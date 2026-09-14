@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
-import { bioPageSchema, defaultBioPage, validateBioForPublish } from "@/lib/public-bio";
+import { bioPageSchema, defaultBioPage, uploadedBioProductImageId, validateBioForPublish } from "@/lib/public-bio";
 import { bioMediaFile, requireBioManager } from "@/lib/public-bio-media";
 
 export const runtime = "nodejs";
@@ -41,8 +41,12 @@ export const PUT = withApiErrorHandling({
   if (body.data.action === "publish") {
     const issue = validateBioForPublish(body.data.page);
     if (issue) throw new AppError({ code: "PUBLIC_BIO_INVALID_LINK", kind: "VALIDATION", safeMessage: issue });
-    const images = [...body.data.page.menuImages, ...body.data.page.promotionImages];
-    const existing = await Promise.all(images.map(async (image) => (await bioMediaFile(image.id).exists())[0]));
+    const imageIds = [
+      ...body.data.page.menuImages.map((image) => image.id),
+      ...body.data.page.promotionImages.map((image) => image.id),
+      ...body.data.page.momentProducts.map((product) => uploadedBioProductImageId(product.image)).filter((id): id is string => Boolean(id)),
+    ];
+    const existing = await Promise.all([...new Set(imageIds)].map(async (id) => (await bioMediaFile(id).exists())[0]));
     if (existing.some((exists) => !exists)) {
       throw new AppError({ code: "PUBLIC_BIO_MISSING_IMAGE", kind: "VALIDATION", safeMessage: "Uma imagem não está mais disponível. Remova-a ou envie novamente." });
     }

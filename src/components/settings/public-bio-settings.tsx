@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, ExternalLink, Heart, Loader2, MapPin, MessageCircle, NotebookText, Percent, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, ExternalLink, Heart, Loader2, MessageCircle, NotebookText, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
 
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
-import { type BioImage, type BioLink, type BioPage, defaultBioPage, MAX_BIO_IMAGES, validateBioForPublish } from "@/lib/public-bio";
+import { type BioImage, type BioLink, type BioMomentProduct, type BioPage, defaultBioPage, MAX_BIO_IMAGES, uploadedBioProductImageId, validateBioForPublish } from "@/lib/public-bio";
 
 const kinds: Array<{ value: BioLink["kind"]; label: string; symbol: string }> = [
   { value: "menu", label: "Cardápio", symbol: "✦" },
@@ -24,53 +24,59 @@ const kinds: Array<{ value: BioLink["kind"]; label: string; symbol: string }> = 
 
 const publicUrl = process.env.NEXT_PUBLIC_BIO_SITE_URL || "https://bio.coalashakes.com";
 
+function productPreviewSrc(image: string, mediaUrls: Record<string, string>): string | null {
+  if (image.startsWith("builtin:")) return `/images/bio-products/${image.slice(8)}.webp`;
+  const id = uploadedBioProductImageId(image);
+  return id ? mediaUrls[id] ?? null : null;
+}
+
+function previewUnitStatus(id: string): { label: string; open: boolean } {
+  const hours = id === "joao-paulo" ? [10, 22, 8, 14] : id === "calhau" ? [9, 21, 9, 15] : [10, 22, 9, 15];
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Fortaleza", weekday: "short", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const sunday = parts.find((part) => part.type === "weekday")?.value === "Sun";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const opening = sunday ? hours[2] : hours[0];
+  const closing = sunday ? hours[3] : hours[1];
+  return hour >= opening && hour < closing ? { label: "Aberto agora", open: true } : { label: "Fechado", open: false };
+}
+
 function BioPreview({ page, mediaUrls, gallery }: { page: BioPage; mediaUrls: Record<string, string>; gallery: "page" | "menuImages" | "promotionImages" }) {
   const visible = page.links.filter((link) => link.enabled);
-  const featured = visible.filter((link) => link.placement === "featured");
-  const quick = visible.filter((link) => link.placement === "quick");
-  const icon = (kind: BioLink["kind"], size = 21) => {
-    if (kind === "menu") return <NotebookText size={size} />;
-    if (kind === "location") return <MapPin size={size} />;
-    if (kind === "whatsapp") return <MessageCircle size={size} />;
-    if (kind === "promotions") return <Percent size={size} />;
-    return <ExternalLink size={size} />;
-  };
+  const menu = visible.find((link) => link.kind === "menu");
+  const whatsapp = visible.find((link) => link.kind === "whatsapp");
+  const promotion = visible.find((link) => link.kind === "promotions");
+  const locations = visible.filter((link) => link.kind === "location");
+  const extras = visible.filter((link) => !["menu", "whatsapp", "promotions", "location"].includes(link.kind));
   return (
-    <div className="mx-auto w-full max-w-[360px] overflow-hidden rounded-[34px] border-[7px] border-[#252025] bg-[#fffcf6] shadow-[0_24px_60px_rgba(50,28,45,.18)]">
-      <div className="mx-auto h-[14px] w-[100px] rounded-b-2xl bg-[#252025]" />
-      <div className="relative overflow-hidden bg-[#fffcf6] text-center text-[#173768]">
+    <div className="mx-auto w-full max-w-[360px] overflow-hidden rounded-[28px] border-[7px] border-[#e6f1f9] bg-[#fff9f0] text-[#173659] shadow-[0_20px_50px_rgba(28,55,83,.17)]">
+      <div className="relative overflow-hidden bg-[#fff9f0]">
         {gallery !== "page" ? <div className="relative min-h-[560px] px-4 pb-6 pt-8">
-          <h4 className="text-2xl font-black text-[#f71979]">{gallery === "menuImages" ? "Cardápio" : "Promoções"}</h4>
+          <h4 className="text-center text-2xl font-black text-[#df2c83]">{gallery === "menuImages" ? "Cardápio" : "Promoções"}</h4>
           {gallery === "menuImages" ? <p className="mx-auto mt-3 max-w-[270px] rounded-xl bg-[#fff0d1] px-3 py-2 text-xs font-semibold">A disponibilidade dos produtos pode variar conforme a unidade.</p> : null}
           {page[gallery].length ? <div className="mt-5 space-y-3">{page[gallery].map((item, index) => <div key={item.id} className="overflow-hidden rounded-xl bg-white shadow-sm">
             {mediaUrls[item.id] ? <Image src={mediaUrls[item.id]} alt={item.alt} width={600} height={900} unoptimized className="h-auto w-full" /> : <div className="flex h-36 items-center justify-center text-xs">Carregando imagem…</div>}
             <p className="p-2 text-xs">{index + 1} de {page[gallery].length}</p>
           </div>)}</div> : <p className="mt-8 text-sm">Envie imagens para montar esta galeria.</p>}
         </div> : <>
-        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[#ff78ad]" />
-        <div className="pointer-events-none absolute -left-20 top-44 h-44 w-32 rounded-full bg-[#03afd0]" />
-        <div className="relative px-4 pt-3">
-          <div className="relative mx-auto h-[148px] w-[290px]"><Image src="/images/coala-bio-logo.png" fill alt={page.title} className="object-cover" /></div>
-          <p className="mt-4 text-[12px] font-bold">{page.description}</p>
-          <p className="mt-2 -rotate-3 text-[31px] font-black leading-[.91] tracking-tight text-[#f71979] [font-family:cursive]">Aqui o exagero<br />é ingrediente.</p>
-          <div className="mx-auto mt-2 h-1.5 w-24 -rotate-3 rounded-full bg-[#029ec5]" />
-          <p className="mt-3 text-[10px]">Cardápio, unidades e contato em um só lugar.</p>
+        <div className="pointer-events-none absolute -right-16 -top-28 h-48 w-48 rounded-full bg-[#ff78ad]" />
+        <div className="relative mx-auto h-[82px] w-[160px]"><Image src="/images/coala-bio-logo-final.svg" fill alt={page.title} className="object-contain" /></div>
+        <div className="relative space-y-2 px-4">
+          {menu ? <div className="flex min-h-11 items-center gap-2 rounded-full bg-[#df2c83] px-4 text-sm font-extrabold text-white"><NotebookText size={18} />Ver cardápio<span className="ml-auto">›</span></div> : null}
+          {whatsapp ? <div className="flex min-h-11 items-center gap-2 rounded-full bg-[#168d53] px-4 text-sm font-extrabold text-white"><MessageCircle size={18} />Fale no WhatsApp<span className="ml-auto">›</span></div> : null}
         </div>
-        <Image src="/images/coala-bio-cups.png" width={320} height={213} alt="Sobremesas Coala Shakes" className="relative -mb-2 mt-2 w-full" />
-        <div className="relative space-y-2 px-5">
-          {featured.map((link) => <div key={link.id} className={`flex min-h-12 items-center gap-3 rounded-full px-4 text-left ${link.kind === "whatsapp" ? "bg-[#10a358] text-white" : link.kind === "location" ? "border border-[#f5dec1] bg-[#fff4e3] text-[#f71979]" : link.kind === "other" ? "border-2 border-[#f71979] bg-[#fff2f7] text-[#f71979]" : "bg-[#fa1679] text-white"}`}>
-            {icon(link.kind, 20)}<strong className="min-w-0 flex-1 truncate text-[15px]">{link.label}</strong><span aria-hidden="true">›</span>
+        {promotion ? <div className="relative mx-4 mt-4 flex min-h-14 items-center gap-2 rounded-xl bg-[#18385d] px-3 text-white"><Heart size={20} fill="#df2c83" className="shrink-0 text-[#df2c83]" /><div className="min-w-0 flex-1"><span className="block text-[8px] font-black uppercase tracking-widest text-[#e6b4cb]">{promotion.label}</span><strong className="block text-[10px] leading-tight">{promotion.subtitle || "Confira as novidades da Coala Shakes"}</strong></div><span className="shrink-0 rounded-full bg-white px-2 py-1 text-[8px] font-black text-[#18385d]">Quero meu</span></div> : null}
+        <div className="relative px-4 pt-6"><h4 className="text-[17px] font-black">Sabores do momento</h4><div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+          {page.momentProducts.filter((product) => product.name && product.image).map((product, index) => <div key={`${product.image}-${index}`} className="w-[132px] shrink-0 overflow-hidden rounded-2xl border border-[#edf0f4] bg-white pb-2 shadow-sm">
+            {productPreviewSrc(product.image, mediaUrls) ? <Image src={productPreviewSrc(product.image, mediaUrls)!} alt={product.name} width={132} height={150} unoptimized className="h-[154px] w-full bg-[#f2f8fc] object-cover object-[center_60%]" /> : <div className="h-[154px]" />}
+            <span className="block px-2 py-1 text-center text-[11px] font-black leading-tight">{product.name}</span>
           </div>)}
-        </div>
-        <div className="relative mt-5 rounded-t-[45%] bg-[#fff7ed] px-4 pb-6 pt-5">
-          <h4 className="-rotate-3 text-[25px] font-black text-[#f71979] [font-family:cursive]"><span className="text-[#05a5c6]">Acesse</span> rápido</h4>
-          {quick.length ? <div className="mt-3 grid grid-cols-2 gap-2">{quick.map((link) => <div key={link.id} className="flex min-h-[104px] flex-col items-center rounded-xl bg-white px-2 py-3 shadow-sm">
-            <span className={link.kind === "location" ? "text-[#02a7ca]" : link.kind === "whatsapp" ? "text-[#059959]" : "text-[#f71979]"}>{icon(link.kind, 24)}</span>
-            <strong className="mt-1 text-[12px] leading-tight">{link.label}</strong><span className="mt-1 text-[10px] leading-tight text-[#63708b]">{link.subtitle}</span>
-          </div>)}</div> : <p className="mt-3 rounded-xl bg-white p-4 text-xs">Ative um link para ver os cartões.</p>}
-          <p className="mt-4 flex items-center justify-center gap-1 text-[11px] font-bold italic"><Heart size={17} className="text-[#f71979]" />Mais que sorvete, é felicidade em copo.</p>
-        </div>
-        <div className="flex min-h-12 items-center justify-center gap-2 bg-[#173768] px-3 text-white"><div className="relative h-10 w-[90px] overflow-hidden"><Image src="/images/coala-bio-logo.png" fill alt="Coala Shakes" className="-translate-y-1 object-cover" /></div><span className="text-[9px]">© Coala Shakes</span></div>
+        </div></div>
+        {locations.length ? <div className="relative px-4 pt-5"><h4 className="text-[17px] font-black">Nossas unidades</h4><div className="mt-3 space-y-2">{locations.map((link) => {
+          const status = previewUnitStatus(link.id);
+          return <div key={link.id} className="rounded-xl border border-[#e7edf1] bg-white p-3 shadow-sm"><div className="flex items-center justify-between"><strong className="text-sm">{link.label.replace(/^Unidade\s+/i, "")}</strong><span className={`text-[9px] font-bold ${status.open ? "text-[#168d53]" : "text-[#d43b83]"}`}><span className={status.open ? "animate-pulse" : ""}>●</span> {status.label}</span></div><p className="mt-2 text-[10px] text-[#63708b]">{link.subtitle}</p><div className="mt-2 flex gap-2"><span className="flex-1 rounded-full bg-[#fff3f8] py-1 text-center text-[9px] font-bold text-[#d83284]">⌖ Mapa</span>{whatsapp ? <span className="flex-1 rounded-full bg-[#effbf4] py-1 text-center text-[9px] font-bold text-[#168d53]">◉ WhatsApp</span> : null}</div></div>;
+        })}</div></div> : null}
+        {extras.length ? <div className="mx-4 mt-5 space-y-2">{extras.map((link) => <div key={link.id} className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-xs font-bold"><ExternalLink size={14} />{link.label}</div>)}</div> : null}
+        <div className="relative mt-6 flex min-h-44 flex-col items-center justify-center gap-1 border-t border-[#f2eee9]"><p className="-rotate-6 text-center text-[26px] font-bold leading-[.96] text-[#df2c83]" style={{ fontFamily: '"Bradley Hand", "Comic Sans MS", cursive' }}>Mais<br />que sorvete,<br />é felicidade<br />em copo! ♡</p><small className="mt-3 text-[8px] text-[#899db1]">© Coala Shakes · São Luís, MA</small></div>
         </>}
       </div>
     </div>
@@ -90,8 +96,11 @@ export function PublicBioSettings() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<"menuImages" | "promotionImages" | null>(null);
+  const [uploadingProduct, setUploadingProduct] = useState<number | null>(null);
   const [previewGallery, setPreviewGallery] = useState<"page" | "menuImages" | "promotionImages">("page");
-  const mediaIds = [...draft.menuImages, ...draft.promotionImages].map((item) => item.id).sort().join(",");
+  const mediaIds = [...new Set([...draft.menuImages, ...draft.promotionImages].map((item) => item.id)
+    .concat(draft.momentProducts.map((product) => uploadedBioProductImageId(product.image)).filter((id): id is string => Boolean(id))))]
+    .sort().join(",");
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(saved), [draft, saved]);
 
   useEffect(() => {
@@ -175,6 +184,42 @@ export function PublicBioSettings() {
     });
   };
 
+  const updateMomentProduct = (index: number, patch: Partial<BioMomentProduct>) => {
+    setDraft((page) => ({ ...page, momentProducts: page.momentProducts.map((product, position) => position === index ? { ...product, ...patch } : product) }));
+  };
+
+  const moveMomentProduct = (index: number, delta: number) => {
+    setDraft((page) => {
+      const products = [...page.momentProducts];
+      const target = index + delta;
+      if (target < 0 || target >= products.length) return page;
+      [products[index], products[target]] = [products[target], products[index]];
+      return { ...page, momentProducts: products };
+    });
+  };
+
+  const uploadMomentProduct = async (index: number, file: File | undefined) => {
+    if (!file) return;
+    setMessage(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setMessage({ type: "error", text: "Envie JPG, PNG ou WebP com até 8 MB." });
+      return;
+    }
+    setUploadingProduct(index);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const result = await request<{ id: string }>("/api/settings/public-bio/media", { method: "POST", body: form, fallbackError: "Falha ao enviar foto do produto." });
+      setDraft((page) => ({ ...page, momentProducts: page.momentProducts.map((product, position) => position === index
+        ? { ...product, image: `uploaded:${result.id}`, name: product.name || file.name.replace(/\.[^.]+$/, "").slice(0, 64) }
+        : product) }));
+      setPreviewGallery("page");
+      setMessage({ type: "success", text: "Foto enviada. Salve o rascunho para conservar a alteração." });
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Falha ao enviar foto." });
+    } finally { setUploadingProduct(null); }
+  };
+
   const uploadImages = async (gallery: "menuImages" | "promotionImages", files: FileList | null) => {
     if (!files?.length) return;
     setMessage(null);
@@ -248,6 +293,25 @@ export function PublicBioSettings() {
           </div>
         </div>
 
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <h3 className="text-base font-bold">Produtos do momento</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Oito posições para foto e nome. As fotos enviadas já estão preenchidas; você pode trocar, esvaziar ou mudar a ordem.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {draft.momentProducts.map((product, index) => <div key={index} className="rounded-xl border bg-[#fdfbfc] p-3">
+              <div className="mb-2 flex items-center gap-2"><strong className="flex-1 text-xs">Posição {index + 1}</strong><Button type="button" variant="ghost" size="icon" aria-label={`Subir produto ${index + 1}`} disabled={index === 0 || uploadingProduct !== null} onClick={() => moveMomentProduct(index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Descer produto ${index + 1}`} disabled={index === 7 || uploadingProduct !== null} onClick={() => moveMomentProduct(index, 1)}><ArrowDown className="h-4 w-4" /></Button></div>
+              <div className="flex gap-3"><div className="h-28 w-24 shrink-0 overflow-hidden rounded-lg bg-white">{productPreviewSrc(product.image, mediaUrls) ? <Image src={productPreviewSrc(product.image, mediaUrls)!} alt={product.name || `Produto ${index + 1}`} width={96} height={112} unoptimized className="h-full w-full object-contain" /> : null}</div>
+                <div className="min-w-0 flex-1 space-y-2"><Input aria-label={`Nome do produto ${index + 1}`} placeholder="Nome do produto" maxLength={64} value={product.name} onChange={(event) => updateMomentProduct(index, { name: event.target.value })} />
+                  <label className={`inline-flex cursor-pointer items-center rounded-md border px-2 py-1.5 text-xs font-semibold ${uploadingProduct !== null ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
+                    {uploadingProduct === index ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1 h-3.5 w-3.5" />}Trocar foto
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploadingProduct !== null || !!uploading} onChange={(event) => { void uploadMomentProduct(index, event.target.files?.[0]); event.target.value = ""; }} />
+                  </label>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" disabled={uploadingProduct !== null || (!product.name && !product.image)} onClick={() => updateMomentProduct(index, { name: "", image: "" })}>Esvaziar</Button>
+                </div>
+              </div>
+            </div>)}
+          </div>
+        </div>
+
         {(["menuImages", "promotionImages"] as const).map((gallery) => <div key={gallery} className="rounded-2xl border bg-white p-5 shadow-sm">
           <h3 className="text-base font-bold">{gallery === "menuImages" ? "Imagens do cardápio" : "Imagens das promoções"}</h3>
           <p className="mt-1 text-sm text-muted-foreground">Envie JPG, PNG ou WebP (até 8 MB). Otimizamos cada imagem para o celular. Use as setas para definir a ordem.</p>
@@ -308,8 +372,8 @@ export function PublicBioSettings() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" disabled={!!saving || !!uploading || !dirty} onClick={() => void submit("save")}>{saving === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar rascunho</Button>
-          <Button type="button" disabled={!!saving || !!uploading} onClick={() => void submit("publish")}>{saving === "publish" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Publicar página</Button>
+          <Button type="button" variant="outline" disabled={!!saving || !!uploading || uploadingProduct !== null || !dirty} onClick={() => void submit("save")}>{saving === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar rascunho</Button>
+          <Button type="button" disabled={!!saving || !!uploading || uploadingProduct !== null} onClick={() => void submit("publish")}>{saving === "publish" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Publicar página</Button>
           <span className="text-xs text-muted-foreground">{publishedAt ? `Última publicação: ${new Date(publishedAt).toLocaleString("pt-BR")}` : "Ainda não publicada"}</span>
         </div>
         {message ? <p role="status" className={`rounded-lg border px-4 py-3 text-sm ${message.type === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-green-200 bg-green-50 text-green-800"}`}>{message.text}</p> : null}

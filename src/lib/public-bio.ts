@@ -27,12 +27,41 @@ export const bioImageSchema = z.object({
 
 export const MAX_BIO_IMAGES = 12;
 
+export const bioProductSlugs = [
+  "milkshake-leite-ninho", "milkshake-ninhomaltine", "milkshake-nutella", "milkshake-oreo",
+  "mix-cafe-nutella", "mix-farinha-lactea", "mix-ninhomaltine", "mix-nutella-ovomaltine", "mix-nesquik-fini",
+] as const;
+
+const builtInProductImages = new Set<string>(bioProductSlugs.map((slug) => `builtin:${slug}`));
+const uploadedProductImagePattern = /^uploaded:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+export const defaultMomentProducts = [
+  { name: "Milkshake Leite Ninho", image: "builtin:milkshake-leite-ninho" },
+  { name: "Milkshake NinhoMaltine", image: "builtin:milkshake-ninhomaltine" },
+  { name: "Milkshake Nutella", image: "builtin:milkshake-nutella" },
+  { name: "Milkshake Oreo", image: "builtin:milkshake-oreo" },
+  { name: "Mix Café com Nutella", image: "builtin:mix-cafe-nutella" },
+  { name: "Mix Farinha Láctea", image: "builtin:mix-farinha-lactea" },
+  { name: "Mix NinhoMaltine", image: "builtin:mix-ninhomaltine" },
+  { name: "Mix Nutella e Ovomaltine", image: "builtin:mix-nutella-ovomaltine" },
+];
+
+export function uploadedBioProductImageId(value: string): string | null {
+  return uploadedProductImagePattern.exec(value)?.[1] ?? null;
+}
+
+export const bioMomentProductSchema = z.object({
+  name: z.string().trim().max(64),
+  image: z.string().max(100).refine((value) => value === "" || builtInProductImages.has(value) || uploadedProductImagePattern.test(value)),
+});
+
 export const bioPageSchema = z.object({
   title: z.string().trim().min(1).max(48),
   description: z.string().trim().max(160),
   links: z.array(bioLinkSchema).max(12),
   menuImages: z.array(bioImageSchema).max(MAX_BIO_IMAGES).default([]),
   promotionImages: z.array(bioImageSchema).max(MAX_BIO_IMAGES).default([]),
+  momentProducts: z.array(bioMomentProductSchema).length(8).default(defaultMomentProducts),
 }).superRefine((page, context) => {
   const ids = new Set<string>();
   page.links.forEach((link, index) => {
@@ -46,12 +75,14 @@ export const bioPageSchema = z.object({
 export type BioPage = z.infer<typeof bioPageSchema>;
 export type BioLink = BioPage["links"][number];
 export type BioImage = BioPage["menuImages"][number];
+export type BioMomentProduct = BioPage["momentProducts"][number];
 
 export const defaultBioPage: BioPage = {
   title: "Coala Shakes",
   description: "Sorvete soft, Milkshakes, Mix e Sundaes.",
   menuImages: [],
   promotionImages: [],
+  momentProducts: defaultMomentProducts,
   links: [
     { id: "menu-featured", kind: "menu", label: "Ver cardápio", subtitle: "", placement: "featured", url: "#cardapio", enabled: false },
     { id: "whatsapp-featured", kind: "whatsapp", label: "Fale no WhatsApp", subtitle: "", placement: "featured", url: "https://wa.me/5598999072739?text=Oi%21%20Vim%20pelo%20Instagram%20da%20Coala%20Shakes.", enabled: true },
@@ -81,6 +112,9 @@ export function isSafeBioUrl(value: string): boolean {
 }
 
 export function validateBioForPublish(page: BioPage): string | null {
+  if (page.momentProducts.some((product) => Boolean(product.name) !== Boolean(product.image))) {
+    return "Complete a foto e o nome de cada produto do momento ou deixe a posição vazia.";
+  }
   const enabled = page.links.filter((link) => link.enabled);
   if (!enabled.length) return "Ative ao menos um link antes de publicar.";
   const invalid = enabled.find((link) => !isValidBioDestination(link, page));
@@ -103,6 +137,7 @@ export function publicBioProjection(value: unknown): BioPage | null {
     description: parsed.data.description,
     menuImages: enabled.some((link) => link.kind === "menu") ? parsed.data.menuImages : [],
     promotionImages: enabled.some((link) => link.kind === "promotions") ? parsed.data.promotionImages : [],
+    momentProducts: parsed.data.momentProducts.filter((product) => product.name && product.image),
     links: enabled
       .map(({ id, kind, label, subtitle, placement, url }) => ({ id, kind, label, subtitle, placement, url, enabled: true })),
   };

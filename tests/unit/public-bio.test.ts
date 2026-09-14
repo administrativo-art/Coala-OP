@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 
-import { bioPageSchema, defaultBioPage, isSafeBioUrl, publicBioProjection, validateBioForPublish } from "../../src/lib/public-bio";
+import { bioPageSchema, bioProductSlugs, defaultBioPage, defaultMomentProducts, isSafeBioUrl, publicBioProjection, uploadedBioProductImageId, validateBioForPublish } from "../../src/lib/public-bio";
 
 test("a página pública aceita apenas destinos HTTPS externos", () => {
   assert.equal(isSafeBioUrl("https://wa.me/5598999999999"), true);
@@ -43,9 +45,35 @@ test("projeção pública omite links desativados e campos não previstos", () =
     description: value.description,
     menuImages: [],
     promotionImages: [],
+    momentProducts: defaultMomentProducts,
     links: [{ ...value.links[0] }],
   });
   assert.equal(bioPageSchema.safeParse({ ...value, links: [value.links[0], value.links[0]] }).success, false);
+});
+
+test("oito posições de produtos aceitam foto e nome, preservando a ordem publicada", () => {
+  assert.equal(defaultMomentProducts.length, 8);
+  assert.ok(existsSync(resolve("public/images/coala-bio-logo-final.svg")));
+  for (const slug of bioProductSlugs) assert.ok(existsSync(resolve("public/images/bio-products", `${slug}.webp`)), slug);
+  assert.equal(bioPageSchema.safeParse({ ...defaultBioPage, momentProducts: defaultMomentProducts.slice(0, 7) }).success, false);
+  assert.equal(bioPageSchema.safeParse({ ...defaultBioPage, momentProducts: [...defaultMomentProducts, defaultMomentProducts[0]] }).success, false);
+  const rearranged = [defaultMomentProducts[7], ...defaultMomentProducts.slice(0, 7)];
+  assert.deepEqual(publicBioProjection({ ...defaultBioPage, momentProducts: rearranged })?.momentProducts, rearranged);
+
+  const empty = { ...defaultBioPage, momentProducts: [...rearranged.slice(0, 7), { name: "", image: "" }] };
+  assert.equal(validateBioForPublish(empty), null);
+  assert.deepEqual(publicBioProjection(empty)?.momentProducts, rearranged.slice(0, 7));
+  assert.match(validateBioForPublish({ ...empty, momentProducts: [...rearranged.slice(0, 7), { name: "Sem foto", image: "" }] }) ?? "", /foto e o nome/);
+});
+
+test("foto enviada só é publicada com identificador válido e nunca expõe caminhos internos", () => {
+  const id = "f096a022-46c3-48bf-88ee-e6c7a903cd80";
+  assert.equal(uploadedBioProductImageId(`uploaded:${id}`), id);
+  assert.equal(uploadedBioProductImageId("uploaded:../secret"), null);
+  assert.equal(bioPageSchema.safeParse({ ...defaultBioPage, momentProducts: [{ name: "Teste", image: `uploaded:${id}` }, ...defaultMomentProducts.slice(1)] }).success, true);
+  for (const image of ["builtin:../../admin", "uploaded:../secret", "https://op.coalashakes.com/api/private", "javascript:alert(1)"]) {
+    assert.equal(bioPageSchema.safeParse({ ...defaultBioPage, momentProducts: [{ name: "Teste", image }, ...defaultMomentProducts.slice(1)] }).success, false, image);
+  }
 });
 
 test("galerias só abrem com imagens válidas e a ordem publicada é preservada", () => {
