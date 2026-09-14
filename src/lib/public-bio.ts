@@ -58,6 +58,7 @@ export const bioMomentProductSchema = z.object({
 export const bioPageSchema = z.object({
   title: z.string().trim().min(1).max(48),
   description: z.string().trim().max(160),
+  promotionIcon: z.enum(["heart", "megaphone", "sparkles"]).default("heart"),
   links: z.array(bioLinkSchema).max(12),
   menuImages: z.array(bioImageSchema).max(MAX_BIO_IMAGES).default([]),
   promotionImages: z.array(bioImageSchema).max(MAX_BIO_IMAGES).default([]),
@@ -80,6 +81,7 @@ export type BioMomentProduct = BioPage["momentProducts"][number];
 export const defaultBioPage: BioPage = {
   title: "Coala Shakes",
   description: "Sorvete soft, Milkshakes, Mix e Sundaes.",
+  promotionIcon: "heart",
   menuImages: [],
   promotionImages: [],
   momentProducts: defaultMomentProducts,
@@ -91,7 +93,7 @@ export const defaultBioPage: BioPage = {
     { id: "joao-paulo", kind: "location", label: "Unidade João Paulo", subtitle: "Mix Mateus João Paulo · Seg–sáb 10h–22h · Dom 8h–14h", placement: "quick", url: "https://www.google.com/maps/search/?api=1&query=Mix+Mateus+Joao+Paulo%2C+Sao+Luis%2C+MA", enabled: true },
     { id: "calhau", kind: "location", label: "Unidade Calhau", subtitle: "Shopping do Automóvel · Seg–sáb 9h–21h · Dom 9h–15h", placement: "quick", url: "https://www.google.com/maps/search/?api=1&query=Shopping+do+Automovel%2C+Sao+Luis%2C+MA", enabled: true },
     { id: "whatsapp-quick", kind: "whatsapp", label: "WhatsApp", subtitle: "Fale com a nossa equipe", placement: "quick", url: "https://wa.me/5598999072739?text=Oi%21%20Vim%20pelo%20Instagram%20da%20Coala%20Shakes.", enabled: true },
-    { id: "promotions", kind: "promotions", label: "Promoções", subtitle: "Fique por dentro das novidades", placement: "quick", url: "#promocoes", enabled: false },
+    { id: "promotions", kind: "promotions", label: "Promoções", subtitle: "", placement: "quick", url: "#promocoes", enabled: false },
   ],
 };
 
@@ -119,6 +121,7 @@ export function validateBioForPublish(page: BioPage): string | null {
   if (!enabled.length) return "Ative ao menos um link antes de publicar.";
   const invalid = enabled.find((link) => !isValidBioDestination(link, page));
   if (invalid) return `Informe um destino público e válido para “${invalid.label}”.`;
+  if (enabled.some((link) => link.kind === "promotions" && !link.subtitle.trim())) return "Escreva a chamada da promoção antes de publicar.";
   return null;
 }
 
@@ -135,6 +138,7 @@ export function publicBioProjection(value: unknown): BioPage | null {
   return {
     title: parsed.data.title,
     description: parsed.data.description,
+    promotionIcon: parsed.data.promotionIcon,
     menuImages: enabled.some((link) => link.kind === "menu") ? parsed.data.menuImages : [],
     promotionImages: enabled.some((link) => link.kind === "promotions") ? parsed.data.promotionImages : [],
     momentProducts: parsed.data.momentProducts.filter((product) => product.name && product.image),

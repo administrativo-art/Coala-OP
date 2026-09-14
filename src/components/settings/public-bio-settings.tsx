@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, ExternalLink, Heart, Loader2, MessageCircle, NotebookText, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, ExternalLink, Heart, Loader2, MapPin, Megaphone, MessageCircle, NotebookText, Plus, Sparkles, Trash2 } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
 
@@ -45,6 +45,7 @@ function BioPreview({ page, mediaUrls, gallery }: { page: BioPage; mediaUrls: Re
   const menu = visible.find((link) => link.kind === "menu");
   const whatsapp = visible.find((link) => link.kind === "whatsapp");
   const promotion = visible.find((link) => link.kind === "promotions");
+  const activePromotion = promotion && page.promotionImages.length ? promotion : null;
   const locations = visible.filter((link) => link.kind === "location");
   const extras = visible.filter((link) => !["menu", "whatsapp", "promotions", "location"].includes(link.kind));
   return (
@@ -58,13 +59,22 @@ function BioPreview({ page, mediaUrls, gallery }: { page: BioPage; mediaUrls: Re
             <p className="p-2 text-xs">{index + 1} de {page[gallery].length}</p>
           </div>)}</div> : <p className="mt-8 text-sm">Envie imagens para montar esta galeria.</p>}
         </div> : <>
-        <div className="pointer-events-none absolute -right-16 -top-28 h-48 w-48 rounded-full bg-[#ff78ad]" />
-        <div className="relative mx-auto h-[82px] w-[160px]"><Image src="/images/coala-bio-logo-final.svg" fill alt={page.title} className="object-contain" /></div>
+        <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rotate-[-15deg] bg-contain bg-center bg-no-repeat opacity-20" style={{ backgroundImage: 'url("/images/coala-bio-pattern-pink.png")' }} />
+        <div className="relative mx-auto mt-2 h-[90px] w-[185px]"><Image src="/images/coala-bio-logo-final.svg" fill alt={page.title} className="object-contain" /></div>
+        {locations.length ? <div className="relative grid grid-cols-2 gap-1.5 px-4 pb-2">{locations.map((link) => {
+          const status = previewUnitStatus(link.id);
+          return <div key={link.id} className={`rounded-full border px-2 py-2 text-center text-[10px] font-black ${status.open ? "border-[#b9e5ce] bg-[#effaf3] text-[#168d53]" : "border-[#f6c7d9] bg-[#fff5f9] text-[#d43b83]"}`}>● {link.label.replace(/^Unidade\s+/i, "")} · {status.label}</div>;
+        })}</div> : null}
         <div className="relative space-y-2 px-4">
           {menu ? <div className="flex min-h-11 items-center gap-2 rounded-full bg-[#df2c83] px-4 text-sm font-extrabold text-white"><NotebookText size={18} />Ver cardápio<span className="ml-auto">›</span></div> : null}
           {whatsapp ? <div className="flex min-h-11 items-center gap-2 rounded-full bg-[#168d53] px-4 text-sm font-extrabold text-white"><MessageCircle size={18} />Fale no WhatsApp<span className="ml-auto">›</span></div> : null}
+          {locations.length ? <div className="flex min-h-11 items-center gap-2 rounded-full border border-[#f5c9dc] bg-[#fff9ee] px-4 text-sm font-extrabold text-[#df2c83]"><MapPin size={18} />Ver unidades<span className="ml-auto">›</span></div> : null}
         </div>
-        {promotion ? <div className="relative mx-4 mt-4 flex min-h-14 items-center gap-2 rounded-xl bg-[#18385d] px-3 text-white"><Heart size={20} fill="#df2c83" className="shrink-0 text-[#df2c83]" /><div className="min-w-0 flex-1"><span className="block text-[8px] font-black uppercase tracking-widest text-[#e6b4cb]">{promotion.label}</span><strong className="block text-[10px] leading-tight">{promotion.subtitle || "Confira as novidades da Coala Shakes"}</strong></div><span className="shrink-0 rounded-full bg-white px-2 py-1 text-[8px] font-black text-[#18385d]">Quero meu</span></div> : null}
+        <div className="relative mx-4 mt-4 flex min-h-14 items-center gap-2 rounded-xl bg-[#18385d] px-3 text-white">
+          {activePromotion ? page.promotionIcon === "megaphone" ? <Megaphone size={20} className="shrink-0 text-[#df2c83]" /> : page.promotionIcon === "sparkles" ? <Sparkles size={20} className="shrink-0 text-[#df2c83]" /> : <Heart size={20} fill="#df2c83" className="shrink-0 text-[#df2c83]" /> : <Megaphone size={20} className="shrink-0 text-[#df2c83]" />}
+          <div className="min-w-0 flex-1"><span className="block text-[8px] font-black uppercase tracking-widest text-[#e6b4cb]">{activePromotion?.label || "Novidades em breve"}</span><strong className="block text-[10px] leading-tight">{activePromotion ? activePromotion.subtitle || "Confira as novidades da Coala Shakes" : "Fique de olho: promoções imperdíveis vêm aí!"}</strong></div>
+          <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[8px] font-black text-[#18385d]">{activePromotion ? "Quero meu" : "Em breve"}</span>
+        </div>
         <div className="relative px-4 pt-6"><h4 className="text-[17px] font-black">Sabores do momento</h4><div className="mt-3 flex gap-2 overflow-x-auto pb-2">
           {page.momentProducts.filter((product) => product.name && product.image).map((product, index) => <div key={`${product.image}-${index}`} className="w-[132px] shrink-0 overflow-hidden rounded-2xl border border-[#edf0f4] bg-white pb-2 shadow-sm">
             {productPreviewSrc(product.image, mediaUrls) ? <Image src={productPreviewSrc(product.image, mediaUrls)!} alt={product.name} width={132} height={150} unoptimized className="h-[154px] w-full bg-[#f2f8fc] object-cover object-[center_60%]" /> : <div className="h-[154px]" />}
@@ -102,6 +112,7 @@ export function PublicBioSettings() {
     .concat(draft.momentProducts.map((product) => uploadedBioProductImageId(product.image)).filter((id): id is string => Boolean(id))))]
     .sort().join(",");
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(saved), [draft, saved]);
+  const promotionDraftLink = draft.links.find((link) => link.kind === "promotions");
 
   useEffect(() => {
     QRCode.toDataURL(publicUrl, { width: 360, margin: 2, color: { dark: "#173768", light: "#ffffff" } })
@@ -316,6 +327,23 @@ export function PublicBioSettings() {
           <h3 className="text-base font-bold">{gallery === "menuImages" ? "Imagens do cardápio" : "Imagens das promoções"}</h3>
           <p className="mt-1 text-sm text-muted-foreground">Envie JPG, PNG ou WebP (até 8 MB). Otimizamos cada imagem para o celular. Use as setas para definir a ordem.</p>
           {gallery === "menuImages" ? <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Ao abrir o cardápio, o visitante verá o aviso: “A disponibilidade dos produtos pode variar conforme a unidade.”</p> : null}
+          {gallery === "promotionImages" ? <div className="mt-4 rounded-xl border border-[#f5dbe7] bg-[#fff8fb] p-4">
+            <h4 className="text-sm font-bold">Texto da faixa de promoção</h4>
+            <p className="mt-1 text-xs text-muted-foreground">Sem imagens de promoção publicadas, a faixa mostra um aviso de novidades em breve. Com imagens e o link ativo, ela usa os textos e o símbolo abaixo.</p>
+            {promotionDraftLink ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">Símbolo na frente
+                <select value={draft.promotionIcon} onChange={(event) => setDraft((page) => ({ ...page, promotionIcon: event.target.value as BioPage["promotionIcon"] }))} className="flex h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground">
+                  <option value="heart">Coração</option><option value="megaphone">Megafone</option><option value="sparkles">Brilhos</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">Título pequeno
+                <Input value={promotionDraftLink.label} maxLength={48} onChange={(event) => updateLink(promotionDraftLink.id, { label: event.target.value })} />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-muted-foreground sm:col-span-2">Chamada da promoção
+                <Textarea value={promotionDraftLink.subtitle} maxLength={80} rows={2} onChange={(event) => updateLink(promotionDraftLink.id, { subtitle: event.target.value })} />
+              </label>
+            </div> : <p className="mt-3 text-xs text-muted-foreground">Adicione um link do tipo “Promoções” em Botões da página para configurar esta faixa.</p>}
+          </div> : null}
           <label className={`mt-4 inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium ${uploading || draft[gallery].length >= MAX_BIO_IMAGES ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
             {uploading === gallery ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}Adicionar imagens
             <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={!!uploading || draft[gallery].length >= MAX_BIO_IMAGES} onChange={(event) => { void uploadImages(gallery, event.target.files); event.target.value = ""; }} />
@@ -349,11 +377,11 @@ export function PublicBioSettings() {
                       {kinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
                     </select>
                   </label>
-                  <label className="space-y-1 text-xs font-medium text-muted-foreground">Texto do botão
+                  {link.kind === "promotions" ? <p className="self-end text-xs text-muted-foreground">Edite o símbolo, o título pequeno e a chamada em “Imagens das promoções”.</p> : <label className="space-y-1 text-xs font-medium text-muted-foreground">Texto do botão
                     <Input value={link.label} maxLength={48} onChange={(event) => updateLink(link.id, { label: event.target.value })} />
-                  </label>
+                  </label>}
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-[160px_1fr]">
+                {link.kind !== "promotions" ? <div className="mt-3 grid gap-3 sm:grid-cols-[160px_1fr]">
                   <label className="space-y-1 text-xs font-medium text-muted-foreground">Exibição
                     <select value={link.placement} onChange={(event) => updateLink(link.id, { placement: event.target.value as BioLink["placement"] })} className="flex h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground">
                       <option value="featured">Botão principal</option><option value="quick">Acesso rápido</option>
@@ -362,7 +390,7 @@ export function PublicBioSettings() {
                   {link.placement === "quick" ? <label className="space-y-1 text-xs font-medium text-muted-foreground">Texto complementar
                     <Input value={link.subtitle} maxLength={80} onChange={(event) => updateLink(link.id, { subtitle: event.target.value })} />
                   </label> : null}
-                </div>
+                </div> : null}
                 {link.kind === "menu" || link.kind === "promotions" ? <p className="mt-3 text-xs text-muted-foreground">Abre a galeria de {link.kind === "menu" ? "cardápio" : "promoções"} nesta página. Envie ao menos uma imagem para ativar.</p> : <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">Endereço público (https://)
                   <Input type="url" inputMode="url" placeholder="https://" value={link.url} maxLength={2048} onChange={(event) => updateLink(link.id, { url: event.target.value })} />
                 </label>}
