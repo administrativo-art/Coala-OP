@@ -30,6 +30,19 @@ test("rascunho sem destino não pode ser publicado", () => {
   assert.equal(publicBioProjection(empty), null);
 });
 
+test("promoção ativa exige uma chamada e publica o símbolo escolhido", () => {
+  const page = {
+    ...defaultBioPage,
+    promotionIcon: "sparkles" as const,
+    promotionImages: [{ id: "f096a022-46c3-48bf-88ee-e6c7a903cd80", alt: "Oferta da Coala" }],
+    links: defaultBioPage.links.map((link) => link.kind === "promotions" ? { ...link, enabled: true } : link),
+  };
+  assert.match(validateBioForPublish(page) ?? "", /chamada da promoção/);
+  const withCopy = { ...page, links: page.links.map((link) => link.kind === "promotions" ? { ...link, subtitle: "Oferta de hoje" } : link) };
+  assert.equal(validateBioForPublish(withCopy), null);
+  assert.equal(publicBioProjection(withCopy)?.promotionIcon, "sparkles");
+});
+
 test("projeção pública omite links desativados e campos não previstos", () => {
   const value = {
     ...defaultBioPage,
@@ -43,12 +56,15 @@ test("projeção pública omite links desativados e campos não previstos", () =
   assert.deepEqual(publicBioProjection(value), {
     title: value.title,
     description: value.description,
+    promotionIcon: value.promotionIcon,
     menuImages: [],
     promotionImages: [],
     momentProducts: defaultMomentProducts,
     links: [{ ...value.links[0] }],
   });
   assert.equal(bioPageSchema.safeParse({ ...value, links: [value.links[0], value.links[0]] }).success, false);
+  assert.equal(bioPageSchema.parse({ ...value, promotionIcon: undefined }).promotionIcon, "heart");
+  assert.equal(bioPageSchema.safeParse({ ...value, promotionIcon: "custom" }).success, false);
 });
 
 test("oito posições de produtos aceitam foto e nome, preservando a ordem publicada", () => {
