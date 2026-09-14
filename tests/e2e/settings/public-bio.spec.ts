@@ -18,7 +18,7 @@ test("edita com prévia, publica somente links externos e mantém a edição pro
   await page.goto("/dashboard/settings?department=operacional&tab=public-bio");
   await expect(page.getByText("Prévia ao vivo")).toBeVisible();
   await expect(page.getByText("Imagens do cardápio")).toBeVisible();
-  await expect(page.getByText("Imagens das promoções")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Imagens das promoções" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copiar link" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Acessar página" })).toBeVisible();
   await expect(page.getByAltText("QR Code da página pública Coala Shakes")).toBeVisible();
