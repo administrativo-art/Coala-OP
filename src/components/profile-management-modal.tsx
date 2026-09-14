@@ -644,6 +644,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     <div className="pl-4 border-l-2 ml-2 space-y-2">
                                       <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Warehouse className="h-4 w-4" /> Operacional</h4>
                                       {renderPermissionSwitch("permissions.settings.manageKiosks" as any, "Gerenciar Unidades", "Permite criar, editar e excluir unidades operacionais.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.settings.managePublicBio" as any, "Gerenciar página da bio", "Permite editar e publicar os links exibidos na página pública do Instagram.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.registration.view" as any, "Acessar Cadastros Operacionais", "Permite abrir os cadastros de insumos, produtos base e pessoas/empresas dentro das configurações.", !settingsViewWatch)}
                                       {settingsViewWatch && registrationViewWatch && (
                                         <div className="ml-6 space-y-2 border-l-2 pl-4">
