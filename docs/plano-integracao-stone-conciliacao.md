@@ -1,14 +1,16 @@
-# Plano de integração Stone e conciliação de receitas — v5
+# Plano consolidado de conciliação financeira e integração Stone — v6
 
-**Status:** plano para implementação incremental
+**Status:** contrato consolidado para implementação incremental
 
 **Competência inicial do backfill:** agosto de 2026
 
-**Unidades:** Whopping, Tirirical e João Paulo
+**Unidades canônicas encontradas no sistema:** Shopping do Automóvel, Tirirical e João Paulo. O vínculo técnico será sempre por `kioskId`. “Whopping” aparece somente nas versões anteriores deste plano e permanece como possível alias de negócio; não será criado um quarto cadastro nem usado como chave sem confirmação explícita.
 
 **Fuso operacional:** `America/Belem`
 
-**Premissa de reaproveitamento:** fechamento de caixa, sangrias, suprimentos, contagem física, malotes/lotes de depósito, depósitos, cobrança no Inter, lançamentos financeiros, conciliação de extratos e a tela de fluxo de caixa já existem e permanecem como capacidades oficiais. Este plano não cria módulos, coleções ou fluxos paralelos; apenas evolui e integra os contratos existentes à conciliação de receitas e à Stone.
+**Premissa de reaproveitamento:** fechamento de caixa, sangrias, suprimentos, contagem física, malotes/lotes de depósito, depósitos, cobrança no Inter, obrigações financeiras, vínculos de pagamentos, solicitações bancárias, lançamentos financeiros, conciliação de extratos e a tela de fluxo de caixa já existem e permanecem como capacidades oficiais. Este plano não cria módulos, coleções ou fluxos paralelos; apenas evolui e integra os contratos existentes à conciliação de receitas e à Stone.
+
+**Fontes de verdade:** o código e os documentos de rollout descrevem o contrato atualmente implementado. Planos anteriores permanecem como histórico e contexto, mas não autorizam reimplementar capacidades já existentes. Esta v6 substitui as versões v3, v4 e v5 deste plano como referência de execução.
 
 ## 1. Objetivo
 
@@ -21,7 +23,8 @@ Construir uma trilha financeira auditável que conecte:
 5. agenda de recebíveis da Stone;
 6. liquidações realizadas na conta Stone;
 7. transferências da conta Stone para o Banco Inter;
-8. DRE por competência e fluxo de caixa previsto/realizado.
+8. obrigações, solicitações, agendamentos e pagamentos já registrados;
+9. DRE por competência e fluxo de caixa previsto/realizado.
 
 O resultado deve permitir consultar cada unidade isoladamente e o consolidado das três unidades, sem misturar venda, recebimento e movimentação interna.
 
@@ -35,6 +38,9 @@ O resultado deve permitir consultar cada unidade isoladamente e o consolidado da
 | Taxa de antecipação | Stone, quando comprovada | data do evento de antecipação | DRE, em conta própria |
 | Recebível líquido previsto | Agenda Stone | data prevista de liquidação | Fluxo de caixa previsto |
 | Recebimento líquido realizado | Liquidação/extrato Stone | data efetiva | Fluxo de caixa realizado |
+| Saída prevista | `financialObligations` + despesa/previsão vigente | data de vencimento ou programação | Fluxo de caixa previsto |
+| Saída agendada | `bankPaymentRequests` + vínculo da obrigação | data agendada confirmada | Fluxo de caixa previsto |
+| Saída realizada | `transactions` + `obligationPaymentLinks` | data efetiva | Fluxo de caixa realizado |
 | Sangria | Módulo existente de fechamento/PDV | data da movimentação | Transferência interna; sem DRE |
 | Perda de caixa | Fechamento + classificação aprovada | competência do fechamento | Despesa operacional |
 | Depósito de numerário | Módulo existente de depósitos + extrato bancário | data efetiva | Transferência interna; sem DRE |
@@ -43,7 +49,36 @@ Regra central:
 
 ```text
 venda != recebível != recebimento != saldo da gaveta
+previsão != despesa real != solicitação != agendamento != pagamento
 ```
+
+### 2.1 Matriz de contratos canônicos
+
+| Domínio | Fonte/contrato canônico | Estado | Não deve ser usado como substituto |
+|---|---|---|---|
+| Venda e pagamento PDV | PDV Legal + projeção `pdvPaymentFacts` | projeção nova | fechamento físico ou extrato bancário |
+| Venda Stone | `stoneSaleTransactions` | novo | liquidação ou crédito bancário |
+| Conciliação de vendas | `salesReconciliationCases` | novo | alteração do PDV ou da Stone |
+| Fechamento e numerário | `cashClosures`, `cashCountingSessions`, `cashDepositBatches` | existente/publicado | cópia dentro da conciliação de receitas |
+| Movimento bancário efetivo | `transactions` + `bankStatementEvents` | existente | `stoneSettlements`, solicitação ou pagamento informado duplicado |
+| Obrigação e saldo a pagar | `financialObligations` | existente | soma independente de previsão, despesa e pagamento |
+| Vínculo de pagamento | `obligationPaymentLinks` + `paymentAdjustments` | existente | nova coleção `expensePaymentLinks` |
+| Processo bancário de saída | `bankPaymentRequests` | existente; rollout Inter condicionado | autorização bancária ou evidência de liquidação |
+| Recebível e liquidação Stone | `stoneReceivables` + `stoneSettlements` | novo | transação bancária duplicada |
+| Receita mensal | `revenueMonthlySummaries` | novo e reconstruível | agregação de transações na DRE |
+| Previsão de caixa | serviço de composição limitado a 91 dias | novo e reconstruível | segundo livro-caixa persistente |
+
+### 2.2 Mapeamento inicial de unidades
+
+Preflight somente leitura executado em 15/09/2026 no banco principal:
+
+| Unidade canônica | `kioskId` | Filial PDV | Cadastro central |
+|---|---|---|---|
+| Shopping do Automóvel | `EzISBSwIv3mIH4mRXPGT` | `39033` | `kPRLQ14F7XpzSLUFXGyO` |
+| Tirirical | `tirirical` | `17343` | `pvLHa7BtW826JmhMkTJA` |
+| João Paulo | `joao-paulo` | `17344` | `WRyOCQrPPQIn4wJJTXaQ` |
+
+Não foi encontrado cadastro chamado “Whopping” em `kiosks`, `dp_units` ou `resultCenters`. Até decisão de negócio em contrário, toda integração da terceira unidade apontará para o `kioskId` de Shopping do Automóvel e exibirá o nome canônico atual.
 
 ## 3. Decisões de negócio já estabelecidas
 
@@ -61,6 +96,11 @@ venda != recebível != recebimento != saldo da gaveta
 - Eventos importados são imutáveis; projeções e resumos podem ser reconstruídos a partir deles.
 - Caixa, sangria e depósito não serão reimplementados dentro da conciliação de receitas. A nova interface exibirá seus resultados e abrirá o registro original quando for necessária uma correção.
 - A conciliação bancária existente será a única porta para movimentos de extrato. A Stone entrará como nova origem/adaptador, sem um segundo livro-caixa ou uma segunda fila bancária.
+- `financialObligations`, `obligationPaymentLinks`, `paymentAdjustments` e `bankPaymentRequests` são os contratos oficiais para acompanhar saídas. A integração Stone e a previsão de caixa não criarão uma segunda identidade de obrigação nem vínculos paralelos.
+- No fluxo de caixa, as representações de uma mesma obrigação se substituem na ordem `transação realizada > agendamento bancário > despesa real > previsão`; elas nunca são somadas como saídas independentes.
+- O nome exibido de uma unidade não é chave de conciliação. Stonecode, terminal, recebível, fechamento, centro de resultado e projeção devem convergir para IDs canônicos documentados.
+- O fluxo de depósito de numerário hoje implementado usa uma cobrança de entrada do Inter. O produto continuará chamando a operação pelo nome operacional adotado, mas o contrato técnico não a confundirá com uma API bancária de depósito físico.
+- As contas `Taxas de cartão` e `Taxas de antecipação de recebíveis` já existentes serão reutilizadas. Somente a conta específica para `Quebras e diferenças de caixa` poderá ser criada, após preflight que comprove sua ausência.
 
 ## 4. Diagnóstico do sistema atual
 
@@ -139,6 +179,37 @@ Referências:
 - [`src/features/financial/pages/cash-flow-page.tsx`](../src/features/financial/pages/cash-flow-page.tsx)
 - [`src/features/financial/lib/cash-flow-analysis.ts`](../src/features/financial/lib/cash-flow-analysis.ts)
 
+### 4.7 Obrigações e pagamentos existentes
+
+O sistema já implementa uma identidade financeira estável e relações N:N entre obrigações, despesas, pagamentos informados e transações bancárias. Os contratos canônicos são `financialObligations`, `obligationPaymentLinks`, `paymentAdjustments` e `bankPaymentRequests`; previsões e documentos reais continuam em `expenses` e são conectados pela obrigação.
+
+A previsão de 13 semanas ainda precisa consumir essa camada explicitamente. Ler `expenses`, `payments` e `transactions` como listas independentes voltaria a somar fases diferentes da mesma obrigação. A composição deve selecionar uma representação vigente por obrigação e manter as demais apenas como histórico e evidência.
+
+Referências:
+
+- [`src/features/financial/obligations/types.ts`](../src/features/financial/obligations/types.ts)
+- [`src/features/financial/obligations/service.server.ts`](../src/features/financial/obligations/service.server.ts)
+- [`src/features/financial/payment-requests/`](../src/features/financial/payment-requests/)
+- [`docs/contrato-contabil-despesas-financeiras.md`](./contrato-contabil-despesas-financeiras.md)
+
+### 4.8 Estado dos planos complementares
+
+- fechamento, contagem física, malotes e depósito por cobrança Inter: implementados e publicados; o documento de rollout prevalece sobre decisões abertas do plano original;
+- obrigações, vínculos e ajustes de pagamento: implementados no código; a previsão deve reutilizar esses registros;
+- pagamentos Pix de saída pelo Inter: implementação local documentada, com rollout condicionado à homologação e à autorização operacional;
+- integração Stone, conciliação de vendas e agenda de recebíveis: ainda planejadas;
+- versões v3, v4 e v5 deste plano: substituídas por esta v6.
+
+### 4.9 Preflight do plano de contas
+
+Consulta somente leitura executada em 15/09/2026 examinou 116 contas, sem truncamento:
+
+- `Taxas de cartão` (`ybXT1oSjyqDdtGPOsAti`): ativa, DRE em `despesas_financeiras`;
+- `Taxas de antecipação de recebíveis` (`9rYkpoScI5X2HC893bNj`): ativa, DRE em `despesas_financeiras`;
+- nenhuma conta com “quebra” ou “diferença” no nome foi encontrada.
+
+Consequência: MDR e antecipação reutilizam as contas existentes. A Fase 2 deverá propor a conta-folha `Quebras e diferenças de caixa`, vinculada a `despesas_operacionais`, com migração e auditoria próprias; a criação não faz parte do preflight nem desta alteração documental.
+
 ## 5. Arquitetura-alvo
 
 ```text
@@ -158,7 +229,10 @@ Stone Vendas ─> recebíveis/parcelas ─> agenda líquida ──────�
 
 Caixa/contagem/sangria/depósito existentes ─> referências e estados no fechamento mensal
 
-saldo atual + recebíveis + obrigações ─> previsão diária de 91 dias ─> conta/unidade/consolidado
+previsão ─> despesa real ─> solicitação/agendamento ─> transação bancária
+                    obrigação + vínculos ─> uma única saída vigente
+
+saldo atual + recebíveis + obrigações vigentes ─> previsão diária de 91 dias ─> conta/unidade/consolidado
 ```
 
 PDV e Financeiro usam bancos distintos. A solução não tentará simular transação atômica entre eles. Os fatos do PDV serão projetados de forma idempotente no banco financeiro, e a conciliação ocorrerá integralmente nesse banco.
@@ -302,7 +376,7 @@ Permanecem canônicas as estruturas atuais de contas bancárias, `transactions`,
 
 ### 6.7 Modelo de leitura do fluxo de caixa
 
-O fluxo de caixa continuará usando como registros canônicos `bankAccounts`, `transactions`, `payments`, `expenses`, `stoneReceivables`, `stoneSettlements` e os registros existentes de fechamento e depósito. Não será criado outro livro financeiro.
+O fluxo de caixa continuará usando como registros canônicos `bankAccounts`, `transactions`, `financialObligations`, `obligationPaymentLinks`, `paymentAdjustments`, `bankPaymentRequests`, `expenses`, `stoneReceivables`, `stoneSettlements` e os registros existentes de fechamento e depósito. `payments` só participa por meio do vínculo com uma obrigação ou transação; não é somado como uma terceira representação independente. Não será criado outro livro financeiro.
 
 Um serviço no servidor comporá uma janela limitada de 91 dias corridos, incluindo a data de referência. Cada item retornado terá, no mínimo:
 
@@ -319,6 +393,23 @@ O serviço produzirá totais diários e semanais sem copiar transações contáb
 O saldo inicial de cada conta deve vir do último saldo confirmado pela conciliação ou pelo provedor, com data e horário de referência. Se ele não estiver disponível, a projeção será marcada como incompleta; o sistema nunca presumirá saldo inicial zero.
 
 Cada resposta do fluxo incluirá `generatedAt`, data de corte, saldo inicial e sua referência, corte de cada fonte e percentual de cobertura. Isso permite distinguir uma projeção atualizada de outra incompleta ou desatualizada.
+
+### 6.8 Integração com obrigações e pagamentos existentes
+
+Cada saída projetada terá `obligationId` como identidade principal e, quando existirem, referências para `expenseId`, `paymentRequestId`, `paymentId`, `obligationPaymentLinkId` e `bankTransactionId`.
+
+A composição obedecerá às seguintes regras:
+
+- `financialObligations` informa valor principal, saldo e estado consolidado;
+- uma previsão conciliada com despesa real deixa de produzir item de caixa próprio;
+- uma solicitação sem data bancária não substitui a data da despesa;
+- um agendamento confirmado substitui data e valor previstos pelo saldo efetivamente agendado;
+- pagamentos parciais mantêm apenas o saldo remanescente na previsão;
+- uma transação bancária conciliada substitui o montante correspondente pelo realizado;
+- juros, multa, desconto e abatimento vêm de `paymentAdjustments` e não são inferidos de uma diferença residual;
+- uma obrigação pode aparecer em várias contas/centros por rateio gerencial, mas continua produzindo uma única saída bancária por pagamento efetivo.
+
+Não será criada `expensePaymentLinks`: o contrato implementado e canônico é `obligationPaymentLinks`.
 
 ## 7. Contratos de conciliação
 
@@ -424,7 +515,7 @@ Assim, a liquidação alimenta o realizado uma única vez e a passagem Stone →
 ### 7.5 Fechamento de período
 
 - Um período pode ser visualizado como parcial, mas só recebe selo `closed` quando todas as fontes esperadas foram carregadas e todos os casos tiveram decisão.
-- O consolidado só fecha quando Whopping, Tirirical e João Paulo estiverem fechados.
+- O consolidado só fecha quando Tirirical, João Paulo e a terceira unidade canônica confirmada na Fase 0 estiverem fechados.
 - Uma revisão tardia do PDV ou Stone marca o período `stale`; não altera silenciosamente um mês fechado.
 - Reabertura exige permissão, motivo e auditoria.
 
@@ -480,9 +571,37 @@ Transferência posterior Stone -> Inter  R$  98,00 entre contas; efeito consolid
 
 Sem orçamento ou modelo de vendas, os dias posteriores aos recebíveis já contratados podem mostrar poucas entradas. A interface deve informar que isso significa “vendas futuras ainda não estimadas”, e não previsão de faturamento zero.
 
+### 7.7 Precedência das saídas e substituição de evidência
+
+Para cada `obligationId`, o fluxo escolherá a fonte vigente sem apagar a trilha anterior:
+
+```text
+transação bancária conciliada
+> agendamento bancário confirmado
+> despesa real
+> previsão
+```
+
+- A transação realizada substitui somente o valor liquidado; pagamento parcial preserva o saldo futuro.
+- Um agendamento substitui a data prevista apenas quando estiver confirmado pelo banco e vinculado sem ambiguidade.
+- Uma solicitação sem agendamento informa o estado operacional, mas não cria uma segunda saída.
+- A despesa real substitui a previsão conciliada na mesma competência.
+- `paymentAdjustments` explicam juros, multa, desconto e abatimento sem alterar silenciosamente o principal.
+- Quando mais de uma obrigação participa do mesmo pagamento, os vínculos repartem o principal, mas o fluxo preserva uma única transação bancária.
+- Ausência, ambiguidade ou cobertura parcial permanecem visíveis; o sistema não escolhe pelo primeiro candidato nem presume quitação.
+
 ## 8. Plano de implementação
 
-### Fase 0 — Acesso e contrato Stone
+### Fase 0 — Contratos canônicos, escopo e acesso Stone
+
+Antes do acesso ao provedor:
+
+- obter confirmação de negócio para o possível alias “Whopping”; tecnicamente, preservar Shopping do Automóvel e seu `kioskId` já identificado;
+- publicar a matriz de fontes canônicas e de representações substituídas;
+- inventariar o que está publicado, apenas implementado e ainda planejado;
+- registrar esta v6 como plano-mestre e as versões anteriores como substituídas;
+- validar que `financialObligations`, `obligationPaymentLinks`, `paymentAdjustments` e `bankPaymentRequests` atendem à composição de saídas sem novas coleções;
+- confirmar no plano de contas a reutilização de `Taxas de cartão` e `Taxas de antecipação de recebíveis` e a necessidade da conta `Quebras e diferenças de caixa`.
 
 Confirmar:
 
@@ -506,7 +625,7 @@ Referências externas:
 - [Relatórios de vendas e recebimentos](https://ajuda.stone.com.br/recebimentos/como-acessar-os-relat%C3%B3rios-de-venda-e-recebimentos-na-nova-stone)
 - [Connect 2.0 e integração do PDV com POS](https://ajuda.stone.com.br/connect-20/connect-20)
 
-**Saída:** contrato de integração documentado e decisão API × importação assistida.
+**Saída:** matriz canônica aprovada, mapeamento de unidades, contrato de integração documentado e decisão API × importação assistida.
 
 ### Fase 1 — Spike com dados reais e anonimizados
 
@@ -546,7 +665,7 @@ A taxa de antecipação será classificada como `EXPLICIT`, `DERIVABLE`, `COMPLE
 - separar vendas, posição da gaveta, diferenças e recebimentos;
 - retirar `finalizedDifferenceTotalCents` da Receita Bruta automática;
 - preservar os módulos atuais de fechamento, sangrias e depósitos com migração compatível;
-- adicionar contas/configurações para MDR, antecipação e perda de caixa;
+- reutilizar as contas existentes de taxas e criar somente a conta de perda de caixa cuja ausência for comprovada;
 - criar contrato para ajustes de resultado sem obrigação bancária;
 - atualizar resumos de fechamento sem misturar sangria/suprimento com receita;
 - deixar testes permanentes para essas invariantes.
@@ -603,6 +722,9 @@ Preferência operacional:
 - mostrar bruto, taxas e líquido;
 - obter o saldo inicial confirmado e sua data de referência para cada conta;
 - compor a previsão diária de 91 dias com recebíveis líquidos e obrigações existentes;
+- compor cada saída por `obligationId`, aplicando a precedência definida na seção 7.7;
+- usar `obligationPaymentLinks` e `paymentAdjustments` para pagamentos parciais, consolidados e encargos;
+- tratar `bankPaymentRequests` como estado operacional e agendamento, nunca como nova despesa;
 - manter data/valor originais e atuais de cada previsão;
 - tratar itens programados, sem data, vencidos, parcialmente liquidados, realizados e cancelados;
 - importar liquidações/extrato Stone;
@@ -678,6 +800,8 @@ No fluxo de caixa:
 - usar horizonte padrão de 91 dias corridos, com visão diária e semanal;
 - iniciar cada conta pelo último saldo confirmado e exibir a atualização/cobertura da fonte;
 - agenda Stone alimenta entradas previstas;
+- `financialObligations` alimenta saídas previstas e preserva uma única representação vigente por obrigação;
+- solicitação, agendamento e pagamento substituem a etapa anterior sem duplicar a saída;
 - liquidação Stone alimenta realizado na conta Stone;
 - o realizado aponta para a transação da conciliação bancária existente, sem duplicá-la;
 - transferência Stone → Inter move saldo entre contas;
@@ -696,7 +820,7 @@ No fluxo de caixa:
 - iniciar em agosto de 2026;
 - publicar relatório de contagens, totais e divergências antes de gravar;
 - rodar em modo sombra, sem alterar a DRE oficial;
-- validar Tirirical, depois João Paulo e Whopping;
+- validar Tirirical, depois João Paulo e a terceira unidade após confirmação de seu `kioskId` canônico;
 - comparar diariamente com PDV, Vendas Stone, Recebimentos Stone e extrato;
 - apenas referenciar fechamentos, sangrias, depósitos e transações bancárias existentes; nunca recriá-los no backfill;
 - fechar cada unidade somente após revisão das exceções;
@@ -719,6 +843,8 @@ financial.stoneIntegration.manage
 
 - `financial.reconciliation` continua protegendo a conciliação de extratos e suas ações atuais; a origem `stone_api` não cria uma permissão bancária paralela.
 - As permissões atuais de fechamento de caixa e depósitos continuam protegendo a consulta e a correção dos registros de origem.
+- `financial.expenses.view` e `financial.expenses.pay` continuam protegendo, respectivamente, a leitura da obrigação e o registro de pagamentos informados.
+- `financial.paymentRequests.*` continua protegendo preparação, autorização interna, envio, consulta e comprovante; nenhuma dessas autoridades é concedida pela tela de fluxo de caixa.
 - `financial.cashFlow.view` continua protegendo a tela e os resumos projetados; `financial.cashFlow.create` continua restrita aos lançamentos manuais já permitidos.
 - `financial.dre` permite consultar os resumos usados pela DRE, mas não os detalhes sensíveis.
 - Ter permissão de DRE, fluxo de caixa, caixa, depósito ou conciliação bancária não concede automaticamente acesso aos detalhes de vendas/recebíveis Stone.
@@ -746,6 +872,7 @@ Diretrizes:
 - Tela de conciliação: consultas por `workspaceId + period + kioskId + status`, paginadas, inicialmente em até 100 casos.
 - Fluxo de caixa: consultas no servidor por conta/unidade, data e status, limitadas à janela de 13 semanas; a tela não carregará coleções financeiras completas para filtrar no cliente.
 - A implementação deverá substituir o carregamento integral atual de `transactions`, `payments` e `expenses` na tela antes de acrescentar os recebíveis Stone.
+- Saídas: consultar obrigações e vínculos por escopo e janela; não executar consultas independentes de despesas, pagamentos e transações para depois deduplicar no cliente.
 - Se resumos diários forem materializados, uma carga terá no máximo 91 documentos por escopo consultado; o preflight decidirá entre cálculo limitado e resumo persistido conforme o volume real.
 - Jobs: cursor, data-fonte, checksum e overlap curto; nunca scan completo recorrente.
 - Históricos fechados ficam fora das filas operacionais.
@@ -774,6 +901,10 @@ Diretrizes:
 - recebível líquido entra na data prevista atual e preserva data/valor originais;
 - previsão vencida, parcial, revisada, cancelada e substituída pelo realizado;
 - despesas abertas entram pelo saldo pendente e pela data de pagamento/vencimento;
+- previsão, despesa real, solicitação, agendamento e transação respeitam a precedência por `obligationId`;
+- pagamento parcial substitui somente o valor realizado e preserva o saldo futuro;
+- um pagamento consolidado mantém uma transação bancária com alocações para várias obrigações;
+- juros, multa, desconto e abatimento vêm de ajustes classificados, nunca de diferença residual inferida;
 - depósito e transferência interna alteram contas, mas têm efeito consolidado zero;
 - visão por unidade não divide artificialmente saldo de conta compartilhada;
 - ausência de estimativa de vendas futuras é sinalizada e não gera entradas inventadas;
@@ -787,6 +918,7 @@ Diretrizes:
 - transações de decisão + auditoria + resumo;
 - compatibilidade do núcleo bancário com `inter_api` e `stone_api`;
 - vínculo único entre liquidação Stone e lançamento bancário existente;
+- composição de saídas por `financialObligations`, `obligationPaymentLinks`, `paymentAdjustments` e `bankPaymentRequests`;
 - links para fechamento e depósito originais sem escrita paralela;
 - consulta limitada do fluxo de caixa sem leitura integral das coleções;
 - saldo por conta e consolidado com a mesma transferência interna;
@@ -805,6 +937,10 @@ Diretrizes:
 8. liquidar e verificar substituição da previsão pelo realizado;
 9. transferir Stone → Inter e verificar efeito consolidado zero;
 10. reabrir após revisão tardia.
+11. substituir uma previsão por despesa real sem duplicar a saída futura;
+12. vincular um agendamento bancário à obrigação e substituir a data prevista;
+13. liquidar parcialmente e manter somente o saldo remanescente projetado;
+14. conciliar a transação bancária final sem somar solicitação, pagamento informado ou agendamento.
 
 Mudanças comuns devem manter `npm run check` verde. Mudanças de rotas, fronteiras server/client ou build devem manter `npm run verify` verde. Regras do Firestore exigem `npm run check:rules`.
 
@@ -829,25 +965,28 @@ Para cada unidade e competência:
 - previsão cobre 91 dias corridos a partir de hoje e começa no saldo confirmado de cada conta;
 - recebíveis Stone aparecem líquidos na data prevista, sem nova dedução das taxas;
 - despesas abertas aparecem pela obrigação pendente e pela data prevista de saída;
+- cada obrigação possui no máximo uma representação vigente no saldo projetado;
+- pagamentos parciais e consolidados fecham com seus vínculos sem criar novas despesas ou transações;
 - previsão liquidada é substituída pelo realizado sem dupla contagem;
 - itens vencidos, parciais, revisados e sem data permanecem identificáveis;
 - visões por conta, unidade e consolidado respeitam seus significados e eliminam transferências internas;
 - a tela informa a data de atualização, a cobertura e a ausência de estimativa para vendas futuras;
 - saldo inicial indisponível bloqueia a exibição de um saldo projetado enganoso;
 - mês fechado não muda sem reabertura auditada;
-- o consolidado só fecha quando Whopping, Tirirical e João Paulo fecharem.
+- o consolidado só fecha quando Tirirical, João Paulo e a terceira unidade canônica confirmada na Fase 0 fecharem.
 
 ## 14. Sequência de entregas e dependências
 
-1. Acesso/spike Stone.
-2. Correção do contrato atual de receita e diferenças de caixa.
-3. Projeção dos pagamentos PDV e ingestão Stone.
-4. Conciliação PDV × Stone Vendas.
-5. Integração de leitura com fechamento, sangrias e depósitos existentes.
-6. Agenda de recebíveis e extensão Stone da conciliação bancária existente.
-7. Interface operacional.
-8. Seletor de receita na DRE e integração com fluxo de caixa.
-9. Backfill e rollout por unidade.
+1. Contratos canônicos, mapeamento de unidades e inventário de estado.
+2. Acesso/spike Stone.
+3. Correção do contrato atual de receita e diferenças de caixa.
+4. Projeção dos pagamentos PDV e ingestão Stone.
+5. Conciliação PDV × Stone Vendas.
+6. Integração de leitura com fechamento, sangrias e depósitos existentes.
+7. Agenda de recebíveis e extensão Stone da conciliação bancária existente.
+8. Composição das saídas pela camada de obrigações e pagamentos existente.
+9. Interface, seletor de receita na DRE e evolução do fluxo de caixa.
+10. Backfill e rollout por unidade.
 
 O seletor de CMV já foi implementado em `feat/dre-cmv-source` (`39d21bf5`). Como o seletor de receita também altera a DRE, sua implementação deverá partir da versão em que esse trabalho já estiver integrado, evitando duas edições concorrentes da mesma página.
 
@@ -862,11 +1001,12 @@ O seletor de CMV já foi implementado em `feat/dre-cmv-source` (`39d21bf5`). Com
 - substituir dados originais do PDV ou Stone por ajustes manuais;
 - criar um segundo módulo de fechamento de caixa, sangrias, custódia ou depósitos;
 - criar uma conciliação bancária paralela à existente;
+- criar uma segunda coleção de obrigações ou `expensePaymentLinks` paralela a `obligationPaymentLinks`;
 - copiar liquidações Stone como novas transações quando já houver lançamento bancário canônico;
 - prever vendas futuras por média, sazonalidade ou inteligência estatística sem orçamento/cenário aprovado;
 - executar automaticamente transferências Stone → Inter, antecipações ou pagamentos a partir da previsão.
 
-## 16. Decisões consolidadas na v5
+## 16. Decisões consolidadas na v6
 
 - Fechamento de caixa, sangrias, suprimentos, contagem, malotes/lotes e depósitos já estão implementados e serão apenas referenciados.
 - A conciliação de extratos já existente será generalizada para receber a Stone, mantendo o Inter e as importações atuais.
@@ -875,3 +1015,9 @@ O seletor de CMV já foi implementado em `feat/dre-cmv-source` (`39d21bf5`). Com
 - A tela de fluxo de caixa existente será evoluída para uma previsão diária de 13 semanas, iniciada por saldos reais e composta por entradas e saídas conhecidas.
 - A primeira versão não estima vendas futuras; separa disponibilidade contratada de cenários comerciais ainda inexistentes.
 - Saldos bancários permanecem por conta, enquanto a visão por unidade representa apenas a atribuição gerencial dos movimentos.
+- Obrigações e saídas reutilizam `financialObligations`, `obligationPaymentLinks`, `paymentAdjustments` e `bankPaymentRequests`.
+- O fluxo aplica a precedência `transação realizada > agendamento confirmado > despesa real > previsão` e preserva somente o saldo ainda não realizado.
+- O vínculo de unidade usa IDs canônicos; “Whopping” e “Shopping do Automóvel” precisam de confirmação explícita antes do backfill.
+- `Taxas de cartão` e `Taxas de antecipação de recebíveis` serão reutilizadas; não serão criadas contas duplicadas para MDR ou antecipação.
+- A cobrança Inter associada ao malote é uma entrada bancária do fluxo de numerário, não uma API de depósito físico nem uma nova receita.
+- Esta v6 substitui as versões anteriores como plano de execução; os documentos especializados continuam válidos apenas dentro de suas responsabilidades canônicas.
