@@ -399,6 +399,7 @@ export function SalesReconciliationPage() {
                     {permissions.financial?.cashDeposits?.view && (entry.cashEvidence?.depositBatchIds.length ?? 0) > 0 ? <Button asChild size="sm" variant="outline"><Link href="/dashboard/financial/cash-deposits">Abrir depósitos</Link></Button> : null}
                   </div>
                 </div>
+                <Button asChild className="w-full" variant="outline"><Link href={`/dashboard/financial/reconciliation/closing?period=${entry.period}&kioskId=${entry.kioskId}`}>Classificar diferenças de caixa</Link></Button>
                 {["ready", "reopened"].includes(entry.status) && entry.cashEvidence?.status !== "ready" ? <p className="text-xs text-amber-700">Conclua todos os dias do fechamento de caixa antes de fechar a competência.</p> : null}
                 {canClose ? <Button className="w-full" onClick={() => setPeriodAction({ period: entry, action: "close" })}><LockKeyhole className="mr-2 h-4 w-4" />Fechar competência</Button> : null}
                 {canReopen ? <Button className="w-full" variant="outline" onClick={() => setPeriodAction({ period: entry, action: "reopen" })}><RotateCcw className="mr-2 h-4 w-4" />Reabrir competência</Button> : null}

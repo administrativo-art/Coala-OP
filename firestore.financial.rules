@@ -497,6 +497,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /cashClosureDifferenceDecisions/{decisionId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     match /salesReconciliationCases/{caseId} {
       allow read, write: if false;
       match /events/{eventId} {

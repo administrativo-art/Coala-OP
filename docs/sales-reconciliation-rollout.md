@@ -35,6 +35,8 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Finalizar uma competência | 5.001 fatos PDV + 5.001 vendas Stone + até 10.000 decisões + resumos existentes das unidades | até 10.000 casos + 2 resumos por unidade + controle e `run` |
 | Listar casos sem unidade | 1 controle + até 101 casos + até 21 períodos + até 20 resumos de caixa | 0 |
 | Listar casos de uma unidade | 1 controle + até 101 casos + 1 período + 1 resumo de caixa | 0 |
+| Listar diferenças de caixa de uma unidade/mês | até 32 fechamentos + 31 decisões | 0 |
+| Classificar diferença de caixa | até 4 leituras transacionais | até 4 escritas atômicas (decisão, evento e efeitos aplicáveis) |
 | Listar recebíveis Stone | até 101 recebíveis por página | 0 |
 | Listar liquidações Stone | até 101 liquidações por página | 0 |
 | Vincular/desvincular liquidação ao extrato | 2 leituras transacionais | até 3 escritas atômicas, incluindo evento |

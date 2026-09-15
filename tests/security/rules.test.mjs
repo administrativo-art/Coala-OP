@@ -498,6 +498,10 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           workspaceId: "coala-shakes",
           status: "completed",
         }),
+        setDoc(doc(db, "cashClosureDifferenceDecisions/decision-1"), {
+          workspaceId: "coala-shakes",
+          closureId: "closure-1",
+        }),
       ]);
     });
 
@@ -554,6 +558,7 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       "revenueMonthlySummaries/summary-1",
       "stoneIngestionRuns/run-1",
       "bankAccountBalances/account-1",
+      "cashClosureDifferenceDecisions/decision-1",
     ]) {
       await assertFails(getDoc(doc(payer.firestore(), path)));
       await assertFails(setDoc(doc(payer.firestore(), path), { forged: true }, { merge: true }));
