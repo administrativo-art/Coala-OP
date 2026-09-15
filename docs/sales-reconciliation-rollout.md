@@ -38,6 +38,8 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Listar recebíveis Stone | até 101 recebíveis por página | 0 |
 | Listar liquidações Stone | até 101 liquidações por página | 0 |
 | Vincular/desvincular liquidação ao extrato | 2 leituras transacionais | até 3 escritas atômicas, incluindo evento |
+| Abrir administração da integração | até 101 mapeamentos + 51 execuções | 0 |
+| Criar/editar mapeamento | até 103 leituras (unidade, conta e mapeamentos) | 2 escritas atômicas, incluindo evento |
 | Compor fluxo de caixa de 91 dias | até 26.056 leituras no teto defensivo | 0 |
 
 Uma leitura que ultrapasse o teto é recusada; não ocorre scan completo como

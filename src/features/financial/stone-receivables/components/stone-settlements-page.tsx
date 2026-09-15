@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronRight, Landmark, Link2, Loader2, RefreshCw, Repeat2, Unlink, WalletCards } from "lucide-react";
+import { Cable, CheckCircle2, ChevronRight, Landmark, Link2, Loader2, RefreshCw, Repeat2, Unlink, WalletCards } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -152,6 +152,7 @@ export function StoneSettlementsPage() {
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/receivables"><WalletCards className="mr-2 h-4 w-4" />Recebíveis</Link></Button>
+          {permissions.financial?.stoneIntegration?.manage ? <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/integration"><Cable className="mr-2 h-4 w-4" />Integração</Link></Button> : null}
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
         </div>

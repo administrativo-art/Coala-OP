@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
+  Cable,
   CheckCircle2,
   ChevronRight,
   Landmark,
@@ -292,6 +293,7 @@ export function SalesReconciliationPage() {
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/receivables"><WalletCards className="mr-2 h-4 w-4" />Recebíveis Stone</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/settlements"><ScrollText className="mr-2 h-4 w-4" />Liquidações</Link></Button>
+          {permissions.financial?.stoneIntegration?.manage ? <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/integration"><Cable className="mr-2 h-4 w-4" />Integração</Link></Button> : null}
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos bancários</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
         </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Repeat2, ScrollText } from "lucide-react";
+import { Cable, CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Repeat2, ScrollText } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -149,6 +149,7 @@ export function StoneReceivablesPage() {
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas PDV × Stone</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/settlements"><ScrollText className="mr-2 h-4 w-4" />Liquidações</Link></Button>
+          {permissions.financial?.stoneIntegration?.manage ? <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/integration"><Cable className="mr-2 h-4 w-4" />Integração</Link></Button> : null}
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos bancários</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
         </div>
