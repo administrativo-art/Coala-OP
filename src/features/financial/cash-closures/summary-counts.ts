@@ -20,10 +20,20 @@ export function cashClosureSummaryCounts(closures: CashClosureSummaryCountSource
 
 export function cashClosureDreRevenueCents(closures: Array<{
   expectedTotalCents: number;
-  finalizedDifferenceTotalCents: number;
+  finalizedDifferenceTotalCents?: number;
 }>) {
   return closures.reduce(
-    (total, closure) => total + closure.expectedTotalCents + closure.finalizedDifferenceTotalCents,
+    (total, closure) => total + closure.expectedTotalCents,
     0,
   );
+}
+
+export function cashClosureSummaryDreRevenueCents(summary: {
+  expectedTotalCents?: number;
+  dreRevenueTotalCents?: number;
+  differenceTotalCents?: number;
+}) {
+  return typeof summary.expectedTotalCents === "number" && Number.isFinite(summary.expectedTotalCents)
+    ? summary.expectedTotalCents
+    : 0;
 }

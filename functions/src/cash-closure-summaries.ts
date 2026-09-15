@@ -74,9 +74,8 @@ async function recomputeSummary(workspaceId: string, kioskId: string, year: numb
     expectedTotalCents: closures.reduce((sum, item) => sum + number(item.expectedTotalCents), 0),
     countedTotalCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedCountedTotalCents', 'countedTotalCents'), 0),
     differenceTotalCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedDifferenceTotalCents', 'differenceTotalCents'), 0),
-    dreRevenueTotalCents: closures.reduce((sum, item) => sum
-      + number(item.expectedTotalCents)
-      + finalizedNumber(item, 'finalizedDifferenceTotalCents', 'differenceTotalCents'), 0),
+    dreRevenueTotalCents: closures.reduce((sum, item) => sum + number(item.expectedTotalCents), 0),
+    dreRevenueContractVersion: 2,
     countedCashCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedCountedCashCents', 'countedCashCents'), 0),
     allocatedCashCents: closures.filter((item) => ['allocated', 'issued', 'paid', 'adjusted'].includes(text(item.cashDeposit?.status))).reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),
     issuedCashCents: closures.filter((item) => ['issued', 'paid'].includes(text(item.cashDeposit?.status))).reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),

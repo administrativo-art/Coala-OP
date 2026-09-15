@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   cashClosureDreRevenueCents,
+  cashClosureSummaryDreRevenueCents,
   cashClosureSummaryCounts,
 } from "../../src/features/financial/cash-closures/summary-counts";
 
@@ -31,10 +32,22 @@ test("resumo mensal separa dias pendentes de finalizações parciais", () => {
   });
 });
 
-test("receita da DRE mantém o PDV em aberto e aplica somente diferenças finalizadas", () => {
+test("receita da DRE usa o PDV e mantém diferenças físicas separadas", () => {
   assert.equal(cashClosureDreRevenueCents([
     { expectedTotalCents: 10_000, finalizedDifferenceTotalCents: 500 },
     { expectedTotalCents: 20_000, finalizedDifferenceTotalCents: -1_000 },
     { expectedTotalCents: 30_000, finalizedDifferenceTotalCents: 0 },
-  ]), 59_500);
+  ]), 60_000);
+});
+
+test("leitura ignora receita legada contaminada por diferença de caixa", () => {
+  assert.equal(cashClosureSummaryDreRevenueCents({
+    expectedTotalCents: 30_000,
+    differenceTotalCents: -1_000,
+    dreRevenueTotalCents: 29_000,
+  }), 30_000);
+});
+
+test("mês sem resumo consolidado inicia a receita da DRE em zero", () => {
+  assert.equal(cashClosureSummaryDreRevenueCents({}), 0);
 });

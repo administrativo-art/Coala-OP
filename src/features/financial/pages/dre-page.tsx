@@ -30,6 +30,7 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
+import { cashClosureSummaryDreRevenueCents } from "@/features/financial/cash-closures/summary-counts";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 import type { DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
 import type {
@@ -254,7 +255,7 @@ export function DrePage() {
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
   const closureRevenueByUnitMonth = useMemo(() => new Map(closureRevenueSummaries.map((summary) => [
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
-    (summary.dreRevenueTotalCents ?? summary.expectedTotalCents + summary.differenceTotalCents) / 100,
+    cashClosureSummaryDreRevenueCents(summary) / 100,
   ])), [closureRevenueSummaries]);
   const salesByUnitMonth = useMemo(() => new Map(salesSummaries.map((summary) => [
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,

@@ -69,6 +69,7 @@ function summaryFromClosures(input: {
     countedTotalCents: closures.reduce((total, closure) => total + closure.finalizedCountedTotalCents, 0),
     differenceTotalCents: closures.reduce((total, closure) => total + closure.finalizedDifferenceTotalCents, 0),
     dreRevenueTotalCents: cashClosureDreRevenueCents(closures),
+    dreRevenueContractVersion: 2,
     countedCashCents: closures.reduce((total, closure) => total + closure.finalizedCountedCashCents, 0),
     allocatedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "allocatedCents"), 0),
     issuedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "issuedCents"), 0),

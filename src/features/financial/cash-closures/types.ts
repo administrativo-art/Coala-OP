@@ -365,8 +365,9 @@ export type CashClosureMonthlySummary = {
   expectedTotalCents: number;
   countedTotalCents: number;
   differenceTotalCents: number;
-  /** Receita da DRE: PDV nos operadores em aberto e valor conferido nos finalizados. */
+  /** Receita do PDV na DRE; diferenças físicas permanecem separadas. */
   dreRevenueTotalCents: number;
+  dreRevenueContractVersion?: 2;
   countedCashCents: number;
   allocatedCashCents: number;
   issuedCashCents: number;
