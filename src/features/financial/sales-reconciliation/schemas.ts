@@ -78,6 +78,7 @@ export const salesReconciliationDecisionSchema = z.object({
     "timing_difference",
     "cancelled_or_refunded",
   ]).optional(),
+  targetKioskId: safeIdentifierSchema.optional(),
   reason: z.string().trim().min(5).max(2_000),
 }).superRefine((value, context) => {
   if (value.action === "classify" && !value.classification) {
@@ -87,6 +88,24 @@ export const salesReconciliationDecisionSchema = z.object({
       message: "Informe a classificação da divergência.",
     });
   }
+  if (value.classification === "wrong_unit" && !value.targetKioskId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["targetKioskId"],
+      message: "Informe a unidade correta.",
+    });
+  }
+  if (value.targetKioskId && !["wrong_unit", "stone_only_sale"].includes(value.classification ?? "")) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["targetKioskId"],
+      message: "A unidade de destino só é aceita nas classificações compatíveis.",
+    });
+  }
+});
+
+export const salesReconciliationPeriodActionSchema = z.object({
+  reason: z.string().trim().min(5).max(2_000),
 });
 
 export const salesReconciliationListQuerySchema = z.object({

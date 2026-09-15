@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { FieldPath, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -17,9 +17,16 @@ import {
   stoneIngestionRunId,
 } from "./identity.server";
 import { suggestSalesReconciliationCases } from "./matching";
+import {
+  revenueContributionDelta,
+  reviewStatusForDecision,
+} from "./decision-effects";
 import type {
+  PersistedSalesReconciliationCase,
   PdvPaymentFact,
   SalesMatchFact,
+  SalesReconciliationDecision,
+  SalesReconciliationPeriodStatus,
   SalesReconciliationReviewStatus,
   StoneSaleTransaction,
   SuggestedSalesReconciliationCase,
@@ -30,6 +37,7 @@ const MAX_FACTS_PER_SOURCE_PERIOD = 5_000;
 const FACT_ROWS_PER_BATCH = 200;
 const CASES_PER_BATCH = 400;
 const RUN_LEASE_MS = 5 * 60 * 1_000;
+const EXPECTED_RECONCILIATION_UNIT_COUNT = 3;
 
 export class SalesReconciliationLimitError extends Error {
   constructor(readonly source: "mappings" | "pdv" | "stone" | "periods") {
@@ -49,6 +57,20 @@ export class SalesReconciliationAccessError extends Error {
   constructor(message = "O lote contém unidade fora do escopo permitido.") {
     super(message);
     this.name = "SalesReconciliationAccessError";
+  }
+}
+
+export class SalesReconciliationNotFoundError extends Error {
+  constructor(message = "O registro de conciliação não foi encontrado.") {
+    super(message);
+    this.name = "SalesReconciliationNotFoundError";
+  }
+}
+
+export class SalesReconciliationStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SalesReconciliationStateError";
   }
 }
 
@@ -424,6 +446,8 @@ async function rebuildPeriod(input: { workspaceId: string; period: string; proje
       caseCount: activeCases.length,
       pdvFactCount: pdv.length,
       stoneSaleCount: stone.length,
+      pendingCaseCount: activeCases.filter((entry) => entry.reviewStatus === "pending_review").length,
+      status: activeCases.some((entry) => entry.reviewStatus === "pending_review") ? "partial" : "ready",
       kioskIds,
       updatedAt: now,
     }, { merge: true });
@@ -550,4 +574,275 @@ export async function listSalesReconciliationCases(input: {
     nextCursor: hasMore ? documents.at(-1)?.id ?? null : null,
     projectionId,
   });
+}
+
+function validateCaseDecision(
+  entry: PersistedSalesReconciliationCase,
+  decision: SalesReconciliationDecision,
+) {
+  if (entry.kioskIds.length === 0) {
+    throw new SalesReconciliationStateError(
+      "Mapeie a venda Stone para uma unidade antes de decidir este caso.",
+    );
+  }
+  if (
+    decision.classification === "stone_only_sale"
+    && entry.stoneGrossAmountCents <= 0
+  ) {
+    throw new SalesReconciliationStateError("Esta classificação exige uma venda Stone no caso.");
+  }
+  if (
+    decision.classification === "invalid_pdv_payment"
+    && entry.pdvGrossAmountCents <= 0
+  ) {
+    throw new SalesReconciliationStateError("Esta classificação exige um pagamento PDV no caso.");
+  }
+  if (
+    decision.classification === "wrong_unit"
+    && (!decision.targetKioskId || !entry.kioskIds.includes(decision.targetKioskId))
+  ) {
+    throw new SalesReconciliationStateError(
+      "A unidade correta precisa ser uma das unidades identificadas no caso.",
+    );
+  }
+  if (decision.targetKioskId && !entry.kioskIds.includes(decision.targetKioskId)) {
+    throw new SalesReconciliationStateError("A unidade de destino não participa deste caso.");
+  }
+}
+
+export async function decideSalesReconciliationCase(input: {
+  caseId: string;
+  workspaceId: string;
+  decision: SalesReconciliationDecision;
+  actor: { id: string; name: string };
+  canAccessKiosk: (kioskId: string) => boolean;
+}) {
+  const caseRef = financialDbAdmin.collection("salesReconciliationCases").doc(input.caseId);
+  return serializeFinancialValue(await financialDbAdmin.runTransaction(async (transaction) => {
+    const caseSnapshot = await transaction.get(caseRef);
+    if (!caseSnapshot.exists || caseSnapshot.data()?.workspaceId !== input.workspaceId) {
+      throw new SalesReconciliationNotFoundError();
+    }
+    const entry = { id: caseSnapshot.id, ...caseSnapshot.data() } as PersistedSalesReconciliationCase;
+    if (entry.kioskIds.some((kioskId) => !input.canAccessKiosk(kioskId))) {
+      throw new SalesReconciliationAccessError();
+    }
+    validateCaseDecision(entry, input.decision);
+
+    const controlRef = financialDbAdmin.collection("revenueReconciliationPeriods")
+      .doc(salesReconciliationControlId({ workspaceId: input.workspaceId, period: entry.period }));
+    const decisionRef = financialDbAdmin.collection("salesReconciliationDecisions").doc(entry.identityId);
+    const periodRefs = entry.kioskIds.map((kioskId) => financialDbAdmin.collection("revenueReconciliationPeriods")
+      .doc(salesReconciliationPeriodId({ workspaceId: input.workspaceId, kioskId, period: entry.period })));
+    const [controlSnapshot, decisionSnapshot, ...periodSnapshots] = await Promise.all([
+      transaction.get(controlRef),
+      transaction.get(decisionRef),
+      ...periodRefs.map((reference) => transaction.get(reference)),
+    ]);
+    const control = controlSnapshot.data() ?? {};
+    if (control.activeProjectionId !== entry.projectionId || control.buildingProjectionId) {
+      throw new SalesReconciliationConflictError(
+        "A competência está sendo reconstruída ou o caso não pertence à projeção ativa.",
+      );
+    }
+    if (periodSnapshots.some((snapshot) => !snapshot.exists)) {
+      throw new SalesReconciliationStateError("O resumo de uma das unidades ainda não foi construído.");
+    }
+    if (periodSnapshots.some((snapshot) => ["closed", "stale"].includes(String(snapshot.data()?.status)))) {
+      throw new SalesReconciliationStateError(
+        "Reabra a competência antes de alterar uma decisão de conciliação.",
+      );
+    }
+
+    const now = Timestamp.now();
+    const nextReviewStatus = reviewStatusForDecision(input.decision);
+    const previousReviewStatus = entry.reviewStatus;
+    const previousDecision = entry.decision ?? null;
+    const contributionDelta = revenueContributionDelta({
+      entry,
+      previousReviewStatus,
+      previousDecision,
+      nextReviewStatus,
+      nextDecision: input.decision,
+    });
+    const wasPending = previousReviewStatus === "pending_review";
+    const eventId = randomUUID();
+    const decision = {
+      ...input.decision,
+      actorId: input.actor.id,
+      actorName: input.actor.name,
+      decidedAt: now,
+    };
+
+    transaction.set(decisionRef, {
+      id: entry.identityId,
+      workspaceId: input.workspaceId,
+      caseIdentityId: entry.identityId,
+      caseId: entry.id,
+      period: entry.period,
+      kioskIds: entry.kioskIds,
+      sourceFingerprint: entry.sourceFingerprint,
+      reviewStatus: nextReviewStatus,
+      decision,
+      createdAt: decisionSnapshot.data()?.createdAt ?? now,
+      updatedAt: now,
+    }, { merge: true });
+    transaction.set(decisionRef.collection("events").doc(eventId), {
+      id: eventId,
+      workspaceId: input.workspaceId,
+      caseIdentityId: entry.identityId,
+      caseId: entry.id,
+      previousReviewStatus,
+      previousDecision,
+      reviewStatus: nextReviewStatus,
+      decision,
+      sourceFingerprint: entry.sourceFingerprint,
+      createdAt: now,
+    });
+    transaction.set(caseRef.collection("events").doc(eventId), {
+      id: eventId,
+      workspaceId: input.workspaceId,
+      caseId: entry.id,
+      action: "decision",
+      previousReviewStatus,
+      reviewStatus: nextReviewStatus,
+      actorId: input.actor.id,
+      actorName: input.actor.name,
+      reason: input.decision.reason,
+      createdAt: now,
+    });
+    transaction.update(caseRef, {
+      reviewStatus: nextReviewStatus,
+      decision,
+      sourceChanged: false,
+      updatedAt: now,
+    });
+
+    periodSnapshots.forEach((snapshot, index) => {
+      const current = snapshot.data() ?? {};
+      const kioskId = entry.kioskIds[index];
+      const decidedCaseCount = Number(current.decidedCaseCount ?? 0) + (wasPending ? 1 : 0);
+      const pendingCaseCount = Math.max(0, Number(current.pendingCaseCount ?? 0) - (wasPending ? 1 : 0));
+      const caseCount = Number(current.caseCount ?? 0);
+      const coveragePercent = caseCount === 0 ? 0 : Math.round((decidedCaseCount / caseCount) * 10_000) / 100;
+      const reconciledRevenueCents = Number(current.reconciledRevenueCents ?? 0)
+        + (contributionDelta.get(kioskId) ?? 0);
+      const status: SalesReconciliationPeriodStatus = pendingCaseCount === 0 ? "ready" : "partial";
+      transaction.update(periodRefs[index], {
+        decidedCaseCount,
+        pendingCaseCount,
+        coveragePercent,
+        reconciledRevenueCents,
+        status,
+        updatedAt: now,
+      });
+      transaction.set(financialDbAdmin.collection("revenueMonthlySummaries").doc(periodRefs[index].id), {
+        reconciledRevenueTotalCents: reconciledRevenueCents,
+        coveragePercent,
+        periodStatus: status,
+        updatedAt: now,
+      }, { merge: true });
+    });
+
+    const controlPendingCaseCount = Math.max(
+      0,
+      Number(control.pendingCaseCount ?? 0) - (wasPending ? 1 : 0),
+    );
+    transaction.update(controlRef, {
+      pendingCaseCount: controlPendingCaseCount,
+      status: controlPendingCaseCount === 0 ? "ready" : "partial",
+      updatedAt: now,
+    });
+    return { case: { ...entry, reviewStatus: nextReviewStatus, decision }, eventId };
+  }));
+}
+
+export async function changeSalesReconciliationPeriodStatus(input: {
+  periodId: string;
+  workspaceId: string;
+  action: "close" | "reopen";
+  reason: string;
+  actor: { id: string; name: string };
+  canAccessKiosk: (kioskId: string) => boolean;
+}) {
+  const periodRef = financialDbAdmin.collection("revenueReconciliationPeriods").doc(input.periodId);
+  return serializeFinancialValue(await financialDbAdmin.runTransaction(async (transaction) => {
+    const periodSnapshot = await transaction.get(periodRef);
+    const current = periodSnapshot.data() ?? {};
+    if (!periodSnapshot.exists || current.workspaceId !== input.workspaceId || current.scope !== "unit") {
+      throw new SalesReconciliationNotFoundError("A competência da unidade não foi encontrada.");
+    }
+    const kioskId = String(current.kioskId ?? "");
+    if (!kioskId || !input.canAccessKiosk(kioskId)) throw new SalesReconciliationAccessError();
+
+    const period = String(current.period ?? "");
+    const controlRef = financialDbAdmin.collection("revenueReconciliationPeriods")
+      .doc(salesReconciliationControlId({ workspaceId: input.workspaceId, period }));
+    const controlSnapshot = await transaction.get(controlRef);
+    const control = controlSnapshot.data() ?? {};
+    const siblingIds = Array.isArray(control.kioskIds) ? control.kioskIds.map(String) : [];
+    const siblingRefs = siblingIds.map((unitId) => financialDbAdmin.collection("revenueReconciliationPeriods")
+      .doc(salesReconciliationPeriodId({ workspaceId: input.workspaceId, kioskId: unitId, period })));
+    const siblingSnapshots = await Promise.all(siblingRefs.map((reference) => transaction.get(reference)));
+
+    if (control.activeProjectionId !== current.activeProjectionId || control.buildingProjectionId) {
+      throw new SalesReconciliationConflictError("A competência está sendo reconstruída.");
+    }
+    if (input.action === "close") {
+      if (!["ready", "reopened"].includes(String(current.status)) || Number(current.pendingCaseCount ?? 0) !== 0) {
+        throw new SalesReconciliationStateError(
+          "A competência só pode ser fechada depois que todas as pendências forem decididas.",
+        );
+      }
+      if (Number(current.pdvFactCount ?? 0) === 0 || Number(current.stoneSaleCount ?? 0) === 0) {
+        throw new SalesReconciliationStateError("Carregue as duas fontes antes de fechar a competência.");
+      }
+    } else if (!["closed", "stale"].includes(String(current.status))) {
+      throw new SalesReconciliationStateError("Somente uma competência fechada ou desatualizada pode ser reaberta.");
+    }
+
+    const now = Timestamp.now();
+    const nextStatus: SalesReconciliationPeriodStatus = input.action === "close" ? "closed" : "reopened";
+    const eventId = randomUUID();
+    const audit = {
+      id: eventId,
+      workspaceId: input.workspaceId,
+      periodId: periodRef.id,
+      kioskId,
+      period,
+      action: input.action === "close" ? "closed" : "reopened",
+      previousStatus: current.status,
+      status: nextStatus,
+      reason: input.reason,
+      actorId: input.actor.id,
+      actorName: input.actor.name,
+      createdAt: now,
+    };
+    transaction.update(periodRef, {
+      status: nextStatus,
+      ...(input.action === "close"
+        ? { closedAt: now, closedBy: input.actor.id, closedReason: input.reason }
+        : { reopenedAt: now, reopenedBy: input.actor.id, reopenReason: input.reason }),
+      updatedAt: now,
+    });
+    transaction.set(periodRef.collection("events").doc(eventId), audit);
+    transaction.set(financialDbAdmin.collection("revenueMonthlySummaries").doc(periodRef.id), {
+      periodStatus: nextStatus,
+      updatedAt: now,
+    }, { merge: true });
+
+    const siblingStatuses = siblingSnapshots.map((snapshot) => (
+      snapshot.id === periodRef.id ? nextStatus : snapshot.data()?.status
+    ));
+    const allClosed = input.action === "close"
+      && siblingStatuses.length === EXPECTED_RECONCILIATION_UNIT_COUNT
+      && siblingStatuses.every((status) => status === "closed")
+      && Number(control.pendingCaseCount ?? 0) === 0;
+    transaction.update(controlRef, {
+      status: input.action === "reopen" ? "reopened" : allClosed ? "closed" : "partial",
+      ...(allClosed ? { closedAt: now, closedBy: input.actor.id } : {}),
+      updatedAt: now,
+    });
+    return { period: { id: periodRef.id, ...current, status: nextStatus }, consolidatedClosed: allClosed, eventId };
+  }));
 }

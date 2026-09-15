@@ -162,5 +162,6 @@ export type SalesReconciliationDecision = {
     | "wrong_unit"
     | "timing_difference"
     | "cancelled_or_refunded";
+  targetKioskId?: string;
   reason: string;
 };
