@@ -375,6 +375,7 @@ async function rebuildPeriod(input: { workspaceId: string; period: string; proje
     const unitPdv = pdv.filter((row) => row.kioskId === kioskId);
     const unitStone = stone.filter((row) => row.kioskId === kioskId);
     const unitCases = activeCases.filter((entry) => entry.kioskIds.includes(kioskId));
+    const kioskName = [...unitPdv, ...unitStone].find((row) => row.kioskName)?.kioskName ?? null;
     const decidedCaseCount = unitCases.filter((entry) => entry.reviewStatus !== "pending_review").length;
     const pendingCaseCount = unitCases.length - decidedCaseCount;
     const pdvGrossAmountCents = approvedTotal(unitPdv);
@@ -383,6 +384,7 @@ async function rebuildPeriod(input: { workspaceId: string; period: string; proje
       id: salesReconciliationPeriodId({ workspaceId: input.workspaceId, kioskId, period: input.period }),
       workspaceId: input.workspaceId,
       kioskId,
+      kioskName,
       scope: "unit",
       period: input.period,
       activeProjectionId: input.projectionId,
@@ -428,6 +430,7 @@ async function rebuildPeriod(input: { workspaceId: string; period: string; proje
         id: summary.id,
         workspaceId: input.workspaceId,
         kioskId: summary.kioskId,
+        kioskName: summary.kioskName,
         period: input.period,
         activeProjectionId: input.projectionId,
         pdvRevenueTotalCents: summary.pdvGrossAmountCents,

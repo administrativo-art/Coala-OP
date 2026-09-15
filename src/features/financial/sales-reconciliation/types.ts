@@ -137,6 +137,7 @@ export type RevenueReconciliationPeriodSummary = {
   id: string;
   workspaceId: string;
   kioskId: string;
+  kioskName?: string | null;
   period: string;
   status: SalesReconciliationPeriodStatus;
   activeProjectionId: string;
@@ -149,6 +150,7 @@ export type RevenueReconciliationPeriodSummary = {
   pdvGrossAmountCents: number;
   stoneGrossAmountCents: number;
   differenceAmountCents: number;
+  reconciledRevenueCents: number;
   sourceFingerprint: string;
 };
 

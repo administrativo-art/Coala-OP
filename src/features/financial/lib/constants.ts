@@ -25,6 +25,7 @@ export type FinancialCollectionName =
 export const FINANCIAL_ROUTES = {
   root: "/dashboard/financial",
   cashFlow: "/dashboard/financial/cash-flow",
+  reconciliation: "/dashboard/financial/reconciliation",
   financialFlow: "/dashboard/financial/financial-flow",
   dre: "/dashboard/financial/dre",
   expenses: "/dashboard/financial/expenses",

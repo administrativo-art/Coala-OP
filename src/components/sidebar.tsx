@@ -278,6 +278,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
             ],
           },
+          { label: "Conciliação", href: "/dashboard/financial/reconciliation", icon: Repeat, show: permissions.financial?.view && permissions.financial?.salesReconciliation?.view },
           { label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
