@@ -378,7 +378,8 @@ export function SalesReconciliationPage() {
       <div className="grid gap-3 lg:grid-cols-3">
         {periods.map((entry) => {
           const canClose = permissions.financial?.salesReconciliation?.close === true
-            && ["ready", "reopened"].includes(entry.status);
+            && ["ready", "reopened"].includes(entry.status)
+            && entry.cashEvidence?.status === "ready";
           const canReopen = permissions.financial?.salesReconciliation?.reopen === true
             && ["closed", "stale"].includes(entry.status);
           return (
@@ -388,6 +389,17 @@ export function SalesReconciliationPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Cobertura</span><strong>{entry.coveragePercent.toLocaleString("pt-BR")} %</strong></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Pendências</span><strong>{entry.pendingCaseCount}</strong></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Receita conciliada</span><strong>{formatBRL(entry.reconciledRevenueCents)}</strong></div>
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between gap-2"><span className="font-semibold">Evidências do caixa</span><Badge variant={entry.cashEvidence?.status === "ready" ? "default" : "outline"}>{entry.cashEvidence?.status === "ready" ? "Completo" : entry.cashEvidence?.status === "missing" ? "Ausente" : "Incompleto"}</Badge></div>
+                  <div className="mt-2 flex justify-between text-xs"><span className="text-muted-foreground">Dias aprovados</span><strong>{entry.cashEvidence?.approvedCount ?? 0}/{entry.cashEvidence?.expectedDayCount ?? 0}</strong></div>
+                  <div className="mt-1 flex justify-between text-xs"><span className="text-muted-foreground">Diferença física</span><strong>{formatBRL(entry.cashEvidence?.differenceTotalCents ?? 0)}</strong></div>
+                  <div className="mt-1 flex justify-between text-xs"><span className="text-muted-foreground">Sangrias / suprimentos</span><strong>{formatBRL(entry.cashEvidence?.withdrawalTotalCents ?? 0)} / {formatBRL(entry.cashEvidence?.supplyTotalCents ?? 0)}</strong></div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {permissions.financial?.cashClosures?.view ? <Button asChild size="sm" variant="outline"><Link href={`/dashboard/financial/cash-closures/${entry.kioskId}/${entry.period.replace("-", "/")}`}>Abrir fechamentos</Link></Button> : null}
+                    {permissions.financial?.cashDeposits?.view && (entry.cashEvidence?.depositBatchIds.length ?? 0) > 0 ? <Button asChild size="sm" variant="outline"><Link href="/dashboard/financial/cash-deposits">Abrir depósitos</Link></Button> : null}
+                  </div>
+                </div>
+                {["ready", "reopened"].includes(entry.status) && entry.cashEvidence?.status !== "ready" ? <p className="text-xs text-amber-700">Conclua todos os dias do fechamento de caixa antes de fechar a competência.</p> : null}
                 {canClose ? <Button className="w-full" onClick={() => setPeriodAction({ period: entry, action: "close" })}><LockKeyhole className="mr-2 h-4 w-4" />Fechar competência</Button> : null}
                 {canReopen ? <Button className="w-full" variant="outline" onClick={() => setPeriodAction({ period: entry, action: "reopen" })}><RotateCcw className="mr-2 h-4 w-4" />Reabrir competência</Button> : null}
               </CardContent>

@@ -31,6 +31,8 @@ import type {
   StoneSaleTransaction,
   SuggestedSalesReconciliationCase,
 } from "./types";
+import { buildSalesReconciliationCashEvidence } from "./cash-evidence";
+import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 
 const MAX_MAPPINGS = 100;
 const MAX_FACTS_PER_SOURCE_PERIOD = 5_000;
@@ -573,15 +575,39 @@ export async function listSalesReconciliationCases(input: {
     periodDocuments = periods.docs.filter((document) => document.data().scope === "unit");
   }
 
+  const visiblePeriodDocuments = periodDocuments
+    .filter((document) => document.exists && input.canAccessKiosk(String(document.data()?.kioskId ?? "")));
+  const [year, month] = input.period.split("-").map(Number);
+  const cashSummaryRefs = visiblePeriodDocuments.map((document) => financialDbAdmin
+    .collection("cashClosureMonthlySummaries")
+    .doc(`${input.workspaceId}_${String(document.data()?.kioskId)}_${year}_${String(month).padStart(2, "0")}`));
+  const cashSummarySnapshots = cashSummaryRefs.length > 0
+    ? await financialDbAdmin.getAll(...cashSummaryRefs)
+    : [];
+  const cashSummaryByKioskId = new Map(cashSummarySnapshots.flatMap((snapshot) => {
+    if (!snapshot.exists || snapshot.data()?.workspaceId !== input.workspaceId) return [];
+    const summary = { id: snapshot.id, ...snapshot.data() } as CashClosureMonthlySummary;
+    return [[summary.kioskId, summary] as const];
+  }));
+
   return serializeFinancialValue({
     cases: documents
       .map((document) => ({ id: document.id, ...document.data() } as PersistedSalesReconciliationCase))
       .filter((entry) => entry.kioskIds.length > 0
         ? entry.kioskIds.every(input.canAccessKiosk)
         : input.canViewUnmapped),
-    periods: periodDocuments
-      .filter((document) => document.exists && input.canAccessKiosk(String(document.data()?.kioskId ?? "")))
-      .map((document) => ({ id: document.id, ...document.data() })),
+    periods: visiblePeriodDocuments.map((document) => {
+      const kioskId = String(document.data()?.kioskId ?? "");
+      return {
+        id: document.id,
+        ...document.data(),
+        cashEvidence: buildSalesReconciliationCashEvidence({
+          year,
+          month,
+          summary: cashSummaryByKioskId.get(kioskId),
+        }),
+      };
+    }),
     nextCursor: hasMore ? documents.at(-1)?.id ?? null : null,
     projectionId,
   });
@@ -787,14 +813,27 @@ export async function changeSalesReconciliationPeriodStatus(input: {
     if (!kioskId || !input.canAccessKiosk(kioskId)) throw new SalesReconciliationAccessError();
 
     const period = String(current.period ?? "");
+    const [year, month] = period.split("-").map(Number);
     const controlRef = financialDbAdmin.collection("revenueReconciliationPeriods")
       .doc(salesReconciliationControlId({ workspaceId: input.workspaceId, period }));
-    const controlSnapshot = await transaction.get(controlRef);
+    const cashSummaryRef = financialDbAdmin.collection("cashClosureMonthlySummaries")
+      .doc(`${input.workspaceId}_${kioskId}_${year}_${String(month).padStart(2, "0")}`);
+    const [controlSnapshot, cashSummarySnapshot] = await Promise.all([
+      transaction.get(controlRef),
+      transaction.get(cashSummaryRef),
+    ]);
     const control = controlSnapshot.data() ?? {};
     const siblingIds = Array.isArray(control.kioskIds) ? control.kioskIds.map(String) : [];
     const siblingRefs = siblingIds.map((unitId) => financialDbAdmin.collection("revenueReconciliationPeriods")
       .doc(salesReconciliationPeriodId({ workspaceId: input.workspaceId, kioskId: unitId, period })));
     const siblingSnapshots = await Promise.all(siblingRefs.map((reference) => transaction.get(reference)));
+    const cashEvidence = buildSalesReconciliationCashEvidence({
+      year,
+      month,
+      summary: cashSummarySnapshot.exists
+        ? cashSummarySnapshot.data() as CashClosureMonthlySummary
+        : null,
+    });
 
     if (control.activeProjectionId !== current.activeProjectionId || control.buildingProjectionId) {
       throw new SalesReconciliationConflictError("A competência está sendo reconstruída.");
@@ -807,6 +846,11 @@ export async function changeSalesReconciliationPeriodStatus(input: {
       }
       if (Number(current.pdvFactCount ?? 0) === 0 || Number(current.stoneSaleCount ?? 0) === 0) {
         throw new SalesReconciliationStateError("Carregue as duas fontes antes de fechar a competência.");
+      }
+      if (cashEvidence.status !== "ready") {
+        throw new SalesReconciliationStateError(
+          `O fechamento de caixa está ${cashEvidence.status === "missing" ? "ausente" : "incompleto"}: ${cashEvidence.approvedCount}/${cashEvidence.expectedDayCount} dias aprovados.`,
+        );
       }
     } else if (!["closed", "stale"].includes(String(current.status))) {
       throw new SalesReconciliationStateError("Somente uma competência fechada ou desatualizada pode ser reaberta.");
@@ -831,6 +875,7 @@ export async function changeSalesReconciliationPeriodStatus(input: {
     };
     transaction.update(periodRef, {
       status: nextStatus,
+      cashEvidence,
       ...(input.action === "close"
         ? { closedAt: now, closedBy: input.actor.id, closedReason: input.reason }
         : { reopenedAt: now, reopenedBy: input.actor.id, reopenReason: input.reason }),
@@ -839,6 +884,7 @@ export async function changeSalesReconciliationPeriodStatus(input: {
     transaction.set(periodRef.collection("events").doc(eventId), audit);
     transaction.set(financialDbAdmin.collection("revenueMonthlySummaries").doc(periodRef.id), {
       periodStatus: nextStatus,
+      cashEvidence,
       updatedAt: now,
     }, { merge: true });
 

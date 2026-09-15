@@ -345,6 +345,8 @@ function aggregateLines(lines: CashClosureLine[]) {
     reportedDifferenceByChannelCents,
     differenceByChannelCents,
     expectedCashCents: expectedByChannelCents.cash,
+    supplyTotalCents: lines.reduce((total, line) => total + (line.metadata.supplyCents ?? 0), 0),
+    withdrawalTotalCents: lines.reduce((total, line) => total + (line.metadata.withdrawalCents ?? 0), 0),
     reportedCashCents: reportedByChannelCents.cash,
     countedCashCents: countedByChannelCents.cash,
     unreportedLineCount,

@@ -66,6 +66,7 @@ function summaryFromClosures(input: {
     month: input.month,
     ...counts,
     expectedTotalCents: closures.reduce((total, closure) => total + closure.expectedTotalCents, 0),
+    expectedCashCents: closures.reduce((total, closure) => total + closure.expectedCashCents, 0),
     countedTotalCents: closures.reduce((total, closure) => total + closure.finalizedCountedTotalCents, 0),
     differenceTotalCents: closures.reduce((total, closure) => total + closure.finalizedDifferenceTotalCents, 0),
     dreRevenueTotalCents: cashClosureDreRevenueCents(closures),
@@ -74,6 +75,13 @@ function summaryFromClosures(input: {
     allocatedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "allocatedCents"), 0),
     issuedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "issuedCents"), 0),
     paidCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "paidCents"), 0),
+    supplyTotalCents: closures.reduce((total, closure) => total + (closure.supplyTotalCents ?? 0), 0),
+    withdrawalTotalCents: closures.reduce((total, closure) => total + (closure.withdrawalTotalCents ?? 0), 0),
+    closureIds: closures.map((closure) => closure.id).sort(),
+    depositBatchIds: [...new Set(closures.flatMap((closure) => [
+      closure.cashDeposit.batchId,
+      ...(closure.cashDeposit.manualSplitBatchIds ?? []),
+    ].filter((value): value is string => Boolean(value))))].sort(),
     lastSyncedAt: maxString(closures.map((closure) => closure.syncedAt)),
     lastApprovedDate: maxString(
       closures.filter((closure) => closure.status === "approved").map((closure) => closure.date),

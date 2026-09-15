@@ -33,8 +33,8 @@ Os números abaixo são tetos do código, não previsão de volume real:
 |---|---:|---:|
 | Importar fragmento sem finalizar | transação pontual do `run` e até 101 mapeamentos se necessários | 2 por fato + atualizações do `run` |
 | Finalizar uma competência | 5.001 fatos PDV + 5.001 vendas Stone + até 10.000 decisões + resumos existentes das unidades | até 10.000 casos + 2 resumos por unidade + controle e `run` |
-| Listar casos sem unidade | 1 controle + até 101 casos + até 21 períodos | 0 |
-| Listar casos de uma unidade | 1 controle + até 101 casos + 1 período | 0 |
+| Listar casos sem unidade | 1 controle + até 101 casos + até 21 períodos + até 20 resumos de caixa | 0 |
+| Listar casos de uma unidade | 1 controle + até 101 casos + 1 período + 1 resumo de caixa | 0 |
 | Listar recebíveis Stone | até 101 recebíveis por página | 0 |
 | Listar liquidações Stone | até 101 liquidações por página | 0 |
 | Vincular/desvincular liquidação ao extrato | 2 leituras transacionais | até 3 escritas atômicas, incluindo evento |

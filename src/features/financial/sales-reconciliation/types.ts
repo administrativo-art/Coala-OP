@@ -152,6 +152,7 @@ export type RevenueReconciliationPeriodSummary = {
   differenceAmountCents: number;
   reconciledRevenueCents: number;
   sourceFingerprint: string;
+  cashEvidence?: import("./cash-evidence").SalesReconciliationCashEvidence;
 };
 
 export type SalesReconciliationDecision = {

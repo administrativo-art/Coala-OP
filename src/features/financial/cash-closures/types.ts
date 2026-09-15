@@ -179,6 +179,8 @@ export type CashClosure = {
   reportedDifferenceTotalCents: number;
   differenceTotalCents: number;
   expectedCashCents: number;
+  supplyTotalCents?: number;
+  withdrawalTotalCents?: number;
   reportedCashCents: number;
   countedCashCents: number;
   finalizedCountedTotalCents: number;
@@ -363,6 +365,7 @@ export type CashClosureMonthlySummary = {
   approvedCount: number;
   syncErrorCount: number;
   expectedTotalCents: number;
+  expectedCashCents?: number;
   countedTotalCents: number;
   differenceTotalCents: number;
   /** Receita do PDV na DRE; diferenças físicas permanecem separadas. */
@@ -372,6 +375,10 @@ export type CashClosureMonthlySummary = {
   allocatedCashCents: number;
   issuedCashCents: number;
   paidCashCents: number;
+  supplyTotalCents?: number;
+  withdrawalTotalCents?: number;
+  closureIds?: string[];
+  depositBatchIds?: string[];
   lastSyncedAt: string | null;
   lastApprovedDate: string | null;
   updatedAt: string;
