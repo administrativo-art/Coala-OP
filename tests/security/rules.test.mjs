@@ -429,6 +429,18 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           totalValue: 1000,
           status: "pending",
         }),
+        setDoc(doc(db, "expenses/stone-fee-1"), {
+          description: "MDR Stone",
+          totalValue: 10,
+          status: "paid",
+          sourceType: "stone_receivable_fee",
+        }),
+        setDoc(doc(db, "expenses/cash-loss-1"), {
+          description: "Quebra de caixa",
+          totalValue: 20,
+          status: "paid",
+          sourceType: "cash_closure_difference",
+        }),
         setDoc(doc(db, "financialInboxMessages/message-1"), {
           workspaceId: "coala-shakes",
           status: "pending_review",
@@ -570,6 +582,15 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       status: "paid",
       paidAt: new Date(),
+    }));
+    await assertFails(updateDoc(doc(editor.firestore(), "expenses/stone-fee-1"), { totalValue: 1 }));
+    await assertFails(updateDoc(doc(editor.firestore(), "expenses/cash-loss-1"), { totalValue: 1 }));
+    await assertFails(setDoc(doc(creator.firestore(), "expenses/forged-stone-fee"), {
+      sourceType: "stone_receivable_fee",
+      status: "paid",
+      totalValue: 1,
+      accountPlan: "active-leaf",
+      resultCenter: "center-jp",
     }));
     await assertSucceeds(setDoc(doc(cardImporter.firestore(), "cardStatements/inter__card__2026-08"), {
       key: "inter:card:2026-08",

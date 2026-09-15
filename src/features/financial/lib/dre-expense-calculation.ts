@@ -51,6 +51,8 @@ export type DreExpenseLineDetail = {
   amount: number;
   billingIdentity?: FinancialExpenseDreDocument["billingIdentity"];
   cardChargeDate?: string | null;
+  sourceType?: string | null;
+  stoneFeeKind?: "mdr" | "anticipation" | null;
 };
 
 export type DreExpenseCalculation = {
@@ -182,6 +184,8 @@ export function calculateDreExpenses(input: {
         amount: amountInCents / 100,
         ...(expense.billingIdentity ? { billingIdentity: expense.billingIdentity } : {}),
         ...(expense.cardChargeDate ? { cardChargeDate: expense.cardChargeDate } : {}),
+        ...(expense.sourceType ? { sourceType: expense.sourceType } : {}),
+        ...(expense.stoneFeeKind ? { stoneFeeKind: expense.stoneFeeKind } : {}),
       });
       detailsByPosition.set(position, details);
     }

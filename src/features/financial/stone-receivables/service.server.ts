@@ -8,10 +8,19 @@ import { prepareStoneFinancialImport } from "./ingestion.server";
 import { stoneFinancialRunId } from "./identity.server";
 import { assertStoneSettlementLink, StoneSettlementReconciliationError } from "./settlement-reconciliation";
 import type { StoneReceivable, StoneReceivableStatus, StoneSettlement } from "./types";
+import { stoneSaleTransactionId } from "@/features/financial/sales-reconciliation/identity.server";
+import type { StoneSaleTransaction } from "@/features/financial/sales-reconciliation/types";
+import {
+  STONE_ANTICIPATION_ACCOUNT,
+  STONE_MDR_ACCOUNT,
+  stoneFeeExpenseFields,
+  stoneFeeExpenseId,
+  stoneReceivableFeeEffects,
+} from "./fee-accounting";
 
 export { StoneSettlementReconciliationError } from "./settlement-reconciliation";
 
-const ROWS_PER_BATCH = 200;
+const ROWS_PER_BATCH = 100;
 const RUN_LEASE_MS = 5 * 60 * 1_000;
 
 export class StoneFinancialConflictError extends Error {
@@ -28,8 +37,77 @@ export class StoneFinancialAccessError extends Error {
   }
 }
 
+export class StoneFinancialAccountingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StoneFinancialAccountingError";
+  }
+}
+
 function chunks<T>(values: T[], size: number) {
   return Array.from({ length: Math.ceil(values.length / size) }, (_, index) => values.slice(index * size, (index + 1) * size));
+}
+
+function validFeeAccount(snapshot: FirebaseFirestore.DocumentSnapshot, expectedName: string) {
+  const data = snapshot.data() ?? {};
+  return snapshot.exists
+    && data.active !== false
+    && data.isGroup !== true
+    && data.is_dre_account !== false
+    && data.dre_position === "despesas_financeiras"
+    && String(data.name ?? "").trim() === expectedName;
+}
+
+async function prepareReceivableAccounting(rows: StoneReceivable[]) {
+  const previousSnapshots = rows.length > 0
+    ? await financialDbAdmin.getAll(...rows.map((row) => financialDbAdmin.collection("stoneReceivables").doc(row.id)))
+    : [];
+  const feeRows = rows.filter((row) => row.mdrAmountCents > 0 || row.anticipationFeeAmountCents > 0);
+  const missingSaleReference = feeRows.find((row) => !row.externalSaleId);
+  if (missingSaleReference) {
+    throw new StoneFinancialAccountingError(`O recebível ${missingSaleReference.receivableKey} possui taxa sem vínculo com a venda de origem.`);
+  }
+  const saleReferences = [...new Set(feeRows.map((row) => row.externalSaleId as string))]
+    .map((externalTransactionId) => financialDbAdmin.collection("stoneSaleTransactions").doc(stoneSaleTransactionId({
+      workspaceId: rows[0]?.workspaceId ?? "",
+      externalTransactionId,
+    })));
+  const [saleSnapshots, accountSnapshots] = await Promise.all([
+    saleReferences.length > 0 ? financialDbAdmin.getAll(...saleReferences) : [],
+    feeRows.length > 0 ? financialDbAdmin.getAll(
+      financialDbAdmin.collection("accounts").doc(STONE_MDR_ACCOUNT.id),
+      financialDbAdmin.collection("accounts").doc(STONE_ANTICIPATION_ACCOUNT.id),
+    ) : [],
+  ]);
+  if (feeRows.some((row) => row.mdrAmountCents > 0) && !validFeeAccount(accountSnapshots[0], STONE_MDR_ACCOUNT.name)) {
+    throw new StoneFinancialAccountingError(`A conta ${STONE_MDR_ACCOUNT.name} não atende ao contrato contábil esperado.`);
+  }
+  if (feeRows.some((row) => row.anticipationFeeAmountCents > 0) && !validFeeAccount(accountSnapshots[1], STONE_ANTICIPATION_ACCOUNT.name)) {
+    throw new StoneFinancialAccountingError(`A conta ${STONE_ANTICIPATION_ACCOUNT.name} não atende ao contrato contábil esperado.`);
+  }
+  const saleByExternalId = new Map(saleSnapshots.flatMap((snapshot) => {
+    if (!snapshot.exists) return [];
+    const sale = { id: snapshot.id, ...snapshot.data() } as StoneSaleTransaction;
+    return [[sale.externalTransactionId, sale] as const];
+  }));
+  const previousById = new Map(previousSnapshots.flatMap((snapshot) => snapshot.exists
+    ? [[snapshot.id, { id: snapshot.id, ...snapshot.data() } as StoneReceivable] as const]
+    : []));
+  const enrichedRows = rows.map((row) => {
+    if (row.mdrAmountCents <= 0 && row.anticipationFeeAmountCents <= 0) return row;
+    const sale = saleByExternalId.get(row.externalSaleId as string);
+    if (!sale || sale.workspaceId !== row.workspaceId) {
+      throw new StoneFinancialAccountingError(`A venda de origem do recebível ${row.receivableKey} precisa ser importada antes das taxas.`);
+    }
+    if (!sale.kioskId) {
+      throw new StoneFinancialAccountingError(`A venda de origem do recebível ${row.receivableKey} ainda não possui unidade canônica.`);
+    }
+    if (row.kioskId && row.kioskId !== sale.kioskId) {
+      throw new StoneFinancialAccountingError(`O recebível ${row.receivableKey} diverge da unidade da venda de origem.`);
+    }
+    return { ...row, kioskId: sale.kioskId, kioskName: row.kioskName ?? sale.kioskName ?? null };
+  });
+  return { enrichedRows, saleByExternalId, previousById };
 }
 
 export async function importStoneFinancialBatch(raw: unknown, actor: {
@@ -70,13 +148,53 @@ export async function importStoneFinancialBatch(raw: unknown, actor: {
   if (started.completed) return { runId, idempotent: true, ...(started.result as object ?? {}) };
 
   try {
+    const receivableAccounting = prepared.source === "stone_receivables"
+      ? await prepareReceivableAccounting(prepared.rows as StoneReceivable[])
+      : null;
+    const rows = receivableAccounting?.enrichedRows ?? prepared.rows;
+    if (rows.some((row) => "kioskId" in row && row.kioskId && !actor.canAccessKiosk(row.kioskId))) {
+      throw new StoneFinancialAccessError();
+    }
     const collection = prepared.source === "stone_receivables" ? "stoneReceivables" : "stoneSettlements";
-    for (const page of chunks(prepared.rows, ROWS_PER_BATCH)) {
+    for (const page of chunks(rows, ROWS_PER_BATCH)) {
       const batch = financialDbAdmin.batch();
       for (const row of page) {
         const reference = financialDbAdmin.collection(collection).doc(row.id);
         batch.set(reference, { ...row, latestRunId: runId, updatedAt: Timestamp.now() }, { merge: true });
         batch.set(reference.collection("events").doc(row.sourceHash), row);
+        if ("receivableKey" in row && receivableAccounting) {
+          const sale = row.externalSaleId ? receivableAccounting.saleByExternalId.get(row.externalSaleId) : null;
+          const previous = receivableAccounting.previousById.get(row.id);
+          for (const fee of stoneReceivableFeeEffects(row)) {
+            const previousAmount = fee.kind === "mdr"
+              ? Number(previous?.mdrAmountCents ?? 0)
+              : Number(previous?.anticipationFeeAmountCents ?? 0);
+            const expenseRef = financialDbAdmin.collection("expenses").doc(stoneFeeExpenseId(row.id, fee.kind));
+            if (fee.amountCents > 0 && sale) {
+              batch.set(expenseRef, {
+                ...stoneFeeExpenseFields({ receivable: row, sale, ...fee }),
+                competenceDate: Timestamp.fromDate(new Date(`${sale.period}-01T12:00:00.000Z`)),
+                latestRunId: runId,
+                cancelledAt: null,
+                cancelledBy: null,
+                cancellationReason: null,
+                ...(previousAmount <= 0 ? { createdAt: Timestamp.now(), createdBy: actor.id } : {}),
+                updatedAt: Timestamp.now(),
+                updatedBy: actor.id,
+              }, { merge: true });
+            } else if (previousAmount > 0) {
+              batch.set(expenseRef, {
+                status: "cancelled",
+                cancellationReason: "A taxa deixou de existir na revisão do recebível Stone.",
+                cancelledAt: Timestamp.now(),
+                cancelledBy: actor.id,
+                latestRunId: runId,
+                updatedAt: Timestamp.now(),
+                updatedBy: actor.id,
+              }, { merge: true });
+            }
+          }
+        }
       }
       await batch.commit();
     }

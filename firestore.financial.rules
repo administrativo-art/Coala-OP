@@ -181,6 +181,13 @@ service cloud.firestore {
         || (hasFinancialClaims() && financialClaims().settings.manageExpenseDescriptions == true);
     }
 
+    function isServerGeneratedExpense(data) {
+      return data.get('sourceType', '') in [
+        'cash_closure_difference',
+        'stone_receivable_fee'
+      ];
+    }
+
     function canReadExpenseDescriptions() {
       return canCreateExpenses()
         || canEditExpenses()
@@ -380,16 +387,19 @@ service cloud.firestore {
     match /expenses/{expenseId} {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre()
         || canViewAudits() || canViewCardStatements() || canViewPersonnelCosts();
-      allow create: if isCardStatementImportCreate(request.resource.data)
-        || (canCreateExpenses()
-          && hasValidExpenseAccount(request.resource.data)
-          && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
-          && hasValidExpenseIndividualization(request.resource.data));
-      allow update: if (canEditExpenses()
+      allow create: if !isServerGeneratedExpense(request.resource.data)
+        && (isCardStatementImportCreate(request.resource.data)
+          || (canCreateExpenses()
+            && hasValidExpenseAccount(request.resource.data)
+            && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
+            && hasValidExpenseIndividualization(request.resource.data)));
+      allow update: if !isServerGeneratedExpense(resource.data)
+        && !isServerGeneratedExpense(request.resource.data)
+        && ((canEditExpenses()
           && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
           && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data))))
-        || isCardStatementAuditUpdate();
-      allow delete: if canDeleteExpenses();
+          || isCardStatementAuditUpdate());
+      allow delete: if !isServerGeneratedExpense(resource.data) && canDeleteExpenses();
     }
 
     match /payments/{paymentId} {

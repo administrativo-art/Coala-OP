@@ -100,6 +100,30 @@ test("DRE preserva as despesas que compõem cada linha e o valor da unidade", ()
   }]);
 });
 
+test("DRE preserva a origem contábil para destacar taxas Stone sem duplicar o total", () => {
+  const expense = normalizeFinancialExpenseForDre("stone-mdr", {
+    status: "paid",
+    competenceMonth: "2026-08",
+    sourceType: "stone_receivable_fee",
+    stoneFeeKind: "mdr",
+    accountPlan: "card-fees",
+    totalValue: 12.34,
+    resultCenter: "center-jp",
+  });
+  const result = calculateDreExpenses({
+    expenses: [expense],
+    accounts: {
+      ...accounts,
+      "card-fees": { name: "Taxas de cartão", drePosition: "despesas_financeiras", isDreAccount: true },
+    },
+    monthKey: "2026-08",
+    resultCenterNames: { "center-jp": "Quiosque João Paulo" },
+  });
+  assert.equal(result.totalsByPosition.despesas_financeiras, 12.34);
+  assert.equal(result.detailsByPosition.despesas_financeiras[0]?.sourceType, "stone_receivable_fee");
+  assert.equal(result.detailsByPosition.despesas_financeiras[0]?.stoneFeeKind, "mdr");
+});
+
 test("DRE exclui título sem competência mesmo que tenha vencimento e pagamento", () => {
   const expense = normalizeFinancialExpenseForDre("without-competence", {
     status: "paid",

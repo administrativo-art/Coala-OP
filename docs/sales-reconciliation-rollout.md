@@ -1,6 +1,6 @@
 # Conciliação de vendas Stone — implementação e rollout
 
-Status: implementação local em andamento, sem publicação e sem acesso ao provedor.
+Status: implementação local das fontes canônicas concluída, sem publicação e sem acesso ao provedor.
 
 Este documento operacionaliza o plano-mestre
 [`plano-integracao-stone-conciliacao.md`](./plano-integracao-stone-conciliacao.md).
@@ -38,6 +38,7 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Listar diferenças de caixa de uma unidade/mês | até 32 fechamentos + 31 decisões | 0 |
 | Classificar diferença de caixa | até 4 leituras transacionais | até 4 escritas atômicas (decisão, evento e efeitos aplicáveis) |
 | Listar recebíveis Stone | até 101 recebíveis por página | 0 |
+| Importar até 200 recebíveis Stone | até 403 leituras (run, versões anteriores, vendas e contas) | até 4 escritas por recebível + controle do run, em lotes de 100 linhas |
 | Listar liquidações Stone | até 101 liquidações por página | 0 |
 | Vincular/desvincular liquidação ao extrato | 2 leituras transacionais | até 3 escritas atômicas, incluindo evento |
 | Abrir administração da integração | até 101 mapeamentos + 51 execuções | 0 |
@@ -45,6 +46,9 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Confirmar saldo de uma conta | 2 leituras transacionais | 2 escritas atômicas, incluindo evento |
 | Listar saldos confirmados | até 51 leituras | 0 |
 | Compor fluxo de caixa de 91 dias | até 26.107 leituras no teto defensivo | 0 |
+| Dry-run do backfill por arquivos | 0 leituras no Firebase | 0 |
+| Migrar permissões Stone | até 5.001 perfis, paginados de 200 | até 5.000 perfis, em lotes de 400 |
+| Preparar conta de diferenças de caixa | até 501 contas, paginadas de 200 | 3 escritas atômicas somente se a conta estiver ausente |
 
 Uma leitura que ultrapasse o teto é recusada; não ocorre scan completo como
 fallback. A tela deverá paginar por cursor e não usará listener ou polling. Os
@@ -67,6 +71,62 @@ mês no teto anterior; com a coleção protegida de saldos, o teto atualizado é
 limites, resumos diários reconstruíveis de no máximo 91 documentos por escopo
 passam a ser gate obrigatório antes do rollout. Cada resposta informa as
 contagens reais por fonte para acompanhamento pós-ativação.
+
+## Backfill canônico e migrações
+
+O backfill recebe um lote canônico por arquivo `.json`, com no máximo 200 linhas,
+no mesmo contrato das rotas de importação. Os arquivos são processados em ordem
+alfabética. O último lote de vendas de cada competência precisa usar
+`finalize=true`; as chaves de idempotência não podem se repetir no conjunto.
+
+O dry-run é inteiramente local: não inicializa o Firebase, consolida contagens e
+centavos, executa o mesmo motor de matching, identifica unidades sem mapeamento
+e emite um `reviewHash`:
+
+```bash
+npm run backfill:stone-reconciliation -- \
+  --input-dir=./tmp/stone-2026-08 \
+  --workspace=coala-shakes \
+  --approved-kiosk=<kioskId-canônico> \
+  --from=2026-08
+```
+
+A escrita exige simultaneamente `--execute`, confirmação exata do workspace e o
+hash do relatório que foi revisado. Se qualquer arquivo mudar, o hash deixa de
+ser aceito. O processo reutiliza os importadores idempotentes e nunca cria
+fechamentos, sangrias, depósitos ou transações bancárias:
+
+```bash
+npm run backfill:stone-reconciliation -- \
+  --input-dir=./tmp/stone-2026-08 \
+  --workspace=coala-shakes \
+  --approved-kiosk=<kioskId-canônico> \
+  --execute \
+  --confirm-workspace=coala-shakes \
+  --reviewed-report=<hash-do-dry-run>
+```
+
+Antes do modo sombra, executar e revisar separadamente os dry-runs abaixo. A
+conta de diferenças só é criada quando não existe conta homônima e o comando de
+escrita recebe a confirmação literal exibida pelo próprio preflight.
+
+```bash
+npm run migrate:stone-reconciliation-permissions
+npm run migrate:cash-difference-account
+```
+
+Para gravar as permissões depois da revisão, acrescentar
+`--execute --confirmation=MIGRATE-STONE-RECONCILIATION-PERMISSIONS-V1`. Perfis
+administradores padrão recebem as autoridades; os demais continuam com todas
+as novas ações negadas até concessão explícita.
+
+Recebíveis com MDR ou antecipação devem informar `externalSaleId`, e os lotes
+de Stone Vendas correspondentes precisam vir antes dos lotes de recebíveis. O
+importador usa a competência e a unidade da venda de origem para gerar despesas
+provisionadas nas contas já existentes, marcadas como efeito incluído no valor
+líquido do recebível. Na liquidação, a mesma identidade passa a paga.
+Assim, as taxas entram na DRE em linhas próprias, enquanto o fluxo de caixa
+continua usando o recebível líquido sem duplicar saída nem criar obrigação.
 
 ## Ordem segura de ativação
 

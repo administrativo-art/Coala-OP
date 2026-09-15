@@ -49,6 +49,8 @@ export type FinancialExpenseDreDocument = {
     serviceNumbers: string[];
   } | null;
   cardChargeDate?: string | null;
+  sourceType?: string | null;
+  stoneFeeKind?: "mdr" | "anticipation" | null;
 };
 
 type ExpenseCompetenceSource = {
@@ -236,6 +238,10 @@ export function normalizeFinancialExpenseForDre(
     supplierId: text(expense.supplierId) || null,
     billingIdentity: normalizeBillingIdentity(expense.billingIdentity),
     cardChargeDate: dateKeyFromDateValue(expense.cardChargeDate),
+    sourceType: text(expense.sourceType) || null,
+    stoneFeeKind: ["mdr", "anticipation"].includes(text(expense.stoneFeeKind))
+      ? text(expense.stoneFeeKind) as "mdr" | "anticipation"
+      : null,
   };
 }
 

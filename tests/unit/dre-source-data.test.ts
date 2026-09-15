@@ -83,6 +83,9 @@ test("mantém a fonte da DRE filtrada, paginada e sem leitura direta no cliente"
   assert.match(pageSource, /value="pdv">Receita · PDV Legal/);
   assert.match(pageSource, /value="reconciled">Receita · Conciliada/);
   assert.match(pageSource, /reconciledRevenueTotalCents/);
+  assert.match(pageSource, /\(-\) MDR Stone/);
+  assert.match(pageSource, /\(-\) Antecipação de recebíveis Stone/);
+  assert.match(pageSource, /\(-\) Quebras e diferenças de caixa/);
   assert.doesNotMatch(pageSource, /closureRevenueByUnitMonth|cashClosureSummaryDreRevenueCents/);
   assert.doesNotMatch(pageSource, /\b(?:getDocs|onSnapshot)\s*\(/);
   assert.doesNotMatch(pageSource, /financialCollection\("expenses"\)/);

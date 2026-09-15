@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
   prepareStoneFinancialImport,
   StoneFinancialImportValidationError,
 } from "../../src/features/financial/stone-receivables/ingestion.server";
+import {
+  STONE_MDR_ACCOUNT,
+  stoneFeeExpenseFields,
+  stoneFeeExpenseId,
+} from "../../src/features/financial/stone-receivables/fee-accounting";
 
 const SOURCE_HASH = "a".repeat(64);
 
@@ -94,5 +100,57 @@ describe("ingestão financeira Stone", () => {
     assert.equal(prepared.rows.length, 1);
     assert.match(prepared.rows[0].id, /^stone_settle_/);
     assert.equal("settledAt" in prepared.rows[0] && prepared.rows[0].settledAt, "2026-09-17T15:00:00.000Z");
+  });
+
+  it("apropria MDR na competência da venda sem criar nova saída bancária", () => {
+    const prepared = prepareStoneFinancialImport({
+      workspaceId: "coala",
+      source: "stone_receivables",
+      idempotencyKey: "receivables-fee-accounting",
+      rows: [receivable()],
+    });
+    const row = prepared.rows[0];
+    assert.ok("receivableKey" in row);
+    const fields = stoneFeeExpenseFields({
+      receivable: row,
+      sale: {
+        id: "stone-sale-1",
+        workspaceId: "coala",
+        externalTransactionId: "sale-1",
+        stoneCode: "stone-tirirical",
+        kioskId: "tirirical",
+        soldAt: "2026-08-31T23:00:00-03:00",
+        businessDate: "2026-08-31",
+        period: "2026-08",
+        channel: "credit_card",
+        grossAmountCents: 10_000,
+        installmentCount: 2,
+        status: "approved",
+        identifiers: {},
+        sourceHash: SOURCE_HASH,
+        sourceRevision: "revision-1",
+      },
+      kind: "mdr",
+      amountCents: row.mdrAmountCents,
+      account: STONE_MDR_ACCOUNT,
+    });
+    assert.equal(fields.competenceMonth, "2026-08");
+    assert.equal(fields.totalValue, 2);
+    assert.equal(fields.status, "provisioned");
+    assert.equal(fields.cashEffectIncludedInNetReceivable, true);
+    assert.equal(fields.cashEffectAlreadyRealized, false);
+    assert.equal(fields.createsBankingObligation, false);
+    assert.match(stoneFeeExpenseId(row.id, "mdr"), /^stone_fee_[a-f0-9]{40}$/);
+  });
+
+  it("persiste taxa junto ao recebível em lote abaixo do limite do Firestore", async () => {
+    const [service, accounting] = await Promise.all([
+      readFile(new URL("../../src/features/financial/stone-receivables/service.server.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../src/features/financial/stone-receivables/fee-accounting.ts", import.meta.url), "utf8"),
+    ]);
+    assert.match(service, /const ROWS_PER_BATCH = 100/);
+    assert.match(service, /stoneFeeExpenseFields/);
+    assert.match(accounting, /cashEffectIncludedInNetReceivable: true/);
+    assert.doesNotMatch(service, /financialObligations|obligationPaymentLinks/);
   });
 });

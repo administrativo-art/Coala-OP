@@ -353,6 +353,9 @@ export function DrePage() {
 
     const pessoal = expenseAt("pessoal");
     const despOp = expenseAt("despesas_operacionais");
+    const cashDifferenceLosses = (expenseCalculation.detailsByPosition.despesas_operacionais ?? [])
+      .filter((detail) => detail.sourceType === "cash_closure_difference")
+      .reduce((total, detail) => total + detail.amount, 0);
     const ocupacao = expenseAt("ocupacao");
     const semCategoria = expenseAt(null);
     const totalFixos = pessoal + despOp + ocupacao + semCategoria;
@@ -360,6 +363,12 @@ export function DrePage() {
 
     const recFin = expenseAt("receita_financeira");
     const despFin = expenseAt("despesas_financeiras");
+    const stoneMdrFees = (expenseCalculation.detailsByPosition.despesas_financeiras ?? [])
+      .filter((detail) => detail.sourceType === "stone_receivable_fee" && detail.stoneFeeKind === "mdr")
+      .reduce((total, detail) => total + detail.amount, 0);
+    const stoneAnticipationFees = (expenseCalculation.detailsByPosition.despesas_financeiras ?? [])
+      .filter((detail) => detail.sourceType === "stone_receivable_fee" && detail.stoneFeeKind === "anticipation")
+      .reduce((total, detail) => total + detail.amount, 0);
     const recNaoOp = expenseAt("receita_nao_operacional");
     const despNaoOp = expenseAt("despesa_nao_operacional");
     const lair = resOp + recFin - despFin + recNaoOp - despNaoOp;
@@ -380,12 +389,15 @@ export function DrePage() {
       margContr,
       pessoal,
       despOp,
+      cashDifferenceLosses,
       ocupacao,
       semCategoria,
       totalFixos,
       resOp,
       recFin,
       despFin,
+      stoneMdrFees,
+      stoneAnticipationFees,
       recNaoOp,
       despNaoOp,
       lair,
@@ -619,7 +631,7 @@ export function DrePage() {
       URL.revokeObjectURL(anchor.href);
       return;
     }
-    const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
+    const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, cashDifferenceLosses, ocupacao, semCategoria, resOp, recFin, despFin, stoneMdrFees, stoneAnticipationFees, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
     const cmvRows = cmvCriterion === "stock_movement"
       ? [
           ["Critério do CMV", "Movimentação de estoque (estimativa histórica)", ""],
@@ -646,12 +658,23 @@ export function DrePage() {
       ["= Margem de Contribuição", formatCurrency(margContr), pct(margContr, recLiq)],
       ["Ponto de Equilíbrio", formatCurrency(pe), ""],
       ["(-) Pessoal", formatCurrency(pessoal), pct(pessoal, recLiq)],
-      ["(-) Despesas operacionais", formatCurrency(despOp), pct(despOp, recLiq)],
+      ...(cashDifferenceLosses > 0
+        ? [
+            ["(-) Outras despesas operacionais", formatCurrency(Math.max(0, despOp - cashDifferenceLosses)), pct(Math.max(0, despOp - cashDifferenceLosses), recLiq)],
+            ["(-) Quebras e diferenças de caixa", formatCurrency(cashDifferenceLosses), pct(cashDifferenceLosses, recLiq)],
+          ]
+        : [["(-) Despesas operacionais", formatCurrency(despOp), pct(despOp, recLiq)]]),
       ["(-) Ocupação", formatCurrency(ocupacao), pct(ocupacao, recLiq)],
       ["(-) Não classificado", formatCurrency(semCategoria), pct(semCategoria, recLiq)],
       ["= EBIT (Resultado Operacional)", formatCurrency(resOp), pct(resOp, recLiq)],
       ["(+) Receita financeira", formatCurrency(recFin), pct(recFin, recLiq)],
-      ["(-) Despesas financeiras", formatCurrency(despFin), pct(despFin, recLiq)],
+      ...(stoneMdrFees > 0 || stoneAnticipationFees > 0
+        ? [
+            ["(-) Outras despesas financeiras", formatCurrency(Math.max(0, despFin - stoneMdrFees - stoneAnticipationFees)), pct(Math.max(0, despFin - stoneMdrFees - stoneAnticipationFees), recLiq)],
+            ["(-) MDR Stone", formatCurrency(stoneMdrFees), pct(stoneMdrFees, recLiq)],
+            ["(-) Antecipação de recebíveis Stone", formatCurrency(stoneAnticipationFees), pct(stoneAnticipationFees, recLiq)],
+          ]
+        : [["(-) Despesas financeiras", formatCurrency(despFin), pct(despFin, recLiq)]]),
       ["(+) Receita não operacional", formatCurrency(recNaoOp), pct(recNaoOp, recLiq)],
       ["(-) Despesa não operacional", formatCurrency(despNaoOp), pct(despNaoOp, recLiq)],
       ["= LAIR", formatCurrency(lair), pct(lair, recLiq)],
@@ -1063,7 +1086,7 @@ export function DrePage() {
             {loading ? (
               <div className="space-y-2 p-6">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : (() => {
-              const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
+              const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, cashDifferenceLosses, ocupacao, semCategoria, resOp, recFin, despFin, stoneMdrFees, stoneAnticipationFees, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
 
               type Row =
                 | { type: "section"; label: string }
@@ -1101,7 +1124,12 @@ export function DrePage() {
                 { type: "divider" },
                 { type: "section", label: "DESPESAS OPERACIONAIS" },
                 { type: "line", label: "(-) Pessoal", value: pessoal, negative: true, detailsKey: "pessoal" },
-                { type: "line", label: "(-) Despesas operacionais", value: despOp, negative: true, detailsKey: "despesas_operacionais" },
+                ...(cashDifferenceLosses > 0
+                  ? [
+                      { type: "line" as const, label: "(-) Outras despesas operacionais", value: Math.max(0, despOp - cashDifferenceLosses), negative: true, detailsKey: "despesas_operacionais" },
+                      { type: "line" as const, label: "(-) Quebras e diferenças de caixa", value: cashDifferenceLosses, negative: true, detailsKey: "despesas_operacionais" },
+                    ]
+                  : [{ type: "line" as const, label: "(-) Despesas operacionais", value: despOp, negative: true, detailsKey: "despesas_operacionais" }]),
                 { type: "line", label: "(-) Ocupação", value: ocupacao, negative: true, detailsKey: "ocupacao" },
                 ...(semCategoria > 0 ? [{ type: "line" as const, label: "(-) Não classificado", value: semCategoria, negative: true, muted: true, detailsKey: "null" }] : []),
                 { type: "subtotal", label: "= EBIT (Resultado Operacional)", value: resOp, variant: resOp >= 0 ? "green" : "rose" },
@@ -1109,7 +1137,13 @@ export function DrePage() {
                 { type: "divider" },
                 { type: "section", label: "RESULTADO FINANCEIRO" },
                 ...(recFin > 0 ? [{ type: "line" as const, label: "(+) Receita financeira", value: recFin, detailsKey: "receita_financeira" }] : []),
-                { type: "line", label: "(-) Despesas financeiras", value: despFin, negative: true, detailsKey: "despesas_financeiras" },
+                ...(stoneMdrFees > 0 || stoneAnticipationFees > 0
+                  ? [
+                      { type: "line" as const, label: "(-) Outras despesas financeiras", value: Math.max(0, despFin - stoneMdrFees - stoneAnticipationFees), negative: true, detailsKey: "despesas_financeiras" },
+                      { type: "line" as const, label: "(-) MDR Stone", value: stoneMdrFees, negative: true, detailsKey: "despesas_financeiras" },
+                      { type: "line" as const, label: "(-) Antecipação de recebíveis Stone", value: stoneAnticipationFees, negative: true, detailsKey: "despesas_financeiras" },
+                    ]
+                  : [{ type: "line" as const, label: "(-) Despesas financeiras", value: despFin, negative: true, detailsKey: "despesas_financeiras" }]),
                 ...(recNaoOp > 0 ? [{ type: "line" as const, label: "(+) Receita não operacional", value: recNaoOp, detailsKey: "receita_nao_operacional" }] : []),
                 ...(despNaoOp > 0 ? [{ type: "line" as const, label: "(-) Despesa não operacional", value: despNaoOp, negative: true, detailsKey: "despesa_nao_operacional" }] : []),
                 { type: "subtotal", label: "= LAIR", value: lair, variant: lair >= 0 ? "slate" : "rose" },

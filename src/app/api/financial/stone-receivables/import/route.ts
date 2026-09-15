@@ -4,6 +4,7 @@ import { StoneFinancialImportValidationError } from "@/features/financial/stone-
 import {
   importStoneFinancialBatch,
   StoneFinancialAccessError,
+  StoneFinancialAccountingError,
   StoneFinancialConflictError,
 } from "@/features/financial/stone-receivables/service.server";
 import { requireUser } from "@/lib/auth-server";
@@ -45,6 +46,9 @@ export const POST = withApiErrorHandling({
     }
     if (cause instanceof StoneFinancialAccessError) {
       throw new AppError({ code: "STONE_FINANCIAL_IMPORT_SCOPE_FORBIDDEN", kind: "AUTHORIZATION", cause });
+    }
+    if (cause instanceof StoneFinancialAccountingError) {
+      throw new AppError({ code: "STONE_FINANCIAL_ACCOUNTING_BLOCKED", kind: "CONFLICT", safeMessage: cause.message, cause });
     }
     if (cause instanceof StoneFinancialConflictError) {
       throw new AppError({ code: "STONE_FINANCIAL_IMPORT_CONFLICT", kind: "CONFLICT", safeMessage: cause.message, cause });
