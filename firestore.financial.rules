@@ -450,6 +450,55 @@ service cloud.firestore {
       }
     }
 
+    // Vendas, recebíveis, projeções e decisões da Stone são expostos somente
+    // por APIs autenticadas, que aplicam escopo de unidade e segregação de ações.
+    match /stoneMerchantMappings/{mappingId} {
+      allow read, write: if false;
+    }
+
+    match /pdvPaymentFacts/{factId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /stoneSaleTransactions/{saleId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /stoneIngestionRuns/{runId} {
+      allow read, write: if false;
+    }
+
+    match /salesReconciliationCases/{caseId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /salesReconciliationDecisions/{caseIdentityId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /revenueReconciliationPeriods/{periodId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /revenueMonthlySummaries/{summaryId} {
+      allow read, write: if false;
+    }
+
     // Expectativas de débito ligam uma solicitação bancária ao extrato real.
     // São internas para impedir que o cliente force uma conciliação.
     match /expectedBankDebits/{debitId} {

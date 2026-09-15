@@ -113,6 +113,45 @@ export type SalesReconciliationPeriodStatus =
   | "reopened"
   | "stale";
 
+export type SalesReconciliationReviewStatus =
+  | "matched_auto"
+  | "pending_review"
+  | "resolved"
+  | "ignored";
+
+export type PersistedSalesReconciliationCase = Omit<SuggestedSalesReconciliationCase, "reviewStatus"> & {
+  id: string;
+  identityId: string;
+  projectionId: string;
+  sourceFingerprint: string;
+  suggestedReviewStatus: SuggestedSalesReconciliationCase["reviewStatus"];
+  reviewStatus: SalesReconciliationReviewStatus;
+  decision?: (SalesReconciliationDecision & {
+    actorId: string;
+    actorName: string;
+    decidedAt: unknown;
+  }) | null;
+};
+
+export type RevenueReconciliationPeriodSummary = {
+  id: string;
+  workspaceId: string;
+  kioskId: string;
+  period: string;
+  status: SalesReconciliationPeriodStatus;
+  activeProjectionId: string;
+  pdvFactCount: number;
+  stoneSaleCount: number;
+  caseCount: number;
+  decidedCaseCount: number;
+  pendingCaseCount: number;
+  coveragePercent: number;
+  pdvGrossAmountCents: number;
+  stoneGrossAmountCents: number;
+  differenceAmountCents: number;
+  sourceFingerprint: string;
+};
+
 export type SalesReconciliationDecision = {
   action: "confirm" | "classify" | "ignore";
   classification?:

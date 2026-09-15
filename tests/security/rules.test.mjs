@@ -445,6 +445,44 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           status: "active",
           amountCents: 100000,
         }),
+        setDoc(doc(db, "stoneMerchantMappings/mapping-1"), {
+          workspaceId: "coala-shakes",
+          kioskId: "tirirical",
+          status: "active",
+        }),
+        setDoc(doc(db, "pdvPaymentFacts/fact-1"), {
+          workspaceId: "coala-shakes",
+          kioskId: "tirirical",
+          period: "2026-09",
+        }),
+        setDoc(doc(db, "stoneSaleTransactions/sale-1"), {
+          workspaceId: "coala-shakes",
+          kioskId: "tirirical",
+          period: "2026-09",
+        }),
+        setDoc(doc(db, "salesReconciliationCases/case-1"), {
+          workspaceId: "coala-shakes",
+          kioskIds: ["tirirical"],
+          period: "2026-09",
+        }),
+        setDoc(doc(db, "salesReconciliationDecisions/identity-1"), {
+          workspaceId: "coala-shakes",
+          reviewStatus: "resolved",
+        }),
+        setDoc(doc(db, "revenueReconciliationPeriods/period-1"), {
+          workspaceId: "coala-shakes",
+          kioskId: "tirirical",
+          period: "2026-09",
+        }),
+        setDoc(doc(db, "revenueMonthlySummaries/summary-1"), {
+          workspaceId: "coala-shakes",
+          kioskId: "tirirical",
+          period: "2026-09",
+        }),
+        setDoc(doc(db, "stoneIngestionRuns/run-1"), {
+          workspaceId: "coala-shakes",
+          status: "completed",
+        }),
       ]);
     });
 
@@ -489,6 +527,19 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     }));
     await assertFails(getDoc(doc(payer.firestore(), "bankPaymentRequests/request-1")));
     await assertFails(getDoc(doc(payer.firestore(), "expectedBankDebits/debit-1")));
+    for (const path of [
+      "stoneMerchantMappings/mapping-1",
+      "pdvPaymentFacts/fact-1",
+      "stoneSaleTransactions/sale-1",
+      "salesReconciliationCases/case-1",
+      "salesReconciliationDecisions/identity-1",
+      "revenueReconciliationPeriods/period-1",
+      "revenueMonthlySummaries/summary-1",
+      "stoneIngestionRuns/run-1",
+    ]) {
+      await assertFails(getDoc(doc(payer.firestore(), path)));
+      await assertFails(setDoc(doc(payer.firestore(), path), { forged: true }, { merge: true }));
+    }
     await assertFails(setDoc(doc(payer.firestore(), "expectedBankDebits/forged"), {
       status: "matched",
       statementTransactionId: "forged-transaction",

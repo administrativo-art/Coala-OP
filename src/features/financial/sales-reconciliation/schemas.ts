@@ -62,8 +62,9 @@ export const canonicalSalesImportBatchSchema = z.object({
   source: z.enum(["pdv", "stone_sales"]),
   period: periodSchema,
   businessDate: civilDateSchema.optional(),
-  rows: z.array(z.unknown()).min(1).max(5_000),
+  rows: z.array(z.unknown()).min(1).max(200),
   idempotencyKey: z.string().trim().min(12).max(180),
+  finalize: z.boolean().default(true),
 });
 
 export const salesReconciliationDecisionSchema = z.object({
