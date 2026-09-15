@@ -460,6 +460,17 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           kioskId: "tirirical",
           period: "2026-09",
         }),
+        setDoc(doc(db, "stoneReceivables/receivable-1"), {
+          workspaceId: "coala-shakes",
+          kioskId: "tirirical",
+          currentExpectedDate: "2026-09-17",
+          netAmountCents: 9800,
+        }),
+        setDoc(doc(db, "stoneSettlements/settlement-1"), {
+          workspaceId: "coala-shakes",
+          settledAt: "2026-09-17T12:00:00-03:00",
+          netAmountCents: 9800,
+        }),
         setDoc(doc(db, "salesReconciliationCases/case-1"), {
           workspaceId: "coala-shakes",
           kioskIds: ["tirirical"],
@@ -531,6 +542,8 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       "stoneMerchantMappings/mapping-1",
       "pdvPaymentFacts/fact-1",
       "stoneSaleTransactions/sale-1",
+      "stoneReceivables/receivable-1",
+      "stoneSettlements/settlement-1",
       "salesReconciliationCases/case-1",
       "salesReconciliationDecisions/identity-1",
       "revenueReconciliationPeriods/period-1",

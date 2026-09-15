@@ -5,6 +5,9 @@ import { describe, it } from "node:test";
 const service = readFileSync("src/features/financial/sales-reconciliation/service.server.ts", "utf8");
 const listRoute = readFileSync("src/app/api/financial/sales-reconciliation/route.ts", "utf8");
 const importRoute = readFileSync("src/app/api/financial/sales-reconciliation/import/route.ts", "utf8");
+const receivablesService = readFileSync("src/features/financial/stone-receivables/service.server.ts", "utf8");
+const receivablesRoute = readFileSync("src/app/api/financial/stone-receivables/route.ts", "utf8");
+const receivablesImportRoute = readFileSync("src/app/api/financial/stone-receivables/import/route.ts", "utf8");
 const decisionRoute = readFileSync(
   "src/app/api/financial/sales-reconciliation/cases/[caseId]/decision/route.ts",
   "utf8",
@@ -39,6 +42,8 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(importRoute, /withApiErrorHandling/);
     assert.match(importRoute, /stoneIntegration\?\.manage/);
     assert.match(importRoute, /canAccessKiosk/);
+    assert.match(receivablesRoute, /salesReconciliation\?\.view/);
+    assert.match(receivablesImportRoute, /stoneIntegration\?\.manage/);
     assert.match(decisionRoute, /salesReconciliationDecisionSchema/);
     assert.match(decisionRoute, /permissions\?\.review/);
     assert.match(decisionRoute, /permissions\.classify/);
@@ -53,6 +58,8 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(service, /revenueMonthlySummaries/);
     assert.match(service, /collection\("events"\)/);
     assert.match(service, /buildingProjectionId/);
+    assert.match(receivablesService, /\.limit\(input\.limit \+ 1\)/);
+    assert.match(receivablesService, /startAfter\(cursor\.date, cursor\.id\)/);
   });
 
   it("nega acesso direto e declara todos os índices usados pelas APIs", () => {
@@ -60,6 +67,8 @@ describe("política de armazenamento da conciliação de vendas", () => {
       "stoneMerchantMappings",
       "pdvPaymentFacts",
       "stoneSaleTransactions",
+      "stoneReceivables",
+      "stoneSettlements",
       "stoneIngestionRuns",
       "salesReconciliationCases",
       "salesReconciliationDecisions",
@@ -73,6 +82,8 @@ describe("política de armazenamento da conciliação de vendas", () => {
       "stoneMerchantMappings",
       "pdvPaymentFacts",
       "stoneSaleTransactions",
+      "stoneReceivables",
+      "stoneSettlements",
       "salesReconciliationCases",
       "revenueReconciliationPeriods",
     ]) {

@@ -534,6 +534,8 @@ export async function listSalesReconciliationCases(input: {
   status?: SalesReconciliationReviewStatus;
   cursor?: string;
   limit: number;
+  canAccessKiosk: (kioskId: string) => boolean;
+  canViewUnmapped: boolean;
 }) {
   const controlRef = financialDbAdmin.collection("revenueReconciliationPeriods")
     .doc(salesReconciliationControlId({ workspaceId: input.workspaceId, period: input.period }));
@@ -572,8 +574,14 @@ export async function listSalesReconciliationCases(input: {
   }
 
   return serializeFinancialValue({
-    cases: documents.map((document) => ({ id: document.id, ...document.data() })),
-    periods: periodDocuments.filter((document) => document.exists).map((document) => ({ id: document.id, ...document.data() })),
+    cases: documents
+      .map((document) => ({ id: document.id, ...document.data() } as PersistedSalesReconciliationCase))
+      .filter((entry) => entry.kioskIds.length > 0
+        ? entry.kioskIds.every(input.canAccessKiosk)
+        : input.canViewUnmapped),
+    periods: periodDocuments
+      .filter((document) => document.exists && input.canAccessKiosk(String(document.data()?.kioskId ?? "")))
+      .map((document) => ({ id: document.id, ...document.data() })),
     nextCursor: hasMore ? documents.at(-1)?.id ?? null : null,
     projectionId,
   });

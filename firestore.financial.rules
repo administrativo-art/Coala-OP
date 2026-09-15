@@ -470,6 +470,20 @@ service cloud.firestore {
       }
     }
 
+    match /stoneReceivables/{receivableId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /stoneSettlements/{settlementId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     match /stoneIngestionRuns/{runId} {
       allow read, write: if false;
     }
