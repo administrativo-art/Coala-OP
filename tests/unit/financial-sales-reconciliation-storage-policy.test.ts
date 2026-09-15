@@ -10,6 +10,7 @@ const receivablesRoute = readFileSync("src/app/api/financial/stone-receivables/r
 const receivablesImportRoute = readFileSync("src/app/api/financial/stone-receivables/import/route.ts", "utf8");
 const cashFlowProjectionService = readFileSync("src/features/financial/cash-flow/projection.server.ts", "utf8");
 const cashFlowProjectionRoute = readFileSync("src/app/api/financial/cash-flow/projection/route.ts", "utf8");
+const cashFlowPage = readFileSync("src/features/financial/pages/cash-flow-page.tsx", "utf8");
 const decisionRoute = readFileSync(
   "src/app/api/financial/sales-reconciliation/cases/[caseId]/decision/route.ts",
   "utf8",
@@ -73,6 +74,9 @@ describe("política de armazenamento da conciliação de vendas", () => {
       "MAX_TRANSACTIONS",
     ]) assert.match(cashFlowProjectionService, new RegExp(`\\.limit\\(${limit} \\+ 1\\)`));
     assert.doesNotMatch(cashFlowProjectionService, /\bonSnapshot\s*\(|\bsetInterval\s*\(/);
+    assert.match(cashFlowPage, /\/api\/financial\/cash-flow\/projection/);
+    assert.match(cashFlowPage, /PageContainer variant="wide"/);
+    assert.doesNotMatch(cashFlowPage, /useFinancialCollection|getDocs\s*\(|onSnapshot\s*\(|setInterval\s*\(/);
   });
 
   it("nega acesso direto e declara todos os índices usados pelas APIs", () => {
