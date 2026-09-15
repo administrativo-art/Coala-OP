@@ -9,6 +9,9 @@ const receivablesService = readFileSync("src/features/financial/stone-receivable
 const receivablesRoute = readFileSync("src/app/api/financial/stone-receivables/route.ts", "utf8");
 const receivablesImportRoute = readFileSync("src/app/api/financial/stone-receivables/import/route.ts", "utf8");
 const receivablesPage = readFileSync("src/features/financial/stone-receivables/components/stone-receivables-page.tsx", "utf8");
+const settlementsRoute = readFileSync("src/app/api/financial/stone-settlements/route.ts", "utf8");
+const settlementLinkRoute = readFileSync("src/app/api/financial/stone-settlements/[settlementId]/bank-transaction/route.ts", "utf8");
+const settlementsPage = readFileSync("src/features/financial/stone-receivables/components/stone-settlements-page.tsx", "utf8");
 const cashFlowProjectionService = readFileSync("src/features/financial/cash-flow/projection.server.ts", "utf8");
 const cashFlowProjectionRoute = readFileSync("src/app/api/financial/cash-flow/projection/route.ts", "utf8");
 const cashFlowPage = readFileSync("src/features/financial/pages/cash-flow-page.tsx", "utf8");
@@ -48,6 +51,12 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(importRoute, /canAccessKiosk/);
     assert.match(receivablesRoute, /salesReconciliation\?\.view/);
     assert.match(receivablesImportRoute, /stoneIntegration\?\.manage/);
+    assert.match(settlementsRoute, /salesReconciliation\?\.view/);
+    assert.match(settlementsRoute, /reconciliation\?\.view/);
+    assert.match(settlementsRoute, /unitAccess\.allUnits/);
+    assert.match(settlementLinkRoute, /"confirm"/);
+    assert.match(settlementLinkRoute, /"correct"/);
+    assert.match(settlementLinkRoute, /unitAccess\.allUnits/);
     assert.match(cashFlowProjectionRoute, /cashFlow\?\.view/);
     assert.match(cashFlowProjectionRoute, /canAccessUnit/);
     assert.match(decisionRoute, /salesReconciliationDecisionSchema/);
@@ -66,8 +75,15 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(service, /buildingProjectionId/);
     assert.match(receivablesService, /\.limit\(input\.limit \+ 1\)/);
     assert.match(receivablesService, /startAfter\(cursor\.date, cursor\.id\)/);
+    assert.match(receivablesService, /listStoneSettlements/);
+    assert.match(receivablesService, /linkStoneSettlement/);
+    assert.match(receivablesService, /unlinkStoneSettlement/);
+    assert.match(receivablesService, /runTransaction/);
+    assert.match(receivablesService, /BANK_TRANSACTION_LINKED/);
     assert.match(receivablesPage, /\/api\/financial\/stone-receivables/);
     assert.doesNotMatch(receivablesPage, /useFinancialCollection|getDocs\s*\(|onSnapshot\s*\(|setInterval\s*\(/);
+    assert.match(settlementsPage, /\/api\/financial\/stone-settlements/);
+    assert.doesNotMatch(settlementsPage, /useFinancialCollection|getDocs\s*\(|onSnapshot\s*\(|setInterval\s*\(/);
     for (const limit of [
       "MAX_ACCOUNTS",
       "MAX_RECEIVABLES",

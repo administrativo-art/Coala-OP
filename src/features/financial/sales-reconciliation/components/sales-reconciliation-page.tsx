@@ -12,6 +12,7 @@ import {
   LockKeyhole,
   RefreshCw,
   RotateCcw,
+  ScrollText,
   WalletCards,
 } from "lucide-react";
 
@@ -290,6 +291,7 @@ export function SalesReconciliationPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/receivables"><WalletCards className="mr-2 h-4 w-4" />Recebíveis Stone</Link></Button>
+          <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/settlements"><ScrollText className="mr-2 h-4 w-4" />Liquidações</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos bancários</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
         </div>

@@ -52,7 +52,7 @@ export function prepareStoneFinancialImport(raw: unknown): {
     }
     const parsed = stoneSettlementImportSchema.safeParse(rawRow);
     if (!parsed.success) throw new StoneFinancialImportValidationError(parsed.error.issues[0]?.message ?? "Liquidação inválida.", index + 1);
-    const row = parsed.data;
+    const row = { ...parsed.data, settledAt: new Date(parsed.data.settledAt).toISOString() };
     return {
       ...row,
       id: stoneSettlementId({ workspaceId: batch.data.workspaceId, externalSettlementId: row.externalSettlementId }),

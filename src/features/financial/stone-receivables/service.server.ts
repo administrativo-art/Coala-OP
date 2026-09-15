@@ -1,12 +1,15 @@
 import "server-only";
 
-import { FieldPath, Timestamp } from "firebase-admin/firestore";
+import { FieldPath, FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { serializeFinancialValue } from "@/features/financial/lib/server-access";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { prepareStoneFinancialImport } from "./ingestion.server";
 import { stoneFinancialRunId } from "./identity.server";
+import { assertStoneSettlementLink, StoneSettlementReconciliationError } from "./settlement-reconciliation";
 import type { StoneReceivable, StoneReceivableStatus, StoneSettlement } from "./types";
+
+export { StoneSettlementReconciliationError } from "./settlement-reconciliation";
 
 const ROWS_PER_BATCH = 200;
 const RUN_LEASE_MS = 5 * 60 * 1_000;
@@ -102,6 +105,46 @@ function parseCursor(cursor: string | undefined) {
   return { date, id };
 }
 
+function parseSettlementCursor(cursor: string | undefined) {
+  if (!cursor) return null;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as { date?: unknown; id?: unknown };
+    if (typeof value.date !== "string" || typeof value.id !== "string" || !value.id) throw new Error("invalid");
+    return { date: value.date, id: value.id };
+  } catch {
+    throw new StoneFinancialConflictError("O cursor da consulta é inválido.");
+  }
+}
+
+function settlementCursor(date: string, id: string) {
+  return Buffer.from(JSON.stringify({ date, id }), "utf8").toString("base64url");
+}
+
+function timestampDate(value: unknown) {
+  if (typeof (value as { toDate?: unknown })?.toDate === "function") return (value as { toDate: () => Date }).toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === "string") return new Date(value);
+  return null;
+}
+
+function civilDateInBelem(value: unknown) {
+  const date = timestampDate(value);
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Belem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function transactionAmountCents(data: Record<string, unknown>) {
+  const direct = Number(data.amountCents);
+  if (Number.isSafeInteger(direct)) return Math.abs(direct);
+  const amount = Number(data.amount);
+  return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) : 0;
+}
+
 export async function listStoneReceivables(input: {
   workspaceId: string;
   from: string;
@@ -133,6 +176,156 @@ export async function listStoneReceivables(input: {
     receivables,
     nextCursor: hasMore && last ? `${String(last.data().currentExpectedDate)}|${last.id}` : null,
   });
+}
+
+export async function listStoneSettlements(input: {
+  workspaceId: string;
+  from: string;
+  to: string;
+  cursor?: string;
+  limit: number;
+}) {
+  const fromInstant = new Date(`${input.from}T03:00:00.000Z`).toISOString();
+  const nextDay = new Date(`${input.to}T03:00:00.000Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  let query: FirebaseFirestore.Query = financialDbAdmin.collection("stoneSettlements")
+    .where("workspaceId", "==", input.workspaceId)
+    .where("settledAt", ">=", fromInstant)
+    .where("settledAt", "<", nextDay.toISOString())
+    .orderBy("settledAt")
+    .orderBy(FieldPath.documentId());
+  const cursor = parseSettlementCursor(input.cursor);
+  if (cursor) query = query.startAfter(cursor.date, cursor.id);
+  const snapshot = await query.limit(input.limit + 1).get();
+  const hasMore = snapshot.size > input.limit;
+  const documents = snapshot.docs.slice(0, input.limit);
+  const last = documents.at(-1);
+  return serializeFinancialValue({
+    settlements: documents.map((document) => ({ id: document.id, ...document.data() } as StoneSettlement)),
+    nextCursor: hasMore && last ? settlementCursor(String(last.data().settledAt), last.id) : null,
+  });
+}
+
+export async function linkStoneSettlement(input: {
+  workspaceId: string;
+  settlementId: string;
+  transactionId: string;
+  reason: string;
+  actor: { id: string; name: string | null; email: string | null };
+}) {
+  const settlementRef = financialDbAdmin.collection("stoneSettlements").doc(input.settlementId);
+  const bankTransactionRef = financialDbAdmin.collection("transactions").doc(input.transactionId);
+  return serializeFinancialValue(await financialDbAdmin.runTransaction(async (transaction) => {
+    const [settlementSnapshot, bankTransactionSnapshot] = await Promise.all([
+      transaction.get(settlementRef),
+      transaction.get(bankTransactionRef),
+    ]);
+    if (!settlementSnapshot.exists) throw new StoneSettlementReconciliationError("SETTLEMENT_NOT_FOUND", "Liquidação Stone não encontrada.");
+    if (!bankTransactionSnapshot.exists) throw new StoneSettlementReconciliationError("TRANSACTION_NOT_FOUND", "Transação bancária não encontrada.");
+    const settlement = settlementSnapshot.data() as StoneSettlement;
+    const bankTransaction = bankTransactionSnapshot.data() ?? {};
+    if (settlement.linkedBankTransactionId === input.transactionId && bankTransaction.stoneSettlementId === input.settlementId) {
+      return { idempotent: true, settlementId: input.settlementId, transactionId: input.transactionId };
+    }
+    if (settlement.linkedBankTransactionId) throw new StoneSettlementReconciliationError("SETTLEMENT_ALREADY_LINKED", "A liquidação já está vinculada a outra transação.");
+    if (bankTransaction.stoneSettlementId) throw new StoneSettlementReconciliationError("TRANSACTION_ALREADY_LINKED", "A transação já está vinculada a outra liquidação Stone.");
+    const bankDate = civilDateInBelem(bankTransaction.date);
+    const settlementDate = civilDateInBelem(settlement.settledAt);
+    assertStoneSettlementLink({
+      workspaceId: input.workspaceId,
+      settlementWorkspaceId: settlement.workspaceId,
+      transactionWorkspaceId: typeof bankTransaction.workspaceId === "string" ? bankTransaction.workspaceId : null,
+      settlementAccountId: settlement.accountId,
+      transactionAccountId: String(bankTransaction.accountId || ""),
+      settlementAmountCents: settlement.netAmountCents,
+      transactionAmountCents: transactionAmountCents(bankTransaction),
+      settlementDate,
+      transactionDate: bankDate,
+      transactionDirection: bankTransaction.direction,
+      transactionReversed: bankTransaction.reversed === true || bankTransaction.auditStatus === "reversed",
+    });
+    const now = Timestamp.now();
+    const audit = { actorId: input.actor.id, actorName: input.actor.name, actorEmail: input.actor.email, reason: input.reason, at: now };
+    transaction.set(settlementRef, {
+      linkedBankTransactionId: input.transactionId,
+      linkedAt: now,
+      linkedBy: input.actor,
+      linkReason: input.reason,
+      updatedAt: now,
+    }, { merge: true });
+    transaction.set(bankTransactionRef, {
+      stoneSettlementId: input.settlementId,
+      stoneSettlementExternalId: settlement.externalSettlementId,
+      stoneSettlementReconciledAt: now,
+      stoneSettlementReconciledBy: input.actor,
+      reconciliationSource: "stone_settlement",
+      updatedAt: now,
+    }, { merge: true });
+    transaction.set(settlementRef.collection("events").doc(), {
+      type: "BANK_TRANSACTION_LINKED",
+      settlementId: input.settlementId,
+      bankTransactionId: input.transactionId,
+      ...audit,
+    });
+    return { idempotent: false, settlementId: input.settlementId, transactionId: input.transactionId };
+  }));
+}
+
+export async function unlinkStoneSettlement(input: {
+  workspaceId: string;
+  settlementId: string;
+  expectedTransactionId?: string;
+  reason: string;
+  actor: { id: string; name: string | null; email: string | null };
+}) {
+  const settlementRef = financialDbAdmin.collection("stoneSettlements").doc(input.settlementId);
+  return serializeFinancialValue(await financialDbAdmin.runTransaction(async (transaction) => {
+    const settlementSnapshot = await transaction.get(settlementRef);
+    if (!settlementSnapshot.exists) throw new StoneSettlementReconciliationError("SETTLEMENT_NOT_FOUND", "Liquidação Stone não encontrada.");
+    const settlement = settlementSnapshot.data() as StoneSettlement;
+    if (settlement.workspaceId !== input.workspaceId) throw new StoneSettlementReconciliationError("WORKSPACE_MISMATCH", "A liquidação não pertence ao workspace.");
+    const linkedId = settlement.linkedBankTransactionId ?? null;
+    if (!linkedId) return { idempotent: true, settlementId: input.settlementId, transactionId: null };
+    if (input.expectedTransactionId && input.expectedTransactionId !== linkedId) {
+      throw new StoneSettlementReconciliationError("SETTLEMENT_ALREADY_LINKED", "A liquidação está vinculada a outra transação.");
+    }
+    const bankTransactionRef = financialDbAdmin.collection("transactions").doc(linkedId);
+    const bankTransactionSnapshot = await transaction.get(bankTransactionRef);
+    const now = Timestamp.now();
+    if (bankTransactionSnapshot.exists && bankTransactionSnapshot.get("stoneSettlementId") === input.settlementId) {
+      transaction.set(bankTransactionRef, {
+        stoneSettlementId: FieldValue.delete(),
+        stoneSettlementExternalId: FieldValue.delete(),
+        stoneSettlementReconciledAt: FieldValue.delete(),
+        stoneSettlementReconciledBy: FieldValue.delete(),
+        reconciliationSource: FieldValue.delete(),
+        stoneSettlementUnlinkedAt: now,
+        stoneSettlementUnlinkedBy: input.actor,
+        updatedAt: now,
+      }, { merge: true });
+    }
+    transaction.set(settlementRef, {
+      linkedBankTransactionId: null,
+      linkedAt: null,
+      linkedBy: null,
+      linkReason: null,
+      unlinkedAt: now,
+      unlinkedBy: input.actor,
+      unlinkReason: input.reason,
+      updatedAt: now,
+    }, { merge: true });
+    transaction.set(settlementRef.collection("events").doc(), {
+      type: "BANK_TRANSACTION_UNLINKED",
+      settlementId: input.settlementId,
+      bankTransactionId: linkedId,
+      actorId: input.actor.id,
+      actorName: input.actor.name,
+      actorEmail: input.actor.email,
+      reason: input.reason,
+      at: now,
+    });
+    return { idempotent: false, settlementId: input.settlementId, transactionId: linkedId };
+  }));
 }
 
 export type { StoneReceivable, StoneSettlement };

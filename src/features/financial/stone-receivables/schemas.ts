@@ -78,4 +78,21 @@ export const stoneReceivablesListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 }).refine((value) => value.to >= value.from, { path: ["to"], message: "O fim deve ser posterior ao início." });
 
+export const stoneSettlementsListQuerySchema = z.object({
+  from: civilDate,
+  to: civilDate,
+  cursor: z.string().trim().min(3).max(500).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).refine((value) => value.to >= value.from, { path: ["to"], message: "O fim deve ser posterior ao início." });
+
+export const stoneSettlementLinkSchema = z.object({
+  transactionId: identifier,
+  reason: z.string().trim().min(5).max(1_000),
+});
+
+export const stoneSettlementUnlinkSchema = z.object({
+  transactionId: identifier.optional(),
+  reason: z.string().trim().min(5).max(1_000),
+});
+
 export type StoneFinancialImportBatchInput = z.infer<typeof stoneFinancialImportBatchSchema>;

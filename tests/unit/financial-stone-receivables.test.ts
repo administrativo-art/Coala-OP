@@ -93,5 +93,6 @@ describe("ingestão financeira Stone", () => {
     });
     assert.equal(prepared.rows.length, 1);
     assert.match(prepared.rows[0].id, /^stone_settle_/);
+    assert.equal("settledAt" in prepared.rows[0] && prepared.rows[0].settledAt, "2026-09-17T15:00:00.000Z");
   });
 });

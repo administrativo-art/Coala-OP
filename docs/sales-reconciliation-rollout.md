@@ -36,6 +36,8 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Listar casos sem unidade | 1 controle + até 101 casos + até 21 períodos | 0 |
 | Listar casos de uma unidade | 1 controle + até 101 casos + 1 período | 0 |
 | Listar recebíveis Stone | até 101 recebíveis por página | 0 |
+| Listar liquidações Stone | até 101 liquidações por página | 0 |
+| Vincular/desvincular liquidação ao extrato | 2 leituras transacionais | até 3 escritas atômicas, incluindo evento |
 | Compor fluxo de caixa de 91 dias | até 26.056 leituras no teto defensivo | 0 |
 
 Uma leitura que ultrapasse o teto é recusada; não ocorre scan completo como
