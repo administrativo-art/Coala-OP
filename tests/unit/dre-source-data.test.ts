@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { chunkDreSimulationIds, summarizeDreSalesReports } from "../../src/features/financial/dre/source-data";
+import { chunkDreSimulationIds, dreRevenueByCriterion, summarizeDreSalesReports } from "../../src/features/financial/dre/source-data";
 import type { SalesReport } from "../../src/types";
 
 test("divide referências de simulação sem corte arbitrário", () => {
@@ -29,6 +29,24 @@ test("agrega receita e CMV por unidade e competência e informa ficha ausente", 
   const result = summarizeDreSalesReports(reports, new Map([["simulation-a", 3]]));
   assert.deepEqual(result.salesSummaries, [{ kioskId: "kiosk-1", year: 2026, month: 8, revenue: 25, cmv: 6 }]);
   assert.deepEqual(result.missingSimulationIds, ["simulation-missing"]);
+});
+
+test("receita conciliada mantém o PDV total e aplica somente os ajustes explicados", () => {
+  const reconciliationSummary = {
+    id: "summary-1",
+    workspaceId: "coala",
+    kioskId: "tirirical",
+    period: "2026-09",
+    pdvRevenueTotalCents: 10_000,
+    reconciledRevenueTotalCents: 11_000,
+    differenceAmountCents: 1_000,
+    coveragePercent: 100,
+    periodStatus: "closed" as const,
+    sourceFingerprint: "hash",
+  };
+  assert.equal(dreRevenueByCriterion({ criterion: "pdv", pdvTotalRevenue: 150, reconciliationSummary }), 150);
+  assert.equal(dreRevenueByCriterion({ criterion: "reconciled", pdvTotalRevenue: 150, reconciliationSummary }), 160);
+  assert.equal(dreRevenueByCriterion({ criterion: "reconciled", pdvTotalRevenue: 150 }), null);
 });
 
 test("mantém a fonte da DRE filtrada, paginada e sem leitura direta no cliente", async () => {
@@ -60,6 +78,12 @@ test("mantém a fonte da DRE filtrada, paginada e sem leitura direta no cliente"
   assert.match(serverSource, /MAX_EXPENSES_PER_PERIOD/);
   assert.match(serverSource, /\.limit\(Math\.min\(SALES_PAGE_SIZE, remaining\)\)/);
   assert.match(serverSource, /MAX_REPORTS_PER_PERIOD/);
+  assert.match(serverSource, /collection\("revenueMonthlySummaries"\)/);
+  assert.match(serverSource, /salesReconciliationPeriodId/);
+  assert.match(pageSource, /value="pdv">Receita · PDV Legal/);
+  assert.match(pageSource, /value="reconciled">Receita · Conciliada/);
+  assert.match(pageSource, /reconciledRevenueTotalCents/);
+  assert.doesNotMatch(pageSource, /closureRevenueByUnitMonth|cashClosureSummaryDreRevenueCents/);
   assert.doesNotMatch(pageSource, /\b(?:getDocs|onSnapshot)\s*\(/);
   assert.doesNotMatch(pageSource, /financialCollection\("expenses"\)/);
   assert.doesNotMatch(pageSource, /collection\("movementHistory"\)/);

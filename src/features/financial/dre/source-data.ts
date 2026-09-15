@@ -24,7 +24,37 @@ export type DreSourceDataStats = {
   simulationDocuments: number;
   closureSummaryDocuments: number;
   expenseDocuments: number;
+  revenueSummaryDocuments: number;
 };
+
+export type DreRevenueMonthlySummary = {
+  id: string;
+  workspaceId: string;
+  kioskId: string;
+  kioskName?: string | null;
+  period: string;
+  pdvRevenueTotalCents: number;
+  reconciledRevenueTotalCents: number;
+  differenceAmountCents: number;
+  coveragePercent: number;
+  periodStatus: "open" | "partial" | "ready" | "closed" | "reopened" | "stale";
+  sourceFingerprint: string;
+  cashRevenueAdjustmentCents?: number;
+};
+
+export function dreRevenueByCriterion(input: {
+  criterion: "pdv" | "reconciled";
+  pdvTotalRevenue: number;
+  reconciliationSummary?: DreRevenueMonthlySummary;
+}) {
+  if (input.criterion === "pdv") return input.pdvTotalRevenue;
+  if (!input.reconciliationSummary) return null;
+  const electronicAdjustmentCents = input.reconciliationSummary.reconciledRevenueTotalCents
+    - input.reconciliationSummary.pdvRevenueTotalCents;
+  return input.pdvTotalRevenue
+    + electronicAdjustmentCents / 100
+    + (input.reconciliationSummary.cashRevenueAdjustmentCents ?? 0) / 100;
+}
 
 export type DreSourceDataPayload = {
   expenses: FinancialExpenseDreDocument[];
@@ -38,6 +68,7 @@ export type DreSourceDataPayload = {
     differenceTotalCents: number;
     dreRevenueTotalCents?: number;
   }>;
+  revenueSummaries: DreRevenueMonthlySummary[];
   missingSimulationIds: string[];
   stats: DreSourceDataStats;
 };

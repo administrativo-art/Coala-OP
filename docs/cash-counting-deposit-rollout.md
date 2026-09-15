@@ -39,7 +39,7 @@ Não foi introduzido polling, `setInterval` ou listener em tempo real. As leitur
 
 ### DRE
 
-O endpoint filtra no Firestore somente as unidades autorizadas solicitadas, pagina `salesReports` em páginas de 500 e aplica teto explícito de 5.000 documentos por competência. Ele busca por referência somente as `productSimulations` efetivamente usadas e lê no máximo 20 unidades × 6 competências = 120 resumos de fechamento. Se o teto for ultrapassado ou uma ficha estiver ausente, a DRE não oculta a lacuna; a exportação é bloqueada.
+O endpoint filtra no Firestore somente as unidades autorizadas solicitadas, pagina `salesReports` e `expenses` em páginas de 500 e aplica teto explícito de 5.000 documentos por competência em cada fonte. Ele busca por referência somente as `productSimulations` efetivamente usadas e lê no máximo 20 unidades × 6 competências = 120 resumos de fechamento e 120 resumos de receita conciliada. Se o teto for ultrapassado ou uma ficha estiver ausente, a DRE não oculta a lacuna; a exportação é bloqueada.
 
 Fórmula por carregamento:
 
@@ -47,22 +47,26 @@ Fórmula por carregamento:
 R = relatórios retornados nas seis competências
 S = fichas únicas referenciadas
 C = unidades × competências, limitado a 120
-leituras = R + S + C
+V = resumos de receita conciliada, limitado a 120
+E = despesas retornadas nas seis competências
+leituras = R + S + C + V + E
 ```
 
-Cenário operacional conservador, com 20 unidades, um relatório diário por unidade, seis competências e 500 fichas únicas:
+Cenário operacional conservador, com 20 unidades, um relatório diário por unidade, seis competências, 500 fichas únicas e 500 despesas por competência:
 
 ```text
 R = 20 × 31 × 6 = 3.720
 S = 500
 C = 20 × 6 = 120
-total por carregamento = 4.340 leituras
+V = 20 × 6 = 120
+E = 500 × 6 = 3.000
+total por carregamento = 7.460 leituras
 ```
 
 Com 0,5 carregamento por hora, 3 usuários/abas, 8 horas por dia e 30 dias:
 
 ```text
-4.340 × 0,5 × 3 × 8 × 30 = 1.562.400 leituras/mês
+7.460 × 0,5 × 3 × 8 × 30 = 2.685.600 leituras/mês
 ```
 
 A resposta do endpoint inclui as contagens reais em `stats`, permitindo substituir a estimativa pela medição pós-rollout. Trocar o mês gera novo carregamento; manter a página aberta não gera leituras periódicas.

@@ -15,7 +15,9 @@ import {
   DreSourceLimitError,
   summarizeDreSalesReports,
   type DreSourceDataPayload,
+  type DreRevenueMonthlySummary,
 } from "./source-data";
+import { salesReconciliationPeriodId } from "@/features/financial/sales-reconciliation/identity.server";
 
 const SALES_PAGE_SIZE = 500;
 const EXPENSE_PAGE_SIZE = 500;
@@ -125,21 +127,36 @@ export async function getDreSourceData(input: {
     return financialDbAdmin.collection("cashClosureMonthlySummaries")
       .doc(`${input.workspaceId}_${kioskId}_${year}_${String(month).padStart(2, "0")}`);
   }));
-  const closureSnapshots = closureRefs.length > 0 ? await financialDbAdmin.getAll(...closureRefs) : [];
+  const revenueRefs = input.kioskIds.flatMap((kioskId) => input.periods.map((period) => (
+    financialDbAdmin.collection("revenueMonthlySummaries").doc(salesReconciliationPeriodId({
+      workspaceId: input.workspaceId,
+      kioskId,
+      period,
+    }))
+  )));
+  const [closureSnapshots, revenueSnapshots] = await Promise.all([
+    closureRefs.length > 0 ? financialDbAdmin.getAll(...closureRefs) : [],
+    revenueRefs.length > 0 ? financialDbAdmin.getAll(...revenueRefs) : [],
+  ]);
   const closureSummaries = closureSnapshots
     .filter((snapshot) => snapshot.exists)
     .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CashClosureMonthlySummary));
+  const revenueSummaries = revenueSnapshots
+    .filter((snapshot) => snapshot.exists)
+    .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as DreRevenueMonthlySummary));
 
   return {
     expenses,
     salesSummaries: sales.salesSummaries,
     closureSummaries,
+    revenueSummaries,
     missingSimulationIds: sales.missingSimulationIds,
     stats: {
       salesReportDocuments: reportDocuments.length,
       simulationDocuments: simulationDocuments.length,
       closureSummaryDocuments: closureSnapshots.length,
       expenseDocuments: expenseDocuments.length,
+      revenueSummaryDocuments: revenueSnapshots.length,
     },
   };
 }

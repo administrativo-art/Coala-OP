@@ -30,9 +30,7 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
-import { cashClosureSummaryDreRevenueCents } from "@/features/financial/cash-closures/summary-counts";
-import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
-import type { DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
+import { dreRevenueByCriterion, type DreRevenueMonthlySummary, type DreSalesUnitMonthSummary, type DreSourceDataPayload } from "@/features/financial/dre/source-data";
 import type {
   DreCmvCriterion,
   DreStockCmvPayload,
@@ -42,6 +40,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageContainer } from "@/components/layout/page-container";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +65,8 @@ function dreMonthKeysEndingAt(monthKey: string) {
   return Array.from({ length: 6 }, (_, index) => format(subMonths(end, 5 - index), "yyyy-MM"))
     .filter((key) => key >= FINANCIAL_DRE_START_MONTH_KEY);
 }
+
+type DreRevenueCriterion = "pdv" | "reconciled";
 
 function expenseIssueLabel(issue: DreExpenseContractIssue, showPersonnelDetails = true) {
   switch (issue.code) {
@@ -120,6 +121,7 @@ export function DrePage() {
     return currentMonth < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : currentMonth;
   });
   const [unitFilter, setUnitFilter] = useState("all");
+  const [revenueCriterion, setRevenueCriterion] = useState<DreRevenueCriterion>("pdv");
   const [cmvCriterion, setCmvCriterion] = useState<DreCmvCriterion>("composition");
   const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
   const [expandedDreRows, setExpandedDreRows] = useState<Record<string, boolean>>({});
@@ -138,7 +140,7 @@ export function DrePage() {
 
   const [expenses, setExpenses] = useState<FinancialExpenseDreDocument[]>([]);
   const [salesSummaries, setSalesSummaries] = useState<DreSalesUnitMonthSummary[]>([]);
-  const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<CashClosureMonthlySummary[]>([]);
+  const [revenueSummaries, setRevenueSummaries] = useState<DreRevenueMonthlySummary[]>([]);
   const [missingSimulationIds, setMissingSimulationIds] = useState<string[]>([]);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loadingSource, setLoadingSource] = useState(true);
@@ -150,7 +152,7 @@ export function DrePage() {
   useEffect(() => {
     if (!firebaseUser || kiosks.length === 0 || !permissions.financial?.dre) {
       setSalesSummaries([]);
-      setClosureRevenueSummaries([]);
+      setRevenueSummaries([]);
       setExpenses([]);
       setMissingSimulationIds([]);
       setSourceError(null);
@@ -168,13 +170,13 @@ export function DrePage() {
     }).then((payload) => {
       if (cancelled) return;
       setSalesSummaries(payload.salesSummaries ?? []);
-      setClosureRevenueSummaries((payload.closureSummaries ?? []) as CashClosureMonthlySummary[]);
+      setRevenueSummaries(payload.revenueSummaries ?? []);
       setExpenses(payload.expenses ?? []);
       setMissingSimulationIds(payload.missingSimulationIds ?? []);
     }).catch((error) => {
       if (cancelled) return;
       setSalesSummaries([]);
-      setClosureRevenueSummaries([]);
+      setRevenueSummaries([]);
       setExpenses([]);
       setMissingSimulationIds([]);
       setSourceError(error instanceof Error ? error.message : "Falha ao carregar as fontes da DRE.");
@@ -253,14 +255,14 @@ export function DrePage() {
     ? null
     : (resultCenterNameByKioskId[unitFilter] ?? kioskNameById[unitFilter] ?? null);
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
-  const closureRevenueByUnitMonth = useMemo(() => new Map(closureRevenueSummaries.map((summary) => [
-    `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
-    cashClosureSummaryDreRevenueCents(summary) / 100,
-  ])), [closureRevenueSummaries]);
   const salesByUnitMonth = useMemo(() => new Map(salesSummaries.map((summary) => [
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
     summary,
   ])), [salesSummaries]);
+  const reconciledRevenueByUnitMonth = useMemo(() => new Map(revenueSummaries.map((summary) => [
+    `${summary.kioskId}:${summary.period}`,
+    summary,
+  ])), [revenueSummaries]);
   const stockCmvByUnitMonth = useMemo(() => new Map((stockCmvPayload?.stockSummaries ?? []).map((summary) => [
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
     summary,
@@ -273,9 +275,12 @@ export function DrePage() {
       ? [selectedKioskId]
       : Array.from(new Set([...kiosks.map((kiosk) => kiosk.id), ...salesSummaries.map((summary) => summary.kioskId)]));
     return unitIds.reduce((total, kioskId) => {
-      const countedRevenue = closureRevenueByUnitMonth.get(`${kioskId}:${monthKey}`);
-      if (countedRevenue !== undefined) return total + countedRevenue;
-      return total + (salesByUnitMonth.get(`${kioskId}:${monthKey}`)?.revenue ?? 0);
+      const revenue = dreRevenueByCriterion({
+        criterion: revenueCriterion,
+        pdvTotalRevenue: salesByUnitMonth.get(`${kioskId}:${monthKey}`)?.revenue ?? 0,
+        reconciliationSummary: reconciledRevenueByUnitMonth.get(`${kioskId}:${monthKey}`),
+      });
+      return total + (revenue ?? 0);
     }, 0);
   }
 
@@ -417,13 +422,53 @@ export function DrePage() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, chartMonthKeys, closureRevenueByUnitMonth, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
+  }, [accounts, chartMonthKeys, cmvCriterion, expenses, kiosks, reconciledRevenueByUnitMonth, revenueCriterion, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, selectedMonth, closureRevenueByUnitMonth, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
+    [accounts, selectedMonth, cmvCriterion, expenses, kiosks, reconciledRevenueByUnitMonth, revenueCriterion, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
   );
+  const revenueScopeUnitIds = selectedKioskId ? [selectedKioskId] : kiosks.map((kiosk) => kiosk.id);
+  const selectedRevenueSummaries = revenueScopeUnitIds.flatMap((kioskId) => {
+    const summary = reconciledRevenueByUnitMonth.get(`${kioskId}:${selectedMonth}`);
+    return summary ? [summary] : [];
+  });
+  const reconciledRevenueMissing = revenueCriterion === "reconciled"
+    && selectedRevenueSummaries.length !== revenueScopeUnitIds.length;
+  const reconciledRevenueCoverage = selectedRevenueSummaries.length === 0
+    ? 0
+    : selectedRevenueSummaries.reduce((total, summary) => total + summary.coveragePercent, 0) / selectedRevenueSummaries.length;
+  const reconciledRevenueClosed = selectedRevenueSummaries.length === revenueScopeUnitIds.length
+    && selectedRevenueSummaries.every((summary) => summary.periodStatus === "closed" && summary.coveragePercent === 100);
+  const reconciledRevenueHistorySummaries = revenueScopeUnitIds.flatMap((kioskId) => (
+    chartMonthKeys.flatMap((period) => {
+      const summary = reconciledRevenueByUnitMonth.get(`${kioskId}:${period}`);
+      return summary ? [summary] : [];
+    })
+  ));
+  const reconciledRevenueHistoryExpectedCount = revenueScopeUnitIds.length * chartMonthKeys.length;
+  const reconciledRevenueHistoryMissingCount = reconciledRevenueHistoryExpectedCount
+    - reconciledRevenueHistorySummaries.length;
+  const reconciledRevenueHistoryOpenCount = reconciledRevenueHistorySummaries.filter((summary) => (
+    summary.periodStatus !== "closed" || summary.coveragePercent !== 100
+  )).length;
+  const reconciledRevenuePartial = revenueCriterion === "reconciled"
+    && (!reconciledRevenueClosed
+      || reconciledRevenueHistoryMissingCount > 0
+      || reconciledRevenueHistoryOpenCount > 0);
+  const selectedPdvRevenueTotal = revenueScopeUnitIds.reduce((total, kioskId) => (
+    total + (salesByUnitMonth.get(`${kioskId}:${selectedMonth}`)?.revenue ?? 0)
+  ), 0);
+  const selectedRevenueAdjustments = selectedRevenueSummaries.map((summary) => (
+    (summary.reconciledRevenueTotalCents - summary.pdvRevenueTotalCents + (summary.cashRevenueAdjustmentCents ?? 0)) / 100
+  ));
+  const selectedPositiveRevenueAdjustments = selectedRevenueAdjustments
+    .filter((value) => value > 0)
+    .reduce((total, value) => total + value, 0);
+  const selectedNegativeRevenueAdjustments = Math.abs(selectedRevenueAdjustments
+    .filter((value) => value < 0)
+    .reduce((total, value) => total + value, 0));
   const stockValuationIssueCount = (stockCmvPayload?.missingProductIds.length ?? 0)
     + (stockCmvPayload?.missingBaseProductIds.length ?? 0)
     + (stockCmvPayload?.unpricedBaseProductIds.length ?? 0);
@@ -589,6 +634,7 @@ export function DrePage() {
         ];
     const rows = [
       ["DRE —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
+      ["Critério da receita", revenueCriterion === "pdv" ? "PDV Legal" : "Receita conciliada", revenueCriterion === "reconciled" ? `${reconciledRevenueCoverage.toFixed(2)}% de cobertura` : ""],
       [],
       ["Indicador", "Valor", "% Receita Líquida"],
       ["Receita Bruta", formatCurrency(revBruta), pct(revBruta, recLiq)],
@@ -616,19 +662,19 @@ export function DrePage() {
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `dre-${selectedMonth}-${cmvCriterion === "stock_movement" ? "estoque" : "composicao"}.csv`;
+    a.download = `dre-${selectedMonth}-${revenueCriterion}-${cmvCriterion === "stock_movement" ? "estoque" : "composicao"}.csv`;
     a.click();
   }
 
   // ── render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="wide" className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">DRE</h1>
-          <p className="text-muted-foreground">Demonstrativo gerencial com comparação do CMV por composição ou movimentação de estoque.</p>
+          <p className="text-muted-foreground">Demonstrativo gerencial com critérios explícitos de receita e de CMV.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Month nav */}
@@ -656,6 +702,16 @@ export function DrePage() {
             <SelectContent>
               <SelectItem value="all">Todas as unidades</SelectItem>
               {kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Select value={revenueCriterion} onValueChange={(value) => setRevenueCriterion(value as DreRevenueCriterion)}>
+            <SelectTrigger className="w-52" aria-label="Critério da receita">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pdv">Receita · PDV Legal</SelectItem>
+              <SelectItem value="reconciled">Receita · Conciliada</SelectItem>
             </SelectContent>
           </Select>
 
@@ -703,6 +759,7 @@ export function DrePage() {
               variant="outline"
               onClick={exportCsv}
               disabled={Boolean(sourceError)
+                || reconciledRevenueMissing
                 || Boolean(stockCmvError && cmvCriterion === "stock_movement")
                 || cmvIntegrityIssue
                 || expenseContractIssues.length > 0}
@@ -714,6 +771,27 @@ export function DrePage() {
       </div>
 
       {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
+      {!sourceError && reconciledRevenuePartial && (
+        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span>
+            <strong>Receita conciliada parcial.</strong>{" "}
+            {reconciledRevenueMissing
+              ? `${revenueScopeUnitIds.length - selectedRevenueSummaries.length} unidade(s) ainda não possuem resumo nesta competência. `
+              : !reconciledRevenueClosed
+                ? "Todos os resumos existem, mas a competência ainda não está fechada. "
+                : "A competência selecionada está fechada, mas o histórico de seis meses possui lacunas. "}
+            Cobertura média atual: {reconciledRevenueCoverage.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%.
+            {reconciledRevenueHistoryMissingCount > 0
+              ? ` O histórico possui ${reconciledRevenueHistoryMissingCount} resumo(s) ausente(s).`
+              : ""}
+            {reconciledRevenueHistoryOpenCount > 0
+              ? ` O histórico possui ${reconciledRevenueHistoryOpenCount} resumo(s) ainda aberto(s) ou abaixo de 100% de cobertura.`
+              : ""}{" "}
+            Não há fallback para o PDV; valores ausentes permanecem ausentes.
+          </span>
+        </div>
+      )}
       {!sourceError && cmvCriterion === "composition" && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
       {!sourceError && cmvCriterion === "stock_movement" && stockCmvError && (
         <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
@@ -740,6 +818,25 @@ export function DrePage() {
           <span><strong>Não há saídas de estoque no filtro atual.</strong> O CMV por movimentação ficou zerado e a exportação foi bloqueada.</span>
         </div>
       )}
+
+      <div className="rounded-xl border bg-background p-4 shadow-sm">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-sm font-semibold">Critério da receita</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {revenueCriterion === "pdv"
+                ? "A Receita Bruta vem explicitamente do PDV Legal, sem incorporar a diferença física do caixa."
+                : "A receita total do PDV recebe somente ajustes de vendas classificados na conciliação; recebimentos líquidos e transferências não alteram a DRE."}
+            </p>
+          </div>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-4 lg:min-w-[680px]">
+            <div className="rounded-lg bg-muted/40 px-3 py-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">PDV Legal</p><p className="mt-0.5 font-mono text-sm font-bold">{formatCurrency(selectedPdvRevenueTotal)}</p></div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ajustes positivos</p><p className="mt-0.5 font-mono text-sm font-bold text-emerald-700">{formatCurrency(selectedPositiveRevenueAdjustments)}</p></div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ajustes negativos</p><p className="mt-0.5 font-mono text-sm font-bold text-rose-700">{formatCurrency(selectedNegativeRevenueAdjustments)}</p></div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Base selecionada</p><p className="mt-0.5 font-mono text-sm font-bold">{formatCurrency(metrics.revBruta)}</p></div>
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-xl border bg-background p-4 shadow-sm">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -1207,6 +1304,6 @@ export function DrePage() {
           unitLabel={selectedUnitName || "Todas as unidades"}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }
