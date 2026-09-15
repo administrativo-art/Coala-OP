@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase";
@@ -55,8 +56,41 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { reaisToCents } from "@/features/financial/cash-flow/opening-balance";
 
 type BrazilianBank = { ispb: string; name: string; code: number | null };
+type ConfirmedBalance = {
+  id: string;
+  accountId: string;
+  confirmedBalanceCents: number;
+  balanceConfirmedAt: string;
+  balanceSource: string;
+};
+
+function localDateTimeInBelem() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Belem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}`;
+}
+
+function formatConfirmedAt(value: unknown) {
+  const date = typeof (value as { toDate?: unknown })?.toDate === "function"
+    ? (value as { toDate: () => Date }).toDate()
+    : new Date(String(value ?? ""));
+  return Number.isNaN(date.getTime()) ? "data não informada" : date.toLocaleString("pt-BR", { timeZone: "America/Belem" });
+}
+
+function formatBalanceCents(value: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value / 100);
+}
 
 const PAYMENT_TYPES = [
   { value: "debit_card", label: "Cartão de débito", icon: CreditCard, color: "text-emerald-400" },
@@ -154,6 +188,7 @@ function PaymentMethodIcon({ type }: { type: string }) {
 
 export default function BankAccountsManagement({ canManage = true }: { canManage?: boolean }) {
   const { firebaseUser } = useAuth();
+  const api = useAuthenticatedApi();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<any[] | null>(null);
@@ -185,6 +220,13 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [editTarget, setEditTarget] = useState<any | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [confirmedBalances, setConfirmedBalances] = useState<ConfirmedBalance[]>([]);
+  const [balanceTarget, setBalanceTarget] = useState<any | null>(null);
+  const [balanceAmount, setBalanceAmount] = useState("");
+  const [balanceConfirmedAt, setBalanceConfirmedAt] = useState(localDateTimeInBelem);
+  const [balanceSource, setBalanceSource] = useState("bank_statement");
+  const [balanceReason, setBalanceReason] = useState("");
+  const [savingBalance, setSavingBalance] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!auth.currentUser) {
@@ -197,7 +239,7 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
 
     try {
       const token = await auth.currentUser.getIdToken();
-      const [accountsResponse, resultCentersResponse] = await Promise.all([
+      const [accountsResponse, resultCentersResponse, balancesPayload] = await Promise.all([
         fetchWithTimeout("/api/financial/data?path=bankAccounts", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -206,6 +248,11 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         }),
+        canManage
+          ? api<{ balances: ConfirmedBalance[] }>("/api/financial/bank-accounts/confirmed-balances", {
+              fallbackError: "Falha ao carregar os saldos confirmados.",
+            })
+          : Promise.resolve({ balances: [] }),
       ]);
 
       const accountsPayload = await accountsResponse.json().catch(() => ({}));
@@ -221,6 +268,7 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
 
       setAccounts((accountsPayload.docs ?? []) as any[]);
       setResultCenters((resultCentersPayload.docs ?? []) as any[]);
+      setConfirmedBalances(balancesPayload.balances ?? []);
       setError(null);
     } catch (loadError) {
       setError(
@@ -229,7 +277,7 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [api, canManage]);
 
   useEffect(() => {
     void refresh();
@@ -324,6 +372,44 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
     }
   }
 
+  function openBalanceConfirmation(account: any) {
+    const current = confirmedBalances.find((balance) => balance.accountId === account.id);
+    setBalanceTarget(account);
+    setBalanceAmount(current ? String(current.confirmedBalanceCents / 100) : "");
+    setBalanceConfirmedAt(localDateTimeInBelem());
+    setBalanceSource(current?.balanceSource ?? "bank_statement");
+    setBalanceReason("");
+  }
+
+  async function saveBalanceConfirmation() {
+    if (!balanceTarget) return;
+    const amount = Number(balanceAmount.replace(",", "."));
+    if (!Number.isFinite(amount) || balanceReason.trim().length < 5 || !balanceConfirmedAt) {
+      toast({ variant: "destructive", title: "Informe saldo, data e justificativa." });
+      return;
+    }
+    setSavingBalance(true);
+    try {
+      await api(`/api/financial/bank-accounts/${encodeURIComponent(balanceTarget.id)}/confirmed-balance`, {
+        method: "POST",
+        body: JSON.stringify({
+          balanceCents: reaisToCents(amount),
+          confirmedAt: new Date(`${balanceConfirmedAt}:00-03:00`).toISOString(),
+          source: balanceSource,
+          reason: balanceReason.trim(),
+        }),
+        fallbackError: "Falha ao confirmar o saldo da conta.",
+      });
+      toast({ title: "Saldo confirmado.", description: "A projeção usará o valor e a data informados; o evento foi auditado." });
+      setBalanceTarget(null);
+      await refresh();
+    } catch (saveError) {
+      toast({ variant: "destructive", title: "Não foi possível confirmar o saldo.", description: saveError instanceof Error ? saveError.message : undefined });
+    } finally {
+      setSavingBalance(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -363,6 +449,7 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
           accountsList.map((account) => {
             const linkedResultCenter = resultCentersList.find((item) => item.id === account.resultCenterId);
             const linkedUnit = units.find((item) => item.id === (account.unitId || account.resultCenterId));
+            const confirmedBalance = confirmedBalances.find((balance) => balance.accountId === account.id);
             return (
               <div key={account.id} className="rounded-lg border p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -387,9 +474,19 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
                     {!linkedResultCenter && linkedUnit && (
                       <p className="mt-1 text-xs text-muted-foreground">Unidade vinculada: {linkedUnit.name}</p>
                     )}
+                    {canManage && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Saldo confirmado: {confirmedBalance
+                          ? `${formatBalanceCents(confirmedBalance.confirmedBalanceCents)} em ${formatConfirmedAt(confirmedBalance.balanceConfirmedAt)}`
+                          : "pendente"}
+                      </p>
+                    )}
                   </div>
                   {canManage && (
                     <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => openBalanceConfirmation(account)}>
+                        <Banknote className="mr-2 h-4 w-4" /> Confirmar saldo
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => openEdit(account)}>
                         <Pencil className="mr-2 h-4 w-4" /> Editar
                       </Button>
@@ -702,6 +799,22 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!balanceTarget} onOpenChange={(open) => !open && !savingBalance && setBalanceTarget(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirmar saldo · {balanceTarget?.name}</DialogTitle>
+            <DialogDescription>Use somente valor conferido no extrato ou no provedor. A confirmação será usada como abertura da projeção de caixa e ficará auditada.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2"><label className="text-sm font-medium">Saldo confirmado (R$)</label><Input inputMode="decimal" value={balanceAmount} onChange={(event) => setBalanceAmount(event.target.value)} placeholder="Ex.: 12500,45 ou -350,00" /></div>
+            <div className="space-y-2"><label className="text-sm font-medium">Data e hora da posição</label><Input type="datetime-local" value={balanceConfirmedAt} onChange={(event) => setBalanceConfirmedAt(event.target.value)} /></div>
+            <div className="space-y-2"><label className="text-sm font-medium">Fonte</label><Select value={balanceSource} onValueChange={setBalanceSource}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_statement">Extrato bancário conferido</SelectItem><SelectItem value="stone_provider">Provedor Stone</SelectItem><SelectItem value="inter_provider">Provedor Inter</SelectItem><SelectItem value="manual_reconciliation">Conciliação manual</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><label className="text-sm font-medium">Justificativa/evidência</label><Input value={balanceReason} onChange={(event) => setBalanceReason(event.target.value)} placeholder="Ex.: saldo final do extrato de 15/09" /></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setBalanceTarget(null)} disabled={savingBalance}>Cancelar</Button><Button onClick={() => void saveBalanceConfirmation()} disabled={savingBalance}>{savingBalance && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar saldo</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -441,6 +441,10 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           status: "awaiting_financial_authorization",
           amount: 1000,
         }),
+        setDoc(doc(db, "bankAccountBalances/account-1"), {
+          workspaceId: "coala-shakes",
+          confirmedBalanceCents: 100000,
+        }),
         setDoc(doc(db, "expectedBankDebits/debit-1"), {
           status: "active",
           amountCents: 100000,
@@ -549,6 +553,7 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       "revenueReconciliationPeriods/period-1",
       "revenueMonthlySummaries/summary-1",
       "stoneIngestionRuns/run-1",
+      "bankAccountBalances/account-1",
     ]) {
       await assertFails(getDoc(doc(payer.firestore(), path)));
       await assertFails(setDoc(doc(payer.firestore(), path), { forged: true }, { merge: true }));

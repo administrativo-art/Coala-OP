@@ -40,7 +40,9 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Vincular/desvincular liquidação ao extrato | 2 leituras transacionais | até 3 escritas atômicas, incluindo evento |
 | Abrir administração da integração | até 101 mapeamentos + 51 execuções | 0 |
 | Criar/editar mapeamento | até 103 leituras (unidade, conta e mapeamentos) | 2 escritas atômicas, incluindo evento |
-| Compor fluxo de caixa de 91 dias | até 26.056 leituras no teto defensivo | 0 |
+| Confirmar saldo de uma conta | 2 leituras transacionais | 2 escritas atômicas, incluindo evento |
+| Listar saldos confirmados | até 51 leituras | 0 |
+| Compor fluxo de caixa de 91 dias | até 26.107 leituras no teto defensivo | 0 |
 
 Uma leitura que ultrapasse o teto é recusada; não ocorre scan completo como
 fallback. A tela deverá paginar por cursor e não usará listener ou polling. Os
@@ -53,12 +55,13 @@ estimar leituras, escritas, armazenamento e chamadas mensais. Sem esse volume,
 qualquer estimativa monetária seria fictícia.
 
 A composição de caixa é acionada somente ao abrir ou alterar os filtros da tela,
-sem polling ou listener. Seu teto defensivo soma 51 contas, 5.001 recebíveis,
+sem polling ou listener. Seu teto defensivo soma 51 contas, 51 saldos confirmados, 5.001 recebíveis,
 5.001 despesas datadas, 501 sem data, 5.001 solicitações, 5.001 transações e até
 5.500 obrigações referenciadas. Esse teto serve para interromper volumes
 inesperados, não como meta operacional. No cenário extremo de uma abertura por
 hora, três usuários e oito horas em 22 dias, seriam até 13.757.568 leituras por
-mês. O spike deverá medir o volume real; se uma carga típica se aproximar desses
+mês no teto anterior; com a coleção protegida de saldos, o teto atualizado é de
+13.784.496 leituras mensais. O spike deverá medir o volume real; se uma carga típica se aproximar desses
 limites, resumos diários reconstruíveis de no máximo 91 documentos por escopo
 passam a ser gate obrigatório antes do rollout. Cada resposta informa as
 contagens reais por fonte para acompanhamento pós-ativação.

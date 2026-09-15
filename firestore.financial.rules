@@ -357,6 +357,15 @@ service cloud.firestore {
       allow create, update, delete: if canManageBankAccounts();
     }
 
+    // Saldos confirmados e seu histórico são lidos e escritos somente por APIs
+    // autenticadas; o cadastro público da conta não expõe posição financeira.
+    match /bankAccountBalances/{accountId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     match /importAliases/{aliasId} {
       allow read: if hasFinancialAccess();
       allow create, update, delete: if canManageImportAliases();

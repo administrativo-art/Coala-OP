@@ -26,7 +26,7 @@ const MAX_TRANSACTIONS = 5_000;
 const OPEN_EXPENSE_STATUSES = ["pending", "overdue", "partially_paid", "reported_paid", "paid_divergent"];
 
 export class CashFlowProjectionLimitError extends Error {
-  constructor(readonly source: "accounts" | "receivables" | "expenses" | "unprogrammed" | "payment_requests" | "transactions") {
+  constructor(readonly source: "accounts" | "balances" | "receivables" | "expenses" | "unprogrammed" | "payment_requests" | "transactions") {
     super("O volume ultrapassa o limite operacional da projeção de caixa.");
     this.name = "CashFlowProjectionLimitError";
   }
@@ -153,8 +153,13 @@ export async function getCashFlowProjection(input: {
 }) {
   const endDate = addCashFlowCivilDays(input.asOf, input.days - 1);
   const expenseLookback = `${FINANCIAL_DRE_START_MONTH_KEY}-01`;
-  const [accountsSnapshot, receivablesSnapshot, expensesSnapshot, unprogrammedSnapshot, requestsSnapshot, transactionsSnapshot] = await Promise.all([
+  const [accountsSnapshot, balancesSnapshot, receivablesSnapshot, expensesSnapshot, unprogrammedSnapshot, requestsSnapshot, transactionsSnapshot] = await Promise.all([
     financialDbAdmin.collection("bankAccounts").orderBy(FieldPath.documentId()).limit(MAX_ACCOUNTS + 1).get(),
+    financialDbAdmin.collection("bankAccountBalances")
+      .where("workspaceId", "==", input.workspaceId)
+      .orderBy(FieldPath.documentId())
+      .limit(MAX_ACCOUNTS + 1)
+      .get(),
     financialDbAdmin.collection("stoneReceivables")
       .where("workspaceId", "==", input.workspaceId)
       .where("currentExpectedDate", ">=", expenseLookback)
@@ -192,6 +197,7 @@ export async function getCashFlowProjection(input: {
       .get(),
   ]);
   ensureLimit(accountsSnapshot.size, MAX_ACCOUNTS, "accounts");
+  ensureLimit(balancesSnapshot.size, MAX_ACCOUNTS, "balances");
   ensureLimit(receivablesSnapshot.size, MAX_RECEIVABLES, "receivables");
   ensureLimit(expensesSnapshot.size, MAX_EXPENSES, "expenses");
   ensureLimit(unprogrammedSnapshot.size, MAX_UNPROGRAMMED_EXPENSES, "unprogrammed");
@@ -205,17 +211,19 @@ export async function getCashFlowProjection(input: {
   const obligationSnapshots = await getAllInChunks(obligationIds.map((id) => financialDbAdmin.collection("financialObligations").doc(id)));
   const obligationById = new Map(obligationSnapshots.filter((snapshot) => snapshot.exists).map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
 
+  const balanceByAccountId = new Map(balancesSnapshot.docs.map((document) => [document.id, document.data()]));
   const openingBalances: CashFlowOpeningBalance[] = accountsSnapshot.docs.flatMap((document) => {
     const data = document.data();
     if (data.active === false || !workspaceMatches(data, input.workspaceId)) return [];
-    const confirmedAt = isoInstant(data.balanceConfirmedAt ?? data.lastReconciledAt ?? data.confirmedAt);
-    const confirmedBalance = Number(data.confirmedBalanceCents);
+    const balance = balanceByAccountId.get(document.id) ?? data;
+    const confirmedAt = isoInstant(balance.balanceConfirmedAt ?? balance.lastReconciledAt ?? balance.confirmedAt);
+    const confirmedBalance = Number(balance.confirmedBalanceCents);
     return [{
       accountId: document.id,
       accountName: String(data.name || document.id),
       balanceCents: Number.isSafeInteger(confirmedBalance) && confirmedAt ? confirmedBalance : null,
       confirmedAt,
-      source: typeof data.balanceSource === "string" ? data.balanceSource : null,
+      source: typeof balance.balanceSource === "string" ? balance.balanceSource : null,
     }];
   });
   const receivables = receivablesSnapshot.docs
@@ -274,6 +282,7 @@ export async function getCashFlowProjection(input: {
       generatedAt: new Date().toISOString(),
     }),
     cutoffs: {
+      balances: balancesSnapshot.size,
       receivables: receivablesSnapshot.size,
       obligations: obligations.length,
       paymentRequests: requestsSnapshot.size,
