@@ -8,6 +8,8 @@ const importRoute = readFileSync("src/app/api/financial/sales-reconciliation/imp
 const receivablesService = readFileSync("src/features/financial/stone-receivables/service.server.ts", "utf8");
 const receivablesRoute = readFileSync("src/app/api/financial/stone-receivables/route.ts", "utf8");
 const receivablesImportRoute = readFileSync("src/app/api/financial/stone-receivables/import/route.ts", "utf8");
+const cashFlowProjectionService = readFileSync("src/features/financial/cash-flow/projection.server.ts", "utf8");
+const cashFlowProjectionRoute = readFileSync("src/app/api/financial/cash-flow/projection/route.ts", "utf8");
 const decisionRoute = readFileSync(
   "src/app/api/financial/sales-reconciliation/cases/[caseId]/decision/route.ts",
   "utf8",
@@ -44,6 +46,8 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(importRoute, /canAccessKiosk/);
     assert.match(receivablesRoute, /salesReconciliation\?\.view/);
     assert.match(receivablesImportRoute, /stoneIntegration\?\.manage/);
+    assert.match(cashFlowProjectionRoute, /cashFlow\?\.view/);
+    assert.match(cashFlowProjectionRoute, /canAccessUnit/);
     assert.match(decisionRoute, /salesReconciliationDecisionSchema/);
     assert.match(decisionRoute, /permissions\?\.review/);
     assert.match(decisionRoute, /permissions\.classify/);
@@ -60,6 +64,15 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(service, /buildingProjectionId/);
     assert.match(receivablesService, /\.limit\(input\.limit \+ 1\)/);
     assert.match(receivablesService, /startAfter\(cursor\.date, cursor\.id\)/);
+    for (const limit of [
+      "MAX_ACCOUNTS",
+      "MAX_RECEIVABLES",
+      "MAX_EXPENSES",
+      "MAX_UNPROGRAMMED_EXPENSES",
+      "MAX_PAYMENT_REQUESTS",
+      "MAX_TRANSACTIONS",
+    ]) assert.match(cashFlowProjectionService, new RegExp(`\\.limit\\(${limit} \\+ 1\\)`));
+    assert.doesNotMatch(cashFlowProjectionService, /\bonSnapshot\s*\(|\bsetInterval\s*\(/);
   });
 
   it("nega acesso direto e declara todos os índices usados pelas APIs", () => {

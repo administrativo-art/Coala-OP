@@ -35,6 +35,8 @@ Os números abaixo são tetos do código, não previsão de volume real:
 | Finalizar uma competência | 5.001 fatos PDV + 5.001 vendas Stone + até 10.000 decisões + resumos existentes das unidades | até 10.000 casos + 2 resumos por unidade + controle e `run` |
 | Listar casos sem unidade | 1 controle + até 101 casos + até 21 períodos | 0 |
 | Listar casos de uma unidade | 1 controle + até 101 casos + 1 período | 0 |
+| Listar recebíveis Stone | até 101 recebíveis por página | 0 |
+| Compor fluxo de caixa de 91 dias | até 26.056 leituras no teto defensivo | 0 |
 
 Uma leitura que ultrapasse o teto é recusada; não ocorre scan completo como
 fallback. A tela deverá paginar por cursor e não usará listener ou polling. Os
@@ -45,6 +47,17 @@ em cada fonte sem correspondência. O spike com dados reais é gate de rollout:
 ele deve medir transações/dia, propor um limite por unidade/dia se necessário e
 estimar leituras, escritas, armazenamento e chamadas mensais. Sem esse volume,
 qualquer estimativa monetária seria fictícia.
+
+A composição de caixa é acionada somente ao abrir ou alterar os filtros da tela,
+sem polling ou listener. Seu teto defensivo soma 51 contas, 5.001 recebíveis,
+5.001 despesas datadas, 501 sem data, 5.001 solicitações, 5.001 transações e até
+5.500 obrigações referenciadas. Esse teto serve para interromper volumes
+inesperados, não como meta operacional. No cenário extremo de uma abertura por
+hora, três usuários e oito horas em 22 dias, seriam até 13.757.568 leituras por
+mês. O spike deverá medir o volume real; se uma carga típica se aproximar desses
+limites, resumos diários reconstruíveis de no máximo 91 documentos por escopo
+passam a ser gate obrigatório antes do rollout. Cada resposta informa as
+contagens reais por fonte para acompanhamento pós-ativação.
 
 ## Ordem segura de ativação
 
