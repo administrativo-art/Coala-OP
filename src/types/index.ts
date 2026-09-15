@@ -757,6 +757,8 @@ export type PermissionSet = {
     inbox: { view: boolean; analyze: boolean; link: boolean; discard: boolean; };
     audits: { view: boolean; import: boolean; edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean; };
     reconciliation: { view: boolean; confirm: boolean; correct: boolean; classifyAdjustments: boolean; administer: boolean; };
+    salesReconciliation: { view: boolean; review: boolean; classify: boolean; close: boolean; reopen: boolean; };
+    stoneIntegration: { manage: boolean; };
     cardStatements: { view: boolean; import: boolean; audit: boolean; close: boolean; reconcile: boolean; };
     personnelCosts: { view: boolean; edit: boolean; export: boolean; };
     beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
@@ -2886,6 +2888,8 @@ export const defaultGuestPermissions: PermissionSet = {
       inbox: { view: false, analyze: false, link: false, discard: false },
       audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
       reconciliation: { view: false, confirm: false, correct: false, classifyAdjustments: false, administer: false },
+      salesReconciliation: { view: false, review: false, classify: false, close: false, reopen: false },
+      stoneIntegration: { manage: false },
       cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
       personnelCosts: { view: false, edit: false, export: false },
       beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
@@ -2997,6 +3001,8 @@ export const defaultAdminPermissions: PermissionSet = {
       inbox: { view: true, analyze: true, link: true, discard: true },
       audits: { view: true, import: true, edit: true, ignore: true, effectuate: true, manage: true },
       reconciliation: { view: true, confirm: true, correct: true, classifyAdjustments: true, administer: true },
+      salesReconciliation: { view: true, review: true, classify: true, close: true, reopen: true },
+      stoneIntegration: { manage: true },
       cardStatements: { view: true, import: true, audit: true, close: true, reconcile: true },
       personnelCosts: { view: true, edit: true, export: true },
       beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },

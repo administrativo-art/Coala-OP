@@ -374,6 +374,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialInboxViewWatch = form.watch('permissions.financial.inbox.view' as any);
   const financialAuditsViewWatch = form.watch('permissions.financial.audits.view' as any);
   const financialReconciliationViewWatch = form.watch('permissions.financial.reconciliation.view' as any);
+  const financialSalesReconciliationViewWatch = form.watch('permissions.financial.salesReconciliation.view' as any);
   const financialCardStatementsViewWatch = form.watch('permissions.financial.cardStatements.view' as any);
   const financialPersonnelCostsViewWatch = form.watch('permissions.financial.personnelCosts.view' as any);
   const financialPaymentRequestsViewWatch = form.watch('permissions.financial.paymentRequests.view' as any);
@@ -807,6 +808,18 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.financial.reconciliation.correct" as any, "Corrigir conciliações", "Permite desfazer ou substituir vínculos preservando o histórico.", !financialReconciliationViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.reconciliation.classifyAdjustments" as any, "Classificar ajustes", "Permite classificar juros, multa, desconto, abatimento, motivo e responsabilidade.", !financialReconciliationViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.reconciliation.administer" as any, "Administrar exceções", "Permite executar correções excepcionais e consultar toda a trilha de auditoria.", !financialReconciliationViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AuditIcon className="h-4 w-4" /> Conciliação de vendas</h4>
+                                  {renderPermissionSwitch("permissions.financial.salesReconciliation.view" as any, "Visualizar PDV × Stone", "Permite consultar vendas, recebíveis, diferenças e fechamentos mensais da integração.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.salesReconciliation.review" as any, "Confirmar correspondências", "Permite confirmar ou corrigir sugestões de vínculo entre PDV e Stone.", !financialSalesReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.salesReconciliation.classify" as any, "Classificar divergências", "Permite classificar diferenças e registrar seus efeitos contábeis auditáveis.", !financialSalesReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.salesReconciliation.close" as any, "Fechar competências", "Permite fechar uma unidade somente quando todas as fontes e decisões estiverem completas.", !financialSalesReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.salesReconciliation.reopen" as any, "Reabrir competências", "Permite reabrir ou tratar uma competência marcada como desatualizada.", !financialSalesReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.stoneIntegration.manage" as any, "Gerenciar integração Stone", "Permite importar dados, manter mapeamentos e acompanhar execuções; segredos permanecem no servidor.", !financialViewWatch, true)}
                                   </div>
                                 </div>
 
