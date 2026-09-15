@@ -8,6 +8,7 @@ const importRoute = readFileSync("src/app/api/financial/sales-reconciliation/imp
 const receivablesService = readFileSync("src/features/financial/stone-receivables/service.server.ts", "utf8");
 const receivablesRoute = readFileSync("src/app/api/financial/stone-receivables/route.ts", "utf8");
 const receivablesImportRoute = readFileSync("src/app/api/financial/stone-receivables/import/route.ts", "utf8");
+const receivablesPage = readFileSync("src/features/financial/stone-receivables/components/stone-receivables-page.tsx", "utf8");
 const cashFlowProjectionService = readFileSync("src/features/financial/cash-flow/projection.server.ts", "utf8");
 const cashFlowProjectionRoute = readFileSync("src/app/api/financial/cash-flow/projection/route.ts", "utf8");
 const cashFlowPage = readFileSync("src/features/financial/pages/cash-flow-page.tsx", "utf8");
@@ -65,6 +66,8 @@ describe("política de armazenamento da conciliação de vendas", () => {
     assert.match(service, /buildingProjectionId/);
     assert.match(receivablesService, /\.limit\(input\.limit \+ 1\)/);
     assert.match(receivablesService, /startAfter\(cursor\.date, cursor\.id\)/);
+    assert.match(receivablesPage, /\/api\/financial\/stone-receivables/);
+    assert.doesNotMatch(receivablesPage, /useFinancialCollection|getDocs\s*\(|onSnapshot\s*\(|setInterval\s*\(/);
     for (const limit of [
       "MAX_ACCOUNTS",
       "MAX_RECEIVABLES",
