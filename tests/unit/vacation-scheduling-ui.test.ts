@@ -53,9 +53,10 @@ test('perfil não reabre trilha para um período legado que já terminou', () =>
   assert.match(profile, /shouldDisplayVacationWorkflow\(vacation, today\)/);
 });
 
-test('painel separa consulta da ficha, registro direto e decisão individual', () => {
-  assert.match(manager, /kind === 'scheduling' \? 'Registrar férias' : 'Abrir ficha'/);
-  assert.match(manager, /kind="scheduling"[\s\S]*\?action=register/);
+test('painel encaminha as filas para a ficha individual e mantém a decisão individual', () => {
+  assert.match(manager, />\s*Abrir ficha\s*<ArrowUpRight/);
+  assert.doesNotMatch(manager, /\?action=register/);
+  assert.match(manager, /kind="scheduling"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
   assert.match(manager, /kind="approval"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
   assert.doesNotMatch(manager, /DPFeriasDrawer|setDrawerUserId/);
   assert.match(manager, /<ConcessivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
@@ -66,6 +67,17 @@ test('painel separa consulta da ficha, registro direto e decisão individual', (
   assert.match(profile, /Revisar e decidir/);
   assert.match(profile, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
   assert.match(profile, /onApprove=\{setDecisionVacation\}/);
+});
+
+test('painel acompanha as trilhas ativas até a finalização e abre o período correto', () => {
+  assert.match(manager, /Trilhas em andamento/);
+  assert.match(manager, /workflow\.status !== 'active'/);
+  assert.match(manager, /workflow\.currentStage === 'scheduling'/);
+  assert.match(manager, /Etapa \{stageIndex \+ 1\} de/);
+  assert.match(manager, /Responsável: \{summary\.owner\}/);
+  assert.match(manager, /\?vacation=\$\{encodeURIComponent\(trail\.record\.id\)\}/);
+  assert.match(profilePage, /initialWorkflowVacationId/);
+  assert.match(profile, /initialWorkflowVacationId \?\? null/);
 });
 
 test('perfil agrupa concessivo, resumo, ciclos e auditoria no mesmo bloco histórico', () => {
@@ -88,6 +100,14 @@ test('resumo separa estados dos ciclos das métricas do ciclo concessivo', () =>
   assert.match(profile, /Saldo a programar/);
   assert.doesNotMatch(profile, /Total de registros/);
   assert.doesNotMatch(profile, /Dias registrados/);
+});
+
+test('ciclo concessivo alerta a data-limite estimada do aviso e explica o cálculo', () => {
+  assert.match(profile, /concessiveNoticeLimit/);
+  assert.match(profile, /Data-limite do aviso/);
+  assert.match(profile, /Entenda esta data/);
+  assert.match(profile, /com 30 dias de antecedência/);
+  assert.match(profile, /remainingDays \+ 29/);
 });
 
 test('decisão no drawer mantém aprovação e rejeição protegidas por permissão e justificativa', () => {

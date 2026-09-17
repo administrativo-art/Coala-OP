@@ -16,7 +16,13 @@ import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { activeOperationalUnits } from '@/lib/dp-units';
-import type { User } from '@/types';
+import { VACATION_WORKFLOW_STAGE_META } from '@/lib/dp-vacation-workflow';
+import type {
+  DPVacationRecord,
+  DPVacationWorkflow,
+  DPVacationWorkflowOwner,
+  User,
+} from '@/types';
 
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -76,6 +82,14 @@ const RISK_CHIPS: { key: 'ALL' | VacationRisk; label: string }[] = [
   { key: 'EM_DIA', label: 'Em dia' },
 ];
 
+const WORKFLOW_OWNER_LABEL: Record<DPVacationWorkflowOwner, string> = {
+  hr: 'RH',
+  employee: 'Colaborador',
+  accountant: 'Contador',
+  finance: 'Financeiro',
+  system: 'Sistema',
+};
+
 interface Enriched {
   user: User;
   health: VacationHealthStatus;
@@ -85,6 +99,62 @@ interface Enriched {
   cycle?: VacationCycle;
   noticeDeadline?: Date;
   noticeDaysLeft?: number;
+}
+
+interface ActiveTrail {
+  item: Enriched;
+  record: DPVacationRecord;
+  workflow: DPVacationWorkflow;
+}
+
+function workflowOperationalSummary(workflow: DPVacationWorkflow) {
+  const currentStep = workflow.steps.find(step => step.id === workflow.currentStage);
+  const fallbackOwner = WORKFLOW_OWNER_LABEL[currentStep?.owner ?? 'hr'];
+
+  if (workflow.currentStage === 'notice') {
+    if (workflow.notice.status === 'not_generated') return { owner: 'RH', action: 'Gerar o aviso de férias' };
+    if (workflow.notice.status === 'generating') return { owner: 'Sistema', action: 'Gerando o aviso de férias' };
+    if (workflow.notice.status === 'draft') return { owner: 'RH', action: 'Validar o aviso de férias' };
+    if (workflow.notice.status === 'validated') return { owner: 'RH', action: 'Enviar o aviso para assinatura' };
+    if (workflow.notice.status === 'sending') return { owner: 'Sistema', action: 'Enviando o aviso para assinatura' };
+    if (workflow.notice.status === 'failed') return { owner: 'RH', action: 'Corrigir e reenviar o aviso' };
+    return { owner: 'Colaborador', action: 'Assinar o aviso de férias' };
+  }
+
+  if (workflow.currentStage === 'accountant') {
+    if (workflow.accountant.status === 'sending') return { owner: 'Sistema', action: 'Enviando documentos à contabilidade' };
+    if (workflow.accountant.status === 'failed') return { owner: 'RH', action: 'Corrigir o envio à contabilidade' };
+    if (workflow.accountant.status === 'correction_requested') return { owner: 'RH', action: 'Solicitar correção ao contador' };
+    if (workflow.accountant.status === 'ready_to_send') return { owner: 'RH', action: 'Enviar documentos à contabilidade' };
+    return { owner: 'Contador', action: 'Enviar o recibo original' };
+  }
+
+  if (workflow.currentStage === 'receipt_review') {
+    if (workflow.receipt.status === 'processing') return { owner: 'Sistema', action: 'Processar o recibo original' };
+    if (workflow.receipt.status === 'correction_requested') return { owner: 'Contador', action: 'Corrigir o recibo de férias' };
+    return { owner: 'RH', action: 'Auditar o recibo recebido' };
+  }
+
+  if (workflow.currentStage === 'payment') {
+    if (workflow.payment.status === 'preparing') return { owner: 'Sistema', action: 'Preparando o pagamento' };
+    if (workflow.payment.status === 'not_started') return { owner: 'RH', action: 'Preparar o pagamento' };
+    if (workflow.payment.status === 'failed') return { owner: 'RH', action: 'Corrigir a preparação do pagamento' };
+    return { owner: 'Financeiro', action: 'Autorizar e confirmar o pagamento' };
+  }
+
+  if (workflow.currentStage === 'receipt_signature') {
+    if (workflow.receiptSignature.status === 'ready') return { owner: 'RH', action: 'Enviar o recibo para assinatura' };
+    if (workflow.receiptSignature.status === 'sending') return { owner: 'Sistema', action: 'Enviando o recibo para assinatura' };
+    if (workflow.receiptSignature.status === 'failed') return { owner: 'RH', action: 'Reenviar o recibo para assinatura' };
+    if (workflow.receiptSignature.status === 'blocked_until_payment') return { owner: 'Financeiro', action: 'Confirmar o pagamento' };
+    return { owner: 'Colaborador', action: 'Assinar o recibo de férias' };
+  }
+
+  if (workflow.currentStage === 'closure') {
+    return { owner: 'RH', action: 'Conferir e finalizar a trilha' };
+  }
+
+  return { owner: fallbackOwner, action: 'Revisar e aprovar o agendamento' };
 }
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
@@ -216,6 +286,7 @@ const KPI_TONES = {
   warning: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
   danger: 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
   purple: 'border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-900 dark:bg-purple-950/30 dark:text-purple-300',
+  info: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300',
 } as const;
 
 function KpiCard({
@@ -297,7 +368,64 @@ function QueueRow({
         {kind === 'approval' ? 'Etapa 1 · decisão' : 'Antes da etapa 1 · registro'}
       </span>
       <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
-        {kind === 'scheduling' ? 'Registrar férias' : 'Abrir ficha'}
+        Abrir ficha
+        <ArrowUpRight className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
+}
+
+function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void }) {
+  const { item, record, workflow } = trail;
+  const stageIndex = Math.max(0, VACATION_WORKFLOW_STAGE_META.findIndex(stage => stage.id === workflow.currentStage));
+  const stage = VACATION_WORKFLOW_STAGE_META[stageIndex];
+  const completedSteps = workflow.steps.filter(step => step.status === 'completed').length;
+  const progress = Math.round((completedSteps / VACATION_WORKFLOW_STAGE_META.length) * 100);
+  const summary = workflowOperationalSummary(workflow);
+  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
+  const period = record.startDate && record.endDate
+    ? `${format(parseISO(record.startDate), 'dd/MM/yyyy')} → ${format(parseISO(record.endDate), 'dd/MM/yyyy')}`
+    : 'Período não informado';
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="grid w-full gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-left transition-colors hover:bg-sky-50/45 dark:hover:bg-sky-950/15 md:grid-cols-[minmax(220px,1.15fr)_minmax(180px,.85fr)_minmax(260px,1.3fr)_auto] md:items-center"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <span
+          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-black text-white"
+          style={{ background: item.user.color || '#8B5CF6' }}
+        >
+          {initials(item.user.username)}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-[13.5px] font-black">{item.user.username}</span>
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">{meta || '—'}</span>
+        </span>
+      </span>
+
+      <span className="min-w-0">
+        <span className="block text-[11px] font-black uppercase tracking-[0.07em] text-sky-700 dark:text-sky-300">
+          Etapa {stageIndex + 1} de {VACATION_WORKFLOW_STAGE_META.length} · {stage.short}
+        </span>
+        <span className="mt-1 block truncate text-[11px] font-semibold text-muted-foreground">
+          {period} · {record.days}d
+        </span>
+        <span className="mt-2 flex items-center gap-2">
+          <Progress value={progress} className="h-1.5 flex-1 [&>*]:bg-sky-600" />
+          <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{completedSteps}/7</span>
+        </span>
+      </span>
+
+      <span className="min-w-0 rounded-xl bg-sky-50 px-3 py-2 dark:bg-sky-950/30">
+        <span className="block truncate text-[12px] font-extrabold text-slate-900 dark:text-slate-100">{summary.action}</span>
+        <span className="mt-0.5 block text-[10.5px] font-semibold text-muted-foreground">Responsável: {summary.owner}</span>
+      </span>
+
+      <span className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] border bg-background px-3.5 text-[12.5px] font-extrabold">
+        Abrir ficha
         <ArrowUpRight className="h-3.5 w-3.5" />
       </span>
     </button>
@@ -410,6 +538,30 @@ export function DPFeriasManager() {
     filtered.filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'AGENDADO'),
     [filtered]);
 
+  const activeTrails = useMemo<ActiveTrail[]>(() => {
+    const visibleUsers = new Map(filtered.map(item => [item.user.id, item]));
+    return vacations
+      .flatMap(record => {
+        const item = visibleUsers.get(record.userId);
+        const workflow = record.workflow;
+        if (
+          !item
+          || record.recordType !== 'gozo'
+          || record.status === 'REJECTED'
+          || !workflow
+          || workflow.status !== 'active'
+          || workflow.currentStage === 'scheduling'
+        ) return [];
+        return [{ item, record, workflow }];
+      })
+      .sort((left, right) => {
+        const leftStage = VACATION_WORKFLOW_STAGE_META.findIndex(stage => stage.id === left.workflow.currentStage);
+        const rightStage = VACATION_WORKFLOW_STAGE_META.findIndex(stage => stage.id === right.workflow.currentStage);
+        if (leftStage !== rightStage) return leftStage - rightStage;
+        return (left.record.startDate ?? '').localeCompare(right.record.startDate ?? '');
+      });
+  }, [filtered, vacations]);
+
   const aquisitivo = useMemo(() =>
     filtered
       .filter(e => e.health.status === 'AQUISITIVO')
@@ -512,9 +664,10 @@ export function DPFeriasManager() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <KpiCard label="Pendente de agendamento" value={pendingScheduling.length} hint="com saldo aberto" tone="neutral" />
         <KpiCard label="Aguardando aprovação" value={awaitingApproval.length} hint="sua decisão" tone="warning" />
+        <KpiCard label="Trilhas em andamento" value={activeTrails.length} hint="até finalizar" tone="info" />
         <KpiCard label="Prazo de aviso em risco" value={noticeAtRisk.length} hint="≤ 60 dias" tone="danger" />
         <KpiCard label="Em gozo neste mês" value={approvedInMonth} hint="na operação" tone="purple" />
       </div>
@@ -535,7 +688,7 @@ export function DPFeriasManager() {
                     key={item.user.id}
                     item={item}
                     kind="scheduling"
-                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}?action=register`)}
+                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
                   />
                 ))}
           </div>
@@ -561,6 +714,26 @@ export function DPFeriasManager() {
                     onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
                   />
                 ))}
+          </div>
+        </section>
+      )}
+
+      {activeTrails.length > 0 && (
+        <section className="rounded-[18px] border border-sky-200 bg-gradient-to-b from-sky-50/80 to-card p-4 dark:border-sky-900 dark:from-sky-950/20">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-sky-200 text-xs font-black text-sky-900 dark:bg-sky-900 dark:text-sky-200">→</span>
+            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-sky-900 dark:text-sky-200">Trilhas em andamento</h2>
+            <Badge className="bg-sky-800 text-white hover:bg-sky-800">{activeTrails.length}</Badge>
+            <span className="ml-auto text-[11.5px] font-semibold text-sky-800/75 dark:text-sky-300/75">Do aviso à finalização · etapa, responsável e próxima ação</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {activeTrails.map(trail => (
+              <TrailRow
+                key={trail.record.id}
+                trail={trail}
+                onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(trail.item.user.id)}?vacation=${encodeURIComponent(trail.record.id)}`)}
+              />
+            ))}
           </div>
         </section>
       )}
