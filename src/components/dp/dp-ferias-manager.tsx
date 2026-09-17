@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   differenceInCalendarDays,
   endOfMonth,
@@ -264,7 +265,7 @@ function QueueRow({
       ? `${format(parseISO(pendingRecord.startDate), 'dd/MM/yyyy')} → ${format(parseISO(pendingRecord.endDate), 'dd/MM/yyyy')}`
       : `${item.balance}d a agendar`;
   const actionLabel = kind === 'approval'
-    ? canAct ? 'Revisar e decidir' : 'Abrir ficha'
+    ? 'Abrir ficha'
     : canAct ? 'Registrar férias' : 'Abrir ficha';
 
   return (
@@ -313,6 +314,7 @@ function QueueRow({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPFeriasManager() {
+  const router = useRouter();
   const { activeUsers, users, permissions } = useAuth();
   const { vacations, units, vacationsLoading, vacationsError, unitsError } = useDPBootstrap();
 
@@ -544,7 +546,7 @@ export function DPFeriasManager() {
                     item={item}
                     kind="scheduling"
                     canAct={canRegister}
-                    onOpen={() => setDrawerUserId(item.user.id)}
+                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
                   />
                 ))}
           </div>
@@ -568,7 +570,7 @@ export function DPFeriasManager() {
                     item={item}
                     kind="approval"
                     canAct={canApprove}
-                    onOpen={() => setDrawerUserId(item.user.id)}
+                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
                   />
                 ))}
           </div>

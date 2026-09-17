@@ -15,6 +15,7 @@ test('aprova e cancela férias com justificativa e histórico auditável', async
   const employeeCard = page.getByRole('button', { name: /Colaboradora Férias E2E.*Aguardando aprovação/ });
   await expect(employeeCard).toBeVisible({ timeout: 60_000 });
   await employeeCard.click();
+  await expect(page).toHaveURL(new RegExp(`/dashboard/dp/ferias/${E2E_VACATION.employeeId}$`));
   await page.getByRole('button', { name: 'Revisar e decidir' }).click();
   await expect(page.getByText('Decisão do período', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Aprovar agendamento' })).toBeVisible();
@@ -23,8 +24,6 @@ test('aprova e cancela férias com justificativa e histórico auditável', async
   await expect(page.getByText('Agendamento aprovado.', { exact: true })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText('Aprovado por você', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Fechar' }).click();
-  await page.getByRole('button', { name: 'Ver perfil completo' }).click();
-  await expect(page).toHaveURL(new RegExp(`/dashboard/dp/ferias/${E2E_VACATION.employeeId}$`));
   await expect(page.getByRole('button', { name: 'Gerar aviso' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancelar formalmente' })).toBeVisible();
 

@@ -36,11 +36,33 @@ test('perfil apresenta a trilha completa e preserva o recibo original para audit
   assert.match(workflow, /Finalizar no RH/);
 });
 
-test('drawer permite revisar e decidir agendamentos sem sair da lista', () => {
-  assert.match(manager, /canApprove=\{canApprove\}/);
-  assert.match(drawer, /DPVacationDecisionPanel/);
-  assert.match(drawer, /Revisar e decidir/);
-  assert.match(drawer, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
+test('trilha mostra uma etapa por vez e mantém etapas concluídas navegáveis', () => {
+  assert.match(workflow, /stageSelection\?\.recordId === record\.id/);
+  assert.match(workflow, /: workflow\.currentStage/);
+  assert.match(workflow, /aria-pressed=\{selected\}/);
+  assert.match(workflow, /setStageSelection\(\{ recordId: record\.id, stage: meta\.id \}\)/);
+  assert.match(workflow, /selectedStage === 'scheduling'/);
+  assert.match(workflow, /selectedStage === 'notice'/);
+  assert.match(workflow, /selectedStage === 'accountant' \|\| selectedStage === 'receipt_review'/);
+  assert.match(workflow, /selectedStage === 'payment' \|\| selectedStage === 'receipt_signature' \|\| selectedStage === 'closure'/);
+  assert.match(workflow, /Etapa concluída\. Os dados permanecem disponíveis para consulta/);
+});
+
+test('painel abre a ficha e a decisão acontece no drawer do perfil individual', () => {
+  assert.match(manager, /kind === 'approval'\s*\? 'Abrir ficha'/);
+  assert.match(manager, /kind="approval"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
+  assert.match(profile, /DPVacationDecisionPanel/);
+  assert.match(profile, /Revisar e decidir/);
+  assert.match(profile, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
+});
+
+test('perfil agrupa concessivo, resumo, ciclos e auditoria no mesmo bloco histórico', () => {
+  assert.match(profile, /Ciclos e histórico/);
+  assert.match(profile, /Consulte o prazo concessivo, os saldos, os lançamentos e a auditoria em um único bloco/);
+  assert.match(profile, /DPVacationAuditTimeline/);
+  assert.match(profile, /Histórico auditável/);
+  assert.match(profile, /Histórico de Ciclos/);
+  assert.doesNotMatch(workflow, /<details className="group/);
 });
 
 test('decisão no drawer mantém aprovação e rejeição protegidas por permissão e justificativa', () => {
@@ -62,15 +84,18 @@ test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
   assert.match(manager, /Prazo de aviso em risco/);
   assert.match(manager, /Em gozo neste mês/);
   assert.match(manager, /QueueRow/);
+  assert.match(manager, /router\.push\(`\/dashboard\/dp\/ferias\/\$\{encodeURIComponent\(item\.user\.id\)\}`\)/);
   assert.match(manager, /DPVacationTimeline/);
   assert.match(timeline, /Aprovada/);
   assert.match(timeline, /Planejada/);
   assert.match(timeline, /Pendente/);
 });
 
-test('drawer oferece cadastro, edição e exclusão do período conforme o handoff', () => {
-  assert.match(drawer, /DPVacationEditorPanel/);
-  assert.match(drawer, /Registrar neste ciclo/);
+test('cadastro acontece na ficha individual e o drawer preserva edição e exclusão', () => {
+  assert.match(profile, /DPVacationEditorPanel/);
+  assert.match(profile, /<Sheet/);
+  assert.match(drawer, /Abrir perfil para registrar/);
+  assert.match(drawer, /router\.push\(`\/dashboard\/dp\/ferias\/\$\{encodeURIComponent\(user\.id\)\}`\)/);
   assert.match(drawer, /Editar período lançado/);
   assert.match(drawer, /Excluir período lançado/);
   assert.match(drawer, /record\.workflow\?\.legalAnalysis\.noticeLeadDays/);

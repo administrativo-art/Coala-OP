@@ -36,6 +36,7 @@ import type {
   DPVacationEvent,
   DPVacationRecord,
   DPVacationWorkflow,
+  DPVacationWorkflowStageId,
   DPVacationWorkflowStep,
 } from '@/types';
 
@@ -330,7 +331,15 @@ function EmptyWorkflow({ canEdit, onRegister }: { canEdit: boolean; onRegister: 
   );
 }
 
-function VacationAuditTimeline({ vacationId, version }: { vacationId: string; version: string }) {
+export function DPVacationAuditTimeline({
+  vacationId,
+  version,
+  embedded = false,
+}: {
+  vacationId: string;
+  version: string;
+  embedded?: boolean;
+}) {
   const api = useAuthenticatedApi();
   const [events, setEvents] = useState<DPVacationEvent[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -363,7 +372,7 @@ function VacationAuditTimeline({ vacationId, version }: { vacationId: string; ve
   }, [load, version]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
+    <div className={embedded ? 'overflow-hidden bg-white' : 'overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'}>
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
         <div>
           <div className="flex items-center gap-2">
@@ -450,6 +459,10 @@ export function DPVacationWorkflowPanel({
   const [correctionReason, setCorrectionReason] = useState('');
   const [receiptOverrideReason, setReceiptOverrideReason] = useState('');
   const [noticeExceptionReason, setNoticeExceptionReason] = useState('');
+  const [stageSelection, setStageSelection] = useState<{
+    recordId: string;
+    stage: DPVacationWorkflowStageId;
+  } | null>(null);
 
   useEffect(() => {
     const reviewed = workflow?.receipt.reviewedValues;
@@ -477,6 +490,12 @@ export function DPVacationWorkflowPanel({
   if (!record || !workflow) return <EmptyWorkflow canEdit={canEdit} onRegister={onRegister} />;
 
   const action = nextAction(workflow);
+  const selectedStage = stageSelection?.recordId === record.id
+    ? stageSelection.stage
+    : workflow.currentStage;
+  const selectedStageMeta = VACATION_WORKFLOW_STAGE_META.find(meta => meta.id === selectedStage)!;
+  const selectedStep = workflow.steps.find(step => step.id === selectedStage)!;
+  const viewingCurrentStage = selectedStage === workflow.currentStage;
   const notice = workflow.notice;
   const noticeGenerated = ['draft', 'validated', 'sent', 'signed'].includes(notice.status);
   const noticeValidated = ['validated', 'sent', 'signed'].includes(notice.status);
@@ -558,38 +577,74 @@ export function DPVacationWorkflowPanel({
         <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
           {VACATION_WORKFLOW_STAGE_META.map((meta, index) => {
             const step = workflow.steps.find((candidate) => candidate.id === meta.id)!;
+            const selected = selectedStage === meta.id;
             return (
-              <div key={meta.id} className={`min-w-[124px] flex-1 rounded-[13px] border-b-[3px] px-3 py-2.5 ${stepClasses(step)}`}>
+              <button
+                key={meta.id}
+                type="button"
+                aria-pressed={selected}
+                aria-label={`Ver etapa ${index + 1}: ${meta.label}`}
+                onClick={() => setStageSelection({ recordId: record.id, stage: meta.id })}
+                className={`min-w-[124px] flex-1 rounded-[13px] border-b-[3px] px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]/50 ${stepClasses(step)} ${selected ? 'ring-2 ring-[#df2f78]/35 shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+              >
                 <span className="flex items-center gap-2">
                   <span className="font-mono text-[9px] font-bold opacity-70">0{index + 1}</span>
                   <span className={`h-1.5 w-1.5 rounded-full ${step.status === 'completed' ? 'bg-emerald-500' : step.status === 'in_progress' || step.status === 'waiting_external' ? 'bg-[#df2f78]' : 'bg-stone-300'}`} />
                 </span>
                 <span className="mt-1 block text-[12px] font-black leading-snug">{meta.short}</span>
                 <span className="mt-0.5 block text-[9.5px] font-bold opacity-70">{stepStateLabel(step)}</span>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-amber-700">O que falta para avançar</p>
-          <p className="mt-1 text-[13px] font-black text-amber-900">{action.title}</p>
-          <p className="mt-1 text-[11.5px] font-semibold text-amber-700">{action.description}</p>
+      {viewingCurrentStage ? (
+        <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-amber-700">O que falta para avançar</p>
+            <p className="mt-1 text-[13px] font-black text-amber-900">{action.title}</p>
+            <p className="mt-1 text-[11.5px] font-semibold text-amber-700">{action.description}</p>
+          </div>
+          <Badge variant="outline" className="rounded-full border-amber-200 bg-white text-[10px] font-black text-amber-800">
+            Responsável: {action.owner}
+          </Badge>
+          {workflow.currentStage === 'scheduling' && canApprove && record.status !== 'APPROVED' ? (
+            <Button size="sm" className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]" onClick={() => onApprove(record)}>
+              Aprovar agendamento
+            </Button>
+          ) : null}
         </div>
-        <Badge variant="outline" className="rounded-full border-amber-200 bg-white text-[10px] font-black text-amber-800">
-          Responsável: {action.owner}
-        </Badge>
-        {workflow.currentStage === 'scheduling' && canApprove && record.status !== 'APPROVED' ? (
-          <Button size="sm" className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]" onClick={() => onApprove(record)}>
-            Aprovar agendamento
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          {selectedStep.status === 'completed' ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          ) : (
+            <LockKeyhole className="h-4 w-4 shrink-0 text-slate-500" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Visualizando {selectedStageMeta.label}</p>
+            <p className="mt-0.5 text-[11.5px] font-semibold text-slate-600">
+              {selectedStep.status === 'completed'
+                ? 'Etapa concluída. Os dados permanecem disponíveis para consulta.'
+                : 'Etapa futura em modo de consulta; as ações serão liberadas quando o processo chegar aqui.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            onClick={() => setStageSelection({ recordId: record.id, stage: workflow.currentStage })}
+          >
+            Voltar à etapa atual
           </Button>
-        ) : null}
-      </div>
+        </div>
+      )}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="space-y-4">
+        {selectedStage === 'scheduling' ? (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
@@ -617,7 +672,9 @@ export function DPVacationWorkflowPanel({
             ))}
           </div>
         </div>
+        ) : null}
 
+        {selectedStage === 'notice' ? (
         <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
           <div className="border-b border-violet-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
@@ -763,27 +820,38 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
         </div>
+        ) : null}
 
+        {selectedStage === 'accountant' || selectedStage === 'receipt_review' ? (
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
           <div className="border-b border-emerald-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
-              <Upload className="h-4 w-4 text-emerald-600" />
-              <p className="text-[13px] font-black">Contador e auditoria do recibo</p>
+              {selectedStage === 'accountant' ? <Upload className="h-4 w-4 text-emerald-600" /> : <FileCheck2 className="h-4 w-4 text-emerald-600" />}
+              <p className="text-[13px] font-black">
+                {selectedStage === 'accountant' ? 'Contabilidade e recebimento' : 'Auditoria do recibo'}
+              </p>
             </div>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              O arquivo original será preservado e exibido ao lado dos dados processados.
+              {selectedStage === 'accountant'
+                ? 'Acompanhe a solicitação e o recebimento do arquivo original enviado pelo contador.'
+                : 'Compare o arquivo original preservado com os dados processados antes de aprovar.'}
             </p>
           </div>
-          <div className="grid gap-2 p-4 sm:grid-cols-3">
-            <Substep done={accountantRequested} active={noticeSigned && !accountantRequested} label="Solicitar ao contador" detail={accountantRequested ? 'Solicitação enviada' : noticeSigned ? 'Aviso assinado disponível' : 'Após ciência do aviso'} />
-            <Substep done={receiptReceived} active={workflow.receipt.status === 'processing'} label="Recibo original" detail={receiptReceived ? 'Original preservado' : 'Aguardando upload'} />
-            <Substep done={receiptApproved} active={workflow.receipt.status === 'review_pending'} label="Auditoria do RH" detail={receiptApproved ? 'Recibo aprovado' : 'Original + extração'} />
+          <div className="grid gap-2 p-4 sm:grid-cols-2">
+            {selectedStage === 'accountant' ? (
+              <>
+                <Substep done={accountantRequested} active={noticeSigned && !accountantRequested} label="Solicitar ao contador" detail={accountantRequested ? 'Solicitação enviada' : noticeSigned ? 'Aviso assinado disponível' : 'Após ciência do aviso'} />
+                <Substep done={receiptReceived} active={workflow.receipt.status === 'processing'} label="Recibo original" detail={receiptReceived ? 'Original preservado' : 'Aguardando upload'} />
+              </>
+            ) : (
+              <Substep done={receiptApproved} active={workflow.receipt.status === 'review_pending'} label="Auditoria do RH" detail={receiptApproved ? 'Recibo aprovado' : receiptReceived ? 'Original + extração' : 'Aguardando o recibo original'} />
+            )}
           </div>
-          <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+          {selectedStage === 'receipt_review' ? (
+          <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
             {[
               { icon: ReceiptText, label: 'Original do contador', detail: 'PDF imutável e hash' },
               { icon: FileCheck2, label: 'Dados extraídos', detail: 'Comparação campo a campo' },
-              { icon: UserRoundCheck, label: 'Versão assinada', detail: 'Gerada após o pagamento' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
                 <item.icon className="h-4 w-4 text-slate-400" />
@@ -791,9 +859,10 @@ export function DPVacationWorkflowPanel({
               </div>
             ))}
           </div>
+          ) : null}
           <div className="border-t border-emerald-100 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              {noticeSigned && canApprove && ['ready_to_send', 'failed', 'correction_requested'].includes(workflow.accountant.status) ? (
+              {selectedStage === 'accountant' && noticeSigned && canApprove && ['ready_to_send', 'failed', 'correction_requested'].includes(workflow.accountant.status) ? (
                 <Button
                   size="sm"
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
@@ -816,26 +885,26 @@ export function DPVacationWorkflowPanel({
                   Abrir recibo original
                 </Button>
               ) : null}
-              {workflow.accountant.recipientEmail ? (
+              {selectedStage === 'accountant' && workflow.accountant.recipientEmail ? (
                 <span className="text-[10.5px] font-semibold text-slate-500">
                   Contabilidade: {workflow.accountant.recipientEmail} · {emailStatusLabel(workflow.accountant.emailStatus)}
                 </span>
               ) : null}
             </div>
-            {workflow.accountant.lastError ? (
+            {selectedStage === 'accountant' && workflow.accountant.lastError ? (
               <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[10.5px] font-semibold text-rose-700">
                 {workflow.accountant.lastError}
               </p>
             ) : null}
           </div>
 
-          {workflow.receipt.status === 'processing' ? (
+          {selectedStage === 'receipt_review' && workflow.receipt.status === 'processing' ? (
             <div className="border-t border-emerald-100 px-4 py-4 text-[11px] font-semibold text-emerald-700">
               <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Processando o recibo original para auditoria.</span>
             </div>
           ) : null}
 
-          {workflow.receipt.status === 'review_pending' ? (
+          {selectedStage === 'receipt_review' && workflow.receipt.status === 'review_pending' ? (
             <div className="space-y-4 border-t border-emerald-100 bg-emerald-50/30 p-4">
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -915,24 +984,50 @@ export function DPVacationWorkflowPanel({
               </div>
             </div>
           ) : null}
+          {selectedStage === 'receipt_review' && !receiptReceived ? (
+            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-[10.5px] font-semibold text-slate-500">
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
+              A auditoria será liberada assim que o contador enviar o recibo original.
+            </div>
+          ) : null}
+          {selectedStage === 'receipt_review' && receiptApproved ? (
+            <div className="mx-4 mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+              <p className="text-[11px] font-black text-emerald-900">Recibo aprovado pelo RH</p>
+              <p className="mt-1 text-[10.5px] font-semibold text-emerald-700">
+                {formatMoney(workflow.receipt.reviewedValues?.netAmount ?? analysis?.amountNet)} líquidos · dados conferidos e enviados ao Financeiro.
+              </p>
+            </div>
+          ) : null}
         </div>
+        ) : null}
 
+        {selectedStage === 'payment' || selectedStage === 'receipt_signature' || selectedStage === 'closure' ? (
         <div className="overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm">
           <div className="border-b border-sky-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
-              <Landmark className="h-4 w-4 text-sky-600" />
-              <p className="text-[13px] font-black">Pagamento, assinatura e fechamento</p>
+              {selectedStage === 'payment' ? <Landmark className="h-4 w-4 text-sky-600" /> : selectedStage === 'receipt_signature' ? <UserRoundCheck className="h-4 w-4 text-sky-600" /> : <CheckCircle2 className="h-4 w-4 text-sky-600" />}
+              <p className="text-[13px] font-black">
+                {selectedStage === 'payment' ? 'Pagamento das férias' : selectedStage === 'receipt_signature' ? 'Assinatura do recibo' : 'Finalização pelo RH'}
+              </p>
             </div>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Prazo de pagamento: {formatDate(workflow.payment.dueAt)}. A autorização bancária permanece com o Financeiro.
+              {selectedStage === 'payment'
+                ? `Prazo de pagamento: ${formatDate(workflow.payment.dueAt)}. A autorização bancária permanece com o Financeiro.`
+                : selectedStage === 'receipt_signature'
+                  ? 'O recibo só é liberado para assinatura depois da confirmação do pagamento.'
+                  : 'Confira o conjunto documental e encerre formalmente a trilha de férias.'}
             </p>
           </div>
-          <div className="grid gap-2 p-4 sm:grid-cols-3">
-            <Substep done={paymentPaid} active={workflow.payment.status !== 'not_started' && !paymentPaid} label="Financeiro" detail={paymentPaid ? 'Pagamento confirmado' : 'Autorizar e acompanhar'} />
-            <Substep done={receiptSigned} active={paymentPaid && !receiptSigned} label="Assinar recibo" detail={receiptSigned ? 'Assinatura concluída' : 'Bloqueado até o pagamento'} />
-            <Substep done={workflow.closure.status === 'completed'} active={workflow.closure.status === 'ready'} label="Finalizar no RH" detail={workflow.closure.status === 'completed' ? 'Trilha encerrada' : 'Após assinatura do recibo'} />
+          <div className="p-4">
+            {selectedStage === 'payment' ? (
+              <Substep done={paymentPaid} active={workflow.payment.status !== 'not_started' && !paymentPaid} label="Financeiro" detail={paymentPaid ? 'Pagamento confirmado' : 'Autorizar e acompanhar'} />
+            ) : selectedStage === 'receipt_signature' ? (
+              <Substep done={receiptSigned} active={paymentPaid && !receiptSigned} label="Assinar recibo" detail={receiptSigned ? 'Assinatura concluída' : 'Bloqueado até o pagamento'} />
+            ) : (
+              <Substep done={workflow.closure.status === 'completed'} active={workflow.closure.status === 'ready'} label="Finalizar no RH" detail={workflow.closure.status === 'completed' ? 'Trilha encerrada' : 'Após assinatura do recibo'} />
+            )}
           </div>
-          {workflow.receipt.status === 'approved' ? (
+          {selectedStage === 'payment' && workflow.receipt.status === 'approved' ? (
             <div className="mx-4 mb-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -983,18 +1078,25 @@ export function DPVacationWorkflowPanel({
               ) : null}
             </div>
           ) : null}
-          {!paymentPaid ? (
+          {selectedStage === 'payment' && workflow.receipt.status !== 'approved' ? (
+            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[10.5px] font-semibold text-slate-500">
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
+              O pagamento será preparado depois que o RH aprovar a auditoria do recibo.
+            </div>
+          ) : null}
+          {selectedStage === 'receipt_signature' && !paymentPaid ? (
             <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[10.5px] font-semibold text-slate-500">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
               O recibo permanece indisponível para assinatura enquanto o pagamento não estiver confirmado.
             </div>
-          ) : (
+          ) : null}
+          {selectedStage === 'receipt_signature' && paymentPaid ? (
             <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[10.5px] font-semibold text-emerald-700">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               Pagamento confirmado. O recibo pode seguir para assinatura do colaborador.
             </div>
-          )}
-          {paymentPaid ? (
+          ) : null}
+          {selectedStage === 'receipt_signature' && paymentPaid ? (
             <div className="mx-4 mb-4 flex flex-wrap items-center gap-2 border-t border-sky-100 pt-3">
               {canApprove && ['ready', 'failed'].includes(workflow.receiptSignature.status) ? (
                 <Button
@@ -1031,23 +1133,12 @@ export function DPVacationWorkflowPanel({
                   Abrir recibo assinado
                 </Button>
               ) : null}
-              {canApprove && workflow.closure.status === 'ready' ? (
-                <Button
-                  size="sm"
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                  disabled={workflowBusy !== null}
-                  onClick={() => onFinalizeWorkflow(record)}
-                >
-                  {workflowBusy === 'finalize' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Finalizar trilha no RH
-                </Button>
-              ) : null}
               {workflow.receiptSignature.lastError ? (
                 <span className="text-[10.5px] font-semibold text-rose-700">{workflow.receiptSignature.lastError}</span>
               ) : null}
             </div>
           ) : null}
-          {workflow.receiptSignature.participants?.length ? (
+          {selectedStage === 'receipt_signature' && workflow.receiptSignature.participants?.length ? (
             <div className="grid gap-3 border-t border-sky-100 bg-sky-50/40 p-4">
               {workflow.receiptSignature.participants.map((participant) => (
                 <div key={participant.providerSignatureId} className="rounded-xl border border-slate-200 bg-white p-3">
@@ -1073,9 +1164,37 @@ export function DPVacationWorkflowPanel({
               ))}
             </div>
           ) : null}
+          {selectedStage === 'closure' ? (
+            <div className="mx-4 mb-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-black text-sky-950">
+                    {workflow.closure.status === 'completed' ? 'Trilha encerrada' : workflow.closure.status === 'ready' ? 'Pronta para finalização' : 'Aguardando assinatura do recibo'}
+                  </p>
+                  <p className="mt-1 text-[10.5px] font-semibold text-sky-700">
+                    {workflow.closure.status === 'completed'
+                      ? 'Todos os documentos, pagamentos e assinaturas foram conferidos.'
+                      : 'A finalização preserva o histórico e encerra o processo no RH.'}
+                  </p>
+                </div>
+                {canApprove && workflow.closure.status === 'ready' ? (
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                    disabled={workflowBusy !== null}
+                    onClick={() => onFinalizeWorkflow(record)}
+                  >
+                    {workflowBusy === 'finalize' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Finalizar trilha no RH
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
-        <VacationAuditTimeline vacationId={record.id} version={workflow.updatedAt} />
+        ) : null}
       </div>
+
     </section>
   );
 }
