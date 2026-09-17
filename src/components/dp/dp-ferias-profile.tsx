@@ -335,11 +335,20 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     [admDate, userVacations]
   );
 
-  const workflowCycle = useMemo(
-    () => cycles.find(cycle => cycle.status !== 'GOZADO' && cycle.status !== 'AQUISITIVO')
-      ?? cycles.find(cycle => cycle.records.length > 0),
+  const concessiveCycle = useMemo(
+    () => cycles.find(cycle => cycle.status !== 'GOZADO' && cycle.status !== 'AQUISITIVO'),
     [cycles],
   );
+  const workflowCycle = useMemo(
+    () => concessiveCycle ?? cycles.find(cycle => cycle.records.length > 0),
+    [concessiveCycle, cycles],
+  );
+  const cycleCounts = useMemo(() => ({
+    acquisition: cycles.filter(cycle => cycle.status === 'AQUISITIVO').length,
+    concessive: cycles.filter(cycle => !['AQUISITIVO', 'GOZADO', 'VENCIDO'].includes(cycle.status)).length,
+    closed: cycles.filter(cycle => cycle.status === 'GOZADO').length,
+    overdue: cycles.filter(cycle => cycle.status === 'VENCIDO').length,
+  }), [cycles]);
   const defaultRegistrationCycle = useMemo(
     () => cycles.find(cycle => cycle.status !== 'AQUISITIVO' && cycle.balance > 0),
     [cycles],
@@ -822,20 +831,53 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
           {/* Summary stats */}
           <Card className="border-0 bg-muted/25 shadow-none">
-            <CardContent className="space-y-1.5 p-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resumo</p>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total de ciclos</span>
-                <span className="font-medium">{cycles.length}</span>
+            <CardContent className="p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ciclos</p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-sky-500" />Em aquisição</span>
+                  <span className="font-semibold tabular-nums">{cycleCounts.acquisition}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-amber-500" />Em período concessivo</span>
+                  <span className="font-semibold tabular-nums">{cycleCounts.concessive}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-emerald-500" />Encerrados</span>
+                  <span className="font-semibold tabular-nums">{cycleCounts.closed}</span>
+                </div>
+                {cycleCounts.overdue > 0 ? (
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2 text-red-700"><span className="h-2 w-2 rounded-full bg-red-500" />Vencidos</span>
+                    <span className="font-semibold tabular-nums text-red-700">{cycleCounts.overdue}</span>
+                  </div>
+                ) : null}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total de registros</span>
-                <span className="font-medium">{userVacations.length}</span>
+
+              <div className="my-3 border-t" />
+
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Férias do ciclo concessivo</p>
+                {concessiveCycle ? <span className="text-[10px] font-bold text-muted-foreground">{concessiveCycle.id}</span> : null}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Dias registrados</span>
-                <span className="font-medium">{userVacations.reduce((t, v) => t + v.days, 0)}</span>
-              </div>
+              {concessiveCycle ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Períodos lançados</span>
+                    <span className="font-semibold tabular-nums">{concessiveCycle.records.length}</span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Dias distribuídos</span>
+                    <span className="font-semibold tabular-nums">{concessiveCycle.takenDays}d</span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Saldo a programar</span>
+                    <span className="font-semibold tabular-nums">{Math.max(0, concessiveCycle.balance)}d</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs font-medium text-muted-foreground">Nenhum ciclo em período concessivo.</p>
+              )}
             </CardContent>
           </Card>
         </div>
