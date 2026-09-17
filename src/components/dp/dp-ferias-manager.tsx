@@ -247,12 +247,10 @@ function KpiCard({
 function QueueRow({
   item,
   kind,
-  canAct,
   onOpen,
 }: {
   item: Enriched;
   kind: 'scheduling' | 'approval';
-  canAct: boolean;
   onOpen: () => void;
 }) {
   if (item.health.status !== 'CONCESSIVO' || !item.cycle) return null;
@@ -264,10 +262,6 @@ function QueueRow({
     : pendingRecord?.startDate && pendingRecord?.endDate
       ? `${format(parseISO(pendingRecord.startDate), 'dd/MM/yyyy')} → ${format(parseISO(pendingRecord.endDate), 'dd/MM/yyyy')}`
       : `${item.balance}d a agendar`;
-  const actionLabel = kind === 'approval'
-    ? 'Abrir ficha'
-    : canAct ? 'Registrar férias' : 'Abrir ficha';
-
   return (
     <button
       type="button"
@@ -304,7 +298,7 @@ function QueueRow({
         {kind === 'approval' ? 'Etapa 1 · decisão' : 'Antes da etapa 1 · registro'}
       </span>
       <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
-        {actionLabel}
+        Abrir ficha
         <ArrowUpRight className="h-3.5 w-3.5" />
       </span>
     </button>
@@ -545,7 +539,6 @@ export function DPFeriasManager() {
                     key={item.user.id}
                     item={item}
                     kind="scheduling"
-                    canAct={canRegister}
                     onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
                   />
                 ))}
@@ -569,7 +562,6 @@ export function DPFeriasManager() {
                     key={item.user.id}
                     item={item}
                     kind="approval"
-                    canAct={canApprove}
                     onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
                   />
                 ))}
