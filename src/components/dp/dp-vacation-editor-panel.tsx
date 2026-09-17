@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDays, differenceInCalendarDays, format, isAfter, parseISO, startOfDay, subDays } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parseISO, startOfDay } from 'date-fns';
 import { AlertTriangle, CalendarCheck2, ChevronLeft, Loader2 } from 'lucide-react';
 
 import { useDP } from '@/components/dp-context';
@@ -60,33 +60,6 @@ export function DPVacationEditorPanel({
   const shortNotice = noticeLeadDays !== null && noticeLeadDays < 30;
   const selectedCalendar = calendars.find(calendar => calendar.id === calendarId);
   const entitlementDays = vacationEntitlementDays(Number(unjustifiedAbsences) || 0);
-  const startSuggestions = useMemo(() => {
-    if (recordType !== 'gozo' || isEdit) return [];
-    const days = Math.min(30, Math.max(1, cycle.balance));
-    const today = startOfDay(new Date());
-    const cycleStart = startOfDay(cycle.concessivePeriod.start);
-    const cycleEnd = startOfDay(cycle.concessivePeriod.end);
-    const laterOf = (left: Date, right: Date) => isAfter(left, right) ? left : right;
-    const fitInsideCycle = (candidate: Date) => {
-      const latestStart = subDays(cycleEnd, days - 1);
-      return isAfter(candidate, latestStart) ? latestStart : candidate;
-    };
-    const build = (kind: 'compliant' | 'short', offset: number) => {
-      const start = fitInsideCycle(laterOf(addDays(today, offset), cycleStart));
-      const end = addDays(start, days - 1);
-      return {
-        kind,
-        start: format(start, 'yyyy-MM-dd'),
-        end: format(end, 'yyyy-MM-dd'),
-        leadDays: differenceInCalendarDays(start, today),
-      };
-    };
-    const suggestions = [build('compliant', 30), build('short', 19)];
-    return suggestions.filter((suggestion, index) =>
-      suggestions.findIndex(candidate => candidate.start === suggestion.start) === index,
-    );
-  }, [cycle.balance, cycle.concessivePeriod.end, cycle.concessivePeriod.start, isEdit, recordType]);
-
   useEffect(() => {
     if (recordType !== 'gozo' || calendarId) return;
     const year = Number(startDate.slice(0, 4));
@@ -257,39 +230,6 @@ export function DPVacationEditorPanel({
             Adiantamento da 1ª parcela do 13º solicitado
           </label>
         </div>
-
-        {recordType === 'gozo' && startSuggestions.length > 0 ? (
-          <div>
-            <p className={labelClass}>Início do gozo · antecedência do aviso</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {startSuggestions.map(suggestion => {
-                const selected = startDate === suggestion.start && endDate === suggestion.end;
-                const isShort = suggestion.leadDays < 30;
-                return (
-                  <button
-                    key={suggestion.kind}
-                    type="button"
-                    className={`flex h-9 items-center gap-2 rounded-[10px] border px-3 text-[12px] font-extrabold transition-colors ${
-                      selected
-                        ? isShort
-                          ? 'border-red-300 bg-red-50 text-red-700'
-                          : 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                        : 'border-border bg-background text-slate-600 hover:bg-muted/40'
-                    }`}
-                    onClick={() => {
-                      setStartDate(suggestion.start);
-                      setEndDate(suggestion.end);
-                    }}
-                    disabled={saving}
-                  >
-                    {format(parseISO(suggestion.start), 'dd/MM/yyyy')}
-                    <span className="text-[10px] opacity-80">{suggestion.leadDays}d de aviso</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
 
         {recordType === 'gozo' && noticeLeadDays !== null ? (
           <div className={`rounded-xl border p-3 ${shortNotice ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/25' : 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/25'}`}>
