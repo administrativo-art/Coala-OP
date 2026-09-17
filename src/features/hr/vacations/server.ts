@@ -712,6 +712,21 @@ async function resolveVacationEmployer(user: User) {
   return { ...employer, cnpj: validation.clean };
 }
 
+async function resolveVacationNoticeEmployer() {
+  const employer = await resolveDocumentLegalEntitySnapshot({
+    cnpj: VACATION_NOTICE_COMPANY_CNPJ,
+    fallbackName: 'C T SORVETES LTDA',
+    fallbackAddress: '',
+  });
+  if (!employer.legalName.trim() || !employer.address.trim()) {
+    throw conflict(
+      'DP_VACATION_NOTICE_COMPANY_REQUIRED',
+      'Complete o nome e o endereço da matriz antes de gerar o aviso de férias.',
+    );
+  }
+  return { ...employer, cnpj: VACATION_NOTICE_COMPANY_CNPJ };
+}
+
 async function ensureVacationAccountantRequestSent(vacationId: string) {
   const vacationRef = dbAdmin.collection('dp_vacations').doc(vacationId);
   const snapshot = await vacationRef.get();
@@ -1276,7 +1291,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
     const expectedReturnDate = requiredText(current.returnDate, 'DP_VACATION_RETURN_REQUIRED', 'Informe a data de retorno.');
     const cycleId = requiredText(current.cycleId, 'DP_VACATION_CYCLE_REQUIRED', 'Informe o período aquisitivo.');
     const [employer, employee] = await Promise.all([
-      resolveVacationEmployer(source.user),
+      resolveVacationNoticeEmployer(),
       loadVacationEmployeeDocumentData(source.user),
     ]);
     const cyclePeriod = vacationCyclePeriod(cycleId, employee.employeeAdmissionDate);

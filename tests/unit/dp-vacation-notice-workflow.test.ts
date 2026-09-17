@@ -20,6 +20,9 @@ test('aviso exige geração, validação e envio em ações separadas', () => {
 test('aviso usa temporariamente o CNPJ da matriz no fingerprint e no PDF', () => {
   assert.match(server, /const VACATION_NOTICE_COMPANY_CNPJ = '14276603000125'/);
   assert.equal((server.match(/companyCnpj: VACATION_NOTICE_COMPANY_CNPJ/g) ?? []).length, 2);
+  assert.match(server, /async function resolveVacationNoticeEmployer\(\)/);
+  assert.match(server, /cnpj: VACATION_NOTICE_COMPANY_CNPJ,[\s\S]*fallbackAddress: ''/);
+  assert.match(server, /resolveVacationNoticeEmployer\(\),[\s\S]*loadVacationEmployeeDocumentData/);
 });
 
 test('rascunho pode ser regenerado antes da validação com auditoria do documento substituído', () => {
