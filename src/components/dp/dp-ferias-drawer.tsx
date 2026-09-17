@@ -14,7 +14,9 @@ import type { DPVacationRecord, DPVacationStatus } from '@/types';
 import {
   Sheet, SheetContent,
 } from '@/components/ui/sheet';
-import { ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ExternalLink, ShieldCheck } from 'lucide-react';
+import { DPVacationDecisionPanel } from './dp-vacation-decision-panel';
 import {
   getVacationCycleHistory,
   getCycleRisk,
@@ -53,12 +55,13 @@ const AWAITING_APPROVAL = { fg: '#A16207', bg: 'rgba(234,179,8,0.16)', label: 'A
 interface Props {
   userId: string | null;
   canEdit: boolean;
+  canApprove: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function DPFeriasDrawer({ userId, canEdit, onOpenChange }: Props) {
+export function DPFeriasDrawer({ userId, canEdit, canApprove, onOpenChange }: Props) {
   const { users } = useAuth();
-  const { vacations, units } = useDPBootstrap();
+  const { vacations, units, calendars } = useDPBootstrap();
 
   const user = userId ? users.find(u => u.id === userId) : undefined;
   const unitName = user?.unitIds?.[0]
@@ -77,7 +80,9 @@ export function DPFeriasDrawer({ userId, canEdit, onOpenChange }: Props) {
             user={user}
             unitName={unitName}
             vacations={vacations.filter(v => v.userId === user.id)}
+            calendars={calendars}
             canEdit={canEdit}
+            canApprove={canApprove}
           />
         )}
       </SheetContent>
@@ -91,13 +96,16 @@ interface DrawerBodyProps {
   user: ReturnType<typeof useAuth>['users'][number];
   unitName: string;
   vacations: DPVacationRecord[];
+  calendars: ReturnType<typeof useDPBootstrap>['calendars'];
   canEdit: boolean;
+  canApprove: boolean;
 }
 
-function DrawerBody({ user, unitName, vacations, canEdit }: DrawerBodyProps) {
+function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove }: DrawerBodyProps) {
   const router = useRouter();
   const today = startOfDay(new Date());
   const admDate = toDate(user.admissionDate);
+  const [decision, setDecision] = useState<{ recordId: string; cycleId: string } | null>(null);
 
   const cycles = useMemo(
     () => (admDate ? getVacationCycleHistory(admDate, vacations) : []),
@@ -118,6 +126,25 @@ function DrawerBody({ user, unitName, vacations, canEdit }: DrawerBodyProps) {
 
   const multiOpen = openCycles.length > 1;
   const noCycles = concessive.length === 0;
+  const decisionRecord = decision
+    ? vacations.find(record => record.id === decision.recordId)
+    : undefined;
+  const decisionCycle = decision
+    ? concessive.find(cycle => cycle.id === decision.cycleId)
+    : undefined;
+
+  if (decisionRecord && decisionCycle) {
+    return (
+      <DPVacationDecisionPanel
+        employeeName={user.username}
+        record={decisionRecord}
+        cycle={decisionCycle}
+        calendarName={calendars.find(calendar => calendar.id === decisionRecord.calendarId)?.name}
+        canApprove={canApprove}
+        onBack={() => setDecision(null)}
+      />
+    );
+  }
 
   return (
     <>
@@ -161,7 +188,9 @@ function DrawerBody({ user, unitName, vacations, canEdit }: DrawerBodyProps) {
             cycle={cycle}
             userId={user.id}
             canEdit={canEdit}
+            canApprove={canApprove}
             today={today}
+            onReview={record => setDecision({ recordId: record.id, cycleId: cycle.id })}
           />
         ))}
       </div>
@@ -182,12 +211,14 @@ function DrawerBody({ user, unitName, vacations, canEdit }: DrawerBodyProps) {
 // ─── One cycle ────────────────────────────────────────────────────────────────
 
 function CycleBlock({
-  cycle, userId, canEdit, today,
+  cycle, userId, canEdit, canApprove, today, onReview,
 }: {
   cycle: VacationCycle;
   userId: string;
   canEdit: boolean;
+  canApprove: boolean;
   today: Date;
+  onReview: (record: DPVacationRecord) => void;
 }) {
   const done = cycle.status === 'GOZADO';
   const scheduled = cycle.status === 'AGENDADO';
@@ -254,7 +285,13 @@ function CycleBlock({
       {active.length > 0 ? (
         <div className="mt-3 flex flex-col gap-2">
           {active.map(r => (
-            <RecordRow key={r.id} record={r} concessiveEnd={cycle.concessivePeriod.end} />
+            <RecordRow
+              key={r.id}
+              record={r}
+              concessiveEnd={cycle.concessivePeriod.end}
+              canApprove={canApprove}
+              onReview={() => onReview(r)}
+            />
           ))}
         </div>
       ) : (
@@ -270,8 +307,19 @@ function CycleBlock({
 
 // ─── One record row ───────────────────────────────────────────────────────────
 
-function RecordRow({ record, concessiveEnd }: { record: DPVacationRecord; concessiveEnd: Date }) {
+function RecordRow({
+  record,
+  concessiveEnd,
+  canApprove,
+  onReview,
+}: {
+  record: DPVacationRecord;
+  concessiveEnd: Date;
+  canApprove: boolean;
+  onReview: () => void;
+}) {
   const isVenda = record.recordType === 'venda';
+  const awaitingDecision = record.status === 'PENDING' || record.status === 'PLANNED';
   const s = VACATION_STATUS_HEX[record.status] ?? VACATION_STATUS_HEX.PENDING;
   const onTime = isVenda || !record.endDate ? true : !isAfter(parseISO(record.endDate), concessiveEnd);
   const prazo = onTime
@@ -279,7 +327,7 @@ function RecordRow({ record, concessiveEnd }: { record: DPVacationRecord; conces
     : { fg: '#DC2626', bg: 'rgba(239,68,68,0.13)', label: 'Fora do prazo' };
 
   return (
-    <div className="flex items-start gap-2.5 rounded-[10px] bg-muted px-3 py-2.5">
+    <div className="flex flex-wrap items-start gap-2.5 rounded-[10px] bg-muted px-3 py-2.5">
       <div
         className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-lg text-xs font-extrabold"
         style={
@@ -315,6 +363,23 @@ function RecordRow({ record, concessiveEnd }: { record: DPVacationRecord; conces
             : `${fmt(record.startDate)} → ${fmt(record.endDate)}${record.workflow?.payment.paidAt ? ` · pago em ${fmt(record.workflow.payment.paidAt)}` : ''}`}
         </div>
       </div>
+      {awaitingDecision && (
+        canApprove ? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 shrink-0 rounded-lg bg-slate-950 px-3 text-[11.5px] text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-300"
+            onClick={onReview}
+          >
+            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+            Revisar e decidir
+          </Button>
+        ) : (
+          <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+            Sem permissão para decidir
+          </span>
+        )
+      )}
     </div>
   );
 }

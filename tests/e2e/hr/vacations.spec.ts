@@ -11,12 +11,18 @@ test('aprova e cancela férias com justificativa e histórico auditável', async
   await page.getByRole('button', { name: 'Entrar no sistema' }).click();
   await expect(page).toHaveURL(/\/dashboard(?:$|\/)/, { timeout: 180_000 });
 
-  await page.goto(`/dashboard/dp/ferias/${E2E_VACATION.employeeId}`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'Colaboradora Férias E2E' })).toBeVisible({ timeout: 60_000 });
+  await page.goto('/dashboard/dp/ferias', { waitUntil: 'domcontentloaded' });
+  const employeeCard = page.getByRole('button', { name: /Colaboradora Férias E2E.*Aguardando aprovação/ });
+  await expect(employeeCard).toBeVisible({ timeout: 60_000 });
+  await employeeCard.click();
+  await page.getByRole('button', { name: 'Revisar e decidir' }).click();
+  await expect(page.getByText('Decisão do período', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Aprovar agendamento' })).toBeVisible();
   await page.getByRole('button', { name: 'Aprovar agendamento' }).click();
 
-  await expect(page.getByText('Aprovado.', { exact: true })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText('Agendamento aprovado.', { exact: true })).toBeVisible({ timeout: 120_000 });
+  await page.getByRole('button', { name: 'Ver perfil completo' }).click();
+  await expect(page).toHaveURL(new RegExp(`/dashboard/dp/ferias/${E2E_VACATION.employeeId}$`));
   await expect(page.getByRole('button', { name: 'Gerar aviso' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancelar formalmente' })).toBeVisible();
 

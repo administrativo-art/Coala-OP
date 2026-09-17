@@ -33,3 +33,19 @@ test('perfil apresenta a trilha completa e preserva o recibo original para audit
   assert.match(workflow, /Bloqueado até o pagamento/);
   assert.match(workflow, /Finalizar no RH/);
 });
+
+test('drawer permite revisar e decidir agendamentos sem sair da lista', () => {
+  assert.match(manager, /canApprove=\{canApprove\}/);
+  assert.match(drawer, /DPVacationDecisionPanel/);
+  assert.match(drawer, /Revisar e decidir/);
+  assert.match(drawer, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
+});
+
+test('decisão no drawer mantém aprovação e rejeição protegidas por permissão e justificativa', () => {
+  const decisionPanel = readFileSync('src/components/dp/dp-vacation-decision-panel.tsx', 'utf8');
+  assert.match(decisionPanel, /status: 'APPROVED'/);
+  assert.match(decisionPanel, /json: \{ action: 'reject', reason: reason\.trim\(\) \}/);
+  assert.match(decisionPanel, /reason\.trim\(\)\.length >= 10/);
+  assert.match(decisionPanel, /hasBlockingIssue/);
+  assert.match(decisionPanel, /Aprovar Férias/);
+});
