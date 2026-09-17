@@ -117,6 +117,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
@@ -440,10 +441,10 @@ export function ExpensesPage() {
   if (!canViewExpenses && !canAccessAudits && (canViewInbox || canViewPaymentRequests)) {
     return (
       <PageContainer variant="default" className="space-y-6 pb-10">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
-          <p className="text-muted-foreground">Seu perfil possui acesso aos fluxos operacionais liberados dentro de contas a pagar.</p>
-        </div>
+        <PageHeader
+          title="Despesas"
+          description="Seu perfil possui acesso aos fluxos operacionais liberados dentro de contas a pagar."
+        />
         <div className="grid gap-4 md:grid-cols-2">
           {canViewInbox ? <Card><CardContent className="flex flex-col items-start gap-3 p-6">
             <p className="font-semibold">Cobranças recebidas</p>
@@ -886,12 +887,11 @@ export function ExpensesPage() {
 
   return (
     <PageContainer variant="default" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
-          <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Despesas"
+        description="Painel consolidado de despesas, contas a pagar e histórico de liquidações."
+        actions={(
+          <>
           {canViewInbox && (
             <Button variant="outline" size="sm" asChild>
               <Link href={FINANCIAL_ROUTES.inbox}>
@@ -918,8 +918,9 @@ export function ExpensesPage() {
               </Link>
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {canAccessAudits ? (
         <Tabs value={currentView} onValueChange={(value) => setExpensesView(value as "expenses" | "audits")} className="space-y-6">
