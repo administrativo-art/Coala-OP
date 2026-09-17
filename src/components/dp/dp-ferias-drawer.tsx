@@ -84,7 +84,8 @@ export function DPFeriasDrawer({ userId, canEdit, canApprove, onOpenChange }: Pr
     <Sheet open={!!userId} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-[560px] max-w-[95vw] flex-col gap-0 p-0 sm:max-w-[560px]"
+        className="flex w-[560px] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+        style={{ height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh' }}
       >
         {user && (
           <DrawerBody

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { differenceInCalendarDays, format, startOfDay, subDays } from 'date-fns';
 import {
   AlertTriangle,
   Check,
@@ -39,9 +40,11 @@ import type {
   DPVacationWorkflowStageId,
   DPVacationWorkflowStep,
 } from '@/types';
+import type { VacationCycle } from '@/lib/utils/vacation-logic';
 
 type Props = {
   records: DPVacationRecord[];
+  registrationCycle?: VacationCycle;
   selectedId: string | null;
   canEdit: boolean;
   canApprove: boolean;
@@ -197,11 +200,27 @@ function nextAction(workflow: DPVacationWorkflow) {
     description: 'Depois da assinatura, o aviso será encaminhado automaticamente ao contador.',
   };
   if (step.id === 'accountant') return {
-    owner: workflow.accountant.status === 'failed' ? 'RH' : 'Contador',
-    title: workflow.accountant.status === 'failed' ? 'Reenviar a solicitação à contabilidade' : 'Aguardando o recibo original',
+    owner: ['ready_to_send', 'correction_requested', 'failed'].includes(workflow.accountant.status)
+      ? 'RH'
+      : workflow.accountant.status === 'sending'
+        ? 'Sistema'
+        : 'Contador',
+    title: workflow.accountant.status === 'failed'
+      ? 'Reenviar a solicitação à contabilidade'
+      : workflow.accountant.status === 'correction_requested'
+        ? 'Enviar a solicitação de correção ao contador'
+        : workflow.accountant.status === 'ready_to_send'
+          ? 'Enviar a solicitação à contabilidade'
+          : workflow.accountant.status === 'sending'
+            ? 'Enviando a solicitação à contabilidade'
+            : 'Aguardando o recibo original',
     description: workflow.accountant.status === 'failed'
       ? 'O envio anterior não terminou. Confira o contato e tente novamente.'
-      : 'O contador deve anexar o recibo pelo link exclusivo enviado por e-mail.',
+      : ['ready_to_send', 'correction_requested'].includes(workflow.accountant.status)
+        ? 'O contador receberá o aviso assinado e o link exclusivo para devolver o recibo original.'
+        : workflow.accountant.status === 'sending'
+          ? 'A solicitação está sendo preparada e enviada ao contato da contabilidade.'
+          : 'O contador deve anexar o recibo pelo link exclusivo enviado por e-mail.',
   };
   if (step.id === 'receipt_review') return {
     owner: workflow.receipt.status === 'processing' ? 'Sistema' : 'RH',
@@ -211,17 +230,47 @@ function nextAction(workflow: DPVacationWorkflow) {
       : 'Compare o PDF original com os dados extraídos antes da aprovação.',
   };
   if (step.id === 'payment') return {
-    owner: workflow.payment.status === 'failed' ? 'RH' : 'Financeiro',
-    title: workflow.payment.status === 'failed' ? 'Corrigir a preparação do pagamento' : 'Autorizar e confirmar o pagamento',
+    owner: ['not_started', 'failed'].includes(workflow.payment.status)
+      ? 'RH'
+      : workflow.payment.status === 'preparing'
+        ? 'Sistema'
+        : 'Financeiro',
+    title: workflow.payment.status === 'not_started'
+      ? 'Preparar o pagamento'
+      : workflow.payment.status === 'preparing'
+        ? 'Preparando o pagamento'
+        : workflow.payment.status === 'failed'
+          ? 'Corrigir a preparação do pagamento'
+          : 'Aguardando autorização e confirmação do Financeiro',
     description: workflow.payment.status === 'failed'
       ? 'Confira o vínculo, CPF e chave Pix da colaboradora antes de tentar novamente.'
+      : workflow.payment.status === 'not_started'
+        ? 'O recibo aprovado será enviado ao Financeiro para autorização e processamento.'
+        : workflow.payment.status === 'preparing'
+          ? 'A solicitação financeira está sendo criada e vinculada à trilha.'
       : 'O recibo somente será liberado para assinatura depois da confirmação bancária.',
   };
   if (step.id === 'receipt_signature') return {
-    owner: workflow.receiptSignature.status === 'failed' ? 'RH' : 'Colaborador',
-    title: workflow.receiptSignature.status === 'failed' ? 'Reenviar o recibo para assinatura' : 'Assinar o recibo de férias',
+    owner: ['ready', 'failed'].includes(workflow.receiptSignature.status)
+      ? 'RH'
+      : workflow.receiptSignature.status === 'sending'
+        ? 'Sistema'
+        : 'Colaborador',
+    title: workflow.receiptSignature.status === 'ready'
+      ? 'Enviar o recibo para assinatura'
+      : workflow.receiptSignature.status === 'sending'
+        ? 'Enviando o recibo para assinatura'
+        : workflow.receiptSignature.status === 'failed'
+          ? 'Reenviar o recibo para assinatura'
+          : workflow.receiptSignature.status === 'blocked_until_payment'
+            ? 'Aguardando confirmação do pagamento'
+            : 'Aguardando assinatura do recibo',
     description: workflow.receiptSignature.status === 'failed'
       ? 'A tentativa anterior não terminou. O RH pode reenviar somente esta assinatura.'
+      : workflow.receiptSignature.status === 'ready'
+        ? 'O pagamento foi confirmado e o recibo pode ser enviado ao colaborador.'
+        : workflow.receiptSignature.status === 'sending'
+          ? 'O convite de assinatura está sendo preparado para o colaborador.'
       : 'A trilha permanece ativa até a assinatura do recibo após o pagamento.',
   };
   return {
@@ -263,39 +312,88 @@ function Substep({
   );
 }
 
-function EmptyWorkflow({ canEdit, onRegister }: { canEdit: boolean; onRegister: () => void }) {
+const STAGE_OWNER_LABEL: Record<(typeof VACATION_WORKFLOW_STAGE_META)[number]['owner'], string> = {
+  hr: 'RH',
+  employee: 'Colaborador',
+  accountant: 'Contador',
+  finance: 'Financeiro',
+  system: 'Sistema',
+};
+
+function EmptyWorkflow({
+  canEdit,
+  onRegister,
+  cycle,
+}: {
+  canEdit: boolean;
+  onRegister: () => void;
+  cycle?: VacationCycle;
+}) {
+  const balance = Math.max(0, cycle?.balance ?? 0);
+  const noticeDeadline = cycle
+    ? subDays(cycle.concessivePeriod.end, Math.max(1, balance) + 29)
+    : null;
+  const noticeDaysLeft = noticeDeadline
+    ? differenceInCalendarDays(noticeDeadline, startOfDay(new Date()))
+    : null;
   const steps = [
     {
       title: 'Registrar o período',
-      description: 'Datas, calendário aplicável, descanso semanal e faltas. O retorno e a antecedência são calculados no lançamento.',
+      description: 'Datas, calendário aplicável, descanso semanal e faltas. O sistema calcula o retorno e confere prazo e antecedência do aviso.',
       meta: 'Você está aqui',
     },
     {
       title: 'Aprovar o agendamento',
-      description: 'O período entra como Pendente. O RH aprova ou rejeita com motivo registrado.',
+      description: 'O período entra como Pendente. Em “Revisar e decidir” o RH aprova ou rejeita com motivo registrado.',
       meta: 'Requer permissão Aprovar Férias',
     },
     {
       title: 'Seguir a trilha',
-      description: 'Aviso, contabilidade, auditoria do recibo, pagamento, assinatura e finalização.',
+      description: 'Aviso e ciência, contabilidade, auditoria do recibo, pagamento, assinatura e finalização.',
       meta: '7 etapas · RH, colaborador, contador e financeiro',
     },
   ];
 
   return (
-    <section className="rounded-[18px] border bg-card p-5">
+    <section className="rounded-[18px] border border-[#e9edf4] bg-card p-[18px]">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-[260px] flex-1">
           <Badge className="rounded-full bg-pink-100 text-[10px] font-black uppercase tracking-[0.1em] text-pink-800 hover:bg-pink-100">
             Passo 1 de 3 · registro
           </Badge>
-          <h2 className="mt-2 text-lg font-black tracking-tight">Lançar o período de férias</h2>
+          <h2 className="mt-2 text-lg font-black tracking-tight">
+            Lançar o período de férias{cycle ? ` do ciclo ${cycle.id}` : ''}
+          </h2>
           <p className="mt-1 max-w-2xl text-[12.5px] font-semibold leading-relaxed text-muted-foreground">
-            A trilha começa no lançamento do gozo ou do abono. Depois disso, o período segue para decisão e para as sete etapas documentais.
+            A trilha só existe depois do lançamento: é o registro do gozo (e da venda, se houver) que cria a etapa de agendamento e abre a aprovação.
           </p>
+          {cycle ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Badge variant="outline" className="h-7 rounded-[9px] border-slate-200 bg-slate-50 px-2.5 text-[11px] font-extrabold text-slate-700">
+                Saldo do ciclo: {balance}d a agendar
+              </Badge>
+              <Badge variant="outline" className="h-7 rounded-[9px] border-slate-200 bg-slate-50 px-2.5 text-[11px] font-extrabold text-slate-700">
+                Concessivo até {format(cycle.concessivePeriod.end, 'dd/MM/yyyy')}
+              </Badge>
+              {noticeDeadline ? (
+                <Badge
+                  variant="outline"
+                  className={`h-7 rounded-[9px] px-2.5 text-[11px] font-extrabold ${
+                    (noticeDaysLeft ?? 0) <= 30
+                      ? 'border-red-200 bg-red-50 text-red-700'
+                      : (noticeDaysLeft ?? 0) <= 90
+                        ? 'border-amber-300 bg-amber-50 text-amber-800'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  Avisar até {format(noticeDeadline, 'dd/MM/yyyy')} · {noticeDaysLeft} dias
+                </Badge>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {canEdit ? (
-          <Button type="button" className="rounded-xl" onClick={onRegister}>
+          <Button type="button" className="h-11 rounded-xl bg-[#db2777] px-5 shadow-[0_12px_24px_-16px_rgba(219,39,119,.9)] hover:bg-[#be185d]" onClick={onRegister}>
             <Plus className="mr-2 h-4 w-4" />
             Registrar férias
           </Button>
@@ -319,10 +417,10 @@ function EmptyWorkflow({ canEdit, onRegister }: { canEdit: boolean; onRegister: 
         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">As 7 etapas que vêm depois da aprovação</p>
         <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-7">
           {VACATION_WORKFLOW_STAGE_META.map((stage, index) => (
-            <div key={stage.id} className="rounded-xl border bg-muted/20 p-2.5">
+            <div key={stage.id} className="rounded-xl border border-[#eef1f6] bg-[#fcfcfd] p-2.5">
               <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-muted text-[9.5px] font-black text-muted-foreground">{index + 1}</span>
-              <p className="mt-1.5 truncate text-[11px] font-extrabold text-muted-foreground">{stage.short}</p>
-              <p className="mt-1 truncate text-[9.5px] font-semibold text-muted-foreground/75">{stage.owner}</p>
+              <p className="mt-1.5 truncate text-[11px] font-extrabold text-muted-foreground">{stage.label}</p>
+              <p className="mt-1 truncate text-[9.5px] font-semibold text-muted-foreground/75">{STAGE_OWNER_LABEL[stage.owner]}</p>
             </div>
           ))}
         </div>
@@ -416,6 +514,7 @@ export function DPVacationAuditTimeline({
 
 export function DPVacationWorkflowPanel({
   records,
+  registrationCycle,
   selectedId,
   canEdit,
   canApprove,
@@ -487,7 +586,9 @@ export function DPVacationWorkflowPanel({
     workflow?.receipt.analysis?.extractedFields,
   ]);
 
-  if (!record || !workflow) return <EmptyWorkflow canEdit={canEdit} onRegister={onRegister} />;
+  if (!record || !workflow) {
+    return <EmptyWorkflow canEdit={canEdit} onRegister={onRegister} cycle={registrationCycle} />;
+  }
 
   const action = nextAction(workflow);
   const selectedStage = stageSelection?.recordId === record.id
@@ -951,7 +1052,7 @@ export function DPVacationWorkflowPanel({
                 <Button
                   variant="outline"
                   className="rounded-xl border-amber-300 text-amber-800"
-                  disabled={workflowBusy !== null || !correctionReason.trim()}
+                  disabled={!canApprove || workflowBusy !== null || !correctionReason.trim()}
                   onClick={() => onReviewReceipt(record, {
                     decision: 'correction_required',
                     reason: correctionReason.trim(),
@@ -963,7 +1064,7 @@ export function DPVacationWorkflowPanel({
                 </Button>
                 <Button
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                  disabled={workflowBusy !== null
+                  disabled={!canApprove || workflowBusy !== null
                     || !receiptValuesValid
                     || (receiptNeedsOverride && receiptOverrideReason.trim().length < 10)}
                   onClick={() => onReviewReceipt(record, {
@@ -1020,7 +1121,7 @@ export function DPVacationWorkflowPanel({
           </div>
           <div className="p-4">
             {selectedStage === 'payment' ? (
-              <Substep done={paymentPaid} active={workflow.payment.status !== 'not_started' && !paymentPaid} label="Financeiro" detail={paymentPaid ? 'Pagamento confirmado' : 'Autorizar e acompanhar'} />
+              <Substep done={paymentPaid} active={!paymentPaid && workflow.currentStage === 'payment'} label="Financeiro" detail={paymentPaid ? 'Pagamento confirmado' : 'Autorizar e acompanhar'} />
             ) : selectedStage === 'receipt_signature' ? (
               <Substep done={receiptSigned} active={paymentPaid && !receiptSigned} label="Assinar recibo" detail={receiptSigned ? 'Assinatura concluída' : 'Bloqueado até o pagamento'} />
             ) : (
@@ -1046,7 +1147,7 @@ export function DPVacationWorkflowPanel({
                       onClick={() => onPreparePayment(record)}
                     >
                       {workflowBusy === 'prepare-payment' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4" />}
-                      Preparar novamente
+                      {workflow.payment.status === 'failed' ? 'Tentar preparar novamente' : 'Preparar pagamento'}
                     </Button>
                   ) : null}
                   {workflow.payment.paymentRequestId && !paymentPaid ? (
@@ -1110,16 +1211,30 @@ export function DPVacationWorkflowPanel({
                 </Button>
               ) : null}
               {workflow.receiptSignature.status === 'sent' ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl"
-                  disabled={workflowBusy !== null}
-                  onClick={() => onSyncReceiptSignature(record)}
-                >
-                  {workflowBusy === 'sync-receipt-signature' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock3 className="h-4 w-4" />}
-                  Atualizar assinatura
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={workflowBusy !== null}
+                    onClick={() => onSyncReceiptSignature(record)}
+                  >
+                    {workflowBusy === 'sync-receipt-signature' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock3 className="h-4 w-4" />}
+                    Atualizar assinatura
+                  </Button>
+                  {canApprove ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={workflowBusy !== null}
+                      onClick={() => onRetryReceiptSignature(record)}
+                    >
+                      {workflowBusy === 'retry-receipt-signature' ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
+                      Reenviar convite
+                    </Button>
+                  ) : null}
+                </>
               ) : null}
               {receiptSigned ? (
                 <Button
@@ -1176,6 +1291,23 @@ export function DPVacationWorkflowPanel({
                       ? 'Todos os documentos, pagamentos e assinaturas foram conferidos.'
                       : 'A finalização preserva o histórico e encerra o processo no RH.'}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[
+                      { label: 'Aviso', done: noticeSigned },
+                      { label: 'Pagamento', done: paymentPaid },
+                      { label: 'Recibo', done: receiptSigned },
+                    ].map(item => (
+                      <Badge
+                        key={item.label}
+                        variant="outline"
+                        className={item.done
+                          ? 'rounded-full border-emerald-200 bg-white text-[9.5px] font-black text-emerald-700'
+                          : 'rounded-full border-slate-200 bg-white text-[9.5px] font-black text-slate-500'}
+                      >
+                        {item.label}: {item.done ? 'concluído' : 'pendente'}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
                 {canApprove && workflow.closure.status === 'ready' ? (
                   <Button
@@ -1185,7 +1317,7 @@ export function DPVacationWorkflowPanel({
                     onClick={() => onFinalizeWorkflow(record)}
                   >
                     {workflowBusy === 'finalize' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    Finalizar trilha no RH
+                    Finalizar trilha
                   </Button>
                 ) : null}
               </div>
