@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { differenceInCalendarDays, format, parseISO, startOfDay, subDays } from 'date-fns';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
@@ -256,9 +256,14 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onRevi
 interface DPFeriasProfileProps {
   userId: string;
   initialRegistrationOpen?: boolean;
+  initialWorkflowVacationId?: string;
 }
 
-export function DPFeriasProfile({ userId, initialRegistrationOpen = false }: DPFeriasProfileProps) {
+export function DPFeriasProfile({
+  userId,
+  initialRegistrationOpen = false,
+  initialWorkflowVacationId,
+}: DPFeriasProfileProps) {
   const { users, permissions } = useAuth();
   const { deleteVacation } = useDP();
   const { vacations, calendars, vacationsLoading, vacationsError } = useDPBootstrap();
@@ -275,7 +280,9 @@ export function DPFeriasProfile({ userId, initialRegistrationOpen = false }: DPF
   const [decisionTarget, setDecisionTarget] = useState<{ record: DPVacationRecord; action: 'reject' | 'cancel' } | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>();
-  const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(null);
+  const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(
+    initialWorkflowVacationId ?? null,
+  );
   const [noticeBusy, setNoticeBusy] = useState<'generate' | 'validate' | 'open' | 'send' | 'sync' | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -341,6 +348,16 @@ export function DPFeriasProfile({ userId, initialRegistrationOpen = false }: DPF
     () => cycles.find(cycle => cycle.status !== 'GOZADO' && cycle.status !== 'AQUISITIVO'),
     [cycles],
   );
+  const concessiveNoticeLimit = useMemo(() => {
+    if (!concessiveCycle || concessiveCycle.balance <= 0) return null;
+    const remainingDays = Math.max(1, concessiveCycle.balance);
+    const date = subDays(concessiveCycle.concessivePeriod.end, remainingDays + 29);
+    return {
+      date,
+      remainingDays,
+      daysLeft: differenceInCalendarDays(date, startOfDay(new Date())),
+    };
+  }, [concessiveCycle]);
   const workflowCycle = useMemo(
     () => concessiveCycle ?? cycles.find(cycle => cycle.records.length > 0),
     [concessiveCycle, cycles],
@@ -879,6 +896,37 @@ export function DPFeriasProfile({ userId, initialRegistrationOpen = false }: DPF
                     <span className="text-muted-foreground">Saldo a programar</span>
                     <span className="font-semibold tabular-nums">{Math.max(0, concessiveCycle.balance)}d</span>
                   </div>
+                  {concessiveNoticeLimit ? (
+                    <div className={`mt-3 rounded-xl border px-3 py-2.5 ${
+                      concessiveNoticeLimit.daysLeft < 0
+                        ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/25 dark:text-red-200'
+                        : concessiveNoticeLimit.daysLeft <= 60
+                          ? 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/25 dark:text-amber-200'
+                          : 'border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/25 dark:text-sky-200'
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span>
+                          <span className="block text-[10px] font-black uppercase tracking-[0.08em]">Data-limite do aviso</span>
+                          <span className="mt-0.5 block text-sm font-black tabular-nums">{fmtDate(concessiveNoticeLimit.date)}</span>
+                        </span>
+                        <span className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black dark:bg-black/15">
+                          {concessiveNoticeLimit.daysLeft < 0
+                            ? `${Math.abs(concessiveNoticeLimit.daysLeft)}d em atraso`
+                            : concessiveNoticeLimit.daysLeft === 0
+                              ? 'Vence hoje'
+                              : `${concessiveNoticeLimit.daysLeft} dias`}
+                        </span>
+                      </div>
+                      <details className="group mt-2">
+                        <summary className="cursor-pointer list-none text-[10.5px] font-bold underline underline-offset-2 marker:content-none">
+                          Entenda esta data
+                        </summary>
+                        <p className="mt-2 text-[10.5px] font-medium leading-relaxed opacity-80">
+                          É a última data estimada para comunicar as férias com 30 dias de antecedência. O cálculo reserva os {concessiveNoticeLimit.remainingDays} dias ainda não distribuídos antes de {fmtDate(concessiveCycle.concessivePeriod.end)}, fim do período concessivo.
+                        </p>
+                      </details>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p className="mt-3 text-xs font-medium text-muted-foreground">Nenhum ciclo em período concessivo.</p>
