@@ -106,6 +106,16 @@ test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
   assert.match(timeline, /Pendente/);
 });
 
+test('timeline encerra o conteúdo operacional depois do período aquisitivo', () => {
+  const acquisitiveSection = manager.indexOf('{/* Período aquisitivo */}');
+  const timelineSection = manager.indexOf('<DPVacationTimeline', acquisitiveSection);
+  const drawerSection = manager.indexOf('{/* Drawer */}', timelineSection);
+
+  assert.ok(acquisitiveSection >= 0);
+  assert.ok(timelineSection > acquisitiveSection);
+  assert.ok(drawerSection > timelineSection);
+});
+
 test('cadastro acontece na ficha individual e o drawer preserva edição e exclusão', () => {
   assert.match(profile, /DPVacationEditorPanel/);
   assert.match(profile, /<Sheet/);
