@@ -140,6 +140,8 @@ test('cadastro acontece na ficha individual e o drawer preserva edição e exclu
   assert.match(drawer, /records\.filter\(r => r\.status !== 'REJECTED'\)/);
   assert.match(editor, /Salvar lançamento/);
   assert.match(editor, /Aviso de férias com menos de 30 dias/);
+  assert.doesNotMatch(editor, /Início do gozo · antecedência do aviso/);
+  assert.doesNotMatch(editor, /build\('short', 19\)/);
   assert.match(editor, /returnDate/);
   assert.match(editor, /status: record\?\.status \?\? 'PENDING'/);
 });
