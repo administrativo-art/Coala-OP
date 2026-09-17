@@ -32,10 +32,14 @@ test('rascunho pode ser regenerado antes da validação com auditoria do documen
   assert.match(server, /replacedStoragePath/);
 });
 
-test('envio reconfere o hash e posiciona as duas assinaturas no PDF validado', () => {
+test('envio reconfere o hash e solicita somente a assinatura da colaboradora', () => {
   assert.match(server, /actualHash !== prepared\.workflow\.notice\.hashSha256/);
-  assert.match(server, /x: '16\.0', y: '56\.0', z: 1, element: 'SIGNATURE'/);
-  assert.match(server, /x: '62\.0', y: '56\.0', z: 1, element: 'SIGNATURE'/);
+  assert.match(server, /VACATION_NOTICE_TEMPLATE_VERSION = '2\.1'/);
+  assert.match(server, /DP_VACATION_NOTICE_TEMPLATE_OUTDATED/);
+  assert.match(server, /party: 'employee'/);
+  assert.match(server, /x: '39\.0', y: '56\.0', z: 1, element: 'SIGNATURE'/);
+  assert.doesNotMatch(server, /party: 'company'/);
+  assert.doesNotMatch(server, /resolveCompanyDocumentSignatory/);
   assert.match(server, /Coala Shakes - RH \| Férias/);
 });
 

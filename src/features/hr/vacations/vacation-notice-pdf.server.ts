@@ -359,12 +359,9 @@ export async function buildVacationNoticePdf(input: VacationNoticePdfInput) {
 
   const signatureY = receiptBottom + 44;
   const signatureWidth = (CONTENT_WIDTH - 34) / 2;
-  const employeeSignatureX = LEFT + signatureWidth + 34;
-  page.drawLine({ start: { x: LEFT + 14, y: signatureY }, end: { x: LEFT + 14 + signatureWidth, y: signatureY }, thickness: 0.65, color: INK });
+  const employeeSignatureX = LEFT + ((CONTENT_WIDTH - signatureWidth) / 2);
   page.drawLine({ start: { x: employeeSignatureX, y: signatureY }, end: { x: employeeSignatureX + signatureWidth, y: signatureY }, thickness: 0.65, color: INK });
-  page.drawText(input.companyLegalName, { x: LEFT + 14, y: signatureY - 13, size: 6.8, font: bold, color: INK, maxWidth: signatureWidth });
   page.drawText(input.employeeName, { x: employeeSignatureX, y: signatureY - 13, size: 6.8, font: bold, color: INK, maxWidth: signatureWidth });
-  page.drawText(`Empregadora · CNPJ ${cnpj(input.companyCnpj)}`, { x: LEFT + 14, y: signatureY - 24, size: 5.5, font: regular, color: MUTED, maxWidth: signatureWidth });
   page.drawText(`Colaborador(a) · CPF ${cpf(input.employeeCpf)}`, { x: employeeSignatureX, y: signatureY - 24, size: 5.5, font: regular, color: MUTED, maxWidth: signatureWidth });
 
   const content = Buffer.from(await document.save({ useObjectStreams: false }));

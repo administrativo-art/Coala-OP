@@ -9,7 +9,6 @@ import { createPaymentRequest, refreshPaymentRequest } from '@/features/financia
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
-import { resolveCompanyDocumentSignatory } from '@/features/hr/documents/company-document-signatory.server';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
@@ -57,7 +56,7 @@ import { buildVacationNoticePdf } from './vacation-notice-pdf.server';
 
 const VACATION_QUERY_LIMIT = 200;
 const VACATION_CYCLE_QUERY_LIMIT = 31;
-const VACATION_NOTICE_TEMPLATE_VERSION = '2.0';
+const VACATION_NOTICE_TEMPLATE_VERSION = '2.1';
 // Override temporário solicitado pelo RH: o aviso de férias deve sair pela matriz.
 const VACATION_NOTICE_COMPANY_CNPJ = '14276603000125';
 const VACATION_ACCOUNT_ID = 'folha-ferias-terco-constitucional';
@@ -1304,6 +1303,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       ? `Aviso emitido com ${noticeLeadDays} dias de antecedência. O prazo legal mínimo do art. 135 da CLT é de 30 dias.`
       : null;
     const fingerprintInput = {
+      templateVersion: VACATION_NOTICE_TEMPLATE_VERSION,
       vacationId,
       userId: source.user.id,
       cycleId,
@@ -1624,6 +1624,12 @@ export async function sendVacationNotice(
       || !workflow.notice.documentId) {
       throw conflict('DP_VACATION_NOTICE_NOT_VALIDATED', 'Valide o aviso antes de enviá-lo.');
     }
+    if (workflow.notice.templateVersion !== VACATION_NOTICE_TEMPLATE_VERSION) {
+      throw conflict(
+        'DP_VACATION_NOTICE_TEMPLATE_OUTDATED',
+        'O modelo do aviso foi atualizado. Gere e valide o documento novamente antes do envio.',
+      );
+    }
     const history = await relatedVacations(transaction, user.id);
     const compliance = await vacationComplianceAnalysis(
       transaction,
@@ -1653,28 +1659,11 @@ export async function sendVacationNotice(
     return { current, user, workflow: updatedWorkflow };
   });
 
-  const employer = await resolveVacationEmployer(prepared.user);
-  const companySignatory = await resolveCompanyDocumentSignatory({
-    entityId: employer.entityId,
-    cnpj: employer.cnpj,
-  });
-  if (!companySignatory) {
-    throw conflict(
-      'DP_VACATION_COMPANY_SIGNATORY_REQUIRED',
-      `Defina o signatário documental da empresa ${employer.legalName} antes do envio.`,
-    );
-  }
   const employeeEmail = requiredText(
     prepared.user.email,
     'DP_VACATION_EMPLOYEE_EMAIL_REQUIRED',
     'Informe o e-mail da colaboradora antes do envio.',
   ).toLowerCase();
-  if (employeeEmail === companySignatory.email.toLowerCase()) {
-    throw conflict(
-      'DP_VACATION_SIGNERS_MUST_DIFFER',
-      'O signatário da empresa precisa ser diferente da colaboradora.',
-    );
-  }
   const employeeName = requiredText(
     prepared.user.username,
     'DP_VACATION_EMPLOYEE_NAME_REQUIRED',
@@ -1695,12 +1684,6 @@ export async function sendVacationNotice(
   }
 
   const signers: VacationNoticeSigner[] = [
-    {
-      party: 'company',
-      name: companySignatory.name,
-      email: companySignatory.email.toLowerCase(),
-      avatarUrl: companySignatory.avatarUrl,
-    },
     {
       party: 'employee',
       name: employeeName,
@@ -1723,7 +1706,8 @@ export async function sendVacationNotice(
     }
     if (workflow.notice.status !== 'validated'
       || workflow.notice.documentId !== prepared.workflow.notice.documentId
-      || workflow.notice.hashSha256 !== actualHash) {
+      || workflow.notice.hashSha256 !== actualHash
+      || workflow.notice.templateVersion !== VACATION_NOTICE_TEMPLATE_VERSION) {
       throw conflict('DP_VACATION_NOTICE_CHANGED', 'O aviso mudou antes do envio. Abra-o novamente.');
     }
     transaction.update(vacationRef, {
@@ -1786,13 +1770,7 @@ export async function sendVacationNotice(
           email: signers[0].email,
           name: signers[0].name,
           action: 'SIGN',
-          positions: [{ x: '16.0', y: '56.0', z: 1, element: 'SIGNATURE' }],
-        },
-        {
-          email: signers[1].email,
-          name: signers[1].name,
-          action: 'SIGN',
-          positions: [{ x: '62.0', y: '56.0', z: 1, element: 'SIGNATURE' }],
+          positions: [{ x: '39.0', y: '56.0', z: 1, element: 'SIGNATURE' }],
         },
       ],
     });
@@ -1857,7 +1835,7 @@ export async function sendVacationNotice(
         context,
         vacationId,
         'VACATION_NOTICE_SENT',
-        'Aviso de férias enviado para assinatura da empresa e da colaboradora.',
+        'Aviso de férias enviado para assinatura da colaboradora.',
         sentAt,
         { signatureRequestId: signatureRequestRef.id, providerDocumentId: created.document.id },
       ));
