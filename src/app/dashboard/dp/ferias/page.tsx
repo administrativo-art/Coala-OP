@@ -15,7 +15,7 @@ export default function DPFeriasPage() {
       <div>
         <h1 className="text-2xl font-semibold">Férias</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Prioridade de agendamento e período aquisitivo dos colaboradores operacionais. Clique em um card para ver o histórico e agendar.
+          Do lançamento ao encerramento: acompanhe prazos, aprove períodos e siga a trilha documental de cada colaborador.
         </p>
       </div>
       <DPFeriasManager />

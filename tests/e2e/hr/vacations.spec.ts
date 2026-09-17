@@ -21,6 +21,8 @@ test('aprova e cancela férias com justificativa e histórico auditável', async
   await page.getByRole('button', { name: 'Aprovar agendamento' }).click();
 
   await expect(page.getByText('Agendamento aprovado.', { exact: true })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText('Aprovado por você', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Fechar' }).click();
   await page.getByRole('button', { name: 'Ver perfil completo' }).click();
   await expect(page).toHaveURL(new RegExp(`/dashboard/dp/ferias/${E2E_VACATION.employeeId}$`));
   await expect(page.getByRole('button', { name: 'Gerar aviso' })).toBeVisible();

@@ -3,20 +3,31 @@
 import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  format, parseISO, differenceInCalendarDays, isAfter, startOfDay,
+  format, parseISO, isAfter, startOfDay,
 } from 'date-fns';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDP } from '@/components/dp-context';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { useToast } from '@/hooks/use-toast';
-import type { DPVacationRecord, DPVacationStatus } from '@/types';
+import type { DPVacationRecord } from '@/types';
 import {
   Sheet, SheetContent,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { ExternalLink, ShieldCheck } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ExternalLink, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { DPVacationDecisionPanel } from './dp-vacation-decision-panel';
+import { DPVacationEditorPanel } from './dp-vacation-editor-panel';
 import {
   getVacationCycleHistory,
   getCycleRisk,
@@ -51,6 +62,7 @@ function fmt(d?: string | Date) {
 const DONE = { fg: '#15803D', bg: 'rgba(34,197,94,0.14)', label: 'Concluído' };
 const SCHEDULED = { fg: '#7C3AED', bg: 'rgba(139,92,246,0.14)', label: 'Agendada' };
 const AWAITING_APPROVAL = { fg: '#A16207', bg: 'rgba(234,179,8,0.16)', label: 'Aguardando aprovação' };
+const WEEKDAYS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'] as const;
 
 interface Props {
   userId: string | null;
@@ -103,13 +115,22 @@ interface DrawerBodyProps {
 
 function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove }: DrawerBodyProps) {
   const router = useRouter();
+  const { deleteVacation } = useDP();
+  const { toast } = useToast();
   const today = startOfDay(new Date());
   const admDate = toDate(user.admissionDate);
   const [decision, setDecision] = useState<{ recordId: string; cycleId: string } | null>(null);
+  const [editor, setEditor] = useState<{ cycleId: string; recordId?: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DPVacationRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const cycles = useMemo(
     () => (admDate ? getVacationCycleHistory(admDate, vacations) : []),
     [admDate, vacations],
+  );
+  const calendarNames = useMemo(
+    () => new Map(calendars.map(calendar => [calendar.id, calendar.name])),
+    [calendars],
   );
 
   // Concessive cycles only (exclude the still-accumulating aquisitivo one).
@@ -132,6 +153,43 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
   const decisionCycle = decision
     ? concessive.find(cycle => cycle.id === decision.cycleId)
     : undefined;
+  const editorCycle = editor
+    ? concessive.find(cycle => cycle.id === editor.cycleId)
+    : undefined;
+  const editorRecord = editor?.recordId
+    ? vacations.find(record => record.id === editor.recordId)
+    : undefined;
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteVacation(deleteTarget.id);
+      toast({ title: 'Registro de férias excluído.' });
+      setDeleteTarget(null);
+    } catch (error) {
+      toast({
+        title: 'Não foi possível excluir o registro.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  if (editorCycle && (!editor?.recordId || editorRecord)) {
+    return (
+      <DPVacationEditorPanel
+        employeeName={user.username}
+        userId={user.id}
+        cycle={editorCycle}
+        calendars={calendars}
+        record={editorRecord}
+        onBack={() => setEditor(null)}
+      />
+    );
+  }
 
   if (decisionRecord && decisionCycle) {
     return (
@@ -186,11 +244,15 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
           <CycleBlock
             key={cycle.id}
             cycle={cycle}
-            userId={user.id}
+            records={vacations.filter(record => record.cycleId === cycle.id)}
+            calendarNames={calendarNames}
             canEdit={canEdit}
             canApprove={canApprove}
             today={today}
             onReview={record => setDecision({ recordId: record.id, cycleId: cycle.id })}
+            onRegister={() => setEditor({ cycleId: cycle.id })}
+            onEdit={record => setEditor({ cycleId: cycle.id, recordId: record.id })}
+            onDelete={setDeleteTarget}
           />
         ))}
       </div>
@@ -204,6 +266,23 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
           Ver perfil completo <ExternalLink className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={open => { if (!open && !deleting) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir período lançado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O período será removido antes da comunicação formal. A exclusão e o conteúdo anterior permanecerão registrados na auditoria.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} onClick={event => { event.preventDefault(); void confirmDelete(); }}>
+              {deleting ? 'Excluindo...' : 'Excluir período'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -211,14 +290,18 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
 // ─── One cycle ────────────────────────────────────────────────────────────────
 
 function CycleBlock({
-  cycle, userId, canEdit, canApprove, today, onReview,
+  cycle, records, calendarNames, canEdit, canApprove, today, onReview, onRegister, onEdit, onDelete,
 }: {
   cycle: VacationCycle;
-  userId: string;
+  records: DPVacationRecord[];
+  calendarNames: ReadonlyMap<string, string>;
   canEdit: boolean;
   canApprove: boolean;
   today: Date;
   onReview: (record: DPVacationRecord) => void;
+  onRegister: () => void;
+  onEdit: (record: DPVacationRecord) => void;
+  onDelete: (record: DPVacationRecord) => void;
 }) {
   const done = cycle.status === 'GOZADO';
   const scheduled = cycle.status === 'AGENDADO';
@@ -227,11 +310,10 @@ function CycleBlock({
   const progress = Math.round(getCycleProgress(cycle, today));
   const rc = done ? DONE : scheduled ? SCHEDULED : awaitingApproval ? AWAITING_APPROVAL : RISK_HEX[risk];
 
-  const active = cycle.records.filter(r => r.status !== 'REJECTED');
+  const active = records.filter(r => r.status !== 'REJECTED');
   const gozoDays = active.filter(r => r.recordType === 'gozo').reduce((t, r) => t + r.days, 0);
   const sold = active.filter(r => r.recordType === 'venda').reduce((t, r) => t + r.days, 0);
-  const taken = active.reduce((t, r) => t + r.days, 0);
-  const balance = Math.max(0, 30 - taken);
+  const balance = Math.max(0, cycle.balance);
 
   const gozoSummary = done
     ? `${gozoDays}d gozados`
@@ -282,15 +364,19 @@ function CycleBlock({
         </div>
       </div>
 
-      {active.length > 0 ? (
+      {records.length > 0 ? (
         <div className="mt-3 flex flex-col gap-2">
-          {active.map(r => (
+          {records.map(r => (
             <RecordRow
               key={r.id}
               record={r}
               concessiveEnd={cycle.concessivePeriod.end}
+              calendarName={r.calendarId ? calendarNames.get(r.calendarId) : undefined}
+              canEdit={canEdit}
               canApprove={canApprove}
               onReview={() => onReview(r)}
+              onEdit={() => onEdit(r)}
+              onDelete={() => onDelete(r)}
             />
           ))}
         </div>
@@ -299,7 +385,10 @@ function CycleBlock({
       )}
 
       {balance > 0 && canEdit && (
-        <RegisterForms cycleId={cycle.id} userId={userId} />
+        <Button type="button" size="sm" className="mt-3 w-full rounded-[10px]" onClick={onRegister}>
+          <Plus className="mr-2 h-4 w-4" />
+          Registrar neste ciclo
+        </Button>
       )}
     </div>
   );
@@ -310,21 +399,55 @@ function CycleBlock({
 function RecordRow({
   record,
   concessiveEnd,
+  calendarName,
+  canEdit,
   canApprove,
   onReview,
+  onEdit,
+  onDelete,
 }: {
   record: DPVacationRecord;
   concessiveEnd: Date;
+  calendarName?: string;
+  canEdit: boolean;
   canApprove: boolean;
   onReview: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const isVenda = record.recordType === 'venda';
   const awaitingDecision = record.status === 'PENDING' || record.status === 'PLANNED';
+  const canEditRecord = canEdit && awaitingDecision;
+  const canDeleteRecord = canApprove && (!record.workflow || ['not_generated', 'failed'].includes(record.workflow.notice.status));
   const s = VACATION_STATUS_HEX[record.status] ?? VACATION_STATUS_HEX.PENDING;
-  const onTime = isVenda || !record.endDate ? true : !isAfter(parseISO(record.endDate), concessiveEnd);
-  const prazo = onTime
+  const withinConcessivePeriod = isVenda || !record.endDate ? true : !isAfter(parseISO(record.endDate), concessiveEnd);
+  const noticeLeadDays = record.workflow?.legalAnalysis.noticeLeadDays;
+  const noticeCompliance = record.workflow?.legalAnalysis.noticeCompliance;
+  const noticeOnTime = noticeCompliance === 'compliant'
+    || (noticeCompliance !== 'exception' && noticeLeadDays != null && noticeLeadDays >= 30);
+  const noticeLate = noticeCompliance === 'exception'
+    || (noticeLeadDays != null && noticeLeadDays < 30);
+  const noticeBadge = noticeOnTime
+    ? { fg: '#15803D', bg: 'rgba(34,197,94,0.14)', label: 'Aviso no prazo' }
+    : noticeLate
+      ? { fg: '#DC2626', bg: 'rgba(239,68,68,0.13)', label: 'Aviso fora do prazo' }
+      : { fg: '#475569', bg: 'rgba(148,163,184,0.16)', label: 'Aviso pendente' };
+  const deadlineBadge = withinConcessivePeriod
     ? { fg: '#15803D', bg: 'rgba(34,197,94,0.14)', label: 'No prazo' }
     : { fg: '#DC2626', bg: 'rgba(239,68,68,0.13)', label: 'Fora do prazo' };
+  const detail = isVenda
+    ? [
+        'Abono pecuniário',
+        record.allowanceRequestedAt ? `pedido em ${fmt(record.allowanceRequestedAt)}` : null,
+      ].filter(Boolean).join(' · ')
+    : [
+        `${fmt(record.startDate)} → ${fmt(record.endDate)}`,
+        record.calendarId ? `calendário ${calendarName ?? 'cadastrado'}` : null,
+        `descanso semanal ${WEEKDAYS[record.weeklyRestDay ?? 0] ?? 'não informado'}`,
+        record.returnDate ? `retorno ${fmt(record.returnDate)}` : null,
+        noticeLeadDays != null ? `aviso ${noticeLeadDays} dias antes` : null,
+        record.workflow?.payment.paidAt ? `pago em ${fmt(record.workflow.payment.paidAt)}` : null,
+      ].filter(Boolean).join(' · ');
 
   return (
     <div className="flex flex-wrap items-start gap-2.5 rounded-[10px] bg-muted px-3 py-2.5">
@@ -351,231 +474,67 @@ function RecordRow({
           {!isVenda && (
             <span
               className="rounded-full px-2 py-px text-[10.5px] font-semibold"
-              style={{ background: prazo.bg, color: prazo.fg }}
+              style={{ background: deadlineBadge.bg, color: deadlineBadge.fg }}
             >
-              {prazo.label}
+              {deadlineBadge.label}
+            </span>
+          )}
+          {!isVenda && (
+            <span
+              className="rounded-full px-2 py-px text-[10.5px] font-semibold"
+              style={{ background: noticeBadge.bg, color: noticeBadge.fg }}
+            >
+              {noticeBadge.label}
             </span>
           )}
         </div>
         <div className="mt-1 text-[11px] text-muted-foreground">
-          {isVenda
-            ? 'Abono pecuniário'
-            : `${fmt(record.startDate)} → ${fmt(record.endDate)}${record.workflow?.payment.paidAt ? ` · pago em ${fmt(record.workflow.payment.paidAt)}` : ''}`}
+          {detail}
         </div>
       </div>
-      {awaitingDecision && (
-        canApprove ? (
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {awaitingDecision && (
+          canApprove ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 rounded-lg bg-slate-950 px-3 text-[11.5px] text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-300"
+              onClick={onReview}
+            >
+              <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+              Revisar e decidir
+            </Button>
+          ) : (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+              Sem permissão para decidir
+            </span>
+          )
+        )}
+        {canEditRecord && (
           <Button
             type="button"
-            size="sm"
-            className="h-8 shrink-0 rounded-lg bg-slate-950 px-3 text-[11.5px] text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-300"
-            onClick={onReview}
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-lg"
+            onClick={onEdit}
+            aria-label="Editar período lançado"
           >
-            <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-            Revisar e decidir
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
-        ) : (
-          <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-            Sem permissão para decidir
-          </span>
-        )
-      )}
-    </div>
-  );
-}
-
-// ─── Inline register forms ────────────────────────────────────────────────────
-
-function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string }) {
-  const { addVacation } = useDP();
-  const { calendars } = useDPBootstrap();
-  const { toast } = useToast();
-  const [mode, setMode] = useState<'none' | 'gozo' | 'venda'>('none');
-  const [saving, setSaving] = useState(false);
-
-  // gozo fields
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [calendarId, setCalendarId] = useState('');
-  const [weeklyRestDay, setWeeklyRestDay] = useState('0');
-  const [unjustifiedAbsences, setUnjustifiedAbsences] = useState('0');
-  const [employeeAgreedToSplit, setEmployeeAgreedToSplit] = useState(false);
-  const [thirteenthAdvanceRequested, setThirteenthAdvanceRequested] = useState(false);
-  // venda fields
-  const [vendaDays, setVendaDays] = useState('10');
-  const [allowanceRequestedAt, setAllowanceRequestedAt] = useState('');
-
-  function reset() {
-    setMode('none'); setStart(''); setEnd(''); setVendaDays('10');
-    setCalendarId(''); setWeeklyRestDay('0'); setUnjustifiedAbsences('0');
-    setEmployeeAgreedToSplit(false); setThirteenthAdvanceRequested(false); setAllowanceRequestedAt('');
-  }
-
-  async function save(recordType: 'gozo' | 'venda') {
-    let days: number;
-    if (recordType === 'gozo') {
-      if (!start || !end || end < start) {
-        toast({ title: 'Informe início e fim válidos.', variant: 'destructive' });
-        return;
-      }
-      if (!calendarId) {
-        toast({ title: 'Selecione o calendário aplicável.', variant: 'destructive' });
-        return;
-      }
-      days = differenceInCalendarDays(parseISO(end), parseISO(start)) + 1;
-    } else {
-      days = Math.min(10, Math.max(1, Number(vendaDays) || 0));
-      if (!days) { toast({ title: 'Informe os dias.', variant: 'destructive' }); return; }
-      if (!allowanceRequestedAt) {
-        toast({ title: 'Informe a data do pedido do abono.', variant: 'destructive' });
-        return;
-      }
-    }
-    setSaving(true);
-    try {
-      const status: DPVacationStatus = 'PLANNED';
-      await addVacation({
-        userId,
-        cycleId,
-        recordType,
-        days,
-        status,
-        startDate: recordType === 'gozo' ? start : undefined,
-        endDate: recordType === 'gozo' ? end : undefined,
-        calendarId: recordType === 'gozo' ? calendarId : undefined,
-        weeklyRestDay: Number(weeklyRestDay),
-        unjustifiedAbsences: Number(unjustifiedAbsences),
-        employeeAgreedToSplit,
-        allowanceRequestedAt: recordType === 'venda' ? allowanceRequestedAt : undefined,
-        thirteenthAdvanceRequested,
-        warnings: [],
-      });
-      toast({ title: recordType === 'gozo' ? 'Gozo registrado.' : 'Venda registrada.' });
-      reset();
-    } catch {
-      toast({ title: 'Erro ao salvar.', variant: 'destructive' });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const inputCls = 'mt-1 w-full rounded-lg border bg-background px-2.5 py-1.5 text-xs';
-  const labelCls = 'text-[10.5px] font-semibold';
-
-  return (
-    <div className="mt-3 border-t pt-3">
-      {mode === 'none' && (
-        <div className="flex gap-2">
-          <button
-            onClick={() => setMode('gozo')}
-            className="flex-1 rounded-lg bg-primary px-3 py-2 text-[12.5px] font-semibold text-primary-foreground hover:bg-primary/90"
+        )}
+        {canDeleteRecord && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-lg border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+            onClick={onDelete}
+            aria-label="Excluir período lançado"
           >
-            Registrar gozo
-          </button>
-          <button
-            onClick={() => setMode('venda')}
-            className="flex-1 rounded-lg border bg-card px-3 py-2 text-[12.5px] font-semibold hover:bg-muted"
-          >
-            Comprar (venda)
-          </button>
-        </div>
-      )}
-
-      {mode === 'gozo' && (
-        <div>
-          <div className="mb-2 text-[11.5px] font-bold">Registrar gozo</div>
-          <div className="mb-2 grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className={labelCls}>Início</span>
-              <input type="date" value={start} onChange={e => setStart(e.target.value)} className={inputCls} />
-            </label>
-            <label className="block">
-              <span className={labelCls}>Fim</span>
-              <input type="date" value={end} onChange={e => setEnd(e.target.value)} className={inputCls} />
-            </label>
-          </div>
-          <div className="mb-2 grid grid-cols-2 gap-2">
-            <label className="block">
-              <span className={labelCls}>Calendário aplicável</span>
-              <select value={calendarId} onChange={e => setCalendarId(e.target.value)} className={inputCls}>
-                <option value="">Selecione</option>
-                {calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name} · {calendar.year}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className={labelCls}>Descanso semanal</span>
-              <select value={weeklyRestDay} onChange={e => setWeeklyRestDay(e.target.value)} className={inputCls}>
-                {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((label, index) => (
-                  <option key={label} value={index}>{label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <p className="mb-2.5 text-[10.5px] font-semibold text-muted-foreground">
-            O pagamento será preparado pela trilha depois do recebimento e da aprovação do recibo do contador.
-          </p>
-        </div>
-      )}
-
-      {mode === 'venda' && (
-        <div>
-          <div className="mb-2 text-[11.5px] font-bold">Comprar férias (abono)</div>
-          <div className="mb-2.5">
-            <label className="block">
-              <span className={labelCls}>Dias (máx. 10)</span>
-              <input
-                type="number" min={1} max={10} value={vendaDays}
-                onChange={e => setVendaDays(e.target.value)} className={inputCls}
-              />
-            </label>
-            <label className="mt-2 block">
-              <span className={labelCls}>Data do pedido do abono</span>
-              <input type="date" value={allowanceRequestedAt} onChange={e => setAllowanceRequestedAt(e.target.value)} className={inputCls} />
-            </label>
-          </div>
-        </div>
-      )}
-
-      {mode !== 'none' && (
-        <div className="mt-2">
-          <div className="mb-3 space-y-2 rounded-lg border p-2.5">
-            <label className="block">
-              <span className={labelCls}>Faltas injustificadas no ciclo</span>
-              <input type="number" min={0} max={100} value={unjustifiedAbsences} onChange={e => setUnjustifiedAbsences(e.target.value)} className={inputCls} />
-            </label>
-            <label className="flex items-center gap-2 text-[10.5px] font-semibold">
-              <input type="checkbox" checked={employeeAgreedToSplit} onChange={e => setEmployeeAgreedToSplit(e.target.checked)} />
-              Colaborador concordou com o fracionamento
-            </label>
-            <label className="flex items-center gap-2 text-[10.5px] font-semibold">
-              <input type="checkbox" checked={thirteenthAdvanceRequested} onChange={e => setThirteenthAdvanceRequested(e.target.checked)} />
-              Adiantamento da 1ª parcela do 13º solicitado
-            </label>
-          </div>
-          <FormActions onCancel={reset} onSave={() => save(mode)} saving={saving} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FormActions({ onCancel, onSave, saving }: { onCancel: () => void; onSave: () => void; saving: boolean }) {
-  return (
-    <div className="flex justify-end gap-2">
-      <button
-        onClick={onCancel}
-        disabled={saving}
-        className="rounded-lg bg-muted px-3 py-2 text-xs font-semibold disabled:opacity-50"
-      >
-        Cancelar
-      </button>
-      <button
-        onClick={onSave}
-        disabled={saving}
-        className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
-        {saving ? 'Salvando...' : 'Salvar'}
-      </button>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

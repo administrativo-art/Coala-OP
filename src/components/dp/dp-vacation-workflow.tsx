@@ -14,6 +14,7 @@ import {
   Landmark,
   Loader2,
   LockKeyhole,
+  Plus,
   ReceiptText,
   ShieldCheck,
   Upload,
@@ -43,6 +44,7 @@ type Props = {
   selectedId: string | null;
   canEdit: boolean;
   canApprove: boolean;
+  onRegister: () => void;
   onSelect: (id: string) => void;
   onEdit: (record: DPVacationRecord) => void;
   onApprove: (record: DPVacationRecord) => void;
@@ -260,14 +262,70 @@ function Substep({
   );
 }
 
-function EmptyWorkflow() {
+function EmptyWorkflow({ canEdit, onRegister }: { canEdit: boolean; onRegister: () => void }) {
+  const steps = [
+    {
+      title: 'Registrar o período',
+      description: 'Datas, calendário aplicável, descanso semanal e faltas. O retorno e a antecedência são calculados no lançamento.',
+      meta: 'Você está aqui',
+    },
+    {
+      title: 'Aprovar o agendamento',
+      description: 'O período entra como Pendente. O RH aprova ou rejeita com motivo registrado.',
+      meta: 'Requer permissão Aprovar Férias',
+    },
+    {
+      title: 'Seguir a trilha',
+      description: 'Aviso, contabilidade, auditoria do recibo, pagamento, assinatura e finalização.',
+      meta: '7 etapas · RH, colaborador, contador e financeiro',
+    },
+  ];
+
   return (
-    <section className="rounded-[18px] border border-dashed border-stone-300 bg-[#faf9f6] p-6 text-center">
-      <FileCheck2 className="mx-auto h-8 w-8 text-stone-300" />
-      <p className="mt-3 text-sm font-black text-stone-700">Nenhum período de gozo registrado</p>
-      <p className="mt-1 text-xs font-semibold text-stone-500">
-        Registre as férias para iniciar a análise, o aviso, o recibo e o pagamento em uma única trilha.
-      </p>
+    <section className="rounded-[18px] border bg-card p-5">
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="min-w-[260px] flex-1">
+          <Badge className="rounded-full bg-pink-100 text-[10px] font-black uppercase tracking-[0.1em] text-pink-800 hover:bg-pink-100">
+            Passo 1 de 3 · registro
+          </Badge>
+          <h2 className="mt-2 text-lg font-black tracking-tight">Lançar o período de férias</h2>
+          <p className="mt-1 max-w-2xl text-[12.5px] font-semibold leading-relaxed text-muted-foreground">
+            A trilha começa no lançamento do gozo ou do abono. Depois disso, o período segue para decisão e para as sete etapas documentais.
+          </p>
+        </div>
+        {canEdit ? (
+          <Button type="button" className="rounded-xl" onClick={onRegister}>
+            <Plus className="mr-2 h-4 w-4" />
+            Registrar férias
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-2.5 md:grid-cols-3">
+        {steps.map((step, index) => (
+          <div key={step.title} className={`rounded-[14px] border p-3.5 ${index === 0 ? 'border-pink-200 bg-pink-50/60' : 'bg-muted/20'}`}>
+            <div className="flex items-center gap-2">
+              <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-black ${index === 0 ? 'bg-pink-600 text-white' : 'bg-muted text-muted-foreground'}`}>{index + 1}</span>
+              <p className="text-[12.5px] font-black">{step.title}</p>
+            </div>
+            <p className="mt-2 text-[11.5px] font-semibold leading-relaxed text-muted-foreground">{step.description}</p>
+            <p className={`mt-2 text-[10.5px] font-extrabold ${index === 0 ? 'text-pink-800' : 'text-muted-foreground'}`}>{step.meta}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 border-t pt-3.5">
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">As 7 etapas que vêm depois da aprovação</p>
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-7">
+          {VACATION_WORKFLOW_STAGE_META.map((stage, index) => (
+            <div key={stage.id} className="rounded-xl border bg-muted/20 p-2.5">
+              <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-muted text-[9.5px] font-black text-muted-foreground">{index + 1}</span>
+              <p className="mt-1.5 truncate text-[11px] font-extrabold text-muted-foreground">{stage.short}</p>
+              <p className="mt-1 truncate text-[9.5px] font-semibold text-muted-foreground/75">{stage.owner}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -352,6 +410,7 @@ export function DPVacationWorkflowPanel({
   selectedId,
   canEdit,
   canApprove,
+  onRegister,
   onSelect,
   onEdit,
   onApprove,
@@ -415,7 +474,7 @@ export function DPVacationWorkflowPanel({
     workflow?.receipt.analysis?.extractedFields,
   ]);
 
-  if (!record || !workflow) return <EmptyWorkflow />;
+  if (!record || !workflow) return <EmptyWorkflow canEdit={canEdit} onRegister={onRegister} />;
 
   const action = nextAction(workflow);
   const notice = workflow.notice;
