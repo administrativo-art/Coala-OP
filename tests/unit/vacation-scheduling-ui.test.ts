@@ -49,7 +49,8 @@ test('trilha mostra uma etapa por vez e mantém etapas concluídas navegáveis',
 });
 
 test('painel abre a ficha e a decisão acontece no drawer do perfil individual', () => {
-  assert.match(manager, /kind === 'approval'\s*\? 'Abrir ficha'/);
+  assert.match(manager, />\s*Abrir ficha\s*<ArrowUpRight/);
+  assert.doesNotMatch(manager, /Registrar férias/);
   assert.match(manager, /kind="approval"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
   assert.match(profile, /DPVacationDecisionPanel/);
   assert.match(profile, /Revisar e decidir/);
@@ -94,7 +95,8 @@ test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
 test('cadastro acontece na ficha individual e o drawer preserva edição e exclusão', () => {
   assert.match(profile, /DPVacationEditorPanel/);
   assert.match(profile, /<Sheet/);
-  assert.match(drawer, /Abrir perfil para registrar/);
+  assert.match(drawer, /Abrir ficha/);
+  assert.doesNotMatch(drawer, /Abrir perfil para registrar/);
   assert.match(drawer, /router\.push\(`\/dashboard\/dp\/ferias\/\$\{encodeURIComponent\(user\.id\)\}`\)/);
   assert.match(drawer, /Editar período lançado/);
   assert.match(drawer, /Excluir período lançado/);

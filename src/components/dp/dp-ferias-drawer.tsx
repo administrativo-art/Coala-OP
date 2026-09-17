@@ -387,7 +387,7 @@ function CycleBlock({
       {balance > 0 && canEdit && (
         <Button type="button" size="sm" className="mt-3 w-full rounded-[10px]" onClick={onRegister}>
           <Plus className="mr-2 h-4 w-4" />
-          Abrir perfil para registrar
+          Abrir ficha
         </Button>
       )}
     </div>
