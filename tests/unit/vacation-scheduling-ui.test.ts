@@ -163,7 +163,8 @@ test('ficha sem lançamento explica as três fases e antecipa as sete etapas', (
 });
 
 test('as sete etapas mantêm ações do handoff e autorização coerente com o back-end', () => {
-  assert.match(workflow, /canApprove && \['not_generated', 'failed'\]\.includes\(notice\.status\)/);
+  assert.match(workflow, /canApprove && \['not_generated', 'failed', 'draft'\]\.includes\(notice\.status\)/);
+  assert.match(workflow, /\['failed', 'draft'\]\.includes\(notice\.status\) \? 'Gerar novamente'/);
   assert.match(workflow, /canApprove && notice\.status === 'draft'/);
   assert.match(workflow, /canApprove && notice\.status === 'validated'/);
   assert.match(workflow, /noticeSigned && canApprove && \['ready_to_send', 'failed', 'correction_requested'\]/);

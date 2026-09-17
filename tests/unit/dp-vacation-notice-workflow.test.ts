@@ -17,6 +17,18 @@ test('aviso exige geração, validação e envio em ações separadas', () => {
   assert.match(route, /sendVacationNotice/);
 });
 
+test('aviso usa temporariamente o CNPJ da matriz no fingerprint e no PDF', () => {
+  assert.match(server, /const VACATION_NOTICE_COMPANY_CNPJ = '14276603000125'/);
+  assert.equal((server.match(/companyCnpj: VACATION_NOTICE_COMPANY_CNPJ/g) ?? []).length, 2);
+});
+
+test('rascunho pode ser regenerado antes da validação com auditoria do documento substituído', () => {
+  assert.match(server, /\['not_generated', 'failed', 'draft'\]\.includes\(workflow\.notice\.status\)/);
+  assert.match(server, /VACATION_NOTICE_REGENERATION_REQUESTED/);
+  assert.match(server, /replacedDocumentId/);
+  assert.match(server, /replacedStoragePath/);
+});
+
 test('envio reconfere o hash e posiciona as duas assinaturas no PDF validado', () => {
   assert.match(server, /actualHash !== prepared\.workflow\.notice\.hashSha256/);
   assert.match(server, /x: '16\.0', y: '56\.0', z: 1, element: 'SIGNATURE'/);

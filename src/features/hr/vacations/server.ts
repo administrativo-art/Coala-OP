@@ -58,6 +58,8 @@ import { buildVacationNoticePdf } from './vacation-notice-pdf.server';
 const VACATION_QUERY_LIMIT = 200;
 const VACATION_CYCLE_QUERY_LIMIT = 31;
 const VACATION_NOTICE_TEMPLATE_VERSION = '2.0';
+// Override temporário solicitado pelo RH: o aviso de férias deve sair pela matriz.
+const VACATION_NOTICE_COMPANY_CNPJ = '14276603000125';
 const VACATION_ACCOUNT_ID = 'folha-ferias-terco-constitucional';
 const VACATION_ACCOUNT_NAME = 'Férias e 1/3 constitucional';
 const PUBLIC_RECRUITMENT_URL = process.env.NEXT_PUBLIC_RECRUITMENT_URL?.trim()
@@ -1196,7 +1198,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
     if (workflow.status !== 'active') {
       throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
     }
-    if (!['not_generated', 'failed'].includes(workflow.notice.status)) {
+    if (!['not_generated', 'failed', 'draft'].includes(workflow.notice.status)) {
       throw conflict(
         'DP_VACATION_NOTICE_GENERATION_STATE',
         workflow.notice.status === 'generating'
@@ -1238,10 +1240,21 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
     transaction.create(requestedEventRef, vacationEvent(
       context,
       vacationId,
-      'VACATION_NOTICE_GENERATION_REQUESTED',
-      'Geração do aviso de férias iniciada.',
+      workflow.notice.status === 'draft'
+        ? 'VACATION_NOTICE_REGENERATION_REQUESTED'
+        : 'VACATION_NOTICE_GENERATION_REQUESTED',
+      workflow.notice.status === 'draft'
+        ? 'Nova geração do aviso de férias iniciada antes da validação.'
+        : 'Geração do aviso de férias iniciada.',
       now,
-      { operationId, documentId },
+      {
+        operationId,
+        documentId,
+        ...(workflow.notice.status === 'draft' ? {
+          replacedDocumentId: workflow.notice.documentId ?? null,
+          replacedStoragePath: workflow.notice.storagePath ?? null,
+        } : {}),
+      },
     ));
     return { current, user, workflow: nextWorkflow, cycleRecords };
   });
@@ -1293,13 +1306,13 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       noticeLeadDays,
       observations,
       companyLegalName: employer.legalName,
-      companyCnpj: employer.cnpj,
+      companyCnpj: VACATION_NOTICE_COMPANY_CNPJ,
       companyAddress: employer.address,
     };
     const sourceFingerprint = vacationSourceFingerprint(fingerprintInput);
     const buffer = await buildVacationNoticePdf({
       companyLegalName: employer.legalName,
-      companyCnpj: employer.cnpj,
+      companyCnpj: VACATION_NOTICE_COMPANY_CNPJ,
       companyAddress: employer.address,
       employeeName,
       employeeCpf: employee.employeeCpf,

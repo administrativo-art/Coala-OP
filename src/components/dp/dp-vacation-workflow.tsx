@@ -808,7 +808,7 @@ export function DPVacationWorkflowPanel({
           </div>
           {workflow.currentStage === 'notice' || noticeGenerated ? (
             <div className="flex flex-wrap items-center gap-2 border-t border-violet-100 px-4 py-3">
-              {canApprove && ['not_generated', 'failed'].includes(notice.status) ? (
+              {canApprove && ['not_generated', 'failed', 'draft'].includes(notice.status) ? (
                 <Button
                   size="sm"
                   className="rounded-xl bg-violet-600 hover:bg-violet-700"
@@ -816,7 +816,7 @@ export function DPVacationWorkflowPanel({
                   onClick={() => onGenerateNotice(record)}
                 >
                   {noticeBusy === 'generate' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                  {notice.status === 'failed' ? 'Gerar novamente' : 'Gerar aviso'}
+                  {['failed', 'draft'].includes(notice.status) ? 'Gerar novamente' : 'Gerar aviso'}
                 </Button>
               ) : null}
               {noticeGenerated ? (
