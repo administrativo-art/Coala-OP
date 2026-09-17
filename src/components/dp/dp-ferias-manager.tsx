@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import {
+  differenceInCalendarDays,
+  endOfMonth,
+  format,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  subDays,
+} from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -18,14 +26,16 @@ import { Input } from '@/components/ui/input';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { CalendarDays, Search } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Search } from 'lucide-react';
 import { DPFeriasDrawer } from './dp-ferias-drawer';
+import { DPVacationTimeline } from './dp-vacation-timeline';
 import {
   calculateVacationHealth,
   CYCLE_STATUS_CONFIG,
   getVacationCycleHistory,
   RISK_PROGRESS_CLASS,
   VACATION_STATUS_HEX,
+  type VacationCycle,
   type VacationHealthStatus,
   type VacationRisk,
 } from '@/lib/utils/vacation-logic';
@@ -72,6 +82,9 @@ interface Enriched {
   role: string;
   unitName: string;
   balance: number;
+  cycle?: VacationCycle;
+  noticeDeadline?: Date;
+  noticeDaysLeft?: number;
 }
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
@@ -198,6 +211,103 @@ function CardSkeleton() {
   );
 }
 
+const KPI_TONES = {
+  neutral: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300',
+  warning: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  danger: 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  purple: 'border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-900 dark:bg-purple-950/30 dark:text-purple-300',
+} as const;
+
+function KpiCard({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  tone: keyof typeof KPI_TONES;
+}) {
+  return (
+    <div className={`rounded-[13px] border px-3.5 py-3 ${KPI_TONES[tone]}`}>
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-current" />
+        <span className="text-[10.5px] font-black uppercase tracking-[0.09em]">{label}</span>
+      </div>
+      <div className="mt-1.5 flex items-baseline gap-2 text-foreground">
+        <span className="text-2xl font-black tracking-tight tabular-nums">{value}</span>
+        <span className="text-[11px] font-semibold text-muted-foreground">{hint}</span>
+      </div>
+    </div>
+  );
+}
+
+function QueueRow({
+  item,
+  kind,
+  canAct,
+  onOpen,
+}: {
+  item: Enriched;
+  kind: 'scheduling' | 'approval';
+  canAct: boolean;
+  onOpen: () => void;
+}) {
+  if (item.health.status !== 'CONCESSIVO' || !item.cycle) return null;
+  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
+  const risk = RISK_CONFIG[item.health.details.risk];
+  const pendingRecord = item.cycle.records.find(record => record.status === 'PENDING' || record.status === 'PLANNED');
+  const period = pendingRecord?.startDate && pendingRecord?.endDate
+    ? `${format(parseISO(pendingRecord.startDate), 'dd/MM/yyyy')} → ${format(parseISO(pendingRecord.endDate), 'dd/MM/yyyy')}`
+    : `${item.balance}d a agendar`;
+  const actionLabel = kind === 'approval'
+    ? canAct ? 'Revisar e decidir' : 'Abrir ficha'
+    : canAct ? 'Registrar férias' : 'Abrir ficha';
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full flex-wrap items-center gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-left transition-colors hover:bg-muted/35"
+    >
+      <span
+        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-black text-white"
+        style={{ background: item.user.color || '#8B5CF6' }}
+      >
+        {initials(item.user.username)}
+      </span>
+      <span className="min-w-0 basis-[190px]">
+        <span className="block truncate text-[13.5px] font-black">{item.user.username}</span>
+        <span className="mt-0.5 block truncate text-[11px] font-semibold text-muted-foreground">{meta || '—'}</span>
+      </span>
+      <span className="min-w-[190px] flex-1">
+        <span className="block text-xs font-extrabold">{period}</span>
+        <span className="mt-0.5 block text-[11px] font-semibold text-muted-foreground">
+          Ciclo {item.cycle.id} · concessivo até {format(item.cycle.concessivePeriod.end, 'dd/MM/yyyy')}
+        </span>
+        {kind === 'scheduling' && item.noticeDeadline ? (
+          <span className={`mt-0.5 block text-[11px] font-extrabold ${
+            (item.noticeDaysLeft ?? 0) <= 60 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'
+          }`}>
+            Avisar até {format(item.noticeDeadline, 'dd/MM/yyyy')} · {item.noticeDaysLeft} dias
+          </span>
+        ) : null}
+      </span>
+      <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-extrabold ${risk.bg} ${risk.text}`}>
+        {kind === 'approval' ? 'Aguardando aprovação' : risk.label}
+      </span>
+      <span className="text-[10px] font-black uppercase tracking-[0.08em] text-muted-foreground">
+        Etapa 1 · {kind === 'approval' ? 'decisão' : 'registro'}
+      </span>
+      <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
+        {actionLabel}
+        <ArrowUpRight className="h-3.5 w-3.5" />
+      </span>
+    </button>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPFeriasManager() {
@@ -228,17 +338,34 @@ export function DPFeriasManager() {
         const health = calculateVacationHealth(admDate, userVacations);
 
         let balance = 0;
+        let cycle: VacationCycle | undefined;
+        let noticeDeadline: Date | undefined;
+        let noticeDaysLeft: number | undefined;
         if (health.status === 'CONCESSIVO' && admDate) {
           const cycles = getVacationCycleHistory(admDate, userVacations);
-          const openCycle = cycles.find(c => c.status !== 'GOZADO' && c.status !== 'AQUISITIVO');
-          if (openCycle) balance = Math.max(0, openCycle.balance);
+          cycle = cycles.find(c => c.status !== 'GOZADO' && c.status !== 'AQUISITIVO');
+          if (cycle) {
+            balance = Math.max(0, cycle.balance);
+            const daysToDistribute = Math.max(1, balance);
+            noticeDeadline = subDays(cycle.concessivePeriod.end, daysToDistribute + 29);
+            noticeDaysLeft = differenceInCalendarDays(noticeDeadline, startOfDay(new Date()));
+          }
         }
 
         const unitName = user.unitIds?.[0]
           ? units.find(u => u.id === user.unitIds![0])?.name ?? ''
           : '';
 
-        return { user, health, role: user.jobRoleName ?? '', unitName, balance };
+        return {
+          user,
+          health,
+          role: user.jobRoleName ?? '',
+          unitName,
+          balance,
+          cycle,
+          noticeDeadline,
+          noticeDaysLeft,
+        };
       })
       .filter(e => e.health.status !== 'INVALIDO');
   }, [operationalUsers, vacations, units]);
@@ -265,6 +392,20 @@ export function DPFeriasManager() {
 
   const awaitingApproval = useMemo(() =>
     filtered.filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'AGUARDANDO_APROVACAO'),
+    [filtered]);
+
+  const pendingScheduling = useMemo(() =>
+    filtered
+      .filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'PENDENTE')
+      .sort((left, right) => (left.noticeDaysLeft ?? Number.POSITIVE_INFINITY) - (right.noticeDaysLeft ?? Number.POSITIVE_INFINITY)),
+    [filtered]);
+
+  const noticeAtRisk = useMemo(() =>
+    filtered.filter(item => (
+      item.health.status === 'CONCESSIVO'
+      && ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(item.health.cycleStatus)
+      && (item.noticeDaysLeft ?? Number.POSITIVE_INFINITY) <= 60
+    )),
     [filtered]);
 
   const scheduled = useMemo(() =>
@@ -301,6 +442,7 @@ export function DPFeriasManager() {
           start: format(parseISO(v.startDate!), 'dd/MM'),
           end: format(parseISO(v.endDate!), 'dd/MM'),
           days: v.days,
+          status: v.status,
           statusFg: cfg.fg,
           statusBg: cfg.bg,
           statusLabel: cfg.label,
@@ -309,6 +451,23 @@ export function DPFeriasManager() {
       })
       .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [vacations, users]);
+
+  const approvedInMonth = useMemo(
+    () => monthVacations.filter(vacation => vacation.status === 'APPROVED').length,
+    [monthVacations],
+  );
+
+  const visibleUserIds = useMemo(() => new Set(filtered.map(item => item.user.id)), [filtered]);
+  const timelineVacations = useMemo(
+    () => vacations.filter(vacation => (
+      visibleUserIds.has(vacation.userId)
+      && vacation.recordType === 'gozo'
+      && vacation.status !== 'REJECTED'
+      && vacation.startDate
+      && vacation.endDate
+    )),
+    [vacations, visibleUserIds],
+  );
 
   const isLoading = vacationsLoading && vacations.length === 0;
   const warningError = vacationsError ?? unitsError;
@@ -355,8 +514,64 @@ export function DPFeriasManager() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Pendente de agendamento" value={pendingScheduling.length} hint="nada lançado" tone="neutral" />
+        <KpiCard label="Aguardando aprovação" value={awaitingApproval.length} hint="sua decisão" tone="warning" />
+        <KpiCard label="Prazo de aviso em risco" value={noticeAtRisk.length} hint="≤ 60 dias" tone="danger" />
+        <KpiCard label="Em gozo neste mês" value={approvedInMonth} hint="na operação" tone="purple" />
+      </div>
+
+      {(isLoading || pendingScheduling.length > 0) && (
+        <section className="rounded-[18px] border border-slate-300 bg-card p-4 dark:border-slate-700">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-slate-200 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">•</span>
+            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-slate-700 dark:text-slate-200">Pendente de agendamento</h2>
+            {!isLoading && <Badge className="bg-slate-700 text-white hover:bg-slate-700">{pendingScheduling.length}</Badge>}
+            <span className="ml-auto text-[11.5px] font-semibold text-muted-foreground">Nenhum período lançado · começa no registro das férias</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {isLoading
+              ? [...Array(2)].map((_, index) => <CardSkeleton key={index} />)
+              : pendingScheduling.map(item => (
+                  <QueueRow
+                    key={item.user.id}
+                    item={item}
+                    kind="scheduling"
+                    canAct={canRegister}
+                    onOpen={() => setDrawerUserId(item.user.id)}
+                  />
+                ))}
+          </div>
+        </section>
+      )}
+
+      {riskFilter === 'ALL' && awaitingApproval.length > 0 && (
+        <section className="rounded-[18px] border border-amber-300 bg-gradient-to-b from-amber-50 to-card p-4 dark:border-amber-900 dark:from-amber-950/25">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-amber-200 text-xs font-black text-amber-900 dark:bg-amber-900 dark:text-amber-200">!</span>
+            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-amber-900 dark:text-amber-200">Aguardando aprovação</h2>
+            {!isLoading && <Badge className="bg-amber-900 text-white hover:bg-amber-900">{awaitingApproval.length}</Badge>}
+            <span className="ml-auto text-[11.5px] font-semibold text-amber-800/75 dark:text-amber-300/75">Ordenado por prazo concessivo · a decisão acontece na ficha</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {isLoading
+              ? [...Array(2)].map((_, index) => <CardSkeleton key={index} />)
+              : awaitingApproval.map(item => (
+                  <QueueRow
+                    key={item.user.id}
+                    item={item}
+                    kind="approval"
+                    canAct={canApprove}
+                    onOpen={() => setDrawerUserId(item.user.id)}
+                  />
+                ))}
+          </div>
+        </section>
+      )}
+
       {/* Risk filter chips */}
       <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11.5px] font-black uppercase tracking-[0.13em] text-muted-foreground">Prioridade de agendamento</span>
         {RISK_CHIPS.map(chip => {
           const active = riskFilter === chip.key;
           return (
@@ -403,21 +618,6 @@ export function DPFeriasManager() {
         )}
       </div>
 
-      {riskFilter === 'ALL' && awaitingApproval.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Aguardando aprovação</h2>
-            <Badge variant="secondary" className="text-xs">{awaitingApproval.length}</Badge>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {awaitingApproval.map(item => (
-              <ScheduledCard key={item.user.id} item={item} onOpen={() => setDrawerUserId(item.user.id)} />
-            ))}
-          </div>
-        </div>
-      )}
-
       {riskFilter === 'ALL' && scheduled.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -432,6 +632,12 @@ export function DPFeriasManager() {
           </div>
         </div>
       )}
+
+      <DPVacationTimeline
+        users={filtered.map(item => item.user)}
+        vacations={timelineVacations}
+        onSelectUser={setDrawerUserId}
+      />
 
       {/* Período aquisitivo */}
       {(isLoading || aquisitivo.length > 0) && (

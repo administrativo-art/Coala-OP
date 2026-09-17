@@ -174,7 +174,7 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
       startDate: vacation?.startDate ?? '',
       endDate: vacation?.endDate ?? '',
       days: vacation?.days ?? 30,
-      status: vacation?.status ?? 'PLANNED',
+      status: vacation?.status ?? 'PENDING',
       returnDate: vacation?.returnDate ?? '',
       unjustifiedAbsences: vacation?.unjustifiedAbsences ?? 0,
       calendarId: vacation?.calendarId ?? '',
@@ -193,7 +193,7 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
         startDate: vacation?.startDate ?? '',
         endDate: vacation?.endDate ?? '',
         days: vacation?.days ?? 30,
-        status: vacation?.status ?? 'PLANNED',
+        status: vacation?.status ?? 'PENDING',
         returnDate: vacation?.returnDate ?? '',
         unjustifiedAbsences: vacation?.unjustifiedAbsences ?? 0,
         calendarId: vacation?.calendarId ?? '',
@@ -457,7 +457,7 @@ function VacationRecordRow({ record, canEdit, canApprove, onEdit, onDelete, onAp
                 <Pencil className="mr-2 h-3.5 w-3.5" />Editar
               </DropdownMenuItem>
             )}
-            {canApprove && record.status === 'PENDING' && (
+            {canApprove && (record.status === 'PENDING' || record.status === 'PLANNED') && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onApprove(record)}>
@@ -978,6 +978,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         selectedId={selectedWorkflowVacationId}
         canEdit={canEdit}
         canApprove={canApprove}
+        onRegister={() => { setSelectedCycleId(undefined); setScheduleOpen(true); }}
         onSelect={setSelectedWorkflowVacationId}
         onEdit={setEditVacation}
         onApprove={handleApprove}
