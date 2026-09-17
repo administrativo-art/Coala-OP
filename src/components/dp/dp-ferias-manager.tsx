@@ -83,9 +83,10 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
   const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onOpen}
-      className={`cursor-pointer rounded-2xl border border-l-4 ${RISK_ACCENT[risk]} bg-card px-4 py-3.5 transition-shadow hover:shadow-md`}
+      className={`w-full cursor-pointer rounded-2xl border border-l-4 ${RISK_ACCENT[risk]} bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md`}
     >
       <div className="flex items-center gap-3">
         <span
@@ -112,7 +113,7 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
           {risk === 'VENCIDA' && item.balance === 0 ? 'Período fora do prazo' : `${Math.max(0, item.balance)}d a agendar`}
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -123,9 +124,10 @@ function ScheduledCard({ item, onOpen }: { item: Enriched; onOpen: () => void })
   const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onOpen}
-      className={`cursor-pointer rounded-2xl border border-l-4 ${awaitingApproval ? 'border-l-amber-500' : 'border-l-purple-500'} bg-card px-4 py-3.5 transition-shadow hover:shadow-md`}
+      className={`w-full cursor-pointer rounded-2xl border border-l-4 ${awaitingApproval ? 'border-l-amber-500' : 'border-l-purple-500'} bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md`}
     >
       <div className="flex items-center gap-3">
         <span
@@ -148,7 +150,7 @@ function ScheduledCard({ item, onOpen }: { item: Enriched; onOpen: () => void })
         <span>Vence {format(item.health.details.deadline, 'dd/MM/yyyy', { locale: ptBR })}</span>
         <span className="font-semibold">{awaitingApproval ? '30d lançados' : '30d programados'}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -158,9 +160,10 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
   const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onOpen}
-      className="cursor-pointer rounded-2xl border border-l-4 border-l-border bg-card px-4 py-3.5 transition-shadow hover:shadow-md"
+      className="w-full cursor-pointer rounded-2xl border border-l-4 border-l-border bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md"
     >
       <div className="flex items-center gap-3">
         <span
@@ -178,7 +181,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
       <div className="mt-2 text-[11px] text-muted-foreground">
         Aquisição até {format(end, 'dd/MM/yyyy', { locale: ptBR })}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -208,6 +211,7 @@ export function DPFeriasManager() {
   const [monthModal, setMonthModal] = useState(false);
 
   const canRegister = permissions.dp?.vacation?.request ?? false;
+  const canApprove = permissions.dp?.vacation?.approve ?? false;
   const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
 
   const operationalUsers = useMemo(() => {
@@ -458,6 +462,7 @@ export function DPFeriasManager() {
       <DPFeriasDrawer
         userId={drawerUserId}
         canEdit={canRegister}
+        canApprove={canApprove}
         onOpenChange={open => { if (!open) setDrawerUserId(null); }}
       />
 
