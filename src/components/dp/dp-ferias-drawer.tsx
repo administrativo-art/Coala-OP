@@ -250,7 +250,7 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
             canApprove={canApprove}
             today={today}
             onReview={record => setDecision({ recordId: record.id, cycleId: cycle.id })}
-            onRegister={() => setEditor({ cycleId: cycle.id })}
+            onRegister={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(user.id)}`)}
             onEdit={record => setEditor({ cycleId: cycle.id, recordId: record.id })}
             onDelete={setDeleteTarget}
           />
@@ -387,7 +387,7 @@ function CycleBlock({
       {balance > 0 && canEdit && (
         <Button type="button" size="sm" className="mt-3 w-full rounded-[10px]" onClick={onRegister}>
           <Plus className="mr-2 h-4 w-4" />
-          Registrar neste ciclo
+          Abrir perfil para registrar
         </Button>
       )}
     </div>
