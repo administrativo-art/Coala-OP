@@ -45,6 +45,7 @@ import {
 } from '@/components/dp/dp-vacation-workflow';
 import { DPVacationEditorPanel } from '@/components/dp/dp-vacation-editor-panel';
 import { DPVacationDecisionPanel } from '@/components/dp/dp-vacation-decision-panel';
+import { shouldDisplayVacationWorkflow } from '@/lib/dp-vacation-workflow';
 
 import {
   calculateVacationHealth,
@@ -393,7 +394,10 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const workflowVacations = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     return userVacations
-      .filter(vacation => vacation.recordType === 'gozo' && (!workflowCycle || vacation.cycleId === workflowCycle.id))
+      .filter(vacation => (
+        (!workflowCycle || vacation.cycleId === workflowCycle.id)
+        && shouldDisplayVacationWorkflow(vacation, today)
+      ))
       .sort((left, right) => {
         const leftRejected = left.status === 'REJECTED' ? 1 : 0;
         const rightRejected = right.status === 'REJECTED' ? 1 : 0;

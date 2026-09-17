@@ -357,6 +357,24 @@ export function vacationWorkflowForRecord(
   };
 }
 
+/**
+ * Defines which vacation record owns the operational trail shown in the profile.
+ *
+ * Older imported records may not have a persisted workflow. They can still use
+ * the compatibility workflow while their period is current or upcoming, but a
+ * period that has already ended must remain historical instead of being reopened
+ * at the notice stage. Persisted active workflows remain visible even after the
+ * enjoyment dates, because their document/payment work may still be unfinished.
+ */
+export function shouldDisplayVacationWorkflow(
+  record: Pick<DPVacationRecord, 'recordType' | 'status' | 'endDate' | 'workflow'>,
+  asOfDate: string,
+) {
+  if (record.recordType !== 'gozo' || record.status === 'REJECTED') return false;
+  if (record.workflow) return record.workflow.status === 'active';
+  return isIsoDate(asOfDate) && isIsoDate(record.endDate) && record.endDate >= asOfDate;
+}
+
 export function advanceVacationWorkflowToNotice(
   workflow: DPVacationWorkflow,
   input: { now: string; actorId: string },

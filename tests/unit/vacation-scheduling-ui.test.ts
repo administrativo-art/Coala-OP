@@ -48,6 +48,10 @@ test('trilha mostra uma etapa por vez e mantém etapas concluídas navegáveis',
   assert.match(workflow, /Etapa concluída\. Os dados permanecem disponíveis para consulta/);
 });
 
+test('perfil não reabre trilha para um período legado que já terminou', () => {
+  assert.match(profile, /shouldDisplayVacationWorkflow\(vacation, today\)/);
+});
+
 test('painel abre a ficha e a decisão acontece no drawer do perfil individual', () => {
   assert.match(manager, />\s*Abrir ficha\s*<ArrowUpRight/);
   assert.doesNotMatch(manager, /Registrar férias/);

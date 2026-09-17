@@ -6,6 +6,7 @@ import {
   analyzeVacationScheduling,
   cancelVacationWorkflow,
   createInitialVacationWorkflow,
+  shouldDisplayVacationWorkflow,
   vacationWorkflowDeadlines,
 } from '../../src/lib/dp-vacation-workflow';
 
@@ -92,4 +93,37 @@ test('rejeição cancela somente os passos ainda não concluídos', () => {
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(cancelled.steps.find((step) => step.id === 'scheduling')?.status, 'completed');
   assert.equal(cancelled.steps.find((step) => step.id === 'notice')?.status, 'cancelled');
+});
+
+test('registro legado encerrado permanece no histórico e não reabre a trilha', () => {
+  const historicalRecord = {
+    recordType: 'gozo' as const,
+    status: 'APPROVED' as const,
+    endDate: '2026-07-30',
+  };
+
+  assert.equal(shouldDisplayVacationWorkflow(historicalRecord, '2026-09-17'), false);
+  assert.equal(shouldDisplayVacationWorkflow({ ...historicalRecord, endDate: '2026-10-05' }, '2026-09-17'), true);
+});
+
+test('trilha persistida ativa continua operacional após o gozo e trilha concluída sai da área ativa', () => {
+  const workflow = createInitialVacationWorkflow({
+    status: 'APPROVED',
+    startDate: '2026-07-15',
+    endDate: '2026-07-30',
+    asOfDate: '2026-07-01',
+    now: '2026-07-01T12:00:00.000-03:00',
+  });
+  const record = {
+    recordType: 'gozo' as const,
+    status: 'APPROVED' as const,
+    endDate: '2026-07-30',
+    workflow,
+  };
+
+  assert.equal(shouldDisplayVacationWorkflow(record, '2026-09-17'), true);
+  assert.equal(shouldDisplayVacationWorkflow({
+    ...record,
+    workflow: { ...workflow, status: 'completed' as const },
+  }, '2026-09-17'), false);
 });
