@@ -258,7 +258,7 @@ interface DPFeriasProfileProps {
 
 export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const { users, permissions } = useAuth();
-  const { updateVacation, deleteVacation } = useDP();
+  const { deleteVacation } = useDP();
   const { vacations, calendars, vacationsLoading, vacationsError } = useDPBootstrap();
   const { toast } = useToast();
   const api = useAuthenticatedApi();
@@ -335,6 +335,11 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     [admDate, userVacations]
   );
 
+  const workflowCycle = useMemo(
+    () => cycles.find(cycle => cycle.status !== 'GOZADO' && cycle.status !== 'AQUISITIVO')
+      ?? cycles.find(cycle => cycle.records.length > 0),
+    [cycles],
+  );
   const defaultRegistrationCycle = useMemo(
     () => cycles.find(cycle => cycle.status !== 'AQUISITIVO' && cycle.balance > 0),
     [cycles],
@@ -379,7 +384,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const workflowVacations = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     return userVacations
-      .filter(vacation => vacation.recordType === 'gozo')
+      .filter(vacation => vacation.recordType === 'gozo' && (!workflowCycle || vacation.cycleId === workflowCycle.id))
       .sort((left, right) => {
         const leftRejected = left.status === 'REJECTED' ? 1 : 0;
         const rightRejected = right.status === 'REJECTED' ? 1 : 0;
@@ -391,7 +396,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
           ? (left.startDate ?? '').localeCompare(right.startDate ?? '')
           : (right.startDate ?? '').localeCompare(left.startDate ?? '');
       });
-  }, [userVacations]);
+  }, [userVacations, workflowCycle]);
   const selectedWorkflowVacation = workflowVacations.find(vacation => vacation.id === selectedWorkflowVacationId)
     ?? workflowVacations[0];
 
@@ -404,11 +409,6 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
       setSelectedWorkflowVacationId(workflowVacations[0].id);
     }
   }, [selectedWorkflowVacationId, workflowVacations]);
-
-  async function handleApprove(v: DPVacationRecord) {
-    try { await updateVacation({ ...v, status: 'APPROVED' }); toast({ title: 'Aprovado.' }); }
-    catch { toast({ title: 'Erro.', variant: 'destructive' }); }
-  }
 
   function handleCancel(v: DPVacationRecord) {
     setDecisionReason('');
@@ -685,7 +685,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
             )}
           </div>
         </div>
-        {canEdit && (
+        {canEdit && defaultRegistrationCycle && workflowVacations.length > 0 && (
           <Button size="sm" onClick={() => openVacationEditor()}>
             <Plus className="mr-2 h-4 w-4" />
             Registrar férias
@@ -695,13 +695,14 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
       <DPVacationWorkflowPanel
         records={workflowVacations}
+        registrationCycle={workflowCycle}
         selectedId={selectedWorkflowVacationId}
         canEdit={canEdit}
         canApprove={canApprove}
         onRegister={() => openVacationEditor()}
         onSelect={setSelectedWorkflowVacationId}
         onEdit={openVacationEdit}
-        onApprove={handleApprove}
+        onApprove={setDecisionVacation}
         onGenerateNotice={handleGenerateNotice}
         onValidateNotice={handleValidateNotice}
         onOpenNotice={handleOpenNotice}
@@ -893,7 +894,8 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
       >
         <SheetContent
           side="right"
-          className="flex w-[560px] max-w-[95vw] flex-col gap-0 p-0 sm:max-w-[560px]"
+          className="flex w-[560px] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+          style={{ height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh' }}
         >
           {decisionVacation && decisionCycle ? (
             <DPVacationDecisionPanel
@@ -915,7 +917,8 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
       >
         <SheetContent
           side="right"
-          className="flex w-[560px] max-w-[95vw] flex-col gap-0 p-0 sm:max-w-[560px]"
+          className="flex w-[560px] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+          style={{ height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh' }}
         >
           {editorCycle ? (
             <DPVacationEditorPanel

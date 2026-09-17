@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDays, differenceInCalendarDays, format, parseISO, startOfDay } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, isAfter, parseISO, startOfDay, subDays } from 'date-fns';
 import { AlertTriangle, CalendarCheck2, ChevronLeft, Loader2 } from 'lucide-react';
 
 import { useDP } from '@/components/dp-context';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { DPCalendar, DPVacationRecord } from '@/types';
 import type { VacationCycle } from '@/lib/utils/vacation-logic';
+import { vacationEntitlementDays } from '@/lib/dp-vacation-workflow';
 
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'] as const;
 
@@ -58,6 +59,33 @@ export function DPVacationEditorPanel({
     : null;
   const shortNotice = noticeLeadDays !== null && noticeLeadDays < 30;
   const selectedCalendar = calendars.find(calendar => calendar.id === calendarId);
+  const entitlementDays = vacationEntitlementDays(Number(unjustifiedAbsences) || 0);
+  const startSuggestions = useMemo(() => {
+    if (recordType !== 'gozo' || isEdit) return [];
+    const days = Math.min(30, Math.max(1, cycle.balance));
+    const today = startOfDay(new Date());
+    const cycleStart = startOfDay(cycle.concessivePeriod.start);
+    const cycleEnd = startOfDay(cycle.concessivePeriod.end);
+    const laterOf = (left: Date, right: Date) => isAfter(left, right) ? left : right;
+    const fitInsideCycle = (candidate: Date) => {
+      const latestStart = subDays(cycleEnd, days - 1);
+      return isAfter(candidate, latestStart) ? latestStart : candidate;
+    };
+    const build = (kind: 'compliant' | 'short', offset: number) => {
+      const start = fitInsideCycle(laterOf(addDays(today, offset), cycleStart));
+      const end = addDays(start, days - 1);
+      return {
+        kind,
+        start: format(start, 'yyyy-MM-dd'),
+        end: format(end, 'yyyy-MM-dd'),
+        leadDays: differenceInCalendarDays(start, today),
+      };
+    };
+    const suggestions = [build('compliant', 30), build('short', 19)];
+    return suggestions.filter((suggestion, index) =>
+      suggestions.findIndex(candidate => candidate.start === suggestion.start) === index,
+    );
+  }, [cycle.balance, cycle.concessivePeriod.end, cycle.concessivePeriod.start, isEdit, recordType]);
 
   useEffect(() => {
     if (recordType !== 'gozo' || calendarId) return;
@@ -134,7 +162,7 @@ export function DPVacationEditorPanel({
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b px-5 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-b px-5 py-4">
         <Button type="button" variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={onBack} disabled={saving} aria-label="Voltar à ficha de férias">
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -145,7 +173,7 @@ export function DPVacationEditorPanel({
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         <div className="grid grid-cols-2 gap-3">
           <label>
             <span className={labelClass}>Ciclo</span>
@@ -212,7 +240,10 @@ export function DPVacationEditorPanel({
         )}
 
         <label className="block">
-          <span className={labelClass}>Faltas injustificadas no ciclo</span>
+          <span className="flex items-center justify-between gap-3">
+            <span className={labelClass}>Faltas injustificadas no ciclo</span>
+            <span className="text-[10px] font-bold text-muted-foreground">direito a {entitlementDays}d</span>
+          </span>
           <input className={inputClass} type="number" min={0} max={100} value={unjustifiedAbsences} onChange={event => setUnjustifiedAbsences(event.target.value)} disabled={saving} />
         </label>
 
@@ -226,6 +257,39 @@ export function DPVacationEditorPanel({
             Adiantamento da 1ª parcela do 13º solicitado
           </label>
         </div>
+
+        {recordType === 'gozo' && startSuggestions.length > 0 ? (
+          <div>
+            <p className={labelClass}>Início do gozo · antecedência do aviso</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {startSuggestions.map(suggestion => {
+                const selected = startDate === suggestion.start && endDate === suggestion.end;
+                const isShort = suggestion.leadDays < 30;
+                return (
+                  <button
+                    key={suggestion.kind}
+                    type="button"
+                    className={`flex h-9 items-center gap-2 rounded-[10px] border px-3 text-[12px] font-extrabold transition-colors ${
+                      selected
+                        ? isShort
+                          ? 'border-red-300 bg-red-50 text-red-700'
+                          : 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        : 'border-border bg-background text-slate-600 hover:bg-muted/40'
+                    }`}
+                    onClick={() => {
+                      setStartDate(suggestion.start);
+                      setEndDate(suggestion.end);
+                    }}
+                    disabled={saving}
+                  >
+                    {format(parseISO(suggestion.start), 'dd/MM/yyyy')}
+                    <span className="text-[10px] opacity-80">{suggestion.leadDays}d de aviso</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {recordType === 'gozo' && noticeLeadDays !== null ? (
           <div className={`rounded-xl border p-3 ${shortNotice ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/25' : 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/25'}`}>
@@ -246,7 +310,7 @@ export function DPVacationEditorPanel({
         ) : null}
       </div>
 
-      <div className="flex justify-end gap-2 border-t bg-background px-5 py-3.5">
+      <div className="flex shrink-0 justify-end gap-2 border-t bg-background px-5 py-3.5">
         <Button type="button" variant="outline" onClick={onBack} disabled={saving}>Cancelar</Button>
         <Button type="button" className="min-w-[150px]" onClick={() => void save()} disabled={!saveEnabled}>
           {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

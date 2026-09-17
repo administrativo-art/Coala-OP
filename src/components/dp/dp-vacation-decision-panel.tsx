@@ -194,7 +194,7 @@ export function DPVacationDecisionPanel({
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b px-5 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-b px-5 py-4">
         <Button
           type="button"
           variant="outline"
@@ -216,7 +216,7 @@ export function DPVacationDecisionPanel({
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         <section className="rounded-2xl border bg-muted/25 p-3.5">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             {fields.map(([label, value]) => (
@@ -310,7 +310,7 @@ export function DPVacationDecisionPanel({
         )}
       </div>
 
-      <div className="border-t bg-background px-5 py-3.5">
+      <div className="shrink-0 border-t bg-background px-5 py-3.5">
         {result ? (
           <div className={`flex flex-wrap items-center gap-2.5 rounded-xl border p-3 ${
             result === 'approved'

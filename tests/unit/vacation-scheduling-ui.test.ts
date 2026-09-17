@@ -55,6 +55,7 @@ test('painel abre a ficha e a decisão acontece no drawer do perfil individual',
   assert.match(profile, /DPVacationDecisionPanel/);
   assert.match(profile, /Revisar e decidir/);
   assert.match(profile, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
+  assert.match(profile, /onApprove=\{setDecisionVacation\}/);
 });
 
 test('perfil agrupa concessivo, resumo, ciclos e auditoria no mesmo bloco histórico', () => {
@@ -112,7 +113,35 @@ test('cadastro acontece na ficha individual e o drawer preserva edição e exclu
 
 test('ficha sem lançamento explica as três fases e antecipa as sete etapas', () => {
   assert.match(workflow, /Passo 1 de 3/);
+  assert.match(workflow, /do ciclo \$\{cycle\.id\}/);
+  assert.match(workflow, /Saldo do ciclo: \{balance\}d a agendar/);
+  assert.match(workflow, /Concessivo até/);
+  assert.match(workflow, /Avisar até/);
   assert.match(workflow, /Registrar o período/);
   assert.match(workflow, /Aprovar o agendamento/);
   assert.match(workflow, /As 7 etapas que vêm depois da aprovação/);
+  assert.match(workflow, /STAGE_OWNER_LABEL\[stage\.owner\]/);
+  assert.match(profile, /registrationCycle=\{workflowCycle\}/);
+});
+
+test('as sete etapas mantêm ações do handoff e autorização coerente com o back-end', () => {
+  assert.match(workflow, /canApprove && \['not_generated', 'failed'\]\.includes\(notice\.status\)/);
+  assert.match(workflow, /canApprove && notice\.status === 'draft'/);
+  assert.match(workflow, /canApprove && notice\.status === 'validated'/);
+  assert.match(workflow, /noticeSigned && canApprove && \['ready_to_send', 'failed', 'correction_requested'\]/);
+  assert.match(workflow, /disabled=\{!canApprove \|\| workflowBusy !== null \|\| !correctionReason\.trim\(\)\}/);
+  assert.match(workflow, /canApprove && \['not_started', 'failed'\]\.includes\(workflow\.payment\.status\)/);
+  assert.match(workflow, /canApprove && \['ready', 'failed'\]\.includes\(workflow\.receiptSignature\.status\)/);
+  assert.match(workflow, /Reenviar convite/);
+  assert.match(workflow, /\{ label: 'Aviso', done: noticeSigned \}/);
+  assert.match(workflow, /\{ label: 'Pagamento', done: paymentPaid \}/);
+  assert.match(workflow, /\{ label: 'Recibo', done: receiptSigned \}/);
+  assert.match(workflow, /canApprove && workflow\.closure\.status === 'ready'/);
+});
+
+test('drawers de férias ocupam a viewport e mantêm conteúdo rolável entre cabeçalho e rodapé', () => {
+  assert.match(profile, /height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh'/);
+  assert.match(drawer, /height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh'/);
+  assert.match(editor, /min-h-0 flex-1 space-y-4 overflow-y-auto/);
+  assert.match(editor, /flex shrink-0 justify-end/);
 });
