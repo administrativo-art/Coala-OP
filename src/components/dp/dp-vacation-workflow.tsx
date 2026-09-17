@@ -36,6 +36,7 @@ import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import type {
   DPVacationEvent,
   DPVacationRecord,
+  DPVacationSignatureParticipant,
   DPVacationWorkflow,
   DPVacationWorkflowStageId,
   DPVacationWorkflowStep,
@@ -130,6 +131,141 @@ function participantStatusLabel(status: NonNullable<DPVacationWorkflow['notice']
   if (status === 'delivery_failed') return 'Falha na entrega';
   if (status === 'rejected') return 'Recusado';
   return 'Convite enviado';
+}
+
+function signatureEventDate(value?: string | null, completed = false) {
+  if (!value) return completed ? 'Concluído' : 'Pendente';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return completed ? 'Concluído' : 'Pendente';
+  return date.toLocaleString('pt-BR', {
+    timeZone: 'America/Belem',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function SignatureParticipantCard({
+  participant,
+  tone,
+}: {
+  participant: DPVacationSignatureParticipant;
+  tone: 'violet' | 'sky';
+}) {
+  const failed = participant.status === 'delivery_failed' || participant.status === 'rejected';
+  const signed = participant.status === 'signed' || Boolean(participant.signedAt);
+  const viewed = signed || participant.status === 'viewed' || Boolean(participant.viewedAt);
+  const delivered = viewed || Boolean(participant.emailDeliveredAt);
+  const invited = true;
+  const accent = tone === 'violet'
+    ? 'text-violet-700 bg-violet-50 border-violet-100'
+    : 'text-sky-700 bg-sky-50 border-sky-100';
+  const statusClasses = failed
+    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    : signed
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : viewed
+        ? 'border-sky-200 bg-sky-50 text-sky-700'
+        : 'border-amber-200 bg-amber-50 text-amber-700';
+  const summary = failed
+    ? participant.status === 'rejected' ? 'Documento recusado pelo colaborador.' : 'Não foi possível entregar o convite.'
+    : signed
+      ? 'Assinatura concluída. O documento está pronto para a próxima etapa.'
+      : viewed
+        ? 'Documento aberto. Aguardando a assinatura do colaborador.'
+        : delivered
+          ? 'Convite entregue. Aguardando o colaborador abrir o documento.'
+          : 'Convite enviado. Aguardando confirmação de entrega.';
+  const milestones = [
+    {
+      label: 'Convite enviado',
+      detail: signatureEventDate(participant.invitedAt ?? participant.emailSentAt, invited),
+      done: invited,
+      icon: UserRoundCheck,
+    },
+    {
+      label: 'E-mail entregue',
+      detail: signatureEventDate(participant.emailDeliveredAt, delivered),
+      done: delivered,
+      icon: CheckCircle2,
+    },
+    {
+      label: 'Documento aberto',
+      detail: signatureEventDate(participant.viewedAt, viewed),
+      done: viewed,
+      icon: FileText,
+    },
+    {
+      label: 'Assinatura concluída',
+      detail: signatureEventDate(participant.signedAt, signed),
+      done: signed,
+      icon: ShieldCheck,
+    },
+  ];
+
+  return (
+    <div className={`overflow-hidden rounded-2xl border bg-white ${failed ? 'border-rose-200' : signed ? 'border-emerald-200' : 'border-slate-200'}`}>
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+        <Avatar className="h-10 w-10 shrink-0 ring-2 ring-white shadow-sm">
+          <AvatarImage src={participant.avatarUrl ?? undefined} />
+          <AvatarFallback>{participantInitials(participant.name)}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <p className={`text-[9px] font-black uppercase tracking-[0.1em] ${tone === 'violet' ? 'text-violet-700' : 'text-sky-700'}`}>
+            {participant.party === 'employee' ? 'Colaborador(a)' : 'Empregadora'}
+          </p>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2">
+            <p className="truncate text-[12.5px] font-black text-slate-950">{participant.name}</p>
+            <p className="truncate text-[10.5px] font-semibold text-slate-500">{participant.email}</p>
+          </div>
+        </div>
+        <Badge variant="outline" className={`rounded-full px-2.5 py-1 text-[9.5px] font-black ${statusClasses}`}>
+          {participantStatusLabel(participant.status)}
+        </Badge>
+      </div>
+
+      <div className={`border-y px-4 py-2 text-[10.5px] font-bold ${accent}`}>
+        {summary}
+      </div>
+
+      <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+        {milestones.map((milestone) => {
+          const Icon = milestone.icon;
+          return (
+            <div
+              key={milestone.label}
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
+                milestone.done
+                  ? 'border-emerald-100 bg-emerald-50/65'
+                  : failed
+                    ? 'border-rose-100 bg-rose-50/60'
+                    : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
+                milestone.done ? 'bg-emerald-600 text-white' : failed ? 'bg-rose-100 text-rose-600' : 'bg-white text-slate-400 ring-1 ring-slate-200'
+              }`}>
+                {milestone.done ? <Check className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[10.5px] font-black text-slate-900">{milestone.label}</span>
+                <span className={`mt-0.5 block text-[9.5px] font-semibold ${milestone.done ? 'text-emerald-700' : failed ? 'text-rose-700' : 'text-slate-500'}`}>
+                  {milestone.detail}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {participant.deliveryFailureReason ? (
+        <div className="border-t border-rose-100 bg-rose-50 px-4 py-2.5 text-[10.5px] font-bold text-rose-700">
+          Motivo da falha: {participant.deliveryFailureReason}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function stepStateLabel(step: DPVacationWorkflowStep) {
@@ -898,40 +1034,13 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
           {notice.participants?.length ? (
-            <div className="grid gap-3 border-t border-violet-100 bg-violet-50/40 p-4 lg:grid-cols-2">
+            <div className="space-y-3 border-t border-violet-100 bg-violet-50/40 p-4">
               {notice.participants.map((participant) => (
-                <div key={participant.providerSignatureId} className={`rounded-xl border bg-white p-3 ${
-                  participant.status === 'delivery_failed' || participant.status === 'rejected'
-                    ? 'border-rose-200'
-                    : participant.status === 'signed'
-                      ? 'border-emerald-200'
-                      : 'border-slate-200'
-                }`}>
-                  <div className="flex items-start gap-3">
-                    <Avatar className="h-9 w-9 shrink-0">
-                      <AvatarImage src={participant.avatarUrl ?? undefined} />
-                      <AvatarFallback>{participantInitials(participant.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[9px] font-black uppercase tracking-[0.08em] text-violet-700">
-                        {participant.party === 'employee' ? 'Colaborador(a)' : 'Empregadora'}
-                      </p>
-                      <p className="truncate text-[11.5px] font-black text-slate-900">{participant.name}</p>
-                      <p className="truncate text-[10px] font-semibold text-slate-500">{participant.email}</p>
-                    </div>
-                    <Badge variant="outline" className="rounded-full text-[9px] font-black">
-                      {participantStatusLabel(participant.status)}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 grid gap-1 text-[9.5px] font-semibold text-slate-500 sm:grid-cols-2">
-                    <span>E-mail entregue: {participant.emailDeliveredAt ? 'Sim' : 'Pendente'}</span>
-                    <span>Documento aberto: {participant.viewedAt ? 'Sim' : 'Pendente'}</span>
-                    <span>Assinatura: {participant.signedAt ? 'Concluída' : 'Pendente'}</span>
-                    {participant.deliveryFailureReason ? (
-                      <span className="text-rose-700 sm:col-span-2">Motivo: {participant.deliveryFailureReason}</span>
-                    ) : null}
-                  </div>
-                </div>
+                <SignatureParticipantCard
+                  key={participant.providerSignatureId}
+                  participant={participant}
+                  tone="violet"
+                />
               ))}
             </div>
           ) : null}
@@ -1269,28 +1378,13 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
           {selectedStage === 'receipt_signature' && workflow.receiptSignature.participants?.length ? (
-            <div className="grid gap-3 border-t border-sky-100 bg-sky-50/40 p-4">
+            <div className="space-y-3 border-t border-sky-100 bg-sky-50/40 p-4">
               {workflow.receiptSignature.participants.map((participant) => (
-                <div key={participant.providerSignatureId} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="flex items-start gap-3">
-                    <Avatar className="h-9 w-9 shrink-0">
-                      <AvatarImage src={participant.avatarUrl ?? undefined} />
-                      <AvatarFallback>{participantInitials(participant.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[9px] font-black uppercase tracking-[0.08em] text-sky-700">Colaborador(a)</p>
-                      <p className="truncate text-[11.5px] font-black text-slate-900">{participant.name}</p>
-                      <p className="truncate text-[10px] font-semibold text-slate-500">{participant.email}</p>
-                    </div>
-                    <Badge variant="outline" className="rounded-full text-[9px] font-black">{participantStatusLabel(participant.status)}</Badge>
-                  </div>
-                  <div className="mt-3 grid gap-1 text-[9.5px] font-semibold text-slate-500 sm:grid-cols-3">
-                    <span>E-mail entregue: {participant.emailDeliveredAt ? 'Sim' : 'Pendente'}</span>
-                    <span>Documento aberto: {participant.viewedAt ? 'Sim' : 'Pendente'}</span>
-                    <span>Assinatura: {participant.signedAt ? 'Concluída' : 'Pendente'}</span>
-                    {participant.deliveryFailureReason ? <span className="text-rose-700 sm:col-span-3">Motivo: {participant.deliveryFailureReason}</span> : null}
-                  </div>
-                </div>
+                <SignatureParticipantCard
+                  key={participant.providerSignatureId}
+                  participant={participant}
+                  tone="sky"
+                />
               ))}
             </div>
           ) : null}

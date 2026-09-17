@@ -198,6 +198,18 @@ test('as sete etapas mantêm ações do handoff e autorização coerente com o b
   assert.match(workflow, /canApprove && workflow\.closure\.status === 'ready'/);
 });
 
+test('acompanhamento de assinatura destaca estado geral e quatro marcos operacionais', () => {
+  assert.match(workflow, /function SignatureParticipantCard/);
+  assert.match(workflow, /Convite enviado/);
+  assert.match(workflow, /E-mail entregue/);
+  assert.match(workflow, /Documento aberto/);
+  assert.match(workflow, /Assinatura concluída/);
+  assert.match(workflow, /Aguardando a assinatura do colaborador/);
+  assert.match(workflow, /timeZone: 'America\/Belem'/);
+  assert.match(workflow, /tone="violet"/);
+  assert.match(workflow, /tone="sky"/);
+});
+
 test('drawers de férias ocupam a viewport e mantêm conteúdo rolável entre cabeçalho e rodapé', () => {
   assert.match(profile, /height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh'/);
   assert.match(drawer, /height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh'/);
