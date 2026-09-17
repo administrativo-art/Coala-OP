@@ -255,13 +255,11 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onRevi
 
 interface DPFeriasProfileProps {
   userId: string;
-  initialRegistrationOpen?: boolean;
   initialWorkflowVacationId?: string;
 }
 
 export function DPFeriasProfile({
   userId,
-  initialRegistrationOpen = false,
   initialWorkflowVacationId,
 }: DPFeriasProfileProps) {
   const { users, permissions } = useAuth();
@@ -273,7 +271,7 @@ export function DPFeriasProfile({
   const canEdit    = permissions.dp?.vacation?.request ?? false;
   const canApprove = permissions.dp?.vacation?.approve ?? false;
 
-  const [scheduleOpen, setScheduleOpen] = useState(initialRegistrationOpen);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editVacation, setEditVacation] = useState<DPVacationRecord | null>(null);
   const [decisionVacation, setDecisionVacation] = useState<DPVacationRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPVacationRecord | null>(null);
