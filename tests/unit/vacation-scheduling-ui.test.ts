@@ -67,6 +67,19 @@ test('perfil agrupa concessivo, resumo, ciclos e auditoria no mesmo bloco histó
   assert.doesNotMatch(workflow, /<details className="group/);
 });
 
+test('resumo separa estados dos ciclos das métricas do ciclo concessivo', () => {
+  assert.match(profile, /Em aquisição/);
+  assert.match(profile, /Em período concessivo/);
+  assert.match(profile, /Encerrados/);
+  assert.match(profile, /Vencidos/);
+  assert.match(profile, /Férias do ciclo concessivo/);
+  assert.match(profile, /Períodos lançados/);
+  assert.match(profile, /Dias distribuídos/);
+  assert.match(profile, /Saldo a programar/);
+  assert.doesNotMatch(profile, /Total de registros/);
+  assert.doesNotMatch(profile, /Dias registrados/);
+});
+
 test('decisão no drawer mantém aprovação e rejeição protegidas por permissão e justificativa', () => {
   const decisionPanel = readFileSync('src/components/dp/dp-vacation-decision-panel.tsx', 'utf8');
   assert.match(decisionPanel, /status: 'APPROVED'/);
