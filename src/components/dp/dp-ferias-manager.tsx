@@ -258,9 +258,11 @@ function QueueRow({
   const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
   const risk = RISK_CONFIG[item.health.details.risk];
   const pendingRecord = item.cycle.records.find(record => record.status === 'PENDING' || record.status === 'PLANNED');
-  const period = pendingRecord?.startDate && pendingRecord?.endDate
-    ? `${format(parseISO(pendingRecord.startDate), 'dd/MM/yyyy')} → ${format(parseISO(pendingRecord.endDate), 'dd/MM/yyyy')}`
-    : `${item.balance}d a agendar`;
+  const period = kind === 'scheduling'
+    ? `${item.balance}d a agendar`
+    : pendingRecord?.startDate && pendingRecord?.endDate
+      ? `${format(parseISO(pendingRecord.startDate), 'dd/MM/yyyy')} → ${format(parseISO(pendingRecord.endDate), 'dd/MM/yyyy')}`
+      : `${item.balance}d a agendar`;
   const actionLabel = kind === 'approval'
     ? canAct ? 'Revisar e decidir' : 'Abrir ficha'
     : canAct ? 'Registrar férias' : 'Abrir ficha';
@@ -298,7 +300,7 @@ function QueueRow({
         {kind === 'approval' ? 'Aguardando aprovação' : risk.label}
       </span>
       <span className="text-[10px] font-black uppercase tracking-[0.08em] text-muted-foreground">
-        Etapa 1 · {kind === 'approval' ? 'decisão' : 'registro'}
+        {kind === 'approval' ? 'Etapa 1 · decisão' : 'Antes da etapa 1 · registro'}
       </span>
       <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
         {actionLabel}
@@ -396,7 +398,11 @@ export function DPFeriasManager() {
 
   const pendingScheduling = useMemo(() =>
     filtered
-      .filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'PENDENTE')
+      .filter(e => (
+        e.health.status === 'CONCESSIVO'
+        && ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(e.health.cycleStatus)
+        && e.balance > 0
+      ))
       .sort((left, right) => (left.noticeDaysLeft ?? Number.POSITIVE_INFINITY) - (right.noticeDaysLeft ?? Number.POSITIVE_INFINITY)),
     [filtered]);
 
@@ -515,7 +521,7 @@ export function DPFeriasManager() {
       </div>
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Pendente de agendamento" value={pendingScheduling.length} hint="nada lançado" tone="neutral" />
+        <KpiCard label="Pendente de agendamento" value={pendingScheduling.length} hint="com saldo aberto" tone="neutral" />
         <KpiCard label="Aguardando aprovação" value={awaitingApproval.length} hint="sua decisão" tone="warning" />
         <KpiCard label="Prazo de aviso em risco" value={noticeAtRisk.length} hint="≤ 60 dias" tone="danger" />
         <KpiCard label="Em gozo neste mês" value={approvedInMonth} hint="na operação" tone="purple" />
@@ -527,7 +533,7 @@ export function DPFeriasManager() {
             <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-slate-200 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">•</span>
             <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-slate-700 dark:text-slate-200">Pendente de agendamento</h2>
             {!isLoading && <Badge className="bg-slate-700 text-white hover:bg-slate-700">{pendingScheduling.length}</Badge>}
-            <span className="ml-auto text-[11.5px] font-semibold text-muted-foreground">Nenhum período lançado · começa no registro das férias</span>
+            <span className="ml-auto text-[11.5px] font-semibold text-muted-foreground">Saldo de férias ainda não distribuído · comece ou complete o agendamento</span>
           </div>
           <div className="mt-3 space-y-2">
             {isLoading

@@ -56,6 +56,9 @@ test('decisão no drawer mantém aprovação e rejeição protegidas por permiss
 
 test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
   assert.match(manager, /Pendente de agendamento/);
+  assert.match(manager, /\['PENDENTE', 'PARCIAL', 'VENCIDO'\]\.includes\(e\.health\.cycleStatus\)/);
+  assert.match(manager, /e\.balance > 0/);
+  assert.match(manager, /com saldo aberto/);
   assert.match(manager, /Prazo de aviso em risco/);
   assert.match(manager, /Em gozo neste mês/);
   assert.match(manager, /QueueRow/);
