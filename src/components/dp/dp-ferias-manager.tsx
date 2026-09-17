@@ -28,7 +28,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import { ArrowUpRight, CalendarDays, Search } from 'lucide-react';
-import { DPFeriasDrawer } from './dp-ferias-drawer';
 import { DPVacationTimeline } from './dp-vacation-timeline';
 import {
   calculateVacationHealth,
@@ -298,7 +297,7 @@ function QueueRow({
         {kind === 'approval' ? 'Etapa 1 · decisão' : 'Antes da etapa 1 · registro'}
       </span>
       <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
-        Abrir ficha
+        {kind === 'scheduling' ? 'Registrar férias' : 'Abrir ficha'}
         <ArrowUpRight className="h-3.5 w-3.5" />
       </span>
     </button>
@@ -309,17 +308,14 @@ function QueueRow({
 
 export function DPFeriasManager() {
   const router = useRouter();
-  const { activeUsers, users, permissions } = useAuth();
+  const { activeUsers, users } = useAuth();
   const { vacations, units, vacationsLoading, vacationsError, unitsError } = useDPBootstrap();
 
   const [search, setSearch] = useState('');
   const [unitFilter, setUnitFilter] = useState<string>('__all__');
   const [riskFilter, setRiskFilter] = useState<'ALL' | VacationRisk>('ALL');
-  const [drawerUserId, setDrawerUserId] = useState<string | null>(null);
   const [monthModal, setMonthModal] = useState(false);
 
-  const canRegister = permissions.dp?.vacation?.request ?? false;
-  const canApprove = permissions.dp?.vacation?.approve ?? false;
   const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
 
   const operationalUsers = useMemo(() => {
@@ -539,7 +535,7 @@ export function DPFeriasManager() {
                     key={item.user.id}
                     item={item}
                     kind="scheduling"
-                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
+                    onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}?action=register`)}
                   />
                 ))}
           </div>
@@ -612,7 +608,11 @@ export function DPFeriasManager() {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {concessivo.map(item => (
-              <ConcessivoCard key={item.user.id} item={item} onOpen={() => setDrawerUserId(item.user.id)} />
+              <ConcessivoCard
+                key={item.user.id}
+                item={item}
+                onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
+              />
             ))}
           </div>
         )}
@@ -627,7 +627,11 @@ export function DPFeriasManager() {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {scheduled.map(item => (
-              <ScheduledCard key={item.user.id} item={item} onOpen={() => setDrawerUserId(item.user.id)} />
+              <ScheduledCard
+                key={item.user.id}
+                item={item}
+                onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
+              />
             ))}
           </div>
         </div>
@@ -651,7 +655,11 @@ export function DPFeriasManager() {
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {aquisitivo.map(item => (
-                <AquisitivoCard key={item.user.id} item={item} onOpen={() => setDrawerUserId(item.user.id)} />
+                <AquisitivoCard
+                  key={item.user.id}
+                  item={item}
+                  onOpen={() => router.push(`/dashboard/dp/ferias/${encodeURIComponent(item.user.id)}`)}
+                />
               ))}
             </div>
           )}
@@ -661,15 +669,7 @@ export function DPFeriasManager() {
       <DPVacationTimeline
         users={filtered.map(item => item.user)}
         vacations={timelineVacations}
-        onSelectUser={setDrawerUserId}
-      />
-
-      {/* Drawer */}
-      <DPFeriasDrawer
-        userId={drawerUserId}
-        canEdit={canRegister}
-        canApprove={canApprove}
-        onOpenChange={open => { if (!open) setDrawerUserId(null); }}
+        onSelectUser={(selectedUserId) => router.push(`/dashboard/dp/ferias/${encodeURIComponent(selectedUserId)}`)}
       />
 
       {/* Férias do mês modal */}

@@ -8,6 +8,7 @@ const profile = readFileSync('src/components/dp/dp-ferias-profile.tsx', 'utf8');
 const workflow = readFileSync('src/components/dp/dp-vacation-workflow.tsx', 'utf8');
 const editor = readFileSync('src/components/dp/dp-vacation-editor-panel.tsx', 'utf8');
 const timeline = readFileSync('src/components/dp/dp-vacation-timeline.tsx', 'utf8');
+const profilePage = readFileSync('src/app/dashboard/dp/ferias/[userId]/page.tsx', 'utf8');
 
 test('fila de prioridade exclui ciclos agendados e pendentes apenas de aprovação', () => {
   assert.match(manager, /e\.health\.cycleStatus !== 'AGENDADO'/);
@@ -52,10 +53,15 @@ test('perfil não reabre trilha para um período legado que já terminou', () =>
   assert.match(profile, /shouldDisplayVacationWorkflow\(vacation, today\)/);
 });
 
-test('painel abre a ficha e a decisão acontece no drawer do perfil individual', () => {
-  assert.match(manager, />\s*Abrir ficha\s*<ArrowUpRight/);
-  assert.doesNotMatch(manager, /Registrar férias/);
+test('painel separa consulta da ficha, registro direto e decisão individual', () => {
+  assert.match(manager, /kind === 'scheduling' \? 'Registrar férias' : 'Abrir ficha'/);
+  assert.match(manager, /kind="scheduling"[\s\S]*\?action=register/);
   assert.match(manager, /kind="approval"[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
+  assert.doesNotMatch(manager, /DPFeriasDrawer|setDrawerUserId/);
+  assert.match(manager, /<ConcessivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
+  assert.match(manager, /<AquisitivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
+  assert.match(profilePage, /initialRegistrationOpen=\{action === 'register'\}/);
+  assert.match(profile, /useState\(initialRegistrationOpen\)/);
   assert.match(profile, /DPVacationDecisionPanel/);
   assert.match(profile, /Revisar e decidir/);
   assert.match(profile, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
@@ -113,11 +119,11 @@ test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
 test('timeline encerra o conteúdo operacional depois do período aquisitivo', () => {
   const acquisitiveSection = manager.indexOf('{/* Período aquisitivo */}');
   const timelineSection = manager.indexOf('<DPVacationTimeline', acquisitiveSection);
-  const drawerSection = manager.indexOf('{/* Drawer */}', timelineSection);
+  const monthModalSection = manager.indexOf('{/* Férias do mês modal */}', timelineSection);
 
   assert.ok(acquisitiveSection >= 0);
   assert.ok(timelineSection > acquisitiveSection);
-  assert.ok(drawerSection > timelineSection);
+  assert.ok(monthModalSection > timelineSection);
 });
 
 test('cadastro acontece na ficha individual e o drawer preserva edição e exclusão', () => {
@@ -148,7 +154,10 @@ test('ficha sem lançamento explica as três fases e antecipa as sete etapas', (
   assert.match(workflow, /Aprovar o agendamento/);
   assert.match(workflow, /As 7 etapas que vêm depois da aprovação/);
   assert.match(workflow, /STAGE_OWNER_LABEL\[stage\.owner\]/);
-  assert.match(profile, /registrationCycle=\{workflowCycle\}/);
+  assert.match(profile, /registrationCycle=\{defaultRegistrationCycle\}/);
+  assert.match(workflow, /Nenhum ciclo disponível para registro/);
+  assert.match(workflow, /O registro será liberado quando houver saldo em período concessivo/);
+  assert.match(workflow, /if \(!cycle \|\| balance <= 0\)/);
 });
 
 test('as sete etapas mantêm ações do handoff e autorização coerente com o back-end', () => {
