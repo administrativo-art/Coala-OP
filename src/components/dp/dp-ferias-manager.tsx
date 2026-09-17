@@ -633,12 +633,6 @@ export function DPFeriasManager() {
         </div>
       )}
 
-      <DPVacationTimeline
-        users={filtered.map(item => item.user)}
-        vacations={timelineVacations}
-        onSelectUser={setDrawerUserId}
-      />
-
       {/* Período aquisitivo */}
       {(isLoading || aquisitivo.length > 0) && (
         <div className="space-y-3">
@@ -663,6 +657,12 @@ export function DPFeriasManager() {
           )}
         </div>
       )}
+
+      <DPVacationTimeline
+        users={filtered.map(item => item.user)}
+        vacations={timelineVacations}
+        onSelectUser={setDrawerUserId}
+      />
 
       {/* Drawer */}
       <DPFeriasDrawer
