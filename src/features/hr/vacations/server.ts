@@ -21,6 +21,7 @@ import { resolveCompanyProcessContact } from '@/lib/company/company-process-cont
 import { EMAIL_SENDERS, sendEmail } from '@/lib/email/resend';
 import { getHrEmployeeId } from '@/lib/hr/person-link';
 import {
+  autentiqueSandboxEnabled,
   createAutentiqueDocument,
   getAutentiqueDocumentSignatures,
   type AutentiqueCreatedDocument,
@@ -1605,6 +1606,12 @@ export async function sendVacationNotice(
 ) {
   const context = await requireUser(request);
   if (!canManageVacation(context, 'approve')) throw forbidden();
+  if (autentiqueSandboxEnabled()) {
+    throw conflict(
+      'DP_VACATION_NOTICE_SANDBOX_BLOCKED',
+      'O envio pela tela está bloqueado no ambiente local. Use a aplicação em produção para enviar o aviso definitivo.',
+    );
+  }
   const asOfDate = belemDateOnly();
   const requestedAt = new Date().toISOString();
   const vacationRef = dbAdmin.collection('dp_vacations').doc(vacationId);
