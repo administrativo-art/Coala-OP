@@ -336,6 +336,21 @@ function EmptyWorkflow({
   const noticeDaysLeft = noticeDeadline
     ? differenceInCalendarDays(noticeDeadline, startOfDay(new Date()))
     : null;
+
+  if (!cycle || balance <= 0) {
+    return (
+      <section className="rounded-[18px] border border-[#e9edf4] bg-card p-[18px]">
+        <Badge variant="outline" className="rounded-full bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-700">
+          Ficha informativa
+        </Badge>
+        <h2 className="mt-2 text-lg font-black tracking-tight">Nenhum ciclo disponível para registro</h2>
+        <p className="mt-1 max-w-2xl text-[12.5px] font-semibold leading-relaxed text-muted-foreground">
+          Consulte abaixo o período aquisitivo, os ciclos anteriores e o histórico. O registro será liberado quando houver saldo em período concessivo.
+        </p>
+      </section>
+    );
+  }
+
   const steps = [
     {
       title: 'Registrar o período',

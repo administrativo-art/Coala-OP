@@ -255,9 +255,10 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onRevi
 
 interface DPFeriasProfileProps {
   userId: string;
+  initialRegistrationOpen?: boolean;
 }
 
-export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
+export function DPFeriasProfile({ userId, initialRegistrationOpen = false }: DPFeriasProfileProps) {
   const { users, permissions } = useAuth();
   const { deleteVacation } = useDP();
   const { vacations, calendars, vacationsLoading, vacationsError } = useDPBootstrap();
@@ -267,7 +268,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const canEdit    = permissions.dp?.vacation?.request ?? false;
   const canApprove = permissions.dp?.vacation?.approve ?? false;
 
-  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(initialRegistrationOpen);
   const [editVacation, setEditVacation] = useState<DPVacationRecord | null>(null);
   const [decisionVacation, setDecisionVacation] = useState<DPVacationRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPVacationRecord | null>(null);
@@ -708,7 +709,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
       <DPVacationWorkflowPanel
         records={workflowVacations}
-        registrationCycle={workflowCycle}
+        registrationCycle={defaultRegistrationCycle}
         selectedId={selectedWorkflowVacationId}
         canEdit={canEdit}
         canApprove={canApprove}
@@ -958,7 +959,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
       </Sheet>
 
       <Sheet
-        open={Boolean((scheduleOpen || editVacation) && editorCycle)}
+        open={Boolean(canEdit && (scheduleOpen || editVacation) && editorCycle)}
         onOpenChange={open => { if (!open) closeVacationEditor(); }}
       >
         <SheetContent
