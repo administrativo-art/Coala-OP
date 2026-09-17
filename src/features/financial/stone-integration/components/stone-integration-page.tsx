@@ -13,6 +13,7 @@ import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -139,16 +140,19 @@ export function StoneIntegrationPage() {
 
   return (
     <PageContainer variant="wide" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-700">Financeiro · Conciliação</p><h1 className="mt-1 text-3xl font-black tracking-tight">Integração Stone</h1><p className="mt-1 text-sm text-muted-foreground">Mapeie estabelecimentos para IDs canônicos e acompanhe importações sem expor credenciais.</p></div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Integração Stone"
+        description="Mapeie estabelecimentos para IDs canônicos e acompanhe importações sem expor credenciais."
+        actions={(
+          <>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/receivables"><WalletCards className="mr-2 h-4 w-4" />Recebíveis</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/settlements"><ScrollText className="mr-2 h-4 w-4" />Liquidações</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
           <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Novo mapeamento</Button>
-        </div>
-      </div>
+          </>
+        )}
+      />
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{error}</div> : null}
       <Card><CardHeader><CardTitle>Mapeamentos de estabelecimento</CardTitle><CardDescription>Um Stonecode/terminal ativo só pode apontar para uma unidade e uma conta. O possível alias “Whopping” não cria uma unidade nova.</CardDescription></CardHeader><CardContent className="space-y-3">
         {loading ? <div className="flex h-32 items-center justify-center"><Loader2 className="h-7 w-7 animate-spin" /></div> : mappings.length === 0 ? <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum mapeamento cadastrado.</div> : mappings.map((mapping) => (

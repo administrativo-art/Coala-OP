@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -284,20 +285,19 @@ export function SalesReconciliationPage() {
 
   return (
     <PageContainer variant="wide" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-700">Financeiro · Conciliação</p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight">Vendas PDV × Stone</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Compare valores brutos por venda, classifique exceções e feche a competência com auditoria.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Vendas PDV × Stone"
+        description="Compare valores brutos por venda, classifique exceções e feche a competência com auditoria."
+        actions={(
+          <>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/receivables"><WalletCards className="mr-2 h-4 w-4" />Recebíveis Stone</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/settlements"><ScrollText className="mr-2 h-4 w-4" />Liquidações</Link></Button>
           {permissions.financial?.stoneIntegration?.manage ? <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/integration"><Cable className="mr-2 h-4 w-4" />Integração</Link></Button> : null}
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos bancários</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="PDV eletrônico bruto" value={formatBRL(totals.pdv)} detail="Pix, débito e crédito aprovados" />

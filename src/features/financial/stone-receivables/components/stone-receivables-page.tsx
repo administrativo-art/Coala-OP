@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Cable, CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Repeat2, ScrollText } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,20 +141,19 @@ export function StoneReceivablesPage() {
 
   return (
     <PageContainer variant="wide" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-700">Financeiro · Conciliação</p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight">Recebíveis Stone</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Acompanhe bruto, MDR, antecipação, líquido e mudanças da data prevista por parcela.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Recebíveis Stone"
+        description="Acompanhe bruto, MDR, antecipação, líquido e mudanças da data prevista por parcela."
+        actions={(
+          <>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas PDV × Stone</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/settlements"><ScrollText className="mr-2 h-4 w-4" />Liquidações</Link></Button>
           {permissions.financial?.stoneIntegration?.manage ? <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/integration"><Cable className="mr-2 h-4 w-4" />Integração</Link></Button> : null}
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos bancários</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Bruto da página" value={formatBRL(totals.gross)} detail={`${receivables.length} parcela(s) carregada(s)`} />

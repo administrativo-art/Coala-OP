@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, Loader2, RefreshCw, Repeat2 } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -144,7 +145,16 @@ export function CashDifferencesPage({ initialPeriod, initialKioskId }: { initial
 
   return (
     <PageContainer variant="wide" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-700">Financeiro · Conciliação</p><h1 className="mt-1 text-3xl font-black tracking-tight">Fechamento mensal</h1><p className="mt-1 text-sm text-muted-foreground">Classifique diferenças físicas sem alterar a contagem, a sangria ou o depósito de origem.</p></div><div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas PDV × Stone</Link></Button><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div></div>
+      <PageHeader
+        title="Fechamento mensal"
+        description="Classifique diferenças físicas sem alterar a contagem, a sangria ou o depósito de origem."
+        actions={(
+          <>
+            <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas PDV × Stone</Link></Button>
+            <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
+          </>
+        )}
+      />
       <div className="grid gap-3 md:grid-cols-3"><Card><CardContent className="p-5"><p className="text-xs font-bold uppercase text-muted-foreground">Pendentes/revisados</p><p className="mt-2 text-2xl font-black">{pendingCount}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-xs font-bold uppercase text-muted-foreground">Faltas</p><p className="mt-2 font-mono text-2xl font-black text-rose-700">{formatBRL(shortages)}</p></CardContent></Card><Card><CardContent className="p-5"><p className="text-xs font-bold uppercase text-muted-foreground">Sobras</p><p className="mt-2 font-mono text-2xl font-black text-emerald-700">{formatBRL(surpluses)}</p></CardContent></Card></div>
       {lossAccounts.length === 0 && canClassify ? <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="h-5 w-5 shrink-0" /><span>Cadastre a conta-folha “Quebras e diferenças de caixa” em Despesas operacionais antes de classificar uma falta como perda.</span></div> : null}
       <Card><CardHeader className="gap-4 md:flex-row md:items-end md:justify-between"><div><CardTitle>Diferenças dos fechamentos</CardTitle><CardDescription>Somente fechamentos com diferença diferente de zero aparecem.</CardDescription></div><div className="flex flex-wrap gap-2"><Input className="w-40" type="month" min="2026-08" value={period} onChange={(event) => setPeriod(event.target.value)} /><Select value={kioskId} onValueChange={setSelectedKioskId}><SelectTrigger className="w-56"><SelectValue placeholder="Selecione a unidade" /></SelectTrigger><SelectContent>{accessibleKiosks.map((kiosk) => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent></Select></div></CardHeader><CardContent>

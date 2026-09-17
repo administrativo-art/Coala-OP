@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Cable, CheckCircle2, ChevronRight, Landmark, Link2, Loader2, RefreshCw, Repeat2, Unlink, WalletCards } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -143,20 +144,19 @@ export function StoneSettlementsPage() {
 
   return (
     <PageContainer variant="wide" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-emerald-700">Financeiro · Conciliação</p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight">Liquidações Stone</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Vincule cada liquidação a uma única entrada já existente no extrato da conta Stone.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Liquidações Stone"
+        description="Vincule cada liquidação a uma única entrada já existente no extrato da conta Stone."
+        actions={(
+          <>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation"><Repeat2 className="mr-2 h-4 w-4" />Vendas</Link></Button>
           <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/receivables"><WalletCards className="mr-2 h-4 w-4" />Recebíveis</Link></Button>
           {permissions.financial?.stoneIntegration?.manage ? <Button asChild variant="outline"><Link href="/dashboard/financial/reconciliation/integration"><Cable className="mr-2 h-4 w-4" />Integração</Link></Button> : null}
           <Button asChild variant="outline"><Link href="/dashboard/financial/expenses/import"><Landmark className="mr-2 h-4 w-4" />Extratos</Link></Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Card className="rounded-2xl"><CardContent className="p-5"><p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Bruto da página</p><p className="mt-2 font-mono text-2xl font-black">{formatBRL(totals.gross)}</p></CardContent></Card>
