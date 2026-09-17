@@ -131,6 +131,10 @@ const CatalogoQRPanel = dynamic(
   () => import("@/components/catalogo/catalogo-qr-panel").then((m) => m.CatalogoQRPanel),
   { ssr: false }
 );
+const PublicBioSettings = dynamic(
+  () => import("@/components/settings/public-bio-settings").then((m) => m.PublicBioSettings),
+  { ssr: false }
+);
 const PurchasingAccountingSettings = dynamic(
   () => import("@/components/purchasing/purchasing-accounting-settings").then((m) => m.PurchasingAccountingSettings),
   { ssr: false }
@@ -551,8 +555,16 @@ export default function SettingsPage() {
       description: "Centralize QR codes, etiquetas e códigos usados em catálogo, patrimônio, estoque e leitura por scanner.",
       content: <CatalogoQRPanel />,
     },
+    {
+      value: "public-bio",
+      label: "Página da bio",
+      title: "Página pública da bio",
+      description: "Configure os links do Instagram e veja a prévia antes de publicar.",
+      content: <PublicBioSettings />,
+    },
   ].filter((tab) => {
     if (tab.value === "cadastros") return !!permissions.registration.view;
+    if (tab.value === "public-bio") return !!permissions.settings.managePublicBio;
     return true;
   });
 
