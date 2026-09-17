@@ -61,8 +61,8 @@ test('painel encaminha as filas para a ficha individual e mantém a decisão ind
   assert.doesNotMatch(manager, /DPFeriasDrawer|setDrawerUserId/);
   assert.match(manager, /<ConcessivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
   assert.match(manager, /<AquisitivoCard[\s\S]*router\.push\(`\/dashboard\/dp\/ferias/);
-  assert.match(profilePage, /initialRegistrationOpen=\{action === 'register'\}/);
-  assert.match(profile, /useState\(initialRegistrationOpen\)/);
+  assert.doesNotMatch(profilePage, /action === 'register'|initialRegistrationOpen/);
+  assert.match(profile, /const \[scheduleOpen, setScheduleOpen\] = useState\(false\)/);
   assert.match(profile, /DPVacationDecisionPanel/);
   assert.match(profile, /Revisar e decidir/);
   assert.match(profile, /record\.status === 'PENDING' \|\| record\.status === 'PLANNED'/);
