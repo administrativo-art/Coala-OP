@@ -33,6 +33,8 @@ test('rascunho pode ser regenerado antes da validação com auditoria do documen
 });
 
 test('envio reconfere o hash e solicita somente a assinatura da colaboradora', () => {
+  assert.match(server, /DP_VACATION_NOTICE_SANDBOX_BLOCKED/);
+  assert.match(server, /autentiqueSandboxEnabled\(\)/);
   assert.match(server, /actualHash !== prepared\.workflow\.notice\.hashSha256/);
   assert.match(server, /VACATION_NOTICE_TEMPLATE_VERSION = '2\.1'/);
   assert.match(server, /DP_VACATION_NOTICE_TEMPLATE_OUTDATED/);
