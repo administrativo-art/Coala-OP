@@ -15,13 +15,16 @@ test("cruzamento automático consulta apenas conjuntos financeiros filtrados e l
   assert.match(workflow, /limit\(MAX_EXISTING_EXPENSE_CANDIDATES \+ 1\)/);
   assert.match(workflow, /where\("principalAmountCents", "==", classification\.amountCents\)/);
   assert.match(workflow, /limit\(MAX_MATCHED_PAYMENT_CANDIDATES \+ 1\)/);
+  assert.match(workflow, /where\("barcodeSnapshot\.codeHash", "==", incomingBarcodeHash\)/);
   assert.match(workflow, /where\("barcodeSnapshot\.code", "==", classification\.barcode\)/);
   assert.match(workflow, /limit\(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES \+ 1\)/);
+  assert.match(paymentService, /codeHash: paymentBarcodeHash\(code\)/);
 });
 
 test("vínculo de parcela e sua auditoria são gravados na mesma transação", () => {
   assert.match(workflow, /runTransaction\(async \(transaction\) =>/);
-  assert.match(workflow, /financialInboxMessageId: id, financialInboxLinkedAt: now/);
+  assert.match(workflow, /financialInboxMessageId: id,[\s\S]{0,120}financialInboxLinkedAt: now/);
+  assert.match(workflow, /documentIdentity: mergeFinancialDocumentIdentities/);
   assert.match(workflow, /CHARGE_LINKED_TO_EXISTING_INSTALLMENT/);
 });
 
