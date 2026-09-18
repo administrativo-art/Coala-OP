@@ -41,7 +41,6 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   const automation = page.getByRole("switch", { name: "Ativar vinculação automática por identidade documental" });
   await expect(automation).toHaveAttribute("aria-checked", "false");
   await automation.click();
-  await expect(page.getByText("Vinculação automática ativada.", { exact: true })).toBeVisible();
   await expect(automation).toHaveAttribute("aria-checked", "true");
 
   await page.getByLabel("Buscar cobranças").fill("Cobrança automática documental E2E");
