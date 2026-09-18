@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, WalletCards } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -14,8 +14,13 @@ type CashControlNavigationProps = {
 export function CashControlNavigation({ active, crumbs = [] }: CashControlNavigationProps) {
   const { permissions } = useAuth();
 
-  return <div className="space-y-3">
-    <div className="flex flex-wrap items-center gap-2">
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-4 border-b border-stone-200 pb-3">
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-pink-600 text-white shadow-[0_6px_14px_-8px_rgba(219,39,119,.95)]"><WalletCards className="h-4 w-4" /></span>
+        <span className="text-[13px] font-extrabold tracking-[.04em] text-zinc-500">Coala · Financeiro</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
       <Link
         href="/dashboard/financial/cash-closures"
         className={cn(
@@ -38,6 +43,7 @@ export function CashControlNavigation({ active, crumbs = [] }: CashControlNaviga
       >
         Depósitos
       </Link>}
+      </div>
     </div>
 
     {crumbs.length > 0 && <nav aria-label="Navegação do controle de caixa" className="flex flex-wrap items-center gap-1.5 text-xs font-bold">

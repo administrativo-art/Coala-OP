@@ -488,13 +488,13 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
     return <PageContainer variant="compact"><div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso aos depósitos em dinheiro.</div></PageContainer>;
   }
 
-  return <PageContainer variant="compact" className="space-y-[18px] pb-10">
+  return <PageContainer variant="compact" className="max-w-[1320px] space-y-[18px] pb-10">
     <CashControlNavigation active="deposits" />
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <p className="text-[11px] font-semibold text-zinc-400">Financeiro <span className="px-1 text-stone-300">›</span> Depósitos em dinheiro</p>
         <h1 className="mt-1.5 text-[24px] font-black tracking-tight">Depósitos em dinheiro</h1>
-        <p className="mt-1.5 text-[13px] font-medium text-zinc-500">Somente dinheiro físico aprovado · nenhum boleto é emitido automaticamente</p>
+        <p className="mt-1.5 text-[13px] font-medium text-zinc-500">Composição física, emissão de boletos e troca de moedas.</p>
       </div>
       <div className="flex gap-2">
         <Button variant="outline" className="h-[42px] rounded-xl border-stone-200 px-4 font-bold" onClick={() => void loadReport()} disabled={reportLoading}>
@@ -527,13 +527,21 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
         {countingSessionsHasMore && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">A fila possui mais de 50 sessões. As mais antigas são exibidas primeiro; ao concluir uma, a próxima aparecerá automaticamente.</div>}
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{countingSessions.map((session) => <button key={session.id} type="button" onClick={() => { setSelectedCountingSession(session); setQuantities(quantityRecord(CASH_COUNTING_DENOMINATION_VALUES_CENTS)); }} className={cn("rounded-xl border p-3 text-left transition-all motion-reduce:transform-none motion-reduce:transition-none", selectedCountingSession?.id === session.id ? "border-pink-500 bg-pink-50 ring-2 ring-pink-100" : "border-stone-200 hover:-translate-y-0.5 hover:border-pink-300 hover:shadow-sm")}><strong className="block truncate text-sm">{session.kioskNames.join(" · ")}</strong><span className="mt-1 block text-xs text-zinc-500">{session.finalizedOperatorCount} operador(es) · {formatBRL(session.depositEligibleCents)}</span></button>)}</div>
 
-        {selectedCountingSession && <div className="space-y-5 border-t border-stone-100 pt-5">
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"><strong>Conciliação obrigatória:</strong> cédulas + moedas precisam totalizar {formatBRL(selectedCountingSession.depositEligibleCents)}. As moedas serão devolvidas ao caixa e não entrarão no depósito bancário.</div>
-          <div><p className="mb-2 text-xs font-black uppercase tracking-wide text-zinc-400">Cédulas destinadas ao depósito</p><DenominationGrid values={CASH_COUNTING_NOTE_VALUES_CENTS} quantities={quantities} setQuantities={setQuantities} disabled={submitting} /></div>
-          <div><p className="mb-2 text-xs font-black uppercase tracking-wide text-zinc-400">Moedas devolvidas ao caixa — incluindo R$ 1,00</p><DenominationGrid values={CASH_COUNTING_COIN_VALUES_CENTS} quantities={quantities} setQuantities={setQuantities} disabled={submitting} /></div>
-          <div className="grid overflow-hidden rounded-xl bg-zinc-900 text-white sm:grid-cols-3"><div className="px-4 py-3"><span className="block text-xs text-zinc-400">Total físico</span><strong className="font-mono text-lg">{formatBRL(denominationTotal)}</strong></div><div className="border-zinc-700 px-4 py-3 sm:border-l"><span className="block text-xs text-zinc-400">Cédulas no depósito</span><strong className="font-mono text-lg text-emerald-300">{formatBRL(denominationNoteTotal)}</strong></div><div className="border-zinc-700 px-4 py-3 sm:border-l"><span className="block text-xs text-zinc-400">Moedas para o caixa</span><strong className="font-mono text-lg text-amber-300">{formatBRL(denominationCoinTotal)}</strong></div></div>
-          <div className="flex flex-wrap items-center justify-between gap-3"><span className={cn("text-sm font-bold", denominationTotal === selectedCountingSession.depositEligibleCents ? "text-emerald-700" : "text-amber-700")}>{denominationTotal === selectedCountingSession.depositEligibleCents ? "O total físico confere." : `Diferença: ${formatBRL(Math.abs(selectedCountingSession.depositEligibleCents - denominationTotal))}`}</span><Button className="bg-pink-600 font-bold hover:bg-pink-700" disabled={submitting || denominationTotal !== selectedCountingSession.depositEligibleCents} onClick={() => void confirmCountingSessionPhysical()}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-2 h-4 w-4" />}Confirmar e preparar malotes</Button></div>
-        </div>}
+        <Dialog open={selectedCountingSession !== null} onOpenChange={(open) => { if (!open) setSelectedCountingSession(null); }}>
+          <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-[20px] p-0 sm:max-w-[960px]">
+            <DialogHeader className="border-b border-stone-100 px-5 py-4 text-left sm:px-6">
+              <DialogTitle className="text-[19px] font-black">Composição física do malote</DialogTitle>
+              <DialogDescription>{selectedCountingSession?.kioskNames.join(" · ")} · informe as cédulas e moedas contadas para gerar os malotes.</DialogDescription>
+            </DialogHeader>
+            {selectedCountingSession && <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-950">As cédulas formarão os malotes enviados ao banco; as moedas retornam ao caixa e ficam aguardando troca.</div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"><strong>Conciliação obrigatória:</strong> cédulas + moedas precisam totalizar {formatBRL(selectedCountingSession.depositEligibleCents)}.</div>
+              <div className="grid gap-4 lg:grid-cols-2"><div><div className="mb-2 flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wide text-zinc-400">Cédulas</p><strong className="font-mono text-sm text-emerald-700">{formatBRL(denominationNoteTotal)}</strong></div><DenominationGrid values={CASH_COUNTING_NOTE_VALUES_CENTS} quantities={quantities} setQuantities={setQuantities} disabled={submitting} /></div><div><div className="mb-2 flex items-center justify-between"><p className="text-xs font-black uppercase tracking-wide text-zinc-400">Moedas</p><strong className="font-mono text-sm text-amber-700">{formatBRL(denominationCoinTotal)}</strong></div><DenominationGrid values={CASH_COUNTING_COIN_VALUES_CENTS} quantities={quantities} setQuantities={setQuantities} disabled={submitting} /></div></div>
+              <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-stone-200 bg-stone-50 p-4"><span className="block text-xs font-bold text-zinc-500">Valor esperado</span><strong className="mt-1 block font-mono text-lg">{formatBRL(selectedCountingSession.depositEligibleCents)}</strong></div><div className="rounded-xl border border-stone-200 bg-white p-4"><span className="block text-xs font-bold text-zinc-500">Total físico</span><strong className="mt-1 block font-mono text-lg">{formatBRL(denominationTotal)}</strong></div><div className={cn("rounded-xl border p-4", denominationTotal === selectedCountingSession.depositEligibleCents ? "border-emerald-200 bg-emerald-50 text-emerald-800" : denominationTotal > selectedCountingSession.depositEligibleCents ? "border-blue-200 bg-blue-50 text-blue-800" : "border-rose-200 bg-rose-50 text-rose-800")}><span className="block text-xs font-bold opacity-80">Diferença</span><strong className="mt-1 block font-mono text-lg">{denominationTotal === selectedCountingSession.depositEligibleCents ? formatBRL(0) : `${denominationTotal > selectedCountingSession.depositEligibleCents ? "+" : "−"} ${formatBRL(Math.abs(selectedCountingSession.depositEligibleCents - denominationTotal))}`}</strong></div></div>
+            </div>}
+            {selectedCountingSession && <DialogFooter className="flex-col items-stretch gap-3 border-t border-stone-100 bg-stone-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"><span className={cn("text-sm font-bold", denominationTotal === selectedCountingSession.depositEligibleCents ? "text-emerald-700" : "text-amber-700")}>{denominationTotal === selectedCountingSession.depositEligibleCents ? "Total físico igual ao valor esperado." : "A confirmação só é liberada quando os totais forem iguais."}</span><div className="flex gap-2"><Button variant="outline" onClick={() => setSelectedCountingSession(null)}>Cancelar</Button><Button className="bg-pink-600 font-bold hover:bg-pink-700" disabled={submitting || denominationTotal !== selectedCountingSession.depositEligibleCents} onClick={() => void confirmCountingSessionPhysical()}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-2 h-4 w-4" />}Confirmar e criar malotes</Button></div></DialogFooter>}
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>}
 
@@ -626,11 +634,11 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
         </section>)}</div>}
 
     <Dialog open={selected !== null} onOpenChange={(open) => { if (!open) setSelected(null); }}>
-      <DialogContent className="gap-0 overflow-hidden rounded-[20px] p-0 sm:max-w-[540px]">
+      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-[20px] p-0 sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:max-h-none sm:w-full sm:max-w-[520px] sm:translate-x-0 sm:translate-y-0 sm:rounded-l-[20px] sm:rounded-r-none">
         <DialogHeader className="border-b border-stone-100 px-[26px] pb-[18px] pt-[22px] text-left">
           <div className="flex items-center gap-3"><span className="grid h-[42px] w-[42px] place-items-center rounded-xl bg-indigo-50"><Barcode className="h-5 w-5 text-indigo-600" /></span><div><DialogTitle className="text-[18px] font-black">{selected && ["failed", "cancelled"].includes(selected.status) ? "Reemitir boleto" : "Emitir boleto"}</DialogTitle><DialogDescription className="mt-0.5 text-[13px]">Bloco #{selected?.sequence} · {selected?.kioskName}</DialogDescription></div></div>
         </DialogHeader>
-        <div className="space-y-5 px-[26px] py-[22px]">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-[26px] py-[22px]">
           {!selected?.countingSessionId && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-[15px] py-[13px] text-[13px] leading-5 text-amber-900"><AlertTriangle className="mt-0.5 h-[17px] w-[17px] shrink-0" /><span>Informe o total de moedas físicas, incluindo <strong>todas as moedas de R$ 1 e de centavos</strong>. O sistema não tenta inferir esse valor pelas denominações de cédulas.</span></div>}
           {!selected?.countingSessionId ? <div className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 sm:grid-cols-3">
             <div><span className="text-[11px] text-zinc-500">Dinheiro físico</span><strong className="mt-1 block font-mono">{formatBRL(selected?.grossTotalCents ?? 0)}</strong></div>
