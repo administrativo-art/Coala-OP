@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, LockKeyhole, Store } from "lucide-react";
+import { ArrowLeft, Loader2, LockKeyhole, Store, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,7 +70,7 @@ export function CashCountingSessionNewPage() {
   }
 
   if (!permissions.financial?.cashClosures?.approve) return null;
-  return <PageContainer variant="compact" className="space-y-5 pb-10">
+  return <PageContainer variant="compact" className="max-w-[880px] space-y-5 pb-10">
     <CashControlNavigation active="closures" crumbs={[
       { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" },
       { label: "Nova sessão" },
@@ -80,8 +80,8 @@ export function CashCountingSessionNewPage() {
       <Button asChild variant="outline" className="rounded-xl"><Link href="/dashboard/financial/cash-closures"><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Link></Button>
     </div>
 
-    <Card className="overflow-hidden rounded-2xl border-stone-200">
-      <CardHeader className="border-b border-stone-100 bg-stone-50/60"><CardTitle className="text-lg">Unidades da sessão</CardTitle><p className="text-sm text-zinc-500">Uma unidade fica indisponível para outras sessões até esta contagem ser finalizada.</p></CardHeader>
+    <Card className="overflow-hidden rounded-[18px] border-stone-200 bg-[#fffefb]">
+      <CardHeader className="border-b border-stone-100 bg-[#faf8f4]"><CardTitle className="text-lg">Unidades da sessão</CardTitle><p className="text-sm text-zinc-500">Uma unidade fica indisponível para outras sessões até esta contagem ser finalizada.</p></CardHeader>
       <CardContent className="pt-6">{loading ? <div className="flex h-32 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> : <div className="grid gap-3 sm:grid-cols-2">{units.map((unit) => {
         const lockedBy = lockByUnitId.get(unit.id);
         const checked = selectedUnits.includes(unit.id);
@@ -98,7 +98,12 @@ export function CashCountingSessionNewPage() {
       })}</div>}</CardContent>
     </Card>
 
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-zinc-900 px-5 py-4 text-white">
+    <div className="flex items-center gap-3 rounded-[18px] border border-stone-200 bg-[#fffefb] px-5 py-4">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-black text-blue-700"><UserRound className="h-4 w-4" /></span>
+      <span><span className="block text-[11px] font-black uppercase tracking-[.1em] text-zinc-400">Contagem realizada por</span><strong className="mt-1 block text-sm font-extrabold">Financeiro</strong></span>
+    </div>
+
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[#1d1d26] px-5 py-4 text-white">
       <span><span className="block text-xs text-zinc-400">Unidades selecionadas</span><strong className="text-lg">{selectedUnits.length}</strong></span>
       <Button className="h-11 rounded-xl bg-pink-600 px-6 font-bold text-white hover:bg-pink-700" disabled={working || selectedUnits.length === 0} onClick={() => void createSession()}>{working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Abrir sessão</Button>
     </div>
