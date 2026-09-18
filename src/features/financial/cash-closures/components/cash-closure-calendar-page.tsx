@@ -83,11 +83,11 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
   const countingSessionId = sessionId ?? activeCountingSessionId;
   const sessionQuery = countingSessionId ? `?sessionId=${encodeURIComponent(countingSessionId)}` : "";
   if (!permissions.financial?.cashClosures?.view) return null;
-  return <PageContainer variant="wide" className="space-y-4 pb-10">
+  return <PageContainer variant="wide" className="max-w-[1320px] space-y-4 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel }]} />
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[26px] font-black tracking-tight">{monthLabel}</h1><p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">{kioskName}{countingSessionId && <span className="ml-2 rounded-full bg-pink-50 px-2 py-1 text-[10px] font-black uppercase text-pink-700">Sessão ativa</span>}</p></div><div className="flex gap-2">{countingSessionId && <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold"><Link href={`/dashboard/financial/cash-closures/sessions/${countingSessionId}`}>Voltar à sessão</Link></Button>}<Button variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div></div>
     <div className="grid gap-3">
-      <Card className="overflow-hidden rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
+      <Card className="overflow-hidden rounded-2xl border-stone-200 bg-[#fffefb] shadow-[0_2px_10px_rgba(15,23,42,.04)]">
         <CardContent className="!p-0">
           <p className="px-[18px] pt-3 text-[9.5px] font-extrabold uppercase tracking-[.08em] text-zinc-400">Fechamento</p>
           <div className="grid min-h-[54px] grid-cols-3 items-center px-[18px] pb-3 pt-1.5">{[
@@ -98,7 +98,7 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
         </CardContent>
       </Card>
     </div>
-    {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Card className="rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]"><CardContent className="p-3 sm:p-4"><div className="grid grid-cols-7 gap-1.5">{WEEKDAYS.map((day) => <div key={day} className="px-1 py-1 text-center text-[11px] font-extrabold uppercase tracking-wide text-zinc-400">{day}</div>)}{days.map((day, index) => {
+    {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Card className="rounded-[18px] border-stone-200 bg-[#fffefb] shadow-[0_2px_10px_rgba(15,23,42,.05)]"><CardContent className="p-3 sm:p-4"><div className="grid grid-cols-7 gap-1.5">{WEEKDAYS.map((day) => <div key={day} className="px-1 py-1 text-center text-[11px] font-extrabold uppercase tracking-wide text-zinc-400">{day}</div>)}{days.map((day, index) => {
       if (day === null) return <div key={`empty-${index}`} />;
       const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const closure = byDate.get(date);
