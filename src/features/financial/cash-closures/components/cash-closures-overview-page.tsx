@@ -87,7 +87,7 @@ export function CashClosuresOverviewPage() {
         ] as const).map(([value, label]) => <Button key={value} type="button" size="sm" variant={sessionFilter === value ? "default" : "outline"} className="h-8 rounded-lg px-3 text-xs font-bold" onClick={() => setSessionFilter(value)}>{label}<span className="ml-1.5 opacity-70">{sessionCounts[value]}</span></Button>)}</div>
       </div>
       {filteredSessions.length === 0
-        ? <Card className="rounded-2xl border-stone-200"><CardContent className="p-6 text-center text-sm text-muted-foreground">Nenhuma sessão neste filtro.</CardContent></Card>
+        ? <Card className="rounded-2xl border-stone-200"><CardContent className="flex min-h-[86px] w-full items-center justify-center px-6 py-5 text-center text-sm text-muted-foreground">Nenhuma sessão neste filtro.</CardContent></Card>
         : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{filteredSessions.slice(0, 9).map((session) => {
           const state = sessionStatus(session.status);
           const StateIcon = state.icon;

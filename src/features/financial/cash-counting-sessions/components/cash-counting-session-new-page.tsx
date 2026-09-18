@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, LockKeyhole, Store, UserRound } from "lucide-react";
+import { ArrowLeft, Loader2, LockKeyhole, Store } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { getUserDisplayName } from "@/lib/user-display";
 import type { CashCountingSession } from "../types";
 import { CashControlNavigation } from "@/features/financial/cash-closures/components/cash-control-navigation";
 
@@ -20,7 +21,7 @@ type Unit = { id: string; name: string; pdvFilialId: string | null };
 
 export function CashCountingSessionNewPage() {
   const router = useRouter();
-  const { firebaseUser, permissions } = useAuth();
+  const { firebaseUser, permissions, user } = useAuth();
   const api = useAuthenticatedApi();
   const { toast } = useToast();
   const [units, setUnits] = useState<Unit[]>([]);
@@ -53,6 +54,20 @@ export function CashCountingSessionNewPage() {
     }
     return result;
   }, [sessions]);
+  const countingUserName = getUserDisplayName({
+    id: user?.id ?? firebaseUser?.uid,
+    username: user?.username ?? firebaseUser?.displayName ?? undefined,
+    email: user?.email ?? firebaseUser?.email ?? undefined,
+    hrEmployeeId: user?.hrEmployeeId,
+    registrationIdBizneo: user?.registrationIdBizneo,
+    registrationIdPdv: user?.registrationIdPdv,
+  }, firebaseUser?.uid);
+  const countingUserInitials = countingUserName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   async function createSession() {
     setWorking(true);
@@ -99,8 +114,8 @@ export function CashCountingSessionNewPage() {
     </Card>
 
     <div className="flex items-center gap-3 rounded-[18px] border border-stone-200 bg-[#fffefb] px-5 py-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-black text-blue-700"><UserRound className="h-4 w-4" /></span>
-      <span><span className="block text-[11px] font-black uppercase tracking-[.1em] text-zinc-400">Contagem realizada por</span><strong className="mt-1 block text-sm font-extrabold">Financeiro</strong></span>
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-black text-blue-700">{countingUserInitials || "U"}</span>
+      <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[.1em] text-zinc-400">Contagem realizada por</span><strong className="mt-1 block truncate text-sm font-extrabold">{countingUserName}</strong><span className="mt-0.5 block text-xs font-semibold text-zinc-400">Financeiro</span></span>
     </div>
 
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[#1d1d26] px-5 py-4 text-white">
