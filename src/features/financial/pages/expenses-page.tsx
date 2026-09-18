@@ -136,7 +136,7 @@ const STATUS_LABELS: Record<string, string> = {
 function unmatchedCardStatementRecordLabel(expense: any) {
   if (expense.status === "cancelled") return "Cancelado";
   if (expense.provisionType === "forecast" && (expense.status === "reconciled" || expense.replacedByExpenseId)) {
-    return "Provisão substituída";
+    return "Previsão conciliada";
   }
   if (expense.cardStatementRevisionStatus === "removed") return "Removido da versão ativa";
   return "Requer conciliação";
@@ -293,12 +293,27 @@ function matchesBaseFilters(
   const competence = toDate(expense.competenceDate);
   const belongsToUnit =
     unitFilter === "all" || expenseReferencesResultCenter(expense, unitFilter, resultCenterNameById);
-  const normalizedSearch = search.toLowerCase();
+  const normalizedSearch = search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const includesSearch = (value: unknown) => String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes(normalizedSearch);
+  const searchableAliases = Array.isArray(expense.aliases) ? expense.aliases : [];
+  const billingIdentity = expense.billingIdentity && typeof expense.billingIdentity === "object" ? expense.billingIdentity : {};
+  const documentIdentity = expense.documentIdentity && typeof expense.documentIdentity === "object" ? expense.documentIdentity : {};
+  const documentReferences = Array.isArray(documentIdentity.documentReferences) ? documentIdentity.documentReferences : [];
   const matchesSearch =
     !search ||
-    expense.description.toLowerCase().includes(normalizedSearch) ||
-    accountingPlanNames.some((name) => name.toLowerCase().includes(normalizedSearch)) ||
-    (expense.supplier || "").toLowerCase().includes(normalizedSearch);
+    includesSearch(expense.description) ||
+    accountingPlanNames.some(includesSearch) ||
+    includesSearch(expense.supplier) ||
+    searchableAliases.some(includesSearch) ||
+    [billingIdentity.supplierTaxId, billingIdentity.customerAccount, billingIdentity.contractNumber]
+      .some(includesSearch) ||
+    (Array.isArray(billingIdentity.serviceNumbers) ? billingIdentity.serviceNumbers : [])
+      .some(includesSearch) ||
+    documentReferences.some(includesSearch);
 
   const matchesOrigin =
     originFilter === "all" ||
@@ -1006,7 +1021,7 @@ export function ExpensesPage() {
             <div className="relative col-span-2 min-w-0 md:col-span-1">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por descrição, fornecedor..."
+                placeholder="Buscar descrição, fornecedor, alias ou identificador..."
                 className="h-8 rounded-lg border-border/70 bg-background pl-9 text-xs"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -1376,7 +1391,7 @@ export function ExpensesPage() {
                                       <p className="mt-1 text-[11px] text-muted-foreground">
                                         {unmatchedActiveCount > 0
                                           ? `${unmatchedActiveCount} registro${unmatchedActiveCount === 1 ? " precisa" : "s precisam"} de conciliação. Nenhum deles altera o total oficial.`
-                                          : "São cancelamentos ou provisões já substituídas. Permanecem visíveis para rastreabilidade, sem alterar o total oficial."}
+                                          : "São cancelamentos ou previsões já conciliadas. Permanecem visíveis para rastreabilidade, sem alterar o total oficial."}
                                       </p>
                                       <div className="mt-2 space-y-1.5">
                                         {statement.unmatchedExpenses.map((expense) => (
@@ -1670,7 +1685,7 @@ export function ExpensesPage() {
                                 <p className="mt-1 text-[10px] text-muted-foreground">
                                   {unmatchedActiveCount > 0
                                     ? `${unmatchedActiveCount} precisa${unmatchedActiveCount === 1 ? "" : "m"} de conciliação.`
-                                    : "Cancelados ou substituídos, mantidos somente para rastreabilidade."}
+                                    : "Cancelados ou conciliados, mantidos somente para rastreabilidade."}
                                 </p>
                                 <div className="mt-2 space-y-1">
                                   {statement.unmatchedExpenses.map((expense) => (

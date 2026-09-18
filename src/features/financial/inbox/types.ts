@@ -73,6 +73,20 @@ export type FinancialInboxResolution = {
   resolvedBy: string | null;
 };
 
+export type FinancialInboxThreadMessage = {
+  id: string;
+  subject: string;
+  receivedAt: string;
+  status: FinancialInboxStatus;
+  kind: "new_charge" | "reminder" | "duplicate" | null;
+};
+
+export type FinancialInboxThread = {
+  primaryMessageId: string;
+  messageCount: number;
+  messages: FinancialInboxThreadMessage[];
+};
+
 export type FinancialInboxStageSummary = {
   count: number;
   amountCents: number;
@@ -150,6 +164,16 @@ export type FinancialInboxBillingIdentity = {
   contractNumber: string | null;
   serviceType: FinancialInboxServiceType | null;
   serviceNumbers: string[];
+};
+
+export type FinancialDocumentIdentity = {
+  barcode: string | null;
+  barcodeMasked: string | null;
+  barcodeHash: string | null;
+  documentReferences: string[];
+  sourceMessageIds: string[];
+  confidence: "high" | "medium" | "low";
+  conflictFields: Array<"barcode">;
 };
 
 export type FinancialInboxDocumentHints = {
@@ -313,6 +337,7 @@ export type FinancialInboxMessage = {
   linkedExpenseId: string | null;
   linkedProvisionId?: string | null;
   obligationId?: string | null;
+  thread?: FinancialInboxThread | null;
   paymentRequestId?: string | null;
   provisionSuggestion?: FinancialInboxProvisionSuggestion | null;
   existingExpenseSuggestion?: FinancialInboxExpenseSuggestion | null;

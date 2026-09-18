@@ -12,6 +12,7 @@ export type BankPaymentRail = "pix" | "barcode";
 export type BarcodePaymentSnapshot = {
   type: "barcode";
   code: string;
+  codeHash?: string | null;
   maskedCode: string;
   dueDate: string;
   scheduledFor: string;

@@ -9,6 +9,7 @@ import { safeInterPaymentError } from "@/lib/integrations/inter/payment-error";
 import { findInterBarcodePaymentsByCode, getInterBarcodePayment, mapInterBarcodeStatus, submitInterBarcodePayment } from "@/lib/integrations/inter/barcode-payments.server";
 import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/integrations/inter/pix-payments.server";
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
+import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, transitionPaymentRequest } from "./repository.server";
 import {
@@ -166,6 +167,7 @@ export async function createInboxBarcodePaymentRequest(input: {
     barcodeSnapshot: {
       type: "barcode",
       code,
+      codeHash: paymentBarcodeHash(code),
       maskedCode: maskPaymentBarcode(code)!,
       dueDate,
       scheduledFor,

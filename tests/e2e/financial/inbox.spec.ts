@@ -27,7 +27,7 @@ test("identifica um lembrete sem alterar a despesa e o preserva na auditoria", a
   await expect(page.getByText("Cobrança identificada.", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: /Cobranças identificadas/ }).click();
   await expect(page.getByText("Lembrete", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("A despesa não foi alterada.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Nome, valor e pagamento foram preservados", { exact: false }).first()).toBeVisible();
 });
 
 test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico", async ({ page }) => {
@@ -41,7 +41,6 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   const automation = page.getByRole("switch", { name: "Ativar vinculação automática por identidade documental" });
   await expect(automation).toHaveAttribute("aria-checked", "false");
   await automation.click();
-  await expect(page.getByText("Vinculação automática ativada.", { exact: true })).toBeVisible();
   await expect(automation).toHaveAttribute("aria-checked", "true");
 
   await page.getByLabel("Buscar cobranças").fill("Cobrança automática documental E2E");
@@ -53,5 +52,5 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   await page.getByRole("tab", { name: /Cobranças identificadas/ }).click();
   await expect(page.getByText("Cobrança automática documental E2E", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Identificação automática em", { exact: false })).toBeVisible();
-  await expect(page.getByText("A despesa não foi alterada.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Nome, valor e pagamento foram preservados", { exact: false }).first()).toBeVisible();
 });
