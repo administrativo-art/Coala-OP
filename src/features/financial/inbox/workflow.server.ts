@@ -1,9 +1,8 @@
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
-import { buildFinancialDescription } from "@/features/financial/lib/expense-description-catalog";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
@@ -25,6 +24,11 @@ import {
   resolutionForDisplay,
 } from "./resolution-contract";
 import { prepareFinancialInboxDocuments } from "./document-processing.server";
+import {
+  financialDocumentIdentityFromClassification,
+  mergeFinancialDocumentIdentities,
+  paymentBarcodeHash,
+} from "./document-identity";
 import { getFinancialInboxMessage } from "./repository.server";
 import {
   buildFinancialInboxSearchTerms,
@@ -39,8 +43,8 @@ const MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES = 10;
 // Custo de triagem: no máximo 10 leituras por cobrança relevante. Com 300
 // cobranças/mês, o teto esperado é 3.000 leituras/mês, além de reanálises manuais.
 // O cruzamento lê no máximo 501 despesas abertas, 101 pagamentos do mesmo valor,
-// 11 solicitações pelo código de barras, 110 despesas referenciadas e 100 previsões.
-// Com 50 cobranças/mês, o teto é 41.150 leituras/mês, incluindo análise automática
+// 22 solicitações pelo hash/código de barras, 110 despesas referenciadas e 100 previsões.
+// Com 50 cobranças/mês, o teto é 41.700 leituras/mês, incluindo análise automática
 // e reanálises manuais.
 // Um candidato documental forte acrescenta 1 leitura pontual da configuração
 // opt-in do workspace antes de qualquer identificação automática.
@@ -53,6 +57,43 @@ function dateTimestamp(value: string | null, fallback: Date) {
   if (!value) return Timestamp.fromDate(fallback);
   const date = new Date(`${value}T12:00:00-03:00`);
   return Timestamp.fromDate(Number.isNaN(date.getTime()) ? fallback : date);
+}
+
+function inboxThreadMessage(
+  message: Pick<FinancialInboxMessage, "id" | "subject" | "receivedAt" | "status" | "resolution">,
+) {
+  const kind = message.resolution?.kind;
+  return {
+    id: message.id,
+    subject: message.subject,
+    receivedAt: message.receivedAt,
+    status: message.status,
+    kind: kind === "new_charge" || kind === "reminder" || kind === "duplicate" ? kind : null,
+  } as const;
+}
+
+function mergeInboxThreadMessages(...groups: unknown[]) {
+  const byId = new Map<string, ReturnType<typeof inboxThreadMessage>>();
+  groups.flatMap((group) => Array.isArray(group) ? group : []).forEach((value) => {
+    if (!value || typeof value !== "object") return;
+    const message = value as ReturnType<typeof inboxThreadMessage>;
+    if (!message.id || !message.subject || !message.receivedAt) return;
+    byId.set(message.id, message);
+  });
+  return [...byId.values()].sort((left, right) => left.receivedAt.localeCompare(right.receivedAt));
+}
+
+function mergeExpenseAliases(currentValue: unknown, ...candidates: unknown[]) {
+  const values = [
+    ...(Array.isArray(currentValue) ? currentValue : []),
+    ...candidates,
+  ].map((value) => String(value ?? "").trim()).filter(Boolean);
+  const byKey = new Map<string, string>();
+  values.forEach((value) => {
+    const key = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    if (!byKey.has(key)) byKey.set(key, value);
+  });
+  return [...byKey.values()].slice(0, 20);
 }
 
 function isoDateKey(value: unknown) {
@@ -74,6 +115,7 @@ function copyExpenseClassification(provision: Record<string, unknown>) {
     "apportionments", "rateioCriterion", "rateioEffectiveFrom", "rateioFirstMonthMode",
     "plannedPaymentMethodType", "plannedBankAccountId", "plannedBankAccountName",
     "plannedPaymentMethodId", "plannedPaymentMethodLabel", "provisionSeriesKey",
+    "aliases",
   ];
   return Object.fromEntries(fields.filter((field) => field in provision).map((field) => [field, provision[field]]));
 }
@@ -104,7 +146,8 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     Boolean(classification.barcode)
     || Boolean(classification.amountCents && classification.dueDate && classification.supplierName)
   )) {
-    const [openSnapshot, paymentSnapshot, barcodePaymentSnapshot] = await Promise.all([
+    const incomingBarcodeHash = paymentBarcodeHash(classification.barcode);
+    const [openSnapshot, paymentSnapshot, barcodeHashPaymentSnapshot, legacyBarcodePaymentSnapshot] = await Promise.all([
       financialDbAdmin.collection("expenses")
       .where("status", "in", ["pending", "partially_paid"])
       .limit(MAX_EXISTING_EXPENSE_CANDIDATES + 1)
@@ -117,6 +160,12 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
         : Promise.resolve(null),
       classification.barcode
         ? financialDbAdmin.collection("bankPaymentRequests")
+          .where("barcodeSnapshot.codeHash", "==", incomingBarcodeHash)
+          .limit(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES + 1)
+          .get()
+        : Promise.resolve(null),
+      classification.barcode
+        ? financialDbAdmin.collection("bankPaymentRequests")
           .where("barcodeSnapshot.code", "==", classification.barcode)
           .limit(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES + 1)
           .get()
@@ -124,7 +173,8 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     ]);
     expenseScanTruncated = openSnapshot.size > MAX_EXISTING_EXPENSE_CANDIDATES
       || Boolean(paymentSnapshot && paymentSnapshot.size > MAX_MATCHED_PAYMENT_CANDIDATES)
-      || Boolean(barcodePaymentSnapshot && barcodePaymentSnapshot.size > MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES);
+      || Boolean(barcodeHashPaymentSnapshot && barcodeHashPaymentSnapshot.size > MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES)
+      || Boolean(legacyBarcodePaymentSnapshot && legacyBarcodePaymentSnapshot.size > MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES);
     if (!expenseScanTruncated) {
       const evidenceByExpenseId = new Map<string, Array<{ transactionId: string; paidAt: string | null }>>();
       const barcodeEvidenceByExpenseId = new Map<string, Array<{
@@ -143,12 +193,18 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
           { transactionId, paidAt },
         ]);
       }
-      for (const document of barcodePaymentSnapshot?.docs ?? []) {
+      const barcodePaymentDocuments = new Map([
+        ...(barcodeHashPaymentSnapshot?.docs ?? []),
+        ...(legacyBarcodePaymentSnapshot?.docs ?? []),
+      ].map((document) => [document.id, document]));
+      for (const document of barcodePaymentDocuments.values()) {
         const payment = document.data();
         const expenseId = String(payment.expenseId ?? "").trim();
         const code = String(payment.barcodeSnapshot?.code ?? "").trim();
+        const codeHash = String(payment.barcodeSnapshot?.codeHash || paymentBarcodeHash(code) || "");
         const status = String(payment.status ?? "").trim();
-        if (!expenseId || !code || /^(?:cancelled|rejected|failed|approval_expired)$/.test(status)) continue;
+        if (!expenseId || !code || !incomingBarcodeHash || codeHash !== incomingBarcodeHash
+          || /^(?:cancelled|rejected|failed|approval_expired)$/.test(status)) continue;
         barcodeEvidenceByExpenseId.set(expenseId, [
           ...(barcodeEvidenceByExpenseId.get(expenseId) ?? []),
           {
@@ -276,6 +332,87 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     }, { merge: true });
   }
   if (automaticReminder) {
+    const targetExpense = expenseCandidates.find((candidate) => candidate.id === automaticReminder.resolution.targetId);
+    if (targetExpense) {
+      const obligationId = String((targetExpense as Record<string, unknown>).obligationId || `obl_${targetExpense.id}`);
+      const billingIdentity = mergeBillingIdentities(
+        targetExpense.billingIdentity ?? {
+          supplierTaxId: null,
+          customerAccount: null,
+          contractNumber: null,
+          serviceType: null,
+          serviceNumbers: [],
+        },
+        [classification.billingIdentity],
+      );
+      const documentIdentity = mergeFinancialDocumentIdentities(
+        targetExpense.documentIdentity,
+        financialDocumentIdentityFromClassification(classification, id),
+      );
+      const targetInstallmentNumber = automaticReminder.resolution.installmentNumber;
+      const targetInstallments = Array.isArray(targetExpense.installments)
+        ? targetExpense.installments as Array<Record<string, unknown>>
+        : [];
+      const enrichedInstallments = targetInstallmentNumber == null
+        ? targetInstallments
+        : targetInstallments.map((installment, index) => (
+          Number(installment.number ?? index + 1) === targetInstallmentNumber
+            ? {
+                ...installment,
+                documentIdentity: mergeFinancialDocumentIdentities(
+                  installment.documentIdentity,
+                  financialDocumentIdentityFromClassification(classification, id),
+                ),
+              }
+            : installment
+        ));
+      batch.set(financialDbAdmin.collection("expenses").doc(targetExpense.id), {
+        aliases: mergeExpenseAliases((targetExpense as Record<string, unknown>).aliases, message.subject),
+        billingIdentity,
+        documentIdentity,
+        fiscalIdentity: classification.fiscalIdentity ?? targetExpense.fiscalIdentity ?? null,
+        ...(targetInstallmentNumber == null ? {} : { installments: enrichedInstallments }),
+        updatedAt: checkedAt,
+      }, { merge: true });
+      const primaryMessageId = String((targetExpense as Record<string, unknown>).financialInboxMessageId || id);
+      const primaryMessageSnapshot = primaryMessageId === id
+        ? null
+        : await financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId).get();
+      const primaryMessage = primaryMessageSnapshot?.exists
+        ? { id: primaryMessageSnapshot.id, ...primaryMessageSnapshot.data() } as FinancialInboxMessage
+        : null;
+      const currentThreadMessage = inboxThreadMessage({
+        ...message,
+        status: automaticReminder.status,
+        resolution: automaticReminder.resolution,
+      });
+      const threadMessages = mergeInboxThreadMessages(
+        primaryMessage?.thread?.messages,
+        primaryMessage ? [inboxThreadMessage(primaryMessage)] : [],
+        [currentThreadMessage],
+      );
+      const thread = { primaryMessageId, messageCount: threadMessages.length, messages: threadMessages };
+      batch.set(messageRef, {
+        obligationId,
+        thread,
+      }, { merge: true });
+      if (primaryMessageId !== id) {
+        batch.set(financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId), {
+          thread,
+          updatedAt: checkedAt,
+        }, { merge: true });
+      }
+      batch.set(financialDbAdmin.collection("financialObligations").doc(obligationId), {
+        id: obligationId,
+        billingIdentity,
+        documentIdentity,
+        fiscalIdentity: classification.fiscalIdentity ?? targetExpense.fiscalIdentity ?? null,
+        primaryInboxMessageId: primaryMessageId,
+        inboxMessageIds: FieldValue.arrayUnion(primaryMessageId, id),
+        inboxMessageSummaries: threadMessages,
+        updatedAt: checkedAt,
+      }, { merge: true });
+    }
     batch.set(messageRef.collection("events").doc("automatic-reminder-identification-v1"), {
       type: "CHARGE_IDENTIFIED_AS_EXISTING",
       at: checkedAt,
@@ -350,7 +487,7 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
     }
     if (["tax", "fgts", "inss_darf"].includes(message.classification.documentType)
       && !message.classification.fiscalIdentity) {
-      throw new Error("Reanalise o documento fiscal antes de substituir a previsão.");
+      throw new Error("Reanalise o documento fiscal antes de vincular a cobrança à previsão.");
     }
     const provisionMatch = scoreProvisionCandidate(message.classification, {
       id: provisionId,
@@ -370,13 +507,25 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       dueDate.toDate(),
     );
     const supplier = message.classification.supplierName || String(provision.supplier || "");
-    const description = message.classification.billingIdentity?.serviceType === "mobile"
-      && message.classification.competence
-      ? buildFinancialDescription("mobile_phone_bill", {
-        competence: message.classification.competence,
-        beneficiary: supplier,
-      })
-      : String(provision.description || message.subject).trim();
+    const description = String(provision.description || message.subject).trim();
+    const aliases = mergeExpenseAliases(provision.aliases, message.subject);
+    const documentIdentity = financialDocumentIdentityFromClassification(message.classification, id);
+    const initialResolution = identifiedFinancialInboxResolution({
+      kind: "new_charge",
+      targetType: "expense",
+      targetId: actualRef.id,
+      financialState: "open",
+      mode: "manual",
+      confidence: message.provisionSuggestion?.confidence ?? null,
+      reasons: message.provisionSuggestion?.reasons ?? [],
+      at: nowIso,
+      by: actor.uid,
+    });
+    const initialThreadMessage = inboxThreadMessage({
+      ...message,
+      status: "linked",
+      resolution: initialResolution,
+    });
     const actual = {
       ...copyExpenseClassification(provision),
       ...inheritExpenseReferenceCenter({}, provision),
@@ -386,6 +535,7 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       }),
       workspaceId: WORKSPACE_ID,
       description,
+      aliases,
       supplier,
       notes: `Cobrança recebida por e-mail: ${message.subject}`,
       totalValue: actualValue,
@@ -405,6 +555,7 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       originModule: "financial_inbox",
       financialInboxMessageId: id,
       billingIdentity: message.classification.billingIdentity ?? null,
+      documentIdentity,
       fiscalIdentity: message.classification.fiscalIdentity ?? null,
       status: "pending",
       createdAt: now,
@@ -434,6 +585,12 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       sourceType: "financial_inbox",
       sourceId: id,
       supplierName: supplier || null,
+      billingIdentity: message.classification.billingIdentity ?? null,
+      documentIdentity,
+      fiscalIdentity: message.classification.fiscalIdentity ?? null,
+      primaryInboxMessageId: id,
+      inboxMessageIds: FieldValue.arrayUnion(id),
+      inboxMessageSummaries: [initialThreadMessage],
       status: summary.obligationStatus,
       reconciliationStatus: summary.reconciliationStatus,
       summary,
@@ -447,17 +604,8 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       linkedExpenseId: actualRef.id,
       linkedProvisionId: provisionId,
       obligationId,
-      resolution: identifiedFinancialInboxResolution({
-        kind: "new_charge",
-        targetType: "expense",
-        targetId: actualRef.id,
-        financialState: "open",
-        mode: "manual",
-        confidence: message.provisionSuggestion?.confidence ?? null,
-        reasons: message.provisionSuggestion?.reasons ?? [],
-        at: nowIso,
-        by: actor.uid,
-      }),
+      resolution: initialResolution,
+      thread: { primaryMessageId: id, messageCount: 1, messages: [initialThreadMessage] },
       resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       "provisionSuggestion.status": "linked",
       reviewedAt: nowIso,
@@ -573,6 +721,15 @@ export async function linkInboxChargeToExistingExpense(
       throw new Error("A despesa já está vinculada a outra cobrança recebida.");
     }
     const obligationId = String(expense.obligationId || `obl_${expenseId}`);
+    const obligationRef = financialDbAdmin.collection("financialObligations").doc(obligationId);
+    const obligationSnapshot = await transaction.get(obligationRef);
+    const obligation = obligationSnapshot.data() || {};
+    const primaryMessageId = String(obligation.primaryInboxMessageId || expense.financialInboxMessageId || id);
+    const primaryMessageRef = financialDbAdmin.collection("financialInboxMessages").doc(primaryMessageId);
+    const primaryMessageSnapshot = primaryMessageId === id ? messageSnapshot : await transaction.get(primaryMessageRef);
+    const primaryMessage = primaryMessageSnapshot.exists
+      ? { id: primaryMessageSnapshot.id, ...primaryMessageSnapshot.data() } as FinancialInboxMessage
+      : null;
     const expenseDateKey = (value: unknown, competence = false) => {
       const date = value && typeof (value as { toDate?: unknown }).toDate === "function"
         ? (value as { toDate: () => Date }).toDate()
@@ -607,23 +764,45 @@ export async function linkInboxChargeToExistingExpense(
       },
       [message.classification.billingIdentity],
     );
+    const documentIdentity = mergeFinancialDocumentIdentities(
+      expense.documentIdentity ?? obligation.documentIdentity,
+      financialDocumentIdentityFromClassification(classification, id),
+    );
+    const fiscalIdentity = message.classification.fiscalIdentity
+      ?? expense.fiscalIdentity
+      ?? obligation.fiscalIdentity
+      ?? null;
+    const identityPatch = {
+      aliases: mergeExpenseAliases(expense.aliases, message.subject),
+      billingIdentity,
+      documentIdentity,
+      fiscalIdentity,
+      updatedAt: Timestamp.now(),
+    };
     if (!resolutionOnly && installmentIndex >= 0) {
       const nextInstallments = installments.map((installment, index) => index === installmentIndex
-        ? { ...installment, financialInboxMessageId: id, financialInboxLinkedAt: now, financialInboxLinkedBy: actor.uid }
+        ? {
+            ...installment,
+            financialInboxMessageId: id,
+            financialInboxLinkedAt: now,
+            financialInboxLinkedBy: actor.uid,
+            documentIdentity: mergeFinancialDocumentIdentities(
+              installment.documentIdentity,
+              financialDocumentIdentityFromClassification(classification, id),
+            ),
+          }
         : installment);
       transaction.set(expenseRef, {
+        ...identityPatch,
         installments: nextInstallments,
-        billingIdentity,
-        fiscalIdentity: message.classification.fiscalIdentity ?? null,
-        updatedAt: Timestamp.now(),
       }, { merge: true });
     } else if (!resolutionOnly) {
       transaction.set(expenseRef, {
+        ...identityPatch,
         financialInboxMessageId: id,
-        billingIdentity,
-        fiscalIdentity: message.classification.fiscalIdentity ?? null,
-        updatedAt: Timestamp.now(),
       }, { merge: true });
+    } else {
+      transaction.set(expenseRef, identityPatch, { merge: true });
     }
     const isNewCharge = !resolutionOnly && (
       expense.financialInboxMessageId === id
@@ -651,6 +830,30 @@ export async function linkInboxChargeToExistingExpense(
       at: now,
       by: actor.uid,
     });
+    const currentThreadMessage = inboxThreadMessage({
+      ...message,
+      status: resolutionOnly ? "identified" : inboxState.status,
+      resolution,
+    });
+    const primaryThreadMessages = primaryMessage?.thread?.messages
+      ?? (primaryMessage ? [inboxThreadMessage(primaryMessage)] : []);
+    const threadMessages = mergeInboxThreadMessages(
+      obligation.inboxMessageSummaries,
+      primaryThreadMessages,
+      [currentThreadMessage],
+    );
+    const thread = { primaryMessageId, messageCount: threadMessages.length, messages: threadMessages };
+    transaction.set(obligationRef, {
+      id: obligationId,
+      billingIdentity,
+      documentIdentity,
+      fiscalIdentity,
+      primaryInboxMessageId: primaryMessageId,
+      inboxMessageIds: FieldValue.arrayUnion(id),
+      inboxMessageSummaries: threadMessages,
+      updatedAt: now,
+    }, { merge: true });
+    if (primaryMessageId !== id) transaction.set(primaryMessageRef, { thread, updatedAt: now }, { merge: true });
     transaction.set(messageRef, {
       status: resolutionOnly ? "identified" : inboxState.status,
       bankState: inboxState.bankState,
@@ -660,6 +863,7 @@ export async function linkInboxChargeToExistingExpense(
       }),
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
+      thread,
       resolution,
       resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       classification: { ...classification, billingIdentity },
