@@ -106,6 +106,9 @@
 - Agendar ou preparar um pagamento não autoriza sua execução.
 - Nunca autorize, aprove ou confirme definitivamente um pagamento bancário sem uma solicitação específica e inequívoca do usuário para essa ação.
 - No Banco Inter, a autorização final pertence ao usuário no aplicativo, salvo se ele der uma nova instrução explícita em sentido diferente.
+- Operações bancárias rotineiras devem usar o serviço implantado com referências ao Secret Manager. É proibido acessar ou exportar o valor das credenciais bancárias para scripts locais, comandos de diagnóstico ou automações pontuais.
+- Rotação é a única exceção para inserir novo material secreto: receba-o por arquivo local ou entrada padrão diretamente no Secret Manager, sem imprimir valores, e valide a nova versão antes de revogar a anterior. Nunca leia o valor da versão antiga para copiá-lo.
+- Nunca registre, propague ou serialize o erro bruto de clientes HTTP bancários. Converta-o na fronteira da integração para um erro por allowlist, sem `config`, request/response bodies, headers, agente HTTPS, certificado, chave ou credenciais.
 
 ## Revisão de permissões
 

@@ -9,7 +9,7 @@ const MAX_ARRAY_ITEMS = 20;
 const MAX_STRING_LENGTH = 2_000;
 const MAX_STACK_LENGTH = 8_000;
 
-const SENSITIVE_KEY = /(?:authorization|cookie|set-cookie|token|secret|password|senha|credential|private.?key|api.?key|client.?secret|cpf|cnpj|\brg\b|salary|salario|remuneracao|bank|banco|account|conta|agency|agencia|pix|medical|medic|health|diagnos|documento|document|payload|body)/i;
+const SENSITIVE_KEY = /(?:authorization|cookie|set-cookie|token|secret|password|senha|credential|private.?key|certificate|\bcert\b|https.?agent|api.?key|client.?secret|cpf|cnpj|\brg\b|salary|salario|remuneracao|bank|banco|account|conta|agency|agencia|pix|medical|medic|health|diagnos|documento|document|payload|body)/i;
 const SAFE_HEADER_NAMES = new Set(["accept", "content-type", "user-agent", "x-request-id", "x-correlation-id"]);
 const DEFAULT_METADATA_KEYS = new Set([
   "action",
@@ -48,6 +48,7 @@ function truncate(value: string, limit = MAX_STRING_LENGTH) {
 function redactInline(value: string) {
   return value
     .replace(/-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/gi, REDACTED)
+    .replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/gi, REDACTED)
     .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, REDACTED)
     .replace(/\b(Authorization|Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]*/gi, "$1: [REDACTED]")
     .replace(/([?&](?:token|key|secret|password|senha|authorization|api[_-]?key|client[_-]?secret)=)[^&#\s]*/gi, `$1${REDACTED}`)
