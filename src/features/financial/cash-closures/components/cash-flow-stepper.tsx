@@ -12,8 +12,7 @@ type CashFlowStepperProps = {
 
 const STEPS = [
   ["Fechamento no PDV", "sincronizado"],
-  ["Conferência do Caixa", "valores informados"],
-  ["Conferência do Financeiro", "contagem física"],
+  ["Conferência do Caixa e Financeiro", "valores e contagem física"],
   ["Finalização do operador", "por turno"],
   ["Composição física", "cédulas e moedas"],
   ["Emissão do depósito", "boleto bancário"],
@@ -28,7 +27,7 @@ function stepState(index: number, current: number, completedThrough: number): Ca
 
 export function CashFlowStepper({ current = 0, completedThrough = 0, className }: CashFlowStepperProps) {
   return (
-    <div className={cn("grid gap-3 rounded-2xl border border-stone-200 bg-[#fffefb] p-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7", className)}>
+    <div className={cn("grid gap-3 rounded-2xl border border-stone-200 bg-[#fffefb] p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6", className)}>
       {STEPS.map(([label, hint], index) => {
         const state = stepState(index, current, completedThrough);
         return (
