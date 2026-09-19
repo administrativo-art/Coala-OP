@@ -37,6 +37,14 @@ type ClosurePayload = CashClosureWithLines & {
   activeCountingSessionId?: string | null;
 };
 
+const COUNTING_GUIDE_STEPS = [
+  { title: "Informe a data", description: "Use a data impressa no malote." },
+  { title: "Escolha turno/operador", description: "Abra o cartão de quem entregou o malote." },
+  { title: "Conte por canal", description: "Preencha Caixa e Financeiro nos canais manuais." },
+  { title: "Revise diferenças", description: "Justifique as faltas indicadas em vermelho." },
+  { title: "Finalize o operador", description: "Finalize e repita nos demais turnos." },
+] as const;
+
 type Props = {
   open: boolean;
   session: CashCountingSession;
@@ -387,11 +395,23 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     : null;
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) void requestClose(); }}>
-    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-[1080px] gap-0 overflow-hidden rounded-2xl p-0 sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[1080px]">
-      <DialogHeader className="border-b border-stone-100 px-4 py-4 text-left sm:px-6">
+    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl p-0 sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[1080px]">
+      <DialogHeader className="space-y-0 border-b border-stone-100 px-4 py-4 text-left sm:px-6">
         <div className="flex items-start justify-between gap-4 pr-1">
           <div><DialogTitle className="text-xl font-black">Contar malote</DialogTitle><DialogDescription className="mt-1">{unit.name} · o rascunho é salvo sem finalizar o operador.</DialogDescription></div>
           <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full" aria-label="Fechar contagem" disabled={changingDate} onClick={() => void requestClose()}><X className="h-4 w-4" /></Button>
+        </div>
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/80 p-3">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Passo a passo da contagem</p>
+          <ol className="flex gap-2 overflow-x-auto pb-1" aria-label="Etapas para contar e finalizar o malote">
+            {COUNTING_GUIDE_STEPS.map((step, index) => {
+              const finalStep = index === COUNTING_GUIDE_STEPS.length - 1;
+              return <li key={step.title} className={cn("flex min-w-[176px] flex-1 items-start gap-2.5 rounded-xl border bg-white p-3", finalStep ? "border-emerald-200" : "border-stone-200")}>
+                <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black text-white", finalStep ? "bg-emerald-700" : "bg-zinc-900")}>{index + 1}</span>
+                <span className="min-w-0"><strong className="block text-[11.5px] leading-4">{step.title}</strong><span className="mt-0.5 block text-[10.5px] leading-4 text-zinc-500">{step.description}</span></span>
+              </li>;
+            })}
+          </ol>
         </div>
       </DialogHeader>
 
