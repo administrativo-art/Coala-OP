@@ -140,13 +140,13 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
     return [...grouped.entries()].sort(([a], [b]) => b.localeCompare(a));
   })();
   const stepper = session.status === "open"
-    ? session.finalizedOperatorCount > 0 ? { current: 3, completedThrough: 3 } : { current: 2, completedThrough: 2 }
+    ? session.finalizedOperatorCount > 0 ? { current: 2, completedThrough: 2 } : { current: 1, completedThrough: 1 }
     : session.status === "counted"
-      ? { current: 4, completedThrough: 4 }
+      ? { current: 3, completedThrough: 3 }
       : session.status === "deposit_ready"
-        ? { current: 5, completedThrough: 5 }
+        ? { current: 4, completedThrough: 4 }
         : session.status === "completed"
-          ? { current: 6, completedThrough: 7 }
+          ? { current: 5, completedThrough: 6 }
           : { current: 0, completedThrough: 0 };
 
   return <PageContainer variant="default" className="max-w-[1320px] space-y-5 pb-10">

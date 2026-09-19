@@ -524,12 +524,12 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
     : data.closure.status === "not_synced" || data.closure.status === "sync_error"
       ? { current: 0, completedThrough: 0 }
       : data.closure.status === "approved" && data.closure.cashDeposit.status === "paid"
-        ? { current: 6, completedThrough: 7 }
+        ? { current: 5, completedThrough: 6 }
         : data.closure.status === "approved"
-          ? { current: 5, completedThrough: 6 }
+          ? { current: 4, completedThrough: 5 }
           : data.closure.status === "pending_review"
-            ? { current: countingSessionId ? 3 : 2, completedThrough: countingSessionId ? 3 : 2 }
-            : { current: countingSessionId ? 2 : 1, completedThrough: countingSessionId ? 2 : 1 };
+            ? { current: countingSessionId ? 2 : 1, completedThrough: countingSessionId ? 2 : 1 }
+            : { current: 1, completedThrough: 1 };
   if (!permissions.financial?.cashClosures?.view) {
     return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso a fechamentos de caixa.</div>;
   }
