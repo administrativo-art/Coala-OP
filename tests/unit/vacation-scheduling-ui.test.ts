@@ -9,6 +9,9 @@ const workflow = readFileSync('src/components/dp/dp-vacation-workflow.tsx', 'utf
 const editor = readFileSync('src/components/dp/dp-vacation-editor-panel.tsx', 'utf8');
 const timeline = readFileSync('src/components/dp/dp-vacation-timeline.tsx', 'utf8');
 const profilePage = readFileSync('src/app/dashboard/dp/ferias/[userId]/page.tsx', 'utf8');
+const vacationPage = readFileSync('src/app/dashboard/dp/ferias/page.tsx', 'utf8');
+const pageHeader = readFileSync('src/components/layout/page-header.tsx', 'utf8');
+const globalStyles = readFileSync('src/app/globals.css', 'utf8');
 
 test('fila de prioridade exclui ciclos agendados e pendentes apenas de aprovação', () => {
   assert.match(manager, /e\.health\.cycleStatus !== 'AGENDADO'/);
@@ -134,6 +137,16 @@ test('painel implementa KPIs, filas operacionais e timeline do handoff', () => {
   assert.match(timeline, /Aprovada/);
   assert.match(timeline, /Planejada/);
   assert.match(timeline, /Pendente/);
+});
+
+test('férias usa o cabeçalho e a escala tipográfica canônicos', () => {
+  assert.match(pageHeader, /data-ui="page-header"/);
+  assert.match(pageHeader, /data-ui="page-title"/);
+  assert.match(pageHeader, /text-2xl font-bold tracking-tight/);
+  assert.match(vacationPage, /system-standard-page/);
+  assert.match(vacationPage, /<PageHeader/);
+  assert.match(globalStyles, /\.personal-section-density \.system-standard-page \[data-ui='page-title'\]/);
+  assert.match(globalStyles, /font-size: 1\.5rem !important/);
 });
 
 test('timeline encerra o conteúdo operacional depois do período aquisitivo', () => {
