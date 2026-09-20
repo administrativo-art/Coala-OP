@@ -1,4 +1,5 @@
 import type {
+  FinancialDocumentIdentity,
   FinancialInboxBillingIdentity,
   FinancialInboxClassification,
   FinancialInboxExpenseAlternative,
@@ -35,6 +36,7 @@ export type InboxExpenseCandidate = {
   notes?: string | null;
   billingIdentity?: FinancialInboxBillingIdentity | null;
   fiscalIdentity?: FinancialInboxFiscalIdentity | null;
+  documentIdentity?: FinancialDocumentIdentity | null;
 };
 
 function normalize(value: unknown) {
@@ -218,8 +220,12 @@ function scoredInstallments(
         && (entry.installmentNumber === candidateInstallmentNumber
           || (entry.installmentNumber == null && installments.length === 1))
       )) ?? null;
+      const installmentDocumentIdentity = candidate.installments?.[index]?.documentIdentity as FinancialDocumentIdentity | null | undefined;
+      const candidateDocumentIdentity = installmentDocumentIdentity
+        ?? (installments.length === 1 ? candidate.documentIdentity : null);
       const candidateBarcode = normalizePaymentBarcode(String(
-        installment.bankLine
+        candidateDocumentIdentity?.barcode
+          ?? installment.bankLine
           ?? installment.barcode
           ?? installment.digitableLine
           ?? barcodeEvidence?.code
@@ -228,12 +234,15 @@ function scoredInstallments(
       const sameBarcode = Boolean(sourceBarcode && candidateBarcode && sourceBarcode === candidateBarcode);
       if (!fiscalMatch.compatible && !sameBarcode) return [];
       const sourceDocumentReferences = classification.documentReferences ?? [];
-      const candidateDocumentReferences = extractFinancialDocumentReferences([
-        candidate.description,
-        candidate.notes,
-        candidateRecord.sourceReference,
-        installment.documentNumber,
-      ].filter(Boolean).join("\n"));
+      const candidateDocumentReferences = [...new Set([
+        ...(candidateDocumentIdentity?.documentReferences ?? []),
+        ...extractFinancialDocumentReferences([
+          candidate.description,
+          candidate.notes,
+          candidateRecord.sourceReference,
+          installment.documentNumber,
+        ].filter(Boolean).join("\n")),
+      ])];
       const matchedDocumentReferences = sourceDocumentReferences.filter((reference) => (
         candidateDocumentReferences.includes(reference)
       ));
@@ -268,6 +277,7 @@ function scoredInstallments(
         && sameInstallment
         && amountMatches
         && dueDateMatches
+        && (!identity.telecomServiceNumberRequired || identity.sameServiceNumber)
       );
       return [{
         alternative: {

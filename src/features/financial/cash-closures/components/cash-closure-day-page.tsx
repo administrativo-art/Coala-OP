@@ -53,6 +53,7 @@ import { cashDepositBatchReferenceFromId } from "../../cash-deposits/references"
 import { isCurrentDraftRevision, persistLatestDraft } from "../latest-draft-save";
 import { CentsInput } from "./cents-input";
 import { CashControlNavigation } from "./cash-control-navigation";
+import { CashFlowStepper } from "./cash-flow-stepper";
 
 type Props = { kioskId: string; date: string; sessionId?: string };
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -518,12 +519,23 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
   const countingSessionIds = useMemo(() => Array.from(new Set(
     (data?.operators ?? []).map((operator) => operator.countingSessionId).filter((id): id is string => !!id),
   )), [data?.operators]);
+  const flowStepper = !data
+    ? { current: 0, completedThrough: 0 }
+    : data.closure.status === "not_synced" || data.closure.status === "sync_error"
+      ? { current: 0, completedThrough: 0 }
+      : data.closure.status === "approved" && data.closure.cashDeposit.status === "paid"
+        ? { current: 5, completedThrough: 6 }
+        : data.closure.status === "approved"
+          ? { current: 4, completedThrough: 5 }
+          : data.closure.status === "pending_review"
+            ? { current: countingSessionId ? 2 : 1, completedThrough: countingSessionId ? 2 : 1 }
+            : { current: 1, completedThrough: 1 };
   if (!permissions.financial?.cashClosures?.view) {
     return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso a fechamentos de caixa.</div>;
   }
   if (loading) return <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!data) {
-    return <PageContainer variant="compact" className="space-y-4 pb-10">
+    return <PageContainer variant="default" className="max-w-[1320px] space-y-4 pb-10">
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
         <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void goToNextDay()} disabled={nextDayIsFuture || !!working} title={nextDayIsFuture ? "O próximo dia ainda não está disponível." : undefined}>{working === "next-day" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Próximo dia{working !== "next-day" && <ArrowRight className="ml-2 h-4 w-4" />}</Button>
@@ -536,7 +548,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
     </PageContainer>;
   }
 
-  return <PageContainer variant="compact" className="space-y-4 pb-10">
+  return <PageContainer variant="default" className="max-w-[1320px] space-y-4 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: data.closure.kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel, href: monthHref }, { label: date.split("-").reverse().join("/") }]} />
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -553,6 +565,8 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
         {data.closure.status === "approved" && legacySharedBatchItemIds.size > 0 && permissions.financial.cashClosures.reopen && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => setReasonAction({ operatorName: "todo o dia" })}><RotateCcw className="mr-2 h-4 w-4" />Reabrir dia legado</Button>}
       </div>
     </div>
+
+    <CashFlowStepper current={flowStepper.current} completedThrough={flowStepper.completedThrough} />
 
     <div className="flex min-h-6 items-center gap-2 text-xs text-muted-foreground">
       {saveState === "dirty" && <><AlertTriangle className="h-3.5 w-3.5 text-amber-600" />Alterações pendentes</>}

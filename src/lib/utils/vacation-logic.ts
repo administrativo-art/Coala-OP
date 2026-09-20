@@ -172,7 +172,7 @@ export const RISK_HEX: Record<VacationRisk, { fg: string; bg: string; label: str
 
 export const VACATION_STATUS_HEX: Record<DPVacationStatus, { fg: string; bg: string; label: string }> = {
   APPROVED: { fg: '#15803D', bg: 'rgba(34,197,94,0.14)',  label: 'Aprovada' },
-  PLANNED:  { fg: '#1D4ED8', bg: 'rgba(59,130,246,0.12)', label: 'Planejada' },
+  PLANNED:  { fg: '#7C3AED', bg: 'rgba(139,92,246,0.14)', label: 'Planejada' },
   PENDING:  { fg: '#A16207', bg: 'rgba(234,179,8,0.16)',  label: 'Pendente' },
   REJECTED: { fg: '#DC2626', bg: 'rgba(239,68,68,0.13)',  label: 'Rejeitada' },
 };

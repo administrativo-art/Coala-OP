@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { createInterCobrancaClient } from "./client.server";
 import { getInterCobrancaEnvironment, type InterCobrancaPayer } from "./config.server";
+import { InterApiError } from "./error";
 
 export const INTER_COBRANCA_SITUATIONS = [
   "RECEBIDO",
@@ -91,24 +92,20 @@ export type CreateInterCobrancaInput = {
 
 export class InterCobrancaApiError extends Error {
   status: number | null;
-  details: unknown;
 
-  constructor(message: string, status: number | null, details: unknown) {
+  constructor(message: string, status: number | null) {
     super(message);
     this.name = "InterCobrancaApiError";
     this.status = status;
-    this.details = details;
   }
 }
 
 function apiError(error: unknown, fallback: string): never {
+  if (error instanceof InterApiError) {
+    throw new InterCobrancaApiError(fallback, error.statusCode);
+  }
   if (axios.isAxiosError(error)) {
-    const detail = error.response?.data;
-    const message =
-      (detail && typeof detail === "object" && "detail" in detail && typeof detail.detail === "string"
-        ? detail.detail
-        : null) ?? fallback;
-    throw new InterCobrancaApiError(message, error.response?.status ?? null, detail);
+    throw new InterCobrancaApiError(fallback, error.response?.status ?? null);
   }
   throw error instanceof Error ? error : new Error(fallback);
 }

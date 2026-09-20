@@ -8,6 +8,7 @@ const bulkRoute = readFileSync("src/app/api/financial/inbox/bulk-review/route.ts
 const listRoute = readFileSync("src/app/api/financial/inbox/route.ts", "utf8");
 const linkRoute = readFileSync("src/app/api/financial/inbox/[id]/link/route.ts", "utf8");
 const settingsRoute = readFileSync("src/app/api/financial/inbox/settings/route.ts", "utf8");
+const workflow = readFileSync("src/features/financial/inbox/workflow.server.ts", "utf8");
 
 test("preparação de pagamento declara que autorização, agendamento e execução são etapas posteriores", () => {
   assert.match(page, /Preparar não autoriza, agenda nem executa pagamento\./);
@@ -31,12 +32,28 @@ test("interface separa a caixa operacional da auditoria de cobranças identifica
   assert.doesNotMatch(page, /const STAGE_OPTIONS/);
 });
 
-test("mostra o lançamento sugerido antes da decisão e explicita a substituição da previsão", () => {
+test("mostra o lançamento sugerido antes da decisão e explicita o vínculo com a previsão", () => {
   assert.ok(page.indexOf("1. Lançamento sugerido") < page.indexOf("2. Próxima decisão"));
-  assert.match(page, /Previsão a substituir/);
-  assert.match(page, /Substituir esta previsão pela cobrança/);
-  assert.match(page, /Previsão substituída/);
+  assert.match(page, /Previsão a vincular/);
+  assert.match(page, /Vincular cobrança à previsão/);
+  assert.match(page, /Vincular e atualizar informações/);
+  assert.match(page, /O nome e a classificação oficial serão mantidos/);
   assert.match(page, /Uma única despesa de/);
+});
+
+test("agrupa mensagens da mesma obrigação sem perder a trilha individual", () => {
+  assert.match(page, /groupFinancialInboxMessages/);
+  assert.match(page, /E-mails desta obrigação/);
+  assert.match(page, /permanecem separados para auditoria/);
+});
+
+test("vínculo com previsão preserva a nomenclatura oficial inclusive em telefonia", () => {
+  assert.match(workflow, /const description = String\(provision\.description \|\| message\.subject\)\.trim\(\)/);
+  assert.doesNotMatch(workflow, /buildFinancialDescription\("mobile_phone_bill"/);
+  assert.match(workflow, /documentIdentity/);
+  assert.match(workflow, /inboxMessageIds/);
+  assert.match(workflow, /aliases: mergeExpenseAliases/);
+  assert.doesNotMatch(workflow, /chooseExistingExpenseSuggestion[\s\S]{0,600}aliases/);
 });
 
 test("documento fiscal separa remetente, arrecadador, contribuinte e composição", () => {

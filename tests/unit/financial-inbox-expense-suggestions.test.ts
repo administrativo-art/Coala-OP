@@ -118,6 +118,54 @@ test("linha digitável idêntica identifica o mesmo boleto apesar da variação 
   assert.match(suggestion.matchedBarcodeMasked || "", /^23793.*13884$/);
 });
 
+test("usa a identidade documental persistida para reconhecer um lembrete", () => {
+  const barcode = "23793493079001004992396000130003915620000113884";
+  const suggestion = chooseExistingExpenseSuggestion({
+    ...classification,
+    barcode,
+  }, [marviExpense({
+    installments: [{
+      number: 1,
+      value: 1138.84,
+      dueDate: "2026-09-07",
+      status: "pending",
+    }],
+    documentIdentity: {
+      barcode,
+      barcodeMasked: "23793••••••••••••••••••••••••••••••••••13884",
+      barcodeHash: "hash",
+      documentReferences: ["872460"],
+      sourceMessageIds: ["message-original"],
+      confidence: "high",
+      conflictFields: [],
+    },
+  })]);
+
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.automaticLinkEligible, true);
+  assert.match(suggestion.reasons.join(" "), /mesmo boleto/);
+});
+
+test("não atribui o boleto global indistintamente a todas as parcelas", () => {
+  const barcode = "23793493079001004992396000130003915620000113884";
+  const expense = marviExpense({
+    documentIdentity: {
+      barcode,
+      barcodeMasked: "23793••••••••••••••••••••••••••••••••••13884",
+      barcodeHash: "hash",
+      documentReferences: ["872460"],
+      sourceMessageIds: ["message-original"],
+      confidence: "high",
+      conflictFields: [],
+    },
+  });
+  const suggestion = chooseExistingExpenseSuggestion({ ...classification, barcode }, [expense]);
+
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.matchStrength, "attributes");
+  assert.equal(suggestion.automaticLinkEligible, false);
+});
+
 test("linha digitável idêntica basta mesmo quando o e-mail não informa valor, vencimento ou fornecedor", () => {
   const barcode = "23793493079001004992396000130003915620000113884";
   const suggestion = chooseExistingExpenseSuggestion({
@@ -280,6 +328,36 @@ test("telefonia exige a mesma linha para sugerir automaticamente", () => {
     description: "Telefonia móvel · Conta 123456",
   })]);
   assert.equal(accountOnly.status, "not_found");
+});
+
+test("telefonia não automatiza por CNPJ e documento quando as linhas são diferentes", () => {
+  const suggestion = chooseExistingExpenseSuggestion({
+    ...classification,
+    documentReferences: ["FATURA-2026-09"],
+    installmentNumber: 1,
+    installmentTotal: 1,
+    billingIdentity: {
+      supplierTaxId: "02558157000162",
+      customerAccount: "CONTA-1",
+      contractNumber: "CONTRATO-1",
+      serviceType: "mobile",
+      serviceNumbers: ["+5598999991234"],
+    },
+  }, [marviExpense({
+    id: "vivo-other-line",
+    supplier: "Vivo",
+    description: "Conta de celular FATURA-2026-09 · Linha (98) 98888-4321",
+    billingIdentity: {
+      supplierTaxId: "02558157000162",
+      customerAccount: "CONTA-1",
+      contractNumber: "CONTRATO-1",
+      serviceType: "mobile",
+      serviceNumbers: ["+5598988884321"],
+    },
+  })]);
+
+  assert.equal(suggestion.status, "not_found");
+  assert.equal(suggestion.automaticLinkEligible, false);
 });
 
 test("não cruza tributos federais diferentes só porque favorecido, valor e vencimento coincidem", () => {

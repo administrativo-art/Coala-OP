@@ -33,6 +33,7 @@ export const expenseFormSchema = z
     description: z
       .string()
       .min(10, "A descrição deve ter pelo menos 10 caracteres."),
+    aliases: z.array(z.string().trim().min(2).max(160)).max(20).default([]),
     totalValue: z.coerce.number().positive("O valor total deve ser positivo."),
     competenceDate: z.date().optional(),
     dueDate: z.date().optional(),

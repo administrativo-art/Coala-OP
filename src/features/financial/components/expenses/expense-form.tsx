@@ -515,6 +515,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       variedInstallments: [],
       accountPlan: "",
       description: "",
+      aliases: [],
       supplier: "",
       notes: "",
       referenceResultCenterId: "",
@@ -548,6 +549,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         const billingIdentity = classification.billingIdentity as FinancialInboxBillingIdentity | null | undefined;
         setInboxBillingIdentity(billingIdentity ?? null);
         form.setValue("description", String(creationSuggestion.description || message?.subject || "Cobrança recebida"), { shouldValidate: true });
+        form.setValue("aliases", [String(message?.subject || "").trim()].filter(Boolean), { shouldValidate: true });
         form.setValue("supplier", String(classification.supplierName || message?.from || ""), { shouldValidate: true });
         const identityNotes = [
           billingIdentity?.customerAccount ? `Conta do cliente: ${billingIdentity.customerAccount}` : null,
@@ -1311,6 +1313,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
               }))
             : [],
           description: data.description,
+          aliases: Array.isArray(data.aliases) ? data.aliases.map(String).filter(Boolean) : [],
           supplier: data.supplier,
           notes: data.notes,
           totalValue: data.totalValue,
@@ -1619,6 +1622,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       hasPersonAllocations: values.hasPersonAllocations,
       personAllocations: storedPersonAllocations,
       description: values.description || "",
+      aliases: [...new Set((values.aliases || []).map((alias) => alias.trim()).filter(Boolean))],
       supplier: values.supplier ?? "",
       notes: values.notes ?? "",
       totalValue: values.totalValue || 0,
@@ -2054,7 +2058,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         if (reconciliation === "reconciled") {
           toast({
             title: "Provisão conciliada.",
-            description: "A previsão da competência foi substituída pelo valor real sem duplicar a DRE.",
+            description: "A cobrança real foi vinculada à previsão da competência, sem duplicar a DRE.",
           });
         } else if (reconciliation === "ambiguous") {
           toast({
@@ -2305,6 +2309,27 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                 <Plus className="h-4 w-4" />
                               </Button>
                             </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="aliases"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Aliases de busca</FormLabel>
+                            <FormControl>
+                              <Input
+                                value={(field.value || []).join(", ")}
+                                onChange={(event) => field.onChange([
+                                  ...new Set(event.target.value.split(",").map((alias) => alias.trim()).filter(Boolean)),
+                                ])}
+                                placeholder="Ex: consultoria de RH, assessoria Isabela"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">Separe por vírgulas. Os aliases ajudam na busca, mas não determinam duplicidade ou pagamento.</p>
                             <FormMessage />
                           </FormItem>
                         )}

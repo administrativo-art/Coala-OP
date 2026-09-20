@@ -19,6 +19,8 @@ test("sanitiza tokens, cookies, senha, documentos, conta e Pix por allowlist e r
     cnpj: "12.345.678/0001-90",
     accountNumber: "123456-7",
     pix: "person@example.com",
+    certificate: "-----BEGIN CERTIFICATE-----\npublic-material\n-----END CERTIFICATE-----",
+    httpsAgent: { privateKey: "private-material" },
     unknownPayload: { email: "person@example.com" },
   });
   assert.equal(result.provider, "fixture");
@@ -29,7 +31,17 @@ test("sanitiza tokens, cookies, senha, documentos, conta e Pix por allowlist e r
   assert.equal(result.cnpj, "[REDACTED]");
   assert.equal(result.accountNumber, "[REDACTED]");
   assert.equal(result.pix, "[REDACTED]");
+  assert.equal(result.certificate, "[REDACTED]");
+  assert.equal(result.httpsAgent, "[REDACTED]");
   assert.equal(result.unknownPayload, "[REDACTED]");
+});
+
+test("redige certificado PEM mesmo quando aparece dentro de texto", () => {
+  const sanitized = sanitizeError(new Error(
+    "Falha TLS -----BEGIN CERTIFICATE-----\npublic-material\n-----END CERTIFICATE-----",
+  ));
+  assert.doesNotMatch(sanitized.message, /public-material|BEGIN CERTIFICATE/);
+  assert.match(sanitized.message, /\[REDACTED\]/);
 });
 
 test("sanitiza URL, query sensível, e-mail, CPF, CNPJ e stack", () => {

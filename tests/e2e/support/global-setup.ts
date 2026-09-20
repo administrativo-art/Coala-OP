@@ -95,7 +95,7 @@ export default async function seedE2E() {
     },
   });
   const vacationStart = dateOnly(45);
-  const vacationEnd = dateOnly(58);
+  const vacationEnd = dateOnly(74);
   const vacationYear = Number(vacationStart.slice(0, 4));
   const weeklyRestDay = (new Date(`${vacationStart}T12:00:00Z`).getUTCDay() + 3) % 7;
   batch.set(mainDb.collection("users").doc(E2E_VACATION.employeeId), {
@@ -105,6 +105,7 @@ export default async function seedE2E() {
     assignedKioskIds: [],
     unitIds: [],
     isActive: true,
+    operacional: true,
     admissionDate: "2024-01-01",
     createdAt: now,
   });
@@ -120,8 +121,8 @@ export default async function seedE2E() {
     recordType: "gozo",
     startDate: vacationStart,
     endDate: vacationEnd,
-    returnDate: dateOnly(59),
-    days: 14,
+    returnDate: dateOnly(75),
+    days: 30,
     unjustifiedAbsences: 0,
     entitledDays: 30,
     calendarId: E2E_VACATION.calendarId,

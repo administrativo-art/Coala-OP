@@ -81,7 +81,7 @@ test("não sugere previsão de outra linha telefônica", () => {
   assert.equal(suggestion.status, "not_found");
 });
 
-test("usa a conta de cliente como identidade forte quando a linha não está cadastrada", () => {
+test("não agrupa telefonia somente pela conta do cliente quando a linha não está cadastrada", () => {
   const telecomClassification: FinancialInboxClassification = {
     ...classification,
     documentType: "utility_bill",
@@ -101,9 +101,8 @@ test("usa a conta de cliente como identidade forte quando a linha não está cad
     provisionCompetence: "2026-08",
     totalValue: 1200,
   }]);
-  assert.equal(suggestion.status, "suggested");
-  assert.equal(suggestion.provisionExpenseId, "forecast-account-only");
-  assert.match(suggestion.reasons.join(" "), /mesma conta do cliente/);
+  assert.equal(suggestion.status, "not_found");
+  assert.equal(suggestion.provisionExpenseId, null);
 });
 
 test("DAS só substitui previsão da mesma natureza fiscal", () => {
