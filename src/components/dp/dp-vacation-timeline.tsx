@@ -14,10 +14,10 @@ function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
 }
 
-const DAY_WIDTH = 30;   // px per day
-const NAME_COL = 220;   // sticky name column width
-const ROW_H = 92;       // row height
-const HEAD_H = 58;      // month-header height
+const DAY_WIDTH = 22;   // px per day
+const NAME_COL = 200;   // sticky name column width
+const ROW_H = 66;       // row height
+const HEAD_H = 46;      // month-header height
 const BAR_H = 40;       // vacation bar height
 const MONTHS_SPAN = 3;  // visible window in months
 
@@ -60,23 +60,24 @@ export function DPVacationTimeline({ users, vacations, onSelectUser }: Props) {
             return {
               id: v.id,
               tooltip: `${format(rs, 'dd/MM')} → ${format(re, 'dd/MM')} · ${cfg.label}`,
+              label: `${format(rs, 'dd/MM')} → ${format(re, 'dd/MM')} · ${cfg.label}`,
               left: startOff * DAY_WIDTH + 2,
               width: widthDays * DAY_WIDTH - 4,
               color: cfg.fg,
             };
           })
-          .filter(Boolean) as { id: string; tooltip: string; left: number; width: number; color: string }[];
+          .filter(Boolean) as { id: string; tooltip: string; label: string; left: number; width: number; color: string }[];
         return { user, bars };
       })
       .filter(r => r.bars.length > 0);
   }, [users, vacations, winStart, winEnd]);
 
   return (
-    <div className="rounded-2xl border bg-card p-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="rounded-[18px] border bg-card p-[18px]">
+      <div className="mb-3.5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Timeline de férias</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h2 className="text-base font-black">Timeline de férias</h2>
+          <p className="mt-1 text-[12.5px] font-semibold text-muted-foreground">
             {capitalize(format(months[0], 'MMM', { locale: ptBR }))}–
             {capitalize(format(months[months.length - 1], 'MMM yyyy', { locale: ptBR }))} · role para o lado para navegar.
           </p>
@@ -155,7 +156,11 @@ export function DPVacationTimeline({ users, vacations, onSelectUser }: Props) {
                         background: bar.color,
                         opacity: 0.85,
                       }}
-                    />
+                    >
+                      {bar.width >= 150 ? (
+                        <span className="block truncate px-3.5 py-3 text-[11px] font-extrabold text-white">{bar.label}</span>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               ))}

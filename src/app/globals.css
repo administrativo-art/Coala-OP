@@ -206,6 +206,46 @@
   line-height: 1rem !important;
 }
 
+/*
+ * Escala tipográfica canônica para páginas migradas ao sistema visual comum.
+ * A classe permite remover gradualmente a compactação legada de Pessoal sem
+ * provocar uma mudança global e não revisada em todas as telas do módulo.
+ */
+.personal-section-density .system-standard-page [data-ui='page-title'] {
+  font-size: 1.5rem !important;
+  line-height: 2rem !important;
+}
+
+.personal-section-density .system-standard-page [data-ui='page-description'] {
+  font-size: 1rem !important;
+  line-height: 1.5rem !important;
+}
+
+.personal-section-density .system-standard-page :where(.text-2xl) {
+  font-size: 1.5rem !important;
+  line-height: 2rem !important;
+}
+
+.personal-section-density .system-standard-page :where(.text-xl) {
+  font-size: 1.25rem !important;
+  line-height: 1.75rem !important;
+}
+
+.personal-section-density .system-standard-page :where(.text-lg) {
+  font-size: 1.125rem !important;
+  line-height: 1.75rem !important;
+}
+
+.personal-section-density .system-standard-page :where(.text-base) {
+  font-size: 1rem !important;
+  line-height: 1.5rem !important;
+}
+
+.personal-section-density .system-standard-page :where(.text-sm) {
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+}
+
 .personal-section-density :where(.rounded-3xl) {
   border-radius: 0.75rem !important;
 }
