@@ -1,13 +1,17 @@
 import type {
+  FinancialDocumentIdentity,
   FinancialInboxBillingIdentity,
   FinancialInboxClassification,
   FinancialInboxExpenseAlternative,
   FinancialInboxExpenseSuggestion,
   FinancialInboxExistingBankPayment,
   FinancialInboxExistingSettlement,
+  FinancialInboxFiscalIdentity,
 } from "./types";
 import {
+  compareFiscalIdentities,
   extractBillingIdentity,
+  extractFiscalIdentity,
   extractFinancialDocumentReferences,
   maskPaymentBarcode,
   normalizePaymentBarcode,
@@ -31,6 +35,8 @@ export type InboxExpenseCandidate = {
   }> | null;
   notes?: string | null;
   billingIdentity?: FinancialInboxBillingIdentity | null;
+  fiscalIdentity?: FinancialInboxFiscalIdentity | null;
+  documentIdentity?: FinancialDocumentIdentity | null;
 };
 
 function normalize(value: unknown) {
@@ -188,6 +194,12 @@ function scoredInstallments(
     if (!["pending", "partially_paid", "paid"].includes(String(candidate.status ?? ""))) return [];
     const supplierMatches = equivalentSupplier(classification.supplierName, candidate.supplier);
     const identity = billingIdentityMatch(classification, candidate);
+    const targetFiscalIdentity = candidate.fiscalIdentity ?? extractFiscalIdentity([
+      candidate.description,
+      candidate.supplier,
+      candidate.notes,
+    ].filter(Boolean).join("\n"));
+    const fiscalMatch = compareFiscalIdentities(classification.fiscalIdentity, targetFiscalIdentity);
     const candidateRecord = candidate as InboxExpenseCandidate & Record<string, unknown>;
     const installments: Array<Record<string, unknown>> = Array.isArray(candidate.installments) && candidate.installments.length
       ? candidate.installments.map((installment) => ({ ...candidateRecord, ...installment }))
@@ -208,21 +220,29 @@ function scoredInstallments(
         && (entry.installmentNumber === candidateInstallmentNumber
           || (entry.installmentNumber == null && installments.length === 1))
       )) ?? null;
+      const installmentDocumentIdentity = candidate.installments?.[index]?.documentIdentity as FinancialDocumentIdentity | null | undefined;
+      const candidateDocumentIdentity = installmentDocumentIdentity
+        ?? (installments.length === 1 ? candidate.documentIdentity : null);
       const candidateBarcode = normalizePaymentBarcode(String(
-        installment.bankLine
+        candidateDocumentIdentity?.barcode
+          ?? installment.bankLine
           ?? installment.barcode
           ?? installment.digitableLine
           ?? barcodeEvidence?.code
           ?? "",
       ));
       const sameBarcode = Boolean(sourceBarcode && candidateBarcode && sourceBarcode === candidateBarcode);
+      if (!fiscalMatch.compatible && !sameBarcode) return [];
       const sourceDocumentReferences = classification.documentReferences ?? [];
-      const candidateDocumentReferences = extractFinancialDocumentReferences([
-        candidate.description,
-        candidate.notes,
-        candidateRecord.sourceReference,
-        installment.documentNumber,
-      ].filter(Boolean).join("\n"));
+      const candidateDocumentReferences = [...new Set([
+        ...(candidateDocumentIdentity?.documentReferences ?? []),
+        ...extractFinancialDocumentReferences([
+          candidate.description,
+          candidate.notes,
+          candidateRecord.sourceReference,
+          installment.documentNumber,
+        ].filter(Boolean).join("\n")),
+      ])];
       const matchedDocumentReferences = sourceDocumentReferences.filter((reference) => (
         candidateDocumentReferences.includes(reference)
       ));
@@ -239,13 +259,15 @@ function scoredInstallments(
         ...(sameInstallment ? [`mesma parcela ${classification.installmentNumber}/${classification.installmentTotal ?? installments.length}`] : []),
         ...(supplierMatches ? ["mesmo favorecido"] : []),
         ...identity.reasons,
+        ...fiscalMatch.reasons,
       ];
       const score = (sameBarcode ? 120 : 0)
         + (sameDocumentReference ? 55 : 0)
         + (amountMatches ? 35 : 0)
         + (dueDateMatches ? 30 : 0)
         + (supplierMatches ? 20 : 0)
-        + (identity.exact ? 35 : 0);
+        + (identity.exact ? 35 : 0)
+        + (fiscalMatch.required ? 40 : 0);
       if (score < 50) return [];
       const settlement = existingSettlement(installment, candidate);
       const bankPayment = settlement ? null : existingPayment(installment) ?? barcodeEvidence?.payment ?? null;
@@ -255,6 +277,7 @@ function scoredInstallments(
         && sameInstallment
         && amountMatches
         && dueDateMatches
+        && (!identity.telecomServiceNumberRequired || identity.sameServiceNumber)
       );
       return [{
         alternative: {
@@ -281,6 +304,7 @@ function scoredInstallments(
           amountMatches
           && dueDateMatches
           && (supplierMatches || identity.exact || sameDocumentReference)
+          && fiscalMatch.compatible
           && (!identity.telecomServiceNumberRequired || identity.sameServiceNumber)
         ),
         strongAutomaticMatch,

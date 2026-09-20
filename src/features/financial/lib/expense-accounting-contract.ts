@@ -44,6 +44,11 @@ export type FinancialExpenseDreDocument = {
   supplier?: string | null;
   employeeId?: string | null;
   supplierId?: string | null;
+  billingIdentity?: {
+    customerAccount: string | null;
+    serviceNumbers: string[];
+  } | null;
+  cardChargeDate?: string | null;
 };
 
 type ExpenseCompetenceSource = {
@@ -94,6 +99,33 @@ function monthFromDateValue(value: unknown) {
   const date = dateFromUnknown(value);
   if (!date) return null;
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function dateKeyFromDateValue(value: unknown) {
+  if (typeof value === "string") {
+    const direct = value.match(/^(\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))(?:T|$)/)?.[1];
+    if (direct) return direct;
+  }
+  const date = dateFromUnknown(value);
+  if (!date) return null;
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function normalizeBillingIdentity(value: unknown): FinancialExpenseDreDocument["billingIdentity"] {
+  const identity = record(value);
+  const customerAccount = text(identity.customerAccount) || null;
+  const serviceNumbers = [...new Set(
+    (Array.isArray(identity.serviceNumbers) ? identity.serviceNumbers : [])
+      .map(text)
+      .filter(Boolean),
+  )].slice(0, 20);
+  return customerAccount || serviceNumbers.length > 0
+    ? { customerAccount, serviceNumbers }
+    : null;
 }
 
 /**
@@ -202,5 +234,19 @@ export function normalizeFinancialExpenseForDre(
     supplier: text(expense.supplier) || null,
     employeeId: text(expense.employeeId) || null,
     supplierId: text(expense.supplierId) || null,
+    billingIdentity: normalizeBillingIdentity(expense.billingIdentity),
+    cardChargeDate: dateKeyFromDateValue(expense.cardChargeDate),
+  };
+}
+
+export function financialExpenseDreWithoutPresentationDetails(
+  expense: FinancialExpenseDreDocument,
+): FinancialExpenseDreDocument {
+  return {
+    ...expense,
+    description: null,
+    supplier: null,
+    billingIdentity: null,
+    cardChargeDate: null,
   };
 }

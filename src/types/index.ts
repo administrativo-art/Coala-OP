@@ -158,6 +158,11 @@ export type MovementRecord = {
   activityId?: string;
   reverted?: boolean;
   revertedFromId?: string;
+  /** Exceção manual e auditável: mantém o movimento no estoque, mas o exclui do CMV da DRE. */
+  excludeFromDreStockCmv?: boolean;
+  dreStockCmvExclusionReason?: string;
+  dreStockCmvExcludedAt?: any;
+  dreStockCmvExcludedBy?: string;
   sourceType?: string;
   sourceId?: string;
   uniformEventId?: string;
@@ -716,7 +721,7 @@ export type PermissionSet = {
       export: boolean;
     };
   };
-  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; viewAiCosts: boolean; };
+  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; managePublicBio: boolean; viewAiCosts: boolean; };
   tasks: { view: boolean; manage: boolean; };
   goals: { view: boolean; manage: boolean; };
   help: { view: true };
@@ -2854,7 +2859,7 @@ export const defaultGuestPermissions: PermissionSet = {
     commercial: {
       technicalSheets: { view: false, create: false, edit: false, delete: false, export: false },
     },
-    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, viewAiCosts: false },
+    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, managePublicBio: false, viewAiCosts: false },
     tasks: { view: false, manage: false },
     goals: { view: false, manage: false },
     help: { view: true },
@@ -2966,7 +2971,7 @@ export const defaultAdminPermissions: PermissionSet = {
     commercial: {
       technicalSheets: { view: true, create: true, edit: true, delete: true, export: true },
     },
-    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true, viewAiCosts: true },
+    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true, managePublicBio: true, viewAiCosts: true },
     tasks: { view: true, manage: true },
     goals: { view: true, manage: true },
     reposition: { view: true, prepareDispatch: true, receive: true, finalize: true, cancel: true },

@@ -33,10 +33,12 @@ export const expenseFormSchema = z
     description: z
       .string()
       .min(10, "A descrição deve ter pelo menos 10 caracteres."),
+    aliases: z.array(z.string().trim().min(2).max(160)).max(20).default([]),
     totalValue: z.coerce.number().positive("O valor total deve ser positivo."),
     competenceDate: z.date().optional(),
     dueDate: z.date().optional(),
     isApportioned: z.boolean().default(false),
+    referenceResultCenterId: z.string().optional(),
     resultCenter: z.string().optional(),
     apportionments: z
       .array(
@@ -146,15 +148,22 @@ export const expenseFormSchema = z
     }
   )
   .refine(
+    (data) => !!data.referenceResultCenterId?.trim(),
+    {
+      message: "Selecione o centro de referência.",
+      path: ["referenceResultCenterId"],
+    }
+  )
+  .refine(
     (data) => {
       if (data.isApportioned) {
         return data.apportionments && data.apportionments.length > 0;
       }
-      return !!data.resultCenter;
+      return true;
     },
     {
-      message: "Defina a unidade ou o rateio.",
-      path: ["resultCenter"],
+      message: "Defina ao menos um participante do rateio.",
+      path: ["apportionments"],
     }
   )
   .refine(

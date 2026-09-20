@@ -111,6 +111,20 @@ Regras:
 - separar configuração de homologação e produção;
 - renovar o certificado antes do vencimento com alerta operacional.
 
+O cliente valida o `validTo` do certificado antes de abrir a conexão. A partir
+de 45 dias para o vencimento ele emite um evento técnico estruturado, elevado
+para severidade alta nos 15 dias finais; certificado vencido interrompe a
+integração com erro seguro. O evento não contém certificado, chave ou
+credenciais.
+
+Autenticação concorrente para o mesmo ambiente e escopo compartilha uma única
+solicitação OAuth. Falhas transitórias de autenticação e leituras idempotentes
+possuem retentativa curta e limitada, respeitando `Retry-After` dentro do teto
+operacional. Inclusões de pagamentos não são repetidas automaticamente. Todo
+erro do cliente HTTP é convertido na fronteira para um objeto por allowlist;
+configuração Axios, headers, bodies e agente mTLS nunca atravessam essa
+fronteira.
+
 O desenvolvimento local não deve receber cópias do certificado e da chave de
 produção. Quando as credenciais locais do ambiente escolhido não existirem, a
 rota autenticada de **consulta manual de status** pode encaminhar somente essa

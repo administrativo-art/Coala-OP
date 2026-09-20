@@ -101,7 +101,13 @@ function adjustmentLabel(type: unknown) {
   return ({ INTEREST: "Juros", FINE: "Multa", DISCOUNT: "Desconto", ABATEMENT: "Abatimento", OTHER: "Outro ajuste" } as Record<string, string>)[String(type)] || "Ajuste";
 }
 
-export function ExpenseFinancialSummary({ expense }: { expense: ExpenseSummarySource }) {
+export function ExpenseFinancialSummary({
+  expense,
+  compact = false,
+}: {
+  expense: ExpenseSummarySource;
+  compact?: boolean;
+}) {
   const { firebaseUser, permissions } = useAuth();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -199,7 +205,13 @@ export function ExpenseFinancialSummary({ expense }: { expense: ExpenseSummarySo
 
   return (
     <>
-      <section className="sm:col-span-3 rounded-xl border bg-muted/20 p-3" aria-label="Resumo financeiro da obrigação">
+      <section
+        className={cn(
+          "rounded-xl border p-3",
+          compact ? "border-[#eceadf] bg-white dark:border-border dark:bg-background" : "sm:col-span-3 bg-muted/20",
+        )}
+        aria-label="Resumo financeiro da obrigação"
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Resumo financeiro</p>
@@ -215,20 +227,20 @@ export function ExpenseFinancialSummary({ expense }: { expense: ExpenseSummarySo
             </div>
           </div>
           <Button type="button" size="sm" variant="outline" className="h-8 rounded-xl" onClick={(event) => { event.stopPropagation(); void openDetails(); }}>
-            <SearchCheck className="mr-1.5 h-4 w-4" /> Ver detalhes
+            <SearchCheck className="mr-1.5 h-4 w-4" /> {compact ? "Detalhes" : "Ver detalhes"}
           </Button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className={cn("mt-3 grid grid-cols-2 gap-2", !compact && "md:grid-cols-4")}>
           {[
             ["Provisionado", currencyFromCents(summary.forecastAmountCents)],
             ["Real", currencyFromCents(summary.actualAmountCents)],
             ["Saída financeira", currencyFromCents(summary.cashPaidAmountCents)],
             ["Saldo principal", currencyFromCents(summary.balanceAmountCents)],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-xl border bg-background px-3 py-2.5">
+            <div key={label} className={cn("rounded-xl border bg-background px-3 py-2.5", compact && "px-2.5 py-2")}>
               <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-              <p className="mt-1 font-mono text-sm font-semibold">{value}</p>
+              <p className={cn("mt-1 font-mono text-sm font-semibold", compact && "text-xs")}>{value}</p>
             </div>
           ))}
         </div>

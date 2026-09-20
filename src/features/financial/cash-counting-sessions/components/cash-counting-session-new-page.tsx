@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { getUserDisplayName } from "@/lib/user-display";
 import type { CashCountingSession } from "../types";
 import { CashControlNavigation } from "@/features/financial/cash-closures/components/cash-control-navigation";
 
@@ -20,7 +21,7 @@ type Unit = { id: string; name: string; pdvFilialId: string | null };
 
 export function CashCountingSessionNewPage() {
   const router = useRouter();
-  const { firebaseUser, permissions } = useAuth();
+  const { firebaseUser, permissions, user } = useAuth();
   const api = useAuthenticatedApi();
   const { toast } = useToast();
   const [units, setUnits] = useState<Unit[]>([]);
@@ -53,6 +54,20 @@ export function CashCountingSessionNewPage() {
     }
     return result;
   }, [sessions]);
+  const countingUserName = getUserDisplayName({
+    id: user?.id ?? firebaseUser?.uid,
+    username: user?.username ?? firebaseUser?.displayName ?? undefined,
+    email: user?.email ?? firebaseUser?.email ?? undefined,
+    hrEmployeeId: user?.hrEmployeeId,
+    registrationIdBizneo: user?.registrationIdBizneo,
+    registrationIdPdv: user?.registrationIdPdv,
+  }, firebaseUser?.uid);
+  const countingUserInitials = countingUserName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   async function createSession() {
     setWorking(true);
@@ -70,7 +85,7 @@ export function CashCountingSessionNewPage() {
   }
 
   if (!permissions.financial?.cashClosures?.approve) return null;
-  return <PageContainer variant="compact" className="space-y-5 pb-10">
+  return <PageContainer variant="compact" className="max-w-[880px] space-y-5 pb-10">
     <CashControlNavigation active="closures" crumbs={[
       { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" },
       { label: "Nova sessão" },
@@ -80,8 +95,8 @@ export function CashCountingSessionNewPage() {
       <Button asChild variant="outline" className="rounded-xl"><Link href="/dashboard/financial/cash-closures"><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Link></Button>
     </div>
 
-    <Card className="overflow-hidden rounded-2xl border-stone-200">
-      <CardHeader className="border-b border-stone-100 bg-stone-50/60"><CardTitle className="text-lg">Unidades da sessão</CardTitle><p className="text-sm text-zinc-500">Uma unidade fica indisponível para outras sessões até esta contagem ser finalizada.</p></CardHeader>
+    <Card className="overflow-hidden rounded-[18px] border-stone-200 bg-[#fffefb]">
+      <CardHeader className="border-b border-stone-100 bg-[#faf8f4]"><CardTitle className="text-lg">Unidades da sessão</CardTitle><p className="text-sm text-zinc-500">Uma unidade fica indisponível para outras sessões até esta contagem ser finalizada.</p></CardHeader>
       <CardContent className="pt-6">{loading ? <div className="flex h-32 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> : <div className="grid gap-3 sm:grid-cols-2">{units.map((unit) => {
         const lockedBy = lockByUnitId.get(unit.id);
         const checked = selectedUnits.includes(unit.id);
@@ -98,7 +113,12 @@ export function CashCountingSessionNewPage() {
       })}</div>}</CardContent>
     </Card>
 
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-zinc-900 px-5 py-4 text-white">
+    <div className="flex items-center gap-3 rounded-[18px] border border-stone-200 bg-[#fffefb] px-5 py-4">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-black text-blue-700">{countingUserInitials || "U"}</span>
+      <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[.1em] text-zinc-400">Contagem realizada por</span><strong className="mt-1 block truncate text-sm font-extrabold">{countingUserName}</strong><span className="mt-0.5 block text-xs font-semibold text-zinc-400">Financeiro</span></span>
+    </div>
+
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[#1d1d26] px-5 py-4 text-white">
       <span><span className="block text-xs text-zinc-400">Unidades selecionadas</span><strong className="text-lg">{selectedUnits.length}</strong></span>
       <Button className="h-11 rounded-xl bg-pink-600 px-6 font-bold text-white hover:bg-pink-700" disabled={working || selectedUnits.length === 0} onClick={() => void createSession()}>{working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Abrir sessão</Button>
     </div>

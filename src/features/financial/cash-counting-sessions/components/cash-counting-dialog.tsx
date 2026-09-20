@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, Loader2, LockKeyhole, RefreshCw, Save, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Loader2, LockKeyhole, RefreshCw, Save, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,14 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type ClosurePayload = CashClosureWithLines & {
   activeCountingSessionId?: string | null;
 };
+
+const COUNTING_GUIDE_STEPS = [
+  { title: "Informe a data", description: "Use a data impressa no malote." },
+  { title: "Escolha turno/operador", description: "Abra o cartão de quem entregou o malote." },
+  { title: "Conte por canal", description: "Preencha Caixa e Financeiro nos canais manuais." },
+  { title: "Revise diferenças", description: "Justifique as faltas indicadas em vermelho." },
+  { title: "Finalize o operador", description: "Finalize e repita nos demais turnos." },
+] as const;
 
 type Props = {
   open: boolean;
@@ -107,6 +115,7 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
   const [working, setWorking] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [collapsedOperators, setCollapsedOperators] = useState<Set<string>>(new Set());
   const latestData = useRef<CashClosureWithLines | null>(null);
   const draftRevision = useRef(0);
   const dirtyLineIds = useRef<Set<string>>(new Set());
@@ -386,17 +395,29 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     : null;
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) void requestClose(); }}>
-    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-[1080px] gap-0 overflow-hidden rounded-2xl p-0 sm:h-[min(860px,calc(100dvh-2rem))]">
-      <DialogHeader className="border-b border-stone-100 px-4 py-4 text-left sm:px-6">
+    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl p-0 sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[1080px]">
+      <DialogHeader className="space-y-0 border-b border-stone-100 px-4 py-4 text-left sm:px-6">
         <div className="flex items-start justify-between gap-4 pr-1">
           <div><DialogTitle className="text-xl font-black">Contar malote</DialogTitle><DialogDescription className="mt-1">{unit.name} · o rascunho é salvo sem finalizar o operador.</DialogDescription></div>
           <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full" aria-label="Fechar contagem" disabled={changingDate} onClick={() => void requestClose()}><X className="h-4 w-4" /></Button>
+        </div>
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/80 p-3">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Passo a passo da contagem</p>
+          <ol className="flex gap-2 overflow-x-auto pb-1" aria-label="Etapas para contar e finalizar o malote">
+            {COUNTING_GUIDE_STEPS.map((step, index) => {
+              const finalStep = index === COUNTING_GUIDE_STEPS.length - 1;
+              return <li key={step.title} className={cn("flex min-w-[176px] flex-1 items-start gap-2.5 rounded-xl border bg-white p-3", finalStep ? "border-emerald-200" : "border-stone-200")}>
+                <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black text-white", finalStep ? "bg-emerald-700" : "bg-zinc-900")}>{index + 1}</span>
+                <span className="min-w-0"><strong className="block text-[11.5px] leading-4">{step.title}</strong><span className="mt-0.5 block text-[10.5px] leading-4 text-zinc-500">{step.description}</span></span>
+              </li>;
+            })}
+          </ol>
         </div>
       </DialogHeader>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="grid gap-3 border-b border-stone-100 bg-stone-50/70 px-4 py-3 sm:grid-cols-[minmax(220px,320px)_1fr] sm:items-end sm:px-6">
-          <label><span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-zinc-500">Data do malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
+          <label><span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-zinc-500">Data impressa no malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
           <div className="flex min-h-8 items-center gap-2 text-xs text-zinc-500 sm:justify-end">
             {changingDate && <><Loader2 className="h-4 w-4 animate-spin" />Abrindo a data…</>}
             {saveState === "dirty" && <><AlertTriangle className="h-4 w-4 text-amber-600" />Alterações pendentes</>}
@@ -420,8 +441,15 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
               const missingNote = missingReportedNote || missingFinanceNote;
               const canEditReported = editable && !!permissions.financial?.cashClosures?.edit && !operatorFinalized;
               const canEditCounted = editable && !!permissions.financial?.cashClosures?.approve && !operatorFinalized;
+              const collapsed = collapsedOperators.has(group.operatorId);
               return <Card key={group.operatorId} className={cn("overflow-hidden rounded-2xl border-stone-200 transition-colors", operatorFinalized && "border-emerald-200 bg-emerald-50/20")}>
-                <CardHeader className="border-b border-stone-100 px-4 py-3 sm:px-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="text-base">{group.name}</CardTitle><p className="mt-1 text-xs text-zinc-400">{group.lines.length} canal(is) do fechamento</p></div><div className="flex items-center gap-2">{operatorFinalized ? <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Finalizado</Badge> : <Button className="bg-emerald-700 font-bold hover:bg-emerald-800" disabled={!editable || !!working || !group.operator || incomplete || missingNote} onClick={() => group.operator && void finalizeOperator(group.operator)}>{working === `finalize:${group.operatorId}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Finalizar operador</Button>}</div></div></CardHeader>
+                <CardHeader className="border-b border-stone-100 px-4 py-3 sm:px-5">
+                  <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setCollapsedOperators((current) => { const next = new Set(current); if (next.has(group.operatorId)) next.delete(group.operatorId); else next.add(group.operatorId); return next; })} aria-expanded={!collapsed}>
+                    <span className="flex min-w-0 items-center gap-2.5"><ChevronDown className={cn("h-4 w-4 shrink-0 text-zinc-400 transition-transform", collapsed && "-rotate-90")} /><span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-black", operatorFinalized ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-pink-700")}>{group.name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span className="min-w-0"><CardTitle className="truncate text-base">{group.name}</CardTitle><p className={cn("mt-1 text-xs", operatorFinalized ? "text-emerald-700" : "text-zinc-400")}>{operatorFinalized ? "Operador finalizado" : `${group.lines.length} canais do fechamento`}</p></span></span>
+                    <span className="flex shrink-0 items-center gap-2">{operatorFinalized && <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Finalizado</Badge>}</span>
+                  </button>
+                </CardHeader>
+                {!collapsed && <>
                 <CardContent className="space-y-4 p-4 sm:p-5">
                   <div className="space-y-3">{group.lines.map((line) => {
                     const automatic = isPdvAutoCountedChannel(line.channel);
@@ -429,12 +457,21 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
                     const financeShortage = (line.differenceCents ?? 0) < 0;
                     return <div key={line.id} className={cn("space-y-3 rounded-xl border border-stone-200 p-3 sm:p-4", (reportedShortage || financeShortage) && "border-rose-200 bg-rose-50/20")}>
                       <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{line.channelLabel}</strong>{automatic && <Badge variant="outline" className="border-stone-200 bg-stone-50 text-zinc-500"><LockKeyhole className="mr-1.5 h-3 w-3" />Conferido pelo PDV</Badge>}</div>
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <div className="rounded-xl bg-stone-50 p-3"><span className="text-xs font-semibold text-zinc-500">PDV · esperado</span><strong className="mt-1 block font-mono text-lg">{formatBRL(line.expectedCents)}</strong></div>
-                        <div className="rounded-xl bg-stone-50 p-3"><span className="text-xs font-semibold text-zinc-500">Caixa · informado</span><CentsInput value={line.reportedCents} onChange={(value) => updateClosureLine(line.id, { reportedCents: value })} disabled={!canEditReported || automatic} ariaLabel={`Valor informado pelo Caixa em ${line.channelLabel} para ${group.name}`} className={cn("mt-1 h-10 bg-white font-mono", !canEditReported && "border-transparent bg-transparent px-0 shadow-none")} /></div>
-                        <div className="rounded-xl border border-pink-200 bg-pink-50/40 p-3"><span className="text-xs font-semibold text-pink-800">Financeiro · contado agora</span><CentsInput value={line.countedCents} onChange={(value) => updateClosureLine(line.id, { countedCents: value })} disabled={!canEditCounted || automatic} ariaLabel={`Valor contado agora em ${line.channelLabel} para ${group.name}`} className={cn("mt-1 h-10 bg-white font-mono", !canEditCounted && "border-transparent bg-transparent px-0 shadow-none")} /></div>
+                      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
+                        <div className="min-w-0 rounded-xl bg-stone-50 p-3 sm:p-4">
+                          <span className="block text-xs font-semibold text-zinc-500">PDV · esperado</span>
+                          <strong className="mt-1 block font-mono text-lg tabular-nums">{formatBRL(line.expectedCents)}</strong>
+                        </div>
+                        <div className="min-w-0 rounded-xl bg-stone-50 p-3 sm:p-4">
+                          <span className="block text-xs font-semibold text-zinc-500">Caixa · informado</span>
+                          <CentsInput value={line.reportedCents} onChange={(value) => updateClosureLine(line.id, { reportedCents: value })} disabled={!canEditReported || automatic} ariaLabel={`Valor informado pelo Caixa em ${line.channelLabel} para ${group.name}`} className={cn("mt-1 h-10 bg-white font-mono", !canEditReported && "border-transparent bg-transparent px-0 shadow-none")} />
+                        </div>
+                        <div className="min-w-0 rounded-xl border border-pink-200 bg-pink-50/40 p-3 sm:p-4">
+                          <span className="block text-xs font-semibold text-pink-800">Financeiro · contado agora</span>
+                          <CentsInput value={line.countedCents} onChange={(value) => updateClosureLine(line.id, { countedCents: value })} disabled={!canEditCounted || automatic} ariaLabel={`Valor contado agora em ${line.channelLabel} para ${group.name}`} className={cn("mt-1 h-10 bg-white font-mono", !canEditCounted && "border-transparent bg-transparent px-0 shadow-none")} />
+                        </div>
                       </div>
-                      <div className="grid gap-2 text-xs font-bold sm:grid-cols-3">
+                      <div className="grid gap-2 text-xs font-bold lg:grid-cols-3">
                         <div className={cn("rounded-lg px-3 py-2", differenceClass(line.reportedDifferenceCents))}>Caixa × PDV: {differenceLabel(line.reportedDifferenceCents)}</div>
                         <div className={cn("rounded-lg px-3 py-2", differenceClass(line.conferenceDifferenceCents))}>Financeiro × Caixa: {differenceLabel(line.conferenceDifferenceCents)}</div>
                         <div className={cn("rounded-lg px-3 py-2", differenceClass(line.differenceCents))}>Financeiro × PDV: {differenceLabel(line.differenceCents)}</div>
@@ -447,6 +484,14 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
                   {!operatorFinalized && missingReportedNote && <p className="text-xs font-medium text-rose-700">O Caixa precisa justificar cada falta em relação ao PDV antes da finalização.</p>}
                   {!operatorFinalized && missingFinanceNote && <p className="text-xs font-medium text-rose-700">Justifique cada falta confirmada pelo Financeiro antes da finalização.</p>}
                 </CardContent>
+                {!operatorFinalized && <CardFooter className="flex-col items-stretch gap-3 border-t border-stone-100 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                  <p className="text-xs text-zinc-500">Revise os valores e as justificativas antes de finalizar.</p>
+                  <Button className="w-full bg-emerald-700 font-bold hover:bg-emerald-800 sm:w-auto" disabled={!editable || !!working || !group.operator || incomplete || missingNote} onClick={() => group.operator && void finalizeOperator(group.operator)}>
+                    {working === `finalize:${group.operatorId}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    Finalizar operador
+                  </Button>
+                </CardFooter>}
+                </>}
               </Card>;
             })}</div>}
         </div>

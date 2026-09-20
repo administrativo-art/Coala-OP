@@ -3,6 +3,9 @@ import type {
   FinancialInboxClassification,
   FinancialInboxDocumentHints,
   FinancialInboxDocumentType,
+  FinancialInboxFiscalDocumentKind,
+  FinancialInboxFiscalIdentity,
+  FinancialInboxFiscalRevenueItem,
   FinancialInboxServiceType,
 } from "./types";
 
@@ -132,17 +135,188 @@ export function maskPaymentBarcode(value: string | null) {
 }
 
 function documentType(value: string): { type: FinancialInboxDocumentType; confidence: "high" | "medium" | "low" } {
-  if (/\bfgts\b/i.test(value)) return { type: "fgts", confidence: "high" };
-  if (/\binss\b|\bdarf\b/i.test(value)) return { type: "inss_darf", confidence: "high" };
+  const fiscalKind = detectFiscalDocumentKind(value);
+  if (fiscalKind === "fgts") return { type: "fgts", confidence: "high" };
+  if (fiscalKind === "das" || fiscalKind === "dare" || fiscalKind === "municipal_tax") {
+    return { type: "tax", confidence: "high" };
+  }
+  if (fiscalKind === "darf" || fiscalKind === "dctfweb") return { type: "inss_darf", confidence: "high" };
   if (/honor[aá]rio\s+cont[aá]bil|mensalidade\s+cont[aá]bil/i.test(value)) return { type: "accounting_fee", confidence: "high" };
-  if (/\b(?:energia|telefone|telefonia|internet|[aá]gua|fatura\s+vivo)\b/i.test(value)) return { type: "utility_bill", confidence: "medium" };
   if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
+  if (/\b(?:energia|telefone|telefonia|internet|[aá]gua|fatura\s+vivo)\b/i.test(value)) return { type: "utility_bill", confidence: "medium" };
   if (/\b(?:boleto|cobran[cç]a|fatura|vencimento|pagar)\b/i.test(value)) return { type: "charge", confidence: "medium" };
   return { type: "other", confidence: "low" };
 }
 
 function digits(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
+}
+
+function detectFiscalDocumentKind(value: string): FinancialInboxFiscalDocumentKind | null {
+  if (/documento\s+de\s+arrecada[cç][aã]o\s+do\s+simples\s+nacional|\bDAS\b[^\n]{0,80}\bsimples\s+nacional\b/i.test(value)) return "das";
+  if (/\bDCTFWEB\b/i.test(value)) return "dctfweb";
+  if (/documento\s+de\s+arrecada[cç][aã]o\s+de\s+receitas\s+federais|\bDARF\b/i.test(value)) return "darf";
+  if (/documento\s+de\s+arrecada[cç][aã]o\s+de\s+receitas\s+estaduais|\bDARE\b/i.test(value)) return "dare";
+  if (/\bFGTS\b|guia\s+do\s+fgts\s+digital|\bGFD\b/i.test(value)) return "fgts";
+  if (/documento\s+de\s+arrecada[cç][aã]o\s+municipal|guia\s+de\s+recolhimento\s+municipal/i.test(value)) return "municipal_tax";
+  return null;
+}
+
+function firstLineValue(value: string, pattern: RegExp) {
+  return value.match(pattern)?.[1]?.replace(/\s{2,}/g, " ").trim().slice(0, 180) || null;
+}
+
+function fiscalCollectorName(kind: FinancialInboxFiscalDocumentKind, value: string) {
+  if (["das", "darf", "dctfweb"].includes(kind)) return "Receita Federal do Brasil";
+  if (kind === "fgts") return "FGTS";
+  if (kind === "dare") {
+    const named = firstLineValue(value, /(SECRETARIA\s+DE\s+ESTADO\s+DA\s+FAZENDA(?:\s+DO\s+[A-ZÀ-Ý ]+)?)/i);
+    if (named) return named;
+    const state = firstLineValue(value, /ESTADO\s+DO\s+([A-ZÀ-Ý ]{2,40})(?:\n|—|-)/i);
+    return state ? `Secretaria de Estado da Fazenda do ${state}` : "Secretaria de Estado da Fazenda";
+  }
+  if (kind === "municipal_tax") {
+    return firstLineValue(value, /((?:PREFEITURA|MUNIC[IÍ]PIO)\s+DE\s+[A-ZÀ-Ý][A-ZÀ-Ý ]{2,80})(?:\n|$)/i);
+  }
+  return null;
+}
+
+function fiscalRevenueDescriptions(kind: FinancialInboxFiscalDocumentKind, value: string) {
+  const descriptions = new Set<string>();
+  if (kind === "das") descriptions.add("Simples Nacional");
+  if (/ICMS\s+ANTECIPADO/i.test(value)) descriptions.add("ICMS antecipado");
+  else if (/\bICMS\b/i.test(value)) descriptions.add("ICMS");
+  if (/\bISS(?:QN)?\b/i.test(value)) descriptions.add("ISS");
+  if (/CONTR(?:IBUI[CÇ][AÃ]O)?\s+PREV|\bINSS\b/i.test(value)) descriptions.add("Contribuição previdenciária");
+  if (/FGTS\s+RESCIS[OÓ]RIO|RESCIS[OÓ]RIO[^\n]{0,40}FGTS/i.test(value)) descriptions.add("FGTS rescisório");
+  else if (kind === "fgts") descriptions.add("FGTS");
+  if (/\bIRRF\b|IMPOSTO\s+DE\s+RENDA\s+RETIDO/i.test(value)) descriptions.add("IRRF");
+  if (/\bIRPJ\b/i.test(value)) descriptions.add("IRPJ");
+  if (/\bCOFINS\b/i.test(value)) descriptions.add("COFINS");
+  if (/\bPIS(?:\/PASEP)?\b/i.test(value)) descriptions.add("PIS/Pasep");
+  if (/\bCSLL\b/i.test(value)) descriptions.add("CSLL");
+  if (/(?:CONSULTA|TAXA)\s+DE\s+ALVAR[AÁ]/i.test(value)) descriptions.add("Alvará");
+  return [...descriptions].slice(0, 20);
+}
+
+function fiscalRevenueItems(
+  kind: FinancialInboxFiscalDocumentKind,
+  value: string,
+  revenueCodes: string[],
+  revenueDescriptions: string[],
+): FinancialInboxFiscalRevenueItem[] {
+  const items: FinancialInboxFiscalRevenueItem[] = [];
+  if (kind === "das") {
+    for (const line of value.split(/\r?\n/)) {
+      const match = line.match(/^\s*(\d{4})\s+(.+?)\s+((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})(?:\s+((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}))*\s*$/i);
+      if (!match) continue;
+      const amounts = Array.from(line.matchAll(/(?:^|\s)((?:\d{1,3}(?:\.\d{3})*|\d+),\d{2})(?=\s|$)/g));
+      const amountCents = amountToCents(amounts.at(-1)?.[1] ?? match[3]);
+      const description = match[2].replace(/\s{2,}/g, " ").trim().slice(0, 180);
+      items.push({ code: match[1], description, amountCents });
+    }
+  }
+  if (items.length === 0 && revenueDescriptions.length === 1) {
+    items.push({ code: revenueCodes.length === 1 ? revenueCodes[0] : null, description: revenueDescriptions[0], amountCents: null });
+  }
+  return items.filter((item, index, all) => all.findIndex((candidate) => (
+    candidate.code === item.code && normalizedFiscalToken(candidate.description) === normalizedFiscalToken(item.description)
+  )) === index).slice(0, 20);
+}
+
+export function extractFiscalIdentity(value: string): FinancialInboxFiscalIdentity | null {
+  const documentKind = detectFiscalDocumentKind(value);
+  if (!documentKind) return null;
+  const taxpayerTaxIdRaw = firstLineValue(
+    value,
+    /(?:CPF\s*\/\s*CNPJ(?:\s+DO\s+(?:EMPREGADOR|CONTRIBUINTE))?|CNPJ)\s*[:#-]?\s*(\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2})/i,
+  );
+  const taxpayerTaxId = digits(taxpayerTaxIdRaw);
+  const documentNumber = firstLineValue(
+    value,
+    /(?:n[uú]mero\s+do\s+documento|nosso\s+n[uú]mero|n[uú]mero\s+da\s+guia)\s*[:#-]?\s*([0-9][0-9.\/-]{2,39})/i,
+  );
+  const revenueCodes = [...new Set(Array.from(value.matchAll(
+    /(?:c[oó]digo(?:\s+da\s+receita)?|c[oó]d\.\s+receita)\s*[:#-]?\s*(\d{3,10})(?!\d)/gi,
+  ), (match) => match[1]))].slice(0, 20);
+  const revenueDescriptions = fiscalRevenueDescriptions(documentKind, value);
+  const revenueItems = fiscalRevenueItems(documentKind, value, revenueCodes, revenueDescriptions);
+  return {
+    documentKind,
+    collectorName: fiscalCollectorName(documentKind, value),
+    taxpayerName: firstLineValue(
+      value,
+      /(?:nome\s*\/\s*raz[aã]o\s+social|raz[aã]o\s+social|contribuinte|sacado)\s*[:#-]?\s*([^\n\r]{3,180})/i,
+    ),
+    taxpayerTaxId: taxpayerTaxId.length === 11 || taxpayerTaxId.length === 14 ? taxpayerTaxId : null,
+    taxpayerRegistration: firstLineValue(
+      value,
+      /(?:inscri[cç][aã]o\s+estadual|inscri[cç][aã]o\s+municipal)\s*[:#-]?\s*([A-Z0-9.\/-]{3,40})/i,
+    ),
+    documentNumber,
+    revenueCodes: [...new Set([...revenueCodes, ...revenueItems.flatMap((item) => item.code ? [item.code] : [])])].slice(0, 20),
+    revenueDescriptions,
+    revenueItems,
+  };
+}
+
+function normalizedFiscalToken(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function compareFiscalIdentities(
+  source: FinancialInboxFiscalIdentity | null | undefined,
+  target: FinancialInboxFiscalIdentity | null | undefined,
+) {
+  if (!source) return { required: false, compatible: true, reasons: [] as string[] };
+  if (!target || source.documentKind !== target.documentKind) {
+    return { required: true, compatible: false, reasons: [] as string[] };
+  }
+  const sourceDescriptions = source.revenueDescriptions.map(normalizedFiscalToken).filter(Boolean);
+  const targetDescriptions = new Set(target.revenueDescriptions.map(normalizedFiscalToken).filter(Boolean));
+  if (sourceDescriptions.length && targetDescriptions.size
+    && !sourceDescriptions.some((description) => targetDescriptions.has(description))) {
+    return { required: true, compatible: false, reasons: [] as string[] };
+  }
+  if (source.revenueCodes.length && target.revenueCodes.length
+    && !source.revenueCodes.some((code) => target.revenueCodes.includes(code))) {
+    return { required: true, compatible: false, reasons: [] as string[] };
+  }
+  const nature = [source.documentKind.toUpperCase(), ...source.revenueDescriptions].join(" / ");
+  return {
+    required: true,
+    compatible: true,
+    reasons: [`mesma natureza fiscal: ${nature}`],
+  };
+}
+
+function mergeFiscalIdentities(
+  extracted: FinancialInboxFiscalIdentity | null,
+  hints: FinancialInboxDocumentHints[],
+) {
+  const identities = hints
+    .filter((hint) => hint.confidence !== "low" && hint.fiscalIdentity)
+    .map((hint) => hint.fiscalIdentity!);
+  if (!extracted && identities.length === 0) return null;
+  const base = extracted ?? identities[0];
+  return identities.reduce<FinancialInboxFiscalIdentity>((current, identity) => ({
+    documentKind: current.documentKind || identity.documentKind,
+    collectorName: current.collectorName || identity.collectorName,
+    taxpayerName: current.taxpayerName || identity.taxpayerName,
+    taxpayerTaxId: current.taxpayerTaxId || identity.taxpayerTaxId,
+    taxpayerRegistration: current.taxpayerRegistration || identity.taxpayerRegistration,
+    documentNumber: current.documentNumber || identity.documentNumber,
+    revenueCodes: [...new Set([...current.revenueCodes, ...identity.revenueCodes])].slice(0, 20),
+    revenueDescriptions: [...new Set([...current.revenueDescriptions, ...identity.revenueDescriptions])].slice(0, 20),
+    revenueItems: [...(current.revenueItems ?? []), ...(identity.revenueItems ?? [])].filter((item, index, all) => all.findIndex((candidate) => (
+      candidate.code === item.code && normalizedFiscalToken(candidate.description) === normalizedFiscalToken(item.description)
+    )) === index).slice(0, 20),
+  }), base);
 }
 
 export function normalizeBrazilianServiceNumber(value: unknown) {
@@ -184,9 +358,13 @@ export function extractFinancialDocumentReferences(value: string) {
   const patterns = [
     /(?:NF(?:-?e)?|NFS(?:-?e)?|nota\s+fiscal|pedido|documento)\s*(?:n[ºo°.]|n[uú]mero)?\s*[:#\-]?\s*(\d{3,20})(?!\d)/gi,
     /(?:^|[_\-\s])(?:NF(?:-?e)?|NFS(?:-?e)?|BOLETO)[_\-\s]+[^\n\r]{0,50}?[_\-\s](\d{3,20})(?=[_.\-\s]|$)/gi,
+    /(?:n[uú]mero\s+do\s+documento|nosso\s+n[uú]mero|n[uú]mero\s+da\s+guia)\s*[:#\-]?\s*([0-9][0-9.\/-]{2,39})/gi,
   ];
-  for (const pattern of patterns) {
-    for (const match of value.matchAll(pattern)) references.add(match[1]);
+  for (const [index, pattern] of patterns.entries()) {
+    for (const match of value.matchAll(pattern)) {
+      const reference = index === 2 ? digits(match[1]) : match[1];
+      if (reference.length >= 3) references.add(reference);
+    }
   }
   return [...references].slice(0, 20);
 }
@@ -304,14 +482,31 @@ export function classifyFinancialEmail(input: {
   const documentText = String(input.documentText ?? "").slice(0, MAX_TEXT_LENGTH);
   const hints = input.documentHints ?? [];
   const hintText = hints.map((hint) => hint.documentText || "").join("\n").slice(0, MAX_TEXT_LENGTH);
+  const documentEvidence = `${documentText}\n${hintText}`.trim().slice(0, MAX_TEXT_LENGTH * 2);
   const combined = `${input.subject}\n${textContent}\n${documentText}\n${hintText}`.slice(0, MAX_TEXT_LENGTH * 2);
-  const identified = documentType(combined);
+  const documentIdentification = documentEvidence ? documentType(documentEvidence) : null;
+  const identified = documentIdentification && documentIdentification.confidence === "high"
+    ? documentIdentification
+    : documentType(combined);
   const barcode = agreedDocumentHint(hints, (hint) => hint.barcode) || extractPaymentBarcode(combined);
   const documentSupplier = agreedDocumentHint(hints, (hint) => hint.supplierName);
   const documentCompetence = agreedDocumentHint(hints, (hint) => hint.competence);
   const documentDueDate = agreedDocumentHint(hints, (hint) => hint.dueDate);
   const documentAmountCents = agreedDocumentHint(hints, (hint) => hint.amountCents);
-  const billingIdentity = mergeBillingIdentities(extractBillingIdentity(combined), hints);
+  const fiscalIdentity = mergeFiscalIdentities(extractFiscalIdentity(documentEvidence || combined), hints);
+  const extractedBillingIdentity = mergeBillingIdentities(
+    extractBillingIdentity(fiscalIdentity ? documentEvidence || combined : combined),
+    hints,
+  );
+  const billingIdentity = fiscalIdentity
+    ? {
+        supplierTaxId: extractedBillingIdentity.supplierTaxId,
+        customerAccount: null,
+        contractNumber: null,
+        serviceType: "other" as const,
+        serviceNumbers: [],
+      }
+    : extractedBillingIdentity;
   const installment = extractFinancialInstallmentReference(combined);
   const marketingLikely = isLikelyMarketingEmail({
     subject: input.subject,
@@ -328,7 +523,9 @@ export function classifyFinancialEmail(input: {
       financeLikely: !marketingLikely && identified.type !== "other",
       marketingLikely,
       confidence: identified.confidence,
-      supplierName: documentSupplier || supplierName(input.senderDomain ?? null, combined),
+      supplierName: fiscalIdentity?.collectorName
+        || documentSupplier
+        || (fiscalIdentity ? null : supplierName(input.senderDomain ?? null, combined)),
       competence: documentCompetence || extractCompetence(combined),
       dueDate: documentDueDate || extractDueDate(combined),
       amountCents: documentAmountCents ?? extractAmount(combined),
@@ -336,12 +533,14 @@ export function classifyFinancialEmail(input: {
       barcodeMasked: maskPaymentBarcode(barcode),
       documentReferences: [...new Set([
         ...extractFinancialDocumentReferences(combined),
+        ...(fiscalIdentity?.documentNumber ? [digits(fiscalIdentity.documentNumber)] : []),
         ...(input.documentReferences ?? []).flatMap(extractFinancialDocumentReferences),
-      ])].slice(0, 20),
+      ].filter((reference) => reference.length >= 3))].slice(0, 20),
       installmentNumber: installment.installmentNumber,
       installmentTotal: installment.installmentTotal,
       links: extractExternalLinks(input.text ?? "", input.html ?? ""),
       billingIdentity,
+      fiscalIdentity,
     },
   };
 }

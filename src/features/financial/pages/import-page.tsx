@@ -42,6 +42,7 @@ import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { expenseDescriptionFormSchema } from "@/features/financial/lib/schemas";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import { ADMIN_REFERENCE_RESULT_CENTER } from "@/features/financial/lib/expense-reference-center";
 import { distributeEqualRateioPercentages } from "@/features/financial/lib/expense-rateio";
 import {
   calculateSplitPercentagesFromValues,
@@ -1485,7 +1486,8 @@ function validateItem(item: ImportSessionItem, purchaseCandidatesByOrderId: Map<
         item.expenseDraft.accountPlanId.trim().length > 0 &&
         accountAllocationsValid &&
         personAllocationsValid &&
-        (item.expenseDraft.isApportioned ? apportionmentValid : item.expenseDraft.resultCenterId.trim().length > 0) &&
+        item.expenseDraft.resultCenterId.trim().length > 0 &&
+        (!item.expenseDraft.isApportioned || apportionmentValid) &&
         item.expenseDraft.competenceDate.trim().length > 0 &&
         item.expenseDraft.dueDate.trim().length > 0;
     }
@@ -2495,8 +2497,8 @@ export function FinancialImportPage({
         expenseDraft: {
           ...current.expenseDraft,
           isApportioned: true,
-          resultCenterId: "",
-          resultCenterName: "",
+          resultCenterId: current.expenseDraft.resultCenterId || ADMIN_REFERENCE_RESULT_CENTER.id,
+          resultCenterName: current.expenseDraft.resultCenterName || ADMIN_REFERENCE_RESULT_CENTER.name,
           apportionments,
         },
       };
@@ -2532,12 +2534,6 @@ export function FinancialImportPage({
           ...current.expenseDraft,
           isApportioned: nextApportionments.length > 0,
           apportionments: nextApportionments,
-          ...(nextApportionments.length === 0
-            ? {
-                resultCenterId: "",
-                resultCenterName: "",
-              }
-            : {}),
         },
       };
     });
@@ -2880,7 +2876,11 @@ export function FinancialImportPage({
                 hasPersonAllocations: false,
                 personAllocations: null,
                 isApportioned: false,
+                referenceResultCenterId: split.resultCenterId || null,
+                referenceResultCenterName: split.resultCenterName || null,
                 resultCenter: split.resultCenterName || null,
+                resultCenterId: split.resultCenterId || null,
+                resultCenterName: split.resultCenterName || null,
                 apportionments: null,
                 installments: [
                   {
@@ -2948,7 +2948,11 @@ export function FinancialImportPage({
                   }))
                 : null,
               isApportioned: item.expenseDraft.isApportioned,
+              referenceResultCenterId: item.expenseDraft.resultCenterId || null,
+              referenceResultCenterName: item.expenseDraft.resultCenterName || null,
               resultCenter: item.expenseDraft.isApportioned ? null : item.expenseDraft.resultCenterName || null,
+              resultCenterId: item.expenseDraft.isApportioned ? null : item.expenseDraft.resultCenterId || null,
+              resultCenterName: item.expenseDraft.isApportioned ? null : item.expenseDraft.resultCenterName || null,
               apportionments: item.expenseDraft.isApportioned
                 ? item.expenseDraft.apportionments.map((entry) => ({
                     resultCenter: entry.resultCenterName,
@@ -5247,6 +5251,7 @@ export function FinancialImportPage({
                       ["Descrição da despesa", item.expenseDraft.description || "—"],
                       ["Fornecedor", item.expenseDraft.supplier || "—"],
                       ["Plano de contas", item.expenseDraft.accountPlanName || "—"],
+                      ["Centro de referência", item.expenseDraft.resultCenterName || "—"],
                       ["Competência", formatInputDate(item.expenseDraft.competenceDate)],
                       ["Vencimento", formatInputDate(item.expenseDraft.dueDate)]
                     );
@@ -5257,8 +5262,6 @@ export function FinancialImportPage({
                           .map((entry) => `${entry.resultCenterName || "Unidade"} ${entry.percentage}%`)
                           .join(" · "),
                       ]);
-                    } else {
-                      reviewRows.push(["Unidade", item.expenseDraft.resultCenterName || "—"]);
                     }
                   }
                 }
@@ -6488,31 +6491,32 @@ export function FinancialImportPage({
                             ) : null}
                             </> : null}
 
-                            {!item.expenseDraft.isApportioned ? (
-                              <div className="space-y-1.5">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                  Unidade <span className="text-rose-500">*</span>
-                                </p>
-                                <ResultCenterSelect
-                                  value={item.expenseDraft.resultCenterId}
-                                  onChange={(value) => {
-                                    const unit = units.find((entry) => entry.id === value);
-                                    updateItem(item.id, (current) => ({
-                                      ...current,
-                                      expenseDraft: {
-                                        ...current.expenseDraft,
-                                        resultCenterId: value,
-                                        resultCenterName: unit?.name || "",
-                                      },
-                                    }));
-                                  }}
-                                  options={units}
-                                  placeholder="Selecione a unidade"
-                                  searchPlaceholder="Buscar unidade..."
-                                  triggerClassName="h-10 rounded-xl text-sm"
-                                />
-                              </div>
-                            ) : null}
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                Centro de referência <span className="text-rose-500">*</span>
+                              </p>
+                              <ResultCenterSelect
+                                value={item.expenseDraft.resultCenterId}
+                                onChange={(value) => {
+                                  const center = personResultCenterOptions.find((entry) => entry.id === value);
+                                  updateItem(item.id, (current) => ({
+                                    ...current,
+                                    expenseDraft: {
+                                      ...current.expenseDraft,
+                                      resultCenterId: value,
+                                      resultCenterName: center?.name || "",
+                                    },
+                                  }));
+                                }}
+                                options={personResultCenterOptions}
+                                placeholder="Selecione o centro"
+                                searchPlaceholder="Buscar centro..."
+                                triggerClassName="h-10 rounded-xl text-sm"
+                              />
+                              <p className="text-[11px] text-muted-foreground">
+                                O rateio define em quais centros o valor entra na DRE.
+                              </p>
+                            </div>
 
                             <div className="flex items-center justify-between rounded-xl border bg-background px-3 py-2.5 md:col-span-2">
                               <div>
@@ -6528,8 +6532,12 @@ export function FinancialImportPage({
                                     expenseDraft: {
                                       ...current.expenseDraft,
                                       isApportioned: checked,
-                                      resultCenterId: checked ? "" : current.expenseDraft.resultCenterId,
-                                      resultCenterName: checked ? "" : current.expenseDraft.resultCenterName,
+                                      resultCenterId: checked
+                                        ? current.expenseDraft.resultCenterId || ADMIN_REFERENCE_RESULT_CENTER.id
+                                        : current.expenseDraft.resultCenterId,
+                                      resultCenterName: checked
+                                        ? current.expenseDraft.resultCenterName || ADMIN_REFERENCE_RESULT_CENTER.name
+                                        : current.expenseDraft.resultCenterName,
                                       apportionments: checked
                                         ? distributeApportionmentsEvenly(
                                             current.expenseDraft.apportionments.length > 0

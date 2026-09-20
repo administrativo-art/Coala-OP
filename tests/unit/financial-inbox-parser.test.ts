@@ -13,7 +13,7 @@ import {
   normalizeBrazilianServiceNumber,
 } from "../../src/features/financial/inbox/parser";
 
-test("classifica guia de FGTS da Maximus com competência e vencimento", () => {
+test("separa o remetente Maximus do beneficiário de uma guia de FGTS", () => {
   const parsed = classifyFinancialEmail({
     subject: "GUIA DE FGTS - VENCIMENTO: 20/08/2026",
     html: "<p>Maximus Contabilidade</p><p>Competência de <strong>07/2026</strong></p><a href='https://documentos.grupomse.com/guia/123'>Acessar</a>",
@@ -23,7 +23,8 @@ test("classifica guia de FGTS da Maximus com competência e vencimento", () => {
   assert.equal(parsed.classification.documentType, "fgts");
   assert.equal(parsed.classification.competence, "2026-07");
   assert.equal(parsed.classification.dueDate, "2026-08-20");
-  assert.equal(parsed.classification.supplierName, "Maximus Contabilidade / Grupo MSE");
+  assert.equal(parsed.classification.supplierName, "FGTS");
+  assert.equal(parsed.classification.fiscalIdentity?.documentKind, "fgts");
   assert.deepEqual(parsed.classification.links, ["https://documentos.grupomse.com/guia/123"]);
 });
 
@@ -81,6 +82,69 @@ test("classifica INSS-DARF e extrai valor brasileiro somente como sugestão", ()
   assert.equal(parsed.classification.documentType, "inss_darf");
   assert.equal(parsed.classification.amountCents, 123456);
   assert.equal(parsed.classification.financeLikely, true);
+});
+
+test("identifica DAS e usa a Receita Federal, não a assessoria remetente, como arrecadador", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Documentos do dpto Fiscal",
+    text: "Maximus Contabilidade / Grupo MSE encaminhou o documento.",
+    senderDomain: "acessorias.com",
+    documentText: [
+      "Documento de Arrecadação do Simples Nacional",
+      "CNPJ: 14.276.603/0001-25",
+      "Razão Social: CT SORVETES LTDA",
+      "Período de Apuração: agosto/2026",
+      "Data de Vencimento: 21/09/2026",
+      "Número do Documento: 07.20.26250.8492649-0",
+      "1001 IRPJ - SIMPLES NACIONAL 236,92 236,92",
+      "1002 CSLL - SIMPLES NACIONAL 150,77 150,77",
+      "1004 COFINS - SIMPLES NACIONAL 548,80 548,80",
+      "1005 PIS - SIMPLES NACIONAL 118,89 118,89",
+      "1006 INSS - SIMPLES NACIONAL 1.809,25 1.809,25",
+      "1007 ICMS - SIMPLES NACIONAL 1.443,10 1.443,10",
+      "Valor Total do Documento: R$ 4.307,73",
+    ].join("\n"),
+  });
+
+  assert.equal(parsed.classification.documentType, "tax");
+  assert.equal(parsed.classification.supplierName, "Receita Federal do Brasil");
+  assert.equal(parsed.classification.fiscalIdentity?.documentKind, "das");
+  assert.equal(parsed.classification.fiscalIdentity?.taxpayerName, "CT SORVETES LTDA");
+  assert.equal(parsed.classification.fiscalIdentity?.taxpayerTaxId, "14276603000125");
+  assert.equal(parsed.classification.fiscalIdentity?.documentNumber, "07.20.26250.8492649-0");
+  assert.deepEqual(parsed.classification.fiscalIdentity?.revenueDescriptions, ["Simples Nacional", "ICMS", "Contribuição previdenciária", "IRPJ", "COFINS", "PIS/Pasep", "CSLL"]);
+  assert.deepEqual(parsed.classification.fiscalIdentity?.revenueCodes, ["1001", "1002", "1004", "1005", "1006", "1007"]);
+  assert.deepEqual(parsed.classification.fiscalIdentity?.revenueItems.map((item) => item.amountCents), [23692, 15077, 54880, 11889, 180925, 144310]);
+  assert.ok(parsed.classification.documentReferences?.includes("07202625084926490"));
+});
+
+test("classifica DARE ICMS pelo documento sem confundir telefone do e-mail com conta de consumo", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Documentos do dpto Fiscal",
+    text: "Em caso de dúvidas, ligue para (99) 8822-5437.",
+    senderDomain: "acessorias.com",
+    documentText: [
+      "ESTADO DO MARANHÃO — SECRETARIA DE ESTADO DA FAZENDA DO MARANHÃO",
+      "DOCUMENTO DE ARRECADAÇÃO DE RECEITAS ESTADUAIS - DARE",
+      "Nome/Razão Social: CT SORVETES LTDA",
+      "CPF/CNPJ: 14.276.603/0003-97",
+      "Nosso Número: 180069207",
+      "Referência: 08/2026",
+      "Vencimento: 21/09/2026",
+      "DARE ICMS ANTECIPADO",
+      "Código da Receita: 101",
+      "Total a Recolher: R$ 88,16",
+    ].join("\n"),
+  });
+
+  assert.equal(parsed.classification.documentType, "tax");
+  assert.match(parsed.classification.supplierName || "", /SECRETARIA DE ESTADO DA FAZENDA DO MARANHÃO/i);
+  assert.equal(parsed.classification.fiscalIdentity?.documentKind, "dare");
+  assert.equal(parsed.classification.fiscalIdentity?.taxpayerTaxId, "14276603000397");
+  assert.equal(parsed.classification.fiscalIdentity?.documentNumber, "180069207");
+  assert.deepEqual(parsed.classification.fiscalIdentity?.revenueDescriptions, ["ICMS antecipado"]);
+  assert.deepEqual(parsed.classification.fiscalIdentity?.revenueItems, [{ code: "101", description: "ICMS antecipado", amountCents: null }]);
+  assert.deepEqual(parsed.classification.billingIdentity?.serviceNumbers, []);
 });
 
 test("identifica honorário contábil mesmo quando o assunto é genérico", () => {

@@ -81,7 +81,7 @@ test("não sugere previsão de outra linha telefônica", () => {
   assert.equal(suggestion.status, "not_found");
 });
 
-test("usa a conta de cliente como identidade forte quando a linha não está cadastrada", () => {
+test("não agrupa telefonia somente pela conta do cliente quando a linha não está cadastrada", () => {
   const telecomClassification: FinancialInboxClassification = {
     ...classification,
     documentType: "utility_bill",
@@ -101,7 +101,83 @@ test("usa a conta de cliente como identidade forte quando a linha não está cad
     provisionCompetence: "2026-08",
     totalValue: 1200,
   }]);
+  assert.equal(suggestion.status, "not_found");
+  assert.equal(suggestion.provisionExpenseId, null);
+});
+
+test("DAS só substitui previsão da mesma natureza fiscal", () => {
+  const dasClassification: FinancialInboxClassification = {
+    ...classification,
+    documentType: "tax",
+    supplierName: "Receita Federal do Brasil",
+    amountCents: 430773,
+    dueDate: "2026-09-21",
+    fiscalIdentity: {
+      documentKind: "das",
+      collectorName: "Receita Federal do Brasil",
+      taxpayerName: "CT SORVETES LTDA",
+      taxpayerTaxId: "14276603000125",
+      taxpayerRegistration: null,
+      documentNumber: "07.20.26250.8492649-0",
+      revenueCodes: [],
+      revenueDescriptions: ["Simples Nacional"],
+      revenueItems: [],
+    },
+  };
+  const suggestion = chooseProvisionSuggestion(dasClassification, [
+    {
+      id: "forecast-inss",
+      description: "Previsão DARF DCTFWeb - competência 08/2026",
+      supplier: "Receita Federal do Brasil",
+      provisionCompetence: "2026-08",
+      totalValue: 4307.73,
+      dueDate: new Date("2026-09-21T12:00:00-03:00"),
+    },
+    {
+      id: "forecast-das",
+      description: "Previsão DAS Simples Nacional - competência 08/2026",
+      supplier: "Receita Federal do Brasil",
+      provisionSeriesKey: "das-simples-nacional",
+      provisionCompetence: "2026-08",
+      totalValue: 3921.78,
+      dueDate: new Date("2026-09-21T12:00:00-03:00"),
+    },
+  ]);
+
   assert.equal(suggestion.status, "suggested");
-  assert.equal(suggestion.provisionExpenseId, "forecast-account-only");
-  assert.match(suggestion.reasons.join(" "), /mesma conta do cliente/);
+  assert.equal(suggestion.provisionExpenseId, "forecast-das");
+  assert.match(suggestion.reasons.join(" "), /mesma natureza fiscal: DAS \/ Simples Nacional/);
+});
+
+test("não usa uma previsão DAS para uma DARE de ICMS mesmo com competência e vencimento iguais", () => {
+  const dareClassification: FinancialInboxClassification = {
+    ...classification,
+    documentType: "tax",
+    supplierName: "Secretaria de Estado da Fazenda do Maranhão",
+    amountCents: 8816,
+    dueDate: "2026-09-21",
+    fiscalIdentity: {
+      documentKind: "dare",
+      collectorName: "Secretaria de Estado da Fazenda do Maranhão",
+      taxpayerName: "CT SORVETES LTDA",
+      taxpayerTaxId: "14276603000397",
+      taxpayerRegistration: "12.814360-6",
+      documentNumber: "180069207",
+      revenueCodes: [],
+      revenueDescriptions: ["ICMS antecipado"],
+      revenueItems: [],
+    },
+  };
+  const suggestion = chooseProvisionSuggestion(dareClassification, [{
+    id: "forecast-das",
+    description: "Previsão DAS Simples Nacional - competência 08/2026",
+    supplier: "Receita Federal do Brasil",
+    provisionSeriesKey: "das-simples-nacional",
+    provisionCompetence: "2026-08",
+    totalValue: 88.16,
+    dueDate: new Date("2026-09-21T12:00:00-03:00"),
+  }]);
+
+  assert.equal(suggestion.status, "not_found");
+  assert.equal(suggestion.provisionExpenseId, null);
 });

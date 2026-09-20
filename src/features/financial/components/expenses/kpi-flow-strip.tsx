@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CheckCheck, Landmark, SearchCheck } from "lucide-react";
+import { CheckCheck, Landmark, SearchCheck } from "lucide-react";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -33,51 +33,51 @@ export function KpiFlowStrip({
       key: "overdue",
       label: "Vencido",
       value: kpis.overdue,
-      barClass: "bg-rose-500",
+      barClass: "bg-[#e11d48]",
       valueClass: "text-rose-700 dark:text-rose-300",
-      dotClass: "bg-rose-500",
+      dotClass: "bg-[#e11d48]",
     },
     {
       key: "dueSoon",
       label: "Vence em 7 dias",
       value: kpis.dueSoon,
-      barClass: "bg-amber-500",
+      barClass: "bg-[#f59e0b]",
       valueClass: "text-amber-700 dark:text-amber-300",
-      dotClass: "bg-amber-500",
+      dotClass: "bg-[#f59e0b]",
     },
     {
       key: "other",
       label: "Demais",
       value: otherOpen,
-      barClass: "bg-blue-500",
+      barClass: "bg-[#3b82f6]",
       valueClass: "text-foreground",
-      dotClass: "bg-blue-500",
+      dotClass: "bg-[#3b82f6]",
     },
   ] as const;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
+    <div className="grid gap-[14px] lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="rounded-[18px] border border-[#e2ded4] bg-white px-5 py-[18px] shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border/70 dark:bg-card">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+            <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-[#eff6ff] text-[#1d4ed8] dark:bg-blue-950/40 dark:text-blue-300">
               <Landmark className="h-3.5 w-3.5" />
             </span>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#a3a099] dark:text-muted-foreground">
               A pagar no período
             </p>
           </div>
-          <span className="text-[11px] font-medium text-muted-foreground">
+          <span className="text-[11px] font-bold text-[#8a8f99] dark:text-muted-foreground">
             {openCount} {openCount === 1 ? "lançamento" : "lançamentos"}
           </span>
         </div>
 
-        <div className="mt-3 font-mono text-[32px] font-bold leading-none tracking-tight">
+        <div className="mt-2 font-mono text-[34px] font-extrabold leading-none tracking-[-0.02em]">
           {formatCurrency(kpis.open)}
         </div>
 
         <div
-          className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-muted"
+          className="mt-4 flex h-[9px] overflow-hidden rounded-[6px] bg-[#eef0f2] dark:bg-muted"
           role="img"
           aria-label="Composição do valor em aberto"
         >
@@ -93,14 +93,14 @@ export function KpiFlowStrip({
           )}
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3">
+        <div className="mt-[14px] flex flex-wrap gap-x-[22px] gap-y-3">
           {segments.map((segment) => (
             <div key={segment.key} className="flex flex-col gap-0.5">
-              <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#6b7078] dark:text-muted-foreground">
                 <span className={cn("h-2 w-2 rounded-sm", segment.dotClass)} />
                 {segment.label}
               </span>
-              <span className={cn("font-mono text-sm font-bold", segment.valueClass)}>
+              <span className={cn("font-mono text-[15px] font-extrabold", segment.valueClass)}>
                 {formatCurrency(segment.value)}
               </span>
             </div>
@@ -108,24 +108,24 @@ export function KpiFlowStrip({
         </div>
       </div>
 
-      <div className="flex flex-col rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+      <div className="flex flex-col rounded-[18px] border border-[#e2ded4] bg-white px-5 py-[18px] shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-border/70 dark:bg-card">
+        <div className="flex items-center gap-[9px]">
+          <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-[#ecfdf5] text-[#047857] dark:bg-emerald-950/40 dark:text-emerald-300">
             <CheckCheck className="h-3.5 w-3.5" />
           </span>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#a3a099] dark:text-muted-foreground">
             Pago no período
           </p>
         </div>
         <div
           className={cn(
-            "mt-3 font-mono text-[28px] font-bold leading-none tracking-tight",
-            kpis.paid > 0 ? "text-foreground" : "text-muted-foreground/70"
+            "mt-3 font-mono text-[28px] font-extrabold leading-none tracking-[-0.02em]",
+            kpis.paid > 0 ? "text-[#1a1b1f] dark:text-foreground" : "text-[#9a9ba1] dark:text-muted-foreground/70"
           )}
         >
           {formatCurrency(kpis.paid)}
         </div>
-        <p className="mt-auto pt-3 text-[11.5px] leading-snug text-muted-foreground">
+        <p className="mt-auto pt-3 text-[11.5px] leading-[1.4] text-[#8a8f99] dark:text-muted-foreground">
           {kpis.paid > 0
             ? "Histórico liquidado no período."
             : "Nenhuma liquidação registrada neste período ainda."}
@@ -134,24 +134,26 @@ export function KpiFlowStrip({
 
       <Link
         href={auditHref}
-        className="flex flex-col rounded-2xl border border-violet-200/70 bg-gradient-to-b from-violet-50 to-card p-5 shadow-sm transition-colors hover:border-violet-300 dark:border-violet-800/70 dark:from-violet-950/30 dark:hover:border-violet-700"
+        className="flex flex-col rounded-[18px] border border-[#e6d9f5] bg-gradient-to-b from-[#faf5ff] to-white px-5 py-[18px] text-inherit shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors hover:border-[#d8c4ee] dark:border-violet-800/70 dark:from-violet-950/30 dark:to-card dark:hover:border-violet-700"
       >
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300">
+        <div className="flex items-center gap-[9px]">
+          <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-[#f3e8ff] text-[#7c3aed] dark:bg-violet-900/60 dark:text-violet-300">
             <SearchCheck className="h-3.5 w-3.5" />
           </span>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600 dark:text-violet-300">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b5cf6] dark:text-violet-300">
             Pendente auditoria
           </p>
         </div>
-        <div className="mt-3 font-mono text-[28px] font-bold leading-none tracking-tight text-violet-700 dark:text-violet-300">
+        <div className="mt-3 font-mono text-[28px] font-extrabold leading-none tracking-[-0.02em] text-[#6d28d9] dark:text-violet-300">
           {formatCurrency(kpis.pendingAudit)}
         </div>
         <div className="mt-auto flex items-center justify-between gap-3 pt-3">
-          <span className="text-[11.5px] font-medium text-violet-700 dark:text-violet-300">
+          <span className="text-[11.5px] font-semibold text-[#7c3aed] dark:text-violet-300">
             {auditCount} {auditCount === 1 ? "item aguardando" : "itens aguardando"} tratamento
           </span>
-          <ArrowRight className="h-4 w-4 shrink-0 text-violet-700 dark:text-violet-300" />
+          <span aria-hidden="true" className="shrink-0 text-[13px] font-extrabold leading-none text-[#7c3aed] dark:text-violet-300">
+            →
+          </span>
         </div>
       </Link>
     </div>

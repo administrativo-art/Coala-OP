@@ -1,5 +1,10 @@
-import { extractBillingIdentity } from "./parser";
-import type { FinancialInboxBillingIdentity, FinancialInboxClassification, FinancialInboxProvisionSuggestion } from "./types";
+import { compareFiscalIdentities, extractBillingIdentity, extractFiscalIdentity } from "./parser";
+import type {
+  FinancialInboxBillingIdentity,
+  FinancialInboxClassification,
+  FinancialInboxFiscalIdentity,
+  FinancialInboxProvisionSuggestion,
+} from "./types";
 
 export type ProvisionCandidate = {
   id: string;
@@ -11,6 +16,7 @@ export type ProvisionCandidate = {
   dueDate?: unknown;
   notes?: string | null;
   billingIdentity?: FinancialInboxBillingIdentity | null;
+  fiscalIdentity?: FinancialInboxFiscalIdentity | null;
 };
 
 function normalize(value: unknown) {
@@ -52,6 +58,18 @@ export function scoreProvisionCandidate(
 ) {
   let score = 30;
   const reasons = ["mesma competência"];
+  const targetFiscalIdentity = candidate.fiscalIdentity ?? extractFiscalIdentity([
+    candidate.description,
+    candidate.provisionSeriesKey,
+    candidate.supplier,
+    candidate.notes,
+  ].filter(Boolean).join("\n"));
+  const fiscalMatch = compareFiscalIdentities(classification.fiscalIdentity, targetFiscalIdentity);
+  if (!fiscalMatch.compatible) return { score: 0, reasons: [], eligible: false };
+  if (fiscalMatch.required) {
+    score += 40;
+    reasons.push(...fiscalMatch.reasons);
+  }
   const candidateAmountCents = Math.round((Number(candidate.totalValue) || 0) * 100);
   if (classification.amountCents != null && candidateAmountCents > 0) {
     const difference = Math.abs(classification.amountCents - candidateAmountCents);
@@ -103,7 +121,7 @@ export function scoreProvisionCandidate(
     score += 30;
     reasons.push("mesmo contrato");
   }
-  return { score, reasons };
+  return { score, reasons, eligible: true };
 }
 
 export function chooseProvisionSuggestion(
@@ -118,17 +136,11 @@ export function chooseProvisionSuggestion(
       if (source?.serviceType !== "mobile" && source?.serviceType !== "landline") return true;
       const target = candidate.billingIdentity
         ?? extractBillingIdentity(`${candidate.description ?? ""}\n${candidate.supplier ?? ""}\n${candidate.notes ?? ""}`);
-      const serviceNumberMatches = Boolean(source.serviceNumbers.length
+      return Boolean(source.serviceNumbers.length
         && target.serviceNumbers.some((number) => source.serviceNumbers.includes(number)));
-      const customerAccountMatches = Boolean(source.customerAccount
-        && target.customerAccount
-        && normalize(source.customerAccount) === normalize(target.customerAccount));
-      const contractNumberMatches = Boolean(source.contractNumber
-        && target.contractNumber
-        && normalize(source.contractNumber) === normalize(target.contractNumber));
-      return serviceNumberMatches || customerAccountMatches || contractNumberMatches;
     })
     .map((candidate) => ({ candidate, ...scoreProvisionCandidate(classification, candidate) }))
+    .filter((entry) => entry.eligible)
     .sort((left, right) => right.score - left.score || left.candidate.id.localeCompare(right.candidate.id));
   const first = scored[0];
   const second = scored[1];

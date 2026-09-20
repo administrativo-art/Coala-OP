@@ -6,7 +6,10 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 import type { ProductSimulation, SalesReport } from "@/types";
-import { normalizeFinancialExpenseForDre } from "@/features/financial/lib/expense-accounting-contract";
+import {
+  financialExpenseDreWithoutPresentationDetails,
+  normalizeFinancialExpenseForDre,
+} from "@/features/financial/lib/expense-accounting-contract";
 import {
   chunkDreSimulationIds,
   DreSourceLimitError,
@@ -71,6 +74,7 @@ export async function getDreSourceData(input: {
   workspaceId: string;
   kioskIds: string[];
   periods: string[];
+  canViewExpenseDetails: boolean;
 }): Promise<DreSourceDataPayload> {
   if (input.kioskIds.length < 1 || input.kioskIds.length > 20) {
     throw new DreSourceLimitError("reports");
@@ -88,6 +92,9 @@ export async function getDreSourceData(input: {
   const expenseDocuments = expensePeriodDocuments.flat();
   const expenses = expenseDocuments
     .map((document) => normalizeFinancialExpenseForDre(document.id, document.data()))
+    .map((expense) => input.canViewExpenseDetails
+      ? expense
+      : financialExpenseDreWithoutPresentationDetails(expense))
     .filter((expense) => expense.competenceMonth && requestedPeriods.has(expense.competenceMonth));
   const reports = reportDocuments.flatMap((document): SalesReport[] => {
     const data = document.data();

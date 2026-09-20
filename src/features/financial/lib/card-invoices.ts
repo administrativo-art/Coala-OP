@@ -211,6 +211,15 @@ export function cardExpenseChargeDate(expense: CardExpenseEntry) {
   );
 }
 
+export function cardExpenseIsActiveStatementLine(expense: CardExpenseEntry) {
+  if (expense.status === "cancelled" || expense.status === "draft") return false;
+  if (expense.cardStatementRevisionStatus === "removed") return false;
+  return !(
+    expense.provisionType === "forecast"
+    && (expense.status === "reconciled" || Boolean(expense.replacedByExpenseId))
+  );
+}
+
 export function cardExpenseAuditIssues(expense: CardExpenseEntry) {
   const issues: string[] = [];
   if (String(expense.description || "").trim().length < 10) issues.push("descrição");
@@ -437,11 +446,7 @@ export function buildCardStatementGroups(
 
   for (const expense of expenses) {
     if (expense.plannedPaymentMethodType !== "credit_card") continue;
-    if (expense.status === "cancelled" || expense.status === "draft") continue;
-    if (expense.cardStatementRevisionStatus === "removed") continue;
-    if (expense.provisionType === "forecast" && (expense.status === "reconciled" || expense.replacedByExpenseId)) {
-      continue;
-    }
+    if (!cardExpenseIsActiveStatementLine(expense)) continue;
     const accountId = String(expense.plannedBankAccountId ?? "");
     const methodId = String(expense.plannedPaymentMethodId ?? "");
     const card = cardByKey.get(`${accountId}:${methodId}`);

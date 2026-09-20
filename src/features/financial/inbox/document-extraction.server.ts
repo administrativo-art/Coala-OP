@@ -3,7 +3,12 @@ import "server-only";
 import { getActiveSystemPrompt, renderSystemPrompt } from "@/ai/prompts/registry";
 import { classifyFinancialEmail, normalizeBrazilianServiceNumber, normalizePaymentBarcode } from "./parser";
 import { extractDeterministicFinancialDocumentText, isImageDocument, isPdfDocument } from "./document-text";
-import type { FinancialInboxDocumentHints, FinancialInboxServiceType } from "./types";
+import type {
+  FinancialInboxDocumentHints,
+  FinancialInboxFiscalDocumentKind,
+  FinancialInboxFiscalIdentity,
+  FinancialInboxServiceType,
+} from "./types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_FILES_URL = "https://api.openai.com/v1/files";
@@ -17,7 +22,7 @@ const EXTRACTION_SCHEMA = {
   additionalProperties: false,
   required: [
     "documentText", "supplierName", "supplierTaxId", "competence", "dueDate", "amountCents",
-    "barcode", "customerAccount", "contractNumber", "serviceType", "serviceNumbers", "confidence",
+    "barcode", "customerAccount", "contractNumber", "serviceType", "serviceNumbers", "fiscalIdentity", "confidence",
   ],
   properties: {
     documentText: { type: ["string", "null"] },
@@ -31,6 +36,38 @@ const EXTRACTION_SCHEMA = {
     contractNumber: { type: ["string", "null"] },
     serviceType: { type: ["string", "null"], enum: ["mobile", "landline", "internet", "energy", "water", "other", null] },
     serviceNumbers: { type: "array", items: { type: "string" }, maxItems: 20 },
+    fiscalIdentity: {
+      type: ["object", "null"],
+      additionalProperties: false,
+      required: [
+        "documentKind", "collectorName", "taxpayerName", "taxpayerTaxId", "taxpayerRegistration",
+        "documentNumber", "revenueCodes", "revenueDescriptions", "revenueItems",
+      ],
+      properties: {
+        documentKind: { type: "string", enum: ["das", "darf", "dctfweb", "dare", "fgts", "municipal_tax", "other"] },
+        collectorName: { type: ["string", "null"] },
+        taxpayerName: { type: ["string", "null"] },
+        taxpayerTaxId: { type: ["string", "null"] },
+        taxpayerRegistration: { type: ["string", "null"] },
+        documentNumber: { type: ["string", "null"] },
+        revenueCodes: { type: "array", items: { type: "string" }, maxItems: 20 },
+        revenueDescriptions: { type: "array", items: { type: "string" }, maxItems: 20 },
+        revenueItems: {
+          type: "array",
+          maxItems: 20,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["code", "description", "amountCents"],
+            properties: {
+              code: { type: ["string", "null"] },
+              description: { type: "string" },
+              amountCents: { type: ["integer", "null"] },
+            },
+          },
+        },
+      },
+    },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
   },
 } as const;
@@ -60,6 +97,51 @@ function competence(value: unknown) {
 function taxId(value: unknown) {
   const normalized = String(value ?? "").replace(/\D/g, "");
   return normalized.length === 14 ? normalized : null;
+}
+
+function personTaxId(value: unknown) {
+  const normalized = String(value ?? "").replace(/\D/g, "");
+  return normalized.length === 11 || normalized.length === 14 ? normalized : null;
+}
+
+function fiscalDocumentKind(value: unknown): FinancialInboxFiscalDocumentKind | null {
+  return ["das", "darf", "dctfweb", "dare", "fgts", "municipal_tax", "other"].includes(String(value))
+    ? value as FinancialInboxFiscalDocumentKind
+    : null;
+}
+
+function shortStringArray(value: unknown) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .map((entry) => shortString(entry, 180))
+    .filter((entry): entry is string => Boolean(entry)))].slice(0, 20);
+}
+
+function normalizeFiscalIdentity(value: unknown): FinancialInboxFiscalIdentity | null {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  const documentKind = fiscalDocumentKind(raw?.documentKind);
+  if (!raw || !documentKind) return null;
+  const revenueItems = (Array.isArray(raw.revenueItems) ? raw.revenueItems : []).flatMap((entry) => {
+    const item = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : null;
+    const description = shortString(item?.description, 180);
+    if (!item || !description) return [];
+    const amount = Number(item.amountCents);
+    return [{
+      code: shortString(item.code, 40),
+      description,
+      amountCents: Number.isInteger(amount) && amount >= 0 ? amount : null,
+    }];
+  }).slice(0, 20);
+  return {
+    documentKind,
+    collectorName: shortString(raw.collectorName),
+    taxpayerName: shortString(raw.taxpayerName),
+    taxpayerTaxId: personTaxId(raw.taxpayerTaxId),
+    taxpayerRegistration: shortString(raw.taxpayerRegistration, 80),
+    documentNumber: shortString(raw.documentNumber, 80),
+    revenueCodes: shortStringArray(raw.revenueCodes),
+    revenueDescriptions: shortStringArray(raw.revenueDescriptions),
+    revenueItems,
+  };
 }
 
 function serviceType(value: unknown): FinancialInboxServiceType | null {
@@ -94,6 +176,7 @@ function normalizeAiHints(value: unknown): FinancialInboxDocumentHints {
     serviceNumbers: [...new Set((Array.isArray(raw.serviceNumbers) ? raw.serviceNumbers : [])
       .map(normalizeBrazilianServiceNumber)
       .filter((entry): entry is string => Boolean(entry)))].slice(0, 20),
+    fiscalIdentity: normalizeFiscalIdentity(raw.fiscalIdentity),
     confidence: raw.confidence === "high" || raw.confidence === "medium" ? raw.confidence : "low",
   };
 }
@@ -181,7 +264,15 @@ function shouldUseAi(params: { text: string; subject: string; senderDomain: stri
   const identity = parsed.billingIdentity;
   const telecomIncomplete = (identity?.serviceType === "mobile" || identity?.serviceType === "landline")
     && !identity.serviceNumbers.length;
-  return !parsed.amountCents || !parsed.dueDate || !parsed.competence || telecomIncomplete;
+  const fiscal = parsed.fiscalIdentity;
+  const fiscalIncomplete = Boolean(fiscal && (
+    !fiscal.collectorName
+    || !fiscal.taxpayerTaxId
+    || !fiscal.documentNumber
+    || fiscal.revenueDescriptions.length === 0
+    || fiscal.revenueItems.length === 0
+  ));
+  return !parsed.amountCents || !parsed.dueDate || !parsed.competence || telecomIncomplete || fiscalIncomplete;
 }
 
 export async function extractFinancialDocument(params: {

@@ -157,6 +157,8 @@ function automaticFinancialChargeFields(
       accountPlanName: accountPlan.name,
     } : {}),
     ...(defaults.resultCenter ? {
+      referenceResultCenterId: defaults.resultCenter.id,
+      referenceResultCenterName: defaults.resultCenter.name,
       resultCenter: defaults.resultCenter.id,
       resultCenterId: defaults.resultCenter.id,
       resultCenterName: defaults.resultCenter.name,
@@ -181,7 +183,8 @@ function existingFingerprints(expense: Record<string, unknown>) {
 function inheritedExpenseFields(expense: Record<string, unknown>) {
   const fields = [
     "accountPlan", "accountId", "accountPlanId", "accountPlanName",
-    "resultCenter", "resultCenterId", "resultCenterName", "isApportioned", "apportionments",
+    "resultCenter", "resultCenterId", "resultCenterName", "referenceResultCenterId", "referenceResultCenterName",
+    "isApportioned", "apportionments",
     "hasAccountAllocations", "accountAllocations", "hasPersonAllocations", "personAllocations",
     "provisionSeriesKey", "provisionCompetence", "provisionScope", "provisionSource",
   ];

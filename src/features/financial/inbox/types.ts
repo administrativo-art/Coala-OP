@@ -73,6 +73,20 @@ export type FinancialInboxResolution = {
   resolvedBy: string | null;
 };
 
+export type FinancialInboxThreadMessage = {
+  id: string;
+  subject: string;
+  receivedAt: string;
+  status: FinancialInboxStatus;
+  kind: "new_charge" | "reminder" | "duplicate" | null;
+};
+
+export type FinancialInboxThread = {
+  primaryMessageId: string;
+  messageCount: number;
+  messages: FinancialInboxThreadMessage[];
+};
+
 export type FinancialInboxStageSummary = {
   count: number;
   amountCents: number;
@@ -117,12 +131,49 @@ export type FinancialInboxAttachment = {
 
 export type FinancialInboxServiceType = "mobile" | "landline" | "internet" | "energy" | "water" | "other";
 
+export type FinancialInboxFiscalDocumentKind =
+  | "das"
+  | "darf"
+  | "dctfweb"
+  | "dare"
+  | "fgts"
+  | "municipal_tax"
+  | "other";
+
+export type FinancialInboxFiscalRevenueItem = {
+  code: string | null;
+  description: string;
+  amountCents: number | null;
+};
+
+export type FinancialInboxFiscalIdentity = {
+  documentKind: FinancialInboxFiscalDocumentKind;
+  collectorName: string | null;
+  taxpayerName: string | null;
+  taxpayerTaxId: string | null;
+  taxpayerRegistration: string | null;
+  documentNumber: string | null;
+  revenueCodes: string[];
+  revenueDescriptions: string[];
+  revenueItems: FinancialInboxFiscalRevenueItem[];
+};
+
 export type FinancialInboxBillingIdentity = {
   supplierTaxId: string | null;
   customerAccount: string | null;
   contractNumber: string | null;
   serviceType: FinancialInboxServiceType | null;
   serviceNumbers: string[];
+};
+
+export type FinancialDocumentIdentity = {
+  barcode: string | null;
+  barcodeMasked: string | null;
+  barcodeHash: string | null;
+  documentReferences: string[];
+  sourceMessageIds: string[];
+  confidence: "high" | "medium" | "low";
+  conflictFields: Array<"barcode">;
 };
 
 export type FinancialInboxDocumentHints = {
@@ -137,6 +188,7 @@ export type FinancialInboxDocumentHints = {
   contractNumber: string | null;
   serviceType: FinancialInboxServiceType | null;
   serviceNumbers: string[];
+  fiscalIdentity?: FinancialInboxFiscalIdentity | null;
   confidence: "high" | "medium" | "low";
 };
 
@@ -156,6 +208,7 @@ export type FinancialInboxClassification = {
   installmentTotal?: number | null;
   links: string[];
   billingIdentity?: FinancialInboxBillingIdentity | null;
+  fiscalIdentity?: FinancialInboxFiscalIdentity | null;
 };
 
 export type FinancialInboxProvisionSuggestion = {
@@ -284,6 +337,7 @@ export type FinancialInboxMessage = {
   linkedExpenseId: string | null;
   linkedProvisionId?: string | null;
   obligationId?: string | null;
+  thread?: FinancialInboxThread | null;
   paymentRequestId?: string | null;
   provisionSuggestion?: FinancialInboxProvisionSuggestion | null;
   existingExpenseSuggestion?: FinancialInboxExpenseSuggestion | null;

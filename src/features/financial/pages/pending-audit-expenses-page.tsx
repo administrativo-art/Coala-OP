@@ -8,7 +8,8 @@ import { Search } from "lucide-react";
 import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
-import { resolveResultCenterName, type ResultCenterNameMap } from "@/features/financial/lib/expense-rateio";
+import type { ResultCenterNameMap } from "@/features/financial/lib/expense-rateio";
+import { expenseReferenceCenterLabel } from "@/features/financial/lib/expense-reference-center";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
@@ -122,7 +123,7 @@ export function PendingAuditExpensesPage() {
         planName: accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "",
         dueDate: toDate(expense.dueDate),
         competenceDate: toDate(expense.competenceDate),
-        unitName: resolveResultCenterName(expense.resultCenter, resultCenterNameById),
+        unitName: expenseReferenceCenterLabel(expense, resultCenterNameById),
         totalValue: expense.totalValue || 0,
         purchaseOrderId: expense.purchaseOrderId || "",
       }));

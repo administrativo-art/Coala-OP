@@ -93,6 +93,7 @@ test("DRE usa somente a participação da unidade no valor rateado", () => {
   const expense = {
     totalValue: 1200,
     isApportioned: true,
+    referenceResultCenterId: "admin",
     apportionments: [
       { resultCenter: "A", percentage: 25 },
       { resultCenter: "B", percentage: 75 },
@@ -123,6 +124,7 @@ test("recorrência rateada exige vigência e bases válidas para critérios vari
     supplier: "Fornecedor",
     totalValue: 1200,
     isApportioned: true,
+    referenceResultCenterId: "admin",
     paymentMethod: "recurring",
     recurrenceFirstDueDate: new Date(2026, 8, 10),
     recurrenceEndDate: new Date(2026, 11, 10),
