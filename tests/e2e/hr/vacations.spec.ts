@@ -34,5 +34,6 @@ test('aprova e cancela férias com justificativa e histórico auditável', async
 
   await expect(page.getByText('Férias canceladas formalmente.', { exact: true })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText('Trilha cancelada', { exact: true })).toBeVisible();
+  await page.getByText('Mostrar', { exact: true }).click();
   await expect(page.getByText('Férias canceladas formalmente pelo RH.', { exact: true })).toBeVisible();
 });

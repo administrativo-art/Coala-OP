@@ -363,15 +363,16 @@ export function vacationWorkflowForRecord(
  * Older imported records may not have a persisted workflow. They can still use
  * the compatibility workflow while their period is current or upcoming, but a
  * period that has already ended must remain historical instead of being reopened
- * at the notice stage. Persisted active workflows remain visible even after the
- * enjoyment dates, because their document/payment work may still be unfinished.
+ * at the notice stage. Persisted active or cancelled workflows remain visible
+ * so the profile keeps the operational trail and its audit context available.
  */
 export function shouldDisplayVacationWorkflow(
   record: Pick<DPVacationRecord, 'recordType' | 'status' | 'endDate' | 'workflow'>,
   asOfDate: string,
 ) {
-  if (record.recordType !== 'gozo' || record.status === 'REJECTED') return false;
-  if (record.workflow) return record.workflow.status === 'active';
+  if (record.recordType !== 'gozo') return false;
+  if (record.workflow) return ['active', 'cancelled'].includes(record.workflow.status);
+  if (record.status === 'REJECTED') return false;
   return isIsoDate(asOfDate) && isIsoDate(record.endDate) && record.endDate >= asOfDate;
 }
 

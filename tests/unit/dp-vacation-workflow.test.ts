@@ -106,7 +106,7 @@ test('registro legado encerrado permanece no histórico e não reabre a trilha',
   assert.equal(shouldDisplayVacationWorkflow({ ...historicalRecord, endDate: '2026-10-05' }, '2026-09-17'), true);
 });
 
-test('trilha persistida ativa continua operacional após o gozo e trilha concluída sai da área ativa', () => {
+test('trilhas persistidas ativas ou canceladas permanecem disponíveis e concluídas saem da área ativa', () => {
   const workflow = createInitialVacationWorkflow({
     status: 'APPROVED',
     startDate: '2026-07-15',
@@ -122,6 +122,11 @@ test('trilha persistida ativa continua operacional após o gozo e trilha conclu�
   };
 
   assert.equal(shouldDisplayVacationWorkflow(record, '2026-09-17'), true);
+  assert.equal(shouldDisplayVacationWorkflow({
+    ...record,
+    status: 'REJECTED' as const,
+    workflow: { ...workflow, status: 'cancelled' as const },
+  }, '2026-09-17'), true);
   assert.equal(shouldDisplayVacationWorkflow({
     ...record,
     workflow: { ...workflow, status: 'completed' as const },
