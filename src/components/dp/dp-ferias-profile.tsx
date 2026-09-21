@@ -655,6 +655,34 @@ export function DPFeriasProfile({
     }
   }
 
+  async function handleOpenReceiptDocument(vacation: DPVacationRecord, documentId: string) {
+    const preview = window.open('', '_blank');
+    setWorkflowBusy(`open-receipt-${documentId}`);
+    try {
+      const blob = await api<Blob>(
+        `/api/dp/vacations/${encodeURIComponent(vacation.id)}/receipt-documents/${encodeURIComponent(documentId)}`,
+        {
+          method: 'GET',
+          responseType: 'blob',
+          fallbackError: 'Não foi possível abrir o arquivo recebido.',
+        },
+      );
+      const url = URL.createObjectURL(blob);
+      if (preview) preview.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      preview?.close();
+      toast({
+        title: 'Não foi possível abrir o arquivo.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setWorkflowBusy(null);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -740,6 +768,12 @@ export function DPFeriasProfile({
         noticeBusy={noticeBusy}
         workflowBusy={workflowBusy}
         onSendAccountant={(vacation) => handleWorkflowAction(vacation, 'accountant', { action: 'send_accountant' }, 'Solicitação enviada à contabilidade.')}
+        onSelectReceiptDocument={(vacation, documentId) => handleWorkflowAction(
+          vacation,
+          `select-receipt-${documentId}`,
+          { action: 'select_receipt_document', documentId },
+          'Recibo principal confirmado pelo RH.',
+        )}
         onReviewReceipt={(vacation, review) => handleWorkflowAction(
           vacation,
           review.decision === 'approved' ? 'approve-receipt' : 'correct-receipt',
@@ -752,6 +786,7 @@ export function DPFeriasProfile({
         onSyncReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'sync-receipt-signature', { action: 'sync_receipt_signature' }, 'Assinatura do recibo atualizada.')}
         onFinalizeWorkflow={(vacation) => handleWorkflowAction(vacation, 'finalize', { action: 'finalize_workflow' }, 'Trilha de férias finalizada.')}
         onOpenWorkflowAsset={handleOpenWorkflowAsset}
+        onOpenReceiptDocument={handleOpenReceiptDocument}
         onCancel={handleCancel}
       />
 

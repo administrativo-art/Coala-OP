@@ -3686,6 +3686,21 @@ export type DPVacationReceiptAnalysis = {
   analyzedAt: string;
 };
 
+export type DPVacationReceiptDocument = {
+  id: string;
+  fileName: string;
+  mimeType: 'application/pdf' | 'image/jpeg' | 'image/png';
+  storagePath: string;
+  hashSha256: string;
+  size: number;
+  uploadedAt: string;
+  uploadedBy: string;
+  correctionRound: number;
+  status: 'processing' | 'review_pending' | 'analysis_failed' | 'selected' | 'superseded';
+  analysis?: DPVacationReceiptAnalysis | null;
+  analyzedAt?: string | null;
+};
+
 export type DPVacationWorkflow = {
   version: 1;
   status: 'active' | 'completed' | 'cancelled';
@@ -3746,9 +3761,14 @@ export type DPVacationWorkflow = {
   };
   receipt: {
     status: 'not_received' | 'processing' | 'review_pending' | 'correction_requested' | 'approved';
+    documents?: DPVacationReceiptDocument[];
+    suggestedDocumentId?: string | null;
+    selectedDocumentId?: string | null;
+    selectedAt?: string | null;
+    selectedBy?: string | null;
     originalDocumentId?: string | null;
     originalFileName?: string | null;
-    originalMimeType?: 'application/pdf' | null;
+    originalMimeType?: DPVacationReceiptDocument['mimeType'] | null;
     originalStoragePath?: string | null;
     originalHashSha256?: string | null;
     originalSize?: number | null;

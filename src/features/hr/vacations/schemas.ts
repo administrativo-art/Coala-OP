@@ -110,6 +110,10 @@ export const updateVacationSchema = z.union([
   }),
   z.object({ action: z.literal('sync_notice') }),
   z.object({ action: z.literal('send_accountant') }),
+  z.object({
+    action: z.literal('select_receipt_document'),
+    documentId: z.string().regex(/^receipt_[a-f0-9]{32}$/, 'Documento inválido.'),
+  }),
   reviewReceiptSchema,
   z.object({ action: z.literal('prepare_payment') }),
   z.object({ action: z.literal('sync_payment') }),

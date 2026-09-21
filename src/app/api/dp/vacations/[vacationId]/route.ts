@@ -8,6 +8,7 @@ import {
   prepareVacationPayment,
   retryVacationReceiptSignatureAction,
   reviewVacationReceipt,
+  selectVacationReceiptDocument,
   sendVacationToAccountant,
   sendVacationNotice,
   syncVacationPayment,
@@ -56,6 +57,9 @@ export const PATCH = withApiErrorHandling({
   }
   if (input.action === 'send_accountant') {
     return NextResponse.json({ vacation: await sendVacationToAccountant(request, id) });
+  }
+  if (input.action === 'select_receipt_document') {
+    return NextResponse.json({ vacation: await selectVacationReceiptDocument(request, id, input.documentId) });
   }
   if (input.action === 'review_receipt') {
     return NextResponse.json({ vacation: await reviewVacationReceipt(request, id, input) });

@@ -9,6 +9,7 @@ import { createPaymentRequest, refreshPaymentRequest } from '@/features/financia
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
+import { vacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
@@ -35,6 +36,7 @@ import {
 } from '@/lib/dp-vacation-workflow';
 import type {
   DPVacationRecord,
+  DPVacationReceiptDocument,
   DPVacationSignatureParticipant,
   DPVacationWorkflow,
   User,
@@ -2360,6 +2362,79 @@ async function prepareVacationPaymentControl(
   }
 }
 
+export async function selectVacationReceiptDocument(
+  request: NextRequest,
+  vacationId: string,
+  documentId: string,
+) {
+  const { context, vacationRef } = await requireVacationApprovalAccess(request, vacationId);
+  const now = new Date().toISOString();
+  await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(vacationRef);
+    if (!snapshot.exists) throw notFound();
+    const current = snapshot.data() ?? {};
+    await assertTargetAccess(transaction, context, String(current.userId ?? ''));
+    const workflow = current.workflow as DPVacationWorkflow | undefined;
+    if (!workflow || workflow.status !== 'active' || workflow.receipt.status !== 'review_pending') {
+      throw conflict('DP_VACATION_RECEIPT_SELECTION_NOT_READY', 'Os arquivos ainda não estão prontos para a seleção do RH.');
+    }
+    const documents = vacationReceiptDocuments(workflow.receipt);
+    const selected = documents.find((document) => document.id === documentId && document.status !== 'superseded');
+    if (!selected || selected.status === 'processing') {
+      throw conflict('DP_VACATION_RECEIPT_DOCUMENT_NOT_READY', 'O arquivo selecionado não está disponível para confirmação.');
+    }
+    const nextDocuments: DPVacationReceiptDocument[] = documents.map((document) => {
+      if (document.status === 'superseded') return document;
+      return { ...document, status: document.id === selected.id ? 'selected' : document.analysis ? 'review_pending' : 'analysis_failed' };
+    });
+    const nextWorkflow: DPVacationWorkflow = {
+      ...workflow,
+      receipt: {
+        ...workflow.receipt,
+        documents: nextDocuments,
+        selectedDocumentId: selected.id,
+        selectedAt: now,
+        selectedBy: context.decoded.uid,
+        originalDocumentId: selected.id,
+        originalFileName: selected.fileName,
+        originalMimeType: selected.mimeType,
+        originalStoragePath: selected.storagePath,
+        originalHashSha256: selected.hashSha256,
+        originalSize: selected.size,
+        originalUploadedAt: selected.uploadedAt,
+        originalUploadedBy: selected.uploadedBy,
+        analysis: selected.analysis ?? null,
+        reviewedValues: null,
+        reviewNotes: null,
+        reviewOverrideReason: null,
+        identityMismatches: [],
+      },
+      updatedAt: now,
+    };
+    transaction.update(vacationRef, { workflow: nextWorkflow, updatedAt: new Date(now), updatedBy: context.decoded.uid });
+    nextDocuments.forEach((document) => {
+      transaction.set(vacationRef.collection('receiptVersions').doc(document.id), {
+        status: document.status,
+        selectedAt: document.id === selected.id ? now : null,
+        selectedBy: document.id === selected.id ? context.decoded.uid : null,
+      }, { merge: true });
+    });
+    transaction.create(dbAdmin.collection('dp_vacationEvents').doc(), vacationEvent(
+      context,
+      vacationId,
+      'VACATION_RECEIPT_DOCUMENT_SELECTED',
+      'O RH confirmou qual arquivo será usado como recibo principal.',
+      now,
+      {
+        documentId: selected.id,
+        suggestedByCopilot: workflow.receipt.suggestedDocumentId === selected.id,
+        documentTypeCode: selected.analysis?.documentTypeCode ?? null,
+      },
+    ));
+  });
+  return { id: vacationId, selectedDocumentId: documentId };
+}
+
 export async function reviewVacationReceipt(
   request: NextRequest,
   vacationId: string,
@@ -2382,6 +2457,10 @@ export async function reviewVacationReceipt(
     }
     if (input.decision === 'correction_required') {
       const reason = requiredText(input.reason, 'DP_VACATION_RECEIPT_CORRECTION_REASON', 'Informe o que precisa ser corrigido.');
+      const currentDocuments = vacationReceiptDocuments(workflow.receipt);
+      const documents = currentDocuments.map((document) => (
+        document.status === 'superseded' ? document : { ...document, status: 'superseded' as const }
+      ));
       const nextWorkflow: DPVacationWorkflow = {
         ...workflow,
         currentStage: 'accountant',
@@ -2391,10 +2470,27 @@ export async function reviewVacationReceipt(
           return step;
         }),
         accountant: { ...workflow.accountant, status: 'correction_requested', lastError: null },
-        receipt: { ...workflow.receipt, status: 'correction_requested', correctionReason: reason, reviewNotes: input.notes ?? null },
+        receipt: {
+          ...workflow.receipt,
+          status: 'correction_requested',
+          documents,
+          suggestedDocumentId: null,
+          selectedDocumentId: null,
+          selectedAt: null,
+          selectedBy: null,
+          correctionReason: reason,
+          reviewNotes: input.notes ?? null,
+        },
         updatedAt: now,
       };
       transaction.update(vacationRef, { workflow: nextWorkflow, updatedAt: new Date(now), updatedBy: context.decoded.uid });
+      currentDocuments.filter((document) => document.status !== 'superseded').forEach((document) => {
+        transaction.set(vacationRef.collection('receiptVersions').doc(document.id), {
+          status: 'superseded',
+          supersededAt: now,
+          supersededBy: context.decoded.uid,
+        }, { merge: true });
+      });
       transaction.create(dbAdmin.collection('dp_vacationEvents').doc(), vacationEvent(
         context,
         vacationId,
@@ -2622,6 +2718,51 @@ export async function getVacationWorkflowAsset(
     });
   }
   return { buffer, fileName: asset.fileName, hashSha256: actualHash };
+}
+
+export async function getVacationReceiptDocumentAsset(
+  request: NextRequest,
+  vacationId: string,
+  documentId: string,
+) {
+  const context = await requireUser(request);
+  if (!canManageVacation(context, 'view') && !canManageVacation(context, 'approve')) throw forbidden();
+  const vacationRef = dbAdmin.collection('dp_vacations').doc(vacationId);
+  const asset = await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(vacationRef);
+    if (!snapshot.exists) throw notFound();
+    const current = snapshot.data() ?? {};
+    await assertTargetAccess(transaction, context, String(current.userId ?? ''));
+    const workflow = current.workflow as DPVacationWorkflow | undefined;
+    const document = workflow
+      ? vacationReceiptDocuments(workflow.receipt).find((candidate) => candidate.id === documentId)
+      : null;
+    if (!document) {
+      throw new AppError({
+        code: 'DP_VACATION_RECEIPT_DOCUMENT_NOT_FOUND',
+        kind: 'NOT_FOUND',
+        safeMessage: 'O arquivo não está disponível.',
+        httpStatus: 404,
+      });
+    }
+    return document;
+  });
+  const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(asset.storagePath).download();
+  const actualHash = createHash('sha256').update(buffer).digest('hex');
+  if (actualHash !== asset.hashSha256) {
+    throw new AppError({
+      code: 'DP_VACATION_RECEIPT_DOCUMENT_INTEGRITY',
+      kind: 'DATA_INTEGRITY',
+      safeMessage: 'O arquivo falhou na conferência de integridade.',
+      metadata: { vacationId, documentId },
+    });
+  }
+  return {
+    buffer,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    hashSha256: actualHash,
+  };
 }
 
 export async function listVacationEvents(

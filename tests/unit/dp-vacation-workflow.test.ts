@@ -7,7 +7,9 @@ import {
   cancelVacationWorkflow,
   createInitialVacationWorkflow,
   shouldDisplayVacationWorkflow,
+  VACATION_WORKFLOW_DISPLAY_STAGE_META,
   vacationWorkflowDeadlines,
+  vacationWorkflowDisplayStageId,
 } from '../../src/lib/dp-vacation-workflow';
 
 test('calcula os marcos do aviso e do pagamento a partir do início do gozo', () => {
@@ -58,6 +60,14 @@ test('trilha planejada começa na análise e mantém assinatura do recibo bloque
   assert.equal(workflow.steps[0].status, 'in_progress');
   assert.equal(workflow.receiptSignature.status, 'blocked_until_payment');
   assert.equal(workflow.payment.dueAt, '2026-09-29');
+});
+
+test('contador e revisão compartilham uma única etapa visual sem remover os controles internos', () => {
+  assert.equal(VACATION_WORKFLOW_DISPLAY_STAGE_META.length, 6);
+  const accountant = VACATION_WORKFLOW_DISPLAY_STAGE_META.find((stage) => stage.id === 'accountant');
+  assert.deepEqual(accountant?.stageIds, ['accountant', 'receipt_review']);
+  assert.equal(vacationWorkflowDisplayStageId('accountant'), 'accountant');
+  assert.equal(vacationWorkflowDisplayStageId('receipt_review'), 'accountant');
 });
 
 test('aprovação conclui o agendamento e abre a geração do aviso', () => {

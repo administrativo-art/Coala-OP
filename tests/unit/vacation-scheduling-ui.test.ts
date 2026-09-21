@@ -35,19 +35,21 @@ test('perfil apresenta a trilha completa e preserva o recibo original para audit
   assert.match(profile, /DPVacationWorkflowPanel/);
   assert.match(workflow, /O que falta para avançar/i);
   assert.match(workflow, /Gerar e validar o aviso de férias/);
-  assert.match(workflow, /Original do contador/);
+  assert.match(workflow, /Arquivos do contador/);
   assert.match(workflow, /Bloqueado até o pagamento/);
   assert.match(workflow, /Finalizar no RH/);
 });
 
 test('trilha mostra uma etapa por vez e mantém etapas concluídas navegáveis', () => {
   assert.match(workflow, /stageSelection\?\.recordId === record\.id/);
-  assert.match(workflow, /: workflow\.currentStage/);
+  assert.match(workflow, /vacationWorkflowDisplayStageId\(workflow\.currentStage\)/);
   assert.match(workflow, /aria-pressed=\{selected\}/);
   assert.match(workflow, /setStageSelection\(\{ recordId: record\.id, stage: meta\.id \}\)/);
   assert.match(workflow, /selectedStage === 'scheduling'/);
   assert.match(workflow, /selectedStage === 'notice'/);
-  assert.match(workflow, /selectedStage === 'accountant' \|\| selectedStage === 'receipt_review'/);
+  assert.match(workflow, /selectedStage === 'accountant'/);
+  assert.match(workflow, /vacationWorkflowDisplayStageId\(workflow\.currentStage\)/);
+  assert.doesNotMatch(workflow, /selectedStage === 'receipt_review'/);
   assert.match(workflow, /selectedStage === 'payment' \|\| selectedStage === 'receipt_signature' \|\| selectedStage === 'closure'/);
   assert.match(workflow, /Etapa concluída\. Os dados permanecem disponíveis para consulta/);
 });
@@ -179,7 +181,7 @@ test('cadastro acontece na ficha individual e o drawer preserva edição e exclu
   assert.match(editor, /status: record\?\.status \?\? 'PENDING'/);
 });
 
-test('ficha sem lançamento explica as três fases e antecipa as sete etapas', () => {
+test('ficha sem lançamento explica as três fases e antecipa as seis etapas visuais', () => {
   assert.match(workflow, /Passo 1 de 3/);
   assert.match(workflow, /do ciclo \$\{cycle\.id\}/);
   assert.match(workflow, /Saldo do ciclo: \{balance\}d a agendar/);
@@ -187,15 +189,16 @@ test('ficha sem lançamento explica as três fases e antecipa as sete etapas', (
   assert.match(workflow, /Avisar até/);
   assert.match(workflow, /Registrar o período/);
   assert.match(workflow, /Aprovar o agendamento/);
-  assert.match(workflow, /As 7 etapas que vêm depois da aprovação/);
-  assert.match(workflow, /STAGE_OWNER_LABEL\[stage\.owner\]/);
+  assert.match(workflow, /As 6 etapas que vêm depois da aprovação/);
+  assert.match(workflow, /VACATION_WORKFLOW_DISPLAY_STAGE_META/);
+  assert.match(workflow, /stage\.ownerLabel/);
   assert.match(profile, /registrationCycle=\{defaultRegistrationCycle\}/);
   assert.match(workflow, /Nenhum ciclo disponível para registro/);
   assert.match(workflow, /O registro será liberado quando houver saldo em período concessivo/);
   assert.match(workflow, /if \(!cycle \|\| balance <= 0\)/);
 });
 
-test('as sete etapas mantêm ações do handoff e autorização coerente com o back-end', () => {
+test('as seis etapas visuais mantêm ações do handoff e autorização coerente com o back-end', () => {
   assert.match(workflow, /canApprove && \['not_generated', 'failed', 'draft'\]\.includes\(notice\.status\)/);
   assert.match(workflow, /\['failed', 'draft'\]\.includes\(notice\.status\) \? 'Gerar novamente'/);
   assert.match(workflow, /canApprove && notice\.status === 'draft'/);
