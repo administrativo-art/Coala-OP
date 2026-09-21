@@ -51,5 +51,5 @@ test('RH só encerra a trilha depois do recibo assinado', () => {
   assert.match(server, /workflow\.receiptSignature\.status !== 'signed'/);
   assert.match(server, /DP_VACATION_CLOSURE_NOT_READY/);
   assert.match(server, /VACATION_WORKFLOW_COMPLETED/);
-  assert.match(workflowUi, /Finalizar trilha no RH/);
+  assert.match(workflowUi, /Finalizar trilha/);
 });

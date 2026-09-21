@@ -63,4 +63,6 @@ test('o gerador institucional aplica o timbre canônico e não imprime metadados
   assert.doesNotMatch(source, /Documento \$\{input\.documentId\}/);
   assert.doesNotMatch(source, /registro de integridade e auditoria/);
   assert.doesNotMatch(source, /Código de verificação/);
+  assert.doesNotMatch(source, /Empregadora · CNPJ/);
+  assert.match(source, /Colaborador\(a\) · CPF/);
 });

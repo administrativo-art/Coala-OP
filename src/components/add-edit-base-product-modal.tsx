@@ -11,7 +11,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -42,6 +44,7 @@ const baseProductSchema = z.object({
   initialCostPerUnit: z.coerce.number().optional(),
   stockLevels: z.record(stockLevelSchema).optional(),
   consumptionMonths: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
+  minStockRecalcPeriod: z.enum(['monthly', 'biweekly']).default('monthly'),
 });
 
 
@@ -86,7 +89,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
-    defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: {}, consumptionMonths: 0 }
+    defaultValues: { name: '', classification: '', category: 'Massa', unit: 'g', initialCostPerUnit: 0, stockLevels: {}, consumptionMonths: 0, minStockRecalcPeriod: 'monthly' }
   });
 
   useEffect(() => {
@@ -111,6 +114,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         initialCostPerUnit: productToEdit?.lastEffectivePrice?.pricePerUnit ?? productToEdit?.initialCostPerUnit ?? 0,
         stockLevels: stockLevelsObject,
         consumptionMonths: productToEdit?.consumptionMonths ?? 0,
+        minStockRecalcPeriod: productToEdit?.minStockRecalcPeriod ?? 'monthly',
       });
     }
   }, [open, productToEdit, sortedKiosks, form]);
@@ -141,6 +145,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       unit: values.unit,
       stockLevels: values.stockLevels,
       consumptionMonths: values.consumptionMonths,
+      minStockRecalcPeriod: values.minStockRecalcPeriod,
       initialCostPerUnit: values.initialCostPerUnit,
     };
 
@@ -336,10 +341,30 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                     {/* STEP 2 */}
                     {currentStep === 2 && (
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                             {sortedKiosks.length} loca{sortedKiosks.length === 1 ? 'l' : 'is'}
                           </span>
+                          <FormField control={form.control} name="minStockRecalcPeriod" render={({ field }) => (
+                            <FormItem className="flex items-center gap-2 space-y-0">
+                              <FormLabel className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                Base do estoque mínimo automático
+                                <InfoTooltip title="Como o estoque mínimo é calculado">
+                                  <p>Todo dia 1 do mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda (equivale a usar o desvio padrão típico de um insumo de giro estável, arredondado para uma regra única).</p>
+                                  <p>Aqui você escolhe se essa média é calculada por <strong>mês</strong> (padrão, 6 pontos) ou por <strong>quinzena</strong> (12 pontos) — quinzenal reage mais rápido a mudanças recentes de consumo.</p>
+                                  <p>Itens em <strong>unidades</strong> são arredondados para cima; itens em <strong>kg/L</strong> mantêm casas decimais.</p>
+                                  <p>Marque <strong>&quot;Travar automação&quot;</strong> num quiosque para editar o mínimo manualmente ali — o cálculo automático passa a ignorar esse quiosque.</p>
+                                </InfoTooltip>
+                              </FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value="monthly">Mensal</SelectItem>
+                                  <SelectItem value="biweekly">Quinzenal</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}/>
                         </div>
                         <div className="rounded-md border">
                           <Table>
@@ -349,15 +374,27 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                 <TableHead className="text-center">Est. mínimo</TableHead>
                                 <TableHead className="text-center">Est. segurança</TableHead>
                                 <TableHead className="text-center">Lead time (dias)</TableHead>
+                                <TableHead className="text-center">Travar automação</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {sortedKiosks.map((kiosk) => (
+                              {sortedKiosks.map((kiosk) => {
+                                const autoCalc = productToEdit?.stockLevels?.[kiosk.id];
+                                const lastAutoCalculatedAt = autoCalc?.lastAutoCalculatedAt;
+                                return (
                                 <TableRow key={kiosk.id}>
                                   <TableCell className="font-medium">{kiosk.name}</TableCell>
                                   <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.min`} render={({ field }) => (
-                                      <FormItem><FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                      <FormItem>
+                                        <FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} /></FormControl>
+                                        {lastAutoCalculatedAt && (
+                                          <FormDescription className="text-right text-[10px]">
+                                            Calc. automaticamente em {new Date(lastAutoCalculatedAt).toLocaleDateString('pt-BR')}
+                                          </FormDescription>
+                                        )}
+                                        <FormMessage />
+                                      </FormItem>
                                     )}/>
                                   </TableCell>
                                   <TableCell>
@@ -370,13 +407,21 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                       <FormItem><FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                   </TableCell>
+                                  <TableCell>
+                                    <FormField control={form.control} name={`stockLevels.${kiosk.id}.override`} render={({ field }) => (
+                                      <FormItem className="flex flex-col items-center space-y-0">
+                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}/>
+                                  </TableCell>
                                 </TableRow>
-                              ))}
+                              );})}
                             </TableBody>
                           </Table>
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo.
+                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo. Com <span className="font-medium text-foreground">&quot;Travar automação&quot;</span> desligado, o estoque mínimo desse quiosque é recalculado automaticamente todo dia 1 do mês.
                         </p>
                       </div>
                     )}

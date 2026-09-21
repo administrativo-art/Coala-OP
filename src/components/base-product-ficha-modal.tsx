@@ -16,6 +16,7 @@ import {
 import { useProducts } from '@/hooks/use-products';
 import { useClassifications } from '@/hooks/use-classifications';
 import { useKiosks } from '@/hooks/use-kiosks';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 
 const formatCurrency = (value?: number) => {
   if (!value || isNaN(value)) return '—';
@@ -253,7 +254,14 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                   <>
                     <Separator />
                     <section className="space-y-3">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Estoque por Quiosque</h3>
+                      <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-gray-400">
+                        Estoque por Quiosque
+                        <InfoTooltip title="Como o estoque mínimo é calculado">
+                          <p>Todo dia 1 do mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda.</p>
+                          <p>A base do cálculo (mensal ou quinzenal) é definida na edição do insumo. Itens em <strong>unidades</strong> são arredondados para cima; itens em <strong>kg/L</strong> mantêm casas decimais.</p>
+                          <p>Quiosques com <strong>&quot;Travado&quot;</strong> têm o valor definido manualmente e não são recalculados automaticamente.</p>
+                        </InfoTooltip>
+                      </h3>
                       <div className="rounded-xl border border-gray-100 overflow-hidden">
                         <table className="w-full text-xs">
                           <thead>
@@ -268,7 +276,14 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                             {kiosksWithStockParams.map(({ kiosk, level }) => (
                               <tr key={kiosk.id}>
                                 <td className="px-4 py-2 font-medium text-gray-800">{kiosk.name}</td>
-                                <td className="px-3 py-2 text-center text-gray-600">{level.min ?? '—'}</td>
+                                <td className="px-3 py-2 text-center text-gray-600">
+                                  {level.min ?? '—'}
+                                  {level.override ? (
+                                    <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Travado</span>
+                                  ) : level.lastAutoCalculatedAt ? (
+                                    <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">Auto</span>
+                                  ) : null}
+                                </td>
                                 <td className="px-3 py-2 text-center text-gray-600">{level.safetyStock ?? '—'}</td>
                                 <td className="px-3 py-2 text-center text-gray-600">{level.leadTime ? `${level.leadTime}d` : '—'}</td>
                               </tr>

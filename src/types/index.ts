@@ -65,7 +65,11 @@ export type BaseProductStockLevel = {
     safetyStock?: number;
     leadTime?: number;
     override: boolean;
+    lastAutoCalculatedAt?: string; // ISO string, set by recalculateMinimumStock job
+    lastAutoCalculatedMean?: number; // mean consumption used for the last automatic calculation
 };
+
+export type MinStockRecalcPeriod = 'monthly' | 'biweekly';
 
 export type ConversionUnits = {
   [key in UnitCategory]: { [unit: string]: number };
@@ -2122,6 +2126,7 @@ export type BaseProduct = {
   initialCostPerUnit?: number;
   stockLevels: { [kioskId: string]: BaseProductStockLevel };
   consumptionMonths?: number;
+  minStockRecalcPeriod?: MinStockRecalcPeriod; // basis used to compute automatic "min": average biweekly or average monthly consumption. Defaults to 'monthly'.
   lastEffectivePrice?: PriceHistoryEntry;
   isArchived?: boolean;
 };

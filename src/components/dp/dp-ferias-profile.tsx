@@ -1,11 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { format, differenceInCalendarDays, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { differenceInCalendarDays, format, parseISO, startOfDay, subDays } from 'date-fns';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
@@ -17,14 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,33 +30,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  CalendarDays, CheckCircle, MoreHorizontal,
-  Pencil, Plus, Trash2, XCircle,
+  CalendarDays, MoreHorizontal,
+  Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
-import { DPVacationWorkflowPanel } from '@/components/dp/dp-vacation-workflow';
-import { vacationEntitlementDays } from '@/lib/dp-vacation-workflow';
+import {
+  DPVacationAuditTimeline,
+  DPVacationWorkflowPanel,
+} from '@/components/dp/dp-vacation-workflow';
+import { DPVacationEditorPanel } from '@/components/dp/dp-vacation-editor-panel';
+import { DPVacationDecisionPanel } from '@/components/dp/dp-vacation-decision-panel';
+import { shouldDisplayVacationWorkflow } from '@/lib/dp-vacation-workflow';
 
 import {
   calculateVacationHealth,
@@ -119,293 +96,6 @@ const STATUS_CONFIG = {
   REJECTED: { label: 'Rejeitado', bg: 'bg-red-100 dark:bg-red-900/30',      text: 'text-red-700 dark:text-red-300'      },
 } as const;
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-const vacationSchema = z.object({
-  cycleId: z.string().min(1, 'Informe o ciclo (ex: 2024-2025).'),
-  recordType: z.enum(['gozo', 'venda']),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  days: z.coerce.number().min(1).max(30),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'PLANNED']),
-  returnDate: z.string().optional(),
-  unjustifiedAbsences: z.coerce.number().int().min(0).max(100),
-  calendarId: z.string().optional(),
-  weeklyRestDay: z.coerce.number().int().min(0).max(6),
-  employeeAgreedToSplit: z.boolean(),
-  allowanceRequestedAt: z.string().optional(),
-  thirteenthAdvanceRequested: z.boolean(),
-}).superRefine((data, context) => {
-  if (data.recordType === 'gozo') {
-    if (!data.startDate) context.addIssue({ code: 'custom', path: ['startDate'], message: 'Informe o início.' });
-    if (!data.endDate) context.addIssue({ code: 'custom', path: ['endDate'], message: 'Informe o fim.' });
-    if (!data.calendarId) context.addIssue({ code: 'custom', path: ['calendarId'], message: 'Selecione o calendário.' });
-    if (data.startDate && data.endDate && data.endDate < data.startDate) {
-      context.addIssue({ code: 'custom', path: ['endDate'], message: 'Data fim deve ser após data início.' });
-    }
-  } else if (!data.allowanceRequestedAt) {
-    context.addIssue({ code: 'custom', path: ['allowanceRequestedAt'], message: 'Informe a data do pedido do abono.' });
-  }
-});
-
-type VacationFormValues = z.infer<typeof vacationSchema>;
-
-// ─── Vacation Form Dialog ─────────────────────────────────────────────────────
-
-interface VacationDialogProps {
-  userId: string;
-  defaultCycleId?: string;
-  vacation?: DPVacationRecord | null;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}
-
-function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }: VacationDialogProps) {
-  const { addVacation, updateVacation } = useDP();
-  const { calendars } = useDPBootstrap();
-  const { toast } = useToast();
-  const isEdit = !!vacation;
-
-  const form = useForm<VacationFormValues>({
-    resolver: zodResolver(vacationSchema),
-    defaultValues: {
-      cycleId: vacation?.cycleId ?? defaultCycleId ?? '',
-      recordType: vacation?.recordType ?? 'gozo',
-      startDate: vacation?.startDate ?? '',
-      endDate: vacation?.endDate ?? '',
-      days: vacation?.days ?? 30,
-      status: vacation?.status ?? 'PLANNED',
-      returnDate: vacation?.returnDate ?? '',
-      unjustifiedAbsences: vacation?.unjustifiedAbsences ?? 0,
-      calendarId: vacation?.calendarId ?? '',
-      weeklyRestDay: vacation?.weeklyRestDay ?? 0,
-      employeeAgreedToSplit: vacation?.employeeAgreedToSplit ?? false,
-      allowanceRequestedAt: vacation?.allowanceRequestedAt ?? '',
-      thirteenthAdvanceRequested: vacation?.thirteenthAdvanceRequested ?? false,
-    },
-  });
-
-  React.useEffect(() => {
-    if (open) {
-      form.reset({
-        cycleId: vacation?.cycleId ?? defaultCycleId ?? '',
-        recordType: vacation?.recordType ?? 'gozo',
-        startDate: vacation?.startDate ?? '',
-        endDate: vacation?.endDate ?? '',
-        days: vacation?.days ?? 30,
-        status: vacation?.status ?? 'PLANNED',
-        returnDate: vacation?.returnDate ?? '',
-        unjustifiedAbsences: vacation?.unjustifiedAbsences ?? 0,
-        calendarId: vacation?.calendarId ?? '',
-        weeklyRestDay: vacation?.weeklyRestDay ?? 0,
-        employeeAgreedToSplit: vacation?.employeeAgreedToSplit ?? false,
-        allowanceRequestedAt: vacation?.allowanceRequestedAt ?? '',
-        thirteenthAdvanceRequested: vacation?.thirteenthAdvanceRequested ?? false,
-      });
-    }
-  }, [open, vacation, defaultCycleId]);
-
-  const startDate = form.watch('startDate');
-  const endDate = form.watch('endDate');
-  const recordType = form.watch('recordType');
-  const unjustifiedAbsences = form.watch('unjustifiedAbsences');
-
-  React.useEffect(() => {
-    if (startDate && endDate && endDate >= startDate) {
-      const diff = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
-      form.setValue('days', diff);
-    }
-  }, [startDate, endDate]);
-
-  React.useEffect(() => {
-    if (!open || recordType !== 'gozo' || form.getValues('calendarId')) return;
-    const year = Number(startDate?.slice(0, 4));
-    const calendar = calendars.find((candidate) => candidate.year === year) ?? calendars[0];
-    if (calendar) form.setValue('calendarId', calendar.id, { shouldValidate: true });
-  }, [calendars, form, open, recordType, startDate]);
-
-  async function onSubmit(values: VacationFormValues) {
-    try {
-      const data = {
-        ...values,
-        userId,
-        startDate: values.startDate || undefined,
-        endDate: values.endDate || undefined,
-        returnDate: values.returnDate || undefined,
-        calendarId: values.calendarId || undefined,
-        allowanceRequestedAt: values.allowanceRequestedAt || undefined,
-        warnings: vacation?.warnings ?? [],
-      };
-      if (isEdit && vacation) {
-        await updateVacation({ ...vacation, ...data });
-        toast({ title: 'Férias atualizadas.' });
-      } else {
-        await addVacation(data as any);
-        toast({ title: 'Férias registradas.' });
-      }
-      onOpenChange(false);
-    } catch {
-      toast({ title: 'Erro ao salvar.', variant: 'destructive' });
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar férias' : 'Agendar férias'}</DialogTitle>
-          <DialogDescription>
-            Registre o ciclo, o tipo e o período do lançamento de férias.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="cycleId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Ciclo</FormLabel>
-                  <FormControl><Input placeholder="Ex: 2024-2025" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="recordType" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tipo</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="gozo">Gozo</SelectItem>
-                      <SelectItem value="venda">Venda (abono)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-
-            {recordType === 'gozo' && (
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="startDate" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Início</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="endDate" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fim</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-            )}
-
-            {recordType === 'gozo' && (
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="calendarId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Calendário aplicável</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {calendars.map((calendar) => (
-                          <SelectItem key={calendar.id} value={calendar.id}>{calendar.name} · {calendar.year}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="weeklyRestDay" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descanso semanal</FormLabel>
-                    <Select value={String(field.value)} onValueChange={(value) => field.onChange(Number(value))}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((label, index) => (
-                          <SelectItem key={label} value={String(index)}>{label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-            )}
-
-            <FormField control={form.control} name="days" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Dias</FormLabel>
-                <FormControl><Input type="number" min={1} max={30} {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="unjustifiedAbsences" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Faltas injustificadas no ciclo</FormLabel>
-                <FormControl><Input type="number" min={0} max={100} {...field} /></FormControl>
-                <p className="text-[11px] text-muted-foreground">
-                  Direito calculado: {vacationEntitlementDays(Number(unjustifiedAbsences) || 0)} dias.
-                </p>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {recordType === 'venda' && (
-              <FormField control={form.control} name="allowanceRequestedAt" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data do pedido do abono</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            {recordType === 'gozo' && (
-              <FormField control={form.control} name="returnDate" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Retorno</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <p className="text-[11px] text-muted-foreground">
-                    O prazo de pagamento será calculado pela trilha e só será confirmado após o recibo do contador.
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            <div className="space-y-3 rounded-xl border p-3">
-              <FormField control={form.control} name="employeeAgreedToSplit" render={({ field }) => (
-                <FormItem className="flex items-start gap-2 space-y-0">
-                  <FormControl><Checkbox checked={field.value} onCheckedChange={(value) => field.onChange(value === true)} /></FormControl>
-                  <div><FormLabel>Colaborador concordou com o fracionamento</FormLabel><FormMessage /></div>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="thirteenthAdvanceRequested" render={({ field }) => (
-                <FormItem className="flex items-start gap-2 space-y-0">
-                  <FormControl><Checkbox checked={field.value} onCheckedChange={(value) => field.onChange(value === true)} /></FormControl>
-                  <div><FormLabel>Adiantamento da 1ª parcela do 13º solicitado</FormLabel><FormMessage /></div>
-                </FormItem>
-              )} />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ─── Vacation Record Row ──────────────────────────────────────────────────────
 
 interface VacationRecordRowProps {
@@ -414,11 +104,10 @@ interface VacationRecordRowProps {
   canApprove: boolean;
   onEdit: (r: DPVacationRecord) => void;
   onDelete: (r: DPVacationRecord) => void;
-  onApprove: (r: DPVacationRecord) => void;
-  onReject: (r: DPVacationRecord) => void;
+  onReview: (r: DPVacationRecord) => void;
 }
 
-function VacationRecordRow({ record, canEdit, canApprove, onEdit, onDelete, onApprove, onReject }: VacationRecordRowProps) {
+function VacationRecordRow({ record, canEdit, canApprove, onEdit, onDelete, onReview }: VacationRecordRowProps) {
   const cfg = STATUS_CONFIG[record.status] ?? STATUS_CONFIG.PENDING;
   const isGozo = record.recordType === 'gozo';
 
@@ -444,7 +133,13 @@ function VacationRecordRow({ record, canEdit, canApprove, onEdit, onDelete, onAp
         )}
       </div>
 
-      {(canEdit || canApprove) && (
+      {canApprove && (record.status === 'PENDING' || record.status === 'PLANNED') ? (
+        <Button type="button" size="sm" className="h-8 rounded-lg" onClick={() => onReview(record)}>
+          Revisar e decidir
+        </Button>
+      ) : null}
+
+      {canEdit && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -456,17 +151,6 @@ function VacationRecordRow({ record, canEdit, canApprove, onEdit, onDelete, onAp
               <DropdownMenuItem onClick={() => onEdit(record)}>
                 <Pencil className="mr-2 h-3.5 w-3.5" />Editar
               </DropdownMenuItem>
-            )}
-            {canApprove && record.status === 'PENDING' && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onApprove(record)}>
-                  <CheckCircle className="mr-2 h-3.5 w-3.5 text-green-600" />Aprovar
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onReject(record)} className="text-destructive focus:text-destructive">
-                  <XCircle className="mr-2 h-3.5 w-3.5" />Rejeitar
-                </DropdownMenuItem>
-              </>
             )}
             {canEdit && (
               <>
@@ -492,11 +176,10 @@ interface CycleCardProps {
   onAdd: (cycleId: string) => void;
   onEdit: (r: DPVacationRecord) => void;
   onDelete: (r: DPVacationRecord) => void;
-  onApprove: (r: DPVacationRecord) => void;
-  onReject: (r: DPVacationRecord) => void;
+  onReview: (r: DPVacationRecord) => void;
 }
 
-function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onApprove, onReject }: CycleCardProps) {
+function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onReview }: CycleCardProps) {
   const cfg = CYCLE_STATUS_CONFIG[cycle.status];
 
   return (
@@ -547,8 +230,7 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onAppr
                 canApprove={canApprove}
                 onEdit={onEdit}
                 onDelete={onDelete}
-                onApprove={onApprove}
-                onReject={onReject}
+                onReview={onReview}
               />
             ))}
           </div>
@@ -573,12 +255,16 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onAppr
 
 interface DPFeriasProfileProps {
   userId: string;
+  initialWorkflowVacationId?: string;
 }
 
-export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
+export function DPFeriasProfile({
+  userId,
+  initialWorkflowVacationId,
+}: DPFeriasProfileProps) {
   const { users, permissions } = useAuth();
-  const { updateVacation, deleteVacation } = useDP();
-  const { vacations, vacationsLoading, vacationsError } = useDPBootstrap();
+  const { deleteVacation } = useDP();
+  const { vacations, calendars, vacationsLoading, vacationsError } = useDPBootstrap();
   const { toast } = useToast();
   const api = useAuthenticatedApi();
 
@@ -587,11 +273,14 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editVacation, setEditVacation] = useState<DPVacationRecord | null>(null);
+  const [decisionVacation, setDecisionVacation] = useState<DPVacationRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPVacationRecord | null>(null);
   const [decisionTarget, setDecisionTarget] = useState<{ record: DPVacationRecord; action: 'reject' | 'cancel' } | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>();
-  const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(null);
+  const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(
+    initialWorkflowVacationId ?? null,
+  );
   const [noticeBusy, setNoticeBusy] = useState<'generate' | 'validate' | 'open' | 'send' | 'sync' | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -653,10 +342,78 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     [admDate, userVacations]
   );
 
+  const concessiveCycle = useMemo(
+    () => cycles.find(cycle => cycle.status !== 'GOZADO' && cycle.status !== 'AQUISITIVO'),
+    [cycles],
+  );
+  const concessiveNoticeLimit = useMemo(() => {
+    if (!concessiveCycle || concessiveCycle.balance <= 0) return null;
+    const remainingDays = Math.max(1, concessiveCycle.balance);
+    const date = subDays(concessiveCycle.concessivePeriod.end, remainingDays + 29);
+    return {
+      date,
+      remainingDays,
+      daysLeft: differenceInCalendarDays(date, startOfDay(new Date())),
+    };
+  }, [concessiveCycle]);
+  const workflowCycle = useMemo(
+    () => concessiveCycle ?? cycles.find(cycle => cycle.records.length > 0),
+    [concessiveCycle, cycles],
+  );
+  const cycleCounts = useMemo(() => ({
+    acquisition: cycles.filter(cycle => cycle.status === 'AQUISITIVO').length,
+    concessive: cycles.filter(cycle => !['AQUISITIVO', 'GOZADO', 'VENCIDO'].includes(cycle.status)).length,
+    closed: cycles.filter(cycle => cycle.status === 'GOZADO').length,
+    overdue: cycles.filter(cycle => cycle.status === 'VENCIDO').length,
+  }), [cycles]);
+  const defaultRegistrationCycle = useMemo(
+    () => cycles.find(cycle => cycle.status !== 'AQUISITIVO' && cycle.balance > 0),
+    [cycles],
+  );
+  const editorCycleId = editVacation?.cycleId ?? selectedCycleId ?? defaultRegistrationCycle?.id;
+  const editorCycle = editorCycleId
+    ? cycles.find(cycle => cycle.id === editorCycleId)
+    : undefined;
+  const decisionCycle = decisionVacation
+    ? cycles.find(cycle => cycle.id === decisionVacation.cycleId)
+    : undefined;
+
+  function closeVacationEditor() {
+    setScheduleOpen(false);
+    setEditVacation(null);
+    setSelectedCycleId(undefined);
+  }
+
+  function openVacationEditor(cycleId?: string) {
+    const cycle = cycleId
+      ? cycles.find(candidate => candidate.id === cycleId && candidate.balance > 0)
+      : defaultRegistrationCycle;
+    if (!cycle) {
+      toast({
+        title: 'Nenhum ciclo com saldo disponível.',
+        description: 'Todos os dias de férias já foram distribuídos ou o ciclo ainda está em aquisição.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setEditVacation(null);
+    setSelectedCycleId(cycle.id);
+    setScheduleOpen(true);
+  }
+
+  function openVacationEdit(record: DPVacationRecord) {
+    setScheduleOpen(false);
+    setSelectedCycleId(record.cycleId);
+    setEditVacation(record);
+  }
+
   const workflowVacations = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     return userVacations
-      .filter(vacation => vacation.recordType === 'gozo')
+      .filter(vacation => (
+        (!workflowCycle || vacation.cycleId === workflowCycle.id)
+        && shouldDisplayVacationWorkflow(vacation, today)
+      ))
       .sort((left, right) => {
         const leftRejected = left.status === 'REJECTED' ? 1 : 0;
         const rightRejected = right.status === 'REJECTED' ? 1 : 0;
@@ -668,7 +425,9 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
           ? (left.startDate ?? '').localeCompare(right.startDate ?? '')
           : (right.startDate ?? '').localeCompare(left.startDate ?? '');
       });
-  }, [userVacations]);
+  }, [userVacations, workflowCycle]);
+  const selectedWorkflowVacation = workflowVacations.find(vacation => vacation.id === selectedWorkflowVacationId)
+    ?? workflowVacations[0];
 
   React.useEffect(() => {
     if (!workflowVacations.length) {
@@ -679,16 +438,6 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
       setSelectedWorkflowVacationId(workflowVacations[0].id);
     }
   }, [selectedWorkflowVacationId, workflowVacations]);
-
-  async function handleApprove(v: DPVacationRecord) {
-    try { await updateVacation({ ...v, status: 'APPROVED' }); toast({ title: 'Aprovado.' }); }
-    catch { toast({ title: 'Erro.', variant: 'destructive' }); }
-  }
-
-  async function handleReject(v: DPVacationRecord) {
-    setDecisionReason('');
-    setDecisionTarget({ record: v, action: 'reject' });
-  }
 
   function handleCancel(v: DPVacationRecord) {
     setDecisionReason('');
@@ -965,8 +714,8 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
             )}
           </div>
         </div>
-        {canEdit && (
-          <Button size="sm" onClick={() => { setSelectedCycleId(undefined); setScheduleOpen(true); }}>
+        {canEdit && defaultRegistrationCycle && workflowVacations.length > 0 && (
+          <Button size="sm" onClick={() => openVacationEditor()}>
             <Plus className="mr-2 h-4 w-4" />
             Registrar férias
           </Button>
@@ -975,12 +724,14 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
       <DPVacationWorkflowPanel
         records={workflowVacations}
+        registrationCycle={defaultRegistrationCycle}
         selectedId={selectedWorkflowVacationId}
         canEdit={canEdit}
         canApprove={canApprove}
+        onRegister={() => openVacationEditor()}
         onSelect={setSelectedWorkflowVacationId}
-        onEdit={setEditVacation}
-        onApprove={handleApprove}
+        onEdit={openVacationEdit}
+        onApprove={setDecisionVacation}
         onGenerateNotice={handleGenerateNotice}
         onValidateNotice={handleValidateNotice}
         onOpenNotice={handleOpenNotice}
@@ -1004,11 +755,36 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         onCancel={handleCancel}
       />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <section className="overflow-hidden rounded-[18px] border bg-card shadow-sm">
+        <div className="border-b px-4 py-3.5">
+          <p className="text-sm font-black">Ciclos e histórico</p>
+          <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+            Consulte o prazo concessivo, os saldos, os lançamentos e a auditoria em um único bloco.
+          </p>
+        </div>
+
+        {selectedWorkflowVacation ? (
+          <details className="group border-b bg-background">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[12px] font-black text-slate-700 marker:content-none">
+              <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Histórico auditável</span>
+              <span className="text-[10px] font-semibold text-slate-500 group-open:hidden">Mostrar</span>
+              <span className="hidden text-[10px] font-semibold text-slate-500 group-open:inline">Ocultar</span>
+            </summary>
+            <div className="border-t border-slate-100">
+              <DPVacationAuditTimeline
+                vacationId={selectedWorkflowVacation.id}
+                version={selectedWorkflowVacation.workflow?.updatedAt ?? String(selectedWorkflowVacation.updatedAt ?? '')}
+                embedded
+              />
+            </div>
+          </details>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
 
         {/* Left: Health Summary */}
         <div className="lg:col-span-1 space-y-4">
-          <Card>
+          <Card className="border-0 bg-muted/25 shadow-none">
             <CardContent className="space-y-2.5 p-3">
               {health.status === 'INVALIDO' && (
                 <p className="text-sm text-muted-foreground">
@@ -1074,21 +850,85 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
           </Card>
 
           {/* Summary stats */}
-          <Card>
-            <CardContent className="space-y-1.5 p-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resumo</p>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total de ciclos</span>
-                <span className="font-medium">{cycles.length}</span>
+          <Card className="border-0 bg-muted/25 shadow-none">
+            <CardContent className="p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ciclos</p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-sky-500" />Em aquisição</span>
+                  <span className="font-semibold tabular-nums">{cycleCounts.acquisition}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-amber-500" />Em período concessivo</span>
+                  <span className="font-semibold tabular-nums">{cycleCounts.concessive}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-emerald-500" />Encerrados</span>
+                  <span className="font-semibold tabular-nums">{cycleCounts.closed}</span>
+                </div>
+                {cycleCounts.overdue > 0 ? (
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2 text-red-700"><span className="h-2 w-2 rounded-full bg-red-500" />Vencidos</span>
+                    <span className="font-semibold tabular-nums text-red-700">{cycleCounts.overdue}</span>
+                  </div>
+                ) : null}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total de registros</span>
-                <span className="font-medium">{userVacations.length}</span>
+
+              <div className="my-3 border-t" />
+
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Férias do ciclo concessivo</p>
+                {concessiveCycle ? <span className="text-[10px] font-bold text-muted-foreground">{concessiveCycle.id}</span> : null}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Dias registrados</span>
-                <span className="font-medium">{userVacations.reduce((t, v) => t + v.days, 0)}</span>
-              </div>
+              {concessiveCycle ? (
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Períodos lançados</span>
+                    <span className="font-semibold tabular-nums">{concessiveCycle.records.length}</span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Dias distribuídos</span>
+                    <span className="font-semibold tabular-nums">{concessiveCycle.takenDays}d</span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Saldo a programar</span>
+                    <span className="font-semibold tabular-nums">{Math.max(0, concessiveCycle.balance)}d</span>
+                  </div>
+                  {concessiveNoticeLimit ? (
+                    <div className={`mt-3 rounded-xl border px-3 py-2.5 ${
+                      concessiveNoticeLimit.daysLeft < 0
+                        ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/25 dark:text-red-200'
+                        : concessiveNoticeLimit.daysLeft <= 60
+                          ? 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/25 dark:text-amber-200'
+                          : 'border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/25 dark:text-sky-200'
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span>
+                          <span className="block text-[10px] font-black uppercase tracking-[0.08em]">Data-limite do aviso</span>
+                          <span className="mt-0.5 block text-sm font-black tabular-nums">{fmtDate(concessiveNoticeLimit.date)}</span>
+                        </span>
+                        <span className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black dark:bg-black/15">
+                          {concessiveNoticeLimit.daysLeft < 0
+                            ? `${Math.abs(concessiveNoticeLimit.daysLeft)}d em atraso`
+                            : concessiveNoticeLimit.daysLeft === 0
+                              ? 'Vence hoje'
+                              : `${concessiveNoticeLimit.daysLeft} dias`}
+                        </span>
+                      </div>
+                      <details className="group mt-2">
+                        <summary className="cursor-pointer list-none text-[10.5px] font-bold underline underline-offset-2 marker:content-none">
+                          Entenda esta data
+                        </summary>
+                        <p className="mt-2 text-[10.5px] font-medium leading-relaxed opacity-80">
+                          É a última data estimada para comunicar as férias com 30 dias de antecedência. O cálculo reserva os {concessiveNoticeLimit.remainingDays} dias ainda não distribuídos antes de {fmtDate(concessiveCycle.concessivePeriod.end)}, fim do período concessivo.
+                        </p>
+                      </details>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-3 text-xs font-medium text-muted-foreground">Nenhum ciclo em período concessivo.</p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1130,31 +970,62 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
                 cycle={cycle}
                 canEdit={canEdit}
                 canApprove={canApprove}
-                onAdd={(cycleId) => { setSelectedCycleId(cycleId); setScheduleOpen(true); }}
-                onEdit={setEditVacation}
+                onAdd={openVacationEditor}
+                onEdit={openVacationEdit}
                 onDelete={setDeleteTarget}
-                onApprove={handleApprove}
-                onReject={handleReject}
+                onReview={setDecisionVacation}
               />
             ))
           )}
         </div>
-      </div>
+        </div>
+      </section>
 
-      {/* Dialogs */}
-      <VacationDialog
-        userId={userId}
-        defaultCycleId={selectedCycleId}
-        open={scheduleOpen}
-        onOpenChange={open => { if (!open) setScheduleOpen(false); }}
-      />
+      <Sheet
+        open={Boolean(decisionVacation && decisionCycle)}
+        onOpenChange={open => { if (!open) setDecisionVacation(null); }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-[560px] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+          style={{ height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh' }}
+        >
+          {decisionVacation && decisionCycle ? (
+            <DPVacationDecisionPanel
+              key={decisionVacation.id}
+              employeeName={user.username}
+              record={decisionVacation}
+              cycle={decisionCycle}
+              calendarName={calendars.find(calendar => calendar.id === decisionVacation.calendarId)?.name}
+              canApprove={canApprove}
+              onBack={() => setDecisionVacation(null)}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
-      <VacationDialog
-        userId={userId}
-        vacation={editVacation}
-        open={!!editVacation}
-        onOpenChange={open => { if (!open) setEditVacation(null); }}
-      />
+      <Sheet
+        open={Boolean(canEdit && (scheduleOpen || editVacation) && editorCycle)}
+        onOpenChange={open => { if (!open) closeVacationEditor(); }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-[560px] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]"
+          style={{ height: '100dvh', minHeight: '100dvh', maxHeight: '100dvh' }}
+        >
+          {editorCycle ? (
+            <DPVacationEditorPanel
+              key={`${editorCycle.id}:${editVacation?.id ?? 'new'}`}
+              employeeName={user.username}
+              userId={userId}
+              cycle={editorCycle}
+              calendars={calendars}
+              record={editVacation ?? undefined}
+              onBack={closeVacationEditor}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
