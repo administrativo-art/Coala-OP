@@ -1,5 +1,6 @@
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as logger from "firebase-functions/logger";
 
 const TIME_ZONE = "America/Belem";
 const HISTORY_MONTHS = 6;
@@ -102,9 +103,10 @@ async function loadMovementHistoryEntries(
     .limit(MOVEMENT_HISTORY_READ_LIMIT)
     .get();
   if (snap.size === MOVEMENT_HISTORY_READ_LIMIT) {
-    console.warn(
-      `[recalculateMinimumStock] movementHistory atingiu o limite de leitura de ${MOVEMENT_HISTORY_READ_LIMIT} documentos; crie o índice composto (type, timestamp) e pagine por data para evitar leituras cada vez maiores.`,
-    );
+    logger.warn("movementHistory atingiu o limite de leitura; crie o índice composto e pagine por data.", {
+      source: "recalculateMinimumStock",
+      readLimit: MOVEMENT_HISTORY_READ_LIMIT,
+    });
   }
   const entries: ConsumptionEntry[] = [];
   for (const doc of snap.docs) {
