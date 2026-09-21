@@ -1002,7 +1002,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                                         <div>
                                                             <p className="text-sm font-bold text-slate-900">E-mails por setor</p>
-                                                            <p className="mt-1 text-xs text-slate-500">Cadastre quantos contatos forem necessários e indique em quais processos cada um será sugerido.</p>
+                                                            <p className="mt-1 text-xs text-slate-500">Cadastre os contatos por setor — por exemplo, Pessoal da contabilidade — e indique em quais processos cada um será sugerido.</p>
                                                         </div>
                                                         <Button type="button" size="sm" variant="outline" onClick={addDepartmentEmail}>
                                                             <Plus className="mr-1.5 h-3.5 w-3.5" />Adicionar e-mail

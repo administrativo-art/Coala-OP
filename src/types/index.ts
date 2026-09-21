@@ -2270,6 +2270,7 @@ export type Entity = {
       purposes?: Array<'onboarding' | 'termination' | 'aso' | 'vacation'>;
     }>;
   };
+  departmentEmailPurposes?: Array<'onboarding' | 'termination' | 'aso' | 'vacation'>;
   responsible?: string; // Only for pessoa_juridica
   documentSignatoryUserId?: string;
   documentSignatoryName?: string;

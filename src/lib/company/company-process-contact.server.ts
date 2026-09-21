@@ -1,8 +1,9 @@
 import "server-only";
 
 import { dbAdmin } from "@/lib/firebase-admin";
+import type { CompanyEmailPurpose } from "./company-process-contact";
 
-export type CompanyEmailPurpose = "onboarding" | "termination" | "aso" | "vacation";
+export type { CompanyEmailPurpose } from "./company-process-contact";
 
 export type CompanyProcessContact = {
   entityId: string;
@@ -68,26 +69,25 @@ export async function resolveCompanyProcessContact(
       [...byCnpj.docs, ...byDocument.docs].map((document) => [document.id, document]),
     ).values()];
   } else {
-    const snapshot = await dbAdmin.collection("entities").limit(100).get();
-    if (snapshot.size >= 100) {
-      throw new Error(`Há muitas empresas para localizar o e-mail marcado para ${purpose}. Informe a empresa do processo.`);
-    }
+    const snapshot = await dbAdmin.collection("entities")
+      .where("departmentEmailPurposes", "array-contains", purpose)
+      .limit(3)
+      .get();
     documents = snapshot.docs;
   }
   const matches = contactsFromDocuments(documents, purpose);
-  const scoped = matches.filter((match) => (
-    (!entityId && cnpj.length !== 14)
-    || (Boolean(entityId) && match.entityId === entityId)
-    || (cnpj.length === 14 && match.companyCnpj === cnpj)
-  ));
-  if (scoped.length > 1) {
-    throw new Error(`Há mais de um e-mail marcado para ${purpose} no CNPJ informado. Revise o cadastro da empresa.`);
-  }
-  if (scoped[0]) return scoped[0];
-  if (entityId || cnpj.length === 14) return null;
-
-  if (matches.length > 1) {
+  const companyScoped = Boolean(entityId) || cnpj.length === 14;
+  const candidates = companyScoped
+    ? matches.filter((match) => (
+        (Boolean(entityId) && match.entityId === entityId)
+        || (cnpj.length === 14 && match.companyCnpj === cnpj)
+      ))
+    : matches;
+  if (candidates.length > 1) {
+    if (companyScoped) {
+      throw new Error(`Há mais de um e-mail marcado para ${purpose} no CNPJ informado. Revise o cadastro da empresa.`);
+    }
     throw new Error(`Há mais de um e-mail de empresa marcado para ${purpose}. Revise os cadastros antes de continuar.`);
   }
-  return matches[0] ?? null;
+  return candidates[0] ?? null;
 }

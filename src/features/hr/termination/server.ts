@@ -662,7 +662,7 @@ export async function createManagedTermination(params: {
   const unit = await loadUnit(target);
   const employer = await resolveTerminationEmployer({ user: target, employerUnitId: params.input.employerUnitId });
   await persistCollaboratorEmployer(target.id, employer);
-  const accountantContact = relationship === "clt" ? await resolveCompanyProcessContact("termination", employer) : null;
+  const accountantContact = relationship === "clt" ? await resolveCompanyProcessContact("termination") : null;
   const identity = await loadExpectedIdentity(target.id).catch(() => null);
   const pjContractSnapshot = relationship === "pj"
     ? await resolvePjTerminationContractSnapshot({ user: target, employer, capturedAt: now })
@@ -906,7 +906,7 @@ export async function createEmployeeResignationRequest(params: {
   const unit = await loadUnit(user);
   const employer = await resolveTerminationEmployer({ user });
   await persistCollaboratorEmployer(user.id, employer);
-  const accountantContact = await resolveCompanyProcessContact("termination", employer);
+  const accountantContact = await resolveCompanyProcessContact("termination");
   const nowDate = new Date();
   const now = nowDate.toISOString();
   const processId = randomUUID();
@@ -2019,7 +2019,7 @@ export async function sendTerminationToAccountant(params: { context: ServerUserC
   const process = await requireManagedProcess(params.context, params.id);
   if (!process.notice) throw new Error("Defina o aviso-prévio antes do envio à contabilidade.");
   const employer = requireTerminationEmployer(process);
-  const configuredContact = await resolveCompanyProcessContact("termination", employer);
+  const configuredContact = await resolveCompanyProcessContact("termination");
   const recipient = params.recipientEmail.trim().toLowerCase() || configuredContact?.email || "";
   if (!recipient.includes("@")) throw new Error("Informe um e-mail válido da contabilidade.");
   const token = randomBytes(32).toString("base64url");
