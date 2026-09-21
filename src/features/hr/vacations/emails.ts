@@ -34,8 +34,8 @@ export function vacationAccountantEmailContent(input: VacationAccountantEmailInp
     : `Recibo de férias a preparar - ${input.employeeName}`;
   const period = `${dateBr(input.vacationStartDate)} a ${dateBr(input.vacationEndDate)}`;
   const message = input.correctionReason
-    ? `O RH revisou o recibo de férias de ${input.employeeName} e precisa de uma nova versão. Você poderia, por gentileza, fazer o ajuste indicado abaixo e enviar novamente o PDF original?\n\nAjuste solicitado: ${input.correctionReason}`
-    : `${input.employeeName} assinou o aviso de férias em ${input.noticeSignedAt}. Você poderia, por gentileza, preparar o recibo referente ao período abaixo e nos devolver o PDF original pelo link exclusivo deste e-mail?`;
+    ? `O RH revisou os documentos de férias de ${input.employeeName} e precisa de uma nova versão. Você poderia, por gentileza, fazer o ajuste indicado abaixo e enviar os arquivos corrigidos?\n\nAjuste solicitado: ${input.correctionReason}`
+    : `${input.employeeName} assinou o aviso de férias em ${input.noticeSignedAt}. Você poderia, por gentileza, preparar o recibo referente ao período abaixo e enviar o recibo e os documentos de apoio pelo link exclusivo deste e-mail?`;
   const details = [
     { label: 'Colaborador(a)', value: input.employeeName },
     { label: 'CPF · matrícula', value: `${input.employeeCpf} · ${input.employeeRegistration}` },
@@ -45,11 +45,11 @@ export function vacationAccountantEmailContent(input: VacationAccountantEmailInp
     { label: 'Abono pecuniário', value: input.allowanceText },
     { label: 'Antecipação do 13º', value: input.thirteenthAdvanceText },
   ];
-  const actionLabel = input.correctionReason ? 'Enviar recibo corrigido' : 'Anexar recibo original';
-  const actionTitle = input.correctionReason ? 'Envio da versão corrigida' : 'Envio seguro do recibo original';
+  const actionLabel = input.correctionReason ? 'Enviar arquivos corrigidos' : 'Enviar arquivos';
+  const actionTitle = input.correctionReason ? 'Envio dos arquivos corrigidos' : 'Envio seguro dos documentos';
   const actionText = input.correctionReason
-    ? 'Quando o ajuste estiver pronto, use o botão abaixo para anexar a nova versão em PDF.'
-    : 'Quando o recibo estiver pronto, use o botão abaixo para anexar o PDF emitido pela contabilidade. O RH receberá o arquivo original para conferência e auditoria.';
+    ? 'Quando o ajuste estiver pronto, use o botão abaixo para anexar os arquivos em PDF, JPG ou PNG.'
+    : 'Quando os documentos estiverem prontos, use o botão abaixo para anexar um ou mais arquivos em PDF, JPG ou PNG. São aceitos até 20 arquivos por envio, com 15 MB por arquivo e 25 MB no conjunto; se necessário, faça outro envio pelo mesmo link. O copiloto indicará o provável recibo principal, e o RH fará a conferência e a escolha final.';
   const plainDetails = details.map((item) => `${item.label}: ${item.value}`).join('\n');
   return {
     subject,

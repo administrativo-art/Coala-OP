@@ -24,8 +24,10 @@ test('e-mail à contabilidade solicita o recibo com tom colaborativo e dados aud
   assert.match(content.text, /Você poderia, por gentileza, preparar o recibo/);
   assert.match(content.text, /Período aquisitivo: 10\/05\/2025 a 09\/05\/2026/);
   assert.match(content.text, /Gozo: 01\/10\/2026 a 30\/10\/2026 · 30 dias/);
-  assert.match(content.html, /Envio seguro do recibo original/);
-  assert.match(content.html, /Anexar recibo original/);
+  assert.match(content.html, /Envio seguro dos documentos/);
+  assert.match(content.html, /Enviar arquivos/);
+  assert.match(content.text, /um ou mais arquivos em PDF, JPG ou PNG/);
+  assert.match(content.text, /copiloto indicará o provável recibo principal/);
   assert.match(content.html, /expira em 30 dias e não deve ser encaminhado/);
   assert.doesNotMatch(content.text, /Prepare o recibo referente/);
 });

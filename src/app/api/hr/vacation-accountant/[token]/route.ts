@@ -40,18 +40,21 @@ export const POST = withApiErrorHandling({
 }, async (request: NextRequest, context: { params: Promise<{ token: string }> }) => {
   const { token } = await context.params;
   const form = await request.formData();
-  const file = form.get('file');
-  if (!(file instanceof File)) {
+  const files = [
+    ...form.getAll('files'),
+    ...form.getAll('file'),
+  ].filter((value): value is File => value instanceof File && value.size > 0);
+  if (!files.length) {
     throw new AppError({
       code: 'DP_VACATION_RECEIPT_FILE_REQUIRED',
       kind: 'VALIDATION',
-      safeMessage: 'Selecione o recibo de férias em PDF.',
+      safeMessage: 'Selecione ao menos um arquivo em PDF, JPG ou PNG.',
       httpStatus: 400,
     });
   }
   const result = await uploadVacationReceipt({
     token: tokenValue(token),
-    file,
+    files,
     ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || request.headers.get('x-real-ip'),
     userAgent: request.headers.get('user-agent'),
