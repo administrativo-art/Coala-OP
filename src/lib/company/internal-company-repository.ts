@@ -4,6 +4,7 @@ import { WORKSPACE_ID } from '@/lib/workspace';
 import type { CompanyLookupResponse, CompanyLookupSourceResult, CompanySavePayload, NormalizedCompanyData } from './company-lookup-types';
 import { CnpjValidator } from './cnpj-validator';
 import { CompanyNormalizer } from './company-normalizer';
+import { companyEmailPurposeIndex } from './company-process-contact';
 
 function cleanUndefined<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -130,15 +131,19 @@ export class InternalCompanyRepository {
       },
       payload.entity ?? {},
     );
+    const indexedEntityData = {
+      ...entityData,
+      departmentEmailPurposes: companyEmailPurposeIndex(entityData),
+    };
 
     const ref = targetId
       ? this.db.collection('entities').doc(targetId)
       : this.db.collection('entities').doc();
 
     if (targetId) {
-      await ref.set(cleanUndefined({ ...entityData, updatedAt: now, updatedBy: userId }), { merge: true });
+      await ref.set(cleanUndefined({ ...indexedEntityData, updatedAt: now, updatedBy: userId }), { merge: true });
     } else {
-      await ref.set(cleanUndefined({ ...entityData, workspaceId: WORKSPACE_ID, createdAt: now, createdBy: userId }));
+      await ref.set(cleanUndefined({ ...indexedEntityData, workspaceId: WORKSPACE_ID, createdAt: now, createdBy: userId }));
     }
 
     await this.saveSources(ref.id, validation.clean, payload.sourceResults ?? []);
@@ -160,14 +165,22 @@ export class InternalCompanyRepository {
       entity.document = CnpjValidator.format(validation.clean);
     }
 
-    await this.db.collection('entities').doc(id).set(
-      cleanUndefined({
-        ...entity,
-        updatedAt: new Date().toISOString(),
-        updatedBy: userId,
-      }),
-      { merge: true },
-    );
+    const ref = this.db.collection('entities').doc(id);
+    const updatedAt = new Date().toISOString();
+    await this.db.runTransaction(async (transaction) => {
+      const current = await transaction.get(ref);
+      if (!current.exists) throw new Error('Empresa não encontrada.');
+      transaction.set(
+        ref,
+        cleanUndefined({
+          ...entity,
+          departmentEmailPurposes: companyEmailPurposeIndex(entity, current.data()),
+          updatedAt,
+          updatedBy: userId,
+        }),
+        { merge: true },
+      );
+    });
     return { id };
   }
 

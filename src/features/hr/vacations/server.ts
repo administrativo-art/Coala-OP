@@ -745,13 +745,12 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
   const userSnapshot = await dbAdmin.collection('users').doc(String(current.userId ?? '')).get();
   if (!userSnapshot.exists) throw conflict('DP_VACATION_EMPLOYEE_NOT_FOUND', 'A colaboradora vinculada às férias não foi encontrada.');
   const user = { id: userSnapshot.id, ...userSnapshot.data() } as User;
-  const employer = await resolveVacationEmployer(user);
-  const configuredContact = await resolveCompanyProcessContact('vacation', employer)
-    ?? await resolveCompanyProcessContact('onboarding', employer);
+  const configuredContact = await resolveCompanyProcessContact('vacation')
+    ?? await resolveCompanyProcessContact('onboarding');
   if (!configuredContact?.email) {
     throw conflict(
       'DP_VACATION_ACCOUNTANT_EMAIL_REQUIRED',
-      'Defina no cadastro da empresa um e-mail setorial para férias ou integração.',
+      'Cadastre no escritório de contabilidade um e-mail do Setor Pessoal marcado para férias ou integração.',
     );
   }
   const employeeName = requiredText(user.username, 'DP_VACATION_EMPLOYEE_NAME_REQUIRED', 'Informe o nome da colaboradora.');
