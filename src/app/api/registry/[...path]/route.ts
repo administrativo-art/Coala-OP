@@ -13,6 +13,7 @@ import {
 import { type StockAuditSession } from '@/types';
 import { normalizeMeasurementUnit } from '@/lib/conversion';
 import { canAccessUnit } from '@/lib/unit-access';
+import { companyEmailPurposeIndex } from '@/lib/company/company-process-contact';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -206,7 +207,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   if (!userContext) return jsonError('Não autorizado.', 401);
   if (!canUseRegistryResource(userContext, resource, 'create')) return permissionError();
   const rawBody = await request.json().catch(() => ({})) as Record<string, any>;
-  const body = normalizeRegistryMeasurementUnit(resource, rawBody);
+  const normalizedBody = normalizeRegistryMeasurementUnit(resource, rawBody);
+  const body = resource === 'entities'
+    ? { ...normalizedBody, departmentEmailPurposes: companyEmailPurposeIndex(normalizedBody) }
+    : normalizedBody;
 
   const collectionMap: Record<string, string> = {
     'products': 'products',
@@ -347,6 +351,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   if (resource === 'entities') {
     try {
       const current = await dbAdmin.collection(collectionName).doc(id).get();
+      if (!current.exists) return jsonError('Empresa não encontrada.', 404);
       normalizedEntityDocument = await assertUniqueEntityDocument(
         body.document ?? body.cnpj ?? current.get('document') ?? current.get('cnpj'),
         id,
@@ -375,6 +380,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
       },
       { merge: true },
     );
+  } else if (resource === 'entities') {
+    const entityRef = dbAdmin.collection(collectionName).doc(id);
+    await dbAdmin.runTransaction(async (transaction) => {
+      const current = await transaction.get(entityRef);
+      if (!current.exists) throw new Error('Empresa não encontrada.');
+      transaction.update(entityRef, {
+        ...updatePayload,
+        departmentEmailPurposes: companyEmailPurposeIndex(body, current.data()),
+      });
+    });
   } else {
     await dbAdmin.collection(collectionName).doc(id).update(updatePayload);
   }
