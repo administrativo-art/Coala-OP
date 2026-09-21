@@ -10,6 +10,8 @@ const webhook = readFileSync('src/app/api/webhooks/autentique/route.ts', 'utf8')
 const paymentService = readFileSync('src/features/financial/payment-requests/service.server.ts', 'utf8');
 const interPix = readFileSync('src/lib/integrations/inter/pix-payments.server.ts', 'utf8');
 const workflowUi = readFileSync('src/components/dp/dp-vacation-workflow.tsx', 'utf8');
+const publicPortal = readFileSync('src/app/ferias/contabilidade/[token]/page.tsx', 'utf8');
+const publicRoute = readFileSync('src/app/api/hr/vacation-accountant/[token]/route.ts', 'utf8');
 
 test('auditoria exige decisão, valores confirmados ou motivo de correção', () => {
   assert.match(schema, /review_receipt/);
@@ -29,6 +31,22 @@ test('arquivo original é imutável, limitado e conferido por hash antes da audi
   assert.match(workflowUi, /Abrir recibo original/);
   assert.match(workflowUi, /Leitura automática/);
   assert.match(workflowUi, /Valores conferidos pelo RH/);
+});
+
+test('contador envia vários PDF ou imagens e o RH confirma a sugestão do copiloto', () => {
+  assert.match(receiptUpload, /MAX_RECEIPT_FILES = 20/);
+  assert.match(receiptUpload, /MAX_RECEIPT_DOCUMENTS = 40/);
+  assert.match(receiptUpload, /MAX_RECEIPT_BATCH_BYTES = 25 \* 1024 \* 1024/);
+  assert.match(receiptUpload, /'application\/pdf'/);
+  assert.match(receiptUpload, /'image\/jpeg'/);
+  assert.match(receiptUpload, /'image\/png'/);
+  assert.match(publicRoute, /form\.getAll\('files'\)/);
+  assert.match(publicPortal, /multiple required/);
+  assert.match(publicPortal, /PDF, JPG ou PNG/);
+  assert.match(workflowUi, /Sugestão/);
+  assert.match(workflowUi, /Usar como recibo/);
+  assert.match(server, /selectVacationReceiptDocument/);
+  assert.match(server, /VACATION_RECEIPT_DOCUMENT_SELECTED/);
 });
 
 test('pagamento nasce no fluxo protegido e nunca é autorizado automaticamente pelo RH', () => {

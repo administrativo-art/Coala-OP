@@ -29,16 +29,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  VACATION_WORKFLOW_STAGE_META,
+  VACATION_WORKFLOW_DISPLAY_STAGE_META,
+  type DPVacationWorkflowDisplayStageId,
+  vacationWorkflowDisplayStageId,
   vacationWorkflowForRecord,
 } from '@/lib/dp-vacation-workflow';
+import { activeVacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import type {
   DPVacationEvent,
   DPVacationRecord,
   DPVacationSignatureParticipant,
   DPVacationWorkflow,
-  DPVacationWorkflowStageId,
   DPVacationWorkflowStep,
 } from '@/types';
 import type { VacationCycle } from '@/lib/utils/vacation-logic';
@@ -61,6 +63,7 @@ type Props = {
   noticeBusy: 'generate' | 'validate' | 'open' | 'send' | 'sync' | null;
   workflowBusy: string | null;
   onSendAccountant: (record: DPVacationRecord) => void;
+  onSelectReceiptDocument: (record: DPVacationRecord, documentId: string) => void;
   onReviewReceipt: (record: DPVacationRecord, review: {
     decision: 'approved' | 'correction_required';
     values?: { grossAmount: number; discountAmount: number; netAmount: number; paymentDate?: string | null };
@@ -75,6 +78,7 @@ type Props = {
   onFinalizeWorkflow: (record: DPVacationRecord) => void;
   onCancel: (record: DPVacationRecord) => void;
   onOpenWorkflowAsset: (record: DPVacationRecord, kind: 'receipt-original' | 'receipt-signed' | 'payment-proof') => void;
+  onOpenReceiptDocument: (record: DPVacationRecord, documentId: string) => void;
 };
 
 const TERMINAL_STEP_STATUSES = new Set(['completed', 'cancelled']);
@@ -99,6 +103,12 @@ function formatDate(value?: string | null) {
 function formatMoney(value?: number | null) {
   if (value == null || !Number.isFinite(value)) return '—';
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function receiptDocumentTypeLabel(code?: string | null) {
+  if (code === 'VACATION_RECEIPT') return 'Recibo de férias';
+  if (!code || code === 'UNKNOWN_DOCUMENT') return 'Documento não identificado';
+  return code.toLocaleLowerCase('pt-BR').replaceAll('_', ' ');
 }
 
 function paymentStatusLabel(status: DPVacationWorkflow['payment']['status']) {
@@ -286,6 +296,19 @@ function stepClasses(step: DPVacationWorkflowStep) {
   return 'border-b-stone-200 bg-[#faf9f6] text-stone-500';
 }
 
+function displayStageStep(
+  workflow: DPVacationWorkflow,
+  meta: (typeof VACATION_WORKFLOW_DISPLAY_STAGE_META)[number],
+) {
+  const steps = meta.stageIds
+    .map((stageId) => workflow.steps.find((step) => step.id === stageId))
+    .filter((step): step is DPVacationWorkflowStep => Boolean(step));
+  const current = steps.find((step) => step.id === workflow.currentStage);
+  if (current) return current;
+  if (steps.length > 0 && steps.every((step) => step.status === 'completed')) return steps.at(-1)!;
+  return steps.find((step) => !TERMINAL_STEP_STATUSES.has(step.status)) ?? steps[0]!;
+}
+
 function nextAction(workflow: DPVacationWorkflow) {
   if (workflow.status === 'cancelled') return {
     owner: 'RH',
@@ -448,14 +471,6 @@ function Substep({
   );
 }
 
-const STAGE_OWNER_LABEL: Record<(typeof VACATION_WORKFLOW_STAGE_META)[number]['owner'], string> = {
-  hr: 'RH',
-  employee: 'Colaborador',
-  accountant: 'Contador',
-  finance: 'Financeiro',
-  system: 'Sistema',
-};
-
 function EmptyWorkflow({
   canEdit,
   onRegister,
@@ -501,7 +516,7 @@ function EmptyWorkflow({
     {
       title: 'Seguir a trilha',
       description: 'Aviso e ciência, contabilidade, auditoria do recibo, pagamento, assinatura e finalização.',
-      meta: '7 etapas · RH, colaborador, contador e financeiro',
+      meta: '6 etapas · RH, colaborador, contador e financeiro',
     },
   ];
 
@@ -565,13 +580,13 @@ function EmptyWorkflow({
       </div>
 
       <div className="mt-4 border-t pt-3.5">
-        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">As 7 etapas que vêm depois da aprovação</p>
-        <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4 xl:grid-cols-7">
-          {VACATION_WORKFLOW_STAGE_META.map((stage, index) => (
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">As 6 etapas que vêm depois da aprovação</p>
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-6">
+          {VACATION_WORKFLOW_DISPLAY_STAGE_META.map((stage, index) => (
             <div key={stage.id} className="rounded-xl border border-[#eef1f6] bg-[#fcfcfd] p-2.5">
               <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-muted text-[9.5px] font-black text-muted-foreground">{index + 1}</span>
               <p className="mt-1.5 truncate text-[11px] font-extrabold text-muted-foreground">{stage.label}</p>
-              <p className="mt-1 truncate text-[9.5px] font-semibold text-muted-foreground/75">{STAGE_OWNER_LABEL[stage.owner]}</p>
+              <p className="mt-1 truncate text-[9.5px] font-semibold text-muted-foreground/75">{stage.ownerLabel}</p>
             </div>
           ))}
         </div>
@@ -681,6 +696,7 @@ export function DPVacationWorkflowPanel({
   noticeBusy,
   workflowBusy,
   onSendAccountant,
+  onSelectReceiptDocument,
   onReviewReceipt,
   onPreparePayment,
   onSyncPayment,
@@ -689,6 +705,7 @@ export function DPVacationWorkflowPanel({
   onFinalizeWorkflow,
   onCancel,
   onOpenWorkflowAsset,
+  onOpenReceiptDocument,
 }: Props) {
   const record = records.find((candidate) => candidate.id === selectedId) ?? records[0] ?? null;
   const asOfDate = todayInBelem();
@@ -711,7 +728,7 @@ export function DPVacationWorkflowPanel({
   const [noticeExceptionReason, setNoticeExceptionReason] = useState('');
   const [stageSelection, setStageSelection] = useState<{
     recordId: string;
-    stage: DPVacationWorkflowStageId;
+    stage: DPVacationWorkflowDisplayStageId;
   } | null>(null);
 
   useEffect(() => {
@@ -744,10 +761,11 @@ export function DPVacationWorkflowPanel({
   const action = nextAction(workflow);
   const selectedStage = stageSelection?.recordId === record.id
     ? stageSelection.stage
-    : workflow.currentStage;
-  const selectedStageMeta = VACATION_WORKFLOW_STAGE_META.find(meta => meta.id === selectedStage)!;
-  const selectedStep = workflow.steps.find(step => step.id === selectedStage)!;
-  const viewingCurrentStage = selectedStage === workflow.currentStage;
+    : vacationWorkflowDisplayStageId(workflow.currentStage);
+  const currentDisplayStage = vacationWorkflowDisplayStageId(workflow.currentStage);
+  const selectedStageMeta = VACATION_WORKFLOW_DISPLAY_STAGE_META.find(meta => meta.id === selectedStage)!;
+  const selectedStep = displayStageStep(workflow, selectedStageMeta);
+  const viewingCurrentStage = selectedStage === currentDisplayStage;
   const notice = workflow.notice;
   const noticeGenerated = ['draft', 'validated', 'sent', 'signed'].includes(notice.status);
   const noticeValidated = ['validated', 'sent', 'signed'].includes(notice.status);
@@ -755,6 +773,9 @@ export function DPVacationWorkflowPanel({
   const accountantRequested = ['sent', 'receipt_received', 'completed'].includes(workflow.accountant.status);
   const receiptReceived = ['processing', 'review_pending', 'approved'].includes(workflow.receipt.status);
   const receiptApproved = workflow.receipt.status === 'approved';
+  const receiptDocuments = activeVacationReceiptDocuments(workflow.receipt);
+  const receiptSelectionConfirmed = workflow.receipt.status !== 'correction_requested'
+    && Boolean(workflow.receipt.selectedDocumentId || workflow.receipt.originalDocumentId);
   const paymentPaid = workflow.payment.status === 'paid';
   const receiptSigned = workflow.receiptSignature.status === 'signed';
   const receiptValuesValid = [receiptValues.grossAmount, receiptValues.discountAmount, receiptValues.netAmount]
@@ -827,8 +848,8 @@ export function DPVacationWorkflowPanel({
         </div>
 
         <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
-          {VACATION_WORKFLOW_STAGE_META.map((meta, index) => {
-            const step = workflow.steps.find((candidate) => candidate.id === meta.id)!;
+          {VACATION_WORKFLOW_DISPLAY_STAGE_META.map((meta, index) => {
+            const step = displayStageStep(workflow, meta);
             const selected = selectedStage === meta.id;
             return (
               <button
@@ -888,7 +909,7 @@ export function DPVacationWorkflowPanel({
             variant="outline"
             size="sm"
             className="rounded-xl"
-            onClick={() => setStageSelection({ recordId: record.id, stage: workflow.currentStage })}
+            onClick={() => setStageSelection({ recordId: record.id, stage: currentDisplayStage })}
           >
             Voltar à etapa atual
           </Button>
@@ -1047,36 +1068,27 @@ export function DPVacationWorkflowPanel({
         </div>
         ) : null}
 
-        {selectedStage === 'accountant' || selectedStage === 'receipt_review' ? (
+        {selectedStage === 'accountant' ? (
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
           <div className="border-b border-emerald-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
-              {selectedStage === 'accountant' ? <Upload className="h-4 w-4 text-emerald-600" /> : <FileCheck2 className="h-4 w-4 text-emerald-600" />}
-              <p className="text-[13px] font-black">
-                {selectedStage === 'accountant' ? 'Contabilidade e recebimento' : 'Auditoria do recibo'}
-              </p>
+              {workflow.currentStage === 'receipt_review' ? <FileCheck2 className="h-4 w-4 text-emerald-600" /> : <Upload className="h-4 w-4 text-emerald-600" />}
+              <p className="text-[13px] font-black">Contabilidade e revisão</p>
             </div>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              {selectedStage === 'accountant'
-                ? 'Acompanhe a solicitação e o recebimento do arquivo original enviado pelo contador.'
-                : 'Compare o arquivo original preservado com os dados processados antes de aprovar.'}
+              Acompanhe o envio do contador, a triagem do copiloto e a confirmação final do RH em uma única etapa.
             </p>
           </div>
-          <div className="grid gap-2 p-4 sm:grid-cols-2">
-            {selectedStage === 'accountant' ? (
-              <>
-                <Substep done={accountantRequested} active={noticeSigned && !accountantRequested} label="Solicitar ao contador" detail={accountantRequested ? 'Solicitação enviada' : noticeSigned ? 'Aviso assinado disponível' : 'Após ciência do aviso'} />
-                <Substep done={receiptReceived} active={workflow.receipt.status === 'processing'} label="Recibo original" detail={receiptReceived ? 'Original preservado' : 'Aguardando upload'} />
-              </>
-            ) : (
-              <Substep done={receiptApproved} active={workflow.receipt.status === 'review_pending'} label="Auditoria do RH" detail={receiptApproved ? 'Recibo aprovado' : receiptReceived ? 'Original + extração' : 'Aguardando o recibo original'} />
-            )}
+          <div className="grid gap-2 p-4 sm:grid-cols-3">
+            <Substep done={accountantRequested} active={noticeSigned && !accountantRequested} label="Solicitar ao contador" detail={accountantRequested ? 'Solicitação enviada' : noticeSigned ? 'Aviso assinado disponível' : 'Após ciência do aviso'} />
+            <Substep done={receiptReceived} active={workflow.receipt.status === 'processing'} label="Receber arquivos" detail={receiptReceived ? `${receiptDocuments.length} arquivo(s) preservado(s)` : 'Aguardando upload'} />
+            <Substep done={receiptApproved} active={workflow.receipt.status === 'review_pending'} label="Triar e revisar" detail={receiptApproved ? 'Recibo aprovado' : receiptSelectionConfirmed ? 'Recibo escolhido pelo RH' : receiptReceived ? 'Escolha final pendente' : 'Após o recebimento'} />
           </div>
-          {selectedStage === 'receipt_review' ? (
+          {receiptReceived ? (
           <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
             {[
-              { icon: ReceiptText, label: 'Original do contador', detail: 'PDF imutável e hash' },
-              { icon: FileCheck2, label: 'Dados extraídos', detail: 'Comparação campo a campo' },
+              { icon: ReceiptText, label: 'Arquivos do contador', detail: 'PDF, JPG ou PNG preservados' },
+              { icon: FileCheck2, label: 'Triagem do copiloto', detail: 'Sugestão para confirmação do RH' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
                 <item.icon className="h-4 w-4 text-slate-400" />
@@ -1123,13 +1135,86 @@ export function DPVacationWorkflowPanel({
             ) : null}
           </div>
 
-          {selectedStage === 'receipt_review' && workflow.receipt.status === 'processing' ? (
+          {workflow.receipt.status === 'processing' ? (
             <div className="border-t border-emerald-100 px-4 py-4 text-[11px] font-semibold text-emerald-700">
-              <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Processando o recibo original para auditoria.</span>
+              <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Processando os arquivos para sugerir o recibo principal.</span>
             </div>
           ) : null}
 
-          {selectedStage === 'receipt_review' && workflow.receipt.status === 'review_pending' ? (
+          {receiptDocuments.length ? (
+            <div className="space-y-3 border-t border-emerald-100 bg-slate-50/60 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-black text-slate-900">Arquivos recebidos</p>
+                  <p className="mt-1 text-[10.5px] font-semibold text-slate-500">
+                    O copiloto sugere; o RH precisa abrir e confirmar o recibo principal.
+                  </p>
+                </div>
+                <Badge variant="outline" className="rounded-full bg-white text-[9.5px] font-black">{receiptDocuments.length} arquivo(s)</Badge>
+              </div>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {receiptDocuments.map((document) => {
+                  const suggested = workflow.receipt.suggestedDocumentId === document.id;
+                  const selected = workflow.receipt.selectedDocumentId === document.id
+                    || (!workflow.receipt.selectedDocumentId && workflow.receipt.originalDocumentId === document.id);
+                  const processing = document.status === 'processing';
+                  return (
+                    <div key={document.id} className={`rounded-xl border bg-white p-3 ${selected ? 'border-emerald-400 ring-1 ring-emerald-200' : suggested ? 'border-amber-300' : 'border-slate-200'}`}>
+                      <div className="flex items-start gap-2.5">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600"><FileText className="h-4 w-4" /></span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[11px] font-black text-slate-900">{document.fileName}</p>
+                          <p className="mt-0.5 text-[9.5px] font-semibold text-slate-500">
+                            {processing
+                              ? 'Análise em andamento'
+                              : `${receiptDocumentTypeLabel(document.analysis?.documentTypeCode)} · ${Math.round((document.analysis?.documentTypeConfidence ?? 0) * 100)}%`}
+                          </p>
+                        </div>
+                        {selected ? (
+                          <Badge className="rounded-full bg-emerald-100 text-[9px] font-black text-emerald-800 hover:bg-emerald-100">Escolhido pelo RH</Badge>
+                        ) : suggested ? (
+                          <Badge className="rounded-full bg-amber-100 text-[9px] font-black text-amber-800 hover:bg-amber-100">Sugestão</Badge>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-lg text-[10px]"
+                          disabled={workflowBusy !== null}
+                          onClick={() => onOpenReceiptDocument(record, document.id)}
+                        >
+                          {workflowBusy === `open-receipt-${document.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                          Abrir arquivo
+                        </Button>
+                        {!selected ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 rounded-lg bg-emerald-600 text-[10px] hover:bg-emerald-700"
+                            disabled={!canApprove || workflowBusy !== null || processing || workflow.receipt.status !== 'review_pending'}
+                            onClick={() => onSelectReceiptDocument(record, document.id)}
+                          >
+                            {workflowBusy === `select-receipt-${document.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            Usar como recibo
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {!receiptSelectionConfirmed && workflow.receipt.status === 'review_pending' ? (
+                <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[10.5px] font-semibold text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  Confirme um arquivo como recibo principal para liberar a revisão dos valores.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {workflow.receipt.status === 'review_pending' && receiptSelectionConfirmed ? (
             <div className="space-y-4 border-t border-emerald-100 bg-emerald-50/30 p-4">
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -1209,13 +1294,13 @@ export function DPVacationWorkflowPanel({
               </div>
             </div>
           ) : null}
-          {selectedStage === 'receipt_review' && !receiptReceived ? (
+          {!receiptReceived ? (
             <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-[10.5px] font-semibold text-slate-500">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
-              A auditoria será liberada assim que o contador enviar o recibo original.
+              A triagem será liberada assim que o contador enviar os arquivos.
             </div>
           ) : null}
-          {selectedStage === 'receipt_review' && receiptApproved ? (
+          {receiptApproved ? (
             <div className="mx-4 mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
               <p className="text-[11px] font-black text-emerald-900">Recibo aprovado pelo RH</p>
               <p className="mt-1 text-[10.5px] font-semibold text-emerald-700">

@@ -24,6 +24,27 @@ export const VACATION_WORKFLOW_STAGE_META: ReadonlyArray<{
   { id: 'closure', label: 'Finalização pelo RH', short: 'Finalizar', owner: 'hr' },
 ];
 
+export type DPVacationWorkflowDisplayStageId = Exclude<DPVacationWorkflowStageId, 'receipt_review'>;
+
+export const VACATION_WORKFLOW_DISPLAY_STAGE_META: ReadonlyArray<{
+  id: DPVacationWorkflowDisplayStageId;
+  label: string;
+  short: string;
+  ownerLabel: string;
+  stageIds: readonly DPVacationWorkflowStageId[];
+}> = [
+  { id: 'scheduling', label: 'Agendamento e análise', short: 'Agendar', ownerLabel: 'RH', stageIds: ['scheduling'] },
+  { id: 'notice', label: 'Aviso e ciência', short: 'Aviso', ownerLabel: 'Colaborador', stageIds: ['notice'] },
+  { id: 'accountant', label: 'Contabilidade e revisão', short: 'Contador + revisão', ownerLabel: 'Contador + RH', stageIds: ['accountant', 'receipt_review'] },
+  { id: 'payment', label: 'Pagamento das férias', short: 'Financeiro', ownerLabel: 'Financeiro', stageIds: ['payment'] },
+  { id: 'receipt_signature', label: 'Assinatura do recibo', short: 'Recibo', ownerLabel: 'Colaborador', stageIds: ['receipt_signature'] },
+  { id: 'closure', label: 'Finalização pelo RH', short: 'Finalizar', ownerLabel: 'RH', stageIds: ['closure'] },
+];
+
+export function vacationWorkflowDisplayStageId(stageId: DPVacationWorkflowStageId): DPVacationWorkflowDisplayStageId {
+  return stageId === 'receipt_review' ? 'accountant' : stageId;
+}
+
 function isIsoDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);

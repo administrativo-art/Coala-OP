@@ -16,7 +16,10 @@ import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
 import { activeOperationalUnits } from '@/lib/dp-units';
-import { VACATION_WORKFLOW_STAGE_META } from '@/lib/dp-vacation-workflow';
+import {
+  VACATION_WORKFLOW_DISPLAY_STAGE_META,
+  vacationWorkflowDisplayStageId,
+} from '@/lib/dp-vacation-workflow';
 import type {
   DPVacationRecord,
   DPVacationWorkflow,
@@ -377,10 +380,13 @@ function QueueRow({
 
 function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void }) {
   const { item, record, workflow } = trail;
-  const stageIndex = Math.max(0, VACATION_WORKFLOW_STAGE_META.findIndex(stage => stage.id === workflow.currentStage));
-  const stage = VACATION_WORKFLOW_STAGE_META[stageIndex];
-  const completedSteps = workflow.steps.filter(step => step.status === 'completed').length;
-  const progress = Math.round((completedSteps / VACATION_WORKFLOW_STAGE_META.length) * 100);
+  const currentDisplayStage = vacationWorkflowDisplayStageId(workflow.currentStage);
+  const stageIndex = Math.max(0, VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === currentDisplayStage));
+  const stage = VACATION_WORKFLOW_DISPLAY_STAGE_META[stageIndex];
+  const completedSteps = VACATION_WORKFLOW_DISPLAY_STAGE_META.filter(stageMeta => (
+    stageMeta.stageIds.every(stageId => workflow.steps.find(step => step.id === stageId)?.status === 'completed')
+  )).length;
+  const progress = Math.round((completedSteps / VACATION_WORKFLOW_DISPLAY_STAGE_META.length) * 100);
   const summary = workflowOperationalSummary(workflow);
   const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
   const period = record.startDate && record.endDate
@@ -408,14 +414,14 @@ function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void })
 
       <span className="min-w-0">
         <span className="block text-[11px] font-black uppercase tracking-[0.07em] text-sky-700 dark:text-sky-300">
-          Etapa {stageIndex + 1} de {VACATION_WORKFLOW_STAGE_META.length} · {stage.short}
+          Etapa {stageIndex + 1} de {VACATION_WORKFLOW_DISPLAY_STAGE_META.length} · {stage.short}
         </span>
         <span className="mt-1 block truncate text-[11px] font-semibold text-muted-foreground">
           {period} · {record.days}d
         </span>
         <span className="mt-2 flex items-center gap-2">
           <Progress value={progress} className="h-1.5 flex-1 [&>*]:bg-sky-600" />
-          <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{completedSteps}/7</span>
+          <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{completedSteps}/{VACATION_WORKFLOW_DISPLAY_STAGE_META.length}</span>
         </span>
       </span>
 
@@ -555,8 +561,8 @@ export function DPFeriasManager() {
         return [{ item, record, workflow }];
       })
       .sort((left, right) => {
-        const leftStage = VACATION_WORKFLOW_STAGE_META.findIndex(stage => stage.id === left.workflow.currentStage);
-        const rightStage = VACATION_WORKFLOW_STAGE_META.findIndex(stage => stage.id === right.workflow.currentStage);
+        const leftStage = VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === vacationWorkflowDisplayStageId(left.workflow.currentStage));
+        const rightStage = VACATION_WORKFLOW_DISPLAY_STAGE_META.findIndex(stage => stage.id === vacationWorkflowDisplayStageId(right.workflow.currentStage));
         if (leftStage !== rightStage) return leftStage - rightStage;
         return (left.record.startDate ?? '').localeCompare(right.record.startDate ?? '');
       });
