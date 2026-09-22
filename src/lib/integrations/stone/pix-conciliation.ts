@@ -17,7 +17,9 @@ export type StonePixWebhookPayload =
 
 export type StonePixTransaction = {
   rowId: string;
+  /** Legacy name: the CSV id identifies an event, not necessarily a sale. */
   transactionId: string | null;
+  merchantIdentity: StonePixMerchantIdentity;
   amountCents: number;
   status: string | null;
   paymentMethod: string | null;
@@ -32,6 +34,51 @@ export type StonePixTransaction = {
   providerDateTime: string | null;
   operationAmountCents: number;
 };
+
+export type StonePixMerchantIdentity = {
+  version: 1;
+  status: "identified" | "missing" | "invalid" | "terminal_conflict";
+  stoneCode: string | null;
+  terminalSerialNumber: string | null;
+};
+
+/** Strictly recognizes the additional_data format in Stone's public CSV example.
+ * This is source evidence only: it does not resolve a unit or authorize access.
+ * Never infer a StoneCode from a credential, document or terminal serial.
+ */
+export function parseStonePixMerchantIdentity(
+  additionalData: unknown,
+  terminalSerialNumber: unknown,
+): StonePixMerchantIdentity {
+  const pending = (status: StonePixMerchantIdentity["status"]): StonePixMerchantIdentity => ({
+    version: 1, status, stoneCode: null, terminalSerialNumber: null,
+  });
+  if (additionalData === undefined || additionalData === null || additionalData === "") {
+    return pending("missing");
+  }
+  if (typeof additionalData !== "string" || additionalData.length > 1024) return pending("invalid");
+  const text = additionalData.trim();
+  if (!text || text === "[]") return pending("missing");
+  if (!text.startsWith("[") || !text.endsWith("]")) return pending("invalid");
+  const entries = text.slice(1, -1).split(/\}\s*,\s*\{/);
+  if (entries.length !== 2) return pending("invalid");
+  const values = new Map<string, string>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = `${index ? "{" : ""}${entries[index]}${index < entries.length - 1 ? "}" : ""}`;
+    const match = /^\{name=(Cliente|Terminal), value=([A-Za-z0-9-]{1,160})\}$/.exec(entry);
+    if (!match || values.has(match[1])) return pending("invalid");
+    values.set(match[1], match[2]);
+  }
+  const stoneCode = values.get("Cliente");
+  const terminal = values.get("Terminal");
+  if (!stoneCode || !/^[1-9]\d{0,19}$/.test(stoneCode) || !terminal) return pending("invalid");
+  if (terminalSerialNumber !== undefined && terminalSerialNumber !== null && terminalSerialNumber !== "") {
+    if (typeof terminalSerialNumber !== "string" || terminalSerialNumber.trim() !== terminal) {
+      return pending("terminal_conflict");
+    }
+  }
+  return { version: 1, status: "identified", stoneCode, terminalSerialNumber: terminal };
+}
 
 export type StonePixSummary = {
   transactionCount: number;
@@ -152,6 +199,10 @@ function normalizeRow(row: Record<string, unknown>, index: number): StonePixTran
   return {
     rowId,
     transactionId,
+    merchantIdentity: parseStonePixMerchantIdentity(
+      row.pix_transaction__additional_data,
+      row.pix_transaction__terminal__serial_number,
+    ),
     amountCents: parseStoneAmountInCents(row.amount),
     status: asLimitedString(row.status, 80)?.toLowerCase() ?? null,
     paymentMethod: asLimitedString(row.payment_method, 80)?.toLowerCase() ?? null,

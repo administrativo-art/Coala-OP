@@ -180,3 +180,25 @@ Nenhuma publicação realizada.
 Próxima frente: completar fonte Pix e sua atribuição inequívoca à unidade, validar
 a consulta com amostra real autorizada e depois seguir taxas/DRE conforme sequência
 recuperada. Não considerar a etapa 2 integralmente entregue pela presença da tela.
+
+### Incremento de identidade — Pix Stone
+
+Branch `feat/stone-pix-identity`, base `6cad6847`. Registrada a informação do usuário:
+somente a chave da conta Tirirical está disponível. A documentação vincula a chave
+ao CPF/CNPJ, não comprova exclusividade de unidade operacional. Não são necessárias
+novas chaves para desenvolver o parser; nenhuma credencial foi acessada.
+
+O exemplo oficial contém StoneCode e terminal no campo adicional de algumas linhas.
+O parser agora preserva essa evidência com validação estrita, sem inferir identidade
+para linhas sem o campo ou com conflito. Isso permite preparar o futuro vínculo pelo
+StoneCode já cadastrado, sem exigir sempre uma associação separada de serial.
+Detalhes e fontes em [stone-pix-identity.md](engineering/stone-pix-identity.md).
+
+Pix continua não comparado na tela. Próximo incremento: validar valores/eventos Pix
+estritamente, ler um arquivo consistente com limite e resolver o vínculo oficial
+antes de conectar a fonte à revisão PDV. Não atribuir todo o arquivo ao Tirirical
+apenas pela origem da chave. Nenhuma publicação ou reprocessamento histórico.
+
+Validação: `npm run check` aprovado (1.383 testes unitários, incluindo dez do parser
+Pix), além da leitura do exemplo público da Stone. Sem novo build: incremento
+isolado de normalização, sem mudanças de importação de produção, fronteiras ou rotas.
