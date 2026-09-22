@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
 import { AnticipationWorkspace } from "@/features/financial/agent/anticipation-workspace";
 import { formatStoneMoney } from "@/features/financial/agent/presentation";
+import { FinancialAnalysisNavigation } from "@/features/financial/agent/analysis-navigation";
 import type { StoneAnticipationReview } from "@/lib/integrations/stone/anticipation-review";
 
 const money = formatStoneMoney;
@@ -24,8 +25,9 @@ export function StoneAnticipationsPage({ agentEntry = false }: { agentEntry?: bo
   }) : [];
   return <PageContainer variant="wide" className="space-y-6 py-6">
     <header><h1 className="text-2xl font-semibold">{agentEntry ? "Coala Financeiro" : "Conferência de antecipações Stone"}</h1>
-      {agentEntry && <p className="text-sm text-muted-foreground">Análise guiada de antecipações. Agenda futura completa, DRE e análise geral de caixa ainda não estão disponíveis neste agente.</p>}
+      {agentEntry && <p className="text-sm text-muted-foreground">Análises guiadas de antecipações e recebíveis por período. Carteira completa, DRE e análise geral de caixa ainda não estão disponíveis neste agente.</p>}
       <p className="text-muted-foreground">Pagamentos comparados com as parcelas originais. Somente leitura, sem baixas ou lançamentos na DRE.</p></header>
+    {agentEntry && <FinancialAnalysisNavigation topic="anticipations" />}
     <AnticipationWorkspace onResult={value => { setResult(value); setPage(0); setFilter("all"); }} />
     <p className="text-sm text-muted-foreground">Consulta manual de até 31 datas de origem. Não representa o saldo total a receber. O vínculo oficial é validado no servidor em cada consulta.</p>
     {result && <section className="space-y-4" aria-label="Resultado da conferência">

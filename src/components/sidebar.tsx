@@ -303,6 +303,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow || isDefaultAdmin,
             children: [
               { label: "Visão do caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
+              { label: "Recebíveis", href: "/dashboard/financial/cash-flow/receivables", icon: Wallet, show: isDefaultAdmin },
               { label: "Coala Financeiro", href: "/dashboard/financial/cash-flow/agent", icon: Wallet, show: isDefaultAdmin },
             ],
           },

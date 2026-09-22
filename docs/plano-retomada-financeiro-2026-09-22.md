@@ -119,6 +119,25 @@ backfill, movimentação bancária ou lançamento financeiro.
 
 ## Manutenção do plano
 
+### Incremento concluído localmente — agenda e agente
+
+Branch `feat/receivables-agent-integration`, iniciada em `1efffb0b`, com a navegação
+`2fdd399c` integrada como `002b950d`. Comparação das bases concluída: o importador
+anterior exige centavos e pode gerar despesas de taxas; a consulta atual preserva
+decimais e não escreve. A integração direta não satisfaz o contrato desta consulta.
+
+Implementados acesso a Recebíveis em Fluxo de caixa, seleção de análises no Coala
+Financeiro e quatro perguntas com evidências sobre a mesma consulta. A cobertura
+integral da carteira permanece pendente e não foi marcada como entregue.
+Detalhes e validação em [receivables-agent-integration.md](engineering/receivables-agent-integration.md).
+Verificação concluída: 1.345 testes unitários, quatro testes de API em emuladores e
+build aprovados. Acesso administrativo mantido, sem novas permissões ou migrações.
+
+Próxima frente após este incremento: PDV × Stone, reaproveitando o motor existente,
+validando a adaptação da fonte real antes de habilitar escrita e fechamento. A
+completude da agenda persistida continua como dependência explícita, não resolvida
+pela mera inclusão de links ou perguntas. Nenhuma publicação realizada neste incremento.
+
 Atualizar este documento ao terminar cada incremento com commit, testes, limite de
 cobertura, estado de publicação e próxima etapa. Distinguir sempre: código existente,
 integração validada, publicação e comprovação com a fonte real.

@@ -60,6 +60,25 @@ test(`${endpoint} denies anonymous and restricted users before contacting Stone`
     } finally {
       await financialDb.collection("stoneMerchantMappings").doc("agent-e2e-map-a").delete();
     }
+    if (endpoint === "stone-future-receivables") {
+      // Each day may be unambiguous in isolation, but one period must not cross
+      // a reassignment. Reject before reading unit/account or contacting Stone.
+      const base = { workspaceId: "coala", kioskId: "agent-e2e-unmapped", stoneCodes: ["123456789"], terminalIds: [], status: "active" };
+      const first = financialDb.collection("stoneMerchantMappings").doc("receivable-e2e-first");
+      const second = financialDb.collection("stoneMerchantMappings").doc("receivable-e2e-second");
+      try {
+        await first.set({ ...base, accountId: "account-before", validFrom: "2026-01-01", validTo: "2026-09-19" });
+        await second.set({ ...base, accountId: "account-after", validFrom: "2026-09-20", validTo: null });
+        const reassigned = await request.post("/api/financial/stone-future-receivables", {
+          headers: { Authorization: `Bearer ${admin.idToken}` },
+          data: { kioskId: base.kioskId, stoneCode: "123456789", from: "2026-09-19", through: "2026-09-20" },
+        });
+        expect(reassigned.status()).toBe(422);
+        expect(JSON.stringify(await reassigned.json())).toContain("FINANCIAL_AGENT_MAPPING_REQUIRED");
+      } finally {
+        await Promise.all([first.delete(), second.delete()]);
+      }
+    }
   }
 });
 }

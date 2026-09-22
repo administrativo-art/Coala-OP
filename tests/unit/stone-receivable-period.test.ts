@@ -135,7 +135,7 @@ test("consulta sequencial lê só datas solicitadas, retorna evidências e lacun
     read: async () => { throw new AppError({ code: "STONE_AGENDA_UPSTREAM_REJECTED", kind: "PERMANENT_EXTERNAL" }); } }), { code: "STONE_AGENDA_UPSTREAM_REJECTED" });
 });
 test("tela usa transporte autenticado, escopo revalidado, sem polling ou escrita financeira", () => {
-  const source = readFileSync(new URL("../../src/app/dashboard/financial/cash-flow/receivables/page.tsx", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../../src/features/financial/receivables/receivables-page.tsx", import.meta.url), "utf8");
   assert.match(source, /if \(!isDefaultAdmin\)/);
   assert.match(source, /useAuthenticatedApi/);
   assert.match(source, /data\.scope\.mappingId !== mapping\.id/);
