@@ -1,4 +1,5 @@
 import { goalsAnalysisPrompt } from "@/ai/prompts/commercial/goals-analysis";
+import { financialAgentPrompt } from "@/ai/prompts/financial/financial-agent";
 import { companyDocumentPrompt } from "@/ai/prompts/documents/company-document";
 import { documentTemplatePlanPrompt } from "@/ai/prompts/documents/template-plan";
 import { dasExtractionPrompt } from "@/ai/prompts/financial/das-extraction";
@@ -18,6 +19,7 @@ import {
 } from "@/ai/prompts/types";
 
 const definitions = [
+  financialAgentPrompt,
   goalsAnalysisPrompt,
   companyDocumentPrompt,
   documentTemplatePlanPrompt,
