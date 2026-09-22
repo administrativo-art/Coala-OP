@@ -129,21 +129,16 @@ export function assertSafeStoneDownloadUrl(rawUrl: string): URL {
   return parsed;
 }
 
-export function parseStoneMoneyToCents(value: unknown): number {
+export function parseStoneAmountInCents(value: unknown): number {
   if (typeof value === "number") {
-    return Number.isFinite(value) ? Math.round(value * 100) : 0;
+    return Number.isFinite(value) ? Math.round(value) : 0;
   }
   if (typeof value !== "string") return 0;
 
-  let normalized = value.trim().replace(/\s/g, "").replace(/^R\$/i, "");
+  const normalized = value.trim().replace(/\s/g, "").replace(",", ".");
   if (!normalized) return 0;
-  if (normalized.includes(",")) {
-    normalized = normalized.replace(/\./g, "").replace(",", ".");
-  } else {
-    normalized = normalized.replace(/(?<=\d)\.(?=\d{3}(?:\D|$))/g, "");
-  }
   const amount = Number(normalized);
-  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  return Number.isFinite(amount) ? Math.round(amount) : 0;
 }
 
 function normalizeRow(row: Record<string, unknown>, index: number): StonePixTransaction {
@@ -157,19 +152,19 @@ function normalizeRow(row: Record<string, unknown>, index: number): StonePixTran
   return {
     rowId,
     transactionId,
-    amountCents: parseStoneMoneyToCents(row.amount),
+    amountCents: parseStoneAmountInCents(row.amount),
     status: asLimitedString(row.status, 80)?.toLowerCase() ?? null,
     paymentMethod: asLimitedString(row.payment_method, 80)?.toLowerCase() ?? null,
     pixType: asLimitedString(row.pix_transaction__type, 80)?.toLowerCase() ?? null,
     createdAt,
-    paidAmountCents: parseStoneMoneyToCents(row.pix_transaction__paid_amount),
-    canceledAmountCents: parseStoneMoneyToCents(row.pix_transaction__canceled_amount),
-    feeAmountCents: parseStoneMoneyToCents(row.pix_transaction__fee_amount),
+    paidAmountCents: parseStoneAmountInCents(row.pix_transaction__paid_amount),
+    canceledAmountCents: parseStoneAmountInCents(row.pix_transaction__canceled_amount),
+    feeAmountCents: parseStoneAmountInCents(row.pix_transaction__fee_amount),
     terminalType: asLimitedString(row.pix_transaction__terminal__type, 100),
     terminalSerialNumber: asLimitedString(row.pix_transaction__terminal__serial_number, 160),
     operation,
     providerDateTime: asLimitedString(row.pix_transaction__detail__provider_datetime, 80),
-    operationAmountCents: parseStoneMoneyToCents(row.pix_transaction__detail__operation_amount),
+    operationAmountCents: parseStoneAmountInCents(row.pix_transaction__detail__operation_amount),
   };
 }
 
