@@ -1,0 +1,54 @@
+import { expect, test } from "@playwright/test";
+import { getApps, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { E2E_USER } from "../support/global-setup";
+import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
+
+test("Stone mapping lifecycle: auth, scope, references, atomic conflicts and audit", async ({ request }) => {
+  assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
+  const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error("Auth emulator required");
+  const path = "/api/financial/stone-mappings";
+  expect((await request.get(path)).status()).toBe(401);
+  expect((await request.post(path, { data: {} })).status()).toBe(401);
+  const app = getApps().find(a => a.name === "stone-mapping-e2e") ?? initializeApp({ projectId: "demo-coala-e2e" }, "stone-mapping-e2e");
+  const db = getFirestore(app, "coala");
+  const financial = getFirestore(app, "coala-financeiro");
+  const signup = await request.post(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`, { data: { returnSecureToken: true } });
+  const restricted = await signup.json();
+  await db.collection("users").doc(restricted.localId).set({ isActive: true, profileCompliance: { status: "complete", policyVersion: 1 } });
+  const restrictedHeaders = { Authorization: `Bearer ${restricted.idToken}` };
+  expect((await request.get(path, { headers: restrictedHeaders })).status()).toBe(403);
+  expect((await request.post(path, { headers: restrictedHeaders, data: {} })).status()).toBe(403);
+  const login = await request.post(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, { data: { email: E2E_USER.email, password: E2E_USER.password, returnSecureToken: true } });
+  const admin = await login.json();
+  const headers = { Authorization: `Bearer ${admin.idToken}` };
+  const prefix = "mapping-lifecycle-e2e";
+  await db.collection("kiosks").doc(prefix).set({ name: "Unidade de teste" });
+  await financial.collection("bankAccounts").doc(prefix).set({ name: "Conta de teste", workspaceId: "coala", active: true });
+  await financial.collection("stoneMerchantMappings").doc(`${prefix}-foreign`).set({ workspaceId: "other", secretReference: "must-not-leak" });
+  const draft = { id: `${prefix}-a`, revision: 0, kioskId: prefix, accountId: prefix, stoneCodes: ["987654321"],
+    status: "active", validFrom: "2026-01-01", validTo: null, reason: "Cadastro confirmado no emulador" };
+  const post = (data: unknown) => request.post(path, { headers, data });
+  expect((await post({ ...draft, validFrom: "2026-02-30" })).status()).toBe(400);
+  expect((await post({ ...draft, accountId: "missing" })).status()).toBe(422);
+  expect((await post({ ...draft, id: `${prefix}-foreign` })).status()).toBe(403);
+  const attempts = await Promise.all([post(draft), post({ ...draft, id: `${prefix}-b` })]);
+  expect(attempts.map(r => r.status()).sort()).toEqual([200, 409]);
+  const saved = await attempts.find(r => r.status() === 200)!.json();
+  expect(saved.revision).toBe(1);
+  expect((await post({ ...draft, id: saved.id })).status()).toBe(409);
+  const update = await post({ ...draft, id: saved.id, revision: 1, validTo: "2026-09-20", status: "inactive" });
+  expect(update.status()).toBe(200);
+  expect((await update.json()).revision).toBe(2);
+  expect((await financial.collection("stoneMerchantMappings").doc(saved.id).collection("events").limit(10).get()).size).toBe(2);
+  const history = await request.get(`${path}?resource=mappings`, { headers });
+  expect(history.status()).toBe(200);
+  expect(JSON.stringify(await history.json())).not.toContain("must-not-leak");
+  expect((await post({ ...draft, id: `${prefix}-next`, validFrom: "2026-09-21" })).status()).toBe(200);
+  const accounts = await request.get(`${path}?resource=accounts`, { headers });
+  expect(accounts.status()).toBe(200);
+  expect((await accounts.json()).items.some((a: { id: string }) => a.id === prefix)).toBeTruthy();
+  // GET must not create runs, payments or expenses. Audit exists only under explicitly saved mappings.
+  expect((await financial.collection("stoneIngestionRuns").limit(1).get()).empty).toBeTruthy();
+});

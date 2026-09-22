@@ -2,49 +2,31 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AnticipationWorkspace } from "@/features/financial/agent/anticipation-workspace";
+import { formatStoneMoney } from "@/features/financial/agent/presentation";
 import type { StoneAnticipationReview } from "@/lib/integrations/stone/anticipation-review";
 
-const money = (value: string | null) => value === null ? "Não informado" :
-  Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const money = formatStoneMoney;
 const date = (value: string | null) => value ? value.split("-").reverse().join("/") : "Não informada";
 const statuses = { paid_early: "Pago antes do vencimento", regular_payment: "Pagamento no prazo ou posterior", needs_review: "Revisar vínculo" };
 
 export default function StoneAnticipationsPage() {
   const { isDefaultAdmin } = useAuth();
-  const api = useAuthenticatedApi();
-  const [stoneCode, setStoneCode] = useState("");
-  const [referenceDate, setReferenceDate] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const [result, setResult] = useState<StoneAnticipationReview | null>(null);
   const [page, setPage] = useState(0);
+  const [filter, setFilter] = useState("all");
   if (!isDefaultAdmin) return <PageContainer><p role="alert">Consulta restrita à administração.</p></PageContainer>;
-  const ordered = result ? [...result.rows].sort((a, b) => {
+  const ordered = result ? result.rows.filter(row => filter === "all" || row.status === filter).sort((a, b) => {
     const rank = { paid_early: 0, needs_review: 1, regular_payment: 2 };
     return rank[a.status] - rank[b.status] || a.transactionId.localeCompare(b.transactionId);
   }) : [];
   return <PageContainer variant="wide" className="space-y-6 py-6">
     <header><h1 className="text-2xl font-semibold">Conferência de antecipações Stone</h1>
       <p className="text-muted-foreground">Pagamentos comparados com as parcelas originais. Somente leitura, sem baixas ou lançamentos na DRE.</p></header>
-    <form className="flex flex-wrap items-end gap-4" onSubmit={async event => {
-      event.preventDefault(); if (busy) return;
-      setBusy(true); setError(""); setResult(null); setPage(0);
-      try {
-        const params = new URLSearchParams({ stoneCode, referenceDate });
-        setResult(await api<StoneAnticipationReview>(`/api/financial/stone-anticipations?${params}`));
-      } catch { setError("Não foi possível concluir a consulta. Verifique os filtros e tente novamente; nenhum valor foi lançado."); }
-      finally { setBusy(false); }
-    }}>
-      <label className="space-y-2">StoneCode<Input aria-label="StoneCode" required pattern="[0-9]{1,20}" maxLength={20} value={stoneCode} disabled={busy} onChange={e => {setStoneCode(e.target.value); setResult(null);}} /></label>
-      <label className="space-y-2">Dia do pagamento<Input aria-label="Dia do pagamento" type="date" required value={referenceDate} disabled={busy} onChange={e => {setReferenceDate(e.target.value); setResult(null);}} /></label>
-      <Button type="submit" disabled={busy}>{busy ? "Conferindo origens…" : "Consultar pagamentos"}</Button>
-    </form>
-    <p className="text-sm text-muted-foreground">Consulta manual de até 31 datas de origem. Não representa o saldo total a receber. O StoneCode não é associado automaticamente a uma unidade.</p>
-    {error && <p role="alert">{error}</p>}
+    <AnticipationWorkspace onResult={value => { setResult(value); setPage(0); setFilter("all"); }} />
+    <p className="text-sm text-muted-foreground">Consulta manual de até 31 datas de origem. Não representa o saldo total a receber. O vínculo oficial é validado no servidor em cada consulta.</p>
     {result && <section className="space-y-4" aria-label="Resultado da conferência">
       <p>StoneCode {result.stoneCode} · Pagamentos de {date(result.referenceDate)} · Consulta: {new Date(result.collectedAt).toLocaleString("pt-BR")}</p>
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950" role="status">
@@ -61,7 +43,10 @@ export default function StoneAnticipationsPage() {
       </div>
       <p>MDR informado das parcelas pagas antes do prazo: {money(result.summary.mdr)} · Vínculos pendentes: {result.summary.pendingCount} · Pagamentos no prazo ou posteriores: {result.summary.regularCount}</p>
       <p>Custo de antecipação informado no XML: {money(result.summary.anticipationFee)} · Parcelas com antecipação explícita validada: {result.summary.providerConfirmedCount} · Diferença não explicada pelas taxas: {money(result.summary.unexplainedDifference)}</p>
-      {!ordered.length ? <p>Nenhuma parcela com evento de pagamento neste arquivo. Isso não comprova ausência de antecipações em outros arquivos.</p> : <>
+      <label className="block">Exibir parcelas <select aria-label="Filtrar parcelas" className="rounded-md border bg-background p-2" value={filter} onChange={event => { setFilter(event.target.value); setPage(0); }}>
+        <option value="all">Todas</option><option value="paid_early">Pagas antes do prazo</option><option value="needs_review">Pendentes de conferência</option><option value="regular_payment">No prazo ou posteriores</option>
+      </select></label>
+      {!ordered.length ? <p>{result.rows.length ? "Nenhuma parcela corresponde ao filtro selecionado." : "Nenhuma parcela com evento de pagamento neste arquivo. Isso não comprova ausência de antecipações em outros arquivos."}</p> : <>
         <div className="overflow-x-auto"><table className="w-full text-sm"><caption className="sr-only">Parcelas e evidências do pagamento</caption>
           <thead><tr>{["Transação / parcela", "Venda", "Vencimento original", "Pagamento Stone", "Bruto", "Líquido original", "Líquido pago", "MDR", "Antecipação informada", "Desconto adicional calculado", "Situação / evidência"].map(t => <th key={t} className="p-2 text-left">{t}</th>)}</tr></thead>
           <tbody>{ordered.slice(page * 50, (page + 1) * 50).map(row => <tr key={`${row.transactionId}:${row.installment}`} className="border-t">
