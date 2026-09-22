@@ -1,5 +1,8 @@
 # Coala Financeiro — piloto de leitura por unidade
 
+Este documento registra a base do piloto. O cadastro e a interface adicionados posteriormente
+estão descritos em [anticipation-workflow.md](anticipation-workflow.md); os limites de leitura permanecem.
+
 ## Entrega e limite
 
 Implementação de backend, sem publicação automática. `POST /api/financial/agent` é uma consulta
