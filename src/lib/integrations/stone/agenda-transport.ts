@@ -76,7 +76,7 @@ async function readBoundedXml(response: Response): Promise<string> {
  * never from request data. Do not expose the returned XML to the browser/logs. */
 export async function fetchStoneAgendaXml(
   input: AgendaRequest,
-  dependencies: { apiKey: string | undefined; fetcher?: typeof fetch },
+  dependencies: { apiKey: string | undefined; fetcher?: typeof fetch; signal?: AbortSignal },
 ): Promise<string> {
   const date = requestDate(input);
   const apiKey = dependencies.apiKey;
@@ -90,7 +90,9 @@ export async function fetchStoneAgendaXml(
         method: "GET",
         cache: "no-store",
         redirect: "manual",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: dependencies.signal
+          ? AbortSignal.any([dependencies.signal, AbortSignal.timeout(TIMEOUT_MS)])
+          : AbortSignal.timeout(TIMEOUT_MS),
         headers: {
           Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`,
           "x-user-type": "client",

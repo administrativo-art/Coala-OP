@@ -80,7 +80,7 @@ interface SidebarProps {
 
 export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const pathname = usePathname();
-  const { user, permissions } = useAuth();
+  const { user, permissions, isDefaultAdmin } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
   const [hoverExpanded, setHoverExpanded] = useState(false);
@@ -279,6 +279,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             ],
           },
           { label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
+          { label: "Antecipações Stone", href: "/dashboard/financial/stone-anticipations", icon: Wallet, show: isDefaultAdmin },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],
@@ -306,6 +307,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     canAccessPurchasing,
     pendingTaskCount,
     permissions,
+    isDefaultAdmin,
     user?.employmentRelationshipType,
     user?.id,
     user?.isActive,
