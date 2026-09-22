@@ -141,3 +141,22 @@ pela mera inclusão de links ou perguntas. Nenhuma publicação realizada neste 
 Atualizar este documento ao terminar cada incremento com commit, testes, limite de
 cobertura, estado de publicação e próxima etapa. Distinguir sempre: código existente,
 integração validada, publicação e comprovação com a fonte real.
+
+### Incremento de domínio — PDV × Stone
+
+Branch `feat/pdv-stone-review`, base `7e20c0aa`. Reaproveitado o motor da branch
+antiga, com validação estrita e remoção da aprovação automática por coincidência.
+Adaptadores puros conectam envelopes de cupons PDV e XML Stone às sugestões,
+preservando pendências de valor, data, identidade, cancelamentos e eventos de conta.
+Pix permanece explicitamente não comparado, aguardando fonte própria e vínculo de terminal.
+
+Este incremento **não conclui a etapa 2**: não há nova tela, rota ou coleta ao vivo.
+Próximo passo: coleta autenticada com limites/timeout e vínculo oficial da filial,
+API administrativa, apresentação das evidências e E2E em emuladores. Não habilitar
+lançamento ou fechamento automático. Nenhuma alteração de produção ou publicação.
+
+Detalhes, limites e resultados dos testes em
+[pdv-stone-daily-review.md](engineering/pdv-stone-daily-review.md).
+Validação: 1.366 testes aprovados (21 novos), check aprovado e build com 171 páginas
+aprovado sem cache persistente. A tentativa inicial de build falhou por disco cheio;
+a configuração temporária usada na repetição não integra a entrega.
