@@ -291,6 +291,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               {
                 label: "Vendas e recebíveis", href: "__group:sales-reconciliation", icon: Wallet, show: isDefaultAdmin,
                 children: [
+                  { label: "PDV × Stone", href: "/dashboard/financial/sales-reconciliation", icon: ClipboardCheck, show: isDefaultAdmin },
                   { label: "Antecipações Stone", href: "/dashboard/financial/stone-anticipations", icon: Wallet, show: isDefaultAdmin },
                 ],
               },

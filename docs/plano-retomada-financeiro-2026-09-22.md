@@ -48,6 +48,7 @@ Financeiro
 │   ├── Extrato bancário
 │   ├── Faturas de cartão
 │   └── Vendas e recebíveis
+│       ├── PDV × Stone
 │       └── Antecipações Stone
 ├── Fluxo de caixa
 │   ├── Visão do caixa
@@ -67,7 +68,7 @@ correspondente esteja implementada ou publicada.
 | Antecipações | Consulta por unidade, parcelas, taxas e evidências | Publicação e consulta real registradas na sessão anterior. |
 | Navegação | Grupos Conciliação e Fluxo de caixa preservando operações atuais | Commit local `2fdd399c`, branch `feat/financial-reconciliation-navigation`; não publicada conforme último registro. |
 | 1. Agenda futura | Recebíveis líquidos, vencimentos e exclusão das parcelas já antecipadas | Entrega parcial no commit `99c18a84`, branch `feat/stone-future-receivables`: conferência por período, sem posição completa da carteira. |
-| 2. Conciliação de vendas | PDV × Stone por unidade, data e meio de pagamento; Pix, cancelamentos e estornos | Há base em branch separada; falta concluir e validar sua integração com a fonte real. |
+| 2. Conciliação de vendas | PDV × Stone por unidade, data e meio de pagamento; Pix, cancelamentos e estornos | Consulta diária e tela implementadas localmente em `feat/pdv-stone-flow`; Pix, histórico integral e comprovação com dados reais pendentes. |
 | 3. Taxas e DRE | Consultar a DRE oficial e preparar classificação nas contas existentes | Integração ao fluxo/agente pendente; aprovação humana para efeitos financeiros. |
 | 4. Fluxo de caixa | Combinar contas a pagar, recebíveis e saldos confirmados; separar realizado e previsto | Integração pendente; não presumir saldo Stone sem fonte bancária. |
 | 5. Análise gerencial | Orçamento, histórico, indicadores, materialidade e investigação de desvios | Ampliação do agente pendente. |
@@ -160,3 +161,22 @@ Detalhes, limites e resultados dos testes em
 Validação: 1.366 testes aprovados (21 novos), check aprovado e build com 171 páginas
 aprovado sem cache persistente. A tentativa inicial de build falhou por disco cheio;
 a configuração temporária usada na repetição não integra a entrega.
+
+### Incremento de fluxo — PDV × Stone
+
+Branch `feat/pdv-stone-flow`, base `268c9b23`. API administrativa somente leitura,
+coleta limitada de um dia e tela de evidências em Conciliação → Vendas e recebíveis
+→ PDV × Stone. Reutiliza o motor; exige filial PDV cadastrada e vínculo Stone
+vigente, revalidados após a coleta. Não cria lançamentos ou decisões financeiras.
+
+Pix e histórico integral de cancelamentos permanecem pendentes; a consulta de um
+StoneCode não equivale à cobertura completa da unidade. Integração validada com
+fontes HTTP sintéticas e E2E de autorização em emuladores, não com produção.
+Validação concluída: `verify` aprovado, 1.378 testes unitários, build com 172 páginas
+e E2E da API aprovado em duas execuções. Detalhes em
+[pdv-stone-flow.md](engineering/pdv-stone-flow.md).
+Nenhuma publicação realizada.
+
+Próxima frente: completar fonte Pix e sua atribuição inequívoca à unidade, validar
+a consulta com amostra real autorizada e depois seguir taxas/DRE conforme sequência
+recuperada. Não considerar a etapa 2 integralmente entregue pela presença da tela.
