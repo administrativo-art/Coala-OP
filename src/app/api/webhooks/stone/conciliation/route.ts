@@ -7,9 +7,11 @@ import {
   assertSafeStoneDownloadUrl,
   parseStonePixCsv,
   parseStonePixWebhookPayload,
+  StonePixProcessingError,
   stonePixFileId,
   verifyStoneWebhookSecret,
 } from "@/lib/integrations/stone/pix-conciliation";
+import { AppError, reportSystemError, withApiErrorHandling } from "@/lib/observability";
 import { WORKSPACE_ID } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -29,6 +31,10 @@ function isAuthorized(request: NextRequest): boolean {
     request.headers.get("x-coala-stone-webhook-secret"),
     process.env.STONE_CONCILIATION_WEBHOOK_SECRET,
   );
+}
+
+function routeError(options: ConstructorParameters<typeof AppError>[0]): never {
+  throw new AppError({ ...options, reportable: false });
 }
 
 async function replaceTransactions(
@@ -81,12 +87,12 @@ async function processPixFile(input: {
       redirect: "error",
       signal: AbortSignal.timeout(20_000),
     });
-    if (!response.ok) throw new Error("download_failed");
+    if (!response.ok) throw new StonePixProcessingError("download_failed");
     const declaredLength = Number(response.headers.get("content-length") ?? 0);
-    if (declaredLength > MAX_CSV_BYTES) throw new Error("csv_too_large");
+    if (declaredLength > MAX_CSV_BYTES) throw new StonePixProcessingError("csv_too_large");
 
     const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_CSV_BYTES) throw new Error("csv_too_large");
+    if (bytes.byteLength > MAX_CSV_BYTES) throw new StonePixProcessingError("csv_too_large");
     const sourceHash = createHash("sha256").update(bytes).digest("hex");
     const csv = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const parsed = parseStonePixCsv(csv);
@@ -100,8 +106,8 @@ async function processPixFile(input: {
       errorCode: null,
     }, { merge: true });
   } catch (error) {
-    const errorCode = error instanceof Error && /^[a-z_]+$/.test(error.message)
-      ? error.message
+    const errorCode = error instanceof StonePixProcessingError
+      ? error.code
       : "processing_failed";
     await fileRef.set({
       id: fileRef.id,
@@ -113,39 +119,85 @@ async function processPixFile(input: {
       receivedAt: input.receivedAt,
       errorCode,
     }, { merge: true });
-    console.error("Falha ao processar arquivo de conciliação Pix da Stone.", {
-      document: input.document,
-      referenceDate: input.referenceDate,
-      errorCode,
+    reportSystemError({
+      error: new StonePixProcessingError(errorCode),
+      code: "STONE_PIX_FILE_PROCESSING_FAILED",
+      kind: "TRANSIENT_EXTERNAL",
+      source: "stone-conciliation",
+      operation: "process-pix-file",
+      routeOrJob: "/api/webhooks/stone/conciliation",
+      metadata: {
+        document: input.document,
+        referenceDate: input.referenceDate,
+        provider: "stone",
+        status: errorCode,
+      },
     });
   }
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withApiErrorHandling({
+  source: "stone-conciliation",
+  operation: "receive-pix-file",
+  routeOrJob: "/api/webhooks/stone/conciliation",
+}, async (request: NextRequest) => {
   if (!process.env.STONE_CONCILIATION_WEBHOOK_SECRET?.trim()) {
-    return NextResponse.json({ error: "Webhook não configurado." }, { status: 503 });
+    return routeError({
+      code: "STONE_WEBHOOK_NOT_CONFIGURED",
+      kind: "TRANSIENT_EXTERNAL",
+      httpStatus: 503,
+      safeMessage: "Webhook não configurado.",
+    });
   }
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Webhook não autorizado." }, { status: 401 });
+    return routeError({
+      code: "STONE_WEBHOOK_UNAUTHORIZED",
+      kind: "AUTHENTICATION",
+      safeMessage: "Webhook não autorizado.",
+    });
   }
 
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_WEBHOOK_BODY_BYTES) {
+    return routeError({
+      code: "STONE_WEBHOOK_PAYLOAD_TOO_LARGE",
+      kind: "VALIDATION",
+      httpStatus: 413,
+      safeMessage: "Payload muito grande.",
+    });
+  }
   const rawBody = await request.text();
   if (Buffer.byteLength(rawBody, "utf8") > MAX_WEBHOOK_BODY_BYTES) {
-    return NextResponse.json({ error: "Payload muito grande." }, { status: 413 });
+    return routeError({
+      code: "STONE_WEBHOOK_PAYLOAD_TOO_LARGE",
+      kind: "VALIDATION",
+      httpStatus: 413,
+      safeMessage: "Payload muito grande.",
+    });
   }
 
   let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
+  } catch (cause) {
+    return routeError({
+      code: "STONE_WEBHOOK_INVALID_JSON",
+      kind: "VALIDATION",
+      safeMessage: "JSON inválido.",
+      cause,
+    });
   }
 
   let notification: ReturnType<typeof parseStonePixWebhookPayload>;
   try {
     notification = parseStonePixWebhookPayload(payload);
-  } catch {
-    return NextResponse.json({ error: "Payload fora do contrato esperado." }, { status: 400 });
+  } catch (cause) {
+    return routeError({
+      code: "STONE_WEBHOOK_INVALID_PAYLOAD",
+      kind: "VALIDATION",
+      safeMessage: "Payload fora do contrato esperado.",
+      cause,
+    });
   }
 
   if (notification.type === "validation_notification") {
@@ -154,29 +206,55 @@ export async function POST(request: NextRequest) {
 
   const document = expectedDocument();
   if (!document) {
-    return NextResponse.json({ error: "Documento Stone não configurado." }, { status: 503 });
+    return routeError({
+      code: "STONE_DOCUMENT_NOT_CONFIGURED",
+      kind: "TRANSIENT_EXTERNAL",
+      httpStatus: 503,
+      safeMessage: "Documento Stone não configurado.",
+    });
   }
   if (notification.document !== document) {
-    return NextResponse.json({ error: "Documento não autorizado." }, { status: 403 });
+    return routeError({
+      code: "STONE_DOCUMENT_UNAUTHORIZED",
+      kind: "AUTHORIZATION",
+      safeMessage: "Documento não autorizado.",
+    });
   }
 
   const receivedAt = new Date().toISOString();
   after(() => processPixFile({ ...notification, receivedAt }));
   return NextResponse.json({ ok: true, accepted: true });
-}
+});
 
-export async function GET(request: NextRequest) {
+export const GET = withApiErrorHandling({
+  source: "stone-conciliation",
+  operation: "read-pix-file",
+  routeOrJob: "/api/webhooks/stone/conciliation",
+}, async (request: NextRequest) => {
   if (!process.env.STONE_CONCILIATION_WEBHOOK_SECRET?.trim()) {
-    return NextResponse.json({ error: "Webhook não configurado." }, { status: 503 });
+    return routeError({
+      code: "STONE_WEBHOOK_NOT_CONFIGURED",
+      kind: "TRANSIENT_EXTERNAL",
+      httpStatus: 503,
+      safeMessage: "Webhook não configurado.",
+    });
   }
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Consulta não autorizada." }, { status: 401 });
+    return routeError({
+      code: "STONE_QUERY_UNAUTHORIZED",
+      kind: "AUTHENTICATION",
+      safeMessage: "Consulta não autorizada.",
+    });
   }
 
   const document = request.nextUrl.searchParams.get("document")?.replace(/\D/g, "") ?? "";
   const referenceDate = request.nextUrl.searchParams.get("referenceDate") ?? "";
   if (document !== expectedDocument() || !/^\d{4}-\d{2}-\d{2}$/.test(referenceDate)) {
-    return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
+    return routeError({
+      code: "STONE_QUERY_INVALID_PARAMETERS",
+      kind: "VALIDATION",
+      safeMessage: "Parâmetros inválidos.",
+    });
   }
 
   const fileRef = financialDbAdmin.collection(COLLECTION)
@@ -185,10 +263,16 @@ export async function GET(request: NextRequest) {
     fileRef.get(),
     fileRef.collection("transactions").limit(2_000).get(),
   ]);
-  if (!file.exists) return NextResponse.json({ error: "Arquivo ainda não recebido." }, { status: 404 });
+  if (!file.exists) {
+    return routeError({
+      code: "STONE_PIX_FILE_NOT_FOUND",
+      kind: "NOT_FOUND",
+      safeMessage: "Arquivo ainda não recebido.",
+    });
+  }
 
   return NextResponse.json({
     file: file.data(),
     transactions: transactionSnapshot.docs.map((doc) => doc.data()),
   });
-}
+});

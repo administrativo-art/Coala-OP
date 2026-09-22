@@ -43,6 +43,17 @@ export type StonePixSummary = {
   statuses: Record<string, number>;
 };
 
+export class StonePixProcessingError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+    this.name = "StonePixProcessingError";
+  }
+}
+
+function processingError(code: string): never {
+  throw new StonePixProcessingError(code);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -71,22 +82,22 @@ export function verifyStoneWebhookSecret(
 }
 
 export function parseStonePixWebhookPayload(payload: unknown): StonePixWebhookPayload {
-  if (!isRecord(payload)) throw new Error("invalid_payload");
+  if (!isRecord(payload)) return processingError("invalid_payload");
   if (payload.type === "validation_notification") {
     return { type: "validation_notification" };
   }
-  if (payload.type !== "pix") throw new Error("unsupported_notification_type");
+  if (payload.type !== "pix") return processingError("unsupported_notification_type");
 
   const document = normalizeDocument(payload.document);
   const referenceDate = asLimitedString(payload.referenceDate, 10);
   const url = asLimitedString(payload.url, 4096);
-  if (!DOCUMENT_PATTERN.test(document)) throw new Error("invalid_document");
-  if (!referenceDate || !DATE_PATTERN.test(referenceDate)) throw new Error("invalid_reference_date");
-  if (!url) throw new Error("missing_download_url");
+  if (!DOCUMENT_PATTERN.test(document)) return processingError("invalid_document");
+  if (!referenceDate || !DATE_PATTERN.test(referenceDate)) return processingError("invalid_reference_date");
+  if (!url) return processingError("missing_download_url");
 
   const parsedDate = new Date(`${referenceDate}T00:00:00.000Z`);
   if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== referenceDate) {
-    throw new Error("invalid_reference_date");
+    return processingError("invalid_reference_date");
   }
 
   return { type: "pix", url, document, referenceDate };
@@ -97,10 +108,10 @@ export function assertSafeStoneDownloadUrl(rawUrl: string): URL {
   try {
     parsed = new URL(rawUrl);
   } catch {
-    throw new Error("invalid_download_url");
+    return processingError("invalid_download_url");
   }
   if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-    throw new Error("unsafe_download_url");
+    return processingError("unsafe_download_url");
   }
 
   const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
@@ -113,7 +124,7 @@ export function assertSafeStoneDownloadUrl(rawUrl: string): URL {
     || isIP(hostname) !== 0
     || !hostname.includes(".")
   ) {
-    throw new Error("unsafe_download_url");
+    return processingError("unsafe_download_url");
   }
   return parsed;
 }
@@ -200,7 +211,7 @@ export function parseStonePixCsv(csv: string): {
     skipEmptyLines: "greedy",
     transformHeader: (header) => header.replace(/^\uFEFF/, "").trim(),
   });
-  if (result.errors.length > 0) throw new Error("invalid_csv");
+  if (result.errors.length > 0) return processingError("invalid_csv");
 
   const transactions = result.data
     .filter((row) => Object.values(row).some((value) => String(value ?? "").trim()))
