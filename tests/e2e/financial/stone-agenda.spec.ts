@@ -4,11 +4,12 @@ import { getFirestore } from "firebase-admin/firestore";
 import { E2E_USER } from "../support/global-setup";
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
 
-test("Stone agenda denies anonymous and restricted users before contacting Stone", async ({ request }) => {
+for (const endpoint of ["stone-agenda", "stone-anticipations"]) {
+test(`${endpoint} denies anonymous and restricted users before contacting Stone`, async ({ request }) => {
   assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
   const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error("Auth emulator required");
-  const path = "/api/financial/stone-agenda?stoneCode=123456789&referenceDate=2026-09-20";
+  const path = `/api/financial/${endpoint}?stoneCode=123456789&referenceDate=2026-09-20`;
   expect((await request.get(path)).status()).toBe(401);
   const signup = await request.post(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`, {
     data: { returnSecureToken: true },
@@ -37,3 +38,4 @@ test("Stone agenda denies anonymous and restricted users before contacting Stone
   });
   expect(invalid.status()).toBe(400);
 });
+}
