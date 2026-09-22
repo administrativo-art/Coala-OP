@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   assertSafeStoneDownloadUrl,
-  parseStoneMoneyToCents,
+  parseStoneAmountInCents,
   parseStonePixCsv,
   parseStonePixWebhookPayload,
   verifyStoneWebhookSecret,
@@ -46,24 +46,25 @@ test("rejeita URLs que permitiriam acesso a redes locais", () => {
   }
 });
 
-test("converte valores monetários usados nos CSVs brasileiros", () => {
-  assert.equal(parseStoneMoneyToCents("10.50"), 1_050);
-  assert.equal(parseStoneMoneyToCents("1.234,56"), 123_456);
-  assert.equal(parseStoneMoneyToCents("R$ 7,00"), 700);
-  assert.equal(parseStoneMoneyToCents(""), 0);
+test("preserva os valores inteiros em centavos usados no CSV da Stone", () => {
+  assert.equal(parseStoneAmountInCents("1050"), 1_050);
+  assert.equal(parseStoneAmountInCents(1_234), 1_234);
+  assert.equal(parseStoneAmountInCents("700,0"), 700);
+  assert.equal(parseStoneAmountInCents(""), 0);
 });
 
 test("extrai apenas campos operacionais e resume o CSV Pix", () => {
   const csv = [
-    "id,amount,status,payment_method,created_at,merchant__document,pix_transaction__pix_key,pix_transaction__payer__name,pix_transaction__payer__document,pix_transaction__paid_amount,pix_transaction__canceled_amount,pix_transaction__fee_amount,pix_transaction__type,pix_transaction__terminal__type,pix_transaction__terminal__serial_number,pix_transaction__detail__operation,pix_transaction__detail__provider_datetime,pix_transaction__detail__operation_amount",
-    "tx-1,87.00,paid,pix,2026-09-20T12:40:13Z,14276603000125,chave-secreta,Maria,12345678900,87.00,0,0,dynamic,POS,terminal-1,payment,2026-09-20T12:40:14Z,87.00",
+    "id;amount;status;payment_method;created_at;merchant__document;pix_transaction__pix_key;pix_transaction__payer__name;pix_transaction__payer__document;pix_transaction__paid_amount;pix_transaction__canceled_amount;pix_transaction__fee_amount;pix_transaction__type;pix_transaction__terminal__type;pix_transaction__terminal__serial_number;pix_transaction__detail__operation;pix_transaction__detail__provider_datetime;pix_transaction__detail__operation_amount",
+    "tx-1;8700;paid;pix;2026-09-20T12:40:13Z;14276603000125;chave-secreta;Maria;12345678900;8700;0;63;dynamic;POS;terminal-1;payment;2026-09-20T12:40:14Z;8700",
   ].join("\n");
   const parsed = parseStonePixCsv(csv);
 
   assert.equal(parsed.summary.transactionCount, 1);
   assert.equal(parsed.summary.grossAmountCents, 8_700);
   assert.equal(parsed.summary.paidAmountCents, 8_700);
-  assert.equal(parsed.summary.netAmountCents, 8_700);
+  assert.equal(parsed.summary.feeAmountCents, 63);
+  assert.equal(parsed.summary.netAmountCents, 8_637);
   assert.equal(parsed.transactions[0]?.transactionId, "tx-1");
   assert.equal("pixKey" in (parsed.transactions[0] ?? {}), false);
   assert.equal("payerName" in (parsed.transactions[0] ?? {}), false);
