@@ -4,7 +4,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { E2E_USER } from "../support/global-setup";
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
 
-for (const endpoint of ["stone-agenda", "stone-anticipations", "agent"]) {
+for (const endpoint of ["stone-agenda", "stone-anticipations", "agent", "stone-future-receivables"]) {
 test(`${endpoint} denies anonymous and restricted users before contacting Stone`, async ({ request }) => {
   assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
   const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
@@ -13,7 +13,10 @@ test(`${endpoint} denies anonymous and restricted users before contacting Stone`
   const invoke = (token?: string, date = "2026-09-20") => endpoint === "agent"
     ? request.post("/api/financial/agent", { headers: token ? { Authorization: `Bearer ${token}` } : {},
       data: { intent: "review_anticipations", kioskId: "agent-e2e-unmapped", stoneCode: "123456789", referenceDate: date } })
-    : request.get(path.replace("2026-09-20", date), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    : endpoint === "stone-future-receivables"
+      ? request.post("/api/financial/stone-future-receivables", { headers: token ? { Authorization: `Bearer ${token}` } : {},
+        data: { kioskId: "agent-e2e-unmapped", stoneCode: "123456789", from: date, through: date } })
+      : request.get(path.replace("2026-09-20", date), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   expect((await invoke()).status()).toBe(401);
   const signup = await request.post(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`, {
     data: { returnSecureToken: true },
@@ -39,7 +42,7 @@ test(`${endpoint} denies anonymous and restricted users before contacting Stone`
   // An impossible date must fail validation, without a real provider key/call.
   const invalid = await invoke(admin.idToken, "2026-02-30");
   expect(invalid.status()).toBe(400);
-  if (endpoint === "agent") {
+  if (endpoint === "agent" || endpoint === "stone-future-receivables") {
     // The safe lack of mapping must be actionable, not an invented zero or provider call.
     const unmapped = await invoke(admin.idToken);
     expect(unmapped.status()).toBe(422);
