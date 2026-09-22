@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "stoneMerchantMappings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "stoneCodes", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
       "collectionGroup": "bankPaymentRequests",
       "queryScope": "COLLECTION",
       "fields": [

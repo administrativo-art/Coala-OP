@@ -24,6 +24,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase";
+import { WORKSPACE_ID } from "@/lib/workspace";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import {
   bankAccountSchema,
@@ -276,6 +277,10 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
 
   async function onSubmit(values: BankAccountFormValues) {
     if (!firebaseUser) return;
+    if (editTarget?.workspaceId && editTarget.workspaceId !== WORKSPACE_ID) {
+      toast({ variant: "destructive", title: "A conta pertence a outro workspace e não pode ser reassociada." });
+      return;
+    }
     setIsSaving(true);
 
     const clean = (entry: Record<string, unknown>) =>
@@ -283,6 +288,8 @@ export default function BankAccountsManagement({ canManage = true }: { canManage
 
     const payload = {
       ...clean(values as unknown as Record<string, unknown>),
+      // Explicit manual save regularizes legacy ownership; never silently reassign another workspace.
+      workspaceId: WORKSPACE_ID,
       paymentMethods: values.paymentMethods.map((paymentMethod) =>
         clean(paymentMethod as unknown as Record<string, unknown>)
       ),
