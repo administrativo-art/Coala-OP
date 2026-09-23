@@ -57,7 +57,7 @@ test("tela usa transporte autenticado e consulta guiada, sem polling, pagamentos
   assert.match(source, /response\.scope\.accountId !== mapping!\.accountId/);
   assert.match(source, /Conferi unidade, StoneCodes, conta e vigência em fonte oficial/);
   assert.doesNotMatch(source, /setInterval|onSnapshot|fetch\(/);
-  const page = readFileSync(new URL("../../src/app/dashboard/financial/stone-anticipations/page.tsx", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../../src/features/financial/pages/stone-anticipations-page.tsx", import.meta.url), "utf8");
   assert.match(page, /if \(!isDefaultAdmin\)/);
   assert.match(page, /PageContainer variant="wide"/);
 });
