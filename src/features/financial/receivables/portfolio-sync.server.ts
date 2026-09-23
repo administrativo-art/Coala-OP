@@ -7,6 +7,7 @@ import { AppError } from "@/lib/observability/app-error";
 import { stoneAgendaQuerySchema } from "@/lib/integrations/stone/agenda-query";
 import { parseStoneAgendaXml } from "@/lib/integrations/stone/agenda-parser";
 import { fetchStoneAgendaXml } from "@/lib/integrations/stone/agenda-transport";
+import { parseStoneWalletPosition } from "@/lib/integrations/stone/wallet-position-parser";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { latestPublishedDate } from "./period-review";
 import { projectStonePortfolio } from "./portfolio-projection";
@@ -19,11 +20,27 @@ export const portfolioSourceSchema = z.object({
 }).strict();
 const sourceCollection = "stonePortfolioSources";
 const fileCollection = "stonePortfolioFiles";
+const rightsCollection = "stonePortfolioRightsFiles";
 const snapshotCollection = "stonePortfolioSnapshots";
 const lockCollection = "stonePortfolioSyncLocks";
 const maxCachedXmlBytes = 800_000;
 const maxDays = 731;
-const projectionVersion = 1;
+const projectionVersion = 2;
+const rightsVersion = 1;
+const rightsSchema = z.object({
+  workspaceId: z.string().min(1), stoneCode: stoneAgendaQuerySchema.shape.stoneCode,
+  referenceDate: date, rightsVersion: z.literal(rightsVersion),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  fileId: z.string().min(1).max(128), generatedAtProvider: z.string().regex(/^\d{14}$/),
+  status: z.enum(["reported", "empty", "not_provided"]),
+  rows: z.array(z.object({
+    walletTypeId: z.string().regex(/^\d{1,2}$/), walletNatureId: z.string().regex(/^\d$/),
+    nature: z.enum(["regular", "warranty", "ownership_assignment", "stone_anticipation", "unknown"]),
+    category: z.string().min(1).max(80), amount: z.string().regex(/^-?\d{1,15}(?:\.\d{1,12})?$/),
+  }).strict()).max(500),
+  unknownNatureCount: z.number().int().nonnegative().max(500),
+  cachedAt: z.string().datetime(),
+}).strict();
 
 const sourceId = (stoneCode: string) => createHash("sha256").update(`${WORKSPACE_ID}:${stoneCode}`).digest("hex");
 const fileId = (stoneCode: string, referenceDate: string) => `${sourceId(stoneCode)}_${referenceDate}`;
@@ -82,15 +99,52 @@ async function readDay(stoneCode: string, referenceDate: string) {
   return parseStoneAgendaXml(xml, { stoneCode, referenceDate });
 }
 
+/** Keep one validated 2.4 position per date. Its aggregate wallet natures are
+ * evidence of guarantees/assignments, but cannot be allocated to sale parcels. */
+async function readRightsPosition(stoneCode: string, referenceDate: string) {
+  const ref = financialDbAdmin.collection(rightsCollection).doc(fileId(stoneCode, referenceDate));
+  const cached = await ref.get();
+  if (cached.exists) {
+    const parsed = rightsSchema.safeParse(cached.data());
+    if (!parsed.success || parsed.data.workspaceId !== WORKSPACE_ID ||
+      parsed.data.stoneCode !== stoneCode || parsed.data.referenceDate !== referenceDate) {
+      throw new AppError({ code: "STONE_PORTFOLIO_RIGHTS_CACHE_INVALID", kind: "DATA_INTEGRITY" });
+    }
+    return parsed.data;
+  }
+  const xml = await fetchStoneAgendaXml({ stoneCode, referenceDate },
+    { apiKey: process.env.STONE_CONCILIATION_API_KEY, layout: "XML2_4" });
+  const parsed = parseStoneWalletPosition(xml, { stoneCode, referenceDate });
+  const value = rightsSchema.parse({ workspaceId: WORKSPACE_ID, stoneCode, referenceDate,
+    rightsVersion, sourceHash: parsed.sourceHash, fileId: parsed.fileId,
+    generatedAtProvider: parsed.generatedAtProvider, status: parsed.status,
+    rows: parsed.rows, unknownNatureCount: parsed.unknownNatureCount,
+    cachedAt: new Date().toISOString() });
+  if (Buffer.byteLength(JSON.stringify(value), "utf8") > maxCachedXmlBytes) {
+    throw new AppError({ code: "STONE_PORTFOLIO_RIGHTS_CACHE_LIMIT", kind: "EXPECTED_BUSINESS" });
+  }
+  await ref.create(value).catch(async error => {
+    if (error?.code !== 6) throw error;
+    const concurrent = rightsSchema.safeParse((await ref.get()).data());
+    if (!concurrent.success || concurrent.data.sourceHash !== value.sourceHash) {
+      throw new AppError({ code: "STONE_PORTFOLIO_RIGHTS_REVISION_CONFLICT", kind: "DATA_INTEGRITY" });
+    }
+  });
+  return value;
+}
+
 export async function syncStonePortfolio(stoneCode: string, now = new Date()) {
   const source = await readSource(stoneCode);
   const asOf = latestPublishedDate(now);
   const dates = days(source.firstCaptureDate, asOf);
   const ref = financialDbAdmin.collection(snapshotCollection).doc(sourceId(stoneCode));
   const published = await ref.get();
+  const publishedRights = rightsSchema.safeParse(published.get("rightsPosition"));
   if (published.get("asOf") === asOf && published.get("mappingId") === source.mappingId &&
     published.get("firstCaptureDate") === source.firstCaptureDate &&
-    published.get("projectionVersion") === projectionVersion) {
+    published.get("projectionVersion") === projectionVersion && publishedRights.success &&
+    publishedRights.data.workspaceId === WORKSPACE_ID && publishedRights.data.stoneCode === stoneCode &&
+    publishedRights.data.referenceDate === asOf) {
     return { stoneCode, asOf, summary: published.get("summary"), missingDates: published.get("missingDates") };
   }
   const lockRef = financialDbAdmin.collection(lockCollection).doc(sourceId(stoneCode));
@@ -110,9 +164,11 @@ export async function syncStonePortfolio(stoneCode: string, now = new Date()) {
       const batch = await Promise.all(dates.slice(offset, offset + 3).map(day => readDay(stoneCode, day)));
       files.push(...batch);
     }
+    const rightsPosition = await readRightsPosition(stoneCode, asOf);
     const result = projectStonePortfolio({ stoneCode, firstCaptureDate: source.firstCaptureDate, asOf }, files);
     const snapshot = { workspaceId: WORKSPACE_ID, stoneCode, kioskId: source.kioskId,
       accountId: source.accountId, mappingId: source.mappingId, projectionVersion, ...result,
+      rightsPosition,
       rows: result.rows.filter(row => row.status !== "paid"),
       updatedAt: new Date().toISOString() };
     if (Buffer.byteLength(JSON.stringify(snapshot), "utf8") > maxCachedXmlBytes) {
@@ -140,10 +196,18 @@ export async function readStonePortfolio(stoneCode: string) {
   if (snapshot.get("workspaceId") !== WORKSPACE_ID || snapshot.get("stoneCode") !== stoneCode ||
     snapshot.get("mappingId") !== source.mappingId || snapshot.get("accountId") !== source.accountId ||
     snapshot.get("kioskId") !== source.kioskId || snapshot.get("firstCaptureDate") !== source.firstCaptureDate ||
-    snapshot.get("projectionVersion") !== projectionVersion) {
+    ![1, projectionVersion].includes(snapshot.get("projectionVersion"))) {
     throw new AppError({ code: "STONE_PORTFOLIO_SNAPSHOT_SCOPE", kind: "DATA_INTEGRITY" });
   }
+  if (snapshot.get("projectionVersion") === projectionVersion) {
+    const rights = rightsSchema.safeParse(snapshot.get("rightsPosition"));
+    if (!rights.success || rights.data.workspaceId !== WORKSPACE_ID ||
+      rights.data.stoneCode !== stoneCode || rights.data.referenceDate !== snapshot.get("asOf")) {
+      throw new AppError({ code: "STONE_PORTFOLIO_RIGHTS_SNAPSHOT_SCOPE", kind: "DATA_INTEGRITY" });
+    }
+  }
   return { status: "synchronized" as const, ...snapshot.data(), latestAvailableDate,
+    rightsPosition: snapshot.get("projectionVersion") === projectionVersion ? snapshot.get("rightsPosition") : null,
     stale: snapshot.get("asOf") !== latestAvailableDate };
 }
 
