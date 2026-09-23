@@ -12,6 +12,7 @@ import { formatStoneMoney } from "@/features/financial/agent/presentation";
 import type { CatalogPage, MappingView } from "@/features/financial/agent/configuration";
 import type { PeriodRow, ReceivablePeriodResult } from "@/features/financial/receivables/period-review";
 import { FinancialAnalysisNavigation } from "../agent/analysis-navigation";
+import { WalletPositionPanel } from "./wallet-position-panel";
 import { ReceivableAnalysisPanel } from "./analysis-panel";
 import { receivableRowMatches, type ReceivableEvidenceFilter } from "./analysis";
 
@@ -80,6 +81,7 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
       <p className="text-sm text-muted-foreground">Até 31 dias por consulta; o vínculo deve cobrir todo o período. Arquivos disponíveis após as 05h do dia seguinte, horário de Brasília.</p>
       <Button type="submit" disabled={busy || !mapping || !code || !from || !through}>{busy ? "Consultando eventos…" : "Conferir previsões"}</Button>
     </form>
+    <WalletPositionPanel key={`${selected}:${code}`} stoneCode={code} />
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {result && mapping && <ReceivableAnalysisPanel result={result} unitName={mapping.kioskName} accountName={mapping.accountName}
       onInspect={value => { setFilter(value); setPage(0); evidence.current?.focus(); evidence.current?.scrollIntoView({ block: "start" }); }} />}

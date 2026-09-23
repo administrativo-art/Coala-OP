@@ -97,3 +97,35 @@ avisos em firebase-rh (top-level await) e protobufjs (dependência dinâmica), f
 dos arquivos alterados. Cinco testes de API passaram em emuladores demo, sem abrir
 navegador nem consultar a Stone real. Revisão de queries: nenhum novo listener,
 polling ou acesso a coleção; só autenticação existente. `git diff --check` aprovado.
+
+## Publicação e interface — continuação autorizada em 23/09/2026
+
+O usuário autorizou implementar as etapas pendentes, incluindo publicação e
+validação real. Adicionada consulta manual na página existente de recebíveis e na
+entrada correspondente do Coala Financeiro. Selecionar o StoneCode e a data da
+posição; a resposta informa natureza, categoria, valor decimal preservado e data
+da coleta. Ausência/vazio não vira zero. Alterar seleção/data limpa a resposta;
+paginar compara hash e exige reinício se o arquivo mudar. A posição é identificada
+por StoneCode, sem inferir saldo de uma unidade ou conta a partir do vínculo.
+
+Permissões administrativas e custo por chamada permanecem os mesmos. Sem polling,
+consulta automática ao montar, soma entre naturezas, novo saldo projetado ou escrita
+financeira. A interface não cria uma nova fonte bancária.
+
+### Dependência bancária identificada
+
+A documentação pública da Stone Banking API tem uma consulta de saldo separada:
+`GET /api/v1/accounts/{account_id}/balance`, com valores em centavos, saldo bloqueado
+e agendado. O guia exige cadastro da aplicação, chave pública, ClientID, autenticação
+por token, homologação e habilitação de produção. A documentação consultada tem
+conteúdo antigo; confirmar o produto e o processo aplicáveis à conta antes de
+implementar autenticação e provisionar novas credenciais.
+
+- https://docs.openbank.stone.com.br/docs/referencia-da-api/dados-da-conta/consultar-o-saldo/
+- https://docs.openbank.stone.com.br/docs/guias/stone-open-banking/
+- https://docs.openbank.stone.com.br/docs/guias/token-de-acesso/
+
+A inspeção apenas dos nomes dos segredos Stone no projeto encontrou
+STONE_CONCILIATION_API_KEY e STONE_CONCILIATION_WEBHOOK_SECRET. Nenhum valor foi lido.
+Não existe evidência de Banking API provisionada nesta implantação. Não reutilizar
+a chave de conciliação como credencial bancária nem inventar account_id.
