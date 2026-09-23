@@ -1,5 +1,16 @@
 # Regras operacionais do Coala One
 
+## Departamento de Desenvolvimento e Tecnologia
+
+- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os sete especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket.
+- Escolha somente os especialistas necessários. Execute no máximo um especialista por vez; aguarde sua entrega e confira processos ainda ativos antes de iniciar ou retomar outro. Especialistas não delegam.
+- Selecione o modelo pelo trabalho concreto, conforme `docs/engineering/development-technology.md`. Neste departamento, use Luna ou Sol no Codex e Haiku ou Sonnet no Claude Code. Nunca selecione Fable ou Opus; Astra exige uma solicitação explícita do programador para aquele chamado. Se o trabalho exceder esses modelos, informe o limite e peça uma decisão. Registre o modelo efetivamente usado quando o CLI informar.
+- Antes de usar o Claude Code para este departamento, confira `claude --version`: a restrição da opção Padrão exige a versão 2.1.175 ou posterior. Se o comando resolver para uma instalação mais antiga, use uma instalação compatível antes de iniciar o chamado.
+- Antes de acionar Velma ou Trinity no Codex, coloque também a sessão principal em modo somente leitura e confira as ferramentas externas disponíveis; uma configuração do agente não substitui a permissão efetiva da sessão.
+- Registre objetivo, autorização, critérios de aceite, trabalho e evidências em `.ai-work/development-technology/<id>/`. Ao mudar de CLI, encerre a sessão anterior e confira o registro e o estado dos arquivos antes de assumir a coordenação.
+- Nome de personagem identifica papel. Somente TARS pode usar um estilo direto, calmo, pragmático e com humor pontual; precisão e regras operacionais têm prioridade.
+- Uma solicitação de implementação autoriza as alterações e verificações locais pertinentes ao escopo. Commit, push, migração em banco real, publicação e deploy exigem autorização própria, salvo quando já foram explicitamente incluídos na solicitação.
+
 ## Como tratar o código existente
 
 - Código existente é evidência, não necessariamente padrão. Antes de copiar uma implementação, distinga decisão arquitetural intencional de convenção consolidada, solução local, detalhe histórico ou dívida técnica. Somente decisão e convenção comprovadas viram padrão.
