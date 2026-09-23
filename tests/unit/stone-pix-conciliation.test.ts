@@ -5,6 +5,7 @@ import {
   assertSafeStoneDownloadUrl,
   parseStoneAmountInCents,
   parseStonePixCsv,
+  parseStonePixMerchantIdentity,
   parseStonePixWebhookPayload,
   verifyStoneWebhookSecret,
 } from "../../src/lib/integrations/stone/pix-conciliation";
@@ -14,6 +15,67 @@ test("valida o segredo sem aceitar valores ausentes", () => {
   assert.equal(verifyStoneWebhookSecret("errado", "segredo"), false);
   assert.equal(verifyStoneWebhookSecret(null, "segredo"), false);
   assert.equal(verifyStoneWebhookSecret("segredo", undefined), false);
+});
+
+const syntheticIdentity = "[{name=Cliente, value=123456789}, {name=Terminal, value=TEST-001}]";
+
+test("preserva StoneCode e terminal no formato do exemplo oficial, sem inferir unidade", () => {
+  assert.deepEqual(parseStonePixMerchantIdentity(syntheticIdentity, "TEST-001"), {
+    version: 1, status: "identified", stoneCode: "123456789", terminalSerialNumber: "TEST-001",
+  });
+  assert.equal(parseStonePixMerchantIdentity(
+    "[{name=Terminal, value=TEST-001}, {name=Cliente, value=123456789}]", undefined,
+  ).stoneCode, "123456789");
+});
+
+test("não atribui unidade por serial quando additional_data está ausente", () => {
+  for (const value of [undefined, null, "", "  ", "[]"]) {
+    assert.deepEqual(parseStonePixMerchantIdentity(value, "TEST-001"), {
+      version: 1, status: "missing", stoneCode: null, terminalSerialNumber: null,
+    });
+  }
+});
+
+test("rejeita identidades incompletas, repetidas, desconhecidas ou truncáveis", () => {
+  for (const value of [
+    {}, 123, "[{name=Cliente, value=123456789}]",
+    "[{name=Cliente, value=123}, {name=Cliente, value=123}]",
+    syntheticIdentity.replace("Cliente", "stoneCode"),
+    syntheticIdentity.replace("123456789", "0123456789"),
+    syntheticIdentity.replace("123456789", "1e8"),
+    syntheticIdentity.replace("123456789", "9".repeat(21)),
+    syntheticIdentity.replace("TEST-001", "X".repeat(161)),
+    `${syntheticIdentity}suffix`,
+    `[${syntheticIdentity.slice(1, -1)}, {name=Pagador, value=privado}]`,
+    "x".repeat(1025),
+  ]) {
+    const identity = parseStonePixMerchantIdentity(value, undefined);
+    assert.equal(identity.status, "invalid");
+    assert.equal(identity.stoneCode, null);
+  }
+});
+
+test("divergência de terminal impede atribuição, sem normalizar case ou pontuação", () => {
+  for (const serial of ["OTHER", "test-001", "TEST001", 123, "TEST-001" + "X".repeat(161)]) {
+    assert.deepEqual(parseStonePixMerchantIdentity(syntheticIdentity, serial), {
+      version: 1, status: "terminal_conflict", stoneCode: null, terminalSerialNumber: null,
+    });
+  }
+});
+
+test("CSV conserva evidência de identidade sem persistir additional_data bruto", () => {
+  const parsed = parseStonePixCsv([
+    "id;amount;pix_transaction__additional_data;pix_transaction__terminal__serial_number",
+    `event-1;100;${syntheticIdentity};TEST-001`,
+    "event-2;100;[];TEST-001",
+    "event-3;100;[{name=Pagador, value=PRIVATE-PAYER}];TEST-001",
+  ].join("\n"));
+  assert.equal(parsed.transactions[0].merchantIdentity.stoneCode, "123456789");
+  assert.equal(parsed.transactions[1].merchantIdentity.status, "missing");
+  assert.equal(parsed.transactions[2].merchantIdentity.status, "invalid");
+  assert.equal(JSON.stringify(parsed).includes("PRIVATE-PAYER"), false);
+  assert.equal(JSON.stringify(parsed).includes("additional_data"), false);
+  assert.equal(parsed.summary.grossAmountCents, 300);
 });
 
 test("aceita a validação e normaliza a notificação Pix", () => {

@@ -51,6 +51,19 @@ test("Stone agenda rejects invalid dates and path injection before network", asy
     { apiKey, fetcher: response(new Response(xml)) }), xml);
 });
 
+test("Stone agenda selects XML2_4 explicitly without changing the legacy default", async () => {
+  assert.equal(await fetchStoneAgendaXml(input, { apiKey, layout: "XML2_4", fetcher: async (url, options) => {
+    assert.equal(url, "https://conciliation.stone.com.br/v2/merchant/123456789/conciliation-file/20260920?layout=XML2_4");
+    assert.equal(new Headers(options?.headers).get("x-user-type"), "client");
+    assert.equal(options?.redirect, "manual");
+    return new Response(xml);
+  } }), xml);
+  await assert.rejects(fetchStoneAgendaXml(input, { apiKey,
+    layout: "XML2_4&redirect=private-location" as "XML2_4",
+    fetcher: async () => { assert.fail("invalid layout must not reach network"); },
+  }), code("STONE_AGENDA_INVALID_INPUT"));
+});
+
 test("Stone agenda fails closed without usable runtime credentials", async () => {
   for (const value of [undefined, "", " ", "key\n", "key:password"]) {
     await assert.rejects(fetchStoneAgendaXml(input, {

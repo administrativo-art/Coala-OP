@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ export function AnticipationWorkspace({ onResult }: { onResult: (review: StoneAn
   return <section className="space-y-4 rounded-lg border p-4" aria-label="Coala Financeiro — antecipações">
     <h2 className="text-xl font-semibold">Coala Financeiro · Antecipações</h2>
     <p className="text-sm text-muted-foreground">Conversa guiada sobre pagamentos e taxas Stone. Selecione vínculo, código e data; nenhuma ação altera caixa, agenda ou DRE.</p>
+    <Link className="inline-block text-sm underline" href="/dashboard/financial/cash-flow/receivables">Conferir previsões de recebíveis por período (não é a carteira completa)</Link>
     <div className="flex flex-wrap gap-3">
       <Button variant="outline" disabled={busy} onClick={() => task(async () => { clearResult(); await loadMappings(); })}>{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</Button>
       {cursor && <Button variant="outline" disabled={busy} onClick={() => task(() => loadMappings(cursor))}>Mais vínculos</Button>}

@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { navigationActiveHref } from "@/lib/navigation-active-href";
 import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
 import { useAuth } from "@/hooks/use-auth";
@@ -80,6 +81,7 @@ interface SidebarProps {
 
 export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, permissions, isDefaultAdmin } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
@@ -278,8 +280,34 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
             ],
           },
-          { label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
-          { label: "Antecipações Stone", href: "/dashboard/financial/stone-anticipations", icon: Wallet, show: isDefaultAdmin },
+          {
+            label: "Conciliação",
+            href: "__group:reconciliation",
+            icon: ClipboardCheck,
+            show: permissions.financial?.audits?.view || permissions.financial?.cardStatements?.view || isDefaultAdmin,
+            children: [
+              { label: "Extrato bancário", href: "/dashboard/financial/expenses?view=audits", icon: Landmark, show: permissions.financial?.audits?.view },
+              { label: "Faturas de cartão", href: "/dashboard/financial/reconciliation/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
+              {
+                label: "Vendas e recebíveis", href: "__group:sales-reconciliation", icon: Wallet, show: isDefaultAdmin,
+                children: [
+                  { label: "PDV × Stone", href: "/dashboard/financial/sales-reconciliation", icon: ClipboardCheck, show: isDefaultAdmin },
+                  { label: "Antecipações Stone", href: "/dashboard/financial/stone-anticipations", icon: Wallet, show: isDefaultAdmin },
+                ],
+              },
+            ],
+          },
+          {
+            label: "Fluxo de caixa",
+            href: "__group:cash-flow",
+            icon: Wallet,
+            show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow || isDefaultAdmin,
+            children: [
+              { label: "Visão do caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
+              { label: "Recebíveis", href: "/dashboard/financial/cash-flow/receivables", icon: Wallet, show: isDefaultAdmin },
+              { label: "Coala Financeiro", href: "/dashboard/financial/cash-flow/agent", icon: Wallet, show: isDefaultAdmin },
+            ],
+          },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],
@@ -332,16 +360,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   }
 
   const activeHref = useMemo(() => {
-    const matches = flatItems
-      .filter((item) =>
-        item.href === "/dashboard"
-          ? pathname === "/dashboard"
-          : pathname === item.href || pathname.startsWith(`${item.href}/`)
-      )
-      .sort((a, b) => b.href.length - a.href.length);
-
-    return matches[0]?.href ?? null;
-  }, [flatItems, pathname]);
+    return navigationActiveHref(flatItems.map(item => item.href), pathname, searchParams.toString());
+  }, [flatItems, pathname, searchParams]);
 
   function isItemActive(item: NavItem) {
     return item.href === activeHref;

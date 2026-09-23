@@ -76,16 +76,21 @@ async function readBoundedXml(response: Response): Promise<string> {
  * never from request data. Do not expose the returned XML to the browser/logs. */
 export async function fetchStoneAgendaXml(
   input: AgendaRequest,
-  dependencies: { apiKey: string | undefined; fetcher?: typeof fetch; signal?: AbortSignal },
+  dependencies: { apiKey: string | undefined; fetcher?: typeof fetch; signal?: AbortSignal;
+    layout?: "XML2_2" | "XML2_4" },
 ): Promise<string> {
   const date = requestDate(input);
+  const layout = dependencies.layout ?? "XML2_2";
+  if (layout !== "XML2_2" && layout !== "XML2_4") {
+    throw new AppError({ code: "STONE_AGENDA_INVALID_INPUT", kind: "VALIDATION" });
+  }
   const apiKey = dependencies.apiKey;
   if (!apiKey || !apiKey.trim() || /[\r\n:]/.test(apiKey)) {
     throw failure("STONE_AGENDA_NOT_CONFIGURED");
   }
   try {
     const response = await (dependencies.fetcher ?? fetch)(
-      `${ENDPOINT}/${input.stoneCode}/conciliation-file/${date}?layout=XML2_2`,
+      `${ENDPOINT}/${input.stoneCode}/conciliation-file/${date}?layout=${layout}`,
       {
         method: "GET",
         cache: "no-store",
