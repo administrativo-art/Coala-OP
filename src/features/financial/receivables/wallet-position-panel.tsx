@@ -13,6 +13,25 @@ const natures: Record<Position["rows"][number]["nature"], string> = {
   stone_anticipation: "Antecipação Stone", unknown: "Natureza não reconhecida",
 };
 
+// Stone WalletTypeId: https://conciliacao.stone.com.br/reference/wallettypeid
+const walletTypes: Record<string, string> = {
+  "1": "Movimentos não transacionais",
+  "2": "Visa débito", "3": "Visa crédito", "4": "Visa antecipação",
+  "5": "Mastercard débito", "6": "Mastercard crédito", "7": "Mastercard antecipação",
+  "8": "Hiper débito", "9": "Hiper crédito", "10": "Hiper antecipação",
+  "11": "Elo débito", "12": "Elo crédito", "13": "Elo antecipação",
+  "14": "American Express débito", "15": "American Express crédito", "16": "American Express antecipação",
+  "17": "Boleto",
+  "20": "Cabal débito", "21": "Cabal crédito", "22": "Cabal antecipação",
+  "23": "UnionPay débito", "24": "UnionPay crédito", "25": "UnionPay antecipação",
+  "26": "Visa débito antecipação", "27": "Mastercard débito antecipação",
+  "28": "Elo débito antecipação", "29": "Cabal débito antecipação",
+  "30": "UnionPay débito antecipação",
+  "31": "Elo voucher crédito", "32": "Elo voucher antecipação",
+  "33": "Mastercard voucher crédito", "34": "Mastercard voucher antecipação",
+  "35": "Visa voucher crédito", "36": "Visa voucher antecipação",
+};
+
 export function WalletPositionPanel({ stoneCode }: { stoneCode: string }) {
   const api = useAuthenticatedApi();
   const [referenceDate, setReferenceDate] = useState("");
@@ -54,7 +73,7 @@ export function WalletPositionPanel({ stoneCode }: { stoneCode: string }) {
         <div className="overflow-x-auto"><table className="w-full text-sm"><caption className="sr-only">Valores da carteira por natureza e categoria</caption>
           <thead><tr>{["Tipo de carteira", "Natureza", "Categoria informada", "Valor informado (R$)"].map(label => <th key={label} className="p-2 text-left">{label}</th>)}</tr></thead>
           <tbody>{result.rows.map(row => <tr className="border-t" key={`${row.walletTypeId}:${row.walletNatureId}:${row.category}`}>
-            <td className="p-2">{row.walletTypeId}</td><td>{natures[row.nature]} ({row.walletNatureId})</td><td>{row.category}</td><td>{row.amount.replace(".", ",")}</td>
+            <td className="p-2">{walletTypes[row.walletTypeId] ?? "Arranjo não identificado"} ({row.walletTypeId})</td><td>{natures[row.nature]} ({row.walletNatureId})</td><td>{row.category}</td><td>{row.amount.replace(".", ",")}</td>
           </tr>)}</tbody></table></div>
         <p className="text-sm">{result.totalRowsInFile} posições no arquivo. Valores preservados com a precisão informada pela Stone.</p>
         {result.nextOffset !== null && <Button type="button" variant="outline" disabled={busy} onClick={() => void read(result.nextOffset!)}>Próxima página de posições</Button>}
