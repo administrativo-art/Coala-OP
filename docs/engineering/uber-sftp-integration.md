@@ -89,13 +89,13 @@ Não há migração obrigatória. Despesas antigas só serão revisitadas se for
 ## Limites, custo e proteção contra escala
 
 - Não há varredura integral de `expenses`, `transactions` ou `uberTrips`.
-- Cada arquivo tem limite de 25 MiB e 100 mil linhas; cada execução processa no máximo dez arquivos.
+- Cada arquivo tem limite de 25 MiB e 100 mil linhas; cada execução processa no máximo dez arquivos. A seleção examina todos os arquivos da janela de 35 dias e só aplica o limite depois de pular os já concluídos, para não deixar relatórios antigos sem reprocessamento.
 - Cada busca de viagem lê no máximo 11 documentos. Se houver várias opções, nenhuma é vinculada automaticamente.
 - A busca reversa por novas viagens usa lotes de até 30 chaves e no máximo 300 candidatas por tipo; atingir o teto aborta o lote em vez de inferir unicidade com dados incompletos.
 - Uma viagem guarda no máximo 50 linhas transacionais, evitando crescimento ilimitado do documento.
 - Escritas que não são Uber ainda invocam o gatilho, mas são filtradas em memória antes de qualquer consulta ao Firestore.
 
-Para `N` viagens importadas e `C` gravações candidatas Uber por mês, a base é aproximadamente `N` leituras transacionais + `N` escritas de viagem, somadas às consultas e gravações de reconciliação de `C`. Cada candidata consulta no máximo 11 viagens, mas normalmente retorna zero ou uma. O custo fixo inclui uma invocação por escrita em `expenses` e `transactions`, inclusive para registros não Uber, além do conector VPC, Cloud NAT, IP reservado, Scheduler e Secret Manager. Conferir as tabelas de preço do projeto antes da ativação em produção.
+Para `N` viagens importadas e `C` gravações candidatas Uber por mês, a base é aproximadamente `N` leituras transacionais + `N` escritas de viagem, somadas às consultas e gravações de reconciliação de `C`. Cada candidata consulta no máximo 11 viagens, mas normalmente retorna zero ou uma. Com um arquivo por dia e uma execução diária, a checagem de arquivos concluídos faz até cerca de 36 leituras por dia (1.080 por mês); execuções manuais e retries somam leituras proporcionais. O custo fixo inclui uma invocação por escrita em `expenses` e `transactions`, inclusive para registros não Uber, além do conector VPC, Cloud NAT, IP reservado, Scheduler e Secret Manager. Conferir as tabelas de preço do projeto antes da ativação em produção.
 
 ## Operação e rollback
 

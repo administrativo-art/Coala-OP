@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   decideUberTripMatch,
+  eligibleUberDailyFiles,
   normalizeSha256HostFingerprint,
   parseUberTripCsv,
   recognizeUberFinancialCandidate,
@@ -82,6 +83,27 @@ test('lê o relatório diário com preâmbulo e ponto e vírgula sem confundir a
   assert.equal(trips[0]?.tripId, 'trip-3');
   assert.equal(trips[0]?.requestDateLocal, '2026-09-12');
   assert.equal(trips[0]?.transactionAmountCents, 2150);
+});
+
+test('lê as colunas reais do relatório diário em português', () => {
+  const report = [
+    'Empresa:;"Empresa Exemplo"',
+    'Período:;13/09/2026',
+    '',
+    'ID da viagem/Uber Eats;Registro de data e hora da transação (UTC);Data da solicitação (local);Hora da solicitação (local);Nome;Sobrenome;E-mail;ID do funcionário;Serviço;Programa;Forma de pagamento;Tipo de transação;Valor da transação (moeda local);Código da moeda local;Recibo',
+    'trip-pt;2026-09-13 13:53:40;13/09/2026;10:53;Ana;Silva;ANA@EXAMPLE.COM;EMP-1;UberX;Empresa;Cartão;Tarifa;"21,50";BRL;https://example.com/recibo',
+  ].join('\r\n');
+
+  const trips = parseUberTripCsv(report);
+  assert.equal(trips.length, 1);
+  assert.equal(trips[0]?.tripId, 'trip-pt');
+  assert.equal(trips[0]?.requestDateLocal, '2026-09-13');
+  assert.equal(trips[0]?.requesterName, 'Ana Silva');
+  assert.equal(trips[0]?.requesterEmail, 'ana@example.com');
+  assert.equal(trips[0]?.employeeId, 'EMP-1');
+  assert.equal(trips[0]?.transactionAmountCents, 2150);
+  assert.equal(trips[0]?.currencyCode, 'BRL');
+  assert.equal(trips[0]?.receiptUrl, 'https://example.com/recibo');
 });
 
 test('não marca relatório com cabeçalho desconhecido como importação vazia', () => {
@@ -217,4 +239,19 @@ test('aceita os dois formatos diários de nome e rejeita datas inválidas', () =
   assert.equal(uberDailyFileDate('daily_trips_2026_09_09.csv'), '2026-09-09');
   assert.equal(uberDailyFileDate('daily_trips-2026-02-30.csv'), null);
   assert.equal(uberDailyFileDate('monthly_trips-2026-09.csv'), null);
+});
+
+test('mantém arquivos antigos elegíveis mesmo quando existem mais de dez relatórios recentes', () => {
+  const files = Array.from({ length: 14 }, (_, index) => ({
+    name: `daily_trips-2026_09_${String(index + 9).padStart(2, '0')}.csv`,
+    type: '-',
+    size: 100,
+    modifyTime: index,
+  }));
+  files.push({ name: 'monthly_statement-2026_09.csv', type: '-', size: 100, modifyTime: 15 });
+
+  const eligible = eligibleUberDailyFiles(files, '2026-09-09', 1_000);
+  assert.equal(eligible.length, 14);
+  assert.equal(eligible[0]?.name, 'daily_trips-2026_09_22.csv');
+  assert.equal(eligible.at(-1)?.name, 'daily_trips-2026_09_09.csv');
 });

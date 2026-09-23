@@ -85,28 +85,28 @@ export type UberMatchDecision =
   | { status: 'matched'; trip: UberTripMatchCandidate };
 
 const HEADER_ALIASES = {
-  tripId: ['Trip/Eats ID', 'Trip ID', 'ID da viagem/refeição', 'ID da viagem', 'ID da corrida'],
-  transactionTimestampUtc: ['Transaction Timestamp (UTC)'],
+  tripId: ['Trip/Eats ID', 'Trip ID', 'ID da viagem/Uber Eats', 'ID da viagem/refeição', 'ID da viagem', 'ID da corrida'],
+  transactionTimestampUtc: ['Transaction Timestamp (UTC)', 'Registro de data e hora da transação (UTC)'],
   requestDateLocal: ['Request Date (Local)', 'Request Date', 'Data da solicitação (local)', 'Data da solicitação'],
-  requestTimeLocal: ['Request Time (Local)', 'Request Time'],
-  requesterFirstName: ['First Name'],
-  requesterLastName: ['Last Name'],
-  requesterEmail: ['Email'],
-  employeeId: ['Employee ID'],
+  requestTimeLocal: ['Request Time (Local)', 'Request Time', 'Hora da solicitação (local)'],
+  requesterFirstName: ['First Name', 'Nome'],
+  requesterLastName: ['Last Name', 'Sobrenome'],
+  requesterEmail: ['Email', 'E-mail'],
+  employeeId: ['Employee ID', 'ID do funcionário'],
   guestFirstName: ['Guest First Name'],
   guestLastName: ['Guest Last Name'],
   service: ['Service', 'Serviço'],
-  program: ['Program'],
-  paymentMethod: ['Payment Method'],
-  transactionType: ['Transaction Type'],
+  program: ['Program', 'Programa'],
+  paymentMethod: ['Payment Method', 'Forma de pagamento'],
+  transactionType: ['Transaction Type', 'Tipo de transação'],
   transactionAmountLocal: [
     'Transaction Amount (Local Currency)',
     'Transaction Amount in Local Currency (incl. Taxes)',
     'Valor da transação (moeda local)',
     'Valor da transação em moeda local (incluindo impostos)',
   ],
-  currencyCode: ['Local Currency Code', 'Currency Code'],
-  receipts: ['Receipts', 'Receipt', 'Receipt PDF', 'Invoices'],
+  currencyCode: ['Local Currency Code', 'Currency Code', 'Código da moeda local'],
+  receipts: ['Receipts', 'Receipt', 'Receipt PDF', 'Invoices', 'Recibo'],
   shortReference: ['Short Reference'],
   networkTransactionId: ['Network Transaction ID', 'Network Transaction Id'],
 } as const;
@@ -377,6 +377,19 @@ export function uberDailyFileDate(fileName: string) {
   const match = /^daily_trips[-_](\d{4})[-_](\d{2})[-_](\d{2})\.csv$/i.exec(fileName.trim());
   if (!match) return null;
   return validDate(`${match[1]}-${match[2]}-${match[3]}`);
+}
+
+export function eligibleUberDailyFiles(
+  files: ReadonlyArray<{ name: string; type: string; size: number; modifyTime: number }>,
+  earliestDate: string,
+  maxFileSizeBytes: number,
+) {
+  return files.flatMap((file) => {
+    if (file.type !== '-' || file.size <= 0 || file.size > maxFileSizeBytes) return [];
+    const fileDate = uberDailyFileDate(file.name);
+    if (!fileDate || fileDate < earliestDate) return [];
+    return [{ name: file.name, fileDate, size: file.size, modifyTime: file.modifyTime }];
+  }).sort((left, right) => right.fileDate.localeCompare(left.fileDate));
 }
 
 export function normalizeSha256HostFingerprint(value: string) {
