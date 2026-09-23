@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import {
+  UBER_TRIP_PARSER_VERSION,
   decideUberTripMatch,
   recognizeUberFinancialCandidate,
   uberMatchKeys,
@@ -122,7 +123,8 @@ export async function claimUberImport(source: Omit<UberImportSource, 'checksumSh
     const current = snapshot.data() ?? {};
     const sameRemoteVersion = current.remoteSize === source.remoteSize
       && current.remoteModifiedAt === source.remoteModifiedAt;
-    if (current.status === 'completed' && sameRemoteVersion) return false;
+    if (current.status === 'completed' && sameRemoteVersion
+      && current.parserVersion === UBER_TRIP_PARSER_VERSION) return false;
     const startedAt = current.startedAt && typeof current.startedAt.toMillis === 'function'
       ? current.startedAt.toMillis()
       : 0;
@@ -147,6 +149,7 @@ export async function completeUberImport(source: UberImportSource, result: { row
   await financialDb.collection('uberSftpImports').doc(source.id).set({
     ...source,
     ...result,
+    parserVersion: UBER_TRIP_PARSER_VERSION,
     status: 'completed',
     completedAt: now,
     updatedAt: now,

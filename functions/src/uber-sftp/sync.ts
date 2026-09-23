@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as logger from 'firebase-functions/logger';
 import SftpClient from 'ssh2-sftp-client';
 import { normalizeSha256HostFingerprint, parseUberTripCsv, uberDailyFileDate } from './domain.js';
+import { safeUberErrorCode } from './errors.js';
 import {
   claimUberImport,
   completeUberImport,
@@ -55,18 +56,13 @@ function earliestEligibleDate(now = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-function sanitizedError(error: unknown) {
-  const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-  return message.replace(/[\r\n\t]+/g, ' ').slice(0, 180);
-}
-
 function reportUnexpectedError(operation: string, error: unknown, metadata: Record<string, unknown> = {}) {
   const eventId = randomUUID();
   logger.error('Uber SFTP operation failed.', {
     source: 'uber-sftp',
     operation,
     eventId,
-    error: sanitizedError(error),
+    errorCode: safeUberErrorCode(error),
     ...metadata,
   });
   return eventId;

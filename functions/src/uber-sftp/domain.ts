@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { parse } from 'csv-parse/sync';
 
 export const UBER_MATCH_DATE_TOLERANCE_DAYS = 3;
+export const UBER_TRIP_PARSER_VERSION = 2;
 
 export type UberCsvTransaction = {
   fingerprint: string;
@@ -84,9 +85,9 @@ export type UberMatchDecision =
   | { status: 'matched'; trip: UberTripMatchCandidate };
 
 const HEADER_ALIASES = {
-  tripId: ['Trip/Eats ID', 'Trip ID'],
+  tripId: ['Trip/Eats ID', 'Trip ID', 'ID da viagem/refeição', 'ID da viagem', 'ID da corrida'],
   transactionTimestampUtc: ['Transaction Timestamp (UTC)'],
-  requestDateLocal: ['Request Date (Local)', 'Request Date'],
+  requestDateLocal: ['Request Date (Local)', 'Request Date', 'Data da solicitação (local)', 'Data da solicitação'],
   requestTimeLocal: ['Request Time (Local)', 'Request Time'],
   requesterFirstName: ['First Name'],
   requesterLastName: ['Last Name'],
@@ -94,13 +95,15 @@ const HEADER_ALIASES = {
   employeeId: ['Employee ID'],
   guestFirstName: ['Guest First Name'],
   guestLastName: ['Guest Last Name'],
-  service: ['Service'],
+  service: ['Service', 'Serviço'],
   program: ['Program'],
   paymentMethod: ['Payment Method'],
   transactionType: ['Transaction Type'],
   transactionAmountLocal: [
     'Transaction Amount (Local Currency)',
     'Transaction Amount in Local Currency (incl. Taxes)',
+    'Valor da transação (moeda local)',
+    'Valor da transação em moeda local (incluindo impostos)',
   ],
   currencyCode: ['Local Currency Code', 'Currency Code'],
   receipts: ['Receipts', 'Receipt', 'Receipt PDF', 'Invoices'],
@@ -158,12 +161,18 @@ function parseMoneyCents(value: unknown) {
   return Math.round((negative ? -Math.abs(parsed) : parsed) * 100);
 }
 
-function parseDate(value: unknown) {
+type SlashDateOrder = 'day-first' | 'month-first';
+
+function parseDate(value: unknown, order: SlashDateOrder = 'day-first') {
   const raw = text(value);
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
   if (iso) return validDate(`${iso[1]}-${iso[2]}-${iso[3]}`);
-  const br = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(raw);
-  if (br) return validDate(`${br[3]}-${br[2]}-${br[1]}`);
+  const slash = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(raw);
+  if (slash) {
+    const day = order === 'day-first' ? slash[1] : slash[2];
+    const month = order === 'day-first' ? slash[2] : slash[1];
+    return validDate(`${slash[3]}-${month}-${day}`);
+  }
   return null;
 }
 
@@ -212,28 +221,93 @@ function requesterName(firstName: string | null, lastName: string | null) {
   return nullable([firstName, lastName].filter(Boolean).join(' '));
 }
 
+function hasHeaderAlias(columns: Set<string>, aliases: readonly string[]) {
+  return aliases.some((alias) => columns.has(normalizedHeader(alias)));
+}
+
+function parseUberCsvRecords(input: Buffer | string): Array<Record<string, unknown>> {
+  const source = Buffer.isBuffer(input) ? input.toString('utf8') : input;
+  let offset = 0;
+  for (let lineNumber = 0; lineNumber < 50 && offset < source.length; lineNumber += 1) {
+    const nextNewline = source.indexOf('\n', offset);
+    const end = nextNewline < 0 ? source.length : nextNewline;
+    const line = source.slice(offset, end).replace(/\r$/, '');
+    for (const delimiter of [',', ';']) {
+      try {
+        const parsed = parse(line, { bom: true, delimiter, trim: true, skip_empty_lines: true }) as string[][];
+        const columns = new Set((parsed[0] ?? []).map(normalizedHeader));
+        if (!hasHeaderAlias(columns, HEADER_ALIASES.tripId)
+          || !hasHeaderAlias(columns, HEADER_ALIASES.requestDateLocal)
+          || !hasHeaderAlias(columns, HEADER_ALIASES.service)
+          || !hasHeaderAlias(columns, HEADER_ALIASES.transactionAmountLocal)) continue;
+        try {
+          return parse(source.slice(offset), {
+            bom: true,
+            columns: true,
+            delimiter,
+            skip_empty_lines: true,
+            relax_column_count: true,
+            trim: true,
+          }) as Array<Record<string, unknown>>;
+        } catch {
+          throw new Error('UBER_CSV_PARSE_FAILED');
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message === 'UBER_CSV_PARSE_FAILED') throw error;
+      }
+    }
+    offset = nextNewline < 0 ? source.length : nextNewline + 1;
+  }
+  throw new Error('UBER_CSV_HEADER_UNRECOGNIZED');
+}
+
+function inferSlashDateOrder(records: Array<Record<string, unknown>>): SlashDateOrder {
+  let dayFirstEvidence = 0;
+  let monthFirstEvidence = 0;
+  for (const record of records) {
+    const lookup = rowLookup(record);
+    const match = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(field(lookup, HEADER_ALIASES.requestDateLocal));
+    if (!match) continue;
+    const dayFirst = validDate(`${match[3]}-${match[2]}-${match[1]}`);
+    const monthFirst = validDate(`${match[3]}-${match[1]}-${match[2]}`);
+    if (dayFirst && !monthFirst) { dayFirstEvidence += 1; continue; }
+    if (monthFirst && !dayFirst) { monthFirstEvidence += 1; continue; }
+    if (!dayFirst || !monthFirst || dayFirst === monthFirst) continue;
+    const timestampDate = parseDate(field(lookup, HEADER_ALIASES.transactionTimestampUtc), 'day-first');
+    if (!timestampDate) continue;
+    const gap = (date: string) => Math.abs(Date.parse(`${date}T12:00:00Z`) - Date.parse(`${timestampDate}T12:00:00Z`)) / 86_400_000;
+    if (gap(dayFirst) <= 1 && gap(monthFirst) > 3) dayFirstEvidence += 1;
+    if (gap(monthFirst) <= 1 && gap(dayFirst) > 3) monthFirstEvidence += 1;
+  }
+  if (dayFirstEvidence && monthFirstEvidence) throw new Error('UBER_CSV_DATE_ORDER_INCONSISTENT');
+  // Preserve the previous day-first behavior when the file has no contrary evidence.
+  return monthFirstEvidence ? 'month-first' : 'day-first';
+}
+
 export function parseUberTripCsv(input: Buffer | string): UberTripAggregate[] {
-  const records = parse(input, {
-    bom: true,
-    columns: true,
-    skip_empty_lines: true,
-    relax_column_count: true,
-    trim: true,
-  }) as Array<Record<string, unknown>>;
+  const records = parseUberCsvRecords(input);
   if (records.length > 100_000) throw new Error('UBER_CSV_ROW_LIMIT_EXCEEDED');
+  const dateOrder = inferSlashDateOrder(records);
 
   const parsedRows: UberCsvTransaction[] = [];
+  let rideRows = 0;
+  let invalidRideRows = 0;
   for (const record of records) {
     const lookup = rowLookup(record);
     const tripId = field(lookup, HEADER_ALIASES.tripId);
     const service = field(lookup, HEADER_ALIASES.service);
-    if (!tripId || !isRideRow(service)) continue;
+    if (!isRideRow(service)) continue;
+    if (!tripId) {
+      if (service) invalidRideRows += 1;
+      continue;
+    }
+    rideRows += 1;
     const amountCents = parseMoneyCents(field(lookup, HEADER_ALIASES.transactionAmountLocal));
-    if (amountCents == null) continue;
+    if (amountCents == null) { invalidRideRows += 1; continue; }
     const transactionTimestampUtc = nullable(field(lookup, HEADER_ALIASES.transactionTimestampUtc));
-    const requestDateLocal = parseDate(field(lookup, HEADER_ALIASES.requestDateLocal))
-      ?? parseDate(transactionTimestampUtc);
-    if (!requestDateLocal) continue;
+    const requestDateLocal = parseDate(field(lookup, HEADER_ALIASES.requestDateLocal), dateOrder)
+      ?? parseDate(transactionTimestampUtc, dateOrder);
+    if (!requestDateLocal) { invalidRideRows += 1; continue; }
     const currencyCode = field(lookup, HEADER_ALIASES.currencyCode).toUpperCase() || 'BRL';
     const row: Omit<UberCsvTransaction, 'fingerprint'> = {
       tripId,
@@ -258,6 +332,8 @@ export function parseUberTripCsv(input: Buffer | string): UberTripAggregate[] {
     };
     parsedRows.push({ ...row, fingerprint: rowFingerprint(row) });
   }
+  if (rideRows > 0 && parsedRows.length === 0) throw new Error('UBER_CSV_NO_VALID_TRIPS');
+  if (invalidRideRows > 0) throw new Error('UBER_CSV_INVALID_RIDE_ROW');
 
   const grouped = new Map<string, UberCsvTransaction[]>();
   for (const row of parsedRows) {
