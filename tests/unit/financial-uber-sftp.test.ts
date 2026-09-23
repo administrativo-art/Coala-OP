@@ -9,6 +9,7 @@ import {
   uberMatchKey,
   type UberTripMatchCandidate,
 } from '../../functions/src/uber-sftp/domain';
+import { safeUberErrorCode } from '../../functions/src/uber-sftp/errors';
 
 const HEADER = [
   'Trip/Eats ID',
@@ -65,6 +66,77 @@ test('aceita o cabeçalho legado de valor e números no formato brasileiro', () 
   assert.equal(trips.length, 1);
   assert.equal(trips[0]?.transactionAmountCents, 123456);
   assert.equal(trips[0]?.requestDateLocal, '2026-09-10');
+});
+
+test('lê o relatório diário com preâmbulo e ponto e vírgula sem confundir a data local', () => {
+  const report = [
+    'Empresa:;"Empresa Exemplo"',
+    'Período:;2026-09-12',
+    '',
+    'Trip/Eats ID;Transaction Timestamp (UTC);Request Date (Local);First Name;Last Name;Service;Transaction Amount (Local Currency);Local Currency Code',
+    'trip-3;2026-09-12 13:53:40;09/12/2026;Bia;Costa;UberX;"21,50";BRL',
+  ].join('\r\n');
+
+  const trips = parseUberTripCsv(report);
+  assert.equal(trips.length, 1);
+  assert.equal(trips[0]?.tripId, 'trip-3');
+  assert.equal(trips[0]?.requestDateLocal, '2026-09-12');
+  assert.equal(trips[0]?.transactionAmountCents, 2150);
+});
+
+test('não marca relatório com cabeçalho desconhecido como importação vazia', () => {
+  const report = [
+    'Empresa:;"Empresa Exemplo"',
+    'Código;Data;Serviço;Valor',
+    'trip-4;12/09/2026;UberX;21,50',
+  ].join('\n');
+  assert.throws(() => parseUberTripCsv(report), /UBER_CSV_HEADER_UNRECOGNIZED/);
+});
+
+test('usa a mesma ordem de dia e mês em todas as linhas do relatório', () => {
+  const report = [
+    'Trip ID;Transaction Timestamp (UTC);Request Date (Local);Service;Transaction Amount (Local Currency)',
+    'trip-5;2026-09-23 13:00:00;09/23/2026;UberX;20,00',
+    'trip-6;2026-10-02 13:00:00;10/02/2026;UberX;25,00',
+  ].join('\n');
+  const trips = parseUberTripCsv(report);
+  assert.deepEqual(trips.map((trip) => trip.requestDateLocal), ['2026-09-23', '2026-10-02']);
+});
+
+test('falha quando linhas de corrida existem mas seus valores não podem ser lidos', () => {
+  const report = [
+    'Trip ID;Request Date (Local);Service;Transaction Amount (Local Currency)',
+    'trip-7;23/09/2026;UberX;valor inválido',
+  ].join('\n');
+  assert.throws(() => parseUberTripCsv(report), /UBER_CSV_NO_VALID_TRIPS/);
+});
+
+test('não importa parcialmente um arquivo com corrida inválida', () => {
+  const report = [
+    'Trip ID;Request Date (Local);Service;Transaction Amount (Local Currency)',
+    'trip-8;23/09/2026;UberX;20,00',
+    'trip-9;23/09/2026;UberX;valor inválido',
+  ].join('\n');
+  assert.throws(() => parseUberTripCsv(report), /UBER_CSV_INVALID_RIDE_ROW/);
+});
+
+test('não descarta uma corrida sem identificador', () => {
+  const report = [
+    'Trip ID;Request Date (Local);Service;Transaction Amount (Local Currency)',
+    ';23/09/2026;UberX;20,00',
+  ].join('\n');
+  assert.throws(() => parseUberTripCsv(report), /UBER_CSV_INVALID_RIDE_ROW/);
+});
+
+test('aceita um relatório de corridas sem linhas de dados', () => {
+  const header = 'Trip ID,Request Date (Local),Service,Transaction Amount (Local Currency)';
+  assert.deepEqual(parseUberTripCsv(header), []);
+});
+
+test('não registra conteúdo do arquivo em erros da integração', () => {
+  assert.equal(safeUberErrorCode(new Error('UBER_CSV_HEADER_UNRECOGNIZED')), 'UBER_CSV_HEADER_UNRECOGNIZED');
+  assert.equal(safeUberErrorCode(new Error('Invalid Opening Quote: linha com nome e e-mail')), 'UBER_UNEXPECTED_ERROR');
+  assert.equal(safeUberErrorCode(new Error('UBER_CSV_PARSE_FAILED\nlinha com dados')), 'UBER_UNEXPECTED_ERROR');
 });
 
 test('reconhece apenas saídas da Uber e cria uma janela de datas para conciliação', () => {

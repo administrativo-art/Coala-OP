@@ -19,6 +19,14 @@ O processamento roda nas Cloud Functions do Coala One. O computador usado para g
 
 O SFTP é uma entrega diária de arquivos, não uma API em tempo real. Por isso, uma despesa pode aparecer primeiro como “Uber identificada; aguardando o relatório diário” e ser completada depois.
 
+O importador localiza o cabeçalho após eventuais linhas de metadados e aceita
+CSV com vírgula ou ponto e vírgula. Se faltar uma coluna essencial ou houver
+linhas de corrida sem valor/data legíveis, o arquivo falha com um código estável,
+sem gravar uma importação vazia como concluída. Erros não registram o conteúdo
+do CSV nos logs. A versão do parser é gravada em `uberSftpImports`: arquivos
+concluídos por uma versão anterior são processados novamente uma vez, com
+deduplicação das transações por impressão digital.
+
 ## Dados gravados na despesa ou movimentação
 
 Quando há correspondência, o registro recebe os campos `uberTripId`, `uberRequesterName`, `uberRequesterEmail`, `uberEmployeeId`, `uberService`, `uberRequestDateLocal`, `uberTripAmount`, `uberTripCurrency`, `uberReceiptUrl`, `uberMatchedAt` e `uberMatchConfidence`.
@@ -68,6 +76,13 @@ Use uma chave de serviço exclusiva, sem senha, mantida apenas no Secret Manager
 5. Confirmar nos logs que os gatilhos de despesas não geram erros.
 6. Alterar `UBER_SFTP_ENABLED=true` e reimplantar `uberSftpDailySync`.
 7. Após a primeira execução, conferir `uberSftpImports`, a quantidade de viagens e uma amostra de correspondências.
+
+Na correção do parser de setembro de 2026, a verificação anterior à implantação
+encontrou `uberTrips` vazio: dois arquivos foram marcados como concluídos com
+zero viagens e dois falharam na leitura do CSV. Após publicar a correção, conferir
+que os arquivos antigos foram reprocessados, que `uberTrips` recebeu corridas e
+que novas falhas mostram apenas códigos de erro. Não considerar o deploy validado
+somente porque a função está `ACTIVE` ou o agendamento executou.
 
 Não há migração obrigatória. Despesas antigas só serão revisitadas se forem regravadas ou se suas chaves de correspondência já tiverem sido geradas pelos gatilhos após o deploy.
 

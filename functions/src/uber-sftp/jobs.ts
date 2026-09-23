@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { defineBoolean, defineSecret, defineString } from 'firebase-functions/params';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { safeUberErrorCode } from './errors.js';
 import { removeDeletedUberFinancialCandidate, synchronizeUberFinancialCandidate } from './repository.js';
 import { syncUberTripsFromSftp } from './sync.js';
 
@@ -19,16 +20,13 @@ function reportCandidateError(
   error: unknown,
 ) {
   const eventId = randomUUID();
-  const errorCode = error instanceof Error
-    ? error.message.replace(/[\r\n\t]+/g, ' ').slice(0, 160)
-    : 'UNKNOWN_ERROR';
   logger.error('Uber reconciliation candidate failed.', {
     source: 'uber-reconciliation',
     operation,
     entityKind,
     entityId,
     eventId,
-    errorCode,
+    errorCode: safeUberErrorCode(error),
   });
   return eventId;
 }
