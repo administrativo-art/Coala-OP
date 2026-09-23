@@ -145,17 +145,42 @@ Tirirical. Ela não prova ausência de garantia/cessão em outras datas ou de ou
 recebíveis por vencimento. A [descrição oficial do layout](https://conciliacao.stone.com.br/reference/layout-2-4)
 chama essa seção de posição de saldo no dia; não fornece ali um calendário integral
 de parcelas futuras. Também não informa saldo disponível da conta Stone.
-A comparação com os relatórios da Stone e a fonte de agenda integral continuam
-pendentes. O acesso à Banking API permanece não provisionado.
+A comparação com o relatório da Stone foi feita em seguida; o acesso à Banking
+API permanece não provisionado.
 
-### Perguntas objetivas à Stone antes de concluir carteira e saldo
+## Relatório de recebimentos do portal — conferência independente
+
+Em 23/09/2026, foi exportada a “Lista de recebimentos” do Tirirical em CSV,
+filtrada para 01/09/2026 a 23/03/2028. O arquivo contém 800 registros,
+dos quais 112 estão abertos. As 47 parcelas do recorte XML2_2 de 20 a 22/09
+foram localizadas pelo identificador Stone e número da parcela, com data da venda,
+vencimento, bruto e líquido correspondentes em centavos. Entre as 112 abertas,
+101 vêm de vendas anteriores à vigência do vínculo em 20/09, oito pertencem ao
+recorte e três são de vendas de 23/09. Onze previsões do recorte foram pagas em
+23/09, depois do último arquivo diário consultado. Outras 28 linhas marcadas
+“pendente de conferência” pelo Coala constam como pagas no relatório e exigem
+análise da regra de conciliação. Os valores financeiros e o CSV não entram no
+repositório.
+
+A prévia administrativa “Recebíveis abertos · relatório Stone” lê o CSV
+**somente no navegador**, valida documento único, StoneCode, cabeçalho, status,
+datas, valores e duplicidades, e exibe a soma exata em micros, vencimentos e
+parcelas abertas. Não envia o arquivo ao servidor nem grava no caixa. O CSV não
+contém o filtro de período usado na exportação; a prévia depende da seleção
+correta no portal. Ela mostra as vendas abertas presentes no relatório Stone,
+sem afirmar cobertura de outros adquirentes ou de todos os efeitos da
+registradora. Uma atualização exige novo relatório.
+
+### Quando ainda consultar a Stone
 
 A leitura XML2_4 já funciona com a chave de conciliação atual; não é preciso
-solicitar sua habilitação novamente. A documentação de
+solicitar sua habilitação novamente. O relatório exportável permite apurar a
+agenda aberta desta conta sem contato com o suporte. A documentação de
 [Registradora](https://conciliacao.stone.com.br/docs/registradora) descreve arquivos
 complementares para o impacto das negociações na previsão futura e para cessões
 RAV. Ela não especifica, nessa página, uma fonte comprovada de carteira integral
-aberta por vencimento para esta conta. Confirmar com a Stone:
+aberta por vencimento via API para esta conta. Contatar a Stone se a automação ou
+uma divergência exigir confirmação de contrato ou habilitação:
 
 1. Qual endpoint ou arquivo fornece, na data da consulta, **todos os recebíveis
    ainda em aberto por vencimento**, incluindo operações na registradora, garantias,
@@ -168,5 +193,6 @@ aberta por vencimento para esta conta. Confirmar com a Stone:
    ClientID, token e escopos de apenas leitura para saldo e extrato? Não solicitar
    permissão de pagamento ou transferência para esta finalidade.
 
-Somente depois de receber e validar esses contratos será possível substituir o
-estado de cobertura parcial por carteira e saldo confirmados no sistema.
+A prévia do CSV resolve a consulta manual da agenda Stone exportada. Uma carteira
+atualizada automaticamente e o saldo bancário confirmado requerem fontes e
+integrações adicionais, sem inferir completude a partir do arquivo diário.

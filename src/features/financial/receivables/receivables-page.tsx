@@ -13,6 +13,7 @@ import type { CatalogPage, MappingView } from "@/features/financial/agent/config
 import type { PeriodRow, ReceivablePeriodResult } from "@/features/financial/receivables/period-review";
 import { FinancialAnalysisNavigation } from "../agent/analysis-navigation";
 import { WalletPositionPanel } from "./wallet-position-panel";
+import { StoneReportPanel } from "./stone-report-panel";
 import { ReceivableAnalysisPanel } from "./analysis-panel";
 import { receivableRowMatches, type ReceivableEvidenceFilter } from "./analysis";
 
@@ -57,7 +58,7 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
       <p className="text-muted-foreground">Previsões das vendas capturadas no intervalo, confrontadas com pagamentos informados até o último dia consultado.</p></header>
     {agentEntry && <FinancialAnalysisNavigation topic="receivables" />}
     <div role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-      Esta consulta não é a carteira completa nem saldo disponível. Não inclui vendas anteriores ao período, posição da registradora ou confirmação bancária. Nenhum valor será lançado no caixa.
+      A conferência automática por período não é a carteira completa nem saldo disponível. Ela não inclui vendas anteriores ao período, posição da registradora ou confirmação bancária. Nenhum valor será lançado no caixa.
     </div>
     <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy} onClick={() => load()}>{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</Button>
       {cursor && <Button variant="outline" disabled={busy} onClick={() => load(cursor)}>Mais vínculos</Button>}
@@ -82,6 +83,7 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
       <Button type="submit" disabled={busy || !mapping || !code || !from || !through}>{busy ? "Consultando eventos…" : "Conferir previsões"}</Button>
     </form>
     <WalletPositionPanel key={`${selected}:${code}`} stoneCode={code} />
+    <StoneReportPanel key={`report:${selected}:${code}`} stoneCode={code} />
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {result && mapping && <ReceivableAnalysisPanel result={result} unitName={mapping.kioskName} accountName={mapping.accountName}
       onInspect={value => { setFilter(value); setPage(0); evidence.current?.focus(); evidence.current?.scrollIntoView({ block: "start" }); }} />}
