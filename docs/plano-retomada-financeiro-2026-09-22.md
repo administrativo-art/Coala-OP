@@ -202,3 +202,20 @@ apenas pela origem da chave. Nenhuma publicação ou reprocessamento histórico.
 Validação: `npm run check` aprovado (1.383 testes unitários, incluindo dez do parser
 Pix), além da leitura do exemplo público da Stone. Sem novo build: incremento
 isolado de normalização, sem mudanças de importação de produção, fronteiras ou rotas.
+
+### Incremento de eventos — Pix Stone
+
+Branch `feat/stone-pix-events`, base `5e198f71`. O parser passa a conservar evidência
+versionada de centavos exatos, evento, E2E, refund e datas UTC com microssegundos.
+Cancelamentos, valores inválidos, identidades ausentes e eventos relacionados ou
+duplicados ficam fora dos candidatos. Os campos/resumo legados não são usados como
+prova de venda única. Detalhes em [stone-pix-events.md](engineering/stone-pix-events.md).
+
+Ainda não conclui a etapa 2: Pix não foi conectado à tela, nenhuma conta real foi
+consultada e não houve publicação. Próximo passo: leitura limitada/consistente,
+validação de escopo e vínculo oficial, conexão ao motor e testes integrados.
+
+Validação concluída: `npm run check` aprovado, 1.395 testes unitários (12 novos),
+checagem final de tipos repetida após o ajuste de UTC e exemplo público verificado.
+Sem novo build: regra isolada no parser, sem alterações de importações de produção,
+fronteiras server/client ou rotas. Permissões existentes não foram alteradas.
