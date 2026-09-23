@@ -129,3 +129,44 @@ A inspeção apenas dos nomes dos segredos Stone no projeto encontrou
 STONE_CONCILIATION_API_KEY e STONE_CONCILIATION_WEBHOOK_SECRET. Nenhum valor foi lido.
 Não existe evidência de Banking API provisionada nesta implantação. Não reutilizar
 a chave de conciliação como credencial bancária nem inventar account_id.
+
+## Primeira leitura real do Tirirical — 23/09/2026
+
+A consulta autenticada no serviço implantado retornou o arquivo do StoneCode
+vinculado ao Tirirical para 22/09/2026, layout 2.4, `FileId=0`, com status
+`reported` e quatro linhas de `WalletPosition`. Todas têm natureza 1 (normal) e
+categoria `Sale`, nos arranjos 2 (Visa débito), 5 (Mastercard débito),
+6 (Mastercard crédito) e 11 (Elo débito). A interface passa a exibir os nomes dos
+arranjos conforme a [tabela oficial de WalletTypeId](https://conciliacao.stone.com.br/reference/wallettypeid).
+Os valores não foram copiados para o repositório. Nenhum lançamento foi criado.
+
+A leitura prova que a chave de conciliação atual acessa `WalletPosition` 2.4 do
+Tirirical. Ela não prova ausência de garantia/cessão em outras datas ou de outros
+recebíveis por vencimento. A [descrição oficial do layout](https://conciliacao.stone.com.br/reference/layout-2-4)
+chama essa seção de posição de saldo no dia; não fornece ali um calendário integral
+de parcelas futuras. Também não informa saldo disponível da conta Stone.
+A comparação com os relatórios da Stone e a fonte de agenda integral continuam
+pendentes. O acesso à Banking API permanece não provisionado.
+
+### Perguntas objetivas à Stone antes de concluir carteira e saldo
+
+A leitura XML2_4 já funciona com a chave de conciliação atual; não é preciso
+solicitar sua habilitação novamente. A documentação de
+[Registradora](https://conciliacao.stone.com.br/docs/registradora) descreve arquivos
+complementares para o impacto das negociações na previsão futura e para cessões
+RAV. Ela não especifica, nessa página, uma fonte comprovada de carteira integral
+aberta por vencimento para esta conta. Confirmar com a Stone:
+
+1. Qual endpoint ou arquivo fornece, na data da consulta, **todos os recebíveis
+   ainda em aberto por vencimento**, incluindo operações na registradora, garantias,
+   cessões, antecipações e recebíveis fora da adquirência Stone? Como reconciliá-lo
+   com `WalletPosition` e identificar versões posteriores do mesmo recebível?
+2. O acesso da conta Tirirical aos arquivos complementares Registradora e RAV
+   está habilitado? Qual o contrato técnico atual para consulta e seus identificadores?
+3. Para o **saldo bancário da Conta Stone**, qual produto de API de leitura é
+   aplicável à conta, qual o `account_id` e o procedimento de habilitação em produção,
+   ClientID, token e escopos de apenas leitura para saldo e extrato? Não solicitar
+   permissão de pagamento ou transferência para esta finalidade.
+
+Somente depois de receber e validar esses contratos será possível substituir o
+estado de cobertura parcial por carteira e saldo confirmados no sistema.
