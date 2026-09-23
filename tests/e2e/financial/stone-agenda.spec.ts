@@ -4,7 +4,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { E2E_USER } from "../support/global-setup";
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
 
-for (const endpoint of ["stone-agenda", "stone-anticipations", "agent", "stone-future-receivables"]) {
+for (const endpoint of ["stone-agenda", "stone-anticipations", "agent", "stone-future-receivables", "stone-wallet-position"]) {
 test(`${endpoint} denies anonymous and restricted users before contacting Stone`, async ({ request }) => {
   assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
   const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
@@ -42,6 +42,14 @@ test(`${endpoint} denies anonymous and restricted users before contacting Stone`
   // An impossible date must fail validation, without a real provider key/call.
   const invalid = await invoke(admin.idToken, "2026-02-30");
   expect(invalid.status()).toBe(400);
+  if (endpoint === "stone-wallet-position") {
+    for (const suffix of ["&layout=XML2_2", "&stoneCode=999", "&limit=201"]) {
+      expect((await request.get(path + suffix, { headers: { Authorization: `Bearer ${admin.idToken}` } })).status()).toBe(400);
+    }
+    const future = await invoke(admin.idToken, "2099-01-01");
+    expect(future.status()).toBe(400);
+    expect(JSON.stringify(await future.json())).not.toMatch(/stack|apiKey|Authorization|private_key/);
+  }
   if (endpoint === "agent" || endpoint === "stone-future-receivables") {
     // The safe lack of mapping must be actionable, not an invented zero or provider call.
     const unmapped = await invoke(admin.idToken);

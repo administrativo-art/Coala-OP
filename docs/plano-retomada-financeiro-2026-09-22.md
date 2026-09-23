@@ -265,3 +265,24 @@ Próximo passo de entrega: publicação autorizada do código e dos índices, se
 de homologação por unidade com as fontes disponíveis. Scheduler permanece
 desativado; nenhuma publicação, pagamento ou lançamento financeiro realizado nesta
 retomada. Permissões administrativas reutilizadas, sem migração de perfis.
+
+### Investigação da carteira — layout 2.4
+
+O usuário pediu continuar a validação do 2.4 antes de solicitar ajuda à Stone.
+Branch `feat/stone-wallet-position`, base `a8367419`. O endpoint público documenta
+XML2_4, WalletPosition e naturezas de garantia/cessão/antecipação. A integração
+anterior pede XML2_2; por isso não havia evidência suficiente para concluir que
+outro endpoint ou habilitação seria necessariamente exigido.
+
+Preparada consulta administrativa separada de posição diária, com o transporte
+existente e parser estrito, mantendo os consumidores 2.2 intactos. Exemplo público
+oficial validado; consulta real do Tirirical depende de publicar a nova rota com
+o segredo já mantido no servidor. WalletPosition não foi tratado como carteira
+integral por vencimento nem saldo bancário. Sem backfill, deploy ou lançamentos.
+Contrato, custo e critérios de cobertura em
+[stone-wallet-position.md](engineering/stone-wallet-position.md).
+
+Validação local concluída: `npm run verify` aprovado com 1.416 testes unitários e
+build; cinco testes de autorização/entrada da API aprovados em emuladores demo.
+Consulta real e publicação seguem pendentes; não declarar carteira integral ou
+saldo bancário resolvidos. Permissões administrativas reutilizadas, sem migração.
