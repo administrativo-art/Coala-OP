@@ -16,7 +16,7 @@ export const stonePortfolioDailySync = onSchedule({
 }, async () => {
   const response = await fetch(syncUrl.value(), {
     method: "POST",
-    headers: { Authorization: `Bearer ${syncSecret.value()}` },
+    headers: { Authorization: `Bearer ${syncSecret.value().trim()}` },
     signal: AbortSignal.timeout(300_000),
   });
   if (!response.ok) throw new Error(`Stone portfolio sync returned HTTP ${response.status}`);
