@@ -16,6 +16,7 @@ import { applyUserTerminationEffects } from './user-termination-effects.js';
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
 export { onFieldUpdate } from './rh/field-update.js';
 export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automations.js';
+export { stonePortfolioDailySync } from './stone-portfolio-job.js';
 export { onTermination, lgpdScheduledCleanup } from './rh/termination.js';
 export { checkFieldMapConsistency } from './rh/propagation.js';
 export { cashClosureDailySync } from './cash-closure-jobs.js';
