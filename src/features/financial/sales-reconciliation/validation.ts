@@ -10,7 +10,7 @@ export const reviewDate = z.string().refine(value => {
   try { return shiftClosureDate(value, 0) === value; } catch { return false; }
 });
 export const reviewTimestamp = z.string().max(50).refine(value => {
-  const parts = value.match(/^(\d{4}-\d{2}-\d{2})[T ]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)?$/);
+  const parts = value.match(/^(\d{4}-\d{2}-\d{2})[T ]([01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(Z|[+-](?:0\d|1[0-4]):[0-5]\d)?$/);
   return !!parts && reviewDate.safeParse(parts[1]).success && Number.isFinite(new Date(parts[3] ? value.replace(" ", "T") : `${value.replace(" ", "T")}-03:00`).getTime());
 });
 const optionalId = reviewId.nullable().optional();

@@ -84,7 +84,7 @@ export function SalesReviewPage() {
     <header><h1 className="text-2xl font-semibold">PDV × Stone · comparação de vendas</h1>
       <p className="text-muted-foreground">Sugestões por unidade, dia e meio de pagamento. Toda correspondência depende de conferência.</p></header>
     <div role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-      Somente leitura. O recorte contém um StoneCode e pode não cobrir todas as vendas da unidade. Pix não é comparado nesta consulta. Não há confirmação bancária, lançamento ou fechamento automático.
+      Somente leitura. O recorte contém um StoneCode e pode não cobrir todas as vendas da unidade. Pix depende de arquivo processado e validado. Não há confirmação bancária, lançamento ou fechamento automático.
     </div>
     <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy} onClick={() => load()}>{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</Button>
       {cursor && <Button variant="outline" disabled={busy} onClick={() => load(cursor)}>Mais vínculos</Button>}
@@ -116,7 +116,7 @@ export function SalesReviewPage() {
       <p>Dia {result.scope.referenceDate} · Filial PDV {result.pdvFilialId} · StoneCode {result.scope.stoneCode} · Arquivo {result.stoneFileId}</p>
       <p>Consulta: {new Date(result.collectedAt).toLocaleString("pt-BR")} · {result.pdvFacts.length} pagamentos digitais PDV · {result.stoneSales.length} capturas Stone comparáveis · {result.issues.length} apontamentos de fonte.</p>
       <label>Meio de pagamento<select aria-label="Filtrar meio de pagamento" className={selectClass} value={channel} onChange={e => { setChannel(e.target.value); setPage(0); }}>
-        <option value="all">Todos os cartões</option><option value="debit_card">Débito</option><option value="credit_card">Crédito</option></select></label>
+        <option value="all">Todos os meios</option><option value="pix">Pix</option><option value="debit_card">Débito</option><option value="credit_card">Crédito</option></select></label>
       {!rows.length ? <p>Nenhuma sugestão neste filtro. Isso não comprova ausência de vendas ou divergências.</p> : <>
         <div className="overflow-x-auto"><table className="w-full text-sm"><caption className="sr-only">Comparação de pagamentos e capturas — não conciliados</caption>
           <thead><tr>{["Meio", "PDV", "Stone", "Valor PDV", "Valor Stone", "Diferença Stone − PDV", "Situação / critério"].map(label => <th key={label} className="p-2 text-left">{label}</th>)}</tr></thead>
@@ -127,8 +127,8 @@ export function SalesReviewPage() {
           </tr>)}</tbody></table></div>
         <div className="flex items-center gap-3"><Button variant="outline" disabled={!page} onClick={() => setPage(page - 1)}>Anterior</Button><span>Página {page + 1} de {Math.ceil(rows.length / 50)}</span><Button variant="outline" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>Próxima</Button></div>
       </>}
-      <details><summary>Pix PDV não comparado ({result.uncomparedPdvFacts.length})</summary>
-        <p>Falta integrar a fonte Pix com vínculo comprovado do terminal à unidade. Estes pagamentos não são classificados como ausentes na Stone.</p>
+      <details><summary>Fonte Pix: {result.pix.status === "available" ? "disponível no recorte" : "pendente / indisponível"} · PDV não comparado ({result.uncomparedPdvFacts.length})</summary>
+        <p>Arquivo: {result.pix.fileId ?? "não configurado"} · Registros excluídos: {result.pix.excludedCount}. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
         <Evidence ids={result.uncomparedPdvFacts.map(f => f.id)} facts={result.uncomparedPdvFacts} />
       </details>
       <details><summary>Apontamentos e eventos fora da comparação ({result.issues.length})</summary>

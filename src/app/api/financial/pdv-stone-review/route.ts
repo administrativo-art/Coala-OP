@@ -6,6 +6,7 @@ import { readSalesReviewBinding } from "@/features/financial/sales-reconciliatio
 import { fetchPdvCouponsReadOnly } from "@/lib/integrations/pdv-coupon-read";
 import { fetchStoneAgendaXml } from "@/lib/integrations/stone/agenda-transport";
 import { readSalesReviewBody } from "@/features/financial/sales-reconciliation/request-body";
+import { readPixSalesSource } from "@/features/financial/sales-reconciliation/pix-source.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export const POST = withApiErrorHandling({ source: "api-financial", operation: "
   try {
     const result = await queryDailySales(input, context, {
       signal, resolveBinding: readSalesReviewBinding,
+      readPix: readPixSalesSource,
       readPdv: query => fetchPdvCouponsReadOnly(query, { signal, credentials: {
         company: process.env.PDVLEGAL_COD_EMPRESA, token: process.env.PDVLEGAL_TOKEN,
         username: process.env.PDVLEGAL_USERNAME, password: process.env.PDVLEGAL_PASSWORD,

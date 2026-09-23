@@ -5,6 +5,9 @@ import { resolveFinancialAgentMapping } from "../agent/mapping";
 import { latestPublishedDate } from "../receivables/period-review";
 import { reviewDailySales } from "./daily-review";
 import { reviewDate } from "./validation";
+import { suggestSalesReconciliationCases } from "./matching";
+import type { DailySalesScope } from "./daily-review";
+import type { PixSourceResult } from "./pix-source";
 
 export const salesReviewRequestSchema = z.object({
   kioskId: financialAgentIdentifier, mappingId: financialAgentIdentifier,
@@ -39,6 +42,7 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
   resolveBinding: (request: SalesReviewRequest, workspaceId: string) => Promise<SalesReviewBinding>;
   readPdv: (input: { filialId: string; referenceDate: string }) => Promise<unknown>;
   readStone: (input: { stoneCode: string; referenceDate: string }) => Promise<string>;
+  readPix?: (scope: DailySalesScope) => Promise<PixSourceResult>;
   now?: () => Date; signal?: AbortSignal;
 }) {
   if (!context.isDefaultAdmin) throw new AppError({ code: "SALES_REVIEW_FORBIDDEN", kind: "AUTHORIZATION" });
@@ -62,13 +66,22 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
   dependencies.signal?.throwIfAborted();
   const result = reviewDailySales({ scope: { workspaceId: context.workspace_id, kioskId: request.kioskId,
     stoneCode: request.stoneCode, referenceDate: request.referenceDate }, pdvCoupons, stoneXml });
+  const pix = dependencies.readPix ? await dependencies.readPix(result.scope)
+    : { status: "not_configured" as const, facts: [], excludedCount: 0, fileId: null };
+  if (pix.status === "available") {
+    result.stoneSales.push(...pix.facts);
+    result.cases = suggestSalesReconciliationCases({ pdvFacts: result.pdvFacts, stoneSales: result.stoneSales });
+    result.uncomparedPdvFacts = [];
+    result.limitations = result.limitations.filter(text => !text.startsWith("Pix não foi comparado:"));
+    result.limitations.push(`Pix: arquivo limitado ao dia e StoneCode; ${pix.excludedCount} registro(s) não comparável(is). Não cobre cancelamentos de outros dias nem toda a conta.`);
+  }
   const after = validateBinding(await dependencies.resolveBinding(request, context.workspace_id), request, context.workspace_id);
   if (JSON.stringify(after) !== JSON.stringify(binding)) {
     throw new AppError({ code: "SALES_REVIEW_BINDING_CHANGED", kind: "CONFLICT",
       safeMessage: "A unidade, filial ou vínculo Stone mudou durante a coleta. Consulte novamente." });
   }
   dependencies.signal?.throwIfAborted();
-  return { ...result, mappingId: binding.mapping.id, accountId: binding.mapping.accountId,
+  return { ...result, pix: { status: pix.status, excludedCount: pix.excludedCount, fileId: pix.fileId }, mappingId: binding.mapping.id, accountId: binding.mapping.accountId,
     pdvFilialId: binding.pdvFilialId, collectedAt: now().toISOString(),
     limitations: [...result.limitations, "A filial PDV segue o cadastro atual da unidade. Esta consulta não comprova o histórico de mudanças dessa associação."],
   };

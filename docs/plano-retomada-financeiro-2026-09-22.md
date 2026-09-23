@@ -219,3 +219,49 @@ Validação concluída: `npm run check` aprovado, 1.395 testes unitários (12 no
 checagem final de tipos repetida após o ajuste de UTC e exemplo público verificado.
 Sem novo build: regra isolada no parser, sem alterações de importações de produção,
 fronteiras server/client ou rotas. Permissões existentes não foram alteradas.
+
+### Execução conjunta das frentes restantes
+
+Autorização do usuário: implementar todas as frentes restantes. Branch
+`feat/financial-plan-completion`, base `c5b7f83f`. O escopo não autoriza publicar,
+executar pagamentos ou gerar lançamentos financeiros automaticamente.
+
+Implementação validada localmente: Pix no fluxo PDV × Stone; análise integrada de taxas,
+DRE, caixa e desvios; configuração/execução de rotinas e acompanhamento de alertas.
+Reutiliza fontes, contas, despesas e regras existentes. As limitações de carteira,
+histórico, fonte bancária e dados reais permanecem explícitas, não marcadas como
+resolvidas por uma nova tela. Scheduler implementado, desativado por padrão.
+
+Detalhes, permissões, preflight de custos, índices, testes e critérios de publicação
+em [financial-plan-completion.md](engineering/financial-plan-completion.md).
+
+### Retomada após desligamento — 23/09/2026
+
+O usuário escolheu continuar esta frente financeira. Alterações recuperadas na
+mesma branch `feat/financial-plan-completion`, preservando o trabalho separado
+de compras/provisões.
+
+| Frente | Implementação local | Dependência ainda aberta |
+|---|---|---|
+| PDV × Stone / Pix | Fonte Pix versionada ligada à consulta diária, com validação de arquivo, escopo e evidências. | Publicação, homologação real e eventual reprocessamento autorizado de arquivos antigos. Histórico integral de cancelamentos/estornos não comprovado. |
+| Taxas e DRE | DRE oficial integrada e evidências para classificação nas contas existentes. | Conferência humana antes de lançar; diferença de antecipação não comprova taxa. |
+| Caixa | Extrato confirmado separado de despesas e recebíveis previstos; pagamento parcial conserva apenas o saldo da obrigação. | Fonte de saldo bancário e carteira completa ainda ausentes; posição final não comprovada. |
+| Gerencial | Duas competências, orçamento informado, materialidade, maiores despesas e alertas. | Orçamento é cenário informado, sem cadastro aprovado; cobertura parcial explícita. |
+| Rotinas | Configuração, execução administrativa, idempotência, histórico e ciência dos alertas. | Publicação dos índices, configuração autorizada do agendador e medição de custo antes de frequência diária. |
+
+Na revisão, removida a leitura de coleção de saldos sem produtor canônico nesta base.
+O formulário de rotinas passou a recuperar os parâmetros salvos. O teste integrado
+de pagamento parcial foi preservado para validar R$ 5 realizados + R$ 5 previstos
+em uma obrigação de R$ 10, sem inferir saldo da conta.
+
+Validação concluída: `NODE_OPTIONS=--max-old-space-size=4096 npm run verify`
+aprovado, com 1.405 testes unitários, tipos, lint, contrato de erros, skills e build
+de produção. Dois testes de API em emuladores aprovados (`management.spec.ts` e
+`pdv-stone-review.spec.ts`), sem navegador nem credenciais bancárias reais. Build
+emitiu avisos de dependências Firebase/protobuf nos módulos existentes. Arquivos
+temporários de configuração de testes removidos após a execução.
+
+Próximo passo de entrega: publicação autorizada do código e dos índices, seguida
+de homologação por unidade com as fontes disponíveis. Scheduler permanece
+desativado; nenhuma publicação, pagamento ou lançamento financeiro realizado nesta
+retomada. Permissões administrativas reutilizadas, sem migração de perfis.
