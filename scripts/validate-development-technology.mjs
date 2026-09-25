@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const roles = ['edna', 'gandalf', 'r2d2', 'rocket', 'shuri', 'trinity', 'velma'];
+const financialRoles = ['diana', 'hermione', 'leia', 'monica', 'pepper', 'sherlock', 'spock', 'tony'];
 const reviewers = new Set(['gandalf', 'rocket', 'trinity', 'velma']);
 
 function read(path) {
@@ -22,7 +23,11 @@ function projectFiles(directory, extension) {
     .sort();
 }
 
-assert.deepEqual(projectFiles('.codex/agents', '.toml'), roles, 'Os sete perfis Codex devem coincidir');
+assert.deepEqual(
+  projectFiles('.codex/agents', '.toml'),
+  [...roles, ...financialRoles].sort(),
+  'Os perfis Codex de desenvolvimento e financeiro devem coincidir',
+);
 assert.deepEqual(projectFiles('.claude/agents', '.md'), roles, 'Os sete perfis Claude devem coincidir');
 
 const codex = read('.codex/config.toml');
@@ -65,4 +70,13 @@ for (const role of roles) {
   assert.match(claudeAgent, /Não delegue nem invoque outros agentes\./);
 }
 
-console.log('Departamento de Desenvolvimento e Tecnologia: sete perfis e limites estáticos válidos.');
+for (const role of financialRoles) {
+  const codexAgent = read(join('.codex/agents', `${role}.toml`));
+  assert.equal(tomlValue(codexAgent, 'name'), `"${role}"`);
+  assert.ok(tomlValue(codexAgent, 'description').startsWith('"'), `${role}: descrição ausente`);
+  assert.equal(tomlValue(codexAgent, 'sandbox_mode'), '"read-only"');
+  assert.match(codexAgent, /^developer_instructions\s*=\s*"""[\s\S]+"""/m);
+  assert.doesNotMatch(codexAgent, /^model\s*=/m, `${role}: modelo deve ser escolhido por tarefa`);
+}
+
+console.log('Departamento de Desenvolvimento e Tecnologia: sete perfis gerais e oito especialistas financeiros Codex válidos.');
