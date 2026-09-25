@@ -177,7 +177,7 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">Uso do limite mensal</CardTitle>
-              <CardDescription className="mt-1">Acompanhamento do orçamento usado pelo copiloto e demais chamadas GPT.</CardDescription>
+              <CardDescription className="mt-1">Acompanhamento do orçamento usado pela Mel e demais chamadas GPT.</CardDescription>
             </div>
             <Badge variant="secondary">{overview.credits.usedPercent === null ? "Sem limite" : `${usedPercent.toLocaleString("pt-BR")}% usado`}</Badge>
           </div>

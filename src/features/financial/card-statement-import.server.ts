@@ -156,7 +156,7 @@ async function uploadOpenAiFile(file: File, apiKey: string) {
     body: form,
   });
   const payload = await response.json() as { id?: string; error?: { message?: string } };
-  if (!response.ok || !payload.id) throw new Error(payload.error?.message || "Não foi possível enviar a fatura para o copiloto.");
+  if (!response.ok || !payload.id) throw new Error(payload.error?.message || "Não foi possível enviar a fatura para a Mel.");
   return payload.id;
 }
 
@@ -181,7 +181,7 @@ function normalizeExcludedEntries(rawEntries: unknown, inspection: CardStatement
     const source = sourceByReference.get(sourceReference);
     if (inspection && !source) return [];
     const description = source?.description || shortString(entry.description, 240) || "Movimento não importado";
-    const reason = shortString(entry.reason, 320) || "O copiloto não recomendou importar esta linha como despesa.";
+    const reason = shortString(entry.reason, 320) || "A Mel não recomendou importar esta linha como despesa.";
     seen.add(sourceReference);
     return [{
       sourceReference,
@@ -221,14 +221,14 @@ export async function extractCardStatementImportPreview(params: {
   if (!isCsv && !isPdf) throw new Error("Envie a fatura em PDF ou CSV.");
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("O copiloto de importação não está configurado neste ambiente.");
+  if (!apiKey) throw new Error("A Mel não está configurada para importação neste ambiente.");
 
   const inspection = isCsv ? inspectCardStatementCsv(await params.file.text(), context) : null;
   if (inspection && inspection.sourceRows.length === 0) {
     throw new Error(inspection.warnings[0] || "O CSV não contém movimentos que possam ser analisados.");
   }
   if (inspection && inspection.sourceRows.length > 400) {
-    throw new Error("A fatura contém mais de 400 movimentos. Divida o arquivo antes de enviar ao copiloto.");
+    throw new Error("A fatura contém mais de 400 movimentos. Divida o arquivo antes de enviar à Mel.");
   }
   const prompt = renderSystemPrompt("financial.card.statement-extraction", {
     expectedCompetence: params.monthKey,
@@ -258,7 +258,7 @@ export async function extractCardStatementImportPreview(params: {
       }),
     });
     const payload = await response.json() as any;
-    if (!response.ok) throw new Error(payload?.error?.message || "O copiloto não conseguiu analisar a fatura.");
+    if (!response.ok) throw new Error(payload?.error?.message || "A Mel não conseguiu analisar a fatura.");
     const raw = parseJson(outputText(payload));
     const rawTransactions = Array.isArray(raw.transactions) ? raw.transactions as CardStatementLineInput[] : [];
     const transactions = inspection
@@ -276,7 +276,7 @@ export async function extractCardStatementImportPreview(params: {
       ...stringArray(raw.warnings),
       ...(inspection?.warnings || []),
       ...(unaccountedReferences.length > 0
-        ? [`O copiloto não classificou ${unaccountedReferences.length} movimento(s) do CSV; revise o arquivo antes de importar.`]
+        ? [`A Mel não classificou ${unaccountedReferences.length} movimento(s) do CSV; revise o arquivo antes de importar.`]
         : []),
     ];
     const lowConfidence = transactions.some((line) => line.confidence === "low");
