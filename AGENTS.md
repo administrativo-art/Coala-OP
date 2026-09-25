@@ -70,6 +70,13 @@
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
 
+## Publicação do Coala-OP
+
+- Este produto usa Firebase App Hosting, não Sites. O backend é `studio` em `us-central1`; o projeto Firebase é o configurado em `.firebaserc`. A branch `production` é acompanhada pelo App Hosting e atende `https://op.coalashakes.com`.
+- Fluxo estabelecido: integrar a mudança por PR em `main`, com as checagens exigidas; depois abrir PR de promoção específico para `production`. O CI de produção usa `scripts/verify-production-promotion.mjs` para exigir que os arquivos promovidos sejam idênticos aos do `main` validado. Merge em `main` não publica o produto.
+- Em cada publicação, confira apenas o estado que pode variar: autorização para commit/push/merge/deploy, branch e alterações locais, escopo e SHA da promoção, checagens atuais e eventual mudança no contrato acima. Não reinvestigue a plataforma nem substitua esse fluxo por `firebase deploy` ou por instruções genéricas de hospedagem.
+- Após o merge em `production`, confirme que o build do App Hosting usa o SHA promovido, que o rollout terminou em `SUCCEEDED` e que a URL responde. PR integrado ou build iniciado não bastam para declarar a publicação concluída. Se a plataforma ou o canal de promoção mudar, atualize esta seção junto com o procedimento.
+
 ## Verificação antes de concluir
 
 - Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
