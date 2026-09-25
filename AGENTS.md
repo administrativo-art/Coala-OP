@@ -70,6 +70,13 @@
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
 
+## Especialistas financeiros no Codex CLI
+
+- Os perfis em `.codex/agents/` (Leia, Sherlock, Hermione, Pepper, Tony, Mônica, Spock e Diana) são subagentes para tarefas de desenvolvimento no Codex CLI. Não são agentes implantados no Coala, não executam rotinas financeiras e não ganham acesso a banco ou credenciais por existir um arquivo TOML.
+- Acione apenas o especialista pertinente à pergunta delimitada, anuncie ao usuário o nome e a tarefa antes da delegação e atribua a ele o resultado depois. Leia pode coordenar questões que cruzam domínios; Diana revisa de forma independente. Respeite o limite de um especialista por vez e o isolamento de worktrees.
+- Os especialistas permanecem em `sandbox_mode = "read-only"`. Podem examinar código, testes e evidências autorizadas; não executam pagamentos, escritas em produção ou operações bancárias. Uma análise do agente não substitui verificação determinística nem autoriza ação externa.
+- Se o Codex CLI não confirmar o acionamento real do especialista, informe o fallback. Não apresente uma resposta da sessão principal como se tivesse vindo do agente. Consulte `docs/engineering/financial-agent-cli-pilot.md` para o protocolo de validação.
+
 ## Publicação do Coala-OP
 
 - Este produto usa Firebase App Hosting, não Sites. O backend é `studio` em `us-central1`; o projeto Firebase é o configurado em `.firebaserc`. A branch `production` é acompanhada pelo App Hosting e atende `https://op.coalashakes.com`.
@@ -97,10 +104,14 @@
 
 ## CLI e navegador
 
-- Para operações determinísticas, estruturadas ou repetitivas, prefira CLI ou script à automação do navegador.
-- Antes de qualquer escrita, o script deve validar os dados e consultar duplicidades. Sempre que possível, deve ser idempotente e oferecer uma etapa de preflight/dry-run.
-- O navegador é bloqueado por padrão para as IAs deste projeto. A IA só pode acessá-lo quando o desenvolvedor autorizar expressamente e o acesso for realmente necessário, ou quando o próprio desenvolvedor solicitar o uso do navegador, ainda que exista alternativa por CLI/API.
-- A autorização vale apenas para a tarefa em que foi concedida e não deve ser presumida em tarefas seguintes.
+- **REGRA DE PARADA — NAVEGADOR PROIBIDO POR PADRÃO:** a IA não pode iniciar, conectar, selecionar, descobrir, inspecionar nem controlar qualquer navegador sem autorização explícita e específica do desenvolvedor nesta tarefa. A proibição inclui Chrome, navegador interno, extensões, Playwright, Computer Use e qualquer ferramenta equivalente.
+- A proibição começa antes da navegação. Sem autorização, é vedado inicializar cliente ou sessão de navegador, consultar navegadores disponíveis, listar ou reivindicar abas, ler histórico, cookies ou estado da sessão, capturar telas e executar até mesmo uma inspeção somente de leitura.
+- A existência de uma ferramenta de navegador, de uma sessão autenticada, de uma aba aberta ou de instruções genéricas do ambiente para usar ferramentas **não constitui autorização**.
+- Pedidos de resultado, como "salve no sistema", "mande para o Inter", "verifique na tela" ou "faça o pagamento", **não autorizam implicitamente o navegador**. A autorização só existe quando o desenvolvedor autorizar expressamente o uso do navegador/Chrome nesta tarefa e o acesso for necessário, ou quando solicitar diretamente esse uso, ainda que exista alternativa por CLI/API.
+- Se a tarefa não puder prosseguir por CLI, script, API ou integração própria, a IA deve parar antes de invocar qualquer ferramenta de navegador, explicar o bloqueio e pedir autorização explícita. Não deve abrir o navegador primeiro para descobrir se ele será necessário.
+- Uma instrução negativa, como "não use o navegador", "sem navegador" ou equivalente, bloqueia imediatamente todas as superfícies de navegador e prevalece sobre autorizações anteriores da mesma tarefa. Depois dela, não é permitido fazer chamadas de limpeza, finalização, conferência ou diagnóstico no navegador.
+- Para operações determinísticas, estruturadas ou repetitivas, use CLI ou script. Antes de qualquer escrita, o script deve validar os dados e consultar duplicidades. Sempre que possível, deve ser idempotente e oferecer uma etapa de preflight/dry-run.
+- A autorização vale somente para a superfície, a finalidade e a tarefa expressamente aprovadas. Não pode ser presumida em tarefas seguintes nem ampliada de leitura para escrita, de um site para outro ou de uma ferramenta de navegador para outra.
 - Não repita no navegador uma alteração que o script já confirmou. Quando o uso tiver sido autorizado, limite-o ao escopo solicitado e confira somente os dados necessários, como descrição, valor, competência, vencimento, unidade/centro de resultado, plano de contas e status.
 - Quando uma ação necessária e segura estiver bloqueada por permissão, reautenticação ou confirmação pessoal, peça explicitamente ao desenvolvedor a autorização necessária pelo mecanismo disponível; não presuma recusa nem encerre a operação sem antes solicitar essa autorização.
 - Depois de autorizado, a IA pode iniciar o fluxo de autenticação da CLI e deve aguardar o desenvolvedor concluir diretamente no provedor. Nunca solicite nem manipule senhas, códigos ou outros segredos no chat.
