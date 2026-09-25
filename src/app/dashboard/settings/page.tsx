@@ -87,6 +87,10 @@ const ImportAliasesManagement = dynamic(
   () => import("@/features/financial/components/settings/import-aliases-management"),
   { ssr: false }
 );
+const BudgetsManagement = dynamic(
+  () => import("@/features/financial/components/settings/budgets-management"),
+  { ssr: false }
+);
 const PricingSimulator = dynamic(
   () => import("@/components/pricing-simulator").then((m) => m.PricingSimulator),
   { ssr: false }
@@ -833,6 +837,13 @@ export default function SettingsPage() {
       content: (
         <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />
       ),
+    },
+    {
+      value: "budgets",
+      label: "Orçamentos",
+      title: "Orçamentos por categoria e projeto",
+      description: "Planeje gastos recorrentes, acompanhe o consumo do mês e organize iniciativas pontuais.",
+      content: <BudgetsManagement canManage={permissions.financial?.settings?.manageBudgets === true} />,
     },
     {
       value: "import",
