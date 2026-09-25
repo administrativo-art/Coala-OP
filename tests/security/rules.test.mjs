@@ -33,6 +33,28 @@ const rules = {
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
 
+test("orçamentos só podem ser lidos e escritos pela API financeira", async () => {
+  const env = await initializeTestEnvironment({
+    projectId: "demo-security-budgets",
+    firestore: { rules: rules.financial },
+  });
+  try {
+    const collections = ["financialBudgets", "financialBudgetRules", "financialBudgetProjects",
+      "financialBudgetAccountClaims", "financialBudgetRuleAccountClaims",
+      "financialBudgetProjectExpenseClaims", "financialBudgetRevisions", "financialBudgetProjectEvents"];
+    await env.withSecurityRulesDisabled(async (context) => {
+      const firestore = context.firestore();
+      await setDoc(doc(firestore, "users/budget-admin"), { isDefaultAdmin: true, permissions: { view: true } });
+      await Promise.all(collections.map((name) => setDoc(doc(firestore, name, "budget-test"), { name: "Teste" })));
+    });
+    const admin = env.authenticatedContext("budget-admin").firestore();
+    for (const name of collections) {
+      await assertFails(getDoc(doc(admin, name, "budget-test")));
+      await assertFails(setDoc(doc(admin, name, "forged"), { name: "Forjado" }));
+    }
+  } finally { await env.cleanup(); }
+});
+
 const basePermissions = {
   settings: {
     manageProfiles: false,

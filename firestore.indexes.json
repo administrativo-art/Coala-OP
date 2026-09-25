@@ -2,6 +2,23 @@
 {
   "indexes": [
     {
+      "collectionGroup": "consumptionReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "year", "order": "ASCENDING" },
+        { "fieldPath": "month", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "purchase_orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "estimatedReceiptDate", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "dp_vacations",
       "queryScope": "COLLECTION",
       "fields": [
