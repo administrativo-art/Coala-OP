@@ -4,7 +4,7 @@ import test from "node:test";
 
 const [componentSource, participantCardSource, routeSource] = await Promise.all([
   readFile(
-    new URL("../../../src/components/hr/recruitment/recruitment-shell.tsx", import.meta.url),
+    new URL("../../../src/components/hr/recruitment/recruitment-onboarding-view.tsx", import.meta.url),
     "utf8",
   ),
   readFile(
