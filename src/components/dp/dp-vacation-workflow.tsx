@@ -1076,7 +1076,7 @@ export function DPVacationWorkflowPanel({
               <p className="text-[13px] font-black">Contabilidade e revisão</p>
             </div>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Acompanhe o envio do contador, a triagem do copiloto e a confirmação final do RH em uma única etapa.
+              Acompanhe o envio do contador, a triagem da Mel e a confirmação final do RH em uma única etapa.
             </p>
           </div>
           <div className="grid gap-2 p-4 sm:grid-cols-3">
@@ -1088,7 +1088,7 @@ export function DPVacationWorkflowPanel({
           <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
             {[
               { icon: ReceiptText, label: 'Arquivos do contador', detail: 'PDF, JPG ou PNG preservados' },
-              { icon: FileCheck2, label: 'Triagem do copiloto', detail: 'Sugestão para confirmação do RH' },
+              { icon: FileCheck2, label: 'Triagem da Mel', detail: 'Sugestão para confirmação do RH' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
                 <item.icon className="h-4 w-4 text-slate-400" />
@@ -1147,7 +1147,7 @@ export function DPVacationWorkflowPanel({
                 <div>
                   <p className="text-[11px] font-black text-slate-900">Arquivos recebidos</p>
                   <p className="mt-1 text-[10.5px] font-semibold text-slate-500">
-                    O copiloto sugere; o RH precisa abrir e confirmar o recibo principal.
+                    A Mel sugere; o RH precisa abrir e confirmar o recibo principal.
                   </p>
                 </div>
                 <Badge variant="outline" className="rounded-full bg-white text-[9.5px] font-black">{receiptDocuments.length} arquivo(s)</Badge>

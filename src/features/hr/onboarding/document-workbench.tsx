@@ -22,7 +22,7 @@ type DocumentWorkbenchProps = {
 const STATUS_LABELS: Record<OnboardingDocument["status"], string> = {
   pending: "Aguardando envio",
   received: "Enviado",
-  ai_approved: "Pré-aprovado pelo copiloto",
+  ai_approved: "Pré-aprovado pela Mel",
   review_required: "Revisão necessária",
   approved: "Aprovado pelo RH",
   rejected: "Reprovado",
@@ -234,7 +234,7 @@ export function OnboardingDocumentWorkbench({
                 <div className="flex flex-wrap items-center gap-2">
                   {selected.aiAnalysis.status === "completed" ? <Sparkles className="h-4 w-4 text-sky-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
                   <span className={`text-[11px] font-black uppercase tracking-wide ${selected.aiAnalysis.status === "completed" ? "text-sky-800" : "text-amber-800"}`}>
-                    {selected.aiAnalysis.status === "completed" ? "Analisado pelo Copiloto" : "Análise automática requer atenção"}
+                    {selected.aiAnalysis.status === "completed" ? "Analisado pela Mel" : "Análise automática requer atenção"}
                   </span>
                   <span className="ml-auto rounded-lg bg-white/80 px-2 py-1 text-[9px] font-black text-slate-500">{selected.aiAnalysis.model}</span>
                 </div>
@@ -253,7 +253,7 @@ export function OnboardingDocumentWorkbench({
 
             {extracted.length ? (
               <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
-                <div className="flex items-center gap-2 text-blue-800"><Sparkles className="h-4 w-4" /><span className="text-[11px] font-black uppercase tracking-wide">Dados extraídos pelo copiloto</span></div>
+                <div className="flex items-center gap-2 text-blue-800"><Sparkles className="h-4 w-4" /><span className="text-[11px] font-black uppercase tracking-wide">Dados extraídos pela Mel</span></div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {extracted.map(([key, value]) => {
                     const confidence = confidenceTone(selected.fieldConfidences?.[key]);
