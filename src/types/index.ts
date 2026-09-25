@@ -3696,7 +3696,7 @@ export type DPVacationReceiptDocument = {
   uploadedAt: string;
   uploadedBy: string;
   correctionRound: number;
-  status: 'processing' | 'review_pending' | 'analysis_failed' | 'selected' | 'superseded';
+  status: 'processing' | 'review_pending' | 'analysis_failed' | 'selected' | 'superseded' | 'discarded';
   analysis?: DPVacationReceiptAnalysis | null;
   analyzedAt?: string | null;
 };
