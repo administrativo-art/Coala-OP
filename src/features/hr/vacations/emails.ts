@@ -49,7 +49,7 @@ export function vacationAccountantEmailContent(input: VacationAccountantEmailInp
   const actionTitle = input.correctionReason ? 'Envio dos arquivos corrigidos' : 'Envio seguro dos documentos';
   const actionText = input.correctionReason
     ? 'Quando o ajuste estiver pronto, use o botão abaixo para anexar os arquivos em PDF, JPG ou PNG.'
-    : 'Quando os documentos estiverem prontos, use o botão abaixo para anexar um ou mais arquivos em PDF, JPG ou PNG. São aceitos até 20 arquivos por envio, com 15 MB por arquivo e 25 MB no conjunto; se necessário, faça outro envio pelo mesmo link. O copiloto indicará o provável recibo principal, e o RH fará a conferência e a escolha final.';
+    : 'Quando os documentos estiverem prontos, use o botão abaixo para anexar um ou mais arquivos em PDF, JPG ou PNG. São aceitos até 20 arquivos por envio, com 15 MB por arquivo e 25 MB no conjunto; se necessário, faça outro envio pelo mesmo link. A Mel indicará o provável recibo principal, e o RH fará a conferência e a escolha final.';
   const plainDetails = details.map((item) => `${item.label}: ${item.value}`).join('\n');
   return {
     subject,

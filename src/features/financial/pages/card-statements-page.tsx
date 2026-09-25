@@ -677,7 +677,7 @@ export function CardStatementsWorkspace({
         body: form,
       });
       const payload = await response.json() as { preview?: CardStatementImportPreview; error?: string };
-      if (!response.ok || !payload.preview) throw new Error(payload.error || "O copiloto não conseguiu analisar a fatura.");
+      if (!response.ok || !payload.preview) throw new Error(payload.error || "A Mel não conseguiu analisar a fatura.");
       setImportPreview(payload.preview);
       setSelectedImportLineIds(
         payload.preview.analysis.status === "blocked" ? [] : payload.preview.transactions.map((line) => line.id),
@@ -966,7 +966,7 @@ export function CardStatementsWorkspace({
                     onClick={() => cardStatementFileRef.current?.click()}
                   >
                     {importingStatement ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                    {importingStatement ? "Copiloto analisando..." : "Analisar fatura com copiloto"}
+                    {importingStatement ? "Mel analisando..." : "Analisar fatura com a Mel"}
                   </Button>
                 ) : null}
                 <span className="text-[11px] text-muted-foreground">{selectedGroup.lines.length} itens</span>
@@ -1327,12 +1327,12 @@ export function CardStatementsWorkspace({
                       >
                         {importingStatement ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
                         {importingStatement
-                          ? "Copiloto analisando..."
+                          ? "Mel analisando..."
                           : statementStatus === "paid"
                             ? "Analisar nova versão"
                             : officialTotal > 0
-                              ? "Revisar fatura com copiloto"
-                              : "Analisar fatura com copiloto"}
+                              ? "Revisar fatura com a Mel"
+                              : "Analisar fatura com a Mel"}
                       </Button>
                     ) : null}
                   </div>
@@ -1602,7 +1602,7 @@ export function CardStatementsWorkspace({
                         {valuesBalanced
                           ? "Os itens lançados somam exatamente o total oficial da fatura."
                           : difference === null
-                            ? "O copiloto lê o arquivo, registra o total oficial e sugere o tratamento de cada compra."
+                            ? "A Mel lê o arquivo, registra o total oficial e sugere o tratamento de cada compra."
                             : difference > 0
                               ? "O total oficial é maior que a soma dos lançamentos. Analise a fatura para identificar as cobranças ausentes."
                               : "A soma dos lançamentos está acima do total oficial. Revise duplicidades, créditos e estornos."}
@@ -1610,7 +1610,7 @@ export function CardStatementsWorkspace({
                       {!valuesBalanced && canImportCardStatements ? (
                         <Button variant="outline" size="sm" className="mt-2.5 h-8 rounded-lg border-violet-300 bg-white text-[11px] font-extrabold text-violet-700 hover:bg-violet-50 hover:text-violet-800" disabled={importingStatement} onClick={() => cardStatementFileRef.current?.click()}>
                           {importingStatement ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                          Analisar fatura com o copiloto
+                          Analisar fatura com a Mel
                         </Button>
                       ) : null}
                     </div>
@@ -1720,10 +1720,10 @@ export function CardStatementsWorkspace({
           <DialogHeader className="shrink-0 border-b border-[#f0ece3] px-6 py-5 pr-14 text-left">
             <DialogTitle className="flex items-center gap-2 text-[16.5px] font-extrabold tracking-tight">
               <Sparkles className="h-4.5 w-4.5 text-violet-600" />
-              Revisar análise do copiloto
+              Revisar análise da Mel
             </DialogTitle>
             <DialogDescription className="mt-1.5 text-xs leading-relaxed">
-              O copiloto interpreta a fatura, mas você decide o que será adicionado. Nada é auditado, efetivado ou pago automaticamente.
+              A Mel interpreta a fatura, mas você decide o que será adicionado. Nada é auditado, efetivado ou pago automaticamente.
             </DialogDescription>
           </DialogHeader>
           {importPreview ? (
@@ -1739,7 +1739,7 @@ export function CardStatementsWorkspace({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="flex items-center gap-2 text-[12.5px] font-extrabold">
                     <Sparkles className="h-4 w-4 text-violet-600" />
-                    Análise do Copiloto Financeiro
+                    Análise da Mel
                   </p>
                   <span className="rounded-full border bg-white/80 px-2.5 py-0.5 text-[9.5px] font-extrabold">
                     {COPILOT_STATUS_LABELS[importPreview.analysis.status]}

@@ -6747,7 +6747,7 @@ const ONBOARDING_STATUS_LABELS: Record<OnboardingProcess['status'], string> = {
 const ONBOARDING_DOCUMENT_STATUS_LABELS: Record<OnboardingDocument['status'], string> = {
   pending: 'Pendente',
   received: 'Enviado',
-  ai_approved: 'Aprovado pelo copiloto',
+  ai_approved: 'Aprovado pela Mel',
   review_required: 'Revisão do gestor',
   approved: 'Aprovado pelo RH',
   rejected: 'Reprovado',
