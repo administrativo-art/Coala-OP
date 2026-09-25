@@ -96,6 +96,8 @@ env:
     value: "1000"
   - variable: CASH_DEPOSIT_RECONCILIATION_SECRET
     secret: CASH_DEPOSIT_RECONCILIATION_SECRET
+  - variable: FINANCIAL_BUDGET_SCHEDULER_SECRET
+    secret: FINANCIAL_BUDGET_SCHEDULER_SECRET
   - variable: RESEND_FORMALIZATION_FROM
     value: "RH Coala Shakes <formalizacao@coalashakes.com>"
   - variable: RESEND_ACCESS_FROM
