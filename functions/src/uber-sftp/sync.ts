@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as logger from 'firebase-functions/logger';
 import SftpClient from 'ssh2-sftp-client';
-import { normalizeSha256HostFingerprint, parseUberTripCsv, uberDailyFileDate } from './domain.js';
+import { eligibleUberDailyFiles, normalizeSha256HostFingerprint, parseUberTripCsv } from './domain.js';
+import { safeUberErrorCode } from './errors.js';
 import {
   claimUberImport,
   completeUberImport,
@@ -55,18 +56,13 @@ function earliestEligibleDate(now = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-function sanitizedError(error: unknown) {
-  const message = error instanceof Error ? error.message : 'UNKNOWN_ERROR';
-  return message.replace(/[\r\n\t]+/g, ' ').slice(0, 180);
-}
-
 function reportUnexpectedError(operation: string, error: unknown, metadata: Record<string, unknown> = {}) {
   const eventId = randomUUID();
   logger.error('Uber SFTP operation failed.', {
     source: 'uber-sftp',
     operation,
     eventId,
-    error: sanitizedError(error),
+    errorCode: safeUberErrorCode(error),
     ...metadata,
   });
   return eventId;
@@ -119,24 +115,15 @@ export async function syncUberTripsFromSftp(configuration: UberSftpConfiguration
     const listed = await client.list(UBER_TRIPS_DIRECTORY);
     result.listedFiles = listed.length;
     const earliestDate = earliestEligibleDate();
-    const eligible = listed.flatMap((file): DailyFile[] => {
-      if (file.type !== '-' || file.size <= 0 || file.size > MAX_FILE_SIZE_BYTES) return [];
-      const fileDate = uberDailyFileDate(file.name);
-      if (!fileDate || fileDate < earliestDate) return [];
-      return [{
-        name: file.name,
-        remotePath: `${UBER_TRIPS_DIRECTORY}/${file.name}`,
-        fileDate,
-        size: file.size,
-        modifyTime: file.modifyTime,
-      }];
-    }).sort((left, right) => left.fileDate.localeCompare(right.fileDate))
-      .slice(-MAX_FILES_PER_RUN);
+    const eligible: DailyFile[] = eligibleUberDailyFiles(listed, earliestDate, MAX_FILE_SIZE_BYTES)
+      .map((file) => ({ ...file, remotePath: `${UBER_TRIPS_DIRECTORY}/${file.name}` }));
     result.eligibleFiles = eligible.length;
 
     const primaryMatchKeys: string[] = [];
     const previouslyLinkedEntities: Array<{ entityKind: 'expense' | 'transaction'; entityId: string }> = [];
     for (const file of eligible) {
+      // Cap work after claims, so completed recent files do not hide older files awaiting replay.
+      if (result.processedFiles >= MAX_FILES_PER_RUN) break;
       const importId = uberImportDocumentId(file.remotePath);
       const claimed = await claimUberImport({
         id: importId,
