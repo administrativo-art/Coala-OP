@@ -10,7 +10,7 @@ export type CardStatementExtractionPromptContext = {
 export const cardStatementExtractionPrompt = defineAiPrompt<CardStatementExtractionPromptContext>({
   id: "financial.card.statement-extraction",
   module: "financial",
-  name: "Copiloto de importação de fatura de cartão",
+  name: "Mel — importação de fatura de cartão",
   description: "Analisa faturas de cartão, separa compras de movimentos não importáveis e prepara uma prévia revisável.",
   version: "financial-card-statement-v3",
   schemaVersion: "financial-card-statement-analysis-v1",
@@ -19,8 +19,8 @@ export const cardStatementExtractionPrompt = defineAiPrompt<CardStatementExtract
   outputMode: "structured",
   owner: "Financeiro",
   tags: ["cartão", "fatura", "extrato", "auditoria"],
-  rulesBoundary: "O copiloto interpreta e propõe a prévia; evidências determinísticas validam datas e valores, e somente a confirmação humana cria despesas pendentes.",
-  render: ({ expectedCompetence, fileName, inputKind, csvEvidence }) => `Você é o Copiloto Financeiro responsável por preparar uma fatura de cartão para importação revisável.
+  rulesBoundary: "A Mel interpreta e propõe a prévia; evidências determinísticas validam datas e valores, e somente a confirmação humana cria despesas pendentes.",
+  render: ({ expectedCompetence, fileName, inputKind, csvEvidence }) => `Você é a Mel, a assistente de IA responsável por preparar uma fatura de cartão para importação revisável.
 Retorne somente JSON válido no schema informado.
 
 OBJETIVO
