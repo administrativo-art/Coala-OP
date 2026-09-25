@@ -822,7 +822,7 @@ function EmployeeAsoControlPanel({
 
         {!summary || summary.admissionMissing ? (
           <p className="rounded-2xl border border-rose-100 bg-rose-50 p-3 text-xs font-bold text-rose-700">
-            Colaborador sem ASO admissional registrado. Ao arquivar o ASO admissional, o copiloto usará a data real do exame para iniciar a previsão do periódico.
+            Colaborador sem ASO admissional registrado. Ao arquivar o ASO admissional, a Mel usará a data real do exame para iniciar a previsão do periódico.
           </p>
         ) : null}
 
@@ -842,7 +842,7 @@ function EmployeeAsoControlPanel({
             ))}
           </div>
         ) : (
-          <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum ASO arquivado pelo copiloto ainda.</p>
+          <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum ASO arquivado pela Mel ainda.</p>
         )}
       </div>
     </Panel>

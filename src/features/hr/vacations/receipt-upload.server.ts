@@ -437,7 +437,7 @@ export async function uploadVacationReceipt(params: {
       vacationId: snapshot.id,
       type: 'VACATION_RECEIPT_FILES_PROCESSED',
       message: suggestion
-        ? 'Os arquivos foram processados e o copiloto sugeriu um recibo para confirmação do RH.'
+        ? 'Os arquivos foram processados e a Mel sugeriu um recibo para confirmação do RH.'
         : 'Os arquivos foram preservados e estão disponíveis para seleção manual do RH.',
       at: completedAt,
       actorId: 'system:document-analysis',
