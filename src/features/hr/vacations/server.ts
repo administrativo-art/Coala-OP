@@ -2379,12 +2379,14 @@ export async function selectVacationReceiptDocument(
       throw conflict('DP_VACATION_RECEIPT_SELECTION_NOT_READY', 'Os arquivos ainda não estão prontos para a seleção do RH.');
     }
     const documents = vacationReceiptDocuments(workflow.receipt);
-    const selected = documents.find((document) => document.id === documentId && document.status !== 'superseded');
+    const selected = documents.find((document) => (
+      document.id === documentId && document.status !== 'superseded' && document.status !== 'discarded'
+    ));
     if (!selected || selected.status === 'processing') {
       throw conflict('DP_VACATION_RECEIPT_DOCUMENT_NOT_READY', 'O arquivo selecionado não está disponível para confirmação.');
     }
     const nextDocuments: DPVacationReceiptDocument[] = documents.map((document) => {
-      if (document.status === 'superseded') return document;
+      if (document.status === 'superseded' || document.status === 'discarded') return document;
       return { ...document, status: document.id === selected.id ? 'selected' : document.analysis ? 'review_pending' : 'analysis_failed' };
     });
     const nextWorkflow: DPVacationWorkflow = {
@@ -2433,6 +2435,67 @@ export async function selectVacationReceiptDocument(
     ));
   });
   return { id: vacationId, selectedDocumentId: documentId };
+}
+
+export async function discardVacationReceiptDocument(
+  request: NextRequest,
+  vacationId: string,
+  documentId: string,
+) {
+  const { context, vacationRef } = await requireVacationApprovalAccess(request, vacationId);
+  const now = new Date().toISOString();
+  await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(vacationRef);
+    if (!snapshot.exists) throw notFound();
+    const current = snapshot.data() ?? {};
+    await assertTargetAccess(transaction, context, String(current.userId ?? ''));
+    const workflow = current.workflow as DPVacationWorkflow | undefined;
+    if (!workflow || workflow.status !== 'active' || workflow.receipt.status !== 'review_pending') {
+      throw conflict('DP_VACATION_RECEIPT_SELECTION_NOT_READY', 'Os arquivos ainda não estão prontos para o descarte.');
+    }
+    const documents = vacationReceiptDocuments(workflow.receipt);
+    const target = documents.find((document) => document.id === documentId);
+    if (!target || target.status === 'superseded' || target.status === 'discarded') {
+      throw conflict('DP_VACATION_RECEIPT_DOCUMENT_NOT_FOUND', 'O arquivo não está disponível para descarte.');
+    }
+    if (target.status === 'selected') {
+      throw conflict('DP_VACATION_RECEIPT_DOCUMENT_ALREADY_SELECTED', 'Não é possível descartar o recibo já escolhido. Selecione outro arquivo antes.');
+    }
+    const nextDocuments: DPVacationReceiptDocument[] = documents.map((document) => (
+      document.id === target.id ? { ...document, status: 'discarded' as const } : document
+    ));
+    const nextWorkflow: DPVacationWorkflow = {
+      ...workflow,
+      receipt: {
+        ...workflow.receipt,
+        documents: nextDocuments,
+        suggestedDocumentId: workflow.receipt.suggestedDocumentId === target.id
+          ? null
+          : workflow.receipt.suggestedDocumentId,
+      },
+      updatedAt: now,
+    };
+    transaction.update(vacationRef, { workflow: nextWorkflow, updatedAt: new Date(now), updatedBy: context.decoded.uid });
+    transaction.set(vacationRef.collection('receiptVersions').doc(target.id), {
+      status: 'discarded',
+      discardedAt: now,
+      discardedBy: context.decoded.uid,
+    }, { merge: true });
+    transaction.create(dbAdmin.collection('dp_vacationEvents').doc(), vacationEvent(
+      context,
+      vacationId,
+      'VACATION_RECEIPT_DOCUMENT_DISCARDED',
+      'O RH descartou um arquivo de recibo recebido do contador.',
+      now,
+      {
+        documentId: target.id,
+        fileName: target.fileName,
+        wasSuggestedByCopilot: workflow.receipt.suggestedDocumentId === target.id,
+        documentTypeCode: target.analysis?.documentTypeCode ?? null,
+      },
+    ));
+  });
+  return { id: vacationId, discardedDocumentId: documentId };
 }
 
 export async function reviewVacationReceipt(

@@ -774,6 +774,12 @@ export function DPFeriasProfile({
           { action: 'select_receipt_document', documentId },
           'Recibo principal confirmado pelo RH.',
         )}
+        onDiscardReceiptDocument={(vacation, documentId) => handleWorkflowAction(
+          vacation,
+          `discard-receipt-${documentId}`,
+          { action: 'discard_receipt_document', documentId },
+          'Arquivo de recibo descartado.',
+        )}
         onReviewReceipt={(vacation, review) => handleWorkflowAction(
           vacation,
           review.decision === 'approved' ? 'approve-receipt' : 'correct-receipt',
