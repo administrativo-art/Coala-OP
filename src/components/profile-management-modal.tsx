@@ -689,6 +689,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                       {renderPermissionSwitch("permissions.financial.settings.manageResultCenters" as any, "Gerenciar Centros de Resultado", "Permite criar, editar e excluir centros de resultado.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.financial.settings.manageBankAccounts" as any, "Gerenciar Contas Bancárias", "Permite manter bancos, contas e métodos de pagamento.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.financial.settings.manageExpenseDescriptions" as any, "Gerenciar Descrições de Despesas", "Permite manter descrições reutilizáveis do financeiro.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.financial.settings.manageBudgets" as any, "Gerenciar Orçamentos", "Permite criar e revisar orçamentos mensais e regras automáticas.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.financial.settings.manageImportAliases" as any, "Gerenciar Aliases de Importação", "Permite manter regras automáticas de classificação de extratos.", !settingsViewWatch)}
                                     </div>
                                 </AccordionContent>
@@ -852,6 +853,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.financial.settings.manageResultCenters" as any, "Gerenciar centros de resultado", "Permite criar, editar e excluir centros de resultado.", !financialSettingsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.settings.manageBankAccounts" as any, "Gerenciar contas bancárias", "Permite manter contas e métodos de pagamento.", !financialSettingsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.settings.manageExpenseDescriptions" as any, "Gerenciar descrições de despesas", "Permite manter o catálogo de descrições reutilizáveis do financeiro.", !financialSettingsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.settings.manageBudgets" as any, "Gerenciar orçamentos", "Permite criar e revisar orçamentos e regras automáticas.", !financialSettingsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.settings.manageImportAliases" as any, "Gerenciar aliases de importação", "Permite manter regras automáticas de classificação de extratos.", !financialSettingsViewWatch, true)}
                                   </div>
                                 </div>

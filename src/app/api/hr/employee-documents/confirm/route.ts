@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
           batchId, itemId: itemDoc.id, traceId: item.traceId ?? null,
           uploadedBy: access.decoded.uid, uploadedByName: access.actorName,
           validatedBy: autoValidated ? "system:document-analysis" : null,
-          validatedByName: autoValidated ? "Copiloto RH" : null,
+          validatedByName: autoValidated ? "Mel" : null,
           validatedAt: autoValidated ? now : null,
           uploadedAt: now, updatedAt: now,
           accessCount: 0, deletedAt: null,
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
           await hrDbAdmin.collection(COLLECTION).doc(documentId).collection("audit").add({
             action: "DOCUMENT_AUTO_VALIDATED",
             actorId: "system:document-analysis",
-            actorName: "Copiloto RH",
+            actorName: "Mel",
             decisionAction: item.decisionAction,
             decisionReason: item.decisionReason,
             confidence: item.confidence ?? null,

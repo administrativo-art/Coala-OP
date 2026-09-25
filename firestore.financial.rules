@@ -342,6 +342,33 @@ service cloud.firestore {
       allow create, update, delete: if canManageAccountPlans();
     }
 
+    // Orçamentos são calculados e validados pela API do servidor. O cliente
+    // recebe somente os resumos autorizados pela sua permissão financeira.
+    match /financialBudgets/{budgetId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetRules/{ruleId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetAccountClaims/{claimId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetRuleAccountClaims/{claimId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetProjects/{projectId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetProjectExpenseClaims/{expenseId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetRevisions/{revisionId} {
+      allow read, write: if false;
+    }
+    match /financialBudgetProjectEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     match /accountPlans/{planId} {
       allow read: if hasFinancialAccess();
       allow create, update, delete: if canManageAccountPlans();

@@ -768,7 +768,7 @@ export type PermissionSet = {
     cashClosures: { view: boolean; edit: boolean; approve: boolean; adjustExpected: boolean; reopen: boolean; resync: boolean; };
     cashDeposits: { view: boolean; issue: boolean; cancel: boolean; adjust: boolean; };
     interIntegration: { manage: boolean; };
-    settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; };
+    settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; manageBudgets: boolean; };
   };
   purchasing: {
     view: boolean;
@@ -2899,7 +2899,7 @@ export const defaultGuestPermissions: PermissionSet = {
       cashClosures: { view: false, edit: false, approve: false, adjustExpected: false, reopen: false, resync: false },
       cashDeposits: { view: false, issue: false, cancel: false, adjust: false },
       interIntegration: { manage: false },
-      settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false },
+      settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false, manageBudgets: false },
     },
     purchasing: {
       view: false,
@@ -3010,7 +3010,7 @@ export const defaultAdminPermissions: PermissionSet = {
       cashClosures: { view: true, edit: true, approve: true, adjustExpected: true, reopen: true, resync: true },
       cashDeposits: { view: true, issue: true, cancel: true, adjust: true },
       interIntegration: { manage: true },
-      settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true },
+      settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true, manageBudgets: true },
     },
     purchasing: {
       view: true,
