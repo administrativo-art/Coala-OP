@@ -28,6 +28,14 @@
 - Não use `stash`, `reset`, `restore`, troca de branch, limpeza de arquivos ou commit-snapshot para reorganizar mudanças de terceiros sem autorização explícita e uma verificação prévia de arquivos não rastreados e possíveis segredos.
 - Antes de encerrar, execute `git status --short`, informe qualquer mudança staged, unstaged ou não rastreada e não declare o workspace limpo sem evidência.
 
+### Ciclo de vida e espaço dos worktrees
+
+- Antes de criar um worktree, consulte `git worktree list` e identifique o worktree da tarefa. Não abra outro apenas para revisar, testar ou publicar a mesma tarefa, salvo quando o isolamento for necessário; nesse caso, defina também quando o temporário será encerrado.
+- Instale dependências e gere builds apenas nos worktrees que precisarem deles. Antes de `npm ci`, build ou E2E pesado, confira `df -h` e não inicie a operação com menos de 15 GB livres; primeiro identifique caches regeneráveis e combine a limpeza necessária.
+- Ao concluir um chamado, faça o fechamento do worktree: confira `git status --short`, branch e commits ainda não integrados, processos em uso e arquivos ignorados. Um checkout limpo não prova que `.ai-work`, `.env.local`, resultados de testes ou outros dados locais possam ser apagados.
+- Se o worktree já não for necessário, remova-o com `git worktree remove` somente depois de preservar dados exclusivos e obter a autorização aplicável à limpeza. Preserve a branch, salvo autorização separada para excluí-la. Se precisar mantê-lo, registre no relatório o motivo e o próximo ponto de revisão.
+- Depois de merge, rollout ou encerramento de um worktree temporário, confira `git worktree list` e o espaço livre. Para registros órfãos, use `git worktree prune --dry-run --verbose` e valide os caminhos antes de executar o prune; não faça exclusão automática em massa.
+
 ## Padrão de construção de módulos
 
 - Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.
