@@ -32,6 +32,16 @@
 .claude/
 !.claude/
 .claude/*
+!.claude/settings.json
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/gandalf.md
+!.claude/agents/shuri.md
+!.claude/agents/edna.md
+!.claude/agents/r2d2.md
+!.claude/agents/velma.md
+!.claude/agents/trinity.md
+!.claude/agents/rocket.md
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/coala-error-triage

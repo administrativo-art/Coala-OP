@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
@@ -13,6 +13,7 @@ import type { CatalogPage, MappingView } from "@/features/financial/agent/config
 import type { PeriodRow, ReceivablePeriodResult } from "@/features/financial/receivables/period-review";
 import { FinancialAnalysisNavigation } from "../agent/analysis-navigation";
 import { WalletPositionPanel } from "./wallet-position-panel";
+import { StonePortfolioPanel } from "./portfolio-panel";
 import { ReceivableAnalysisPanel } from "./analysis-panel";
 import { receivableRowMatches, type ReceivableEvidenceFilter } from "./analysis";
 
@@ -37,6 +38,16 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const evidence = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isDefaultAdmin) return;
+    let active = true;
+    api<CatalogPage<MappingView>>("/api/financial/stone-mappings?resource=mappings")
+      .then(data => { if (!active) return;
+        setMappings(data.items); setCursor(data.nextCursor); setLoaded(true);
+        if (data.items.length === 1) { setSelected(data.items[0].id); setCode(data.items[0].stoneCodes[0] ?? ""); }
+      }).catch(() => { if (active) setLoaded(false); });
+    return () => { active = false; };
+  }, [api, isDefaultAdmin]);
   if (!isDefaultAdmin) return <PageContainer><p role="alert">Consulta restrita à administração.</p></PageContainer>;
   const mapping = mappings.find(value => value.id === selected);
   const clear = () => { setResult(null); setError(""); setPage(0); setFilter("all"); };
@@ -53,11 +64,11 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
   const rows = result?.rows.filter(row => receivableRowMatches(row, filter)) ?? [];
   const selectClass = "w-full rounded-md border bg-background p-2";
   return <PageContainer variant="wide" className="space-y-6 py-6">
-    <header><h1 className="text-2xl font-semibold">{agentEntry ? "Coala Financeiro · Recebíveis" : "Recebíveis · conferência por período"}</h1>
-      <p className="text-muted-foreground">Previsões das vendas capturadas no intervalo, confrontadas com pagamentos informados até o último dia consultado.</p></header>
+    <header><h1 className="text-2xl font-semibold">{agentEntry ? "Coala Financeiro · Recebíveis" : "Recebíveis Stone"}</h1>
+      <p className="text-muted-foreground">Carteira atualizada pelos arquivos diários da Stone e conferência detalhada por período.</p></header>
     {agentEntry && <FinancialAnalysisNavigation topic="receivables" />}
     <div role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-      Esta consulta não é a carteira completa nem saldo disponível. Não inclui vendas anteriores ao período, posição da registradora ou confirmação bancária. Nenhum valor será lançado no caixa.
+      A conferência por período inclui somente vendas do intervalo escolhido. A carteira automática usa o histórico configurado até o último arquivo publicado. Nenhuma das duas confirma saldo bancário ou registradora.
     </div>
     <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy} onClick={() => load()}>{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</Button>
       {cursor && <Button variant="outline" disabled={busy} onClick={() => load(cursor)}>Mais vínculos</Button>}
@@ -81,6 +92,7 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
       <p className="text-sm text-muted-foreground">Até 31 dias por consulta; o vínculo deve cobrir todo o período. Arquivos disponíveis após as 05h do dia seguinte, horário de Brasília.</p>
       <Button type="submit" disabled={busy || !mapping || !code || !from || !through}>{busy ? "Consultando eventos…" : "Conferir previsões"}</Button>
     </form>
+    <StonePortfolioPanel key={`portfolio:${selected}:${code}`} stoneCode={code} />
     <WalletPositionPanel key={`${selected}:${code}`} stoneCode={code} />
     {error && <p role="alert" className="text-destructive">{error}</p>}
     {result && mapping && <ReceivableAnalysisPanel result={result} unitName={mapping.kioskName} accountName={mapping.accountName}

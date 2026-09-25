@@ -12,12 +12,14 @@ import {
   FileText,
   History,
   ExternalLink,
+  Info,
   Landmark,
   Loader2,
   LockKeyhole,
   Plus,
   ReceiptText,
   ShieldCheck,
+  Trash2,
   Upload,
   UserRoundCheck,
 } from 'lucide-react';
@@ -28,13 +30,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import {
   VACATION_WORKFLOW_DISPLAY_STAGE_META,
   type DPVacationWorkflowDisplayStageId,
   vacationWorkflowDisplayStageId,
   vacationWorkflowForRecord,
 } from '@/lib/dp-vacation-workflow';
-import { activeVacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
+import { activeVacationReceiptDocuments, vacationReceiptDocuments } from '@/features/hr/vacations/receipt-documents';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import type {
   DPVacationEvent,
@@ -64,6 +67,7 @@ type Props = {
   workflowBusy: string | null;
   onSendAccountant: (record: DPVacationRecord) => void;
   onSelectReceiptDocument: (record: DPVacationRecord, documentId: string) => void;
+  onDiscardReceiptDocument: (record: DPVacationRecord, documentId: string) => void;
   onReviewReceipt: (record: DPVacationRecord, review: {
     decision: 'approved' | 'correction_required';
     values?: { grossAmount: number; discountAmount: number; netAmount: number; paymentDate?: string | null };
@@ -697,6 +701,7 @@ export function DPVacationWorkflowPanel({
   workflowBusy,
   onSendAccountant,
   onSelectReceiptDocument,
+  onDiscardReceiptDocument,
   onReviewReceipt,
   onPreparePayment,
   onSyncPayment,
@@ -730,6 +735,7 @@ export function DPVacationWorkflowPanel({
     recordId: string;
     stage: DPVacationWorkflowDisplayStageId;
   } | null>(null);
+  const [discardTarget, setDiscardTarget] = useState<{ documentId: string; fileName: string } | null>(null);
 
   useEffect(() => {
     const reviewed = workflow?.receipt.reviewedValues;
@@ -744,6 +750,7 @@ export function DPVacationWorkflowPanel({
     setCorrectionReason(workflow?.receipt.correctionReason ?? '');
     setReceiptOverrideReason('');
     setNoticeExceptionReason(workflow?.legalAnalysis.noticeExceptionReason ?? '');
+    setDiscardTarget(null);
   }, [
     record?.id,
     workflow?.receipt.originalDocumentId,
@@ -773,7 +780,9 @@ export function DPVacationWorkflowPanel({
   const accountantRequested = ['sent', 'receipt_received', 'completed'].includes(workflow.accountant.status);
   const receiptReceived = ['processing', 'review_pending', 'approved'].includes(workflow.receipt.status);
   const receiptApproved = workflow.receipt.status === 'approved';
+  const receiptDocumentsRaw = vacationReceiptDocuments(workflow.receipt);
   const receiptDocuments = activeVacationReceiptDocuments(workflow.receipt);
+  const receiptAllDocumentsDiscarded = receiptReceived && receiptDocumentsRaw.length > 0 && receiptDocuments.length === 0;
   const receiptSelectionConfirmed = workflow.receipt.status !== 'correction_requested'
     && Boolean(workflow.receipt.selectedDocumentId || workflow.receipt.originalDocumentId);
   const paymentPaid = workflow.payment.status === 'paid';
@@ -1076,7 +1085,7 @@ export function DPVacationWorkflowPanel({
               <p className="text-[13px] font-black">Contabilidade e revisão</p>
             </div>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              Acompanhe o envio do contador, a triagem do copiloto e a confirmação final do RH em uma única etapa.
+              Acompanhe o envio do contador, a triagem da Mel e a confirmação final do RH em uma única etapa.
             </p>
           </div>
           <div className="grid gap-2 p-4 sm:grid-cols-3">
@@ -1088,7 +1097,7 @@ export function DPVacationWorkflowPanel({
           <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
             {[
               { icon: ReceiptText, label: 'Arquivos do contador', detail: 'PDF, JPG ou PNG preservados' },
-              { icon: FileCheck2, label: 'Triagem do copiloto', detail: 'Sugestão para confirmação do RH' },
+              { icon: FileCheck2, label: 'Triagem da Mel', detail: 'Sugestão para confirmação do RH' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
                 <item.icon className="h-4 w-4 text-slate-400" />
@@ -1147,7 +1156,7 @@ export function DPVacationWorkflowPanel({
                 <div>
                   <p className="text-[11px] font-black text-slate-900">Arquivos recebidos</p>
                   <p className="mt-1 text-[10.5px] font-semibold text-slate-500">
-                    O copiloto sugere; o RH precisa abrir e confirmar o recibo principal.
+                    A Mel sugere; o RH precisa abrir e confirmar o recibo principal.
                   </p>
                 </div>
                 <Badge variant="outline" className="rounded-full bg-white text-[9.5px] font-black">{receiptDocuments.length} arquivo(s)</Badge>
@@ -1200,6 +1209,19 @@ export function DPVacationWorkflowPanel({
                             Usar como recibo
                           </Button>
                         ) : null}
+                        {!selected ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg border-rose-200 text-[10px] text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                            disabled={!canApprove || workflowBusy !== null || processing || workflow.receipt.status !== 'review_pending'}
+                            onClick={() => setDiscardTarget({ documentId: document.id, fileName: document.fileName })}
+                          >
+                            {workflowBusy === `discard-receipt-${document.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            Descartar
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -1211,6 +1233,16 @@ export function DPVacationWorkflowPanel({
                   Confirme um arquivo como recibo principal para liberar a revisão dos valores.
                 </div>
               ) : null}
+            </div>
+          ) : receiptAllDocumentsDiscarded ? (
+            <div className="space-y-3 border-t border-emerald-100 bg-slate-50/60 p-4">
+              <div className="flex gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10.5px] font-semibold text-slate-600">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                <span>
+                  Nenhum recibo disponível para revisão: todos os arquivos recebidos foram descartados pelo RH.
+                  Aguarde um novo envio do contador para retomar a triagem.
+                </span>
+              </div>
             </div>
           ) : null}
 
@@ -1521,6 +1553,22 @@ export function DPVacationWorkflowPanel({
         ) : null}
       </div>
 
+      <DeleteConfirmationDialog
+        open={discardTarget !== null}
+        onOpenChange={(open) => { if (!open) setDiscardTarget(null); }}
+        onConfirm={() => {
+          if (!discardTarget) return;
+          onDiscardReceiptDocument(record, discardTarget.documentId);
+        }}
+        title="Descartar arquivo de recibo?"
+        description={discardTarget
+          ? `O arquivo "${discardTarget.fileName}" deixará de aparecer para seleção do RH. Ele continua registrado para auditoria e não pode ser restaurado por aqui; será necessário um novo envio do contador.`
+          : undefined}
+        confirmButtonText="Descartar"
+        cancelButtonText="Cancelar"
+        confirmButtonVariant="destructive"
+        isDeleting={discardTarget !== null && workflowBusy === `discard-receipt-${discardTarget.documentId}`}
+      />
     </section>
   );
 }

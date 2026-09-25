@@ -7,10 +7,16 @@ test('mantém a linha de produção limitada, paginada e sem polling da lista co
     new URL('../../../src/app/api/hr/onboarding/route.ts', import.meta.url),
     'utf8',
   );
-  const shellSource = await readFile(
-    new URL('../../../src/components/hr/recruitment/recruitment-shell.tsx', import.meta.url),
-    'utf8',
-  );
+  const [shellSource, onboardingSource] = await Promise.all([
+    readFile(
+      new URL('../../../src/components/hr/recruitment/recruitment-shell.tsx', import.meta.url),
+      'utf8',
+    ),
+    readFile(
+      new URL('../../../src/components/hr/recruitment/recruitment-onboarding-view.tsx', import.meta.url),
+      'utf8',
+    ),
+  ]);
   const getHandler = routeSource.slice(
     routeSource.indexOf('export async function GET'),
     routeSource.indexOf('export async function POST'),
@@ -20,7 +26,8 @@ test('mantém a linha de produção limitada, paginada e sem polling da lista co
   assert.match(getHandler, /ONBOARDING_PAGE_LIMIT \+ 1/);
   assert.match(getHandler, /startAfter\(cursorDocument\)/);
   assert.doesNotMatch(shellSource, /setInterval\(onRefresh/);
-  assert.match(shellSource, /api\/hr\/onboarding\/\$\{selectedProcess\.id\}/);
+  assert.doesNotMatch(onboardingSource, /setInterval\(onRefresh/);
+  assert.match(onboardingSource, /api\/hr\/onboarding\/\$\{selectedProcess\.id\}/);
 });
 
 test('declara os índices da linha de produção no banco coala-rh', async () => {

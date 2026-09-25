@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarRange, CircleDollarSign, Download, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { CalendarRange, CircleDollarSign, Download, Plus, RefreshCw, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { NewTransactionDialog } from "@/features/financial/components/cash-flow/new-transaction-dialog";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
@@ -14,7 +14,12 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import type { Account } from "@/features/financial/types/account";
 import type { Transaction } from "@/features/financial/types/transaction";
 import { useAuth } from "@/hooks/use-auth";
+import { auth } from "@/lib/firebase";
+import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
+import { financialDateKey } from "@/features/financial/lib/financial-dates";
+import type { FinancialBudgetSummary } from "@/features/financial/budgets/types";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -79,6 +84,11 @@ export function CashFlowPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [directionFilter, setDirectionFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedBudgetId, setSelectedBudgetId] = useState("");
+  const [monthlyBudgets, setMonthlyBudgets] = useState<FinancialBudgetSummary[]>([]);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [budgetLoading, setBudgetLoading] = useState(false);
+  const [includeBudgetScenario, setIncludeBudgetScenario] = useState(false);
   const { data: accountsData } = useFinancialCollection<Account>(financialCollection("bankAccounts"));
   const { data: transactionsData, loading: loadingTransactions } = useFinancialCollection<Transaction>(financialCollection("transactions"));
   const { data: paymentsData, loading: loadingPayments } = useFinancialCollection<any>(financialCollection("payments"));
@@ -86,6 +96,25 @@ export function CashFlowPage() {
   const { data: accountPlansData, loading: loadingAccountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
 
   const canView = Boolean(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow);
+  const budgetMonth = financialDateKey(new Date())!.slice(0, 7);
+  const refreshBudgets = useCallback(async () => {
+    if (!canView) return;
+    setBudgetLoading(true);
+    try {
+      const result = await authenticatedApiRequest<{ budgets: FinancialBudgetSummary[] }>(`/api/financial/budgets?month=${budgetMonth}`, {
+      getIdToken: async () => auth.currentUser?.getIdToken(),
+      fallbackError: "Falha ao carregar orçamentos.",
+      });
+      setMonthlyBudgets(result.budgets.filter((budget) => budget.active));
+      setBudgetError(null);
+    } catch (cause) {
+      setBudgetError(cause instanceof Error ? cause.message : "Falha ao carregar orçamentos.");
+    } finally { setBudgetLoading(false); }
+  }, [budgetMonth, canView]);
+  useEffect(() => {
+    void refreshBudgets();
+  }, [refreshBudgets]);
+  const selectedBudget = monthlyBudgets.find((budget) => budget.id === selectedBudgetId) ?? monthlyBudgets[0];
   const months = Number.parseInt(period, 10);
   const periodStart = startOfMonth(subMonths(new Date(), months - 1));
   const periodEnd = endOfMonth(new Date());
@@ -165,8 +194,8 @@ export function CashFlowPage() {
     });
   }, [accountPlanMap, expenseMap, paymentsData, periodEnd, periodStart, transactionsData]);
 
-  const forecastMovements = useMemo<Movement[]>(() =>
-    (expensesData || []).flatMap((expense) => {
+  const forecastMovements = useMemo<Movement[]>(() => {
+    const expenseForecast = (expensesData || []).flatMap((expense): Movement[] => {
       if (["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return [];
       const date = toDate(expense.dueDate) || toDate(expense.competenceDate);
       if (!date || date < periodStart || date > periodEnd) return [];
@@ -191,7 +220,19 @@ export function CashFlowPage() {
           ? Number(expense.settlementSummary.balanceAmountCents) / 100
           : Number(expense.totalValue) || 0,
       }];
-    }), [accountPlanMap, expensesData, periodEnd, periodStart]);
+    });
+    if (!includeBudgetScenario) return expenseForecast;
+    const budgetForecast: Movement[] = monthlyBudgets.filter((budget) => budget.balanceAmountCents - budget.forecastCoverageAmountCents > 0)
+      .map((budget) => ({
+        id: `budget-scenario-${budget.id}`,
+        date: endOfMonth(new Date()),
+        description: `Estimativa adicional do orçamento: ${budget.name}`,
+        direction: "out" as const,
+        status: "forecast" as const,
+        amount: (budget.balanceAmountCents - budget.forecastCoverageAmountCents) / 100,
+      }));
+    return [...expenseForecast, ...budgetForecast];
+  }, [accountPlanMap, expensesData, includeBudgetScenario, monthlyBudgets, periodEnd, periodStart]);
 
   const allMovements = useMemo(
     () => [...realizedMovements, ...forecastMovements].sort((left, right) => right.date.getTime() - left.date.getTime()),
@@ -217,9 +258,13 @@ export function CashFlowPage() {
   const totals = useMemo(() => {
     const realizedIncome = scopedRealized.filter((item) => item.direction === "in").reduce((sum, item) => sum + item.amount, 0);
     const realizedOutcome = scopedRealized.filter((item) => item.direction === "out").reduce((sum, item) => sum + item.amount, 0);
-    const accountsPayable = scopedForecast.reduce((sum, item) => sum + item.amount, 0);
+    const accountsPayable = scopedForecast.filter((item) => !item.id.startsWith("budget-scenario-"))
+      .reduce((sum, item) => sum + item.amount, 0);
+    const budgetScenarioAmount = scopedForecast.filter((item) => item.id.startsWith("budget-scenario-"))
+      .reduce((sum, item) => sum + item.amount, 0);
     const realizedBalance = realizedIncome - realizedOutcome;
-    return { realizedIncome, realizedOutcome, accountsPayable, realizedBalance, projectedBalance: realizedBalance - accountsPayable };
+    return { realizedIncome, realizedOutcome, accountsPayable, budgetScenarioAmount, realizedBalance,
+      projectedBalance: realizedBalance - accountsPayable - budgetScenarioAmount };
   }, [scopedForecast, scopedRealized]);
 
   const chartData = useMemo(() => {
@@ -300,7 +345,7 @@ export function CashFlowPage() {
         <Kpi label="Entradas realizadas" value={totals.realizedIncome} detail="Recebimentos do período" tone="positive" icon={TrendingUp} />
         <Kpi label="Saídas realizadas" value={totals.realizedOutcome} detail="Pagamentos do período" tone="negative" icon={TrendingDown} />
         <Kpi label="Contas a pagar" value={totals.accountsPayable} detail="Despesas abertas no período" tone="warning" icon={CircleDollarSign} />
-        <Kpi label="Saldo projetado" value={totals.projectedBalance} detail="Saldo realizado menos previsões" tone={totals.projectedBalance >= 0 ? "positive" : "negative"} icon={Wallet} />
+        <Kpi label="Saldo projetado" value={totals.projectedBalance} detail={includeBudgetScenario ? "Inclui simulação dos orçamentos" : "Saldo realizado menos previsões"} tone={totals.projectedBalance >= 0 ? "positive" : "negative"} icon={Wallet} />
       </div>
 
       <Card className="rounded-2xl">
@@ -352,6 +397,40 @@ export function CashFlowPage() {
               </ResponsiveContainer>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-[#e2ded4] shadow-sm">
+        <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div><CardTitle>Orçamento da categoria</CardTitle><CardDescription>Limite do mês por competência. A linha tracejada é a referência fixa; a linha sólida mostra o disponível após as despesas.</CardDescription></div>
+          <div className="flex w-full gap-2 sm:w-auto">
+          {monthlyBudgets.length > 0 && <Select value={selectedBudget?.id} onValueChange={setSelectedBudgetId}>
+            <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Selecione um orçamento" /></SelectTrigger>
+            <SelectContent>{monthlyBudgets.map((budget) => <SelectItem key={budget.id} value={budget.id}>{budget.name}</SelectItem>)}</SelectContent>
+          </Select>}
+          <Button variant="outline" size="icon" aria-label="Atualizar orçamento" disabled={budgetLoading} onClick={() => void refreshBudgets()}><RefreshCw className={cn("h-4 w-4", budgetLoading && "animate-spin")} /></Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <label className="mb-4 flex items-start gap-2 rounded-xl border bg-muted/20 p-3 text-sm">
+            <Checkbox checked={includeBudgetScenario} onCheckedChange={(checked) => setIncludeBudgetScenario(checked === true)} disabled={accountFilter !== "all"} />
+            <span><strong>Simular no saldo projetado</strong><span className="block text-xs text-muted-foreground">Inclui somente o valor ainda disponível dos orçamentos, como saída adicional no último dia do mês. As despesas já lançadas continuam nas suas próprias datas. Disponível apenas em “Todas as contas”.</span></span>
+          </label>
+          {budgetError ? <p className="text-sm text-amber-700">{budgetError}</p> : !selectedBudget
+            ? <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhum orçamento ativo para {budgetMonth}.</p>
+            : <><div className="mb-5 grid gap-3 sm:grid-cols-3">
+                {[["Orçado", selectedBudget.budgetedAmountCents], ["Comprometido", selectedBudget.consumedAmountCents], ["Disponível", selectedBudget.balanceAmountCents]].map(([label, cents]) =>
+                  <div key={label} className="rounded-xl border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="font-mono text-lg font-bold">{formatCurrency(Number(cents) / 100)}</p></div>)}
+              </div><div className="h-[280px] w-full"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={selectedBudget.curve} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.12} />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
+                <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 100000)}k`} />
+                <Tooltip formatter={(value: number) => formatCurrency(value / 100)} />
+                <Legend />
+                <Line type="linear" dataKey="plannedBalanceCents" name="Referência planejada" stroke="#94a3b8" strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                <Line type="stepAfter" dataKey="actualBalanceCents" name="Disponível após despesas" stroke="#2563eb" strokeWidth={3} dot={false} connectNulls={false} />
+              </ComposedChart></ResponsiveContainer></div>
+              <p className="mt-3 text-xs text-muted-foreground">Este saldo é do orçamento da categoria. Ele não representa o saldo bancário.</p></>}
         </CardContent>
       </Card>
 

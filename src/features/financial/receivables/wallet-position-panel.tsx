@@ -6,12 +6,9 @@ import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { queryStoneWalletPosition } from "./wallet-position";
+import { walletNatureLabels, walletTypeLabels } from "./wallet-position-labels";
 
 type Position = Awaited<ReturnType<typeof queryStoneWalletPosition>>;
-const natures: Record<Position["rows"][number]["nature"], string> = {
-  regular: "Carteira normal", warranty: "Garantia", ownership_assignment: "Cessão",
-  stone_anticipation: "Antecipação Stone", unknown: "Natureza não reconhecida",
-};
 
 export function WalletPositionPanel({ stoneCode }: { stoneCode: string }) {
   const api = useAuthenticatedApi();
@@ -54,7 +51,7 @@ export function WalletPositionPanel({ stoneCode }: { stoneCode: string }) {
         <div className="overflow-x-auto"><table className="w-full text-sm"><caption className="sr-only">Valores da carteira por natureza e categoria</caption>
           <thead><tr>{["Tipo de carteira", "Natureza", "Categoria informada", "Valor informado (R$)"].map(label => <th key={label} className="p-2 text-left">{label}</th>)}</tr></thead>
           <tbody>{result.rows.map(row => <tr className="border-t" key={`${row.walletTypeId}:${row.walletNatureId}:${row.category}`}>
-            <td className="p-2">{row.walletTypeId}</td><td>{natures[row.nature]} ({row.walletNatureId})</td><td>{row.category}</td><td>{row.amount.replace(".", ",")}</td>
+            <td className="p-2">{walletTypeLabels[row.walletTypeId] ?? "Arranjo não identificado"} ({row.walletTypeId})</td><td>{walletNatureLabels[row.nature]} ({row.walletNatureId})</td><td>{row.category}</td><td>{row.amount.replace(".", ",")}</td>
           </tr>)}</tbody></table></div>
         <p className="text-sm">{result.totalRowsInFile} posições no arquivo. Valores preservados com a precisão informada pela Stone.</p>
         {result.nextOffset !== null && <Button type="button" variant="outline" disabled={busy} onClick={() => void read(result.nextOffset!)}>Próxima página de posições</Button>}

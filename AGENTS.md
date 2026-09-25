@@ -1,5 +1,16 @@
 # Regras operacionais do Coala One
 
+## Departamento de Desenvolvimento e Tecnologia
+
+- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os sete especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket.
+- Escolha somente os especialistas necessários. Execute no máximo um especialista por vez; aguarde sua entrega e confira processos ainda ativos antes de iniciar ou retomar outro. Especialistas não delegam.
+- Selecione o modelo pelo trabalho concreto, conforme `docs/engineering/development-technology.md`. Neste departamento, use Luna ou Sol no Codex e Haiku ou Sonnet no Claude Code. Nunca selecione Fable ou Opus; Astra exige uma solicitação explícita do programador para aquele chamado. Se o trabalho exceder esses modelos, informe o limite e peça uma decisão. Registre o modelo efetivamente usado quando o CLI informar.
+- Antes de usar o Claude Code para este departamento, confira `claude --version`: a restrição da opção Padrão exige a versão 2.1.175 ou posterior. Se o comando resolver para uma instalação mais antiga, use uma instalação compatível antes de iniciar o chamado.
+- Antes de acionar Velma ou Trinity no Codex, coloque também a sessão principal em modo somente leitura e confira as ferramentas externas disponíveis; uma configuração do agente não substitui a permissão efetiva da sessão.
+- Registre objetivo, autorização, critérios de aceite, trabalho e evidências em `.ai-work/development-technology/<id>/`. Ao mudar de CLI, encerre a sessão anterior e confira o registro e o estado dos arquivos antes de assumir a coordenação.
+- Nome de personagem identifica papel. Somente TARS pode usar um estilo direto, calmo, pragmático e com humor pontual; precisão e regras operacionais têm prioridade.
+- Uma solicitação de implementação autoriza as alterações e verificações locais pertinentes ao escopo. Commit, push, migração em banco real, publicação e deploy exigem autorização própria, salvo quando já foram explicitamente incluídos na solicitação.
+
 ## Como tratar o código existente
 
 - Código existente é evidência, não necessariamente padrão. Antes de copiar uma implementação, distinga decisão arquitetural intencional de convenção consolidada, solução local, detalhe histórico ou dívida técnica. Somente decisão e convenção comprovadas viram padrão.
@@ -16,6 +27,14 @@
 - Infraestrutura compartilhada por mais de um módulo deve ficar em commit próprio. Código de produto, testes e documentação do mesmo comportamento podem ficar juntos quando formarem uma unidade verificável.
 - Não use `stash`, `reset`, `restore`, troca de branch, limpeza de arquivos ou commit-snapshot para reorganizar mudanças de terceiros sem autorização explícita e uma verificação prévia de arquivos não rastreados e possíveis segredos.
 - Antes de encerrar, execute `git status --short`, informe qualquer mudança staged, unstaged ou não rastreada e não declare o workspace limpo sem evidência.
+
+### Ciclo de vida e espaço dos worktrees
+
+- Antes de criar um worktree, consulte `git worktree list` e identifique o worktree da tarefa. Não abra outro apenas para revisar, testar ou publicar a mesma tarefa, salvo quando o isolamento for necessário; nesse caso, defina também quando o temporário será encerrado.
+- Instale dependências e gere builds apenas nos worktrees que precisarem deles. Antes de `npm ci`, build ou E2E pesado, confira `df -h` e não inicie a operação com menos de 15 GB livres; primeiro identifique caches regeneráveis e combine a limpeza necessária.
+- Ao concluir um chamado, faça o fechamento do worktree: confira `git status --short`, branch e commits ainda não integrados, processos em uso e arquivos ignorados. Um checkout limpo não prova que `.ai-work`, `.env.local`, resultados de testes ou outros dados locais possam ser apagados.
+- Se o worktree já não for necessário, remova-o com `git worktree remove` somente depois de preservar dados exclusivos e obter a autorização aplicável à limpeza. Preserve a branch, salvo autorização separada para excluí-la. Se precisar mantê-lo, registre no relatório o motivo e o próximo ponto de revisão.
+- Depois de merge, rollout ou encerramento de um worktree temporário, confira `git worktree list` e o espaço livre. Para registros órfãos, use `git worktree prune --dry-run --verbose` e valide os caminhos antes de executar o prune; não faça exclusão automática em massa.
 
 ## Padrão de construção de módulos
 
@@ -50,6 +69,13 @@
 - `coala-error-triage` é de invocação explícita, escreve somente em `.ai-work/error-triage/` e nunca publica issues.
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
+
+## Publicação do Coala-OP
+
+- Este produto usa Firebase App Hosting, não Sites. O backend é `studio` em `us-central1`; o projeto Firebase é o configurado em `.firebaserc`. A branch `production` é acompanhada pelo App Hosting e atende `https://op.coalashakes.com`.
+- Fluxo estabelecido: integrar a mudança por PR em `main`, com as checagens exigidas; depois abrir PR de promoção específico para `production`. O CI de produção usa `scripts/verify-production-promotion.mjs` para exigir que os arquivos promovidos sejam idênticos aos do `main` validado. Merge em `main` não publica o produto.
+- Em cada publicação, confira apenas o estado que pode variar: autorização para commit/push/merge/deploy, branch e alterações locais, escopo e SHA da promoção, checagens atuais e eventual mudança no contrato acima. Não reinvestigue a plataforma nem substitua esse fluxo por `firebase deploy` ou por instruções genéricas de hospedagem.
+- Após o merge em `production`, confirme que o build do App Hosting usa o SHA promovido, que o rollout terminou em `SUCCEEDED` e que a URL responde. PR integrado ou build iniciado não bastam para declarar a publicação concluída. Se a plataforma ou o canal de promoção mudar, atualize esta seção junto com o procedimento.
 
 ## Verificação antes de concluir
 

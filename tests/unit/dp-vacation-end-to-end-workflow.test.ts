@@ -49,6 +49,13 @@ test('contador envia vários PDF ou imagens e o RH confirma a sugestão do copil
   assert.match(server, /VACATION_RECEIPT_DOCUMENT_SELECTED/);
 });
 
+test('RH pode descartar arquivo de recibo não selecionado, mas não o já escolhido', () => {
+  assert.match(server, /discardVacationReceiptDocument/);
+  assert.match(server, /VACATION_RECEIPT_DOCUMENT_DISCARDED/);
+  assert.match(server, /DP_VACATION_RECEIPT_DOCUMENT_ALREADY_SELECTED/);
+  assert.match(workflowUi, /Descartar/);
+});
+
 test('pagamento nasce no fluxo protegido e nunca é autorizado automaticamente pelo RH', () => {
   assert.match(server, /sourceType: 'vacation'/);
   assert.match(paymentService, /const status: BankPaymentRequestStatus = "awaiting_financial_authorization"/);
