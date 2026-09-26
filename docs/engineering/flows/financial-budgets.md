@@ -34,6 +34,8 @@ Orçamentos/regras podem pertencer a centro de resultado. [Referências](../../.
 
 Testes adicionais disponíveis: [composição](../../../tests/unit/financial-budget-unit-composition.test.ts), [conversão](../../../tests/unit/financial-budget-conversion.test.ts), [integração](../../../tests/integration/financial-budgets.test.mjs). Ver [implantação e limites existentes](../financial-budgets-rollout.md); não executar conversão real só por integrar documentação.
 
+Conversão de VT rateado por centro: a origem pode conter `isApportioned` quando as parcelas pessoais identificam a mesma pessoa/conta e conservam o total, com centros resolvidos sem ambiguidade. Percentuais devem totalizar 100% e concordar com os valores pessoais (tolerância de um centavo por arredondamento). Os valores pessoais exatos de cada centro são preservados nos destinos, sem redistribuição. Listagem, prévia e confirmação normalizam nomes legados em IDs; a conversão lê essas referências dentro da transação. Rateio só percentual, centro ausente/ambíguo, outra pessoa/conta ou atividade financeira continuam bloqueados. Cobertura de regressão nos testes unitários e de integração acima; nenhuma nova permissão ou rotina recorrente.
+
 ## Cronograma de projetos por competência ou período
 
 Ajuste de 2026-09-26: [contrato completo](../project-budget-cashflow.md). O cadastro escolhe um mês ou datas inclusivas; o desembolso pode ser uniforme por dia (etapas mensais) ou até 36 etapas com valores/data exatos. A referência inicial é preservada; revisão do limite exige motivo e cronograma correspondente. Projetos legados só passam a projetar depois de configuração explícita, sem backfill.

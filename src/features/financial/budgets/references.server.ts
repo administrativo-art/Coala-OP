@@ -97,7 +97,7 @@ export async function listBudgetPersonReferences(actor: ServerUserContext, cente
 }
 
 /** Resolve only referenced tokens. Ambiguous/deleted names stay unresolved and produce issues. */
-export async function resolveBudgetExpenseCenters(expenses: BudgetExpense[]): Promise<BudgetExpense[]> {
+export async function resolveBudgetExpenseCenters(expenses: BudgetExpense[], transaction?: FirebaseFirestore.Transaction): Promise<BudgetExpense[]> {
   const tokens = [...new Set(expenses.flatMap((expense) => [expense.resultCenter,
     ...(expense.apportionments ?? []).map((p) => p.resultCenter), ...(expense.personAllocations ?? []).map((p) => p.resultCenter)])
     .filter((token): token is string => Boolean(token)))];
@@ -106,12 +106,14 @@ export async function resolveBudgetExpenseCenters(expenses: BudgetExpense[]): Pr
   const validIds = tokens.filter((token) => !token.includes("/") && token.length <= 180);
   const byToken = new Map<string, string>();
   if (validIds.length) {
-    const docs = await financialDbAdmin.getAll(...validIds.map((id) => financialDbAdmin.collection("resultCenters").doc(id)));
+    const refs = validIds.map((id) => financialDbAdmin.collection("resultCenters").doc(id));
+    const docs = transaction ? await transaction.getAll(...refs) : await financialDbAdmin.getAll(...refs);
     docs.forEach((doc) => { if (doc.exists) byToken.set(doc.id, doc.id); });
   }
   const names = tokens.filter((token) => !byToken.has(token));
   for (let index = 0; index < names.length; index += 30) {
-    const docs = await financialDbAdmin.collection("resultCenters").where("name", "in", names.slice(index, index + 30)).limit(201).get();
+    const query = financialDbAdmin.collection("resultCenters").where("name", "in", names.slice(index, index + 30)).limit(201);
+    const docs = transaction ? await transaction.get(query) : await query.get();
     if (docs.size > 200) throw new BudgetDomainError("Referências de centro ambíguas excedem o limite de consulta.");
     const matches = new Map<string, string[]>();
     docs.forEach((doc) => { const name = String(doc.get("name")); matches.set(name, [...matches.get(name) ?? [], doc.id]); });
