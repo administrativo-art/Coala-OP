@@ -213,3 +213,31 @@ test("filtros anteriores preservam acesso por etapa e concluídos", () => {
     assert.equal(matchesPaymentRequestFilter(paid, "unpaid"), false);
   }
 });
+
+test("pagos destacam a data efetiva e deixam de exibir previsão, vencimento ou envio imediato", () => {
+  for (const base of [pix, boleto]) {
+    for (const scheduledFor of [undefined, "2026-10-01"]) {
+      for (const beneficiaryVerificationStatus of ["verified", "divergent"] as const) {
+        assert.deepEqual(paymentSchedulePresentation({ ...base, status: "paid", scheduledFor,
+          bankScheduledFor: "2026-10-02", paidAt: "2026-09-08T15:00:00.000Z", beneficiaryVerificationStatus }, now), {
+          label: "Pago em", date: "08/09/2026", timing: null, dueDate: null,
+        });
+      }
+    }
+  }
+});
+
+test("data de pagamento respeita Belém e preserva datas sem horário", () => {
+  for (const [paidAt, date] of [["2026-09-09T02:00:00.000Z", "08/09/2026"], ["2026-09-09", "09/09/2026"]]) {
+    assert.equal(paymentSchedulePresentation({ ...pix, status: "paid", paidAt }, now).date, date);
+  }
+});
+
+test("pago sem data efetiva não usa previsão nem a data da observação como pagamento", () => {
+  for (const paidAt of [undefined, "", "inválida"]) {
+    assert.deepEqual(paymentSchedulePresentation({ ...boleto, status: "paid", paidAt,
+      bankLiquidationObservedAt: "2026-09-10T15:00:00.000Z" }, now), {
+      label: "Pago em", date: null, timing: "Data não informada", dueDate: null,
+    });
+  }
+});
