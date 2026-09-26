@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
+import { endOfMonth, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarRange, CircleDollarSign, Download, Plus, RefreshCw, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { NewTransactionDialog } from "@/features/financial/components/cash-flow/new-transaction-dialog";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
-import { buildCashFlowCsv, buildExpenseLifecycleData } from "@/features/financial/lib/cash-flow-analysis";
+import { buildCashFlowCsv, buildExpenseLifecycleData, cashFlowPeriod } from "@/features/financial/lib/cash-flow-analysis";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import type { Account } from "@/features/financial/types/account";
 import type { Transaction } from "@/features/financial/types/transaction";
@@ -18,7 +18,8 @@ import { auth } from "@/lib/firebase";
 import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
 import { financialDateKey } from "@/features/financial/lib/financial-dates";
 import type { FinancialBudgetSummary } from "@/features/financial/budgets/types";
-import { budgetScenarioAmount, cashForecastTotals, type BudgetCashProjectionPayload } from "@/features/financial/budgets/projection-view";
+import { budgetScenarioAmount, cashForecastTotals, selectProjectCashProjections, type BudgetCashProjectionPayload } from "@/features/financial/budgets/projection-view";
+import { expenseAccountAllocations } from "@/features/financial/lib/expense-account-allocations";
 import { allowedBudgetCenters, type BudgetCenterOption } from "@/features/financial/components/settings/budget-ui-model";
 import { resolveUnitAccess } from "@/lib/unit-access";
 import { PageContainer } from "@/components/layout/page-container";
@@ -28,10 +29,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 type Movement = {
-  source?: "expense" | "expense_forecast" | "budget_residual" | "budget_scenario";
+  source?: "expense" | "expense_forecast" | "budget_residual" | "budget_scenario" | "project_residual";
   id: string;
   date: Date;
   description: string;
@@ -49,10 +52,10 @@ type Movement = {
 };
 
 const PERIOD_OPTIONS = [
-  { value: "1", label: "Mês atual" },
-  { value: "3", label: "Últimos 3 meses" },
-  { value: "6", label: "Últimos 6 meses" },
-  { value: "12", label: "Últimos 12 meses" },
+  { value: "1", label: "1 mês" },
+  { value: "3", label: "3 meses" },
+  { value: "6", label: "6 meses" },
+  { value: "12", label: "12 meses" },
 ];
 
 function Kpi({ label, value, detail, tone, icon: Icon }: {
@@ -86,6 +89,7 @@ export function CashFlowPage() {
   const { permissions, user, isDefaultAdmin } = useAuth();
   const [accountFilter, setAccountFilter] = useState("all");
   const [period, setPeriod] = useState("3");
+  const [endingMonth, setEndingMonth] = useState(() => financialDateKey(new Date())!.slice(0, 7));
   const [statusFilter, setStatusFilter] = useState("all");
   const [directionFilter, setDirectionFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -105,10 +109,9 @@ export function CashFlowPage() {
   const { data: accountPlansData, loading: loadingAccountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
 
   const canView = Boolean(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow);
-  const budgetMonth = financialDateKey(new Date())!.slice(0, 7);
+  const budgetMonth = endingMonth;
   const months = Number.parseInt(period, 10);
-  const periodStart = startOfMonth(subMonths(new Date(), months - 1));
-  const periodEnd = endOfMonth(new Date());
+  const { referenceDate, periodStart, periodEnd } = useMemo(() => cashFlowPeriod(endingMonth, months), [endingMonth, months]);
   const from = financialDateKey(periodStart)!;
   const to = financialDateKey(periodEnd)!;
   const allBudgetUnits = Boolean(user && resolveUnitAccess(user, { isDefaultAdmin }).allUnits);
@@ -223,6 +226,15 @@ export function CashFlowPage() {
     });
   }, [accountPlanMap, expenseMap, paymentsData, periodEnd, periodStart, transactionsData]);
 
+  const projectForecastSelection = useMemo(() => {
+    const legacyAccounts = (expensesData ?? []).filter((expense) => {
+      if (expense.provisionType !== "forecast" || ["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return false;
+      const date = toDate(expense.dueDate) || toDate(expense.competenceDate);
+      return date && date >= periodStart && date <= periodEnd;
+    }).flatMap((expense) => expenseAccountAllocations(expense).map((part) => part.accountPlanId));
+    return selectProjectCashProjections(budgetProjections.projectProjections ?? [], legacyAccounts);
+  }, [budgetProjections.projectProjections, expensesData, periodStart, periodEnd]);
+
   const forecastMovements = useMemo<Movement[]>(() => {
     const expenseForecast = (expensesData || []).flatMap((expense): Movement[] => {
       if (["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return [];
@@ -257,19 +269,25 @@ export function CashFlowPage() {
       accountPlanId: projection.accountPlanId, competenceDate: new Date(`${projection.competenceMonth}-01T12:00:00`),
       direction: "out", status: "forecast", amount: projection.amountCents / 100,
     }));
-    if (!includeBudgetScenario) return [...expenseForecast, ...residual];
-    const budgetForecast: Movement[] = monthlyBudgets.filter((budget) => budgetScenarioAmount(budget) > 0)
+    const projectResidual: Movement[] = projectForecastSelection.projections.map((projection) => ({
+      id: `project-residual-${projection.id}`, source: "project_residual", date: new Date(`${projection.date}T12:00:00`),
+      description: `Estimativa do projeto: ${projection.description}${projection.requiresReview ? " · revisar data/cobertura" : ""}`,
+      direction: "out", status: "forecast", amount: projection.amountCents / 100,
+    }));
+    if (!includeBudgetScenario) return [...expenseForecast, ...residual, ...projectResidual];
+    const budgetForecast: Movement[] = monthlyBudgets.filter((budget) => budgetScenarioAmount(budget) > 0
+      && !budget.accountPlanIds.some((id) => projectForecastSelection.accountPlanIds.includes(id)))
       .map((budget) => ({
         id: `budget-scenario-${budget.id}`,
         source: "budget_scenario",
-        date: endOfMonth(new Date()),
+        date: endOfMonth(referenceDate),
         description: `Estimativa adicional do orçamento: ${budget.name}`,
         direction: "out" as const,
         status: "forecast" as const,
         amount: budgetScenarioAmount(budget) / 100,
       }));
-    return [...expenseForecast, ...residual, ...budgetForecast];
-  }, [accountPlanMap, expensesData, includeBudgetScenario, monthlyBudgets, periodEnd, periodStart, budgetProjections]);
+    return [...expenseForecast, ...residual, ...projectResidual, ...budgetForecast];
+  }, [accountPlanMap, expensesData, includeBudgetScenario, monthlyBudgets, periodEnd, periodStart, referenceDate, budgetProjections, projectForecastSelection]);
 
   const allMovements = useMemo(
     () => [...realizedMovements, ...forecastMovements].sort((left, right) => right.date.getTime() - left.date.getTime()),
@@ -304,7 +322,7 @@ export function CashFlowPage() {
   const chartData = useMemo(() => {
     const map: Record<string, { key: string; month: string; income: number; outcome: number; forecast: number; balance: number }> = {};
     for (let index = months - 1; index >= 0; index -= 1) {
-      const date = subMonths(new Date(), index);
+      const date = subMonths(referenceDate, index);
       const key = format(date, "yyyy-MM");
       map[key] = { key, month: format(date, "MMM/yy", { locale: ptBR }), income: 0, outcome: 0, forecast: 0, balance: 0 };
     }
@@ -323,11 +341,11 @@ export function CashFlowPage() {
       balance += bucket.income - bucket.outcome - bucket.forecast;
       return { ...bucket, balance };
     });
-  }, [months, scopedForecast, scopedRealized]);
+  }, [months, referenceDate, scopedForecast, scopedRealized]);
 
   const expenseLifecycleData = useMemo(
-    () => buildExpenseLifecycleData(expensesData || [], months),
-    [expensesData, months]
+    () => buildExpenseLifecycleData(expensesData || [], months, referenceDate),
+    [expensesData, months, referenceDate]
   );
 
   function exportCsv() {
@@ -367,6 +385,9 @@ export function CashFlowPage() {
             <SelectTrigger className="w-44"><CalendarRange className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
             <SelectContent>{PERIOD_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
           </Select>
+          <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44" value={endingMonth} onChange={(event) => {
+            if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setEndingMonth(event.target.value);
+          }} /></div>
           <Button variant="outline" size="sm" onClick={exportCsv} disabled={filteredMovements.length === 0}>
             <Download className="mr-2 h-4 w-4" /> Exportar CSV
           </Button>
@@ -377,6 +398,10 @@ export function CashFlowPage() {
       {(budgetError || !budgetScopeReady || budgetLoading) && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{budgetError || (budgetLoading ? "Atualizando planejamento…" : "Selecione abaixo um centro autorizado para incluir o planejamento por orçamento.")} O saldo projetado fica incompleto até essa conferência.</p>}
       {budgetProjections.conflictCount > 0 && <p className="text-sm text-amber-700">Há {budgetProjections.conflictCount} linha(s) com provisão antiga. Mantivemos a fonte antiga e suspendemos a nova projeção para evitar duplicidade. A conversão depende de prévia e confirmação.</p>}
       {budgetProjections.issueCount > 0 && <p className="text-sm text-amber-700">Há classificações ou coberturas a conferir nos orçamentos.</p>}
+      {(budgetProjections.projectIssues ?? []).map((issue, index) => <p key={`${index}:${issue}`} role="status" className="text-sm text-amber-700">{issue}</p>)}
+      {!!budgetProjections.projectIssues?.length && <p className="text-sm text-amber-700">O planejamento dos projetos precisa de conferência; o saldo projetado pode estar incompleto.</p>}
+      {projectForecastSelection.conflictCount > 0 && <p role="status" className="text-sm text-amber-700">Há {projectForecastSelection.conflictCount} projeto(s) com provisões avulsas nas mesmas contas e intervalo. Mantivemos as provisões e suspendemos a previsão desses projetos para evitar duplicidade. Confira os vínculos antes de usar o saldo projetado.</p>}
+      {(budgetProjections.projectProjections?.length ?? 0) > 0 && <p className="text-sm text-muted-foreground">O planejamento inclui o saldo ainda esperado dos projetos, sem criar contas a pagar. Disponível em “Todas as contas” e “Todos os centros”. Envelopes mensais nas mesmas contas não são somados à simulação para evitar sobreposição.</p>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Kpi label="Saldo realizado" value={totals.realizedBalance} detail="Entradas menos saídas realizadas" tone="neutral" icon={Wallet} />
         <Kpi label="Entradas realizadas" value={totals.realizedIncome} detail="Recebimentos do período" tone="positive" icon={TrendingUp} />

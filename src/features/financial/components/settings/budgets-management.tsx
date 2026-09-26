@@ -370,7 +370,7 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
         accountPlanId: row.accountPlanId, amountCents: row.amountCents, expectedPurchaseDate: row.expectedPurchaseDate,
         estimateSource: "manual", purchaseDay: Number(row.expectedPurchaseDate.slice(8, 10)), purchaseMonthOffset: row.expectedPurchaseDate.slice(0, 7) < month ? -1 : 0 })));
     }} />}
-    <BudgetProjectsManagement canManage={canManage} accounts={postingAccounts} />
+    {allUnits && <BudgetProjectsManagement canManage={canManage} accounts={postingAccounts} />}
 
     <Card className="rounded-2xl border-[#e2ded4] shadow-sm"><CardHeader><CardTitle>Regras automáticas</CardTitle>
       <CardDescription>Uma regra ativa cria um orçamento independente em cada mês, mantendo o valor original de cada geração.</CardDescription></CardHeader>

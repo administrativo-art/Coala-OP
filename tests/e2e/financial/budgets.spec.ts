@@ -11,6 +11,65 @@ function shiftMonth(month: string, offset: number) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// API lifecycle coverage; do not run the browser suite without task-specific authorization.
+test("projeto distribui desembolsos, substitui previsão por boleto e encerra apenas o restante", async ({ request }) => {
+  assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
+  const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error("Emulador Auth obrigatório.");
+  const app = getApps().find((item) => item.name === "project-cash-e2e") ?? initializeApp({ projectId: "demo-coala-e2e" }, "project-cash-e2e");
+  const db = getFirestore(app, "coala-financeiro");
+  const first = shiftMonth(financialDateKey(new Date())!.slice(0, 7), 1);
+  const last = shiftMonth(first, 1);
+  const account = db.collection("accounts").doc("project-cash-e2e-material");
+  const expense = db.collection("expenses").doc("project-cash-e2e-bill");
+  const login = await request.post(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, {
+    data: { email: E2E_USER.email, password: E2E_USER.password, returnSecureToken: true },
+  });
+  expect(login.ok()).toBe(true);
+  const headers = { Authorization: `Bearer ${(await login.json()).idToken}` };
+  let id: string | undefined;
+  try {
+    await account.set({ name: "Material projeto E2E", active: true, isGroup: false });
+    await expense.set({ status: "pending", competenceMonth: first, dueDate: `${shiftMonth(last, 1)}-10`, totalValue: 3000, accountId: account.id });
+    const data = { name: "Reforma E2E", accountPlanIds: [account.id], periodMode: "date_range", startMonth: first, endMonth: last,
+      startDate: `${first}-10`, endDate: `${last}-12`, budgetedAmountCents: 1000000, cashPlan: { mode: "custom", stages: [
+        { id: "entry", name: "Entrada", startDate: `${first}-10`, endDate: `${first}-10`, amountCents: 400000 },
+        { id: "delivery", name: "Entrega", startDate: `${last}-12`, endDate: `${last}-12`, amountCents: 600000 },
+      ] } };
+    expect((await request.post("/api/financial/budget-projects", { data })).status()).toBe(401);
+    const created = await request.post("/api/financial/budget-projects", { headers, data });
+    expect(created.status(), await created.text()).toBe(201); id = (await created.json()).id;
+    const path = `/api/financial/budget-projects/${id}`;
+    expect((await request.post(`${path}/expenses`, { headers, data: { expenseId: expense.id } })).status()).toBe(400);
+    expect((await request.post(`${path}/expenses`, { headers, data: { expenseId: expense.id, stageId: "entry" } })).status()).toBe(200);
+    const read = async () => { const response = await request.get(path, { headers }); expect(response.status()).toBe(200); return (await response.json()).project; };
+    const projected = async () => {
+      const response = await request.get(`/api/financial/budgets/cash-projections?from=${first}-01&to=${last}-12`, { headers });
+      expect(response.status(), await response.text()).toBe(200);
+      return (await response.json()).projectProjections.filter((row: { projectId: string }) => row.projectId === id)
+        .reduce((sum: number, row: { amountCents: number }) => sum + row.amountCents, 0);
+    };
+    expect(await projected()).toBe(700000);
+    const stage = (await read()).cashStages[0];
+    expect((await request.post(`${path}/stages`, { headers, data: { stageId: "entry", evidence: stage.evidence,
+      closed: true, confirmed: true, reason: "Entrada concluída sem compra adicional" } })).status()).toBe(200);
+    expect(await projected()).toBe(600000);
+    await expense.update({ status: "paid" });
+    expect(await projected()).toBe(600000);
+    expect((await read()).originalCashPlan.stages[0].amountCents).toBe(400000);
+    expect((await expense.get()).get("dueDate")).toBe(`${shiftMonth(last, 1)}-10`);
+  } finally {
+    if (id) {
+      for (const collection of ["financialBudgetProjectEvents", "financialBudgetRevisions"]) {
+        const docs = await db.collection(collection).where("projectId", "==", id).limit(50).get();
+        await Promise.all(docs.docs.map((doc) => doc.ref.delete()));
+      }
+      await db.collection("financialBudgetProjects").doc(id).delete();
+    }
+    await Promise.all([account.delete(), expense.delete(), db.collection("financialBudgetProjectExpenseClaims").doc(expense.id).delete()]);
+  }
+});
+
 // Observation only until an explicitly authorized emulator E2E run validates this flow.
 test("VT mantém boleto único, cobertura por pessoa e conversão confirmada das previsões", async ({ request }) => {
   assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
@@ -152,9 +211,14 @@ test("orçamento agrupa despesas, impede sobreposição e protege a criação", 
     expect((await candidates.json()).expenses.some((item: { id: string }) => item.id === expense.id)).toBe(true);
     const linkPath = `/api/financial/budget-projects/${projectId}/expenses`;
     expect((await request.post(linkPath, { headers: { Authorization: `Bearer ${token}` }, data: { expenseId: expense.id } })).status()).toBe(200);
-    expect((await request.post(linkPath, { headers: { Authorization: `Bearer ${token}` }, data: { expenseId: expense.id } })).status()).toBe(400);
+    // Repeating the same link is idempotent; it must not duplicate the expense or consumption.
+    expect((await request.post(linkPath, { headers: { Authorization: `Bearer ${token}` }, data: { expenseId: expense.id } })).status()).toBe(200);
     const projectSummary = await request.get(`/api/financial/budget-projects/${projectId}`, { headers: { Authorization: `Bearer ${token}` } });
-    expect((await projectSummary.json()).project.consumedAmountCents).toBe(10000);
+    const linkedProject = (await projectSummary.json()).project;
+    expect(linkedProject.expenseIds).toEqual([expense.id]);
+    expect(linkedProject.consumedAmountCents).toBe(10000);
+    const linkEvents = await db.collection("financialBudgetProjectEvents").where("projectId", "==", projectId).limit(20).get();
+    expect(linkEvents.docs.filter((doc) => doc.get("action") === "link")).toHaveLength(1);
     expect((await request.delete(`${linkPath}?expenseId=${expense.id}`, { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(200);
   } finally {
     await Promise.all([restrictedUser.delete(), account.delete(), outside.delete(), expense.delete()]);
