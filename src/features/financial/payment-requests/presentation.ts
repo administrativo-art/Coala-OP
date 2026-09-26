@@ -38,9 +38,12 @@ export function matchesPaymentRequestFilter(item: BankPaymentRequest, filter: Pa
 /** Requested payment date; bank confirmation remains a separate status. */
 export function paymentSchedulePresentation(item: BankPaymentRequest, now = new Date()) {
   // Match the submission source for each rail; a boleto's due date is not its payment date.
-  const scheduledFor = item.paymentRail === "barcode"
+  const requestedDate = item.paymentRail === "barcode"
     ? item.barcodeSnapshot?.scheduledFor
     : item.scheduledFor;
+  const scheduledFor = item.status === "scheduled" && formatFinancialDate(item.bankScheduledFor)
+    ? item.bankScheduledFor
+    : requestedDate;
   const date = formatFinancialDate(scheduledFor);
   const days = financialDaysUntil(scheduledFor, now);
   const timing = date && days !== null

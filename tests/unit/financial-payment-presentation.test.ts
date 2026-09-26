@@ -159,6 +159,22 @@ test("boleto já agendado explicita data do agendamento independente do vencimen
   });
 });
 
+test("agendamento confirmado pelo banco prevalece sobre a data solicitada", () => {
+  const item = { ...boleto, sourceType: "expense_boleto", status: "scheduled", bankScheduledFor: "2026-09-28" } as const;
+  assert.deepEqual(paymentSchedulePresentation(item, now), {
+    label: "Agendado para", date: "28/09/2026", timing: "Data futura", dueDate: "30/09/2026",
+  });
+  assert.equal(paymentSchedulePresentation({ ...item, status: "ready_to_submit" }, now).date, "26/09/2026");
+});
+
+test("agendamento legado sem data bancária válida mantém a data solicitada", () => {
+  for (const bankScheduledFor of [undefined, null, "", "28/09/2026"]) {
+    assert.deepEqual(paymentSchedulePresentation({ ...boleto, status: "scheduled", bankScheduledFor }, now), {
+      label: "Agendado para", date: "26/09/2026", timing: "Hoje", dueDate: "30/09/2026",
+    });
+  }
+});
+
 test("filtro inicial inclui todos os status não pagos, até os terminais", () => {
   const statuses: BankPaymentRequestStatus[] = [
     "draft", "awaiting_financial_authorization", "ready_to_submit", "submitting",
