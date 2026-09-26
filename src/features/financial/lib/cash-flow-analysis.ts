@@ -1,7 +1,15 @@
-import { format, startOfMonth, subMonths } from "date-fns";
+import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { toDate } from "@/features/financial/lib/utils";
+import { financialCompetenceMonthSchema } from "./expense-accounting-contract";
+
+export function cashFlowPeriod(endingMonth: string, months: number) {
+  const month = financialCompetenceMonthSchema.parse(endingMonth);
+  const referenceDate = new Date(`${month}-01T12:00:00`);
+  const count = Math.min(12, Math.max(1, Math.floor(months) || 1));
+  return { referenceDate, periodStart: startOfMonth(subMonths(referenceDate, count - 1)), periodEnd: endOfMonth(referenceDate) };
+}
 
 export type ExpenseLifecyclePoint = {
   key: string;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { financialCompetenceMonthSchema } from "@/features/financial/lib/expense-accounting-contract";
-import { budgetActor, budgetError, validBudgetDocumentId } from "@/features/financial/budgets/access.server";
+import { projectBudgetActor as budgetActor, budgetError, validBudgetDocumentId } from "@/features/financial/budgets/access.server";
 import { listProjectCandidates } from "@/features/financial/budgets/service.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 

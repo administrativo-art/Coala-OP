@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { budgetActor, budgetError } from "@/features/financial/budgets/access.server";
+import { projectBudgetActor as budgetActor, budgetError } from "@/features/financial/budgets/access.server";
 import { createBudgetProjectSchema } from "@/features/financial/budgets/schemas";
 import { createBudgetProject, listBudgetProjects } from "@/features/financial/budgets/service.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";

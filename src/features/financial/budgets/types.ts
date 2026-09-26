@@ -110,12 +110,26 @@ export type FinancialBudgetSummary = FinancialBudget & {
   issues: string[];
 };
 
+export type ProjectCashStage = { id: string; name: string; startDate: string; endDate: string; amountCents: number };
+export type ProjectCashPlan = { mode: "uniform" | "custom"; stages: ProjectCashStage[] };
+export type ProjectStageClosure = { stageId: string; evidence: string; reason: string; actorUid: string; closedAt: string };
+export type ProjectCashStageSummary = ProjectCashStage & {
+  committedAmountCents: number; residualAmountCents: number; closed: boolean; requiresReview: boolean; evidence: string;
+};
+
 export type FinancialBudgetProject = {
   id: string;
   name: string;
   accountPlanIds: string[];
   startMonth: string;
   endMonth: string;
+  periodMode?: "competence" | "date_range";
+  startDate?: string;
+  endDate?: string;
+  cashPlan?: ProjectCashPlan;
+  originalCashPlan?: ProjectCashPlan;
+  expenseStageIds?: Record<string, string>;
+  stageClosures?: ProjectStageClosure[];
   budgetedAmountCents: number;
   active: boolean;
   expenseIds: string[];
@@ -129,4 +143,5 @@ export type FinancialBudgetProjectSummary = FinancialBudgetProject & {
   balanceAmountCents: number;
   expenses: Array<{ id: string; description: string; amountCents: number; competenceMonth: string }>;
   issues: string[];
+  cashStages?: ProjectCashStageSummary[];
 };

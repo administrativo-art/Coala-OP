@@ -1,6 +1,11 @@
 
 {
   "indexes": [
+    { "collectionGroup": "financialBudgetProjects", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" },
+      { "fieldPath": "cashPlanningEnabled", "order": "ASCENDING" },
+      { "fieldPath": "cashPlanStartDate", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "isActive", "order": "ASCENDING" }, { "fieldPath": "unitIds", "arrayConfig": "CONTAINS" }
     ] },
