@@ -1,4 +1,5 @@
 import type { SalesReport } from "@/types";
+import type { BudgetPlanningComparison } from "../budgets/projection-view";
 import type { FinancialExpenseDreDocument } from "@/features/financial/lib/expense-accounting-contract";
 
 export class DreSourceLimitError extends Error {
@@ -27,6 +28,7 @@ export type DreSourceDataStats = {
 };
 
 export type DreSourceDataPayload = {
+  budgetPlanning?: BudgetPlanningComparison[];
   expenses: FinancialExpenseDreDocument[];
   salesSummaries: DreSalesUnitMonthSummary[];
   closureSummaries: Array<{

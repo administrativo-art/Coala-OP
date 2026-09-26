@@ -398,16 +398,18 @@ service cloud.firestore {
     match /expenses/{expenseId} {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre()
         || canViewAudits() || canViewCardStatements() || canViewPersonnelCosts();
-      allow create: if isCardStatementImportCreate(request.resource.data)
+      allow create: if !request.resource.data.keys().hasAny(['budgetMigration']) && (isCardStatementImportCreate(request.resource.data)
         || (canCreateExpenses()
           && hasValidExpenseAccount(request.resource.data)
           && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
-          && hasValidExpenseIndividualization(request.resource.data));
-      allow update: if (canEditExpenses()
+          && hasValidExpenseIndividualization(request.resource.data)));
+      // Conversion is an administrative server transaction. Preserve its tombstone/history.
+      allow update: if !resource.data.keys().hasAny(['budgetMigration'])
+        && !request.resource.data.keys().hasAny(['budgetMigration']) && ((canEditExpenses()
           && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
           && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data))))
-        || isCardStatementAuditUpdate();
-      allow delete: if canDeleteExpenses();
+        || isCardStatementAuditUpdate());
+      allow delete: if canDeleteExpenses() && !resource.data.keys().hasAny(['budgetMigration']);
     }
 
     match /payments/{paymentId} {

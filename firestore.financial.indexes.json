@@ -1,5 +1,27 @@
 {
   "indexes": [
+    { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "purchaseMonths", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "resultCenterId", "order": "ASCENDING" }, { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "purchaseMonths", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "compositionEmployeeIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "competenceMonth", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "financialBudgetRules", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "provisionType", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "provisionSeriesKey", "order": "ASCENDING" }
+    ] },
     {
       "collectionGroup": "financialAnalysisRoutines",
       "queryScope": "COLLECTION",
