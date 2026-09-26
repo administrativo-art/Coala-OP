@@ -159,4 +159,4 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npm ci
-      - run: npm run test:e2e:expense-boleto
+      - run: node scripts/test-expense-boleto-e2e.mjs
