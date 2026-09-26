@@ -17,6 +17,8 @@ import { changeBudgetClaim, claimConflicts } from "./claims";
 import { makeBudgetCoverage, materializeBudgetComposition, shiftBudgetMonth, summarizeBudgetPeople } from "./composition";
 import { resolveBudgetCenter, resolveBudgetEmployees, resolveBudgetExpenseCenters } from "./references.server";
 import { canEditBudgetPersonnel } from "./personnel-access";
+import { materializeProjectCashPlan, projectDateRange, summarizeProjectCashPlan } from "./project-cash-plan";
+import { projectStageClosureSchema } from "./schemas";
 export { BudgetDomainError } from "./errors";
 
 const budgets = financialDbAdmin.collection("financialBudgets");
@@ -381,10 +383,16 @@ export async function listBudgetProjects() {
 }
 
 export async function createBudgetProject(input: z.infer<typeof createBudgetProjectSchema>, uid: string) {
-  await validateBudgetAccounts(input.accountPlanIds);
   const ref = projects.doc();
   const now = Timestamp.now();
-  await ref.create({ ...input, active: true, expenseIds: [], createdBy: uid, createdAt: now, updatedAt: now });
+  const cashPlan = input.cashPlan ? materializeProjectCashPlan(input, input.cashPlan) : undefined;
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    await validateBudgetAccounts(input.accountPlanIds, transaction);
+    transaction.create(ref, { ...input, ...(cashPlan ? { cashPlan, originalCashPlan: cashPlan,
+      cashPlanningEnabled: true, cashPlanStartDate: projectDateRange(input).startDate, expenseStageIds: {}, stageClosures: [] } : {}),
+      active: true, expenseIds: [], createdBy: uid, createdAt: now, updatedAt: now });
+    transaction.create(projectEvents.doc(), { projectId: ref.id, action: "create", actorUid: uid, createdAt: now });
+  });
   return { id: ref.id };
 }
 
@@ -398,8 +406,9 @@ export async function getBudgetProjectSummary(id: string): Promise<FinancialBudg
   const existing = expenseSnapshots.filter((expense) => expense.exists)
     .map((expense) => ({ id: expense.id, ...expense.data() } as BudgetExpense));
   const summary = calculateProjectBudgetConsumption(project, existing);
+  const cash = summarizeProjectCashPlan(project, existing);
   const missing = expenseSnapshots.filter((expense) => !expense.exists).map((expense) => `Despesa ${expense.id} não encontrada.`);
-  return { ...project, ...summary, issues: [...summary.issues, ...missing] };
+  return { ...project, ...summary, cashStages: cash.stages, issues: [...new Set([...summary.issues, ...cash.issues, ...missing])] };
 }
 
 export async function updateBudgetProject(id: string, input: z.infer<typeof updateBudgetProjectSchema>, uid: string) {
@@ -411,11 +420,25 @@ export async function updateBudgetProject(id: string, input: z.infer<typeof upda
     if (input.budgetedAmountCents !== undefined && input.budgetedAmountCents !== project.budgetedAmountCents && !input.reason) {
       throw new BudgetDomainError("Explique por que o limite do projeto foi alterado.");
     }
-    const { reason, ...changes } = input;
+    const { reason, cashPlan: planInput, ...rest } = input;
+    if (planInput && !reason) throw new BudgetDomainError("Explique a configuração ou revisão do cronograma.");
+    if (project.cashPlan && input.budgetedAmountCents !== undefined && input.budgetedAmountCents !== project.budgetedAmountCents && !planInput) {
+      throw new BudgetDomainError("Revise também o cronograma para distribuir o novo limite.");
+    }
+    const cashPlan = planInput ? materializeProjectCashPlan({ ...project, ...rest }, planInput) : undefined;
+    if (cashPlan && Object.values(project.expenseStageIds ?? {}).some((stageId) => !cashPlan.stages.some((stage) => stage.id === stageId))) {
+      throw new BudgetDomainError("Não remova uma etapa com despesas vinculadas. Reatribua os vínculos primeiro.");
+    }
+    if (cashPlan && project.stageClosures?.some((entry) => !cashPlan.stages.some((stage) => stage.id === entry.stageId))) {
+      throw new BudgetDomainError("Reabra explicitamente a expectativa antes de remover uma etapa encerrada.");
+    }
+    const changes = { ...rest, ...(cashPlan ? { cashPlan, originalCashPlan: project.originalCashPlan ?? project.cashPlan ?? cashPlan,
+      cashPlanningEnabled: true, cashPlanStartDate: projectDateRange(project).startDate } : {}) };
     const now = Timestamp.now();
     transaction.update(ref, { ...changes, updatedAt: now, updatedBy: uid });
     transaction.create(revisions.doc(), { projectId: id, previous: {
       name: project.name, budgetedAmountCents: project.budgetedAmountCents, active: project.active,
+      cashPlan: project.cashPlan ?? null, stageClosures: project.stageClosures ?? [],
     }, changes, reason: reason ?? null, actorUid: uid, createdAt: now });
   });
 }
@@ -424,7 +447,7 @@ export async function listProjectCandidates(id: string, month: string, search: s
   const snapshot = await projects.doc(id).get();
   if (!snapshot.exists) throw new BudgetDomainError("Projeto não encontrado.");
   const project = docData<FinancialBudgetProject>(snapshot);
-  if (month < project.startMonth || month > project.endMonth) return [];
+  if (project.periodMode !== "date_range" && (month < project.startMonth || month > project.endMonth)) return [];
   const linked = new Set(project.expenseIds);
   return (await expensesForMonth(month)).filter((expense) => !linked.has(expense.id)
     && (!search || `${expense.description ?? ""} ${expense.id}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"))))
@@ -433,7 +456,7 @@ export async function listProjectCandidates(id: string, month: string, search: s
     .map(({ expense, value }) => ({ id: expense.id, description: expense.description || "Despesa sem descrição", amountCents: value }));
 }
 
-export async function linkProjectExpense(projectId: string, expenseId: string, uid: string) {
+export async function linkProjectExpense(projectId: string, expenseId: string, uid: string, stageId?: string) {
   const projectRef = projects.doc(projectId);
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
   const claimRef = projectExpenseClaims.doc(expenseId);
@@ -442,18 +465,23 @@ export async function linkProjectExpense(projectId: string, expenseId: string, u
       transaction.get(projectRef), transaction.get(expenseRef), transaction.get(claimRef),
     ]);
     if (!projectSnap.exists || !expenseSnap.exists) throw new BudgetDomainError("Projeto ou despesa não encontrado.");
-    if (claimSnap.exists) throw new BudgetDomainError("Esta despesa já está vinculada a um projeto.");
+    if (claimSnap.exists && claimSnap.get("projectId") !== projectId) throw new BudgetDomainError("Esta despesa já está vinculada a um projeto.");
     const project = projectSnap.data() as FinancialBudgetProject;
     if (!project.active) throw new BudgetDomainError("Reative o projeto antes de vincular despesas.");
-    if (project.expenseIds.length >= 100) throw new BudgetDomainError("Este projeto chegou ao limite de 100 despesas.");
+    if (!project.expenseIds.includes(expenseId) && project.expenseIds.length >= 100) throw new BudgetDomainError("Este projeto chegou ao limite de 100 despesas.");
+    if (project.cashPlan && !project.cashPlan.stages.some((stage) => stage.id === stageId)) throw new BudgetDomainError("Selecione a etapa que esta despesa substitui no planejamento.");
+    if (!project.cashPlan && stageId) throw new BudgetDomainError("Configure primeiro o cronograma do projeto.");
     const contribution = calculateProjectBudgetConsumption(project, [{ id: expenseId, ...expenseSnap.data() } as BudgetExpense]);
-    if (contribution.consumedAmountCents <= 0 || contribution.issues.length) {
+    if (contribution.consumedAmountCents <= 0 || contribution.issues.some((issue) => !issue.includes("fora do período"))) {
       throw new BudgetDomainError("A despesa não pertence ao período ou às contas deste projeto.");
     }
     const now = Timestamp.now();
-    transaction.create(claimRef, { projectId, createdAt: now });
-    transaction.update(projectRef, { expenseIds: [...project.expenseIds, expenseId], updatedAt: now });
-    transaction.create(projectEvents.doc(), { projectId, expenseId, action: "link", actorUid: uid, createdAt: now });
+    const oldStage = project.expenseStageIds?.[expenseId];
+    if (claimSnap.exists && project.expenseIds.includes(expenseId) && oldStage === stageId) return;
+    transaction.set(claimRef, { projectId, createdAt: claimSnap.get("createdAt") ?? now });
+    transaction.update(projectRef, { expenseIds: [...new Set([...project.expenseIds, expenseId])], updatedAt: now,
+      ...(stageId ? { expenseStageIds: { ...project.expenseStageIds, [expenseId]: stageId } } : {}) });
+    transaction.create(projectEvents.doc(), { projectId, expenseId, stageId: stageId ?? null, previousStageId: oldStage ?? null, action: "link", actorUid: uid, createdAt: now });
   });
 }
 
@@ -468,7 +496,29 @@ export async function unlinkProjectExpense(projectId: string, expenseId: string,
     const project = projectSnap.data() as FinancialBudgetProject;
     transaction.delete(claimRef);
     const now = Timestamp.now();
-    transaction.update(projectRef, { expenseIds: project.expenseIds.filter((id) => id !== expenseId), updatedAt: now });
+    const expenseStageIds = { ...project.expenseStageIds }; delete expenseStageIds[expenseId];
+    transaction.update(projectRef, { expenseIds: project.expenseIds.filter((id) => id !== expenseId), expenseStageIds,
+      updatedAt: now });
     transaction.create(projectEvents.doc(), { projectId, expenseId, action: "unlink", actorUid: uid, createdAt: now });
+  });
+}
+
+export async function closeProjectStage(projectId: string, input: z.infer<typeof projectStageClosureSchema>, uid: string) {
+  input = projectStageClosureSchema.parse(input);
+  const ref = projects.doc(projectId);
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new BudgetDomainError("Projeto não encontrado.");
+    const project = docData<FinancialBudgetProject>(snapshot);
+    if (!project.active || project.expenseIds.length > 100) throw new BudgetDomainError("Confira o projeto antes de encerrar a expectativa.");
+    const docs = project.expenseIds.length ? await transaction.getAll(...project.expenseIds.map((id) => financialDbAdmin.collection("expenses").doc(id))) : [];
+    const summary = summarizeProjectCashPlan(project, docs.filter((doc) => doc.exists).map((doc) => ({ id: doc.id, ...doc.data() } as BudgetExpense)));
+    const stage = summary.stages.find((entry) => entry.id === input.stageId);
+    if (summary.blocked || !stage || stage.evidence !== input.evidence) throw new BudgetDomainError("Os vínculos ou valores mudaram. Atualize e confira a etapa novamente.");
+    const now = Timestamp.now();
+    const closures = (project.stageClosures ?? []).filter((entry) => entry.stageId !== input.stageId);
+    if (input.closed) closures.push({ stageId: input.stageId, evidence: stage.evidence, reason: input.reason, actorUid: uid, closedAt: now.toDate().toISOString() });
+    transaction.update(ref, { stageClosures: closures, updatedAt: now, updatedBy: uid });
+    transaction.create(projectEvents.doc(), { projectId, action: input.closed ? "close_expectation" : "reopen_expectation", ...input, actorUid: uid, createdAt: now });
   });
 }

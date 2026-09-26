@@ -4,15 +4,17 @@ import type { BudgetExpense } from "./budget-consumption";
 import type { FinancialBudgetProject } from "../budgets/types";
 
 export function calculateProjectBudgetConsumption(
-  project: Pick<FinancialBudgetProject, "accountPlanIds" | "startMonth" | "endMonth" | "budgetedAmountCents">,
+  project: Pick<FinancialBudgetProject, "accountPlanIds" | "startMonth" | "endMonth" | "budgetedAmountCents" | "periodMode">,
   expenses: BudgetExpense[],
 ) {
   const accountIds = new Set(project.accountPlanIds);
   const issues: string[] = [];
   const matching = expenses.flatMap((expense) => {
     const competenceMonth = financialExpenseCompetenceMonth(expense);
-    if (!competenceMonth || competenceMonth < project.startMonth || competenceMonth > project.endMonth) {
-      issues.push(`Despesa ${expense.id} fora do período do projeto.`); return [];
+    if (!competenceMonth) { issues.push(`Despesa ${expense.id} sem competência.`); return []; }
+    if (competenceMonth < project.startMonth || competenceMonth > project.endMonth) {
+      issues.push(`Despesa ${expense.id} fora do período do projeto.`);
+      if (project.periodMode !== "date_range") return [];
     }
     if (["draft", "cancelled", "reconciled"].includes(String(expense.status)) || expense.provisionType === "forecast") return [];
     if ((expense.hasAccountAllocations || (expense.accountAllocations?.length ?? 0) > 0)

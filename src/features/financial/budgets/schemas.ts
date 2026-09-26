@@ -115,15 +115,48 @@ export const budgetCoverageSchema = z.object({
   }
 });
 
+export const projectCashPlanSchema = z.object({
+  mode: z.enum(["uniform", "custom"]),
+  stages: z.array(z.object({
+    id: budgetIdSchema, name: z.string().trim().min(1).max(100),
+    startDate: dateSchema, endDate: dateSchema, amountCents: amountSchema,
+  })).max(36).default([]),
+}).superRefine((value, context) => {
+  if (value.mode === "custom" && !value.stages.length) context.addIssue({ code: "custom", message: "Informe as datas e valores das etapas." });
+  if (new Set(value.stages.map((s) => s.id)).size !== value.stages.length) context.addIssue({ code: "custom", message: "Não repita etapas." });
+  if (value.mode === "custom" && value.stages.some((s) => s.startDate !== s.endDate)) context.addIssue({ code: "custom", message: "Cada etapa personalizada deve ter uma data de desembolso." });
+});
+
 export const createBudgetProjectSchema = budgetFieldsSchema.extend({
   startMonth: financialCompetenceMonthSchema,
   endMonth: financialCompetenceMonthSchema,
+  periodMode: z.enum(["competence", "date_range"]).optional(),
+  startDate: dateSchema.optional(),
+  endDate: dateSchema.optional(),
+  cashPlan: projectCashPlanSchema.optional(),
   budgetedAmountCents: z.number().int().min(0).max(100_000_000_000),
-}).refine((value) => value.endMonth >= value.startMonth, { path: ["endMonth"], message: "O fim deve vir após o início." });
+}).superRefine((value, context) => {
+  if (value.endMonth < value.startMonth) context.addIssue({ code: "custom", path: ["endMonth"], message: "O fim deve vir após o início." });
+  if (value.cashPlan && !value.periodMode) context.addIssue({ code: "custom", path: ["periodMode"], message: "Escolha competência ou período personalizado para o novo projeto com cronograma." });
+  if (value.periodMode === "date_range") {
+    if (!value.startDate || !value.endDate || value.endDate < value.startDate
+      || value.startDate.slice(0, 7) !== value.startMonth || value.endDate.slice(0, 7) !== value.endMonth) {
+      context.addIssue({ code: "custom", path: ["startDate"], message: "Confira as datas do período." });
+    }
+  } else if (value.startDate || value.endDate) context.addIssue({ code: "custom", message: "Datas exatas exigem período personalizado." });
+  if (value.periodMode === "competence" && value.startMonth !== value.endMonth) context.addIssue({ code: "custom", message: "Selecione uma competência ou use período personalizado." });
+});
 
 export const updateBudgetProjectSchema = z.object({
   name: z.string().trim().min(3).max(100).optional(),
   budgetedAmountCents: z.number().int().min(0).max(100_000_000_000).optional(),
   active: z.boolean().optional(),
   reason: z.string().trim().min(5).max(500).optional(),
+  cashPlan: projectCashPlanSchema.optional(),
 }).refine((value) => Object.keys(value).length > 0);
+
+export const projectStageClosureSchema = z.object({
+  stageId: budgetIdSchema, closed: z.boolean(), reason: z.string().trim().min(5).max(500),
+  evidence: z.string().max(30000), confirmed: z.literal(true),
+});
+export const projectExpenseLinkSchema = z.object({ expenseId: budgetIdSchema, stageId: budgetIdSchema.optional() });

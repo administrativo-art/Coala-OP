@@ -13,11 +13,94 @@ const { convertForecastsToBudgets } = await import("../../src/features/financial
 const { stopTerminatedEmployeeBudgetExpectations } = await import("../../src/features/financial/budgets/termination.server.ts");
 const { budgetSummaryForViewer } = await import("../../src/features/financial/budgets/personnel-access.ts");
 const { assertBudgetPermission } = await import("../../src/features/financial/budgets/access.server.ts");
+const { createBudgetProject, getBudgetProjectSummary, updateBudgetProject, linkProjectExpense, unlinkProjectExpense, closeProjectStage } = await import("../../src/features/financial/budgets/service.server.ts");
+const { getProjectCashProjections } = await import("../../src/features/financial/budgets/project-projections.server.ts");
+const { assertBudgetCenterAccess } = await import("../../src/features/financial/budgets/references.server.ts");
 const actor = { isDefaultAdmin: true, permissions: defaultAdminPermissions, decoded: { uid: "vtu-admin" }, userDoc: { id: "vtu-admin", unitAccessScope: "all" }, workspace_id: "coala" };
 const month = "2026-10";
 const part = (center, amount) => ({ id: center, employeeId: "vtu-person", employeeName: "Pessoa de teste", accountPlanId: "vtu-account", amount, resultCenter: center, analysisType: "employer_cost" });
 const input = (center, name = "VT de teste") => ({ name, competenceMonth: month, accountPlanIds: ["vtu-account"], resultCenterId: center,
   budgetedAmountCents: 21000, composition: [{ id: `line-${center}`, employeeId: "vtu-person", accountPlanId: "vtu-account", amountCents: 21000, expectedPurchaseDate: "2026-09-30", estimateSource: "manual" }] });
+
+test("Projetos: cronograma, vínculo exclusivo, encerramento concorrente, revisão e caixa", async (t) => {
+  const accountId = "project-cash-material";
+  const expense = db.collection("expenses").doc("project-cash-bill");
+  await db.collection("accounts").doc(accountId).set({ name: "Material", active: true, isGroup: false });
+  await expense.set({ status: "pending", competenceMonth: "2026-10", dueDate: "2027-01-10", totalValue: 3000, accountId });
+  const input = { name: "Projeto de teste", accountPlanIds: [accountId], periodMode: "date_range", startMonth: "2026-10", endMonth: "2026-12",
+    startDate: "2026-10-10", endDate: "2026-12-12", budgetedAmountCents: 1000000,
+    cashPlan: { mode: "custom", stages: [
+      { id: "entry", name: "Entrada", startDate: "2026-10-10", endDate: "2026-10-10", amountCents: 400000 },
+      { id: "delivery", name: "Entrega", startDate: "2026-12-12", endDate: "2026-12-12", amountCents: 600000 },
+    ] } };
+  const created = await createBudgetProject(input, "test");
+  const other = await createBudgetProject(input, "test");
+  const read = () => getBudgetProjectSummary(created.id);
+  const projected = async () => (await getProjectCashProjections({ from: "2026-01-01", to: "2099-12-31" }, [])).projectProjections
+    .filter((row) => row.projectId === created.id).reduce((sum, row) => sum + row.amountCents, 0);
+  try {
+    await t.test("criação conserva referência e vínculo exige etapa válida", async () => {
+      assert.equal((await read()).originalCashPlan.stages.length, 2);
+      await assert.rejects(linkProjectExpense(created.id, expense.id, "test"));
+      await assert.rejects(linkProjectExpense(created.id, expense.id, "test", "missing"));
+      await linkProjectExpense(created.id, expense.id, "test", "entry");
+      await linkProjectExpense(created.id, expense.id, "test", "entry");
+      assert.equal((await read()).expenseIds.length, 1);
+      await assert.rejects(linkProjectExpense(other.id, expense.id, "test", "entry"));
+      assert.equal(await projected(), 700000);
+    });
+    await t.test("encerramento exige leitura atual e não modifica a despesa", async () => {
+      const stage = (await read()).cashStages[0];
+      const closure = { stageId: stage.id, closed: true, reason: "Etapa conferida", confirmed: true, evidence: stage.evidence };
+      await expense.update({ totalValue: 2000 });
+      await assert.rejects(closeProjectStage(created.id, closure, "test"));
+      await closeProjectStage(created.id, { ...closure, evidence: (await read()).cashStages[0].evidence }, "test");
+      assert.equal(await projected(), 600000);
+      await expense.update({ status: "paid" });
+      assert.equal((await read()).cashStages[0].closed, true);
+      assert.equal(await projected(), 600000);
+      await linkProjectExpense(created.id, expense.id, "test", "entry");
+      assert.equal((await read()).cashStages[0].closed, true);
+      await updateBudgetProject(created.id, { cashPlan: input.cashPlan, reason: "Reenvio sem mudança" }, "test");
+      assert.equal((await read()).cashStages[0].closed, true);
+      await updateBudgetProject(created.id, { budgetedAmountCents: 1100000, cashPlan: { mode: "custom", stages: input.cashPlan.stages.map((s) => s.id === "delivery" ? { ...s, amountCents: 700000 } : s) }, reason: "Ajustar somente entrega" }, "test");
+      assert.equal((await read()).cashStages[0].closed, true);
+      assert.equal((await read()).cashStages[0].requiresReview, false);
+      await updateBudgetProject(created.id, { budgetedAmountCents: 1000000, cashPlan: input.cashPlan, reason: "Restaurar entrega" }, "test");
+      assert.equal((await read()).cashStages[0].closed, true);
+      const delivery = (await read()).cashStages[1];
+      await closeProjectStage(created.id, { stageId: "delivery", closed: true, evidence: delivery.evidence, reason: "Etapa dispensada sem despesas", confirmed: true }, "test");
+      await assert.rejects(updateBudgetProject(created.id, { cashPlan: { mode: "custom", stages: [{ ...input.cashPlan.stages[0], amountCents: 1000000 }] }, reason: "Remover etapa dispensada" }, "test"));
+      await closeProjectStage(created.id, { stageId: "delivery", closed: false, evidence: delivery.evidence, reason: "Restaurar planejamento", confirmed: true }, "test");
+      assert.equal((await expense.get()).get("competenceMonth"), "2026-10");
+      assert.equal((await expense.get()).get("dueDate"), "2027-01-10");
+    });
+    await t.test("alterar valores invalida encerramento, revisão preserva baseline", async () => {
+      await expense.update({ totalValue: 1000 });
+      assert.equal((await read()).cashStages[0].requiresReview, true);
+      assert.equal(await projected(), 900000);
+      await assert.rejects(updateBudgetProject(created.id, { budgetedAmountCents: 1100000, reason: "Novo orçamento" }, "test"));
+      await updateBudgetProject(created.id, { budgetedAmountCents: 1100000, reason: "Revisão do cronograma", cashPlan: { mode: "custom", stages: input.cashPlan.stages.map((s) => s.id === "delivery" ? { ...s, amountCents: 700000 } : s) } }, "test");
+      assert.equal((await read()).originalCashPlan.stages[1].amountCents, 600000);
+      assert.equal((await read()).cashPlan.stages[1].amountCents, 700000);
+      await assert.rejects(updateBudgetProject(created.id, { cashPlan: { mode: "uniform", stages: [] }, reason: "Troca inválida com vínculos" }, "test"));
+    });
+    await t.test("documento ausente suspende cálculo, desvincular restaura; escopo global protegido", async () => {
+      await expense.delete(); // Owned emulator fixture only.
+      assert.equal(await projected(), 0);
+      assert.ok((await read()).issues.some((issue) => issue.includes("não encontrad")));
+      await unlinkProjectExpense(created.id, expense.id, "test");
+      assert.equal(await projected(), 1100000);
+      const restricted = { ...actor, isDefaultAdmin: false, userDoc: { id: "project-restricted", unitIds: ["one-unit"] } };
+      assert.throws(() => assertBudgetCenterAccess(restricted));
+      const collision = await getProjectCashProjections({ from: "2026-01-01", to: "2099-12-31" }, [accountId]);
+      assert.equal(collision.projectProjections.filter((row) => row.projectId === created.id).length, 0);
+      assert.ok(collision.projectIssues.some((issue) => issue.includes("sobreposição")));
+    });
+  } finally {
+    await Promise.all([created.id, other.id].map((id) => updateBudgetProject(id, { active: false }, "test")));
+  }
+});
 
 test("VT: persistência, claims concorrentes, cobertura, conversão atômica e caixa/DRE", async (t) => {
   await Promise.all([
