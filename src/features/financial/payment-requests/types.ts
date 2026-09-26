@@ -5,8 +5,8 @@ export type BankPaymentRequestStatus =
   | "awaiting_bank_approval" | "scheduled" | "processing" | "awaiting_statement" | "paid" | "rejected"
   | "approval_expired" | "failed" | "cancelled";
 
-export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "financial_inbox";
-export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox">;
+export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "financial_inbox" | "expense_boleto";
+export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox" | "expense_boleto">;
 export type BankPaymentRail = "pix" | "barcode";
 
 export type BarcodePaymentSnapshot = {
@@ -38,6 +38,7 @@ type BankPaymentRequestBase = {
   idempotencyKey: string;
   interRequestId?: string;
   bankStatus?: string;
+  bankScheduledFor?: string | null;
   endToEndId?: string;
   statementReconciliationStatus?: "not_expected" | "expected" | "matched" | "divergent";
   statementTransactionId?: string;
@@ -78,7 +79,7 @@ export type PixBankPaymentRequest = BankPaymentRequestBase & {
 };
 
 export type BarcodeBankPaymentRequest = BankPaymentRequestBase & {
-  sourceType: "financial_inbox";
+  sourceType: "financial_inbox" | "expense_boleto";
   paymentRail: "barcode";
   beneficiaryReference?: never;
   beneficiarySnapshot?: never;
