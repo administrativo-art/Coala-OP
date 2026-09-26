@@ -32,4 +32,4 @@ Consultas pontuais por ID e duas consultas exatas limit1 por preparação; nenhu
 
 ## Verificação
 
-`npm run check`, `npm run build` e `npm run test:e2e:expense-boleto`. O último executa a aplicação Next por HTTP com Auth/Firestore/Storage em emuladores `demo-coala-boleto`, sem navegador, credenciais reais ou chamada ao Inter. O teste cobre upload/download, duas preparações simultâneas, idempotência, competência e negação de acesso. Gate financeiro observado separadamente; não executa transferências reais.
+`npm run check`, `npm run build` e `node scripts/test-expense-boleto-e2e.mjs`. O último executa a aplicação Next por HTTP com Auth/Firestore/Storage em emuladores `demo-coala-boleto`, sem navegador, credenciais reais ou chamada ao Inter. O teste cobre upload/download, duas preparações simultâneas, idempotência, competência e negação de acesso. Gate financeiro observado separadamente; não executa transferências reais. A invocação direta não depende de promover alterações de outros módulos no `package.json`.
