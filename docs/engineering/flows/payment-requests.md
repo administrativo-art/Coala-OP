@@ -21,6 +21,10 @@ A [tela de solicitações](../../../src/app/dashboard/financial/payment-requests
 
 [`finishPaidPaymentRequest`](../../../src/features/financial/payment-requests/service.server.ts) usa lease de pós-pagamento, gera/guarda comprovante quando ausente, anexa-o à caixa/despesa ou atualiza a origem e registra conclusão. `completeSource` propaga resultados para ASO, desligamento, férias, compras, despesa e recibo conforme `sourceType`. A origem e Storage são efeitos separados; passos persistidos permitem retomada, mas exigem teste de falha entre operações.
 
+Antes de encerrar o pós-pagamento, inclusive quando já concluído, o [repositório](../../../src/features/financial/payment-requests/repository.server.ts) revalida solicitações Pix `paid`/`matched` com revisão `divergent` do tipo `receiver`. A [regra de evidência](../../../src/features/financial/payment-requests/beneficiary-review.ts) exige extrato Inter Pix auditado, de saída e não estornado, mesma despesa/valor/código Inter, endToEndId quando presente e SHA256 do CPF/CNPJ completo correspondente ao snapshot. A solicitação e o extrato são relidos em transação; somente os campos da verificação são atualizados, junto de um evento que preserva o aviso anterior. Dados ausentes/mascarados, tipo de divergência desconhecido e divergência cadastral permanecem para revisão. Não há varredura de pagamentos históricos nem nova consulta recorrente.
+
+Esse comportamento isolado tem [testes unitários](../../../tests/unit/financial-paid-beneficiary-review.test.ts) e [integração no emulador](../../../tests/integration/financial-paid-beneficiary-review.test.mjs), incluindo concorrência, repetição e preservação dos campos financeiros. A validação não homologa todos os caminhos bancários deste guia.
+
 O [job Inter](../../../src/app/api/jobs/inter/reconcile/route.ts) autentica por segredo de job e consulta filas limitadas: até 10 estados bancários, 5 pós-pagamentos e 5 envios interrompidos. Reagenda falhas com atraso e encaminha `submitting` antigo para revisão. O [webhook bancário](../../../src/app/api/webhooks/inter/banking/route.ts) confere segredo, identifica solicitação, registra evento com hash e chama a mesma atualização. Não se deve usar este levantamento para executar pagamentos reais.
 
 ## Dados, permissão e impacto
@@ -58,3 +62,5 @@ Fontes adicionais: [procedimento existente](../expense-boleto-direct-payment.md)
 ## Datas e apresentação do agendamento
 
 A [apresentação](../../../src/features/financial/payment-requests/presentation.ts) distingue vencimento, data solicitada e data confirmada pelo banco; a data bancária confirmada tem precedência na apresentação do agendamento. A [tela](../../../src/features/financial/payment-requests/payment-requests-page.tsx) inicia na seleção de não pagos. Conferir [testes de apresentação](../../../tests/unit/financial-payment-presentation.test.ts) ao alterar filtros ou datas; não confundir agendamento com liquidação.
+
+Solicitações `paid` destacam “Pago em” pela data efetiva `paidAt`, no calendário de Belém, sem previsão ou instrução de envio imediato. Sem data efetiva válida, mostram “Data não informada”; não inferem a data pelo agendamento ou pelo momento da consulta ao banco.

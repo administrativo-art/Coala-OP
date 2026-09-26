@@ -37,7 +37,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `measure-conversion` | 1 | Traçado | [Conversão local](flows/conversions.md) — cálculo, acesso e ausência de escrita conferidos; renderização visual não testada |
 | `operations` | 1 | Traçado | [Agregação do painel](flows/operations-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `organization` | 1 | Traçado | [Organograma](flows/organization.md) — percurso complementado; verificação integrada pendente |
-| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — percurso complementado; verificação integrada pendente |
+| `payment-requests` | 2 | Traçado | [Solicitações e Banco Inter](flows/payment-requests.md) — revalidação do recebedor após pagamento testada em emulador; demais fronteiras bancárias pendentes |
 | `pdv-sync` | 1 | Traçado | [Callable e reprocessamento](flows/pdv-sync.md) — percurso complementado; verificação integrada pendente |
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
