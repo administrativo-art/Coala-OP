@@ -9,7 +9,7 @@ const { hrDbAdmin: hr } = await import("../../src/lib/firebase-rh-admin.ts");
 const { defaultAdminPermissions, defaultGuestPermissions } = await import("../../src/types/index.ts");
 const { createBudget, createBudgetRule, generateBudgetMonth, getBudgetSummary, confirmBudgetCoverage, listBudgetSummaries } = await import("../../src/features/financial/budgets/service.server.ts");
 const { getBudgetCashProjections, getBudgetPlanningComparisons } = await import("../../src/features/financial/budgets/projections.server.ts");
-const { convertForecastsToBudgets } = await import("../../src/features/financial/budgets/forecast-conversion.server.ts");
+const { convertForecastsToBudgets, listForecastConversionCandidates } = await import("../../src/features/financial/budgets/forecast-conversion.server.ts");
 const { stopTerminatedEmployeeBudgetExpectations } = await import("../../src/features/financial/budgets/termination.server.ts");
 const { budgetSummaryForViewer } = await import("../../src/features/financial/budgets/personnel-access.ts");
 const { assertBudgetPermission } = await import("../../src/features/financial/budgets/access.server.ts");
@@ -187,6 +187,51 @@ test("VT: persistência, claims concorrentes, cobertura, conversão atômica e c
       expenses: [{ id: actualRef.id, ...(await actualRef.get()).data() }], canViewPersonnel: false });
     assert.equal(comparison.reduce((sum, row) => sum + row.committedAmountCents, 0), 40320);
     assert.equal(comparison.reduce((sum, row) => sum + row.budgetedAmountCents, 0), 42000);
+  });
+
+  await t.test("VT rateado resolve nomes legados e conserva valores por centro em transação", async () => {
+    const splitRef = db.collection("expenses").doc("vtu-split-forecast");
+    const splitObligation = db.collection("financialObligations").doc("vtu-split-obligation");
+    const billBefore = (await actualRef.get()).data();
+    await splitObligation.set({ sourceId: splitRef.id, status: "OPEN", summary: { forecastAmountCents: 42000 } });
+    const portions = [part("Centro a", 210), part("Centro b", 210)];
+    await splitRef.set({ competenceMonth: month, provisionCompetence: month, dueDate: "2026-09-30",
+      accountId: "vtu-account", employeeId: "vtu-person", provisionSeriesKey: "recurring:vale-transporte:vtu-person",
+      provisionType: "forecast", status: "provisioned", totalValue: 420, isApportioned: true,
+      hasPersonAllocations: true, personAllocations: portions, obligationId: splitObligation.id,
+      apportionments: ["Centro a", "Centro b"].map((resultCenter) => ({ resultCenter, percentage: 50 })) });
+    const request = { ...conversion, mappings: [{ ...conversion.mappings[0], expenseId: splitRef.id }] };
+    const candidates = await listForecastConversionCandidates(month, actor);
+    assert.equal(candidates.find((row) => row.id === splitRef.id).blocked, null);
+    const preview = await convertForecastsToBudgets(request, actor);
+    assert.deepEqual(preview.preview.rows[0].centerAmounts, ["vtu-a", "vtu-b"].map((resultCenterId) => ({ resultCenterId, amountCents: 21000 })));
+    assert.equal((await splitRef.get()).get("status"), "provisioned");
+    const budgetA = db.collection("financialBudgets").doc(a.id);
+    const budgetB = db.collection("financialBudgets").doc(b.id);
+    const originalA = (await budgetA.get()).get("composition");
+    const originalB = (await budgetB.get()).get("composition");
+    await budgetA.update({ composition: originalA.map((line) => ({ ...line, amountCents: 20000 })) });
+    await budgetB.update({ composition: originalB.map((line) => ({ ...line, amountCents: 22000 })) });
+    await assert.rejects(convertForecastsToBudgets(request, actor), /cada centro/);
+    assert.equal((await splitRef.get()).get("status"), "provisioned");
+    await budgetA.update({ composition: originalA });
+    await budgetB.update({ composition: originalB });
+    await splitRef.update({ personAllocations: [part("Centro a", 209), part("Centro b", 211)] });
+    await assert.rejects(convertForecastsToBudgets(request, actor), /incompatíveis/);
+    await splitRef.update({ personAllocations: portions });
+    const ambiguous = db.collection("resultCenters").doc("vtu-duplicate-name");
+    await ambiguous.set({ name: "Centro a", active: true });
+    await assert.rejects(convertForecastsToBudgets(request, actor));
+    await ambiguous.delete(); // Owned emulator fixture only.
+    await assert.rejects(convertForecastsToBudgets(request, actor, { fingerprint: preview.fingerprint, confirmed: true }), /prévia mudou/);
+    const current = await convertForecastsToBudgets(request, actor);
+    const result = await convertForecastsToBudgets(request, actor, { fingerprint: current.fingerprint, confirmed: true });
+    assert.equal(result.converted, true);
+    assert.equal((await splitRef.get()).get("status"), "cancelled");
+    assert.equal((await splitObligation.get()).get("status"), "CANCELLED");
+    assert.equal((await splitRef.get()).get("personAllocations").length, 2);
+    assert.deepEqual((await actualRef.get()).data(), billBefore);
+    assert.equal((await convertForecastsToBudgets(request, actor, { fingerprint: current.fingerprint, confirmed: true })).alreadyConverted, true);
   });
 
   await t.test("permissões e privacidade não dependem dos botões", async () => {
