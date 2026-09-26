@@ -49,6 +49,7 @@ export const GET = withApiErrorHandling({
     periods: parsed.data.periods,
     canViewExpenseDetails: context.isDefaultAdmin
       || context.permissions.financial?.expenses?.view === true,
+    canViewPersonnel: context.isDefaultAdmin || context.permissions.financial?.personnelCosts?.view === true,
   }).catch((cause) => {
     if (cause instanceof DreSourceLimitError) {
       throw new AppError({

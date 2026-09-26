@@ -9,6 +9,7 @@ import {
 import {
   collection,
   doc,
+  deleteDoc,
   getDoc,
   getDocs,
   limit,
@@ -32,6 +33,25 @@ const rules = {
   rh: await readFile(new URL("firestore.rh.rules", root), "utf8"),
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
+
+test("previsão transferida para orçamento não pode ser reativada, apagada ou forjada pelo cliente", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-budget-conversion", firestore: { rules: rules.financial } });
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "accounts/vt"), { name: "VT", active: true, isGroup: false });
+      await setDoc(doc(db, "expenses/converted"), { status: "cancelled", accountId: "vt", budgetMigration: { operationId: "test" } });
+      await setDoc(doc(db, "expenses/ordinary"), { status: "pending", accountId: "vt" });
+    });
+    const db = env.authenticatedContext("admin", { isDefaultAdmin: true, financial: { view: true, expenses: { view: true, create: true, edit: true, delete: true } } }).firestore();
+    await assertSucceeds(updateDoc(doc(db, "expenses/ordinary"), { notes: "Revisão normal" }));
+    await assertFails(updateDoc(doc(db, "expenses/converted"), { status: "provisioned" }));
+    await assertFails(deleteDoc(doc(db, "expenses/converted")));
+    await assertFails(updateDoc(doc(db, "expenses/ordinary"), { budgetMigration: { operationId: "forged" } }));
+    await assertFails(setDoc(doc(db, "expenses/forged"), { status: "cancelled", accountId: "vt", budgetMigration: { operationId: "forged" } }));
+    await assertFails(getDoc(doc(db, "financialBudgetConversions/test")));
+  } finally { await env.cleanup(); }
+});
 
 test("orçamentos só podem ser lidos e escritos pela API financeira", async () => {
   const env = await initializeTestEnvironment({

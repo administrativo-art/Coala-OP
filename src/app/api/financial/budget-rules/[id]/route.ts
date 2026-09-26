@@ -12,6 +12,6 @@ export const PATCH = withApiErrorHandling<Context>({ source: "api-financial", op
   if (!id || id.length > 180 || id.includes("/")) throw new AppError({ code: "BUDGET_RULE_ID_INVALID", kind: "VALIDATION" });
   const parsed = updateBudgetRuleSchema.safeParse(await request.json());
   if (!parsed.success) throw new AppError({ code: "BUDGET_RULE_UPDATE_INVALID", kind: "VALIDATION", safeMessage: "Revise a alteração da regra." });
-  try { await updateBudgetRule(id, parsed.data, actor.decoded.uid); return NextResponse.json({ ok: true }); }
+  try { await updateBudgetRule(id, parsed.data, actor.decoded.uid, actor); return NextResponse.json({ ok: true }); }
   catch (error) { budgetError(error); }
 });
