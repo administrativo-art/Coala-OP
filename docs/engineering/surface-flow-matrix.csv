@@ -78,6 +78,7 @@ api,src/app/api/financial/budget-inputs/route.ts,,docs/engineering/flows/financi
 api,src/app/api/financial/budget-projects/[id]/candidates/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
 api,src/app/api/financial/budget-projects/[id]/expenses/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
 api,src/app/api/financial/budget-projects/[id]/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
+api,src/app/api/financial/budget-projects/[id]/stages/route.ts,,docs/engineering/flows/financial-budgets.md,Encerramento/reabertura de expectativa por etapa; gestao global e evidencia transacional.
 api,src/app/api/financial/budget-projects/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
 api,src/app/api/financial/budget-rules/[id]/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
 api,src/app/api/financial/budget-rules/generate/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.

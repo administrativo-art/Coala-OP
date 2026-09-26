@@ -12,7 +12,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — percurso complementado; verificação integrada pendente |
 | `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — percurso complementado; verificação integrada pendente |
 | `cash-deposits` | 1 | Traçado | [Lote, cobrança Inter e conciliação](flows/cash-deposits.md) — percurso complementado; verificação integrada pendente |
-| `cash-flow` | 3 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — percurso complementado; verificação integrada pendente |
+| `cash-flow` | 3 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
 | `catalog` | 1 | Traçado | [Fichas técnicas](flows/catalog.md) — verificação de acesso e custo pendente |
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — privacidade/custo e teste integrado pendentes |
