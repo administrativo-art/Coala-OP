@@ -46,11 +46,19 @@ import {
   isWithinPastFinancialDays,
 } from "./timeline";
 
+import {
+  DEFAULT_PAYMENT_REQUEST_FILTER,
+  matchesPaymentRequestFilter,
+  paymentSchedulePresentation,
+  requiresBeneficiaryReview,
+  stageGroup,
+  type PaymentRequestFilter,
+  type StageGroup,
+} from "./presentation";
+
 /* -------------------------------------------------------------------------- */
 /*  Estágios                                                                    */
 /* -------------------------------------------------------------------------- */
-
-type StageGroup = "you" | "risk" | "bank" | "done";
 
 const STATUS_LABEL: Record<BankPaymentRequestStatus, string> = {
   draft: "Rascunho",
@@ -68,31 +76,7 @@ const STATUS_LABEL: Record<BankPaymentRequestStatus, string> = {
   cancelled: "Cancelado",
 };
 
-const STATUS_GROUP: Record<BankPaymentRequestStatus, StageGroup> = {
-  draft: "you",
-  awaiting_financial_authorization: "you",
-  ready_to_submit: "you",
-  submitting: "bank",
-  awaiting_bank_approval: "bank",
-  scheduled: "bank",
-  processing: "bank",
-  awaiting_statement: "bank",
-  paid: "done",
-  rejected: "risk",
-  approval_expired: "risk",
-  failed: "risk",
-  cancelled: "risk",
-};
-
 const GROUP_ORDER: Record<StageGroup, number> = { you: 0, risk: 1, bank: 2, done: 3 };
-
-function requiresBeneficiaryReview(item: BankPaymentRequest) {
-  return item.status === "paid" && item.beneficiaryVerificationStatus === "divergent";
-}
-
-function stageGroup(item: BankPaymentRequest): StageGroup {
-  return requiresBeneficiaryReview(item) ? "risk" : STATUS_GROUP[item.status];
-}
 
 function statusLabel(item: BankPaymentRequest) {
   return requiresBeneficiaryReview(item) ? "Pago · revisar favorecido" : STATUS_LABEL[item.status];
@@ -128,7 +112,8 @@ const GROUP_META: Record<
   },
 };
 
-const TABS: { key: "all" | StageGroup; label: string }[] = [
+const TABS: { key: PaymentRequestFilter; label: string }[] = [
+  { key: "unpaid", label: "Não pagos" },
   { key: "all", label: "Todos" },
   { key: "you", label: "Aguardando você" },
   { key: "risk", label: "Atenção" },
@@ -198,13 +183,6 @@ function dueInfo(item: BankPaymentRequest): DueInfo {
   return { immediate: true, date: null, days: 0 };
 }
 
-function dueHint(group: StageGroup, due: DueInfo) {
-  if (group === "done" || due.immediate || due.days === null) return "";
-  if (due.days < 0) return `há ${Math.abs(due.days)}d`;
-  if (due.days === 0) return "hoje";
-  return `em ${due.days}d`;
-}
-
 /* -------------------------------------------------------------------------- */
 /*  Ação por linha                                                              */
 /* -------------------------------------------------------------------------- */
@@ -258,7 +236,7 @@ export function PaymentRequestsPage() {
   const [working, setWorking] = useState<string | null>(null);
   const [batchWorking, setBatchWorking] = useState(false);
 
-  const [tab, setTab] = useState<"all" | StageGroup>("all");
+  const [tab, setTab] = useState<PaymentRequestFilter>(DEFAULT_PAYMENT_REQUEST_FILTER);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -420,7 +398,7 @@ export function PaymentRequestsPage() {
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
     return items
-      .filter((item) => tab === "all" || stageGroup(item) === tab)
+      .filter((item) => matchesPaymentRequestFilter(item, tab))
       .filter((item) => {
         if (!term) return true;
         return (
@@ -531,11 +509,12 @@ export function PaymentRequestsPage() {
           </div>
           {TABS.map((entry) => {
             const active = tab === entry.key;
-            const count = entry.key === "all" ? items.length : groupItems(entry.key).length;
+            const count = items.filter((item) => matchesPaymentRequestFilter(item, entry.key)).length;
             return (
               <button
                 key={entry.key}
                 type="button"
+                aria-pressed={active}
                 onClick={() => {
                   setTab(entry.key);
                   setSelected([]);
@@ -566,7 +545,7 @@ export function PaymentRequestsPage() {
           <span />
           <span>Solicitação</span>
           <span>Trilho</span>
-          <span>Prazo</span>
+          <span>Pagamento</span>
           <span className="text-right">Valor</span>
           <span>Situação</span>
           <span className="text-right">Próxima ação</span>
@@ -777,11 +756,7 @@ function RequestRow({
   onToggle: () => void;
   onAction: (kind: RowActionKind) => void;
 }) {
-  const group = stageGroup(item);
-  const due = dueInfo(item);
-  const overdue = due.days !== null && due.days < 0 && group !== "done";
-  const soon = due.days !== null && due.days >= 0 && due.days <= 3 && group !== "done";
-  const hint = dueHint(group, due);
+  const schedule = paymentSchedulePresentation(item);
   const paid = item.paidAt ? formatFinancialDateTime(item.paidAt).split(" ")[0] : null;
 
   return (
@@ -839,33 +814,16 @@ function RequestRow({
           </span>
         </div>
 
-        {/* prazo */}
-        <div className="hidden lg:block">
-          <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Vencimento</p>
-          <p
-            className={cn(
-              "mt-0.5 font-mono text-[12.5px] font-bold",
-              group === "done"
-                ? "text-muted-foreground"
-                : overdue
-                  ? "text-rose-600"
-                  : soon
-                    ? "text-amber-600"
-                    : "text-foreground",
-            )}
-          >
-            {due.immediate ? "Imediato" : formatFinancialDate(due.date) ?? "—"}
-            {hint ? (
-              <span
-                className={cn(
-                  "ml-1 text-[10.5px] font-bold",
-                  overdue ? "text-rose-600" : soon ? "text-amber-600" : "text-muted-foreground",
-                )}
-              >
-                {hint}
-              </span>
-            ) : null}
-          </p>
+        {/* previsão de pagamento, visível também no mobile */}
+        <div className="col-start-2 lg:col-start-auto">
+          <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{schedule.label}</p>
+          {schedule.date ? (
+            <p className="mt-0.5 font-mono text-[12.5px] font-bold">{schedule.date}</p>
+          ) : null}
+          <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">{schedule.timing}</p>
+          {schedule.dueDate ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">Vencimento: {schedule.dueDate}</p>
+          ) : null}
           {paid ? (
             <p className="mt-0.5 whitespace-nowrap text-[11px] font-semibold text-emerald-700">
               ✓ Pago {paid}
