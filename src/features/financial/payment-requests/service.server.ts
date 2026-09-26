@@ -12,7 +12,7 @@ import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financia
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoSchema } from "./expense-boleto";
 import { WORKSPACE_ID } from "@/lib/workspace";
-import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, transitionPaymentRequest } from "./repository.server";
+import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
   paymentSubmissionRequiresManualReconciliation,
   planBankStatusObservation,
@@ -667,6 +667,7 @@ async function persistPostPaymentStep(params: {
 }
 
 async function finishPaidPaymentRequest(request: BankPaymentRequest) {
+  request = await revalidatePaidPaymentBeneficiary(request);
   if (
     request.postPaymentProcessingStatus === "completed"
     && request.proofStoragePath
