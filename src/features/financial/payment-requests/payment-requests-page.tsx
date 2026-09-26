@@ -758,7 +758,6 @@ function RequestRow({
   onAction: (kind: RowActionKind) => void;
 }) {
   const schedule = paymentSchedulePresentation(item);
-  const paid = item.paidAt ? formatFinancialDateTime(item.paidAt).split(" ")[0] : null;
 
   return (
     <li>
@@ -815,20 +814,15 @@ function RequestRow({
           </span>
         </div>
 
-        {/* previsão de pagamento, visível também no mobile */}
+        {/* pagamento realizado ou previsto, visível também no mobile */}
         <div className="col-start-2 lg:col-start-auto">
-          <p className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{schedule.label}</p>
+          <p className={cn("text-[9.5px] font-bold uppercase tracking-[0.1em]", item.status === "paid" ? "text-emerald-700" : "text-muted-foreground")}>{schedule.label}</p>
           {schedule.date ? (
-            <p className="mt-0.5 font-mono text-[12.5px] font-bold">{schedule.date}</p>
+            <p className={cn("mt-0.5 font-mono text-[12.5px] font-bold", item.status === "paid" && "text-emerald-700")}>{schedule.date}</p>
           ) : null}
-          <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">{schedule.timing}</p>
+          {schedule.timing ? <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">{schedule.timing}</p> : null}
           {schedule.dueDate ? (
             <p className="mt-1 text-[11px] text-muted-foreground">Vencimento: {schedule.dueDate}</p>
-          ) : null}
-          {paid ? (
-            <p className="mt-0.5 whitespace-nowrap text-[11px] font-semibold text-emerald-700">
-              ✓ Pago {paid}
-            </p>
           ) : null}
         </div>
 
