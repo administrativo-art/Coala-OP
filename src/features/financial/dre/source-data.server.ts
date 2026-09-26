@@ -4,6 +4,8 @@ import { FieldPath } from "firebase-admin/firestore";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { getBudgetPlanningComparisons } from "../budgets/projections.server";
+import type { BudgetExpense } from "../lib/budget-consumption";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 import type { ProductSimulation, SalesReport } from "@/types";
 import {
@@ -75,6 +77,7 @@ export async function getDreSourceData(input: {
   kioskIds: string[];
   periods: string[];
   canViewExpenseDetails: boolean;
+  canViewPersonnel?: boolean;
 }): Promise<DreSourceDataPayload> {
   if (input.kioskIds.length < 1 || input.kioskIds.length > 20) {
     throw new DreSourceLimitError("reports");
@@ -131,6 +134,8 @@ export async function getDreSourceData(input: {
     .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CashClosureMonthlySummary));
 
   return {
+    budgetPlanning: await getBudgetPlanningComparisons({ periods: input.periods, kioskIds: input.kioskIds,
+      expenses: expenseDocuments.map((doc) => ({ ...doc.data(), id: doc.id } as BudgetExpense)), canViewPersonnel: input.canViewPersonnel === true }),
     expenses,
     salesSummaries: sales.salesSummaries,
     closureSummaries,

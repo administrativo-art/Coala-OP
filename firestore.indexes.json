@@ -1,6 +1,12 @@
 
 {
   "indexes": [
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "isActive", "order": "ASCENDING" }, { "fieldPath": "unitIds", "arrayConfig": "CONTAINS" }
+    ] },
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "isActive", "order": "ASCENDING" }, { "fieldPath": "assignedKioskIds", "arrayConfig": "CONTAINS" }
+    ] },
     {
       "collectionGroup": "consumptionReports",
       "queryScope": "COLLECTION",

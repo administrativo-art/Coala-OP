@@ -5,12 +5,18 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { financialDateKey } from "@/features/financial/lib/financial-dates";
 import { calculateBudgetConsumption, calculateBudgetForecastCoverage, buildBudgetBurndownData, type BudgetExpense } from "@/features/financial/lib/budget-consumption";
 import { serializeFinancialValue } from "@/features/financial/lib/server-access";
-import { createBudgetSchema, createBudgetRuleSchema, createBudgetProjectSchema, updateBudgetSchema, updateBudgetRuleSchema, updateBudgetProjectSchema } from "./schemas";
+import { createBudgetSchema, createBudgetRuleSchema, createBudgetProjectSchema, updateBudgetSchema, updateBudgetRuleSchema, updateBudgetProjectSchema, budgetCoverageSchema } from "./schemas";
 import type { FinancialBudget, FinancialBudgetRule, FinancialBudgetSummary, FinancialBudgetProject, FinancialBudgetProjectSummary } from "./types";
 import type { z } from "zod";
 import { BudgetDomainError } from "./errors";
 import { estimateConsumptionPriceBudget } from "./input-estimate.server";
 import { calculateProjectBudgetConsumption } from "@/features/financial/lib/budget-project-consumption";
+import type { ServerUserContext } from "@/lib/auth-server";
+import { AppError } from "@/lib/observability/app-error";
+import { changeBudgetClaim, claimConflicts } from "./claims";
+import { makeBudgetCoverage, materializeBudgetComposition, shiftBudgetMonth, summarizeBudgetPeople } from "./composition";
+import { resolveBudgetCenter, resolveBudgetEmployees, resolveBudgetExpenseCenters } from "./references.server";
+import { canEditBudgetPersonnel } from "./personnel-access";
 export { BudgetDomainError } from "./errors";
 
 const budgets = financialDbAdmin.collection("financialBudgets");
@@ -37,9 +43,12 @@ function currentMonth() {
   return financialDateKey(new Date())!.slice(0, 7);
 }
 
-export async function validateBudgetAccounts(accountPlanIds: string[]) {
-  const snapshots = await financialDbAdmin.getAll(...accountPlanIds.map((id) => financialDbAdmin.collection("accounts").doc(id)));
-  if (snapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.active === false || snapshot.data()?.isGroup === true)) {
+export async function validateBudgetAccounts(accountPlanIds: string[], transaction?: FirebaseFirestore.Transaction) {
+  const refs = accountPlanIds.map((id) => financialDbAdmin.collection("accounts").doc(id));
+  const snapshots = transaction ? await transaction.getAll(...refs) : await financialDbAdmin.getAll(...refs);
+  const childrenQuery = financialDbAdmin.collection("accounts").where("parentId", "in", accountPlanIds).limit(1);
+  const children = transaction ? await transaction.get(childrenQuery) : await childrenQuery.get();
+  if (!children.empty || snapshots.some((snapshot) => !snapshot.exists || snapshot.data()?.active === false || snapshot.data()?.isGroup === true)) {
     throw new BudgetDomainError("Escolha apenas contas ativas que aceitam despesas.");
   }
 }
@@ -54,93 +63,166 @@ export async function expensesForMonth(month: string): Promise<BudgetExpense[]> 
 }
 
 function summarize(budget: FinancialBudget, expenses: BudgetExpense[], today: string): FinancialBudgetSummary {
+  const consumption = calculateBudgetConsumption(budget, expenses);
+  const composition = budget.composition?.length ? summarizeBudgetPeople(budget, expenses) : undefined;
   return {
     ...budget,
-    ...calculateBudgetConsumption(budget, expenses),
+    hasComposition: Boolean(budget.composition?.length),
+    ...consumption,
+    ...composition,
+    issues: [...consumption.issues, ...composition?.issues ?? []],
     forecastCoverageAmountCents: calculateBudgetForecastCoverage(budget, expenses),
     curve: buildBudgetBurndownData(budget, expenses, today),
   };
 }
 
-export async function listBudgetSummaries(month: string) {
+export async function listBudgetSummaries(month: string, resultCenterId?: string, actor?: ServerUserContext) {
+  await resolveBudgetCenter(resultCenterId, actor, undefined, false);
+  let query = budgets.where("competenceMonth", "==", month);
+  if (resultCenterId) query = query.where("resultCenterId", "==", resultCenterId);
   const [budgetSnapshot, expenseRows] = await Promise.all([
-    budgets.where("competenceMonth", "==", month).limit(101).get(),
+    query.limit(101).get(),
     expensesForMonth(month),
   ]);
   if (budgetSnapshot.size > 100) throw new BudgetDomainError("Há orçamentos demais nesta competência.");
   const today = financialDateKey(new Date())!;
-  return budgetSnapshot.docs.map((doc) => summarize(docData<FinancialBudget>(doc), expenseRows, today));
+  const rows = await resolveBudgetExpenseCenters(expenseRows);
+  return budgetSnapshot.docs.map((doc) => summarize(docData<FinancialBudget>(doc), rows, today));
 }
 
-export async function getBudgetSummary(id: string) {
+export async function getBudgetSummary(id: string, actor?: ServerUserContext) {
   const snapshot = await budgets.doc(id).get();
   if (!snapshot.exists) throw new BudgetDomainError("Orçamento não encontrado.");
   const budget = docData<FinancialBudget>(snapshot);
-  return summarize(budget, await expensesForMonth(budget.competenceMonth), financialDateKey(new Date())!);
+  await resolveBudgetCenter(budget.resultCenterId, actor, undefined, false);
+  return summarize(budget, await resolveBudgetExpenseCenters(await expensesForMonth(budget.competenceMonth)), financialDateKey(new Date())!);
 }
 
-export async function listBudgetRules() {
-  const snapshot = await rules.limit(101).get();
+export async function listBudgetRules(options?: { active?: boolean; resultCenterId?: string; actor?: ServerUserContext }) {
+  await resolveBudgetCenter(options?.resultCenterId, options?.actor, undefined, false);
+  let query = rules.where("active", "==", options?.active ?? true);
+  if (options?.resultCenterId) query = query.where("resultCenterId", "==", options.resultCenterId);
+  const snapshot = await query.limit(101).get();
   if (snapshot.size > 100) throw new BudgetDomainError("Há regras de orçamento demais para esta consulta.");
-  return snapshot.docs.map((doc) => docData<FinancialBudgetRule>(doc));
+  return snapshot.docs.map((doc) => { const rule = docData<FinancialBudgetRule>(doc); return { ...rule, hasComposition: Boolean(rule.composition?.length) }; });
+}
+
+function assertPersonnelWrite(actor?: ServerUserContext) {
+  if (actor && !canEditBudgetPersonnel(actor)) throw new AppError({ code: "BUDGET_PERSONNEL_FORBIDDEN", kind: "AUTHORIZATION" });
+}
+
+function writeClaims(transaction: FirebaseFirestore.Transaction, snapshots: FirebaseFirestore.DocumentSnapshot[], centerId: string | null | undefined, ownerId: string, acquire: boolean) {
+  snapshots.forEach((snapshot) => {
+    const next = changeBudgetClaim(snapshot.data(), centerId, ownerId, acquire);
+    if (next) transaction.set(snapshot.ref, next);
+    else if (snapshot.exists) transaction.delete(snapshot.ref);
+  });
 }
 
 export async function createBudget(input: z.infer<typeof createBudgetSchema>, uid: string, options?: {
   ruleId?: string;
   calculationMode?: FinancialBudget["calculationMode"];
   calculationSnapshot?: FinancialBudget["calculationSnapshot"];
+  actor?: ServerUserContext;
 }) {
-  await validateBudgetAccounts(input.accountPlanIds);
+  input = createBudgetSchema.parse(input);
+  if (input.composition) assertPersonnelWrite(options?.actor);
+  const names = await resolveBudgetEmployees(input.composition?.map((line) => line.employeeId) ?? [], input.competenceMonth, options?.actor);
+  const composition = input.composition?.map((line) => ({ ...line, employeeName: names.get(line.employeeId)! }));
   const ref = options?.ruleId ? budgets.doc(`${options.ruleId}_${input.competenceMonth}`) : budgets.doc();
   const claimRefs = input.accountPlanIds.map((accountId) => budgetClaims.doc(`${input.competenceMonth}_${accountId}`));
   const now = Timestamp.now();
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [existing, ...claims] = await Promise.all([transaction.get(ref), ...claimRefs.map((claim) => transaction.get(claim))]);
     if (existing.exists && options?.ruleId) return { id: ref.id, created: false };
-    if (claims.some((claim) => claim.exists)) {
+    await validateBudgetAccounts(input.accountPlanIds, transaction);
+    const scope = await resolveBudgetCenter(input.resultCenterId, options?.actor, transaction);
+    if (options?.ruleId) {
+      const ruleSnapshot = await transaction.get(rules.doc(options.ruleId));
+      const rule = ruleSnapshot.data() as FinancialBudgetRule | undefined;
+      if (!rule?.active || rule.startMonth > input.competenceMonth || (rule.endMonth && rule.endMonth < input.competenceMonth)) {
+        throw new BudgetDomainError("Regra inativa ou fora da vigência durante a geração.");
+      }
+    }
+    if (claims.some((claim) => claimConflicts(claim.data(), input.resultCenterId))) {
       if (options?.ruleId) return { id: ref.id, created: false, skipped: "Já há orçamento para uma das contas deste mês." };
       throw new BudgetDomainError("Uma das contas já pertence a outro orçamento neste mês.");
     }
     transaction.create(ref, {
       ...input, active: true, source: options?.ruleId ? "generated" : "manual",
+      ...scope, ...(composition ? { composition, compositionEmployeeIds: [...new Set(composition.map((line) => line.employeeId))], purchaseMonths: [...new Set(composition.map((line) => line.expectedPurchaseDate.slice(0, 7)))].sort() } : {}),
       ruleId: options?.ruleId ?? null, calculationMode: options?.calculationMode ?? "manual",
       calculationSnapshot: options?.calculationSnapshot ?? null,
       createdBy: uid, createdAt: now, updatedAt: now,
     });
-    claimRefs.forEach((claim) => transaction.create(claim, { budgetId: ref.id, competenceMonth: input.competenceMonth }));
+    writeClaims(transaction, claims, input.resultCenterId, ref.id, true);
     return { id: ref.id, created: true };
   });
   return result;
 }
 
-export async function updateBudget(id: string, input: z.infer<typeof updateBudgetSchema>, uid: string) {
+export async function updateBudget(id: string, input: z.infer<typeof updateBudgetSchema>, uid: string, actor?: ServerUserContext) {
+  input = updateBudgetSchema.parse(input);
   const ref = budgets.doc(id);
+  // HR is a separate database: eligibility preflight, never represented as a cross-database transaction.
+  const before = await ref.get();
+  if (!before.exists) throw new BudgetDomainError("Orçamento não encontrado.");
+  const original = before.data() as FinancialBudget;
+  await resolveBudgetCenter(original.resultCenterId, actor, undefined, false);
+  if (original.composition || input.composition) assertPersonnelWrite(actor);
+  if (input.active === true && !original.active && original.composition) {
+    await resolveBudgetEmployees(original.composition.map((line) => line.employeeId), original.competenceMonth, actor);
+  }
+  const names = input.composition ? await resolveBudgetEmployees(input.composition.map((line) => line.employeeId), original.competenceMonth, actor) : null;
   await financialDbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new BudgetDomainError("Orçamento não encontrado.");
     const budget = snapshot.data() as FinancialBudget;
+    await resolveBudgetCenter(budget.resultCenterId, actor, transaction, input.active === true);
+    if (input.active === true && !budget.active) await validateBudgetAccounts(budget.accountPlanIds, transaction);
+    if (budget.composition || input.composition) assertPersonnelWrite(actor);
+    const composition = input.composition?.map((line) => ({ ...line, employeeName: names!.get(line.employeeId)! })) ?? budget.composition;
+    if (input.composition) {
+      if (!input.reason) throw new BudgetDomainError("Explique a revisão da composição.");
+      for (const previous of budget.composition ?? []) {
+        const matching = composition?.find((line) => line.employeeId === previous.employeeId && line.accountPlanId === previous.accountPlanId);
+        const sameId = composition?.find((line) => line.id === previous.id);
+        if ((matching && matching.id !== previous.id) || (sameId && (sameId.employeeId !== previous.employeeId || sameId.accountPlanId !== previous.accountPlanId))) {
+          throw new BudgetDomainError("Preserve os identificadores das linhas e não os reutilize para outra pessoa/conta.");
+        }
+      }
+    }
+    const amount = input.budgetedAmountCents ?? (input.composition ? composition!.reduce((sum, line) => sum + line.amountCents, 0) : budget.budgetedAmountCents);
+    const candidate = createBudgetSchema.safeParse({ ...budget, ...input, composition, budgetedAmountCents: amount });
+    if (!candidate.success) throw new BudgetDomainError("Composição, centro, contas ou soma incompatíveis com o orçamento.");
     if (input.budgetedAmountCents !== undefined && input.budgetedAmountCents !== budget.budgetedAmountCents && !input.reason) {
       throw new BudgetDomainError("Explique por que o valor orçado foi alterado.");
     }
     const claims = budget.accountPlanIds.map((accountId) => budgetClaims.doc(`${budget.competenceMonth}_${accountId}`));
-    const claimSnapshots = input.active === true && !budget.active
+    const claimSnapshots = input.active !== undefined && input.active !== budget.active
       ? await Promise.all(claims.map((claim) => transaction.get(claim))) : [];
-    if (claimSnapshots.some((claim) => claim.exists && claim.data()?.budgetId !== id)) {
+    if (input.active === true && claimSnapshots.some((claim) => claimConflicts(claim.data(), budget.resultCenterId, id))) {
       throw new BudgetDomainError("Uma das contas já pertence a outro orçamento neste mês.");
     }
-    const { reason, ...changes } = input;
+    const { reason, composition: _composition, ...fields } = input;
+    const changes = { ...fields, budgetedAmountCents: amount, ...(input.composition ? {
+      composition, compositionEmployeeIds: [...new Set(composition!.map((line) => line.employeeId))], purchaseMonths: [...new Set(composition!.map((line) => line.expectedPurchaseDate.slice(0, 7)))].sort(), coverage: [],
+    } : {}) };
     const now = Timestamp.now();
     transaction.update(ref, { ...changes, updatedAt: now, updatedBy: uid });
     transaction.create(revisions.doc(), { budgetId: id, previous: {
       name: budget.name, budgetedAmountCents: budget.budgetedAmountCents, active: budget.active,
+      ...(budget.composition ? { composition: budget.composition, coverage: budget.coverage ?? [] } : {}),
     }, changes, reason: reason ?? null, actorUid: uid, createdAt: now });
-    if (input.active === false && budget.active) claims.forEach((claim) => transaction.delete(claim));
-    if (input.active === true && !budget.active) claims.forEach((claim) => transaction.set(claim, { budgetId: id, competenceMonth: budget.competenceMonth }));
+    if (input.active !== undefined && input.active !== budget.active) writeClaims(transaction, claimSnapshots, budget.resultCenterId, id, input.active);
   });
 }
 
-export async function createBudgetRule(input: z.infer<typeof createBudgetRuleSchema>, uid: string) {
-  await validateBudgetAccounts(input.accountPlanIds);
+export async function createBudgetRule(input: z.infer<typeof createBudgetRuleSchema>, uid: string, actor?: ServerUserContext) {
+  input = createBudgetRuleSchema.parse(input);
+  if (input.composition) assertPersonnelWrite(actor);
+  const names = await resolveBudgetEmployees(input.composition?.map((line) => line.employeeId) ?? [], input.startMonth, actor);
+  const composition = input.composition?.map((line) => ({ ...line, employeeName: names.get(line.employeeId)! }));
   if (input.mode === "consumption_price") await previewBudgetRule(input, input.startMonth);
   const ref = rules.doc();
   const claims = input.accountPlanIds.map((accountId) => ruleClaims.doc(accountId));
@@ -150,43 +232,50 @@ export async function createBudgetRule(input: z.infer<typeof createBudgetRuleSch
       Promise.all(claims.map((claim) => transaction.get(claim))),
       Promise.all(initialMonthClaims.map((claim) => transaction.get(claim))),
     ]);
-    if (existing.some((claim) => claim.exists)) throw new BudgetDomainError("Uma das contas já tem outra regra automática ativa.");
-    if (initial.some((claim) => claim.exists)) throw new BudgetDomainError("Uma das contas já tem orçamento no mês inicial. Escolha outra competência ou desative o orçamento existente.");
+    await validateBudgetAccounts(input.accountPlanIds, transaction);
+    const scope = await resolveBudgetCenter(input.resultCenterId, actor, transaction);
+    if (existing.some((claim) => claimConflicts(claim.data(), input.resultCenterId))) throw new BudgetDomainError("Uma das contas já tem outra regra automática ativa.");
+    if (initial.some((claim) => claimConflicts(claim.data(), input.resultCenterId))) throw new BudgetDomainError("Uma das contas já tem orçamento no mês inicial. Escolha outra competência ou desative o orçamento existente.");
     const now = Timestamp.now();
-    transaction.create(ref, { ...input, active: true, createdBy: uid, createdAt: now, updatedAt: now });
-    claims.forEach((claim) => transaction.create(claim, { ruleId: ref.id }));
+    transaction.create(ref, { ...input, ...scope, ...(composition ? { composition } : {}), active: true, createdBy: uid, createdAt: now, updatedAt: now });
+    writeClaims(transaction, existing, input.resultCenterId, ref.id, true);
   });
   return { id: ref.id };
 }
 
-export async function updateBudgetRule(id: string, input: z.infer<typeof updateBudgetRuleSchema>, uid: string) {
+export async function updateBudgetRule(id: string, input: z.infer<typeof updateBudgetRuleSchema>, uid: string, actor?: ServerUserContext) {
+  input = updateBudgetRuleSchema.parse(input);
   const ref = rules.doc(id);
   await financialDbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new BudgetDomainError("Regra não encontrada.");
     const rule = snapshot.data() as FinancialBudgetRule;
+    if (rule.composition) assertPersonnelWrite(actor);
+    await resolveBudgetCenter(rule.resultCenterId, actor, transaction, input.active);
+    if (input.active && !rule.active) await validateBudgetAccounts(rule.accountPlanIds, transaction);
     const claims = rule.accountPlanIds.map((accountId) => ruleClaims.doc(accountId));
-    const existing = input.active && !rule.active ? await Promise.all(claims.map((claim) => transaction.get(claim))) : [];
-    if (existing.some((claim) => claim.exists && claim.data()?.ruleId !== id)) {
+    const existing = input.active !== rule.active ? await Promise.all(claims.map((claim) => transaction.get(claim))) : [];
+    if (input.active && existing.some((claim) => claimConflicts(claim.data(), rule.resultCenterId, id))) {
       throw new BudgetDomainError("Uma das contas já tem outra regra automática ativa.");
     }
     const now = Timestamp.now();
     transaction.update(ref, { active: input.active, updatedAt: now, updatedBy: uid });
     transaction.create(revisions.doc(), { ruleId: id, previous: { active: rule.active }, changes: input,
       reason: null, actorUid: uid, createdAt: now });
-    if (!input.active && rule.active) claims.forEach((claim) => transaction.delete(claim));
-    if (input.active && !rule.active) claims.forEach((claim) => transaction.set(claim, { ruleId: id }));
+    if (input.active !== rule.active) writeClaims(transaction, existing, rule.resultCenterId, id, input.active);
   });
 }
 
-export async function previewBudgetRule(rule: Pick<FinancialBudgetRule, "mode" | "accountPlanIds" | "fixedAmountCents" | "averageMonths">, month: string) {
+export async function previewBudgetRule(rule: Pick<FinancialBudgetRule, "mode" | "accountPlanIds" | "fixedAmountCents" | "averageMonths" | "resultCenterId">, month: string,
+  loadExpenses: (month: string) => Promise<BudgetExpense[]> = async (key) => resolveBudgetExpenseCenters(await expensesForMonth(key))) {
   if (rule.mode === "consumption_price") {
+    if (rule.resultCenterId) throw new BudgetDomainError("Consumo/estoque por centro ainda não é suportado.");
     const stockRule = rule as Pick<FinancialBudgetRule,
       "baseProductIds" | "averageMonths" | "closingStockDays" | "accountPlanIds" | "stockKioskId">;
     const estimate = await estimateConsumptionPriceBudget(stockRule, month);
     const committedAmountCents = calculateBudgetConsumption({
       accountPlanIds: rule.accountPlanIds, competenceMonth: month, budgetedAmountCents: 0,
-    }, await expensesForMonth(month)).consumedAmountCents;
+    }, await loadExpenses(month)).consumedAmountCents;
     return { amountCents: committedAmountCents + estimate.additionalAmountCents,
       snapshot: { referenceMonths: estimate.referenceMonths, referenceAmountsCents: [] as number[],
         calculatedAt: new Date().toISOString(), inputEstimates: estimate.inputEstimates, committedAmountCents } };
@@ -204,23 +293,35 @@ export async function previewBudgetRule(rule: Pick<FinancialBudgetRule, "mode" |
     referenceMonths.push(reference);
     reference = previousMonth(reference);
   }
-  const references = await Promise.all(referenceMonths.map(expensesForMonth));
+  const references = await Promise.all(referenceMonths.map(loadExpenses));
   if (references.some((expenses, index) => !expenses.some((expense) => {
     if (expense.provisionType === "forecast" || ["draft", "cancelled", "reconciled"].includes(String(expense.status))) return false;
-    return calculateBudgetConsumption({ accountPlanIds: rule.accountPlanIds,
+    return calculateBudgetConsumption({ accountPlanIds: rule.accountPlanIds, resultCenterId: rule.resultCenterId,
       competenceMonth: referenceMonths[index], budgetedAmountCents: 0 }, [expense]).consumedAmountCents > 0;
   }))) {
     throw new BudgetDomainError("Faltam despesas válidas em um ou mais meses de referência. Confira o histórico antes de usar o cálculo automático.");
   }
   const referenceAmountsCents = references.map((expenses, index) => calculateBudgetConsumption({
-    accountPlanIds: rule.accountPlanIds, competenceMonth: referenceMonths[index], budgetedAmountCents: 0,
+    accountPlanIds: rule.accountPlanIds, resultCenterId: rule.resultCenterId, competenceMonth: referenceMonths[index], budgetedAmountCents: 0,
   }, expenses).consumedAmountCents);
   const amountCents = Math.round(referenceAmountsCents.reduce((sum, amount) => sum + amount, 0) / count);
   return { amountCents, snapshot: { referenceMonths, referenceAmountsCents, calculatedAt: new Date().toISOString() } };
 }
 
-export async function generateBudgetMonth(month: string, uid: string) {
-  const activeRules = (await listBudgetRules()).filter((rule) => rule.active && rule.startMonth <= month);
+export async function generateBudgetMonth(month: string, uid: string, options?: {
+  actor?: ServerUserContext; resultCenterId?: string; advanceOnly?: boolean;
+  expenseCache?: Map<string, Promise<BudgetExpense[]>>;
+}) {
+  const activeRules = (await listBudgetRules({ actor: options?.actor, resultCenterId: options?.resultCenterId }))
+    .filter((rule) => rule.startMonth <= month && (!rule.endMonth || rule.endMonth >= month)
+      && (!options?.advanceOnly || rule.generationLeadMonths === 1));
+  // Validate permissions for the entire request before making the first write.
+  if (activeRules.some((rule) => rule.composition?.length)) assertPersonnelWrite(options?.actor);
+  const cache = options?.expenseCache ?? new Map<string, Promise<BudgetExpense[]>>();
+  const loadExpenses = (key: string) => {
+    if (!cache.has(key)) cache.set(key, expensesForMonth(key).then(resolveBudgetExpenseCenters));
+    return cache.get(key)!;
+  };
   const results = [];
   for (const rule of activeRules) {
     const generatedId = `${rule.id}_${month}`;
@@ -228,13 +329,49 @@ export async function generateBudgetMonth(month: string, uid: string) {
       results.push({ ruleId: rule.id, id: generatedId, created: false });
       continue;
     }
-    const preview = await previewBudgetRule(rule, month);
-    results.push({ ruleId: rule.id, ...await createBudget({
-      name: rule.name, accountPlanIds: rule.accountPlanIds,
-      competenceMonth: month, budgetedAmountCents: preview.amountCents,
-    }, uid, { ruleId: rule.id, calculationMode: rule.mode, calculationSnapshot: preview.snapshot }) });
+    try {
+      const preview = await previewBudgetRule(rule, month, loadExpenses);
+      const composition = materializeBudgetComposition(rule, month);
+      results.push({ ruleId: rule.id, ...await createBudget({
+        name: rule.name, accountPlanIds: rule.accountPlanIds, ...(rule.resultCenterId ? { resultCenterId: rule.resultCenterId } : {}),
+        competenceMonth: month, budgetedAmountCents: preview.amountCents, ...(composition ? { composition } : {}),
+      }, uid, { ruleId: rule.id, calculationMode: rule.mode, calculationSnapshot: preview.snapshot, actor: options?.actor }) });
+    } catch (error) {
+      if (!(error instanceof BudgetDomainError)) throw error;
+      results.push({ ruleId: rule.id, created: false, skipped: error.message });
+    }
   }
   return results;
+}
+
+export async function generateScheduledBudgetMonths(month: string, uid: string) {
+  const expenseCache = new Map<string, Promise<BudgetExpense[]>>();
+  const current = await generateBudgetMonth(month, uid, { expenseCache });
+  const nextMonth = shiftBudgetMonth(month, 1);
+  const next = await generateBudgetMonth(nextMonth, uid, { advanceOnly: true, expenseCache });
+  return { current, nextMonth, next };
+}
+
+export async function confirmBudgetCoverage(id: string, input: z.infer<typeof budgetCoverageSchema>, uid: string, actor?: ServerUserContext) {
+  input = budgetCoverageSchema.parse(input);
+  assertPersonnelWrite(actor);
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = budgets.doc(id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new BudgetDomainError("Orçamento não encontrado.");
+    const budget = docData<FinancialBudget>(snapshot);
+    await resolveBudgetCenter(budget.resultCenterId, actor, transaction);
+    const expenseSnapshot = await transaction.get(financialDbAdmin.collection("expenses")
+      .where("competenceMonth", "==", budget.competenceMonth).limit(MAX_EXPENSES_PER_MONTH + 1));
+    if (expenseSnapshot.size > MAX_EXPENSES_PER_MONTH) throw new BudgetDomainError("Limite de 2.000 despesas por competência excedido.");
+    const rows = await resolveBudgetExpenseCenters(expenseSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as BudgetExpense)));
+    const now = new Date().toISOString();
+    const confirmation = makeBudgetCoverage(budget, rows, input, uid, now);
+    const coverage = [...(budget.coverage ?? []).filter((item) => item.lineId !== input.lineId), confirmation];
+    transaction.update(ref, { coverage, updatedAt: Timestamp.now(), updatedBy: uid });
+    transaction.create(revisions.doc(), { budgetId: id, action: "coverage", previous: budget.coverage ?? [],
+      changes: confirmation, reason: input.reason, actorUid: uid, createdAt: Timestamp.now() });
+  });
 }
 
 export async function listBudgetProjects() {

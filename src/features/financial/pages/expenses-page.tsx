@@ -1493,12 +1493,12 @@ export function ExpensesPage() {
                           <td className="px-4 py-3 text-right font-mono">{formatCurrency(expense.totalValue || 0)}</td>
                           <td className="w-[160px] px-4 py-3 text-center">
                             <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
-                              {STATUS_LABELS[statusKey] || statusKey}
+                              {expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              {permissions.financial?.expenses?.edit && (
+                              {permissions.financial?.expenses?.edit && !expense.budgetMigration && (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1527,9 +1527,9 @@ export function ExpensesPage() {
                                 resultCenterNameById={resultCenterNameById}
                                 canViewPersonnelCosts={canViewPersonnelCosts}
                                 canViewExpenses={canViewExpenses}
-                                canEdit={permissions.financial?.expenses?.edit === true}
-                                canPay={permissions.financial?.expenses?.pay === true}
-                                canDelete={permissions.financial?.expenses?.delete === true}
+                                canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration}
+                                canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration}
+                                canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration}
                                 finalizingAudit={finalizingAuditId === expense.id}
                                 onFinalizeAudit={() => void handleFinalizeAudit(expense)}
                                 onPay={() => setPayTarget({
@@ -1773,7 +1773,7 @@ export function ExpensesPage() {
 
                       <div className="mt-3 flex items-center justify-end gap-2">
                         <span className={cn("rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
-                          {STATUS_LABELS[statusKey] || statusKey}
+                          {expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey}
                         </span>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1806,14 +1806,14 @@ export function ExpensesPage() {
                                 Registrar pagamento
                               </DropdownMenuItem>
                             )}
-                            {permissions.financial?.expenses?.edit && (
+                            {permissions.financial?.expenses?.edit && !expense.budgetMigration && (
                               <DropdownMenuItem asChild>
                                 <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
                                   {expense.status === "draft" ? "Continuar rascunho" : "Editar"}
                                 </Link>
                               </DropdownMenuItem>
                             )}
-                            {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
+                            {permissions.financial?.expenses?.delete && !expense.budgetMigration && expense.originModule !== "purchasing" && (
                               <DropdownMenuItem onClick={() => setDeleteTarget(expense)}>
                                 <Trash2 className="mr-2 h-4 w-4" /> Excluir
                               </DropdownMenuItem>
