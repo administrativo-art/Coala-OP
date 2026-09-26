@@ -36,6 +36,14 @@ jobs:
       - name: Enforce vulnerability ratchet
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run check:vulnerabilities
+      - name: Verify engineering map
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
+        run: |
+          python3 scripts/generate-route-inventory.py --check
+          python3 scripts/generate-surface-inventory.py --check
+          python3 scripts/check-flow-matrix.py
+          python3 scripts/generate-flow-entrypoints.py --check
+          python3 scripts/check-engineering-docs.py
       - name: Verify application
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run verify
