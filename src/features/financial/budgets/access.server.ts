@@ -4,6 +4,14 @@ import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { AppError } from "@/lib/observability/app-error";
 import { BudgetDomainError } from "./errors";
 import { canEditBudgetPersonnel } from "./personnel-access";
+import { assertBudgetCenterAccess } from "./references.server";
+
+export async function projectBudgetActor(request: NextRequest, action: "view" | "manage") {
+  const actor = await budgetActor(request, action);
+  // Projects are global until they have their own explicit center model.
+  assertBudgetCenterAccess(actor);
+  return actor;
+}
 
 export async function budgetActor(request: NextRequest, action: "view" | "manage") {
   const actor = await requireUser(request).catch((cause) => {

@@ -10,6 +10,7 @@ import { canViewBudgetPersonnel } from "./personnel-access";
 import { BudgetDomainError } from "./errors";
 import type { FinancialBudget } from "./types";
 import type { BudgetCashProjection, BudgetCashProjectionPayload, BudgetPlanningComparison } from "./projection-view";
+import { getProjectCashProjections } from "./project-projections.server";
 
 const budgetData = (doc: FirebaseFirestore.DocumentSnapshot) => ({ ...serializeFinancialValue(doc.data()) as FinancialBudget, id: doc.id });
 
@@ -49,7 +50,8 @@ export async function getBudgetCashProjections(actor: ServerUserContext, input: 
       accountPlanId: projection.accountPlanId, competenceMonth: projection.competenceMonth,
       date: projection.expectedPurchaseDate, amountCents: projection.amountCents, requiresReview: projection.requiresReview });
   }
-  return { projections: [...grouped.values()], conflictCount: result.conflicts.length, issueCount: result.issues.length };
+  const projects = input.resultCenterId ? {} : await getProjectCashProjections(input, budgets.filter((budget) => budget.composition?.length).flatMap((budget) => budget.accountPlanIds));
+  return { projections: [...grouped.values()], conflictCount: result.conflicts.length, issueCount: result.issues.length, ...projects };
 }
 
 /** Separate planning comparison: never fabricates payable expenses or changes DRE policy. */

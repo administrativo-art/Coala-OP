@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **352 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **353 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -113,6 +113,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/budget-projects/[id]` | GET, PATCH | [src/app/api/financial/budget-projects/[id]/route.ts](../../src/app/api/financial/budget-projects/%5Bid%5D/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budget-projects/[id]/candidates` | GET | [src/app/api/financial/budget-projects/[id]/candidates/route.ts](../../src/app/api/financial/budget-projects/%5Bid%5D/candidates/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budget-projects/[id]/expenses` | POST, DELETE | [src/app/api/financial/budget-projects/[id]/expenses/route.ts](../../src/app/api/financial/budget-projects/%5Bid%5D/expenses/route.ts) | [financial-budgets](flows/financial-budgets.md) |
+| `/api/financial/budget-projects/[id]/stages` | POST | [src/app/api/financial/budget-projects/[id]/stages/route.ts](../../src/app/api/financial/budget-projects/%5Bid%5D/stages/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budget-rules` | GET, POST | [src/app/api/financial/budget-rules/route.ts](../../src/app/api/financial/budget-rules/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budget-rules/[id]` | PATCH | [src/app/api/financial/budget-rules/[id]/route.ts](../../src/app/api/financial/budget-rules/%5Bid%5D/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budget-rules/generate` | POST | [src/app/api/financial/budget-rules/generate/route.ts](../../src/app/api/financial/budget-rules/generate/route.ts) | [financial-budgets](flows/financial-budgets.md) |

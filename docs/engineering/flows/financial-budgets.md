@@ -12,6 +12,8 @@ As rotas de [orçamentos](../../../src/app/api/financial/budgets/route.ts), [reg
 
 `budgetActor` em [access.server](../../../src/features/financial/budgets/access.server.ts) exige sessão. Leitura: administrador padrão ou `financial.view` com `financial.settings.view` ou `financial.cashFlow.view`. Gestão: administrador padrão ou `financial.view`, `financial.settings.view` e `financial.settings.manageBudgets`.
 
+Projetos usam adicionalmente `projectBudgetActor`: exigem acesso a todas as unidades, pois ainda não têm centro próprio. A projeção global aplica a mesma restrição. Não há nova permissão nem migração de perfis.
+
 O serviço mantém `financialBudgets`, `financialBudgetRules`, reservas de contas por competência/regra, `financialBudgetProjects`, reservas de despesas por projeto, revisões e eventos. Criação e reservas são transacionais; alteração de limite exige justificativa e registra revisão. Vínculo/desvínculo da despesa ao projeto atualiza projeto, reserva e evento na mesma transação. Consultas de resumo usam competência e limites; conferir erro/limite antes de assumir cobertura completa de coleções crescentes.
 
 ## Geração e consumidores
@@ -31,3 +33,11 @@ Orçamentos/regras podem pertencer a centro de resultado. [Referências](../../.
 [Conversão](../../../src/features/financial/budgets/forecast-conversion.server.ts) de provisões VT exige administrador padrão. Prévia produz fingerprint; confirmação revalida fonte e grava cancelamento, vínculos e `financialBudgetConversions` em transação. Repetição retorna operação persistida. [Desligamento](../../../src/features/financial/budgets/termination.server.ts) interrompe expectativas futuras com revisão auditável, preservando documento real/pagamento.
 
 Testes adicionais disponíveis: [composição](../../../tests/unit/financial-budget-unit-composition.test.ts), [conversão](../../../tests/unit/financial-budget-conversion.test.ts), [integração](../../../tests/integration/financial-budgets.test.mjs). Ver [implantação e limites existentes](../financial-budgets-rollout.md); não executar conversão real só por integrar documentação.
+
+## Cronograma de projetos por competência ou período
+
+Ajuste de 2026-09-26: [contrato completo](../project-budget-cashflow.md). O cadastro escolhe um mês ou datas inclusivas; o desembolso pode ser uniforme por dia (etapas mensais) ou até 36 etapas com valores/data exatos. A referência inicial é preservada; revisão do limite exige motivo e cronograma correspondente. Projetos legados só passam a projetar depois de configuração explícita, sem backfill.
+
+Cada despesa pertence a uma única etapa do projeto e reduz apenas seu saldo esperado, considerando rateio elegível. Competência, vencimento e pagamento da despesa não são reescritos; pagar não consome novamente. [POST stages](../../../src/app/api/financial/budget-projects/%5Bid%5D/stages/route.ts) encerra/reabre a expectativa com motivo, confirmação e evidência atual em transação. Revisão sem mudança preserva o encerramento; alteração relevante exige nova conferência. Documento ausente, rateio inválido ou etapa não atribuída suspende a projeção com aviso.
+
+Evidências locais deste ajuste: 1498 testes unitários, 28 de integração no emulador e build concluídos. [Testes do cronograma](../../../tests/unit/financial-project-cash-plan.test.ts) cobrem centavos, limites e não duplicidade. E2E de API incluído na suíte isolada; não confundir esses testes com homologação visual ou execução real.
