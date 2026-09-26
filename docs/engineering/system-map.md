@@ -1,0 +1,39 @@
+# Mapa de localização e impacto
+
+Índice curto do **sistema inteiro**. Busque a linha do pedido com `rg -n -i` e siga o destino pertinente. Use os inventários abaixo quando faltar um caminho; não é necessário percorrer todos. Escolha uma linha pelo pedido; para uma entrada principal, abra sua seção em [entradas do dashboard](dashboard-areas.md), para uma subpágina interna, busque seu caminho no [inventário de 156 páginas](route-inventory.md), para página pública use o [mapa de entradas externas](external-page-map.md), e para endpoint consulte o [inventário de entradas externas e API](surface-inventory.md). Para chamadas candidatas a partir de uma tela interna, consulte apenas a seção pertinente em [entradas por fluxo](flow-entrypoints.md). Para um fluxo que atravessa áreas, abra o guia do domínio. Confirme o trecho relevante no código atual. Não procure a partir da pasta `Coala Sistemas`: há vários worktrees com cópias do repositório.
+
+| Pedido ou área | Primeira entrada | Guia de impacto |
+| --- | --- | --- |
+| Colaborador, cadastro, acesso inicial, perfis | [`dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`dp/settings/page.tsx`](../../src/app/dashboard/dp/settings/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); `users` redireciona para colaboradores |
+| Férias, recibos, contador, desligamento | [`dp/ferias/page.tsx`](../../src/app/dashboard/dp/ferias/page.tsx), [`dp/terminations/page.tsx`](../../src/app/dashboard/dp/terminations/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); [etapas de férias](flow-coverage.md) |
+| Pedido de demissão pelo próprio colaborador | [`resignation/page.tsx`](../../src/app/dashboard/resignation/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
+| Escalas, turnos, folgas, calendário, portal do colaborador | [`dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx), [`collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
+| Entrada geral de DP | [`dp/page.tsx`](../../src/app/dashboard/dp/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
+| Recrutamento, admissão, integração, ASO, Bizneo | [`hr/recruitment/page.tsx`](../../src/app/dashboard/hr/recruitment/page.tsx), [`rh/employees/page.tsx`](../../src/app/dashboard/rh/employees/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
+| Documentos de colaborador ou empresa, modelos, geração, assinatura | [`documents/page.tsx`](../../src/app/dashboard/documents/page.tsx) | [Documentos e privacidade](modules/documents-privacy.md) |
+| Caixa financeira de e-mails e documentos, despesas, obrigações | [`financial/inbox/page.tsx`](../../src/app/dashboard/financial/inbox/page.tsx), [`expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx) | [Financeiro](modules/finance.md) |
+| Solicitação de pagamento, favorecidos, Banco Inter | [`financial/payment-requests/page.tsx`](../../src/app/dashboard/financial/payment-requests/page.tsx) | [Financeiro](modules/finance.md) |
+| Caixa físico, depósitos, conciliação, Stone, PDV | [`financial/cash-closures/page.tsx`](../../src/app/dashboard/financial/cash-closures/page.tsx), [`sales-reconciliation/page.tsx`](../../src/app/dashboard/financial/sales-reconciliation/page.tsx) | [Financeiro](modules/finance.md) |
+| Fluxo de caixa, contas a receber, DRE, análise financeira e agente | [`financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx), [`dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx) | [Financeiro](modules/finance.md) |
+| Entrada geral do financeiro | [`financial/page.tsx`](../../src/app/dashboard/financial/page.tsx) | [Financeiro](modules/finance.md) |
+| Cotações, pedidos, recebimento, fornecedores e custo de compra | [`purchasing/orders/page.tsx`](../../src/app/dashboard/purchasing/orders/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md); `purchasing` redireciona para pedidos |
+| Produtos, mercadorias, insumos, entidades, catálogo | [`registration/page.tsx`](../../src/app/dashboard/registration/page.tsx), [`registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md); `items` está desativada |
+| Estoque, transferência, contagem, reposição, devolução, uniforme, patrimônio | [`stock/page.tsx`](../../src/app/dashboard/stock/page.tsx), [`assets/page.tsx`](../../src/app/dashboard/assets/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
+| Conversão de inventário e controle de validade | [`inventory/page.tsx`](../../src/app/dashboard/inventory/page.tsx), [`inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
+| Vencimentos | [`expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
+| Preços, concorrentes e metas | [`pricing/page.tsx`](../../src/app/dashboard/pricing/page.tsx), [`goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx) | [Comercial e operações](modules/commercial-operations.md); `goals` redireciona para acompanhamento |
+| Comercial e conversões especificamente | [`commercial/page.tsx`](../../src/app/dashboard/commercial/page.tsx), [`conversions/page.tsx`](../../src/app/dashboard/conversions/page.tsx) | [Comercial e operações](modules/commercial-operations.md) |
+| Formulários, projetos, execução e análises | [`forms/page.tsx`](../../src/app/dashboard/forms/page.tsx) | [Trabalho e formulários](modules/work-forms.md) |
+| Tarefas | [`tasks/page.tsx`](../../src/app/dashboard/tasks/page.tsx) | [Trabalho e formulários](modules/work-forms.md) |
+| Processos de desligamento | [`processes/page.tsx`](../../src/app/dashboard/processes/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
+| Análises de estoque, ajuda e operação | [`reports/page.tsx`](../../src/app/dashboard/reports/page.tsx), [`help/page.tsx`](../../src/app/dashboard/help/page.tsx), [`operations/page.tsx`](../../src/app/dashboard/operations/page.tsx) | [Comercial e operações](modules/commercial-operations.md); `manager-diary` está desativada |
+| Auditoria de estoque e sessões de contagem | [`audit/page.tsx`](../../src/app/dashboard/audit/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
+| Unidades, configurações, permissões e logs de auditoria | [`settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`api/audit/logs`](../../src/app/api/audit/logs/route.ts) | [Plataforma e integrações](modules/platform-integrations.md) |
+| Sinalização, TV, site público, integrações e webhooks | [`signage/page.tsx`](../../src/app/dashboard/signage/page.tsx), [`api/integrations`](../../src/app/api/integrations) | [Plataforma e integrações](modules/platform-integrations.md) |
+| Rotas antigas `import`, `items`, `manager-diary`, `predefined` e `team` | [Entradas desativadas](dashboard-areas.md) | Retornam `null`; localizar o fluxo ativo pelo assunto |
+
+Para uma pergunta ou mudança, siga o [procedimento de investigação](investigation-harness.md), abra o guia pertinente e confira a implementação. [Regras aprovadas e comportamento implementado](business-rules.md) ficam separados; [verificações](verification.md) são escolhidas pelo impacto. Guias amplos dão caminhos e contratos observáveis, mas **não certificam todas as regras internas** de cada tela.
+
+Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
+
+Orçamentos por categoria/projeto e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).

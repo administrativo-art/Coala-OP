@@ -1,5 +1,14 @@
 # Regras operacionais do Coala One
 
+## Localização e impacto
+
+- Quando a tarefa exigir localizar uma funcionalidade ou avaliar impacto, consulte a linha pertinente do índice curto `docs/engineering/system-map.md` e siga `docs/engineering/investigation-harness.md`. Reutilize o procedimento já lido enquanto estiver no contexto e sem alteração; releia após perda de contexto ou mudança do arquivo. Busque no guia apenas as seções necessárias e confirme no código. Use inventários quando faltar um caminho; amplie a investigação quando houver lacuna, divergência ou efeito cruzado.
+- Nas tarefas reais, registre o uso do mapa e a telemetria disponível no registro local do chamado, conforme `docs/engineering/map-usage.md`. Se o CLI não informar tokens atribuíveis à tarefa, registre indisponível; não estime nem execute sessões adicionais apenas para medir.
+- Separe comportamento observado de regra aprovada. Se divergirem, registre a divergência; o mapa não substitui o código nem uma decisão de negócio.
+- Ao criar, mover, renomear ou remover página do dashboard, regenere `docs/engineering/route-inventory.md` com `python3 scripts/generate-route-inventory.py` e `docs/engineering/flow-entrypoints.md` com `python3 scripts/generate-flow-entrypoints.py`; atualize `docs/engineering/flow-matrix.csv`, índice e entrada principal afetados. Para páginas fora do dashboard ou rotas de API, regenere `docs/engineering/surface-inventory.md` com `python3 scripts/generate-surface-inventory.py`; atualize também `docs/engineering/external-page-map.md` para páginas externas e revise manualmente os guias e contratos afetados. Antes de concluir, execute os geradores com `--check`, `python3 scripts/check-flow-matrix.py` e `python3 scripts/check-engineering-docs.py`. Os verificadores não comprovam comportamento.
+- Ao alterar um fluxo, contrato de dados, permissão ou integração, atualize no mesmo trabalho o guia de fluxo e as referências de impacto afetados. Registre qualquer trecho ainda não confirmado como lacuna; não mantenha descrição antiga como se estivesse verificada. Consulte `docs/engineering/system-map-execution.md` para o critério de cobertura.
+- Ao criar/remover/mover API, página externa ou export de Cloud Functions, revise `docs/engineering/surface-flow-matrix.csv` antes de regenerar o inventário. Para jobs, gatilhos e webhooks, atualize `runtime-surfaces.md` e os consumidores afetados; para entradas compartilhadas, `access-and-privacy.md`. `generate-surface-inventory.py --check` também exige classificação dessas superfícies. Não marcar associação estrutural como autorização ou execução verificada.
+
 ## Departamento de Desenvolvimento e Tecnologia
 
 - Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os sete especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket.
