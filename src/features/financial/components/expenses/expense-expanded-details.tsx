@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ExpenseFinancialSummary } from "@/features/financial/components/expenses/expense-financial-summary";
+import { ExpenseBoletoPanel } from "@/features/financial/components/expenses/expense-boleto-panel";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { expenseAccountAllocations } from "@/features/financial/lib/expense-account-allocations";
@@ -484,6 +485,7 @@ export function ExpenseExpandedDetails({
 
         <section>
           <SectionHeading>Documentos</SectionHeading>
+          {canViewExpenses && <ExpenseBoletoPanel expense={expense} canEdit={canEdit} />}
           <div className="flex flex-wrap gap-2">
             {documentUrl ? (
               <a href={documentUrl} target="_blank" rel="noreferrer" className="inline-flex h-[34px] items-center gap-2 rounded-[10px] border border-[#e6e2d9] bg-[#faf9f6] px-3 text-xs font-semibold text-[#2c2f36] dark:border-border dark:bg-muted/20 dark:text-foreground">
@@ -500,7 +502,7 @@ export function ExpenseExpandedDetails({
                 <FileText className="h-3.5 w-3.5" /> Cobrança recebida
               </span>
             ) : null}
-            {!documentUrl && !invoiceAccessKey && !expense.financialInboxMessageId ? (
+            {!documentUrl && !invoiceAccessKey && !expense.financialInboxMessageId && !expense.boletoAttachment ? (
               <p className="text-xs text-[#8a8f99]">Nenhum documento vinculado.</p>
             ) : null}
           </div>
