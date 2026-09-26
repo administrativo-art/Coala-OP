@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import type { BankPaymentRequest, BankPaymentRequestStatus, PaymentActor } from "./types";
+import { canRevalidatePaidBeneficiary, planPaidBeneficiaryReview } from "./beneficiary-review";
 
 const COLLECTION = "bankPaymentRequests";
 
@@ -12,6 +13,28 @@ export async function getPaymentRequest(id: string): Promise<BankPaymentRequest>
   const snapshot = await paymentRequestRef(id).get();
   if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
   return { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+}
+
+export async function revalidatePaidPaymentBeneficiary(request: BankPaymentRequest) {
+  if (!canRevalidatePaidBeneficiary(request)) return request;
+  const ref = paymentRequestRef(request.id);
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
+    const current = { ...snapshot.data(), id: snapshot.id } as BankPaymentRequest;
+    if (!canRevalidatePaidBeneficiary(current)) return current;
+    const statement = await transaction.get(financialDbAdmin.collection("transactions").doc(current.statementTransactionId!));
+    const plan = planPaidBeneficiaryReview({
+      request: current,
+      statementTransactionId: statement.id,
+      statement: statement.data(),
+      observedAt: new Date().toISOString(),
+    });
+    if (!plan) return current;
+    transaction.update(ref, plan.patch);
+    transaction.create(ref.collection("events").doc(randomUUID()), plan.event);
+    return { ...current, ...plan.patch } as BankPaymentRequest;
+  });
 }
 
 export async function findPaymentRequestBySource(sourceType: string, sourceId: string) {

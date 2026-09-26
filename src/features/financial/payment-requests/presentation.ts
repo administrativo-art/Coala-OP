@@ -1,5 +1,5 @@
 import type { BankPaymentRequest, BankPaymentRequestStatus } from "./types";
-import { financialDaysUntil, formatFinancialDate } from "./timeline";
+import { financialDaysUntil, formatFinancialDate, formatFinancialDateTime } from "./timeline";
 
 export type StageGroup = "you" | "risk" | "bank" | "done";
 export type PaymentRequestFilter = "unpaid" | "all" | StageGroup;
@@ -35,8 +35,19 @@ export function matchesPaymentRequestFilter(item: BankPaymentRequest, filter: Pa
   return stageGroup(item) === filter;
 }
 
-/** Requested payment date; bank confirmation remains a separate status. */
+/** Actual payment date for settled requests, otherwise the requested/confirmed schedule. */
 export function paymentSchedulePresentation(item: BankPaymentRequest, now = new Date()) {
+  if (item.status === "paid") {
+    const paidDateTime = formatFinancialDateTime(item.paidAt);
+    const date = formatFinancialDate(item.paidAt)
+      ?? (paidDateTime === "—" ? null : paidDateTime.split(" ")[0]);
+    return {
+      label: "Pago em",
+      date,
+      timing: date ? null : "Data não informada",
+      dueDate: null,
+    };
+  }
   // Match the submission source for each rail; a boleto's due date is not its payment date.
   const requestedDate = item.paymentRail === "barcode"
     ? item.barcodeSnapshot?.scheduledFor
