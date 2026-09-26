@@ -13,6 +13,7 @@ function paymentOriginLabel(request: BankPaymentRequest) {
   if (request.sourceType === "termination") return "Rescisão CLT";
   if (request.sourceType === "purchase_order") return "Pedido de compra";
   if (request.sourceType === "financial_inbox") return "Cobrança recebida por e-mail";
+  if (request.sourceType === "expense_boleto") return "Boleto anexado à despesa";
   return "Recibo gerado pelo Coala";
 }
 
