@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ExpenseFinancialSummary } from "@/features/financial/components/expenses/expense-financial-summary";
+import { expensePersonCenterTotals } from "./expense-person-center-totals";
+import { ExpenseBoletoPanel } from "@/features/financial/components/expenses/expense-boleto-panel";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { expenseAccountAllocations } from "@/features/financial/lib/expense-account-allocations";
@@ -256,6 +258,9 @@ export function ExpenseExpandedDetails({
   const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
   const personAllocations = canViewPersonnelCosts ? expensePersonAllocations(expense, accountPlanMap) : [];
   const peopleCount = personAllocationDistinctPeopleCount(personAllocations);
+  const personCenterTotals = expensePersonCenterTotals(personAllocations);
+  const personTotalCents = personCenterTotals.reduce((total, center) => total + center.amountCents, 0);
+  const personDifferenceCents = Math.round((Number(expense.totalValue) || 0) * 100) - personTotalCents;
   const plannedPayment = expense.plannedPaymentMethodType
     ? `${expense.plannedBankAccountName ? `${expense.plannedBankAccountName} · ` : ""}${
         expense.plannedPaymentMethodLabel
@@ -415,7 +420,7 @@ export function ExpenseExpandedDetails({
           </section>
         ) : null}
 
-        {peopleCount > 1 ? (
+        {personAllocations.length > 0 ? (
           <section>
             <SectionHeading aside={`${peopleCount} pessoas · ${personAllocations.length} vínculos`}>Individualização auditável</SectionHeading>
             <div className="overflow-x-auto rounded-[11px] border border-[#eceadf] dark:border-border">
@@ -423,7 +428,7 @@ export function ExpenseExpandedDetails({
                 <div className="grid grid-cols-[minmax(145px,1.15fr)_minmax(125px,1fr)_minmax(120px,.9fr)_minmax(110px,.8fr)_100px] gap-3 border-b border-[#f1ede4] bg-[#faf9f6] px-3 py-2 dark:border-border dark:bg-muted/20">
                   <span className={KICKER_CLASS}>Pessoa e conta</span>
                   <span className={KICKER_CLASS}>Classificação</span>
-                  <span className={KICKER_CLASS}>Centro</span>
+                  <span className={KICKER_CLASS}>Centro de custo</span>
                   <span className={KICKER_CLASS}>Referência</span>
                   <span className={cn(KICKER_CLASS, "text-right")}>Valor</span>
                 </div>
@@ -457,6 +462,17 @@ export function ExpenseExpandedDetails({
                 ))}
               </div>
             </div>
+            <div className="mt-3 space-y-2 rounded-[11px] border p-3 text-xs">
+              <p className="font-semibold">Subtotais por centro de custo</p>
+              {personCenterTotals.map((center) => <div key={center.resultCenter || "pending"} className="flex justify-between gap-3">
+                <span>{resolveResultCenterName(center.resultCenter, resultCenterNameById) || "Centro pendente"}</span>
+                <strong className="font-mono">{formatCurrency(center.amountCents / 100)}</strong>
+              </div>)}
+              <div className="flex justify-between gap-3 border-t pt-2"><span>Total individualizado</span><strong className="font-mono">{formatCurrency(personTotalCents / 100)}</strong></div>
+              {personDifferenceCents !== 0 ? <p role="alert" className="text-amber-700">Diferença para o documento: {formatCurrency(personDifferenceCents / 100)}. Confira o rateio registrado.</p>
+                : <p className="text-muted-foreground">Os subtotais fecham com o total do documento.</p>}
+              <p className="text-muted-foreground">O centro de referência do cabeçalho não substitui o destino do custo registrado em cada linha.</p>
+            </div>
           </section>
         ) : null}
 
@@ -484,6 +500,7 @@ export function ExpenseExpandedDetails({
 
         <section>
           <SectionHeading>Documentos</SectionHeading>
+          {canViewExpenses && <ExpenseBoletoPanel expense={expense} canEdit={canEdit} />}
           <div className="flex flex-wrap gap-2">
             {documentUrl ? (
               <a href={documentUrl} target="_blank" rel="noreferrer" className="inline-flex h-[34px] items-center gap-2 rounded-[10px] border border-[#e6e2d9] bg-[#faf9f6] px-3 text-xs font-semibold text-[#2c2f36] dark:border-border dark:bg-muted/20 dark:text-foreground">
@@ -500,7 +517,7 @@ export function ExpenseExpandedDetails({
                 <FileText className="h-3.5 w-3.5" /> Cobrança recebida
               </span>
             ) : null}
-            {!documentUrl && !invoiceAccessKey && !expense.financialInboxMessageId ? (
+            {!documentUrl && !invoiceAccessKey && !expense.financialInboxMessageId && !expense.boletoAttachment ? (
               <p className="text-xs text-[#8a8f99]">Nenhum documento vinculado.</p>
             ) : null}
           </div>

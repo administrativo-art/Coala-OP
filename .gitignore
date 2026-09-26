@@ -16,6 +16,7 @@
 /test-results/
 /.auth/
 /.next-e2e/
+/.next-boleto-e2e/
 
 # next.js
 /.next/

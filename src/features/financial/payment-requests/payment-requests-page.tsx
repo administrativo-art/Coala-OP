@@ -138,6 +138,7 @@ function sourceLabel(sourceType: BankPaymentRequest["sourceType"]) {
   if (sourceType === "vacation") return "Férias";
   if (sourceType === "purchase_order") return "Pedido de compra";
   if (sourceType === "financial_inbox") return "Cobrança recebida";
+  if (sourceType === "expense_boleto") return "Boleto da despesa";
   return "Recibo gerado";
 }
 

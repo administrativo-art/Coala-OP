@@ -1,5 +1,38 @@
 export type BudgetCalculationMode = "manual" | "fixed" | "expense_average" | "expense_previous" | "consumption_price";
 
+/** Absence of resultCenterId means a legacy/global envelope. Names are server snapshots. */
+export type BudgetScope = { resultCenterId?: string | null; resultCenterName?: string | null };
+export type BudgetPersonLine = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  accountPlanId: string;
+  amountCents: number;
+  expectedPurchaseDate: string;
+  estimateSource: "manual" | "fixed";
+};
+export type BudgetRulePersonLine = Omit<BudgetPersonLine, "expectedPurchaseDate" | "estimateSource"> & {
+  purchaseDay: number;
+  purchaseMonthOffset: -1 | 0;
+};
+export type BudgetCoverage = {
+  lineId: string;
+  state: "partial" | "final" | "not_required";
+  documents: Array<{ expenseId: string; fingerprint: string }>;
+  residualAmountCents: number | null;
+  reason: string;
+  confirmedBy: string;
+  confirmedAt: string;
+};
+export type BudgetPersonSummary = BudgetPersonLine & {
+  committedAmountCents: number;
+  balanceAmountCents: number;
+  residualAmountCents: number;
+  coverageState: "open" | "partial" | "final" | "invalidated" | "not_required";
+  documentIds: string[];
+  documentFingerprints: Record<string, string>;
+};
+
 export type BudgetInputEstimate = {
   baseProductId: string;
   name: string;
@@ -13,7 +46,7 @@ export type BudgetInputEstimate = {
   additionalPurchaseAmountCents: number;
 };
 
-export type FinancialBudget = {
+export type FinancialBudget = BudgetScope & {
   id: string;
   name: string;
   competenceMonth: string;
@@ -33,9 +66,15 @@ export type FinancialBudget = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  composition?: BudgetPersonLine[];
+  purchaseMonths?: string[];
+  compositionEmployeeIds?: string[];
+  expectationStops?: Array<{ lineId: string; terminationProcessId: string; terminationDate: string; stoppedBy: string; stoppedAt: string }>;
+  coverage?: BudgetCoverage[];
 };
 
-export type FinancialBudgetRule = {
+export type FinancialBudgetRule = BudgetScope & {
+  hasComposition?: boolean;
   id: string;
   name: string;
   accountPlanIds: string[];
@@ -46,6 +85,9 @@ export type FinancialBudgetRule = {
   stockKioskId: string | null;
   closingStockDays: number;
   startMonth: string;
+  endMonth?: string | null;
+  generationLeadMonths?: 0 | 1;
+  composition?: BudgetRulePersonLine[];
   active: boolean;
   createdBy: string;
   createdAt: string;
@@ -53,6 +95,12 @@ export type FinancialBudgetRule = {
 };
 
 export type FinancialBudgetSummary = FinancialBudget & {
+  hasComposition?: boolean;
+  people?: BudgetPersonSummary[];
+  residualAmountCents?: number;
+  unidentifiedAmountCents?: number;
+  outsideCompositionAmountCents?: number;
+  personnelDetailsRedacted?: boolean;
   consumedAmountCents: number;
   forecastCoverageAmountCents: number;
   balanceAmountCents: number;

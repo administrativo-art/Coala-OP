@@ -568,7 +568,7 @@ async function loadExpectedBankDebits() {
     const paymentRequestId = String(data.paymentRequestId || "");
     const financialInboxMessageId = String(data.financialInboxMessageId || "");
     const expenseId = String(data.expenseId || "");
-    if (!expectedDate || amount <= 0 || !paymentRequestId || !financialInboxMessageId || !expenseId) return [];
+    if (!expectedDate || amount <= 0 || !paymentRequestId || (!financialInboxMessageId && data.sourceType !== "expense_boleto") || !expenseId) return [];
     return [{
       id: document.id,
       paymentRequestId,
@@ -655,8 +655,10 @@ async function reconcileExpectedBankDebit(params: {
         && paymentRequest.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE");
     if (
       paymentRequest.expenseId !== params.expected.expenseId
-      || paymentRequest.sourceType !== "financial_inbox"
-      || paymentRequest.sourceId !== params.expected.financialInboxMessageId
+      || paymentRequest.paymentRail !== "barcode"
+      || (paymentRequest.sourceType === "financial_inbox"
+        ? paymentRequest.sourceId !== params.expected.financialInboxMessageId
+        : paymentRequest.sourceId !== params.expected.expenseId || Boolean(params.expected.financialInboxMessageId))
       || Math.abs((Number(paymentRequest.amount) || 0) - params.expected.amount) > 0.01
       || !paymentRequestStatusAllowed
     ) {
@@ -751,7 +753,7 @@ async function reconcileExpectedBankDebit(params: {
       bankStatus: "STATEMENT_MATCHED",
       sourceCompletedAt: now.toDate().toISOString(),
     }, { merge: true });
-    batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
+    if (paymentRequest.sourceType === "financial_inbox") batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
       status: isDivergent ? "divergent" : "reconciled",
       bankState: isDivergent ? "divergent" : "reconciled",
       "resolution.status": "identified",

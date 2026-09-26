@@ -26,6 +26,9 @@ import {
 } from "@/features/financial/lib/dre-expense-details";
 import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
 import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
+import { BudgetPlanningComparisonCard } from "@/features/financial/components/dre/budget-planning-comparison";
+import type { BudgetPlanningComparison } from "@/features/financial/budgets/projection-view";
+import { PageContainer } from "@/components/layout/page-container";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
@@ -136,6 +139,7 @@ export function DrePage() {
   const { data: resultCenters, loading: loadingResultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
 
   const [expenses, setExpenses] = useState<FinancialExpenseDreDocument[]>([]);
+  const [budgetPlanning, setBudgetPlanning] = useState<BudgetPlanningComparison[]>([]);
   const [salesSummaries, setSalesSummaries] = useState<DreSalesUnitMonthSummary[]>([]);
   const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<CashClosureMonthlySummary[]>([]);
   const [missingSimulationIds, setMissingSimulationIds] = useState<string[]>([]);
@@ -151,6 +155,7 @@ export function DrePage() {
       setSalesSummaries([]);
       setClosureRevenueSummaries([]);
       setExpenses([]);
+      setBudgetPlanning([]);
       setMissingSimulationIds([]);
       setSourceError(null);
       setLoadingSource(false);
@@ -159,6 +164,7 @@ export function DrePage() {
     let cancelled = false;
     setLoadingSource(true);
     setSourceError(null);
+    setBudgetPlanning([]);
     const params = new URLSearchParams();
     kiosks.slice(0, 20).forEach((kiosk) => params.append("kioskId", kiosk.id));
     dreMonthKeysEndingAt(selectedMonth).forEach((period) => params.append("period", period));
@@ -169,6 +175,7 @@ export function DrePage() {
       setSalesSummaries(payload.salesSummaries ?? []);
       setClosureRevenueSummaries((payload.closureSummaries ?? []) as CashClosureMonthlySummary[]);
       setExpenses(payload.expenses ?? []);
+      setBudgetPlanning(payload.budgetPlanning ?? []);
       setMissingSimulationIds(payload.missingSimulationIds ?? []);
     }).catch((error) => {
       if (cancelled) return;
@@ -622,7 +629,7 @@ export function DrePage() {
   // ── render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="wide" className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -712,6 +719,7 @@ export function DrePage() {
         </div>
       </div>
 
+      {!sourceError && <BudgetPlanningComparisonCard rows={budgetPlanning} month={selectedMonth} unitId={unitFilter} />}
       {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
       {!sourceError && cmvCriterion === "composition" && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
       {!sourceError && cmvCriterion === "stock_movement" && stockCmvError && (
@@ -1206,6 +1214,6 @@ export function DrePage() {
           unitLabel={selectedUnitName || "Todas as unidades"}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }

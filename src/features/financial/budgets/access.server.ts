@@ -1,8 +1,9 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
-import { AppError } from "@/lib/observability";
-import { BudgetDomainError } from "./service.server";
+import { AppError } from "@/lib/observability/app-error";
+import { BudgetDomainError } from "./errors";
+import { canEditBudgetPersonnel } from "./personnel-access";
 
 export async function budgetActor(request: NextRequest, action: "view" | "manage") {
   const actor = await requireUser(request).catch((cause) => {
@@ -26,6 +27,16 @@ export function budgetError(error: unknown): never {
     throw new AppError({ code: "BUDGET_INVALID_OPERATION", kind: "VALIDATION", safeMessage: error.message, cause: error });
   }
   throw error;
+}
+
+export function assertBudgetPersonnelPermission(actor: ServerUserContext) {
+  assertBudgetPermission(actor, "manage");
+  if (!canEditBudgetPersonnel(actor)) throw new AppError({ code: "BUDGET_PERSONNEL_FORBIDDEN", kind: "AUTHORIZATION" });
+}
+
+export function budgetCenterFilter(request: NextRequest) {
+  const id = request.nextUrl.searchParams.get("resultCenterId");
+  return id ? validBudgetDocumentId(id) : undefined;
 }
 
 export function validBudgetDocumentId(id: string) {
