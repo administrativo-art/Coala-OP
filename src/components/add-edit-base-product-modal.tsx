@@ -346,7 +346,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                             {sortedKiosks.length} loca{sortedKiosks.length === 1 ? 'l' : 'is'}
                           </span>
                           <FormField control={form.control} name="minStockRecalcPeriod" render={({ field }) => (
-                            <FormItem className="flex items-center gap-2 space-y-0">
+                            <FormItem className="flex flex-wrap items-center justify-end gap-2 space-y-0">
                               <FormLabel className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                 Base do estoque mínimo automático
                                 <InfoTooltip title="Como o estoque mínimo é calculado">
@@ -356,13 +356,21 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                   <p>Marque <strong>&quot;Travar automação&quot;</strong> num quiosque para editar o mínimo manualmente ali — o cálculo automático passa a ignorar esse quiosque.</p>
                                 </InfoTooltip>
                               </FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                  <SelectItem value="monthly">Mensal</SelectItem>
-                                  <SelectItem value="biweekly">Quinzenal</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <div className="flex h-9 items-center gap-2 rounded-md border bg-background px-3">
+                                <span className={cn('text-xs font-medium', field.value === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
+                                  Mensal
+                                </span>
+                                <FormControl>
+                                  <Switch
+                                    aria-label="Alternar base do estoque mínimo entre mensal e quinzenal"
+                                    checked={field.value === 'biweekly'}
+                                    onCheckedChange={(checked) => field.onChange(checked ? 'biweekly' : 'monthly')}
+                                  />
+                                </FormControl>
+                                <span className={cn('text-xs font-medium', field.value === 'biweekly' ? 'text-foreground' : 'text-muted-foreground')}>
+                                  Quinzenal
+                                </span>
+                              </div>
                             </FormItem>
                           )}/>
                         </div>
