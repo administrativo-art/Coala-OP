@@ -32,6 +32,8 @@ A ferramenta administrativa em Orçamentos permite consultar previsões abertas 
 
 Na conversão, previsão e obrigação exclusiva elegível ficam `cancelled`/`CANCELLED`, com motivo `MIGRATED_TO_BUDGET`, destinos e auditoria. Nunca são marcadas pagas ou conciliadas artificialmente. Repetir a mesma confirmação é idempotente. As regras impedem alterar/excluir a previsão convertida ou forjar o marcador pelo cliente. Rotinas administrativas com Admin SDK também devem respeitar o marcador: regras Firestore não restringem Admin SDK. Não há gerador operacional de VT no produto a alterar nesta entrega.
 
+Previsão individual rateada entre centros também pode ser convertida, desde que tenha parcelas pessoais completas e compatíveis com os percentuais. Não se calcula uma divisão nova: os centavos de cada centro devem coincidir com os destinos. Nomes legados são resolvidos em IDs na transação; referência ambígua ou ausente bloqueia. Rateio sem parcelas pessoais explícitas e rateio entre planos de contas continuam fora desse procedimento.
+
 Implantar código não converte dados existentes. A conversão real requer análise e autorização próprias. Para reversão, não apague marcadores nem reative previsões diretamente: revise o estado atual, documentos e projeções, e faça uma operação compensatória auditada. Desabilitar a nova interface não desfaz uma conversão.
 
 ## Implantação
