@@ -11,6 +11,92 @@ function shiftMonth(month: string, offset: number) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// Observation only until an explicitly authorized emulator E2E run validates this flow.
+test("VT mantém boleto único, cobertura por pessoa e conversão confirmada das previsões", async ({ request }) => {
+  assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
+  const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error("Emulador Auth obrigatório.");
+  const app = getApps().find((item) => item.name === "financial-vt-e2e")
+    ?? initializeApp({ projectId: "demo-coala-e2e" }, "financial-vt-e2e");
+  const main = getFirestore(app, "coala");
+  const hr = getFirestore(app, "coala-rh");
+  const db = getFirestore(app, "coala-financeiro");
+  const month = "2026-10";
+  const personId = "vt-e2e-person";
+  const accountId = "vt-e2e-account";
+  const centers = ["vt-e2e-a", "vt-e2e-b"];
+  const actual = db.collection("expenses").doc("vt-e2e-bill");
+  const forecast = db.collection("expenses").doc("vt-e2e-forecast");
+  const login = await request.post(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, {
+    data: { email: E2E_USER.email, password: E2E_USER.password, returnSecureToken: true },
+  });
+  expect(login.ok()).toBe(true);
+  const headers = { Authorization: `Bearer ${(await login.json()).idToken}` };
+  const owned = [main.collection("users").doc(personId), hr.collection("employees").doc("vt-e2e-hr"),
+    db.collection("accounts").doc(accountId), ...centers.map((id) => db.collection("resultCenters").doc(id)), actual, forecast];
+  const budgetIds: string[] = [];
+  let operationId: string | undefined;
+  try {
+    await Promise.all([
+      owned[0].set({ username: "Pessoa VT E2E", isActive: true, admissionDate: "2025-01-01", hrEmployeeId: "vt-e2e-hr", unitIds: ["vt-e2e-unit"] }),
+      owned[1].set({ name: "Pessoa VT E2E", status: "active", auth_uid: personId, source_user_id: personId }),
+      owned[2].set({ name: "VT E2E", active: true, isGroup: false }),
+      ...centers.map((id) => db.collection("resultCenters").doc(id).set({ name: id, active: true, unitIds: ["vt-e2e-unit"] })),
+      actual.set({ competenceMonth: month, status: "pending", provisionType: "actual", totalValue: 403.2, accountId, resultCenter: "matriz",
+        hasPersonAllocations: true, personAllocations: centers.map((resultCenter) => ({ employeeId: personId, employeeName: "Pessoa VT E2E", accountPlanId: accountId, resultCenter, amount: 201.6, analysisType: "employer_cost" })) }),
+      forecast.set({ competenceMonth: month, status: "provisioned", provisionType: "forecast", totalValue: 420, accountId,
+        employeeId: personId, provisionSeriesKey: `recurring:vale-transporte:${personId}`, dueDate: "2026-09-30" }),
+    ]);
+    for (const resultCenterId of centers) {
+      const created = await request.post("/api/financial/budgets", { headers, data: { name: "VT E2E", competenceMonth: month,
+        accountPlanIds: [accountId], resultCenterId, budgetedAmountCents: 21000,
+        composition: [{ id: resultCenterId, employeeId: personId, accountPlanId: accountId, amountCents: 21000, expectedPurchaseDate: "2026-09-30", estimateSource: "manual" }] } });
+      expect(created.status(), await created.text()).toBe(201);
+      budgetIds.push((await created.json()).id);
+    }
+    const read = async (id: string) => {
+      const response = await request.get(`/api/financial/budgets/${id}`, { headers });
+      expect(response.status()).toBe(200);
+      return (await response.json()).budget;
+    };
+    const budget = await read(budgetIds[0]);
+    expect(budget.consumedAmountCents).toBe(20160);
+    const coverage = { lineId: centers[0], state: "final", documentIds: budget.people[0].documentIds,
+      documentFingerprints: budget.people[0].documentFingerprints, reason: "Compra conferida no teste", confirmed: true };
+    await actual.update({ sourceDocumentSha256: "changed-support" });
+    expect((await request.post(`/api/financial/budgets/${budgetIds[0]}/coverage`, { headers, data: coverage })).status()).toBe(400);
+    coverage.documentFingerprints = (await read(budgetIds[0])).people[0].documentFingerprints;
+    expect((await request.post(`/api/financial/budgets/${budgetIds[0]}/coverage`, { headers, data: coverage })).status()).toBe(200);
+    const input = { month, reason: "Conversão revisada no E2E", mappings: [{ expenseId: forecast.id,
+      destinations: budgetIds.map((budgetId, index) => ({ budgetId, lineId: centers[index] })) }] };
+    const path = "/api/financial/budgets/forecast-conversion";
+    const previewResponse = await request.post(path, { headers, data: { input } });
+    expect(previewResponse.status(), await previewResponse.text()).toBe(200);
+    const preview = await previewResponse.json();
+    expect((await forecast.get()).get("status")).toBe("provisioned");
+    const converted = await request.post(path, { headers, data: { input, confirmation: { confirmed: true, fingerprint: preview.fingerprint } } });
+    expect(converted.status(), await converted.text()).toBe(200);
+    operationId = (await converted.json()).operationId;
+    expect((await forecast.get()).get("cancellationReason")).toBe("MIGRATED_TO_BUDGET");
+    expect((await actual.get()).get("status")).toBe("pending");
+    expect((await actual.get()).get("personAllocations")).toHaveLength(2);
+    const cash = await request.get("/api/financial/budgets/cash-projections?from=2026-09-01&to=2026-09-30", { headers });
+    expect(cash.status()).toBe(200);
+    expect((await cash.json()).projections.filter((row: { budgetId: string }) => budgetIds.includes(row.budgetId))
+      .reduce((sum: number, row: { amountCents: number }) => sum + row.amountCents, 0)).toBe(840);
+  } finally {
+    // Only deterministic documents owned by this emulator test; no production targets.
+    for (const budgetId of budgetIds) {
+      const revisions = await db.collection("financialBudgetRevisions").where("budgetId", "==", budgetId).limit(20).get();
+      await Promise.all(revisions.docs.map((doc) => doc.ref.delete()));
+      await db.collection("financialBudgets").doc(budgetId).delete();
+    }
+    if (operationId) await Promise.all([db.collection("financialBudgetConversions").doc(operationId).delete(), forecast.collection("events").doc(operationId).delete()]);
+    await db.collection("financialBudgetAccountClaims").doc(`${month}_${accountId}`).delete();
+    await Promise.all(owned.map((ref) => ref.delete()));
+  }
+});
+
 test("orçamento agrupa despesas, impede sobreposição e protege a criação", async ({ request }) => {
   assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
   const host = process.env.FIREBASE_AUTH_EMULATOR_HOST;

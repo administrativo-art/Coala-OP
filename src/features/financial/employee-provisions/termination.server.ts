@@ -5,6 +5,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { calculateFinancialObligationSummary, moneyToCents } from "@/features/financial/obligations/calculations";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { employeeForecastSeriesKeys, isForecastAfterTermination } from "./termination";
+import { stopTerminatedEmployeeBudgetExpectations } from "../budgets/termination.server";
 
 const MAX_FORECASTS_PER_SERIES = 100;
 
@@ -14,6 +15,9 @@ export async function cancelFutureEmployeeForecasts(params: {
   terminationProcessId: string;
   actorId: string;
 }) {
+  // Independent idempotent stage: a retry after a later legacy-forecast failure is safe.
+  // This never cancels the real document shared with other employees.
+  await stopTerminatedEmployeeBudgetExpectations(params);
   const seriesKeys = employeeForecastSeriesKeys(params.employeeId);
   const snapshots = await Promise.all(seriesKeys.map((seriesKey) =>
     financialDbAdmin.collection("expenses")
