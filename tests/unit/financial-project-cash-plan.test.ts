@@ -37,6 +37,23 @@ test("fluxo permite consultar outubro a dezembro futuros com gráfico no mesmo i
   assert.throws(() => cashFlowPeriod("2026-13", 3));
 });
 
+test("limites da consulta seguem Belém mesmo com cliente ou servidor em outro fuso", () => {
+  const previous = process.env.TZ;
+  try {
+    for (const zone of ["UTC", "America/Belem", "America/Los_Angeles", "Asia/Tokyo"]) {
+      process.env.TZ = zone;
+      const window = cashFlowPeriod("2026-12", 3);
+      assert.equal(window.periodStart.toISOString(), "2026-10-01T03:00:00.000Z", zone);
+      assert.equal(window.periodEnd.toISOString(), "2027-01-01T02:59:59.999Z", zone);
+      assert.equal(financialDateKey(window.periodStart), "2026-10-01", zone);
+      assert.equal(financialDateKey(window.periodEnd), "2026-12-31", zone);
+      assert.deepEqual(buildExpenseLifecycleData([], 3, window.referenceDate).map((point) => point.key), ["2026-10", "2026-11", "2026-12"]);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;
+  }
+});
+
 test("centavos, dia único e fevereiro bissexto não criam nem perdem dinheiro", () => {
   assert.equal(sum(spreadProjectAmount(1, "2028-02-01", "2028-02-29")), 1);
   assert.equal(spreadProjectAmount(101, "2026-10-10", "2026-10-10")[0].amountCents, 101);

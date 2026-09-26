@@ -18,6 +18,8 @@ Projetos aparecem no fluxo em Todas as contas / Todos os centros, sem atribuir b
 
 O filtro “Até o mês” permite consultar meses futuros; selecionar três meses até dezembro mostra outubro, novembro e dezembro no mesmo gráfico, listagem e consulta de projeções. A simulação do envelope mensal e o gráfico de competência usam o mês selecionado, não o relógio atual.
 
+Os limites inclusivos da consulta usam o fuso financeiro canônico de Belém, independentemente do fuso do navegador/servidor. Regressão protegida em UTC, Belém, Los Angeles e Tóquio.
+
 ## Consultas e publicação
 
 Sem polling: consulta de projetos ativos com `cashPlanningEnabled=true` e `cashPlanStartDate<=to`, limite 51; até 500 IDs de despesas referenciados. Não há consulta irrestrita à coleção de despesas. Índice `financialBudgetProjects(active,cashPlanningEnabled,cashPlanStartDate)` necessário no banco financeiro antes do rollout. Projetos concluídos devem ser inativados.

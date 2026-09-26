@@ -3,12 +3,19 @@ import { ptBR } from "date-fns/locale";
 
 import { toDate } from "@/features/financial/lib/utils";
 import { financialCompetenceMonthSchema } from "./expense-accounting-contract";
+import { financialDateFromIso } from "./financial-dates";
 
 export function cashFlowPeriod(endingMonth: string, months: number) {
   const month = financialCompetenceMonthSchema.parse(endingMonth);
   const referenceDate = new Date(`${month}-01T12:00:00`);
   const count = Math.min(12, Math.max(1, Math.floor(months) || 1));
-  return { referenceDate, periodStart: startOfMonth(subMonths(referenceDate, count - 1)), periodEnd: endOfMonth(referenceDate) };
+  const from = format(subMonths(referenceDate, count - 1), "yyyy-MM") + "-01";
+  const to = format(endOfMonth(referenceDate), "yyyy-MM-dd");
+  // Canonical financial dates are noon in Belém, independent of the browser/server TZ.
+  const halfDayMs = 12 * 60 * 60 * 1000;
+  return { referenceDate,
+    periodStart: new Date(financialDateFromIso(from).getTime() - halfDayMs),
+    periodEnd: new Date(financialDateFromIso(to).getTime() + halfDayMs - 1) };
 }
 
 export type ExpenseLifecyclePoint = {
