@@ -211,9 +211,14 @@ test("orçamento agrupa despesas, impede sobreposição e protege a criação", 
     expect((await candidates.json()).expenses.some((item: { id: string }) => item.id === expense.id)).toBe(true);
     const linkPath = `/api/financial/budget-projects/${projectId}/expenses`;
     expect((await request.post(linkPath, { headers: { Authorization: `Bearer ${token}` }, data: { expenseId: expense.id } })).status()).toBe(200);
-    expect((await request.post(linkPath, { headers: { Authorization: `Bearer ${token}` }, data: { expenseId: expense.id } })).status()).toBe(400);
+    // Repeating the same link is idempotent; it must not duplicate the expense or consumption.
+    expect((await request.post(linkPath, { headers: { Authorization: `Bearer ${token}` }, data: { expenseId: expense.id } })).status()).toBe(200);
     const projectSummary = await request.get(`/api/financial/budget-projects/${projectId}`, { headers: { Authorization: `Bearer ${token}` } });
-    expect((await projectSummary.json()).project.consumedAmountCents).toBe(10000);
+    const linkedProject = (await projectSummary.json()).project;
+    expect(linkedProject.expenseIds).toEqual([expense.id]);
+    expect(linkedProject.consumedAmountCents).toBe(10000);
+    const linkEvents = await db.collection("financialBudgetProjectEvents").where("projectId", "==", projectId).limit(20).get();
+    expect(linkEvents.docs.filter((doc) => doc.get("action") === "link")).toHaveLength(1);
     expect((await request.delete(`${linkPath}?expenseId=${expense.id}`, { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(200);
   } finally {
     await Promise.all([restrictedUser.delete(), account.delete(), outside.delete(), expense.delete()]);
