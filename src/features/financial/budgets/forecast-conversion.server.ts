@@ -9,7 +9,7 @@ import { calculateFinancialObligationSummary } from "../obligations/calculations
 import { buildBudgetResidualProjections } from "./composition";
 import { resolveBudgetExpenseCenters } from "./references.server";
 import { validateBudgetAccounts } from "./service.server";
-import { forecastConversionCandidate, forecastConversionSchema, type ForecastConversionInput } from "./forecast-conversion";
+import { assertForecastConversionDestinations, forecastConversionCandidate, forecastConversionSchema, type ForecastConversionInput } from "./forecast-conversion";
 import { BudgetDomainError } from "./errors";
 import type { BudgetExpense } from "../lib/budget-consumption";
 import type { FinancialBudget } from "./types";
@@ -49,12 +49,14 @@ async function readConversion(tx: FirebaseFirestore.Transaction, input: Forecast
   const accounts = [...new Set(budgets.flatMap((budget) => budget.accountPlanIds))];
   if (accounts.length > 30) throw new BudgetDomainError("O lote suporta até 30 contas.");
   await validateBudgetAccounts(accounts, tx);
+  // Use the same normalization in listing, preview and confirmation, under the transaction.
+  const normalizedSources = await resolveBudgetExpenseCenters(sourceDocs.map((doc) => ({ ...doc.data(), id: doc.id } as BudgetExpense)), tx);
   const obligationDocs: FirebaseFirestore.DocumentSnapshot[] = [];
   const beforeAfter = [];
   for (const mapping of input.mappings) {
     const doc = sourceDocs.find((source) => source.id === mapping.expenseId)!;
     const data = { ...doc.data(), id: doc.id } as BudgetExpense & Record<string, any>;
-    const source = forecastConversionCandidate(data, input.month);
+    const source = forecastConversionCandidate(normalizedSources.find((item) => item.id === doc.id)!, input.month);
     const destinations = mapping.destinations.map((target) => {
       const budget = budgets.find((item) => item.id === target.budgetId)!;
       const line = budget.composition?.find((item) => item.id === target.lineId);
@@ -64,7 +66,7 @@ async function readConversion(tx: FirebaseFirestore.Transaction, input: Forecast
       }
       return { ...target, resultCenterId: budget.resultCenterId, resultCenterName: budget.resultCenterName ?? "Centro", amountCents: line.amountCents };
     });
-    if (destinations.reduce((sum, target) => sum + target.amountCents, 0) !== source.amountCents) throw new BudgetDomainError("A soma dos destinos precisa preservar exatamente o valor previsto, sem divisão presumida.");
+    assertForecastConversionDestinations(source, destinations);
     if (monthly.docs.some((other) => other.id !== doc.id && other.get("provisionSeriesKey") === data.provisionSeriesKey
       && !["draft", "cancelled"].includes(String(other.get("status"))))) throw new BudgetDomainError("Há outro registro da mesma série/competência; revise a duplicidade ou reconciliação.");
     const presence = [
@@ -101,7 +103,7 @@ async function readConversion(tx: FirebaseFirestore.Transaction, input: Forecast
     }
     beforeAfter.push({ ...source, destinations, obligationId: obligationId ?? null });
   }
-  const expenses = await resolveBudgetExpenseCenters(monthly.docs.map((doc) => ({ ...doc.data(), id: doc.id } as BudgetExpense)));
+  const expenses = await resolveBudgetExpenseCenters(monthly.docs.map((doc) => ({ ...doc.data(), id: doc.id } as BudgetExpense)), tx);
   const before = buildBudgetResidualProjections(budgets, expenses);
   const after = buildBudgetResidualProjections(budgets, expenses.map((expense) => sourceIds.includes(expense.id) ? { ...expense, status: "cancelled" } : expense));
   const preview = {
