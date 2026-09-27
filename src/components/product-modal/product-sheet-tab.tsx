@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateProductCompositionCmv } from "@/lib/product-composition-cmv";
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -112,16 +113,11 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
   const watchedIngredients = useWatch({ control: form.control, name: 'ingredients' }) || [];
   const watchedAllergens = useWatch({ control: form.control, name: 'allergens' }) || [];
 
-  const totalCmv = useMemo(() => {
-    return watchedIngredients.reduce((acc, item) => {
-      const bp = baseProducts.find(b => b.id === item.baseProductId);
-      if (!bp) return acc;
-      const cost = item.useDefault 
-        ? (bp.lastEffectivePrice?.pricePerUnit || bp.initialCostPerUnit || 0)
-        : (item.overrideCostPerUnit || 0);
-      return acc + (item.quantity * cost);
-    }, 0);
-  }, [watchedIngredients, baseProducts]);
+  const compositionCmv = useMemo(() => calculateProductCompositionCmv(
+    watchedIngredients.map((item, index) => ({ ...item, quantity: Number(item.quantity), overrideCostPerUnit: item.overrideCostPerUnit == null ? undefined : Number(item.overrideCostPerUnit), id: `draft-${index}`, simulationId: simulation.id })),
+    new Map(baseProducts.map(base => [base.id, base])),
+  ), [watchedIngredients, baseProducts, simulation.id]);
+  const totalCmv = compositionCmv.totalCmv ?? 0;
 
   const handleAddItem = (baseProductId: string) => {
     const bp = baseProducts.find(b => b.id === baseProductId);
@@ -247,7 +243,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
                   <Badge variant="outline" className="bg-pink-50 text-pink-600 border-pink-100 text-[10px] py-0">Editável</Badge>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Total calculado: <strong className="text-gray-700">{formatCurrency(totalCmv)}</strong>
+                  Total calculado: <strong className="text-gray-700">{compositionCmv.complete ? formatCurrency(totalCmv) : "Incompleto"}</strong>
                 </div>
               </div>
 
@@ -265,9 +261,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
                     {ingredientFields.map((field, index) => {
                       const bp = baseProducts.find(b => b.id === watchedIngredients[index].baseProductId);
                       if (!bp) return null;
-                      const cost = watchedIngredients[index].useDefault 
-                        ? (bp.lastEffectivePrice?.pricePerUnit || bp.initialCostPerUnit || 0)
-                        : (watchedIngredients[index].overrideCostPerUnit || 0);
+                      const cost = compositionCmv.lines.find(line => line.itemId === `draft-${index}`)?.costPerBaseUnit ?? 0;
                       const impact = totalCmv > 0 ? (watchedIngredients[index].quantity * cost / totalCmv * 100) : 0;
 
                       return (

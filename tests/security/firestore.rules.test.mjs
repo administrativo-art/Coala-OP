@@ -133,3 +133,19 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
     await environment.cleanup();
   }
 });
+
+
+test("snapshot CMV, revisões e auditoria ficam inacessíveis diretamente ao cliente", async () => {
+  assertFirestoreEmulatorSafety({ projectId });
+  const environment = await initializeTestEnvironment({ projectId, firestore: { rules } });
+  try {
+    for (const context of [environment.unauthenticatedContext(), environment.authenticatedContext("cmv-user"),
+      environment.authenticatedContext("cmv-admin", { admin: true })]) {
+      for (const path of ["dreCmvClosures/test", "dreCmvClosures/test/revisions/1", "dreCmvClosures/test/audit/1"]) {
+        await assertFails(getDoc(doc(context.firestore(), path)));
+        await assertFails(setDoc(doc(context.firestore(), path), { totalCmv: 0, status: "closed" }));
+        await assertFails(deleteDoc(doc(context.firestore(), path)));
+      }
+    }
+  } finally { await environment.cleanup(); }
+});

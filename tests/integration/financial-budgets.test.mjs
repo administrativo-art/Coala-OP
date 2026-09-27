@@ -18,6 +18,23 @@ const { getProjectCashProjections } = await import("../../src/features/financial
 const { assertBudgetCenterAccess } = await import("../../src/features/financial/budgets/references.server.ts");
 const actor = { isDefaultAdmin: true, permissions: defaultAdminPermissions, decoded: { uid: "vtu-admin" }, userDoc: { id: "vtu-admin", unitAccessScope: "all" }, workspace_id: "coala" };
 const month = "2026-10";
+const { listBudgetComparisonCenters } = await import("../../src/features/financial/budgets/comparison.server.ts");
+
+test("comparação: catálogo de centros respeita todas as unidades e não altera registros", async () => {
+  const refs = ["own", "shared", "foreign", "inactive"].map((id) => db.collection("resultCenters").doc(`comparison-${id}`));
+  await Promise.all(refs.map((ref, index) => ref.set({ name: `Centro ${index}`, ...(index === 0 ? {} : { active: index !== 3 }),
+    unitIds: index === 1 ? ["comparison-a", "comparison-b"] : [index === 2 ? "comparison-b" : "comparison-a"] })));
+  try {
+    const restricted = { ...actor, isDefaultAdmin: false, userDoc: { id: "comparison-reader", unitIds: ["comparison-a"] } };
+    const before = (await refs[0].get()).updateTime;
+    const scoped = await listBudgetComparisonCenters(restricted);
+    assert.deepEqual(scoped, { allUnits: false, centers: [{ id: refs[0].id, name: "Centro 0" }, { id: refs[3].id, name: "Centro 3" }] });
+    assert.ok((await refs[0].get()).updateTime.isEqual(before));
+    assert.deepEqual(await listBudgetComparisonCenters({ ...restricted, userDoc: { id: "no-units", unitAccessScope: "selected", unitIds: [] } }), { allUnits: false, centers: [] });
+    assert.equal((await listBudgetComparisonCenters(actor)).centers.filter((center) => center.id.startsWith("comparison-")).length, 4);
+    assert.throws(() => assertBudgetPermission({ ...restricted, permissions: defaultGuestPermissions }, "view"));
+  } finally { await Promise.all(refs.map((ref) => ref.delete())); }
+});
 const part = (center, amount) => ({ id: center, employeeId: "vtu-person", employeeName: "Pessoa de teste", accountPlanId: "vtu-account", amount, resultCenter: center, analysisType: "employer_cost" });
 const input = (center, name = "VT de teste") => ({ name, competenceMonth: month, accountPlanIds: ["vtu-account"], resultCenterId: center,
   budgetedAmountCents: 21000, composition: [{ id: `line-${center}`, employeeId: "vtu-person", accountPlanId: "vtu-account", amountCents: 21000, expectedPurchaseDate: "2026-09-30", estimateSource: "manual" }] });

@@ -48,6 +48,7 @@ src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx,active,c
 src/app/dashboard/financial/cash-closures/sessions/new/page.tsx,active,cash-closures,
 src/app/dashboard/financial/cash-deposits/page.tsx,active,cash-deposits,
 src/app/dashboard/financial/cash-flow/agent/page.tsx,active,cash-flow,
+src/app/dashboard/financial/budget-comparison/page.tsx,active,cash-flow,Consulta de orçamento e despesas da competência
 src/app/dashboard/financial/cash-flow/page.tsx,active,cash-flow,
 src/app/dashboard/financial/cash-flow/receivables/page.tsx,active,receivables,
 src/app/dashboard/financial/dre/page.tsx,active,dre,

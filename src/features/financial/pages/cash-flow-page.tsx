@@ -22,6 +22,7 @@ import { budgetScenarioAmount, cashForecastTotals, selectProjectCashProjections,
 import { expenseAccountAllocations } from "@/features/financial/lib/expense-account-allocations";
 import { allowedBudgetCenters, type BudgetCenterOption } from "@/features/financial/components/settings/budget-ui-model";
 import { resolveUnitAccess } from "@/lib/unit-access";
+import { expenseCashForecastAmount } from "@/features/financial/lib/expense-display-state";
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -240,6 +241,8 @@ export function CashFlowPage() {
       if (["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return [];
       const date = toDate(expense.dueDate) || toDate(expense.competenceDate);
       if (!date || date < periodStart || date > periodEnd) return [];
+      const outstanding = expenseCashForecastAmount(expense);
+      if (outstanding <= 0) return [];
       return [{
         id: `forecast-${expense.id}`,
         source: expense.provisionType === "forecast" ? "expense_forecast" : "expense",
@@ -258,9 +261,7 @@ export function CashFlowPage() {
         dueDate: toDate(expense.dueDate),
         direction: "out" as const,
         status: "forecast" as const,
-        amount: expense.status === "partially_paid" && expense.settlementSummary?.balanceAmountCents != null
-          ? Number(expense.settlementSummary.balanceAmountCents) / 100
-          : Number(expense.totalValue) || 0,
+        amount: outstanding,
       }];
     });
     const residual: Movement[] = budgetProjections.projections.map((projection) => ({

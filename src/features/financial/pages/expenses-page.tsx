@@ -75,6 +75,7 @@ import {
   compareExpenseCompetenceMonths,
   consolidateExpenseObligations,
   groupExpensesByDueWeek,
+  sumExpenseValues,
   type ExpenseDueWeekGroup,
 } from "@/features/financial/lib/expense-list";
 import {
@@ -119,6 +120,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
+import { expenseDisplayStatus as getExpenseStatusKey, expenseDisplayAmounts, expenseAwaitingConfirmation, expenseCashForecastAmount, showExpenseInOperationalList } from "@/features/financial/lib/expense-display-state";
+import { canViewBudgetComparison } from "@/features/financial/budgets/comparison";
 import { PageContainer } from "@/components/layout/page-container";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -126,6 +129,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending_audit: "Pendente auditoria",
   paid: "Pago",
   reported_paid: "Pago informado",
+  payment_found_pending_document: "Pagamento confirmado",
   partially_paid: "Parcialmente pago",
   paid_divergent: "Pagamento divergente",
   cancelled: "Cancelado",
@@ -149,6 +153,7 @@ const STATUS_COLORS: Record<string, string> = {
   draft: "border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
   pending_audit: "border-violet-200 bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800",
   paid: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
+  payment_found_pending_document: "border-emerald-200 bg-emerald-50 text-emerald-800",
   reported_paid: "border-sky-300 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800",
   partially_paid: "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
   paid_divergent: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
@@ -164,6 +169,7 @@ const STATUS_ACCENT_COLORS: Record<string, string> = {
   draft: "bg-slate-400",
   pending_audit: "bg-violet-500",
   paid: "bg-emerald-500",
+  payment_found_pending_document: "bg-emerald-500",
   reported_paid: "bg-sky-500",
   partially_paid: "bg-amber-500",
   paid_divergent: "bg-rose-500",
@@ -383,28 +389,8 @@ function accountPlanBreadcrumb(plan: any, plansById: Map<string, any>) {
   return labels.join(" › ");
 }
 
-function getExpenseStatusKey(expense: any, now: Date) {
-  const due = toDate(expense.dueDate);
-  let statusKey = expense.status;
-
-  if (expense.paymentState === "reported_paid") return "reported_paid";
-  if (expense.paymentState === "paid_divergent") return "paid_divergent";
-  if (expense.status === "partially_paid") return "partially_paid";
-
-  if (expense.status === "pending") {
-    if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
-      statusKey = "pending_audit";
-    } else if (due) {
-      if (due < now) statusKey = "overdue";
-      else if (format(due, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")) statusKey = "due_soon";
-    }
-  }
-
-  return statusKey;
-}
-
 export function ExpensesPage() {
-  const { firebaseUser, permissions } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const router = useRouter();
@@ -443,7 +429,7 @@ export function ExpensesPage() {
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
-  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(searchParams.get("expense"));
   const [expandedCardStatementKey, setExpandedCardStatementKey] = useState<string | null>(null);
   const [collapsedDueWeeks, setCollapsedDueWeeks] = useState<Set<string>>(() => new Set());
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -519,6 +505,7 @@ export function ExpensesPage() {
   useEffect(() => {
     const params = new URLSearchParams(searchParamsKey);
     setSearch(params.get("search") ?? "");
+    setExpandedExpenseId(params.get("expense"));
     setStatusFilter(params.get("status") ?? "all");
     setOriginFilter(params.get("origin") ?? "all");
     setPeriodPreset("custom");
@@ -533,7 +520,7 @@ export function ExpensesPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(searchParamsKey);
-    if (params.get("date_from") || params.get("date_to") || params.get("competence")) {
+    if (params.get("date_from") || params.get("date_to") || params.get("competence") || params.get("expense")) {
       return;
     }
 
@@ -619,6 +606,9 @@ export function ExpensesPage() {
     const now = startOfDay(new Date());
     return consolidatedExpenses
       .filter((expense) => {
+        if (!showExpenseInOperationalList(expense, statusFilter)) return false;
+        const target = searchParams.get("expense");
+        if (target && expense.id !== target) return false;
         if (
           !matchesBaseFilters(expense, {
             accountPlanMap,
@@ -652,11 +642,12 @@ export function ExpensesPage() {
       .sort((left, right) => expenseSort.key === "value"
         ? compareExpensesByValue(left, right, expenseSort.direction)
         : compareExpensesByDueDateDirection(left, right, expenseSort.direction));
-  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, statusFilter, supplierFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
     return consolidatedExpenses.filter((expense) =>
+      showExpenseInOperationalList(expense, statusFilter) &&
       matchesBaseFilters(expense, {
         accountPlanMap,
         cardStatements: cardStatementsData || [],
@@ -673,7 +664,7 @@ export function ExpensesPage() {
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
   const scopedDisplayEntries = useMemo(
     () => groupExpensesByCardStatement(scopedExpenses, {
       statements: cardStatementsData || [],
@@ -730,6 +721,8 @@ export function ExpensesPage() {
   }, [cardStatementsData, competenceMonth, dateFrom, dateTo, expenseSort, expenses, filtered]);
   const scopedDisplayEntryCount = scopedDisplayEntries.length;
   const filteredCountLabel = `${filteredDisplayEntries.length} de ${scopedDisplayEntryCount}`;
+  const filteredTotalValue = sumExpenseValues(filteredDisplayEntries,
+    (entry) => entry.kind === "expense" ? Number(entry.expense.totalValue) || 0 : entry.statement.totalValue);
   const activeCompetenceLabel = competenceMonth !== "all"
     ? `${competenceMonth.slice(5, 7)}/${competenceMonth.slice(0, 4)}`
     : null;
@@ -783,28 +776,14 @@ export function ExpensesPage() {
         financialUnitFilter === "all" ? undefined : financialUnitFilter,
         resultCenterNameById
       );
-      if (expense.status === "pending") {
-        open += scopedValue;
-        if (due && due < now) overdue += scopedValue;
-        if (due && due >= now && due <= in7Days) dueSoon += scopedValue;
-      }
-      if (expense.status === "partially_paid") {
-        const totalValue = Number(expense.totalValue) || 0;
-        const scopedRatio = totalValue > 0 ? scopedValue / totalValue : 1;
-        const balance = expense.settlementSummary?.balanceAmountCents != null
-          ? Number(expense.settlementSummary.balanceAmountCents) / 100 * scopedRatio
-          : scopedValue;
-        const settled = expense.settlementSummary?.principalSettledAmountCents != null
-          ? Number(expense.settlementSummary.principalSettledAmountCents) / 100 * scopedRatio
-          : Math.max(0, scopedValue - balance);
-        open += balance;
-        paid += settled;
-        if (due && due < now) overdue += balance;
-        if (due && due >= now && due <= in7Days) dueSoon += balance;
-      }
-      if (expense.status === "paid") {
-        paid += scopedValue;
-      }
+      const amounts = expenseDisplayAmounts(expense);
+      const totalValue = Number(expense.totalValue) || 0;
+      const ratio = totalValue > 0 ? scopedValue / totalValue : 1;
+      const balance = amounts.open * ratio;
+      open += balance;
+      paid += amounts.paid * ratio;
+      if (due && due < now) overdue += balance;
+      if (due && due >= now && due <= in7Days) dueSoon += balance;
     });
 
     expenses.forEach((expense) => {
@@ -841,11 +820,11 @@ export function ExpensesPage() {
   }, [expenses, transactions]);
 
   useEffect(() => {
-    if (!expandedExpenseId) return;
+    if (loading || !expandedExpenseId) return;
     if (!filtered.some((expense) => expense.id === expandedExpenseId)) {
       setExpandedExpenseId(null);
     }
-  }, [expandedExpenseId, filtered]);
+  }, [expandedExpenseId, filtered, loading]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -941,6 +920,7 @@ export function ExpensesPage() {
           <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canViewBudgetComparison(permissions, isDefaultAdmin) && <Button variant="outline" size="sm" asChild><Link href={`${FINANCIAL_ROUTES.budgetComparison}${competenceMonth !== "all" ? `?month=${competenceMonth}` : ""}`}>Orçamento × despesas</Link></Button>}
           {canViewInbox && (
             <Button variant="outline" size="sm" asChild>
               <Link href={FINANCIAL_ROUTES.inbox}>
@@ -1003,7 +983,7 @@ export function ExpensesPage() {
           <TabsContent value="expenses" className="space-y-6">
       <KpiFlowStrip
         kpis={kpis}
-        openCount={scopedExpenses.filter((expense) => ["pending", "partially_paid"].includes(expense.status)).length}
+        openCount={scopedExpenses.filter((expense) => expenseDisplayAmounts(expense).open > 0).length}
         auditCount={pendingAuditCount}
         auditHref={FINANCIAL_ROUTES.pendingAuditExpenses}
       />
@@ -1056,6 +1036,7 @@ export function ExpensesPage() {
         </div>
       </div>
 
+      {searchParams.get("expense") && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><span>Despesa selecionada na comparação de orçamento.</span><Button variant="outline" size="sm" asChild><Link href={`${FINANCIAL_ROUTES.budgetComparison}?month=${competenceMonth}`}>Voltar à comparação</Link></Button></div>}
       <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
         <CardHeader className="border-b bg-muted/20 px-4 py-3">
           <div data-testid="expense-filter-bar" className="grid grid-cols-2 items-center gap-2 md:grid-cols-[minmax(170px,1.7fr)_minmax(0,.8fr)_minmax(0,.85fr)_minmax(0,.95fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,.85fr)_auto]">
@@ -1079,6 +1060,7 @@ export function ExpensesPage() {
                 <SelectItem value="draft">Rascunhos</SelectItem>
                 <SelectItem value="overdue">Vencidos</SelectItem>
                 <SelectItem value="paid">Pagos</SelectItem>
+                <SelectItem value="payment_found_pending_document">Pagamento confirmado · conferir despesa</SelectItem>
                 <SelectItem value="provisioned">Provisionados</SelectItem>
                 <SelectItem value="reconciled">Com previsão conciliada</SelectItem>
                 <SelectItem value="cancelled">Cancelados</SelectItem>
@@ -1163,6 +1145,8 @@ export function ExpensesPage() {
               <span className="text-[10.5px] text-muted-foreground">
                 {filteredDisplayEntries.length} {filteredDisplayEntries.length === 1 ? "obrigação" : "obrigações"}
               </span>
+              <span className="h-3.5 w-px bg-primary/15" />
+              <span data-testid="expense-competence-total" className="whitespace-nowrap font-mono text-xs font-semibold text-foreground">Total: {formatCurrency(filteredTotalValue)}</span>
             </div>
           ) : null}
         </CardHeader>
@@ -1238,23 +1222,22 @@ export function ExpensesPage() {
                               type="button"
                               className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
                               aria-expanded={!isCollapsed}
-                              aria-label={`${isCollapsed ? "Expandir" : "Recolher"} semana de vencimento ${row.group.label}`}
+                              aria-label={`${isCollapsed ? "Expandir" : "Recolher"} ${row.group.weekNumber ? `semana ${row.group.weekNumber}` : "grupo sem vencimento"} · ${row.group.label}`}
                               onClick={() => toggleDueWeek(row.group.key)}
                             >
-                              <div className="flex items-center gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-primary transition-transform", !isCollapsed && "rotate-90")} />
                                 <CalendarDays className="h-3.5 w-3.5 text-primary" />
                                 <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/75">
-                                  Semana de vencimento
+                                  {row.group.weekNumber ? `Semana ${row.group.weekNumber} · vencimento` : "Sem vencimento"}
                                 </span>
                                 <span className="text-xs font-semibold text-foreground">{row.group.label}</span>
                                 <span className="text-[10.5px] text-muted-foreground">
                                   {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
                                 </span>
+                                <span className="h-3.5 w-px bg-primary/15" />
+                                <span className="whitespace-nowrap font-mono text-xs font-semibold text-foreground">Total: {formatCurrency(row.group.totalValue)}</span>
                               </div>
-                              <span className="font-mono text-xs font-semibold text-foreground">
-                                {formatCurrency(row.group.totalValue)}
-                              </span>
                             </button>
                           </td>
                         </tr>
@@ -1522,7 +1505,7 @@ export function ExpensesPage() {
                           <td className="px-4 py-3">
                             <div className="space-y-1 text-center md:text-left">
                               <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
-                              {due && expense.status !== "paid" && expense.status !== "reconciled" ? (
+                              {due && !expenseAwaitingConfirmation(expense) && !["paid", "reconciled", "cancelled"].includes(expense.status) ? (
                                 <p className={cn("text-xs", due < startOfDay(new Date()) ? "text-rose-600" : "text-muted-foreground")}>
                                   {due < startOfDay(new Date())
                                     ? `${Math.abs(Math.round((startOfDay(new Date()).getTime() - due.getTime()) / 86400000))}d atraso`
@@ -1569,7 +1552,7 @@ export function ExpensesPage() {
                                 canViewPersonnelCosts={canViewPersonnelCosts}
                                 canViewExpenses={canViewExpenses}
                                 canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration && !expense.sourceSettlement}
-                                canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement}
+                                canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0}
                                 canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration && !expense.sourceSettlement}
                                 finalizingAudit={finalizingAuditId === expense.id}
                                 onFinalizeAudit={() => void handleFinalizeAudit(expense)}
@@ -1616,7 +1599,7 @@ export function ExpensesPage() {
                         type="button"
                         className="w-full border-b border-primary/10 bg-primary/[0.04] px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.065] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
                         aria-expanded={!isCollapsed}
-                        aria-label={`${isCollapsed ? "Expandir" : "Recolher"} semana de vencimento ${row.group.label}`}
+                        aria-label={`${isCollapsed ? "Expandir" : "Recolher"} ${row.group.weekNumber ? `semana ${row.group.weekNumber}` : "grupo sem vencimento"} · ${row.group.label}`}
                         onClick={() => toggleDueWeek(row.group.key)}
                       >
                         <div className="flex items-center justify-between gap-3">
@@ -1624,12 +1607,12 @@ export function ExpensesPage() {
                             <p className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary/75">
                               <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", !isCollapsed && "rotate-90")} />
                               <CalendarDays className="h-3.5 w-3.5" />
-                              Semana de vencimento
+                              {row.group.weekNumber ? `Semana ${row.group.weekNumber} · vencimento` : "Sem vencimento"}
                             </p>
                             <p className="mt-1 text-xs font-semibold text-foreground">{row.group.label}</p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="font-mono text-xs font-semibold">{formatCurrency(row.group.totalValue)}</p>
+                            <p className="font-mono text-xs font-semibold">Total: {formatCurrency(row.group.totalValue)}</p>
                             <p className="mt-0.5 text-[10px] text-muted-foreground">
                               {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
                             </p>
@@ -1780,6 +1763,7 @@ export function ExpensesPage() {
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
                       </div>
                       <UberRecognitionStatus record={expense} compact />
+                      {expenseAwaitingConfirmation(expense) && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">Pagamento confirmado no extrato. A despesa ainda precisa de conferência; esse valor já pago não é uma cobrança vencida.</p>}
                       {expense.sourceSettlement && <SourceSettlementNotice source={expense.sourceSettlement} cancelled={expense.status === "cancelled"} />}
 
                       {expense.originModule === "purchasing" && (
@@ -1835,7 +1819,7 @@ export function ExpensesPage() {
                                   Finalizar auditoria
                                 </DropdownMenuItem>
                               )}
-                            {permissions.financial?.expenses?.pay && !expense.sourceSettlement && ["pending", "partially_paid"].includes(expense.status) && (
+                            {permissions.financial?.expenses?.pay && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0 && ["pending", "partially_paid"].includes(expense.status) && (
                               <DropdownMenuItem
                                 onClick={() =>
                                   setPayTarget({

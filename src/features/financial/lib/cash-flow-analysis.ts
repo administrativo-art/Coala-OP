@@ -3,6 +3,7 @@ import { ptBR } from "date-fns/locale";
 
 import { toDate } from "@/features/financial/lib/utils";
 import { financialCompetenceMonthSchema } from "./expense-accounting-contract";
+import { expenseAwaitingConfirmation } from "./expense-display-state";
 import { financialDateFromIso } from "./financial-dates";
 
 export function cashFlowPeriod(endingMonth: string, months: number) {
@@ -67,7 +68,7 @@ export function buildExpenseLifecycleData(
     const value = Number(expense.totalValue) || 0;
     point.provisioned += value;
     if (expense.status === "paid") point.paid += value;
-    if (expense.status === "partially_paid") {
+    if (expense.status === "partially_paid" || expenseAwaitingConfirmation(expense)) {
       point.paid += expense.settlementSummary?.principalSettledAmountCents != null
         ? Number(expense.settlementSummary.principalSettledAmountCents) / 100
         : 0;

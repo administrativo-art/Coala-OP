@@ -4,7 +4,7 @@ Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1
 
 A [verificação por grupo](flow-verification.md) registra referências e lacunas na base principal para cada grupo; `Traçado` não significa teste integrado aprovado.
 
-Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 22 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
+Classificação inicial: **158/158 páginas** — 115 ativas, 8 de navegação, 24 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
@@ -12,7 +12,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — projeção por compra/parcela coberta localmente; verificação integrada pendente |
 | `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — classificação/gate/UI implementados; integração e HTTP autenticado em emulador aprovados; não certifica todos os depósitos nem UI no navegador |
 | `cash-deposits` | 1 | Traçado | [Lote, cobrança Inter e conciliação](flows/cash-deposits.md) — percurso complementado; verificação integrada pendente |
-| `cash-flow` | 3 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
+| `cash-flow` | 4 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
 | `catalog` | 1 | Traçado | [Fichas técnicas](flows/catalog.md) — verificação de acesso e custo pendente |
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — privacidade/custo e teste integrado pendentes |
@@ -23,7 +23,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — percurso complementado; verificação integrada pendente |
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
-| `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; teste100−10−10 e cobertura aprovados; histórico real/validação visual não executados |
+| `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
 | `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos e compatibilidade; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
@@ -65,3 +65,5 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 Total inicial: **53 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
 
 Na integração documental da main, nenhum grupo é promovido a Verificado pelas execuções do worktree de correções. São 53 grupos traçados, 72 guias de subfluxo e validação comportamental parcial.
+
+Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.
