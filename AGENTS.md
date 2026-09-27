@@ -81,9 +81,9 @@
 
 ## Especialistas financeiros no Codex CLI
 
-- Os perfis em `.codex/agents/` (Leia, Sherlock, Hermione, Pepper, Tony, Mônica, Spock e Diana) são subagentes para tarefas de desenvolvimento no Codex CLI. Não são agentes implantados no Coala, não executam rotinas financeiras e não ganham acesso a banco ou credenciais por existir um arquivo TOML.
+- Os perfis em `.codex/agents/` são subagentes no Codex CLI, não agentes implantados no Coala. Use nas mensagens ao usuário os nomes completos de `docs/engineering/agent-names.md`, quando houver; os identificadores técnicos permanecem inalterados. Por padrão, trabalham em desenvolvimento. A exceção delimitada é Pepper Potts em operação assistida de um boleto explicitamente autorizado, conforme `docs/engineering/pepper-payment-operations.md`; nenhum TOML concede acesso a banco ou credenciais por si só.
 - Acione apenas o especialista pertinente à pergunta delimitada, anuncie ao usuário o nome e a tarefa antes da delegação e atribua a ele o resultado depois. Leia pode coordenar questões que cruzam domínios; Diana revisa de forma independente. Respeite o limite de um especialista por vez e o isolamento de worktrees.
-- Os especialistas permanecem em `sandbox_mode = "read-only"`. Podem examinar código, testes e evidências autorizadas; não executam pagamentos, escritas em produção ou operações bancárias. Uma análise do agente não substitui verificação determinística nem autoriza ação externa.
+- Os especialistas permanecem em `sandbox_mode = "read-only"`. Exceto pela operação assistida delimitada de Pepper Potts, não executam pagamentos, escritas em produção ou operações bancárias. Esse sandbox restringe arquivos, não constitui por si só bloqueio de escrita em APIs; confira as ferramentas e permissões efetivas. Uma análise do agente não substitui verificação determinística nem autoriza ação externa.
 - Se o Codex CLI não confirmar o acionamento real do especialista, informe o fallback. Não apresente uma resposta da sessão principal como se tivesse vindo do agente. Consulte `docs/engineering/financial-agent-cli-pilot.md` para o protocolo de validação.
 
 ## Publicação do Coala-OP
