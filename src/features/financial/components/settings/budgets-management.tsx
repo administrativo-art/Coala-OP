@@ -359,7 +359,7 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${Math.min(Math.max(budget.usageRatio, 0) * 100, 100)}%` }} /></div>
           <p className="mt-2 text-xs text-muted-foreground">{budget.expenses.length} despesa(s) vinculada(s) automaticamente.</p>
           {budget.issues.length > 0 && <p className="mt-2 text-xs text-amber-700">{budget.issues.join(" ")}</p>}
-          <BudgetDetails budget={budget} accounts={accounts} canManage={canManage} canViewPersonnel={canViewPersonnel} canEditPersonnel={canEditPersonnel} onSaved={refresh} />
+          <BudgetDetails budget={budget} accounts={accounts} canManage={canManage} canViewPersonnel={canViewPersonnel} canEditPersonnel={canEditPersonnel} canViewExpenses={isDefaultAdmin || permissions.financial?.expenses?.view === true} onSaved={refresh} />
         </div>)}
     </CardContent></Card>
 

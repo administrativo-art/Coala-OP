@@ -91,7 +91,7 @@ function currencyFromCents(value: number | null | undefined) {
 
 function statusCopy(summary: FinancialObligationSummary) {
   if (summary.reconciliationStatus === "DIVERGENT") return { label: "Revisão necessária", tone: "warning" as const };
-  if (summary.reconciliationStatus === "PENDING_DOCUMENT") return { label: "Pagamento localizado · documento pendente", tone: "warning" as const };
+  if (summary.reconciliationStatus === "PENDING_DOCUMENT") return { label: "Pagamento confirmado · conferir despesa", tone: "warning" as const };
   if (summary.obligationStatus === "PARTIALLY_PAID") return { label: "Parcialmente pago", tone: "warning" as const };
   if (summary.obligationStatus === "PAID" && summary.paymentEvidenceStatus === "REPORTED") {
     return { label: "Pago informado · aguardando extrato", tone: "reported" as const };
