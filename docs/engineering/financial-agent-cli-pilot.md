@@ -4,7 +4,7 @@
 
 Os arquivos em `.codex/agents/` são agentes personalizados do **Codex CLI para desenvolvimento**.
 Eles podem ler o repositório e devolver revisão de domínio; todos usam `sandbox_mode = "read-only"`.
-Herdam o modelo GPT da sessão principal, para comparar papéis sob o mesmo modelo durante o piloto.
+Herdam o modelo GPT da sessão principal, exceto Pepper Potts, configurada em `gpt-6-luna` com esforço `high` para trabalho delimitado. A operação assistida por boleto tem contrato próprio em `pepper-payment-operations.md`; os critérios abaixo continuam aplicáveis ao piloto e não comprovam uma automação bancária validada.
 O limite inicial é de um subagente por vez na sessão. O nome de personagem identifica o papel,
 sem imitação de personalidade. Nenhum desses arquivos instala agente no Coala publicado, fornece
 credenciais, concede acesso ao Firestore ou habilita os prompts `draft` do produto.

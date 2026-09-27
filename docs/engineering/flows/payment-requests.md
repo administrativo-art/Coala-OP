@@ -41,6 +41,14 @@ O [job Inter](../../../src/app/api/jobs/inter/reconcile/route.ts) autentica por 
 
 Conferir os [testes de segurança da caixa](../../../tests/unit/financial-inbox-payment-safety.test.ts) e os testes do módulo financeiro pertinentes à ação modificada. Para mudanças, verificar origem RH protegida, permissões de criar/autorizar/enviar, favorecido alterado, reenvio Pix/código de barras, resposta com aprovação no banco, transição para débito esperado e atualização da fonte. Este levantamento não executou pagamento nem ambiente bancário real.
 
+## Operação assistida por CLI
+
+Pepper Potts pode usar a [CLI local](../../../scripts/financial/coala-authenticated-payment.mts) para uma ordem de boleto expressamente autorizada, conforme [contrato operacional](../pepper-payment-operations.md) e [login pelo Chaves](../coala-keychain-payment-cli.md). É um perfil do Codex CLI, não uma rotina autônoma implantada no Coala. O login humano guarda apenas a sessão renovável; a CLI reutiliza as permissões do operador nas APIs existentes, sem novas permissões, Admin SDK ou credenciais bancárias locais.
+
+`authorize` e `send` são comandos separados e restritos às origens `financial_inbox` e `expense_boleto`, rail `barcode`. O [contrato](../../../scripts/financial/payment-cli-contract.ts) compara despesa, valor em centavos, código completo, data e favorecido com o snapshot; tentativa anterior bloqueia novo envio. O [transporte](../../../scripts/financial/payment-cli-transport.ts) restringe origens, recusa redirects, limita o tempo e sanitiza falhas, sem retry. Uma resposta incerta exige consulta, não repetição automática. As transações e autorizações do servidor permanecem determinantes; aprovação final no Inter continua humana.
+
+As consultas são por ID ou filtradas/limitadas: caixa25/página, solicitações100 recentes, lookup de despesas25 mais sentinela. Ausência em cobertura parcial não prova inexistência histórica. [Testes do dispatcher](../../../tests/unit/financial-payments/payment-cli-workflow.test.ts) substituem integralmente rede e Chaves, cobrindo autorização/envio separados, divergência, tentativa anterior e resposta incerta. Esses testes não homologam uma nova operação bancária real nem a disponibilidade da sessão do operador.
+
 ## Seleção do extrato e recuperação rastreadas
 
 [`findExpectedBankDebitMatch`](../../../src/features/financial/payment-requests/expected-bank-debits.ts) considera apenas saída e candidato ainda não usado. Referência bancária comum única tem precedência; múltiplas referências elegíveis geram ausência de match. Sem referência, exige candidato único com diferença até 5 centavos e até cinco dias da data esperada. A referência direta não dispensa a validação posterior de valor/origem em `reconcileExpectedBankDebit`.
