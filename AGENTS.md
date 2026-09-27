@@ -1,5 +1,26 @@
 # Regras operacionais do Coala One
 
+## Localização e impacto
+
+- Em checkouts de promoção seletiva, uma referência de documentação pode não existir na branch. Nesse caso, consulte a versão aprovada em `main` por leitura (`git show <sha-main-validado>:<caminho>`), registre a origem e confirme a aplicabilidade no código local. Isso não autoriza importar código, configurações ou executar ferramentas ausentes no checkout.
+- Quando a tarefa exigir localizar uma funcionalidade ou avaliar impacto, consulte a linha pertinente do índice curto `docs/engineering/system-map.md` e siga `docs/engineering/investigation-harness.md`. Reutilize o procedimento já lido enquanto estiver no contexto e sem alteração; releia após perda de contexto ou mudança do arquivo. Busque no guia apenas as seções necessárias e confirme no código. Use inventários quando faltar um caminho; amplie a investigação quando houver lacuna, divergência ou efeito cruzado.
+- Nas tarefas reais, registre o uso do mapa e a telemetria disponível no registro local do chamado, conforme `docs/engineering/map-usage.md`. Se o CLI não informar tokens atribuíveis à tarefa, registre indisponível; não estime nem execute sessões adicionais apenas para medir.
+- Separe comportamento observado de regra aprovada. Se divergirem, registre a divergência; o mapa não substitui o código nem uma decisão de negócio.
+- Ao criar, mover, renomear ou remover página do dashboard, regenere `docs/engineering/route-inventory.md` com `python3 scripts/generate-route-inventory.py` e `docs/engineering/flow-entrypoints.md` com `python3 scripts/generate-flow-entrypoints.py`; atualize `docs/engineering/flow-matrix.csv`, índice e entrada principal afetados. Para páginas fora do dashboard ou rotas de API, regenere `docs/engineering/surface-inventory.md` com `python3 scripts/generate-surface-inventory.py`; atualize também `docs/engineering/external-page-map.md` para páginas externas e revise manualmente os guias e contratos afetados. Antes de concluir, execute os geradores com `--check`, `python3 scripts/check-flow-matrix.py` e `python3 scripts/check-engineering-docs.py`. Os verificadores não comprovam comportamento.
+- Ao alterar um fluxo, contrato de dados, permissão ou integração, atualize no mesmo trabalho o guia de fluxo e as referências de impacto afetados. Registre qualquer trecho ainda não confirmado como lacuna; não mantenha descrição antiga como se estivesse verificada. Consulte `docs/engineering/system-map-execution.md` para o critério de cobertura.
+- Ao criar/remover/mover API, página externa ou export de Cloud Functions, revise `docs/engineering/surface-flow-matrix.csv` antes de regenerar o inventário. Para jobs, gatilhos e webhooks, atualize `runtime-surfaces.md` e os consumidores afetados; para entradas compartilhadas, `access-and-privacy.md`. `generate-surface-inventory.py --check` também exige classificação dessas superfícies. Não marcar associação estrutural como autorização ou execução verificada.
+
+## Departamento de Desenvolvimento e Tecnologia
+
+- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os sete especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket.
+- Escolha somente os especialistas necessários. Execute no máximo um especialista por vez; aguarde sua entrega e confira processos ainda ativos antes de iniciar ou retomar outro. Especialistas não delegam.
+- Selecione o modelo pelo trabalho concreto, conforme `docs/engineering/development-technology.md`. Neste departamento, use Luna ou Sol no Codex e Haiku ou Sonnet no Claude Code. Nunca selecione Fable ou Opus; Astra exige uma solicitação explícita do programador para aquele chamado. Se o trabalho exceder esses modelos, informe o limite e peça uma decisão. Registre o modelo efetivamente usado quando o CLI informar.
+- Antes de usar o Claude Code para este departamento, confira `claude --version`: a restrição da opção Padrão exige a versão 2.1.175 ou posterior. Se o comando resolver para uma instalação mais antiga, use uma instalação compatível antes de iniciar o chamado.
+- Antes de acionar Velma ou Trinity no Codex, coloque também a sessão principal em modo somente leitura e confira as ferramentas externas disponíveis; uma configuração do agente não substitui a permissão efetiva da sessão.
+- Registre objetivo, autorização, critérios de aceite, trabalho e evidências em `.ai-work/development-technology/<id>/`. Ao mudar de CLI, encerre a sessão anterior e confira o registro e o estado dos arquivos antes de assumir a coordenação.
+- Nome de personagem identifica papel. Somente TARS pode usar um estilo direto, calmo, pragmático e com humor pontual; precisão e regras operacionais têm prioridade.
+- Uma solicitação de implementação autoriza as alterações e verificações locais pertinentes ao escopo. Commit, push, migração em banco real, publicação e deploy exigem autorização própria, salvo quando já foram explicitamente incluídos na solicitação.
+
 ## Como tratar o código existente
 
 - Código existente é evidência, não necessariamente padrão. Antes de copiar uma implementação, distinga decisão arquitetural intencional de convenção consolidada, solução local, detalhe histórico ou dívida técnica. Somente decisão e convenção comprovadas viram padrão.
@@ -16,6 +37,20 @@
 - Infraestrutura compartilhada por mais de um módulo deve ficar em commit próprio. Código de produto, testes e documentação do mesmo comportamento podem ficar juntos quando formarem uma unidade verificável.
 - Não use `stash`, `reset`, `restore`, troca de branch, limpeza de arquivos ou commit-snapshot para reorganizar mudanças de terceiros sem autorização explícita e uma verificação prévia de arquivos não rastreados e possíveis segredos.
 - Antes de encerrar, execute `git status --short`, informe qualquer mudança staged, unstaged ou não rastreada e não declare o workspace limpo sem evidência.
+
+### Ciclo de vida e espaço dos worktrees
+
+- Antes de criar um worktree, consulte `git worktree list` e identifique o worktree da tarefa. Não abra outro apenas para revisar, testar ou publicar a mesma tarefa, salvo quando o isolamento for necessário; nesse caso, defina também quando o temporário será encerrado.
+- Instale dependências e gere builds apenas nos worktrees que precisarem deles. Antes de `npm ci`, build ou E2E pesado, confira `df -h` e não inicie a operação com menos de 15 GB livres; primeiro identifique caches regeneráveis e combine a limpeza necessária.
+- O fechamento do worktree temporário é uma condição de conclusão do chamado, anterior à resposta final. Confira `git status --short`, branch e integração dos commits, verificações e publicação quando aplicáveis, processos em uso e arquivos ignorados. Um checkout limpo não prova que `.ai-work`, `.env.local`, resultados de testes ou outros dados locais possam ser apagados.
+- A autorização para executar uma tarefa inclui arquivar seus registros e remover o worktree temporário exclusivo dela depois de integrar as alterações e concluir as verificações e a publicação autorizada, quando aplicável. Não peça nova confirmação de uso para essa limpeza. Preserve o checkout principal, worktrees de terceiros e branches. É proibido descartar alterações ainda não integradas ou dados exclusivos sem preservação prévia comprovada.
+- Antes de remover, arquive os logs, registros e demais dados exclusivos necessários fora do worktree, em local privado, e confira a integridade da cópia. Registre o destino no relatório. Não arquive `node_modules`, `.next`, caches e artefatos de build comprovadamente regeneráveis: descarte somente as cópias exclusivas da tarefa, depois de conferir processos e dependências. Nunca versione credenciais nem siga symlinks para apagar dependências compartilhadas; remover o link não autoriza remover seu destino.
+- Antes do descarte, confira os caminhos exatos e os links com `lstat`/`readlink`, inclusive referências de outros worktrees às dependências deste. Não use remoção recursiva sobre um destino compartilhado ou incerto. Restrição a ferramentas de leitura não autoriza um revisor a executar a limpeza; devolva essa etapa ao coordenador.
+- Execute `git worktree remove <caminho>` somente após confirmar: (1) nenhuma alteração local pendente e trabalho integrado; (2) verificações e publicação autorizada concluídas, quando aplicáveis; (3) dados exclusivos, incluindo `.ai-work/development-technology/<id>/`, preservados fora do diretório e cópia íntegra; (4) ausência de processos ou dependências compartilhadas que exijam o diretório. Preserve a branch. Antes da resposta final, confirme a ausência em `git worktree list`, a remoção do diretório e a preservação da branch e do arquivo de registros no destino informado. Declarar a intenção de remover não substitui executar e verificar a remoção.
+- Retenção exige uma pendência concreta, como alterações ainda não integradas, processo necessário em execução ou falha na preservação dos dados. Registre a pendência e a condição objetiva para resolvê-la. Guardar logs ou aguardar confirmação de uso não justifica manter um worktree concluído. Se o fechamento falhar, informe a pendência sem declarar a limpeza concluída.
+- Se precisar reter o worktree da tarefa, avalie separadamente `node_modules`, `.next` e os demais artefatos regeneráveis. Para retê-los, identifique o teste/build em andamento ou a próxima etapa concreta que os exige, ou o processo/worktree que os compartilha, e o momento de reavaliação. Possível uso futuro não basta. Código pendente não exige, por si só, manter gigabytes de dependências e builds locais.
+- Depois de merge, rollout ou encerramento de um worktree temporário, confira `git worktree list` e o espaço livre. Para registros órfãos, use `git worktree prune --dry-run --verbose` e valide os caminhos antes de executar o prune; não faça exclusão automática em massa.
+- Ao publicar uma atualização destas instruções, confirme em quais branches ela foi integrada. Worktrees antigos e sessões já abertas não são atualizados automaticamente: antes de retomar um chamado, confira a versão aplicável, preserve alterações locais e leia as regras atualizadas. Não sobrescreva `AGENTS.md` modificado de outra tarefa nem declare que a publicação, sozinha, atualizou todas as sessões.
 
 ## Padrão de construção de módulos
 
@@ -51,6 +86,20 @@
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
 
+## Especialistas financeiros no Codex CLI
+
+- Os perfis em `.codex/agents/` são subagentes no Codex CLI, não agentes implantados no Coala. Use nas mensagens ao usuário os nomes completos de `docs/engineering/agent-names.md`, quando houver; os identificadores técnicos permanecem inalterados. Por padrão, trabalham em desenvolvimento. A exceção delimitada é Pepper Potts em operação assistida de um boleto explicitamente autorizado, conforme `docs/engineering/pepper-payment-operations.md`; nenhum TOML concede acesso a banco ou credenciais por si só.
+- Acione apenas o especialista pertinente à pergunta delimitada, anuncie ao usuário o nome e a tarefa antes da delegação e atribua a ele o resultado depois. Leia pode coordenar questões que cruzam domínios; Diana revisa de forma independente. Respeite o limite de um especialista por vez e o isolamento de worktrees.
+- Os especialistas permanecem em `sandbox_mode = "read-only"`. Exceto pela operação assistida delimitada de Pepper Potts, não executam pagamentos, escritas em produção ou operações bancárias. Esse sandbox restringe arquivos, não constitui por si só bloqueio de escrita em APIs; confira as ferramentas e permissões efetivas. Uma análise do agente não substitui verificação determinística nem autoriza ação externa.
+- Se o Codex CLI não confirmar o acionamento real do especialista, informe o fallback. Não apresente uma resposta da sessão principal como se tivesse vindo do agente. Consulte `docs/engineering/financial-agent-cli-pilot.md` para o protocolo de validação.
+
+## Publicação do Coala-OP
+
+- Este produto usa Firebase App Hosting, não Sites. O backend é `studio` em `us-central1`; o projeto Firebase é o configurado em `.firebaserc`. A branch `production` é acompanhada pelo App Hosting e atende `https://op.coalashakes.com`.
+- Fluxo estabelecido: integrar a mudança por PR em `main`, com as checagens exigidas; depois abrir PR de promoção específico para `production`. O CI de produção usa `scripts/verify-production-promotion.mjs` para exigir que os arquivos promovidos sejam idênticos aos do `main` validado. Merge em `main` não publica o produto.
+- Em cada publicação, confira apenas o estado que pode variar: autorização para commit/push/merge/deploy, branch e alterações locais, escopo e SHA da promoção, checagens atuais e eventual mudança no contrato acima. Não reinvestigue a plataforma nem substitua esse fluxo por `firebase deploy` ou por instruções genéricas de hospedagem.
+- Após o merge em `production`, confirme que o build do App Hosting usa o SHA promovido, que o rollout terminou em `SUCCEEDED` e que a URL responde. PR integrado ou build iniciado não bastam para declarar a publicação concluída. Se a plataforma ou o canal de promoção mudar, atualize esta seção junto com o procedimento.
+
 ## Verificação antes de concluir
 
 - Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
@@ -71,10 +120,14 @@
 
 ## CLI e navegador
 
-- Para operações determinísticas, estruturadas ou repetitivas, prefira CLI ou script à automação do navegador.
-- Antes de qualquer escrita, o script deve validar os dados e consultar duplicidades. Sempre que possível, deve ser idempotente e oferecer uma etapa de preflight/dry-run.
-- O navegador é bloqueado por padrão para as IAs deste projeto. A IA só pode acessá-lo quando o desenvolvedor autorizar expressamente e o acesso for realmente necessário, ou quando o próprio desenvolvedor solicitar o uso do navegador, ainda que exista alternativa por CLI/API.
-- A autorização vale apenas para a tarefa em que foi concedida e não deve ser presumida em tarefas seguintes.
+- **REGRA DE PARADA — NAVEGADOR PROIBIDO POR PADRÃO:** a IA não pode iniciar, conectar, selecionar, descobrir, inspecionar nem controlar qualquer navegador sem autorização explícita e específica do desenvolvedor nesta tarefa. A proibição inclui Chrome, navegador interno, extensões, Playwright, Computer Use e qualquer ferramenta equivalente.
+- A proibição começa antes da navegação. Sem autorização, é vedado inicializar cliente ou sessão de navegador, consultar navegadores disponíveis, listar ou reivindicar abas, ler histórico, cookies ou estado da sessão, capturar telas e executar até mesmo uma inspeção somente de leitura.
+- A existência de uma ferramenta de navegador, de uma sessão autenticada, de uma aba aberta ou de instruções genéricas do ambiente para usar ferramentas **não constitui autorização**.
+- Pedidos de resultado, como "salve no sistema", "mande para o Inter", "verifique na tela" ou "faça o pagamento", **não autorizam implicitamente o navegador**. A autorização só existe quando o desenvolvedor autorizar expressamente o uso do navegador/Chrome nesta tarefa e o acesso for necessário, ou quando solicitar diretamente esse uso, ainda que exista alternativa por CLI/API.
+- Se a tarefa não puder prosseguir por CLI, script, API ou integração própria, a IA deve parar antes de invocar qualquer ferramenta de navegador, explicar o bloqueio e pedir autorização explícita. Não deve abrir o navegador primeiro para descobrir se ele será necessário.
+- Uma instrução negativa, como "não use o navegador", "sem navegador" ou equivalente, bloqueia imediatamente todas as superfícies de navegador e prevalece sobre autorizações anteriores da mesma tarefa. Depois dela, não é permitido fazer chamadas de limpeza, finalização, conferência ou diagnóstico no navegador.
+- Para operações determinísticas, estruturadas ou repetitivas, use CLI ou script. Antes de qualquer escrita, o script deve validar os dados e consultar duplicidades. Sempre que possível, deve ser idempotente e oferecer uma etapa de preflight/dry-run.
+- A autorização vale somente para a superfície, a finalidade e a tarefa expressamente aprovadas. Não pode ser presumida em tarefas seguintes nem ampliada de leitura para escrita, de um site para outro ou de uma ferramenta de navegador para outra.
 - Não repita no navegador uma alteração que o script já confirmou. Quando o uso tiver sido autorizado, limite-o ao escopo solicitado e confira somente os dados necessários, como descrição, valor, competência, vencimento, unidade/centro de resultado, plano de contas e status.
 - Quando uma ação necessária e segura estiver bloqueada por permissão, reautenticação ou confirmação pessoal, peça explicitamente ao desenvolvedor a autorização necessária pelo mecanismo disponível; não presuma recusa nem encerre a operação sem antes solicitar essa autorização.
 - Depois de autorizado, a IA pode iniciar o fluxo de autenticação da CLI e deve aguardar o desenvolvedor concluir diretamente no provedor. Nunca solicite nem manipule senhas, códigos ou outros segredos no chat.
