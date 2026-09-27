@@ -34,6 +34,8 @@ Este inventário separa as **31 entradas de primeiro nível**. Ele registra o qu
 
 [`financial/page.tsx`](../../src/app/dashboard/financial/page.tsx) entrega [`financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx). Essa página agrega diferentes visões; para alterar um número, siga o componente/hook daquele cartão até sua rota ou coleção. Despesas, caixa, solicitações, DRE e conciliação têm fluxos distintos em [Finanças](modules/finance.md). Não derive regra de pagamento de um total do painel.
 
+Navegação financeira: Despesas é entrada direta; **Conciliação e fechamento** agrupa fechamento diário, vendas/recebimentos, [extratos bancários](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx) e faturas corporativas. Uploads e atalhos em Despesas são preservados; ver [contrato de navegação](flows/expenses.md#navegação-financeira--etapa-local-de-2026-09-26). Fechamento mensal permanece adiado, sem entrada vazia.
+
 ## Compras, estoque e patrimônio
 
 ### `purchasing` — redirecionamento para pedidos

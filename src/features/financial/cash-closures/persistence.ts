@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { isPdvAutoCountedChannel, type CashClosureChannel } from "./channel-normalization";
+import { linePdvSalesSource, sumPdvSales } from "./dre-contract";
 import {
   CASH_CLOSURE_CHANNELS,
   type BuiltCashClosure,
@@ -96,6 +97,7 @@ function lineStatus(countedCents: number | null, differenceCents: number | null)
 }
 
 function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure["status"]): CashClosureLine {
+  const pdvSales = linePdvSalesSource(line);
   const automatic = isPdvAutoCountedChannel(line.channel);
   const legacy = line.reportedCents === undefined;
   const calculatedExpectedCents = line.calculatedExpectedCents ?? line.expectedCents;
@@ -110,6 +112,7 @@ function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure
   const differenceCents = countedCents === null ? null : countedCents - line.expectedCents;
   return {
     ...line,
+    pdvSales,
     calculatedExpectedCents,
     expectedAdjustmentCents,
     expectedAdjustmentReason: line.expectedAdjustmentReason ?? null,
@@ -186,6 +189,7 @@ function builtLineToPersistent(
     existing?.countedCents === countedCents &&
     existing.countedBy === "system:pdv";
   const comparable = {
+    pdvSales: line.pdvSales ?? { version: 1 as const, amountCents: null },
     operatorName: line.operatorName,
     channelLabel: line.channelLabel,
     calculatedExpectedCents,
@@ -221,6 +225,7 @@ function builtLineToPersistent(
   };
   const existingComparable = existing
     ? {
+        pdvSales: existing.pdvSales,
         operatorName: existing.operatorName,
         channelLabel: existing.channelLabel,
         calculatedExpectedCents: existing.calculatedExpectedCents,
@@ -267,6 +272,9 @@ function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLi
   const differenceCents = existing.countedCents === null ? null : existing.countedCents - expectedCents;
   return {
     ...existing,
+    // A disappeared PDV line has zero source sales, even when its count is retained.
+    pdvSales: { version: 1, amountCents: 0 },
+    pdvSourceMissing: true,
     calculatedExpectedCents: 0,
     expectedCents,
     expectedAdjustmentCents: expectedCents,
@@ -409,6 +417,7 @@ export function mergeBuiltClosureForPersistence(input: {
     day: built.day,
     status,
     ...aggregates,
+    pdvSales: built.pdvSales ?? { version: 1, amountCents: null },
     cashDepositEligibleCents: existingClosure?.cashDepositEligibleCents ?? 0,
     finalizedCountedTotalCents: existingClosure?.finalizedCountedTotalCents ?? (status === "approved" ? aggregates.countedTotalCents : 0),
     finalizedDifferenceTotalCents: existingClosure?.finalizedDifferenceTotalCents ?? (status === "approved" ? aggregates.differenceTotalCents : 0),
@@ -453,6 +462,12 @@ export function recomputeCashClosureFromLines(closure: CashClosure, lines: CashC
   return {
     ...closure,
     ...aggregateLines(lines),
+    // Keep an explicit incomplete import incomplete, including an empty source.
+    pdvSales: (!closure.pdvSales && (!Array.isArray(closure.source?.integrityWarnings) || closure.source.integrityWarnings.length > 0))
+      ? { version: 1, amountCents: null }
+      : closure.pdvSales?.amountCents === null || lines.length === 0
+      ? closure.pdvSales ?? { version: 1, amountCents: null }
+      : sumPdvSales(lines.map(linePdvSalesSource)),
     operatorCount: new Set(lines.map((line) => line.operatorId)).size,
     finalizedOperatorCount: closure.finalizedOperatorCount ?? (closure.status === "approved" ? new Set(lines.map((line) => line.operatorId)).size : 0),
     updatedAt: now,

@@ -1,5 +1,11 @@
 # Fluxo de caixa: realizados, previsões e lançamento manual
 
+## Liquidação na origem — sangrias e taxas
+
+Despesas `sourceSettlement` são liquidadas no caixa físico (sangria) ou retidas no recebível líquido (taxas). Não geram pagamento/split/transação bancária e, por estarem pagas, não voltam às saídas futuras. O gráfico de ciclo de despesas pode mostrar esses valores pagos por competência; isso não é uma segunda saída de banco. O realizado bancário continua vindo de transações/pagamentos existentes, incluindo recebível líquido ou depósito do caixa remanescente. Não subtrair taxas novamente desse líquido. Uma DRE não precisa ser igual ao saldo do banco.
+
+Origem mantém competência e data efetiva distintas. Malote atrasado não vira perda automática nem nova receita ao chegar. Ver [DRE](dre.md), [sangrias](cash-closures.md) e [taxas](stone-sales-review.md). Fechamento mensal/ajustes de período já encerrado foram adiados, não há trava nova nesta entrega.
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.

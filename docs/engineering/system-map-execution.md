@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-09-26, entrega local de sangrias: classificação/vínculo transacionais, quitação na origem protegida e gate de finalização descritos em [fechamento de caixa](flows/cash-closures.md). Testes focados sem navegador; UI, revisão integrada e publicação ainda não concluídas. Não altera o estado de homologação global abaixo.
+
 ## Entrega documental para a main
 
 | Etapa | Estado |
@@ -16,6 +18,10 @@
 | 10. Compatibilização com main | Documentação adaptada; resultado final de integração e verificações em [relatório](main-map-integration.md). |
 
 ## Como usar e manter
+
+Conciliação/DRE (2026-09-26): navegação, fonte integral, sangrias e taxas explícitas integradas localmente. Guias DRE, caixa diário, caixa financeiro, despesas e Stone atualizados. Testes HTTP autenticados sem navegador e integrações de classificação/taxas aprovados em emuladores; não houve dados reais. Grupos continuam Traçados pelas lacunas de UI/provedores/fluxos adjacentes. [Preparação de publicação](financial-reconciliation-release.md) separa código validado de recuperação autorizada de histórico; fechamento mensal adiado.
+
+Atualização local de 2026-09-26: navegação financeira reúne conciliação e fechamento diário, com destino canônico de extratos e preservação de uploads, permissões e links antigos. Faturas possuem uma entrada canônica; nenhum fechamento mensal foi acrescentado. [Despesas](flows/expenses.md) e [faturas](flows/card-statements.md) atualizados no mesmo trabalho. Estado dos fluxos continua Traçado; testes de navegação não homologam os motores financeiros completos.
 
 Começar pela linha pertinente do [mapa](system-map.md), seguir [harness](investigation-harness.md) e conferir fontes atuais. Usar inventário quando faltar caminho. Registrar o [uso real](map-usage.md) no chamado, sem contadores inventados.
 

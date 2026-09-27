@@ -26,4 +26,20 @@ Os dois fluxos dependem do vínculo Stone/unidade/conta em [`configuration.serve
 
 ## Evidências da etapa 2
 
+## Apropriação de taxas explícitas — 2026-09-26
+
+O [painel de taxas](../../../src/features/financial/acquirer-fees/fees-panel.tsx) é separado da comparação de vendas. [GET/POST acquirer-fees](../../../src/app/api/financial/acquirer-fees/route.ts) exige administrador padrão no servidor. Prévia não grava. Cadastro/vínculo/correção/auditoria usam transação, revalidando workspace, mapping/vigência, centro exclusivo da unidade, conta-folha ativa de despesa e snapshot Pix. Sem permissão nova.
+
+- Pix: taxa explícita de evento pago elegível identificado por e2e/evento. Competência da venda; retenção no dia do evento financeiro. Datas futuras/anteriores à venda ficam pendentes.
+- Cartão: MDR explícito por parcela na competência da venda; antecipação explícita confirmada na competência do evento. Moeda não BRL, estorno, parcialidade ou origem ambígua não geram taxa presumida.
+- `SaleFee`/`FeeType=2` combinado fica pendente sem composição comprovada. Não somar às partes nem inferir taxa pelo residual bruto−líquido. Soma decimal antes do arredondamento.
+
+Limites:500 parcelas/componentes,31 datas originais,2 chamadas simultâneas,100 grupos e100 componentes/grupo. Excesso explícito, nunca soma parcial silenciosa. Identidade independe do arquivo/posição: reservas `financialSourceSettlements` impedem duplicidade/sobreposição. `financialAcquirerFeeBatches` mantém revisões/auditoria.
+
+Despesa `paid`, `sourceSettlement.kind=acquirer_fee`, `cashEffectIncludedInNetReceivable=true`, evidência REPORTED e zero confirmação bancária. Não cria payment/split/obrigação/débito. Motor e regras bloqueiam novo pagamento. Antes de criar, usuário confirma ausência de lançamento manual; servidor verifica mesmo valor/competência/centro. Isso não identifica todo equivalente com valores diferentes. Vínculo só com avulsa elegível, sem pagamento/obrigação materializada/rateio. Correção exige motivo e estado financeiro intacto; histórico permite desfazer sem provedor disponível.
+
+Catálogos501 contas/51 centros sob escolha de grupo; candidatos25+sentinela, histórico100+sentinela. Sem polling. Corpo2048 bytes/10s, consulta110s. [Unitários](../../../tests/unit/acquirer-fees.test.ts), [integração](../../../tests/integration/acquirer-fees.test.mjs), [HTTP em emuladores](../../../tests/e2e-api/financial-reconciliation.test.mts).
+
+Fontes primárias consultadas em 2026-09-26: [Stone Installments](https://conciliacao.stone.com.br/reference/installments), [AccountType](https://conciliacao.stone.com.br/reference/accounttype), [FinancialTransactionsAccounts](https://conciliacao.stone.com.br/reference/financialtransactionsaccounts), [arquivo Pix](https://conciliacao.stone.com.br/reference/estrutura-do-arquivo-pix).
+
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.

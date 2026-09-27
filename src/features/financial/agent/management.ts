@@ -3,6 +3,7 @@ import { financialAgentIdentifier } from "./contracts";
 import { calculateDreExpenses, type DreExpenseAccountMeta } from "../lib/dre-expense-calculation";
 import { expenseReferencesResultCenter } from "../lib/expense-rateio";
 import type { DreSourceDataPayload } from "../dre/source-data";
+import { selectDreRevenue } from "../dre/revenue-selection";
 import type { ReceivablePeriodResult } from "../receivables/period-review";
 import { exactSalesCents } from "../sales-reconciliation/validation";
 import { FINANCIAL_DRE_START_MONTH_KEY } from "../lib/constants";
@@ -41,11 +42,10 @@ export function analyzeManagement(input: {
       monthKey: month, resultCenter: input.centerName, resultCenterNames: input.centerNames });
     const sales = source.salesSummaries.filter(row => row.kioskId === request.kioskId
       && `${row.year}-${String(row.month).padStart(2, "0")}` === month);
-    const closure = source.closureSummaries.filter(row => row.kioskId === request.kioskId
-      && `${row.year}-${String(row.month).padStart(2, "0")}` === month);
-    const revenue = closure.length ? closure.reduce((sum, row) => sum + (row.dreRevenueTotalCents
-      ?? row.expectedTotalCents + row.differenceTotalCents) / 100, 0)
-      : sales.length ? sales.reduce((sum, row) => sum + row.revenue, 0) : null;
+    const [year, monthNumber] = month.split("-").map(Number);
+    const dreSource = selectDreRevenue({ kioskId: request.kioskId, year, month: monthNumber,
+      closureSummaries: source.closureSummaries, salesSummaries: source.salesSummaries });
+    const revenue = dreSource.revenueCents === null ? null : dreSource.revenueCents / 100;
     const cmv = sales.length && !source.missingSimulationIds.length ? sales.reduce((sum, row) => sum + row.cmv, 0) : null;
     const at = (key: string) => calculation.totalsByPosition[key] ?? 0;
     // Same expense positions as the official DRE; CMV is computed separately.
@@ -53,11 +53,14 @@ export function analyzeManagement(input: {
       "ocupacao", "null", "despesas_financeiras", "despesa_nao_operacional", "impostos_resultado"]
       .reduce((sum, key) => sum + at(key), 0);
     const result = revenue !== null && cmv !== null && !calculation.issues.length
-      ? revenue - cmv - expenseTotal + at("receita_financeira") + at("receita_nao_operacional") : null;
+      && dreSource.cashShortageCents !== null && dreSource.cashSurplusCents !== null
+      ? revenue - cmv - expenseTotal - dreSource.cashShortageCents / 100 + dreSource.cashSurplusCents / 100
+        + at("receita_financeira") + at("receita_nao_operacional") : null;
     const lines = Object.entries(calculation.detailsByPosition).flatMap(([position, details]) => details.map(row => ({
       expenseId: row.expenseId, accountId: row.accountPlanId, accountName: row.accountPlanName, position, amount: row.amount,
     }))).sort((a, b) => b.amount - a.amount);
-    return { month, revenue, revenueBasis: closure.length ? "cash_closure" : "pdv", cmv,
+    // Retain the historical basis union for existing presentation consumers.
+    return { month, revenue, revenueBasis: dreSource.revenueSource as "cash_closure" | "pdv" | "unavailable", dreSource, cmv,
       expenseTotal, result, margin: result !== null && revenue !== null && revenue > 0 ? result / revenue : null,
       positions: calculation.totalsByPosition, issues: calculation.issues, topExpenses: lines.slice(0, 20) };
   });
@@ -91,6 +94,10 @@ export function analyzeManagement(input: {
     projectedBalanceCents: null, // Incomplete portfolio and account scope: never fabricate a closing balance.
   };
   const alerts: { code: string; severity: "high" | "review"; title: string; evidence: string; href: string }[] = [];
+  if (current.dreSource.revenueCoverage !== "complete" || current.dreSource.cashDifferenceCoverage !== "complete") alerts.push({ code: "dre_source_coverage", severity: "high",
+    title: "Conferir fontes da DRE", evidence: current.dreSource.issues.join(", "), href: "/dashboard/financial/dre" });
+  if (current.dreSource.pendingOperatorCount !== 0) alerts.push({ code: "dre_pending_counting", severity: "review",
+    title: "Conferências de caixa pendentes", evidence: "As vendas estão separadas das finalizações; cobertura de dados não fecha a competência.", href: "/dashboard/financial/cash-closures" });
   if (current.issues.length) alerts.push({ code: "dre_quality", severity: "high", title: "Revisar classificação da DRE", evidence: `${current.issues.length} inconsistências contábeis`, href: "/dashboard/financial/dre" });
   if (budgetDifferenceCents !== null && budgetDifferenceCents >= request.materialityCents) alerts.push({ code: "budget", severity: "high", title: "Despesas acima do orçamento informado", evidence: `Desvio de ${budgetDifferenceCents} centavos`, href: "/dashboard/financial/dre" });
   if (expenseChangeCents !== null && expenseChangeCents >= request.materialityCents) alerts.push({ code: "history", severity: "review", title: "Investigar aumento de despesas", evidence: `Variação de ${expenseChangeCents} centavos versus ${period.previous}; comparar meses completos`, href: "/dashboard/financial/expenses" });

@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **353 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **355 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -102,6 +102,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/vacations/[vacationId]/notice` | GET | [src/app/api/dp/vacations/[vacationId]/notice/route.ts](../../src/app/api/dp/vacations/%5BvacationId%5D/notice/route.ts) | [vacation-notice](flows/vacation-notice.md) |
 | `/api/dp/vacations/[vacationId]/receipt-documents/[documentId]` | GET | [src/app/api/dp/vacations/[vacationId]/receipt-documents/[documentId]/route.ts](../../src/app/api/dp/vacations/%5BvacationId%5D/receipt-documents/%5BdocumentId%5D/route.ts) | [vacation-receipts](flows/vacation-receipts.md) |
 | `/api/financial/accounts` | POST, PATCH, DELETE | [src/app/api/financial/accounts/route.ts](../../src/app/api/financial/accounts/route.ts) | [expenses](flows/expenses.md) |
+| `/api/financial/acquirer-fees` | POST, GET | [src/app/api/financial/acquirer-fees/route.ts](../../src/app/api/financial/acquirer-fees/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/agent` | POST | [src/app/api/financial/agent/route.ts](../../src/app/api/financial/agent/route.ts) | [financial-overview](flows/financial-overview.md) |
 | `/api/financial/analysis-routines` | GET, POST | [src/app/api/financial/analysis-routines/route.ts](../../src/app/api/financial/analysis-routines/route.ts) | [financial-overview](flows/financial-overview.md) |
 | `/api/financial/analysis-routines/scheduler` | POST | [src/app/api/financial/analysis-routines/scheduler/route.ts](../../src/app/api/financial/analysis-routines/scheduler/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
@@ -134,6 +135,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/cash-closures/[closureId]/finalize` | POST | [src/app/api/financial/cash-closures/[closureId]/finalize/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/finalize/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/[closureId]/reopen` | POST | [src/app/api/financial/cash-closures/[closureId]/reopen/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/reopen/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/[closureId]/split-deposit` | POST | [src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/split-deposit/route.ts) | [cash-closures](flows/cash-closures.md) |
+| `/api/financial/cash-closures/[closureId]/withdrawals` | GET, PATCH | [src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/withdrawals/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/months` | GET | [src/app/api/financial/cash-closures/months/route.ts](../../src/app/api/financial/cash-closures/months/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/overview` | GET | [src/app/api/financial/cash-closures/overview/route.ts](../../src/app/api/financial/cash-closures/overview/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/sync` | POST | [src/app/api/financial/cash-closures/sync/route.ts](../../src/app/api/financial/cash-closures/sync/route.ts) | [cash-closures](flows/cash-closures.md) |

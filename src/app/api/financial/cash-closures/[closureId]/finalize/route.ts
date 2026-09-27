@@ -14,6 +14,7 @@ type RouteContext = { params: Promise<{ closureId: string }> };
 const ROUTE = "/api/financial/cash-closures/[closureId]/finalize";
 
 function throwFinalizationError(cause: unknown): never {
+  if (cause instanceof AppError) throw cause;
   const message = cause instanceof Error ? cause.message : "";
   if (message.includes("em uso por")) {
     throw new AppError({
@@ -60,6 +61,9 @@ function throwFinalizationError(cause: unknown): never {
   }
   if (message.includes("não pode avançar")) {
     throw new AppError({ code: "CASH_CLOSURE_STATE_CONFLICT", kind: "CONFLICT", cause });
+  }
+  if (message.includes("perfil sênior") || message.includes("Sem permissão")) {
+    throw new AppError({ code: "CASH_CLOSURE_FINALIZE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "A permissão ou a divergência mudou. Confira seu acesso e atualize a contagem.", cause });
   }
   throw cause;
 }
@@ -110,6 +114,7 @@ export const POST = withApiErrorHandling<RouteContext>({
     actor,
     {
       countingSessionId: parsed.data.countingSessionId,
+      authorizationContext: context,
       canManageSessionOfOthers: context.isDefaultAdmin || context.permissions.financial?.cashClosures?.reopen === true,
     },
   ).catch(throwFinalizationError);

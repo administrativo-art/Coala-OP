@@ -4,6 +4,8 @@ export const FINANCIAL_COLLECTIONS = {
   resultCenters: "resultCenters",
   expenseDescriptions: "expenseDescriptions",
   expenses: "expenses",
+  sourceSettlements: "financialSourceSettlements",
+  acquirerFeeBatches: "financialAcquirerFeeBatches",
   budgets: "financialBudgets",
   budgetRules: "financialBudgetRules",
   budgetProjects: "financialBudgetProjects",
@@ -35,7 +37,8 @@ export const FINANCIAL_ROUTES = {
   pendingAuditExpenses: "/dashboard/financial/expenses/pending-audit",
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
-  cardStatements: "/dashboard/financial/expenses/card-statements",
+  bankStatements: "/dashboard/financial/reconciliation/bank-statements",
+  cardStatements: "/dashboard/financial/reconciliation/card-statements",
   settings: "/dashboard/financial/settings",
   paymentRequests: "/dashboard/financial/expenses/authorizations",
 } as const;

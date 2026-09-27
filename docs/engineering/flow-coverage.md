@@ -10,7 +10,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | --- | ---: | --- | --- |
 | `assets` | 1 | Traçado | [Cadastro e movimentação](flows/assets.md) — percurso complementado; verificação integrada pendente |
 | `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — percurso complementado; verificação integrada pendente |
-| `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — percurso complementado; verificação integrada pendente |
+| `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — classificação/gate/UI implementados; integração e HTTP autenticado em emulador aprovados; não certifica todos os depósitos nem UI no navegador |
 | `cash-deposits` | 1 | Traçado | [Lote, cobrança Inter e conciliação](flows/cash-deposits.md) — percurso complementado; verificação integrada pendente |
 | `cash-flow` | 3 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
 | `catalog` | 1 | Traçado | [Fichas técnicas](flows/catalog.md) — verificação de acesso e custo pendente |
@@ -23,9 +23,9 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — percurso complementado; verificação integrada pendente |
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
-| `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — percurso complementado; verificação integrada pendente |
+| `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; teste100−10−10 e cobertura aprovados; histórico real/validação visual não executados |
 | `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
-| `expenses` | 6 | Traçado | [Lançamento e auditoria](flows/expenses.md) — percurso complementado; verificação integrada pendente |
+| `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos e compatibilidade; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
 | `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — percurso complementado; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |
@@ -47,7 +47,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
-| `sales-reconciliation` | 1 | Traçado | [Comparação PDV × Stone](flows/stone-sales-review.md) — percurso complementado; verificação integrada pendente |
+| `sales-reconciliation` | 1 | Traçado | [Comparação PDV × Stone](flows/stone-sales-review.md) — taxas explícitas em ação separada; precisão/retry/escopo em emulador e Pix HTTP aprovados; não valida provedor real |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — percurso complementado; verificação integrada pendente |
