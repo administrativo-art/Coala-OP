@@ -593,7 +593,9 @@ export default function PurchaseOrderPage() {
       paymentCondition: order.paymentCondition ?? "cash",
       installmentsCount,
       installmentDueDates,
-      paymentDueDate: order.paymentDueDate.slice(0, 10),
+      paymentDueDate: (isCardPayment(order.paymentMethod)
+        ? order.purchaseDate || order.paymentDueDate
+        : order.paymentDueDate).slice(0, 10),
       estimatedReceiptDate: order.estimatedReceiptDate.slice(0, 10),
       deliveryFee: order.deliveryFee ?? 0,
       accountPlanId:
@@ -685,9 +687,12 @@ export default function PurchaseOrderPage() {
             ? editForm.installmentDueDates
             : [],
         paymentDueDate:
-          editForm.paymentCondition === "installments"
+          editForm.paymentCondition === "installments" && !isCardPayment(editForm.paymentMethod)
             ? editForm.installmentDueDates[0]
             : editForm.paymentDueDate,
+        purchaseDate: isCardPayment(editForm.paymentMethod)
+          ? editForm.paymentDueDate
+          : null,
         estimatedReceiptDate:
           order.receiptMode === "future_delivery"
             ? editForm.estimatedReceiptDate
@@ -1604,12 +1609,14 @@ export default function PurchaseOrderPage() {
                     />
                     <ActionSummaryItem
                       label={
-                        order.paymentCondition === "installments"
+                        order.paymentCondition === "installments" && !isCardPayment(order.paymentMethod)
                           ? "Primeiro vencimento"
                           : getPaymentDateLabel(order.paymentMethod)
                       }
                       value={format(
-                        parseISO(order.paymentDueDate),
+                        parseISO(isCardPayment(order.paymentMethod)
+                          ? order.purchaseDate || order.paymentDueDate
+                          : order.paymentDueDate),
                         "dd/MM/yyyy",
                       )}
                     />
@@ -2134,28 +2141,7 @@ export default function PurchaseOrderPage() {
                         </Select>
                       </div>
 
-                      {editForm.paymentCondition === "installments" ? (
-                        <div className="space-y-1.5">
-                          <Label className="text-[12px] font-bold text-zinc-700">
-                            Parcelamento
-                            <RequiredMark />
-                          </Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={cn(
-                              "h-10 w-full justify-start rounded-[9px] border-zinc-200 bg-zinc-50 font-normal shadow-none",
-                              editForm.installmentDueDates.length < 2 &&
-                                PENDING_FIELD_CLASS,
-                            )}
-                            onClick={() => setInstallmentPlanOpen(true)}
-                          >
-                            {editForm.installmentDueDates.length >= 2
-                              ? `${editForm.installmentDueDates.length}x · ${format(parseISO(editForm.installmentDueDates[0]), "dd/MM/yyyy")} a ${format(parseISO(editForm.installmentDueDates[editForm.installmentDueDates.length - 1]), "dd/MM/yyyy")}`
-                              : "Definir parcelas e vencimentos"}
-                          </Button>
-                        </div>
-                      ) : (
+                      {(editForm.paymentCondition !== "installments" || isCardPayment(editForm.paymentMethod)) && (
                         <div className="space-y-1.5">
                           <Label className="text-[12px] font-bold text-zinc-700">
                             {getPaymentDateLabel(editForm.paymentMethod)}
@@ -2178,6 +2164,29 @@ export default function PurchaseOrderPage() {
                               )
                             }
                           />
+                        </div>
+                      )}
+
+                      {editForm.paymentCondition === "installments" && (
+                        <div className="space-y-1.5">
+                          <Label className="text-[12px] font-bold text-zinc-700">
+                            Parcelamento
+                            <RequiredMark />
+                          </Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              "h-10 w-full justify-start rounded-[9px] border-zinc-200 bg-zinc-50 font-normal shadow-none",
+                              editForm.installmentDueDates.length < 2 &&
+                                PENDING_FIELD_CLASS,
+                            )}
+                            onClick={() => setInstallmentPlanOpen(true)}
+                          >
+                            {editForm.installmentDueDates.length >= 2
+                              ? `${editForm.installmentDueDates.length}x · ${format(parseISO(editForm.installmentDueDates[0]), "dd/MM/yyyy")} a ${format(parseISO(editForm.installmentDueDates[editForm.installmentDueDates.length - 1]), "dd/MM/yyyy")}`
+                              : "Definir parcelas e vencimentos"}
+                          </Button>
                         </div>
                       )}
 
@@ -2545,7 +2554,9 @@ export default function PurchaseOrderPage() {
                       ...current,
                       installmentsCount: dueDates.length,
                       installmentDueDates: dueDates,
-                      paymentDueDate: dueDates[0],
+                      paymentDueDate: isCardPayment(current.paymentMethod)
+                        ? current.paymentDueDate
+                        : dueDates[0],
                     }
                   : current,
               )

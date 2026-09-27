@@ -85,6 +85,7 @@ import {
   type PlannedPaymentMethodType,
 } from "@/features/financial/lib/card-invoices";
 import {
+  cardExpenseStatementOccurrences,
   groupExpensesByCardStatement,
   type ExpenseCardStatementDocument,
   type ExpenseCardStatementListEntry,
@@ -269,6 +270,7 @@ function matchesBaseFilters(
   expense: any,
   {
     accountPlanMap,
+    cardStatements,
     resultCenterNameById,
     search,
     originFilter,
@@ -282,6 +284,7 @@ function matchesBaseFilters(
     now,
   }: {
     accountPlanMap: Record<string, string>;
+    cardStatements: ExpenseCardStatementDocument[];
     resultCenterNameById: ResultCenterNameMap;
     search: string;
     originFilter: string;
@@ -298,6 +301,11 @@ function matchesBaseFilters(
   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "";
   const accountingPlanNames = Array.from(new Set([planName, ...expenseAccountPlanLabels(expense, accountPlanMap)].filter(Boolean)));
   const due = toDate(expense.dueDate);
+  const statementOccurrences = cardExpenseStatementOccurrences(expense, cardStatements);
+  const periodDueDates = statementOccurrences
+    .map((occurrence) => occurrence.dueDate)
+    .filter((date): date is Date => date !== null);
+  const dueDateCandidates = periodDueDates.length > 0 ? periodDueDates : due ? [due] : [];
   const competence = toDate(expense.competenceDate);
   const belongsToUnit =
     unitFilter === "all" || expenseReferencesResultCenter(expense, unitFilter, resultCenterNameById);
@@ -328,12 +336,17 @@ function matchesBaseFilters(
     (originFilter === "purchasing" && expense.originModule === "purchasing") ||
     (originFilter === "manual" && expense.originModule !== "purchasing");
 
-  const matchesDateFrom = !dateFrom || (due && due >= new Date(`${dateFrom}T00:00:00`));
-  const matchesDateTo = !dateTo || (due && due <= new Date(`${dateTo}T23:59:59`));
+  const dateFromValue = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+  const dateToValue = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
+  const matchesDateRange = (!dateFromValue && !dateToValue) || dueDateCandidates.some((candidate) => (
+    (!dateFromValue || candidate >= dateFromValue) && (!dateToValue || candidate <= dateToValue)
+  ));
   const matchesCompetence =
     !competenceMonth
     || competenceMonth === "all"
-    || (competence && format(competence, "yyyy-MM") === competenceMonth);
+    || (statementOccurrences.length > 0
+      ? statementOccurrences.some((occurrence) => occurrence.monthKey === competenceMonth)
+      : competence && format(competence, "yyyy-MM") === competenceMonth);
   const matchesSupplier = supplierFilter === "all" || (expense.supplier || "") === supplierFilter;
   const matchesAccountPlan = accountPlanFilter === "all" || accountingPlanNames.includes(accountPlanFilter);
   const matchesPaymentType =
@@ -344,8 +357,7 @@ function matchesBaseFilters(
   return (
     matchesSearch &&
     matchesOrigin &&
-    matchesDateFrom &&
-    matchesDateTo &&
+    matchesDateRange &&
     matchesCompetence &&
     matchesSupplier &&
     matchesAccountPlan &&
@@ -554,15 +566,20 @@ export function ExpensesPage() {
           [
             ...rollingPastMonths,
             ...(competenceMonth !== "all" ? [competenceMonth] : []),
-            ...consolidatedExpenses
-            .map((expense) => toDate(expense.competenceDate))
-            .filter((date): date is Date => Boolean(date))
-            .map((date) => format(date, "yyyy-MM")),
+            ...consolidatedExpenses.flatMap((expense) => {
+              const statementMonths = cardExpenseStatementOccurrences(
+                expense,
+                cardStatementsData || [],
+              ).map((occurrence) => occurrence.monthKey);
+              if (statementMonths.length > 0) return statementMonths;
+              const date = toDate(expense.competenceDate);
+              return date ? [format(date, "yyyy-MM")] : [];
+            }),
           ]
         )
       ).sort(compareExpenseCompetenceMonths);
     },
-    [competenceMonth, consolidatedExpenses]
+    [cardStatementsData, competenceMonth, consolidatedExpenses]
   );
 
   const units = useMemo(
@@ -595,6 +612,7 @@ export function ExpensesPage() {
         if (
           !matchesBaseFilters(expense, {
             accountPlanMap,
+            cardStatements: cardStatementsData || [],
             resultCenterNameById,
             search,
             originFilter,
@@ -624,7 +642,7 @@ export function ExpensesPage() {
       .sort((left, right) => expenseSort.key === "value"
         ? compareExpensesByValue(left, right, expenseSort.direction)
         : compareExpensesByDueDateDirection(left, right, expenseSort.direction));
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, consolidatedExpenses, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, statusFilter, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, statusFilter, supplierFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
@@ -632,6 +650,7 @@ export function ExpensesPage() {
       showExpenseInOperationalList(expense, statusFilter) &&
       matchesBaseFilters(expense, {
         accountPlanMap,
+        cardStatements: cardStatementsData || [],
         resultCenterNameById,
         search,
         originFilter,
@@ -645,13 +664,16 @@ export function ExpensesPage() {
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
   const scopedDisplayEntries = useMemo(
     () => groupExpensesByCardStatement(scopedExpenses, {
       statements: cardStatementsData || [],
       allExpenses: expenses,
+      statementMonthKey: competenceMonth !== "all" ? competenceMonth : null,
+      statementDateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00`) : null,
+      statementDateTo: dateTo ? new Date(`${dateTo}T23:59:59`) : null,
     }),
-    [cardStatementsData, expenses, scopedExpenses]
+    [cardStatementsData, competenceMonth, dateFrom, dateTo, expenses, scopedExpenses]
   );
   const unitCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -671,6 +693,9 @@ export function ExpensesPage() {
     const entries = groupExpensesByCardStatement(filtered, {
       statements: cardStatementsData || [],
       allExpenses: expenses,
+      statementMonthKey: competenceMonth !== "all" ? competenceMonth : null,
+      statementDateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00`) : null,
+      statementDateTo: dateTo ? new Date(`${dateTo}T23:59:59`) : null,
     });
     return entries.sort((left, right) => {
       const leftComparable = left.kind === "expense"
@@ -693,7 +718,7 @@ export function ExpensesPage() {
         ? compareExpensesByValue(leftComparable, rightComparable, expenseSort.direction)
         : compareExpensesByDueDateDirection(leftComparable, rightComparable, expenseSort.direction);
     });
-  }, [cardStatementsData, expenseSort, expenses, filtered]);
+  }, [cardStatementsData, competenceMonth, dateFrom, dateTo, expenseSort, expenses, filtered]);
   const scopedDisplayEntryCount = scopedDisplayEntries.length;
   const filteredCountLabel = `${filteredDisplayEntries.length} de ${scopedDisplayEntryCount}`;
   const filteredTotalValue = sumExpenseValues(filteredDisplayEntries,

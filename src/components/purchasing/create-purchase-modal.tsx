@@ -180,6 +180,9 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
         receiptMode: values.receiptMode,
         paymentMethod: values.paymentMethod,
         paymentDueDate: values.paymentDueDate,
+        purchaseDate: values.paymentMethod === 'card_credit' || values.paymentMethod === 'card_debit'
+          ? values.paymentDueDate
+          : undefined,
         estimatedReceiptDate:
           values.receiptMode === 'immediate_pickup'
             ? new Date().toISOString()
