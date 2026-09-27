@@ -36,4 +36,4 @@ Para uma pergunta ou mudança, siga o [procedimento de investigação](investiga
 
 Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
 
-Orçamentos por categoria/projeto e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).
+Orçamentos por categoria/projeto, [comparação com despesas](../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).

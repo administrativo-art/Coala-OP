@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **355 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **356 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -123,6 +123,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/budgets/[id]` | GET, PATCH | [src/app/api/financial/budgets/[id]/route.ts](../../src/app/api/financial/budgets/%5Bid%5D/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budgets/[id]/coverage` | POST | [src/app/api/financial/budgets/[id]/coverage/route.ts](../../src/app/api/financial/budgets/%5Bid%5D/coverage/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budgets/cash-projections` | GET | [src/app/api/financial/budgets/cash-projections/route.ts](../../src/app/api/financial/budgets/cash-projections/route.ts) | [financial-budgets](flows/financial-budgets.md) |
+| `/api/financial/budgets/centers` | GET | [src/app/api/financial/budgets/centers/route.ts](../../src/app/api/financial/budgets/centers/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budgets/forecast-conversion` | GET, POST | [src/app/api/financial/budgets/forecast-conversion/route.ts](../../src/app/api/financial/budgets/forecast-conversion/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/budgets/person-references` | POST, GET | [src/app/api/financial/budgets/person-references/route.ts](../../src/app/api/financial/budgets/person-references/route.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `/api/financial/card-statements/[statementId]/reconcile` | POST | [src/app/api/financial/card-statements/[statementId]/reconcile/route.ts](../../src/app/api/financial/card-statements/%5BstatementId%5D/reconcile/route.ts) | [card-statements](flows/card-statements.md) |
