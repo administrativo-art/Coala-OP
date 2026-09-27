@@ -31,7 +31,8 @@ const PDFDownloadLink = dynamic(
 interface ProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  simulation: ProductSimulation | null;
+  /** Completeness is derived by the provider, not part of the stored document. */
+  simulation: (ProductSimulation & { cmvComplete?: boolean }) | null;
   initialTab?: 'cost' | 'ficha' | 'instruction';
 }
 
