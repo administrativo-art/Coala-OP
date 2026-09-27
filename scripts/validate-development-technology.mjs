@@ -76,7 +76,16 @@ for (const role of financialRoles) {
   assert.ok(tomlValue(codexAgent, 'description').startsWith('"'), `${role}: descrição ausente`);
   assert.equal(tomlValue(codexAgent, 'sandbox_mode'), '"read-only"');
   assert.match(codexAgent, /^developer_instructions\s*=\s*"""[\s\S]+"""/m);
-  assert.doesNotMatch(codexAgent, /^model\s*=/m, `${role}: modelo deve ser escolhido por tarefa`);
+  if (role === 'pepper') {
+    assert.equal(tomlValue(codexAgent, 'model'), '"gpt-6-luna"');
+    assert.equal(tomlValue(codexAgent, 'model_reasoning_effort'), '"high"');
+    assert.match(codexAgent, /\[agents\]\s*enabled\s*=\s*false/m);
+    assert.match(codexAgent, /Não delegue nem invoque outros agentes\./);
+    assert.match(codexAgent, /não contorne validações da CLI/);
+    assert.match(codexAgent, /a aprovação final no Inter pertence ao usuário/);
+  } else {
+    assert.doesNotMatch(codexAgent, /^model\s*=/m, `${role}: modelo deve ser escolhido por tarefa`);
+  }
 }
 
 console.log('Departamento de Desenvolvimento e Tecnologia: sete perfis gerais e oito especialistas financeiros Codex válidos.');
