@@ -9,6 +9,7 @@ const documentExtraction = readFileSync("src/features/financial/inbox/document-e
 const statementSync = readFileSync("src/features/financial/inter-statement-sync.server.ts", "utf8");
 const statementSettlement = readFileSync("src/features/financial/payment-requests/statement-settlement.ts", "utf8");
 const reconciliationJob = readFileSync("src/app/api/jobs/inter/reconcile/route.ts", "utf8");
+const inboxPaymentRoute = readFileSync("src/app/api/financial/inbox/[id]/payment/route.ts", "utf8");
 
 test("cruzamento automático consulta apenas conjuntos financeiros filtrados e limitados", () => {
   assert.match(workflow, /where\("status", "in", \["pending", "partially_paid"\]\)/);
@@ -37,6 +38,14 @@ test("pagamento por boleto não pode ser recriado quando já há extrato ou regi
   assert.match(paymentService, /message\.status !== "linked"/);
   assert.match(paymentService, /Somente a cobrança principal vinculada pode preparar um pagamento/);
   assert.match(paymentService, /installmentNumber: Number\(message\.linkedExpenseInstallmentNumber\)/);
+});
+
+test("preparação exige e preserva a identidade confirmada do favorecido", () => {
+  assert.match(inboxPaymentRoute, /inboxBarcodePaymentPreparationSchema\.parse/);
+  assert.match(paymentService, /const beneficiaryDocument = preparation\.beneficiaryDocument/);
+  assert.match(paymentService, /barcodeSnapshot: \{[\s\S]{0,300}beneficiaryDocument,/);
+  assert.match(paymentService, /assertMatchingInboxBarcodeRequest/);
+  assert.doesNotMatch(paymentService, /beneficiaryDocument: null/);
 });
 
 test("lembrete identificado não recebe vínculo financeiro principal", () => {
