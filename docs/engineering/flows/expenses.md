@@ -14,6 +14,8 @@ No [`ExpenseForm`](../../../src/features/financial/components/expenses/expense-f
 
 Na [`PendingAuditExpensesPage`](../../../src/features/financial/pages/pending-audit-expenses-page.tsx), `handleLinkImportedExpense` marca a despesa como paga e depois marca a transação como resolvida em duas chamadas `updateDoc` separadas. O filtro da tela combina despesas vindas de compras e transações importadas; o vínculo parcial exige reconciliação manual. O [pagamento](../../../src/features/financial/components/pay-expense-dialog.tsx) e as [rotas de liquidação](../../../src/app/api/financial/expenses/%5BexpenseId%5D/settlement/route.ts) têm contratos próprios e precisam ser lidos antes de qualquer mudança em estado `paid`.
 
+Na listagem, despesas com `plannedPaymentMethodType: credit_card` e identidade de ciclo ativa são apresentadas dentro da fatura correspondente por [`groupExpensesByCardStatement`](../../../src/features/financial/lib/expense-card-statement-groups.ts). Uma compra parcelada contribui em cada fatura apenas com a parcela daquele ciclo, e os filtros de competência/vencimento avaliam as ocorrências das faturas em vez de esconder parcelas futuras pelo vencimento da primeira. O lançamento continua sendo a despesa real de origem; a fatura representa o agrupamento e a obrigação de caixa, não uma segunda despesa.
+
 ## Dados e acesso
 
 ### Navegação financeira — etapa local de 2026-09-26
@@ -36,7 +38,7 @@ Regressões de roteamento/contexto/permissão estrutural: [testes de navegação
 
 ## Dependências e verificação
 
-Despesas alimentam [DRE](dre.md), [fluxo de caixa](cash-flow.md), [solicitações de pagamento](payment-requests.md), [compras](purchasing-order-receipt.md) e [caixa de entrada](financial-inbox.md). Para alteração funcional, conferir série, competência, rateio, provisão, importação, baixa/pagamento e permissões de leitura/escrita. Referências de teste: [séries](../../../tests/unit/financial-expense-series.test.ts), [provisões](../../../tests/unit/financial-expense-provisions.test.ts) e [centro de resultado](../../../tests/unit/financial-expense-reference-center.test.ts). `npm run check` passou na verificação anterior do mapa (2026-09-25); não demonstra consistência ponta a ponta entre despesas, transações, provisão e obrigação. O rastreamento dos ramos está complementado abaixo; verificação integrada pendente.
+Despesas alimentam [DRE](dre.md), [fluxo de caixa](cash-flow.md), [solicitações de pagamento](payment-requests.md), [compras](purchasing-order-receipt.md) e [caixa de entrada](financial-inbox.md). Para alteração funcional, conferir série, competência, rateio, provisão, importação, baixa/pagamento e permissões de leitura/escrita. Referências de teste: [séries](../../../tests/unit/financial-expense-series.test.ts), [provisões](../../../tests/unit/financial-expense-provisions.test.ts), [centro de resultado](../../../tests/unit/financial-expense-reference-center.test.ts) e [agrupamento de cartão](../../../tests/unit/financial-expense-card-statement-groups.test.ts). `npm run check` passou na verificação anterior do mapa (2026-09-25); não demonstra consistência ponta a ponta entre despesas, transações, provisão e obrigação. O rastreamento dos ramos está complementado abaixo; verificação integrada pendente.
 
 ## Liquidação, importação e variantes rastreadas
 

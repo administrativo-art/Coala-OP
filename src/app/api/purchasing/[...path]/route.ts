@@ -27,9 +27,15 @@ import {
   purchaseTreatmentCreatesAsset,
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
-import { buildPurchaseExpenseComponents } from '@/lib/purchase-financial-expenses';
+import {
+  assertPurchaseExpenseCanSync,
+  buildPurchaseExpenseComponents,
+  buildPurchaseExpensePaymentPlan,
+  type PurchasePaymentInstrument,
+} from '@/lib/purchase-financial-expenses';
 import { computeReceiptFinancialUpdate } from '@/lib/purchase-receipt-financials';
 import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
+import { isValidFinancialDateIso } from '@/features/financial/lib/financial-dates';
 import {
   cancelPurchaseSchema,
   revertPurchaseStageSchema,
@@ -187,6 +193,77 @@ function buildExpenseInstallments(
       status: 'pending',
     };
   });
+}
+
+async function resolvePurchasePaymentInstrument(orderData: Record<string, any>): Promise<PurchasePaymentInstrument | null> {
+  const expectedType = orderData.paymentMethod === 'card_credit'
+    ? 'credit_card'
+    : orderData.paymentMethod === 'card_debit'
+      ? 'debit_card'
+      : null;
+  if (!expectedType) return null;
+
+  const accountId = String(orderData.paymentAccountId || '').trim();
+  const methodId = String(orderData.paymentMethodId || '').trim();
+  if (!accountId || !methodId) {
+    throw new Error('A compra no cartão não possui conta e meio de pagamento completos.');
+  }
+  const account = await financialDbAdmin.collection('bankAccounts').doc(accountId).get();
+  if (!account.exists) {
+    throw new Error('A conta financeira do cartão da compra não foi encontrada.');
+  }
+  const method = (account.get('paymentMethods') || []).find((item: Record<string, any>) => item.id === methodId);
+  if (!method || method.type !== expectedType) {
+    throw new Error('O cartão da compra não corresponde ao cadastro financeiro atual.');
+  }
+  return {
+    accountId,
+    accountName: String(account.get('name') || orderData.paymentAccountName || '').trim(),
+    methodId,
+    methodLabel: String(method.label || orderData.paymentMethodLabel || '').trim(),
+    type: expectedType,
+    lastDigits: method.lastDigits,
+    closingDay: method.closingDay,
+    dueDay: method.dueDay,
+  };
+}
+
+function purchasePaymentFields(
+  orderData: Record<string, any>,
+  instrument: PurchasePaymentInstrument | null,
+  installments: ReturnType<typeof buildExpenseInstallments> | null,
+  options: { separateFromOrderPayment?: boolean } = {},
+) {
+  const plan = buildPurchaseExpensePaymentPlan(orderData, instrument, options);
+  const installmentAssignments = new Map(plan.installmentAssignments.map((assignment) => [assignment.number, assignment]));
+  const plannedInstallments = installments?.map((installment) => {
+    const assignment = installmentAssignments.get(installment.number);
+    if (!assignment) return installment;
+    return {
+      ...installment,
+      ...assignment,
+      dueDate: Timestamp.fromDate(assignment.dueDate),
+    };
+  }) ?? null;
+  return {
+    plannedPaymentMethodType: plan.plannedPaymentMethodType,
+    plannedBankAccountId: plan.plannedBankAccountId,
+    plannedBankAccountName: plan.plannedBankAccountName,
+    plannedPaymentMethodId: plan.plannedPaymentMethodId,
+    plannedPaymentMethodLabel: plan.plannedPaymentMethodLabel,
+    dueDate: Timestamp.fromDate(plan.dueDate),
+    firstInstallmentDueDate: plan.firstInstallmentDueDate
+      ? Timestamp.fromDate(plan.firstInstallmentDueDate)
+      : null,
+    cardChargeDate: plan.cardChargeDate ? Timestamp.fromDate(plan.cardChargeDate) : null,
+    originalCardChargeDate: plan.originalCardChargeDate,
+    cardStatementId: plan.cardStatementId,
+    cardStatementKey: plan.cardStatementKey,
+    cardStatementMonthKey: plan.cardStatementMonthKey,
+    cardReconciliationStatus: plan.cardReconciliationStatus,
+    cardStatementRevisionStatus: plan.cardStatementRevisionStatus,
+    installments: plannedInstallments,
+  };
 }
 
 function normalizeFreightPaymentMode(
@@ -427,12 +504,6 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   const supplierSnap = orderData.supplierId ? await dbAdmin.collection('entities').doc(orderData.supplierId).get() : null;
   const supplier = supplierSnap?.data() as Record<string, any> | undefined;
 
-  const financialSnap = await financialDbAdmin
-    .collection('expenses')
-    .where('purchaseOrderId', '==', orderId)
-    .limit(10)
-    .get();
-
   const totalValue = Number(orderData.totalEstimated ?? 0);
   const goodsSupplierName = supplier?.fantasyName || supplier?.name || orderData.supplierName || orderData.supplierId || orderId;
   const components = buildPurchaseExpenseComponents({
@@ -446,27 +517,35 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     freightAccountPlanId: orderData.freightAccountPlanId,
     freightAccountPlanName: orderData.freightAccountPlanName,
   });
-  const existingExpenses = financialSnap.docs;
   const linkedGoodsId = String(orderData.linkedExpenseId || '').trim();
   const linkedFreightId = String(orderData.linkedFreightExpenseId || '').trim();
-  const existingGoods = existingExpenses.find((document) => document.id === linkedGoodsId)
-    ?? existingExpenses.find((document) => ['goods', 'combined'].includes(String(document.data().purchaseExpenseRole || '')))
-    ?? existingExpenses.find((document) => document.data().purchaseExpenseRole !== 'freight');
-  const existingFreight = existingExpenses.find((document) => document.id === linkedFreightId)
-    ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'freight');
-  const goodsRef = existingGoods?.ref ?? financialDbAdmin.collection('expenses').doc();
-  const freightRef = existingFreight?.ref ?? financialDbAdmin.collection('expenses').doc(`purchase_freight_${orderId}`);
   const freightComponent = components.find((component) => component.role === 'freight');
   const primaryComponent = components.find((component) => component.role !== 'freight');
   if (!primaryComponent) throw new Error('A compra não gerou uma despesa principal válida.');
-  const competenceDate = Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate));
+  const usesCard = orderData.paymentMethod === 'card_credit' || orderData.paymentMethod === 'card_debit';
+  const canonicalOrderData = usesCard && !orderData.purchaseDate
+    ? { ...orderData, purchaseDate: orderData.paymentDueDate }
+    : orderData;
+  const paymentInstrument = await resolvePurchasePaymentInstrument(canonicalOrderData);
+  const baseInstallments = orderData.paymentCondition === 'installments'
+    ? buildExpenseInstallments(
+        totalValue,
+        Number(orderData.installmentsCount ?? 2),
+        orderData.paymentDueDate,
+        orderData.installmentDueDates,
+      )
+    : null;
+  const canonicalPaymentFields = purchasePaymentFields(canonicalOrderData, paymentInstrument, baseInstallments);
+  const competenceDate = Timestamp.fromDate(
+    canonicalPaymentFields.cardChargeDate?.toDate()
+      ?? new Date(orderData.createdAt ?? orderData.purchaseDate ?? orderData.paymentDueDate),
+  );
 
   const sharedPayload = {
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
     paymentMethodLabel: orderData.paymentMethodLabel ?? null,
-    dueDate: Timestamp.fromDate(new Date(orderData.paymentDueDate)),
     competenceDate,
     ...financialExpenseAccountingFields({ competenceDate }),
     isApportioned: false,
@@ -488,13 +567,29 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     cancelledAt: FieldValue.delete(),
     cancelledBy: FieldValue.delete(),
     cancelledReason: FieldValue.delete(),
+    ...canonicalPaymentFields,
     updatedAt: Timestamp.now(),
   };
 
-  function componentPayload(component: (typeof components)[number], relatedExpenseId: string | null) {
+  function componentPayload(
+    component: (typeof components)[number],
+    relatedExpenseId: string | null,
+    goodsExpenseId: string,
+  ) {
     const canInstall = component.role !== 'freight' && orderData.paymentCondition === 'installments';
+    const separateFreight = component.role === 'freight';
+    const componentPaymentFields = separateFreight
+      ? purchasePaymentFields(canonicalOrderData, null, null, { separateFromOrderPayment: true })
+      : canonicalPaymentFields;
     return {
       ...sharedPayload,
+      ...componentPaymentFields,
+      ...(separateFreight ? {
+        paymentAccountId: null,
+        paymentAccountName: null,
+        paymentMethodId: null,
+        paymentMethodLabel: null,
+      } : {}),
       description: component.description,
       supplier: component.supplier,
       accountPlan: component.accountPlanId,
@@ -506,50 +601,84 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
       accountAllocations: component.accountAllocations,
       paymentMethod: canInstall ? 'installments' : 'single',
       installments: canInstall
-        ? buildExpenseInstallments(
-            component.totalValue,
-            Number(orderData.installmentsCount ?? 2),
-            orderData.paymentDueDate,
-            orderData.installmentDueDates,
-          )
+        ? purchasePaymentFields(
+            canonicalOrderData,
+            paymentInstrument,
+            buildExpenseInstallments(
+              component.totalValue,
+              Number(orderData.installmentsCount ?? 2),
+              orderData.paymentDueDate,
+              orderData.installmentDueDates,
+            ),
+          ).installments
         : null,
       installmentType: canInstall ? 'equal' : null,
       installmentPeriodicity: canInstall ? 'monthly' : null,
-      firstInstallmentDueDate: canInstall ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
+      firstInstallmentDueDate: canInstall ? componentPaymentFields.firstInstallmentDueDate : null,
       purchaseExpenseRole: component.role,
       purchaseComponentType: component.role === 'freight' ? 'inbound_freight' : 'goods',
       relatedPurchaseExpenseId: relatedExpenseId,
       notes: component.role === 'freight'
-        ? `${buildPurchaseAuditNotes(orderData)}\n\nFrete vinculado à despesa ${goodsRef.id} do pedido ${orderId}.`
+        ? `${buildPurchaseAuditNotes(orderData)}\n\nFrete vinculado à despesa ${goodsExpenseId} do pedido ${orderId}.`
         : buildPurchaseAuditNotes(orderData),
     };
   }
 
   const now = Timestamp.now();
-  const expenseBatch = financialDbAdmin.batch();
-  expenseBatch.set(goodsRef, {
-    ...componentPayload(primaryComponent, freightComponent ? freightRef.id : null),
-    ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
-  }, { merge: true });
-  if (freightComponent) {
-    expenseBatch.set(freightRef, {
-      ...componentPayload(freightComponent, goodsRef.id),
-      ...(existingFreight ? {} : { createdAt: now, createdBy: uid }),
+  const expenseQuery = financialDbAdmin
+    .collection('expenses')
+    .where('purchaseOrderId', '==', orderId)
+    .limit(10);
+  const syncedExpenses = await financialDbAdmin.runTransaction(async (transaction) => {
+    // A leitura transacional impede que importação, revisão ou liquidação seja
+    // gravada entre esta validação e a atualização originada pelo pedido.
+    const financialSnap = await transaction.get(expenseQuery);
+    const existingExpenses = financialSnap.docs;
+    const existingGoods = existingExpenses.find((document) => document.id === linkedGoodsId)
+      ?? existingExpenses.find((document) => ['goods', 'combined'].includes(String(document.data().purchaseExpenseRole || '')))
+      ?? existingExpenses.find((document) => document.data().purchaseExpenseRole !== 'freight');
+    const existingFreight = existingExpenses.find((document) => document.id === linkedFreightId)
+      ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'freight');
+
+    for (const existingExpense of [existingGoods, existingFreight]) {
+      if (!existingExpense) continue;
+      assertPurchaseExpenseCanSync(existingExpense.data());
+    }
+
+    const goodsRef = existingGoods?.ref
+      ?? financialDbAdmin.collection('expenses').doc(`purchase_goods_${orderId}`);
+    const freightRef = existingFreight?.ref
+      ?? financialDbAdmin.collection('expenses').doc(`purchase_freight_${orderId}`);
+
+    transaction.set(goodsRef, {
+      ...componentPayload(primaryComponent, freightComponent ? freightRef.id : null, goodsRef.id),
+      ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
     }, { merge: true });
-  } else if (existingFreight) {
-    expenseBatch.set(existingFreight.ref, {
-      status: 'cancelled',
-      originStatus: 'superseded_by_purchase_sync',
-      cancelledReason: 'O frete passou a ser pago junto com a mercadoria ou foi removido do pedido.',
-      updatedAt: now,
-    }, { merge: true });
-  }
-  await expenseBatch.commit();
+    if (freightComponent) {
+      transaction.set(freightRef, {
+        ...componentPayload(freightComponent, goodsRef.id, goodsRef.id),
+        ...(existingFreight ? {} : { createdAt: now, createdBy: uid }),
+      }, { merge: true });
+    } else if (existingFreight) {
+      transaction.set(existingFreight.ref, {
+        status: 'cancelled',
+        originStatus: 'superseded_by_purchase_sync',
+        cancelledReason: 'O frete passou a ser pago junto com a mercadoria ou foi removido do pedido.',
+        updatedAt: now,
+      }, { merge: true });
+    }
+
+    return {
+      goodsExpenseId: goodsRef.id,
+      freightExpenseId: freightComponent ? freightRef.id : null,
+    };
+  });
 
   await Promise.all([
     dbAdmin.collection('purchase_orders').doc(orderId).set({
-      linkedExpenseId: goodsRef.id,
-      linkedFreightExpenseId: freightComponent ? freightRef.id : FieldValue.delete(),
+      linkedExpenseId: syncedExpenses.goodsExpenseId,
+      linkedFreightExpenseId: syncedExpenses.freightExpenseId ?? FieldValue.delete(),
+      ...(usesCard && !orderData.purchaseDate ? { purchaseDate: orderData.paymentDueDate } : {}),
     }, { merge: true }),
     dbAdmin
       .collection('purchase_financials')
@@ -558,13 +687,13 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
       .get()
       .then((snapshot) =>
         Promise.all(snapshot.docs.map((doc) => doc.ref.set({
-          linkedExpenseId: goodsRef.id,
-          linkedFreightExpenseId: freightComponent ? freightRef.id : FieldValue.delete(),
+          linkedExpenseId: syncedExpenses.goodsExpenseId,
+          linkedFreightExpenseId: syncedExpenses.freightExpenseId ?? FieldValue.delete(),
         }, { merge: true }))),
       ),
   ]);
 
-  return goodsRef.id;
+  return syncedExpenses.goodsExpenseId;
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
@@ -779,6 +908,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     }
 
     const paymentDueDate = body.paymentDueDate || now;
+    const cardPayment = body.paymentMethod === 'card_credit' || body.paymentMethod === 'card_debit';
+    const purchaseDate = isValidFinancialDateIso(body.purchaseDate) ? body.purchaseDate : null;
+    if (cardPayment && !purchaseDate) {
+      return jsonError('Informe a data da compra para o pagamento no cartão.', 400);
+    }
     const estimatedReceiptDate = body.estimatedReceiptDate || paymentDueDate;
 
     const freightPaymentMode = normalizeFreightPaymentMode(deliveryFee, body.freightPaymentMode);
@@ -796,6 +930,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentCondition: body.paymentCondition ?? 'cash',
       paymentDueDate,
       paymentMethod: body.paymentMethod || 'pix',
+      purchaseDate: cardPayment
+        ? purchaseDate
+        : body.purchaseDate ?? null,
       paymentAccountId: body.paymentAccountId ?? null,
       paymentAccountName: body.paymentAccountName ?? null,
       paymentMethodId: body.paymentMethodId ?? null,
@@ -2277,82 +2414,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
       return jsonError('A despesa anterior deste pedido foi arquivada na virada financeira de 01/08/2026.', 409);
     }
-    const supplierSnap = order.supplierId ? await dbAdmin.collection('entities').doc(order.supplierId).get() : null;
-    const supplier = supplierSnap?.data() as Record<string, any> | undefined;
-
-    const financialSnap = await financialDbAdmin
-      .collection('expenses')
-      .where('purchaseOrderId', '==', id)
-      .limit(1)
-      .get();
-
-    const totalValue = Number(order.totalEstimated ?? 0);
-    const competenceDate = Timestamp.fromDate(new Date(order.createdAt ?? order.paymentDueDate));
-    const basePayload = {
-      description: `Compra ${supplier?.fantasyName || supplier?.name || order.supplierId || id}`,
-      supplier: supplier?.fantasyName || supplier?.name || '',
-      accountPlan: order.accountPlanId ?? '',
-      accountPlanName: order.accountPlanName ?? '',
-      totalValue,
-      dueDate: Timestamp.fromDate(new Date(order.paymentDueDate)),
-      competenceDate,
-      ...financialExpenseAccountingFields({ competenceDate }),
-      paymentMethod: order.paymentCondition === 'installments' ? 'installments' : 'single',
-      installments:
-        order.paymentCondition === 'installments'
-          ? buildExpenseInstallments(
-              totalValue,
-              Number(order.installmentsCount ?? 2),
-              order.paymentDueDate,
-              order.installmentDueDates,
-            )
-          : null,
-      installmentType: order.paymentCondition === 'installments' ? 'equal' : null,
-      installmentPeriodicity: order.paymentCondition === 'installments' ? 'monthly' : null,
-      firstInstallmentDueDate:
-        order.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(order.paymentDueDate)) : null,
-      isApportioned: false,
-      referenceResultCenterId: order.resultCenterId ?? null,
-      referenceResultCenterName: order.resultCenterName ?? null,
-      resultCenter: order.resultCenterName ?? order.resultCenterId ?? null,
-      resultCenterId: order.resultCenterId ?? null,
-      resultCenterName: order.resultCenterName ?? null,
-      apportionments: null,
-      notes: buildPurchaseAuditNotes(order),
-      status: 'pending',
-      originModule: 'purchasing',
-      originStatus: 'pending_audit',
-      purchaseOrderId: id,
-      purchaseFinancialStatus: order.paymentCondition === 'installments' ? 'installments_pending_audit' : 'pending_audit',
-      createdBy: decoded.uid,
-      updatedAt: Timestamp.now(),
-    };
-
-    let expenseId: string;
-    if (financialSnap.empty) {
-      const expenseRef = financialDbAdmin.collection('expenses').doc();
-      expenseId = expenseRef.id;
-      await expenseRef.set({
-        ...basePayload,
-        createdAt: Timestamp.now(),
-      });
-    } else {
-      const existing = financialSnap.docs[0];
-      expenseId = existing.id;
-      await existing.ref.set(basePayload, { merge: true });
-    }
-
-    await Promise.all([
-      orderRef.set({ linkedExpenseId: expenseId }, { merge: true }),
-      dbAdmin
-        .collection('purchase_financials')
-        .where('purchaseOrderId', '==', id)
-        .get()
-        .then((snapshot) =>
-          Promise.all(snapshot.docs.map((doc) => doc.ref.set({ linkedExpenseId: expenseId }, { merge: true }))),
-        ),
-    ]);
-
+    const expenseId = await internalSyncExpense(id, order, decoded.uid);
     return NextResponse.json({ ok: true, expenseId });
   }
 
@@ -2509,6 +2571,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const currentOrder = orderSnap.data()!;
 
     const { items, ...rest } = body;
+    const nextPaymentMethod = rest.paymentMethod ?? currentOrder.paymentMethod;
+    const nextUsesCard = nextPaymentMethod === 'card_credit' || nextPaymentMethod === 'card_debit';
+    const nextPurchaseDateValue = String(
+      Object.prototype.hasOwnProperty.call(rest, 'purchaseDate')
+        ? rest.purchaseDate || ''
+        : currentOrder.purchaseDate || '',
+    );
+    const nextPurchaseDate = isValidFinancialDateIso(nextPurchaseDateValue)
+      ? nextPurchaseDateValue
+      : null;
+    if (nextUsesCard && !nextPurchaseDate) {
+      return jsonError('Informe a data da compra para o pagamento no cartão.', 400);
+    }
+    if (nextUsesCard) rest.purchaseDate = nextPurchaseDate;
     for (const accountField of [rest.accountPlanId, rest.freightAccountPlanId]) {
       const accountError = await validateAccountPlanForPosting(accountField);
       if (accountError) return jsonError(accountError);
@@ -2633,6 +2709,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               installmentsCount: rest.installmentsCount ?? currentOrder.installmentsCount ?? null,
               installmentDueDates: rest.installmentDueDates ?? currentOrder.installmentDueDates ?? null,
               paymentDueDate: rest.paymentDueDate ?? currentOrder.paymentDueDate ?? null,
+              purchaseDate: rest.purchaseDate ?? currentOrder.purchaseDate ?? null,
               updatedAt: now,
             },
             { merge: true },

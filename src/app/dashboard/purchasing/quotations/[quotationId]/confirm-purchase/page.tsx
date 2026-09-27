@@ -236,6 +236,7 @@ export default function ConfirmPurchasePage() {
         paymentMethodId: isCardPayment(paymentMethod) ? selectedPaymentCard?.methodId ?? null : null,
         paymentMethodLabel: isCardPayment(paymentMethod) ? selectedPaymentCard?.methodLabel ?? null : null,
         paymentDueDate,
+        purchaseDate: isCardPayment(paymentMethod) ? paymentDueDate : undefined,
         paymentCondition,
         installmentsCount: paymentCondition === 'installments' ? installmentsCount : undefined,
         estimatedReceiptDate:

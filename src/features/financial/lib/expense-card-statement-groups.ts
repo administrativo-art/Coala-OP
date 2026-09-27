@@ -66,11 +66,15 @@ type StatementIdentity = {
   key: string;
   monthKey: string;
   statementId: string;
+  dueDate: Date | null;
 };
 
 type GroupOptions<T extends GroupableCardExpense> = {
   statements?: ExpenseCardStatementDocument[];
   allExpenses?: T[];
+  statementMonthKey?: string | null;
+  statementDateFrom?: Date | null;
+  statementDateTo?: Date | null;
 };
 
 function text(value: unknown) {
@@ -85,10 +89,13 @@ export function cardStatementDocumentId(key: string) {
   return key.replaceAll(":", "__").replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
-function statementIdentity(expense: GroupableCardExpense): StatementIdentity | null {
+function statementIdentityFrom(
+  value: Pick<CardExpenseEntry, "cardStatementId" | "cardStatementKey" | "cardStatementMonthKey" | "dueDate">,
+  expense: GroupableCardExpense,
+): StatementIdentity | null {
   if (expense.plannedPaymentMethodType !== "credit_card") return null;
-  const monthFromField = text(expense.cardStatementMonthKey);
-  const storedKey = text(expense.cardStatementKey);
+  const monthFromField = text(value.cardStatementMonthKey);
+  const storedKey = text(value.cardStatementKey);
   const keyParts = storedKey.split(":");
   const monthFromKey = keyParts.at(-1) || "";
   const monthKey = /^\d{4}-\d{2}$/.test(monthFromField)
@@ -106,8 +113,60 @@ function statementIdentity(expense: GroupableCardExpense): StatementIdentity | n
   return {
     key,
     monthKey,
-    statementId: text(expense.cardStatementId) || cardStatementDocumentId(key),
+    statementId: text(value.cardStatementId) || cardStatementDocumentId(key),
+    dueDate: cardDateFromUnknown(value.dueDate),
   };
+}
+
+function hasExplicitInstallmentStatementIdentity(expense: GroupableCardExpense) {
+  return expense.paymentMethod === "installments"
+    && Array.isArray(expense.installments)
+    && expense.installments.some((installment) => Boolean(
+      text(installment.cardStatementId)
+      || text(installment.cardStatementKey)
+      || text(installment.cardStatementMonthKey),
+    ));
+}
+
+function statementIdentities(expense: GroupableCardExpense) {
+  const usesExplicitInstallmentIdentities = hasExplicitInstallmentStatementIdentity(expense);
+  const installmentIdentities = usesExplicitInstallmentIdentities && Array.isArray(expense.installments)
+    ? expense.installments.flatMap((installment) => {
+        if (installment.cardStatementRevisionStatus === "removed") return [];
+        const identity = statementIdentityFrom(installment, expense);
+        return identity ? [identity] : [];
+      })
+    : [];
+  const identities = usesExplicitInstallmentIdentities
+    ? installmentIdentities
+    : [statementIdentityFrom(expense, expense)].filter((identity): identity is StatementIdentity => identity !== null);
+  return [...new Map(identities.map((identity) => [identity.key, identity])).values()];
+}
+
+export function cardExpenseStatementOccurrences(
+  expense: GroupableCardExpense,
+  statements: ExpenseCardStatementDocument[] = [],
+) {
+  const officialStatements = statementMap(statements);
+  return statementIdentities(expense).map(({ key, monthKey, statementId, dueDate }) => ({
+    key,
+    monthKey,
+    dueDate: cardDateFromUnknown(
+      (officialStatements.get(key) ?? officialStatements.get(statementId))?.dueDate,
+    ) ?? dueDate,
+  }));
+}
+
+function statementIdentityMatchesPeriod(
+  identity: StatementIdentity,
+  statement: ExpenseCardStatementDocument | null,
+  options: Pick<GroupOptions<GroupableCardExpense>, "statementMonthKey" | "statementDateFrom" | "statementDateTo">,
+) {
+  if (options.statementMonthKey && identity.monthKey !== options.statementMonthKey) return false;
+  const dueDate = cardDateFromUnknown(statement?.dueDate) ?? identity.dueDate;
+  if (options.statementDateFrom && (!dueDate || dueDate < options.statementDateFrom)) return false;
+  if (options.statementDateTo && (!dueDate || dueDate > options.statementDateTo)) return false;
+  return true;
 }
 
 function statementTitle(paymentMethodLabel: string, monthKey: string) {
@@ -167,6 +226,7 @@ function installmentLines<T extends GroupableCardExpense>(
         && (key === identity.key || (!key && monthKey === identity.monthKey));
     });
   if (matching.length === 0) {
+    if (hasExplicitInstallmentStatementIdentity(expense)) return [];
     return [{
       lineId: expense.id,
       expense,
@@ -186,6 +246,20 @@ function installmentLines<T extends GroupableCardExpense>(
   }));
 }
 
+function projectedDueDates(expense: GroupableCardExpense, identity: StatementIdentity) {
+  const installments = Array.isArray(expense.installments) ? expense.installments : [];
+  const matchingDates = installments.flatMap((installment) => {
+    if (installment.cardStatementRevisionStatus === "removed") return [];
+    const installmentIdentity = statementIdentityFrom(installment, expense);
+    if (installmentIdentity?.key !== identity.key) return [];
+    const dueDate = cardDateFromUnknown(installment.dueDate);
+    return dueDate ? [dueDate] : [];
+  });
+  if (matchingDates.length > 0) return matchingDates;
+  const expenseDueDate = cardDateFromUnknown(expense.dueDate);
+  return expenseDueDate ? [expenseDueDate] : [];
+}
+
 function finishProjectedGroup<T extends GroupableCardExpense>(
   identity: StatementIdentity,
   expenses: T[],
@@ -193,8 +267,7 @@ function finishProjectedGroup<T extends GroupableCardExpense>(
   const activeExpenses = expenses.filter(cardExpenseIsActiveStatementLine);
   const paymentMethodLabel = text(activeExpenses[0]?.plannedPaymentMethodLabel) || "Cartão de crédito";
   const dueDates = activeExpenses
-    .map((expense) => cardDateFromUnknown(expense.dueDate))
-    .filter((date): date is Date => date !== null)
+    .flatMap((expense) => projectedDueDates(expense, identity))
     .sort((left, right) => left.getTime() - right.getTime());
   const lines = activeExpenses.flatMap((expense) => installmentLines(expense, identity));
   const auditCounts = emptyAuditCounts();
@@ -239,7 +312,9 @@ function finishOfficialGroup<T extends GroupableCardExpense>(
     auditStatus: cardStatementLineAuditStatus(line),
   }));
   const expenses = [...new Map(lines.map((line) => [line.expense.id, line.expense])).values()];
-  const candidates = allExpenses.filter((expense) => statementIdentity(expense)?.key === identity.key);
+  const candidates = allExpenses.filter((expense) => (
+    statementIdentities(expense).some((candidate) => candidate.key === identity.key)
+  ));
   const unmatchedExpenses = candidates.filter((expense) => !allocatedExpenseIds.has(expense.id));
   const paymentMethodLabel = text(statement.paymentMethodLabel)
     || text(expenses[0]?.plannedPaymentMethodLabel)
@@ -284,21 +359,35 @@ export function groupExpensesByCardStatement<T extends GroupableCardExpense>(
   const ordered: Array<{ kind: "expense"; expense: T } | { kind: "statement_key"; key: string }> = [];
 
   expenses.forEach((expense) => {
-    const identity = statementIdentity(expense);
-    const officialStatement = identity
-      ? statements.get(identity.key) ?? statements.get(identity.statementId)
-      : null;
-    if (!identity || (!officialStatement && !cardExpenseIsActiveStatementLine(expense))) {
+    const identities = statementIdentities(expense);
+    if (identities.length === 0) {
+      if (hasExplicitInstallmentStatementIdentity(expense)) return;
       ordered.push({ kind: "expense", expense });
       return;
     }
-    const current = grouped.get(identity.key);
-    if (current) {
-      current.expenses.push(expense);
-      return;
+    let groupedExpense = false;
+    let matchedStatementPeriod = false;
+    identities.forEach((identity) => {
+      const officialStatement = statements.get(identity.key) ?? statements.get(identity.statementId);
+      if (!statementIdentityMatchesPeriod(identity, officialStatement ?? null, options)) return;
+      matchedStatementPeriod = true;
+      if (!officialStatement && !cardExpenseIsActiveStatementLine(expense)) return;
+      groupedExpense = true;
+      const current = grouped.get(identity.key);
+      if (current) {
+        current.expenses.push(expense);
+        return;
+      }
+      grouped.set(identity.key, { identity, expenses: [expense] });
+      ordered.push({ kind: "statement_key", key: identity.key });
+    });
+    if (!groupedExpense) {
+      const hasStatementPeriodFilter = Boolean(
+        options.statementMonthKey || options.statementDateFrom || options.statementDateTo,
+      );
+      if (hasStatementPeriodFilter && !matchedStatementPeriod) return;
+      ordered.push({ kind: "expense", expense });
     }
-    grouped.set(identity.key, { identity, expenses: [expense] });
-    ordered.push({ kind: "statement_key", key: identity.key });
   });
 
   return ordered.map((entry) => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  cardExpenseStatementOccurrences,
   cardStatementDocumentId,
   groupExpensesByCardStatement,
 } from "../../src/features/financial/lib/expense-card-statement-groups";
@@ -190,4 +191,157 @@ test("usa as alocações oficiais sem somar cancelamentos, provisões substituí
   assert.equal(entries[0].statement.lineCount, 2);
   assert.deepEqual(entries[0].statement.lines.map((line) => line.amount), [50, 100]);
   assert.deepEqual(entries[0].statement.unmatchedExpenses.map((expense) => expense.id), ["raw-vivo", "forecast-vivo"]);
+});
+
+test("projeta uma compra parcelada em uma fatura por parcela", () => {
+  const octoberKey = "inter:card-1127:2026-10";
+  const novemberKey = "inter:card-1127:2026-11";
+  const entries = groupExpensesByCardStatement([{
+    id: "freezer",
+    description: "Freezer parcelado no cartão",
+    supplier: "Mercado Livre",
+    totalValue: 540.82,
+    status: "pending",
+    paymentMethod: "installments",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    plannedPaymentMethodLabel: "Cartão Crédito Inter - 1127",
+    cardStatementKey: octoberKey,
+    cardStatementMonthKey: "2026-10",
+    competenceDate: new Date("2026-09-15T12:00:00-03:00"),
+    installments: [
+      { number: 1, value: 270.41, dueDate: new Date("2026-10-12T12:00:00-03:00"), cardStatementKey: octoberKey, cardStatementMonthKey: "2026-10" },
+      { number: 2, value: 270.41, dueDate: new Date("2026-11-12T12:00:00-03:00"), cardStatementKey: novemberKey, cardStatementMonthKey: "2026-11" },
+    ],
+  }]);
+
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map((entry) => entry.kind === "card_statement"
+    ? [
+        entry.statement.monthKey,
+        entry.statement.totalValue,
+        entry.statement.lines[0]?.installmentNumber,
+        entry.statement.dueDate?.toISOString(),
+      ]
+    : null), [
+    ["2026-10", 270.41, 1, "2026-10-12T15:00:00.000Z"],
+    ["2026-11", 270.41, 2, "2026-11-12T15:00:00.000Z"],
+  ]);
+});
+
+test("filtra a compra parcelada pela competência e vencimento da própria fatura", () => {
+  const expense = {
+    id: "freezer-filtered",
+    totalValue: 540.82,
+    status: "pending",
+    paymentMethod: "installments",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    cardStatementKey: "inter:card-1127:2026-10",
+    cardStatementMonthKey: "2026-10",
+    dueDate: new Date("2026-10-12T12:00:00-03:00"),
+    competenceDate: new Date("2026-09-15T12:00:00-03:00"),
+    installments: [
+      { number: 1, value: 270.41, dueDate: new Date("2026-10-12T12:00:00-03:00"), cardStatementKey: "inter:card-1127:2026-10", cardStatementMonthKey: "2026-10" },
+      { number: 2, value: 270.41, dueDate: new Date("2026-11-12T12:00:00-03:00"), cardStatementKey: "inter:card-1127:2026-11", cardStatementMonthKey: "2026-11" },
+    ],
+  };
+  const entries = groupExpensesByCardStatement([expense], {
+    statementMonthKey: "2026-11",
+    statementDateFrom: new Date("2026-11-01T00:00:00-03:00"),
+    statementDateTo: new Date("2026-11-30T23:59:59-03:00"),
+  });
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, "card_statement");
+  if (entries[0].kind !== "card_statement") return;
+  assert.equal(entries[0].statement.monthKey, "2026-11");
+  assert.equal(entries[0].statement.totalValue, 270.41);
+  assert.equal(entries[0].statement.lines[0]?.installmentNumber, 2);
+
+  const incompatiblePeriod = groupExpensesByCardStatement([expense], {
+    statementMonthKey: "2026-11",
+    statementDateFrom: new Date("2026-10-01T00:00:00-03:00"),
+    statementDateTo: new Date("2026-10-31T23:59:59-03:00"),
+  });
+  assert.deepEqual(incompatiblePeriod, []);
+});
+
+test("usa o vencimento oficial da fatura nos filtros da ocorrência", () => {
+  const expense = {
+    id: "official-due-date",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    cardStatementKey: "inter:card-1127:2026-10",
+    cardStatementMonthKey: "2026-10",
+    dueDate: new Date("2026-10-12T12:00:00-03:00"),
+  };
+  const occurrences = cardExpenseStatementOccurrences(expense, [{
+    id: "inter__card-1127__2026-10",
+    key: "inter:card-1127:2026-10",
+    monthKey: "2026-10",
+    dueDate: new Date("2026-10-15T12:00:00-03:00"),
+  }]);
+
+  assert.equal(occurrences[0]?.dueDate?.toISOString(), "2026-10-15T15:00:00.000Z");
+});
+
+test("não ressuscita pelo valor integral uma parcela removida da revisão", () => {
+  const entries = groupExpensesByCardStatement([{
+    id: "revised-installments",
+    totalValue: 540.82,
+    status: "pending",
+    paymentMethod: "installments",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    cardStatementKey: "inter:card-1127:2026-10",
+    cardStatementMonthKey: "2026-10",
+    installments: [
+      {
+        number: 1,
+        value: 270.41,
+        dueDate: new Date("2026-10-12T12:00:00-03:00"),
+        cardStatementKey: "inter:card-1127:2026-10",
+        cardStatementMonthKey: "2026-10",
+        cardStatementRevisionStatus: "removed",
+      },
+      {
+        number: 2,
+        value: 270.41,
+        dueDate: new Date("2026-11-12T12:00:00-03:00"),
+        cardStatementKey: "inter:card-1127:2026-11",
+        cardStatementMonthKey: "2026-11",
+        cardStatementRevisionStatus: "active",
+      },
+    ],
+  }]);
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, "card_statement");
+  if (entries[0].kind !== "card_statement") return;
+  assert.equal(entries[0].statement.monthKey, "2026-11");
+  assert.equal(entries[0].statement.totalValue, 270.41);
+  assert.equal(entries[0].statement.lines[0]?.installmentNumber, 2);
+
+  const allRemoved = groupExpensesByCardStatement([{
+    id: "fully-removed-installments",
+    totalValue: 540.82,
+    status: "pending",
+    paymentMethod: "installments",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    installments: [{
+      number: 1,
+      value: 540.82,
+      cardStatementKey: "inter:card-1127:2026-10",
+      cardStatementMonthKey: "2026-10",
+      cardStatementRevisionStatus: "removed",
+    }],
+  }]);
+  assert.deepEqual(allRemoved, []);
 });

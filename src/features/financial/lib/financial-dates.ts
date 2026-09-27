@@ -1,5 +1,11 @@
 export const FINANCIAL_TIME_ZONE = "America/Belem";
 
+export function isValidFinancialDateIso(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function asDate(value: unknown) {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (value && typeof value === "object" && typeof (value as { toDate?: unknown }).toDate === "function") {
@@ -14,7 +20,7 @@ function asDate(value: unknown) {
 }
 
 export function financialDateFromIso(isoDate: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) throw new Error("Data financeira inválida.");
+  if (!isValidFinancialDateIso(isoDate)) throw new Error("Data financeira inválida.");
   return new Date(`${isoDate}T12:00:00-03:00`);
 }
 
