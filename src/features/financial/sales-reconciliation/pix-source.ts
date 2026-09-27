@@ -21,11 +21,14 @@ const headSchema = z.object({ workspaceId: z.string(), document: z.string().rege
   referenceDate: reviewDate, status: z.literal("processed"), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   summary: z.object({ transactionCount: z.number().int().min(0).max(MAX_SALES_REVIEW_FACTS) }) });
 export type PixSourceResult = { status: "available" | "not_configured" | "unavailable" | "pending";
-  facts: SalesMatchFact[]; excludedCount: number; fileId: string | null };
+  facts: SalesMatchFact[]; excludedCount: number; fileId: string | null;
+  sourceHash?: string;
+  feeExcludedCount?: number;
+  feeEvidence?: Array<{ e2eId: string; eventId: string; soldOn: string; settledOn: string; feeCents: number; grossCents: number }> };
 
 /** Validate a single consistent, complete snapshot before filtering by StoneCode. */
 export function reviewPixSnapshot(input: { head: unknown; rows: unknown[]; document: string;
-  fileId: string; scope: DailySalesScope }): PixSourceResult {
+  fileId: string; scope: DailySalesScope; now?: Date }): PixSourceResult {
   const pending: PixSourceResult = { status: "pending", facts: [], excludedCount: 0, fileId: input.fileId };
   const head = headSchema.safeParse(input.head);
   const rows = z.array(rowSchema).max(MAX_SALES_REVIEW_FACTS).safeParse(input.rows);
@@ -41,6 +44,8 @@ export function reviewPixSnapshot(input: { head: unknown; rows: unknown[]; docum
     if (e.e2eId) e2es.set(e.e2eId, (e2es.get(e.e2eId) ?? 0) + 1);
   }
   const facts: SalesMatchFact[] = []; let excludedCount = 0;
+  const feeEvidence: NonNullable<PixSourceResult["feeEvidence"]> = [];
+  let feeExcludedCount = 0;
   for (const row of rows.data) {
     const identity = row.merchantIdentity; const e = row.reviewEvidence; const a = e.amounts;
     if (identity.stoneCode && identity.stoneCode !== input.scope.stoneCode) continue;
@@ -56,6 +61,12 @@ export function reviewPixSnapshot(input: { head: unknown; rows: unknown[]; docum
       kioskId: input.scope.kioskId, businessDate: input.scope.referenceDate, soldAt: e.createdAtUtc,
       channel: "pix", grossAmountCents: a.gross, status: "approved",
       identifiers: { providerTransactionId: e.e2eId, terminalId: identity.terminalSerialNumber } });
+    // Keep the sales review unchanged; fee settlement needs the financial event,
+    // never the file's capture day. Invalid/future events remain pending for fees.
+    const eventTime = Date.parse(e.providerDateTimeUtc);
+    if (eventTime < Date.parse(e.createdAtUtc) || eventTime > (input.now ?? new Date()).getTime()) { feeExcludedCount += 1; continue; }
+    feeEvidence.push({ e2eId: e.e2eId, eventId: e.eventId, soldOn: input.scope.referenceDate,
+      settledOn: closureDateFromIso(e.providerDateTimeUtc), feeCents: a.fee, grossCents: a.gross });
   }
-  return { status: "available", facts, excludedCount, fileId: input.fileId };
+  return { status: "available", facts, excludedCount, fileId: input.fileId, sourceHash: head.data.sourceHash, feeEvidence, feeExcludedCount };
 }

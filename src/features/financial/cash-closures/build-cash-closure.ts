@@ -5,6 +5,7 @@ import {
 } from "./channel-normalization";
 import { closureDateFromIso, compareClosureTimestamps } from "./date";
 import { sumCents, toCents } from "./money";
+import { sumPdvSales } from "./dre-contract";
 import { type ParsedCoupon, parsePdvCoupons } from "./pdv-coupon-parser";
 import type {
   BuiltCashClosure,
@@ -21,6 +22,7 @@ type OperatorChannelAccumulator = {
   channel: CashClosureChannel;
   channelLabel: string;
   expectedAmountCents: number;
+  pdvSalesCents: number;
   grossCashCents: number;
   changeCents: number;
   supplyCents: number;
@@ -92,11 +94,13 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
   };
 
   let expectedTotalCents = 0;
+  let revenueComplete = parseWarnings.length === 0;
 
   for (const coupon of coupons) {
     const couponDate = safeClosureDate(coupon, integrityWarnings);
     // Cupons fora do dia-alvo só existem porque a janela de busca pode ser
     // mais larga que um dia (para cobrir fronteira de fuso); descartados aqui.
+    if (couponDate === null) revenueComplete = false;
     if (couponDate === null || couponDate !== ctx.date) continue;
 
     source.couponCount++;
@@ -110,6 +114,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
     }
 
     source.validCouponCount++;
+    if (coupon.paymentRows.length === 0) revenueComplete = false;
 
     const operatorId = coupon.operatorId ?? "unknown";
     const operatorName = ctx.operatorNameById?.[operatorId] ?? (coupon.operatorId ? operatorId : "Operador não identificado");
@@ -152,6 +157,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
           channel: normalized.channel,
           channelLabel: normalized.label,
           expectedAmountCents: 0,
+          pdvSalesCents: 0,
           grossCashCents: 0,
           changeCents: 0,
           supplyCents: 0,
@@ -163,6 +169,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
         accumulators.set(key, acc);
       }
       acc.expectedAmountCents += signedCents;
+      acc.pdvSalesCents += signedCents;
       acc.paymentRowCount++;
       acc.rawPaymentNames.add(row.rawName);
       if (normalized.channel === "cash") {
@@ -179,6 +186,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
 
     const reportedCents = toCents(coupon.totalAmount);
     if (reportedCents !== couponNetCents) {
+      revenueComplete = false;
       pushCapped(
         integrityWarnings,
         `Cupom ${coupon.couponId}: total líquido das formas de pagamento (${couponNetCents}) ` +
@@ -222,6 +230,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
         channel: "cash",
         channelLabel: "Dinheiro",
         expectedAmountCents: 0,
+        pdvSalesCents: 0,
         grossCashCents: 0,
         changeCents: 0,
         supplyCents: 0,
@@ -268,6 +277,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
         channel: acc.channel,
         channelLabel: acc.channelLabel,
         expectedAmountCents: acc.expectedAmountCents,
+        pdvSales: { version: 1, amountCents: revenueComplete ? acc.pdvSalesCents : null },
         calculatedExpectedAmountCents: acc.expectedAmountCents,
         reportedAmountCents: automaticallyCounted ? acc.expectedAmountCents : null,
         reportedDifferenceAmountCents: automaticallyCounted ? 0 : null,
@@ -306,6 +316,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
     day,
     status: "draft",
     expectedTotalCents,
+    pdvSales: revenueComplete ? sumPdvSales(lines.map(line => line.pdvSales)) : { version: 1, amountCents: null },
     expectedByChannelCents,
     operatorCount,
     lines,

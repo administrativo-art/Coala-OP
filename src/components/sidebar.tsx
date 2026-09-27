@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { navigationActiveHref } from "@/lib/navigation-active-href";
+import { financialSidebarPath } from "@/features/financial/lib/reconciliation-navigation";
 import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
 import { useAuth } from "@/hooks/use-auth";
@@ -257,44 +258,25 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
           {
-            label: "Contas a pagar",
-            href: "__group:accounts-payable",
+            label: "Despesas",
+            href: "/dashboard/financial/expenses",
             icon: ReceiptText,
             show: permissions.financial?.expenses?.view
               || permissions.financial?.audits?.view
-              || permissions.financial?.cardStatements?.view
               || permissions.financial?.inbox?.view
               || permissions.financial?.paymentRequests?.view,
-            children: [
-              { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view || permissions.financial?.audits?.view || permissions.financial?.inbox?.view || permissions.financial?.paymentRequests?.view },
-              { label: "Faturas de cartão", href: "/dashboard/financial/expenses/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
-            ],
           },
           {
-            label: "Controle de caixa",
-            href: "__group:cash-control",
-            icon: Banknote,
-            show: permissions.financial?.view || permissions.financial?.cashDeposits?.view,
-            children: [
-              { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.view },
-              { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
-            ],
-          },
-          {
-            label: "Conciliação",
+            label: "Conciliação e fechamento",
             href: "__group:reconciliation",
             icon: ClipboardCheck,
-            show: permissions.financial?.audits?.view || permissions.financial?.cardStatements?.view || isDefaultAdmin,
+            show: permissions.financial?.view || permissions.financial?.cashDeposits?.view || permissions.financial?.audits?.view || permissions.financial?.cardStatements?.view || isDefaultAdmin,
             children: [
-              { label: "Extrato bancário", href: "/dashboard/financial/expenses?view=audits", icon: Landmark, show: permissions.financial?.audits?.view },
-              { label: "Faturas de cartão", href: "/dashboard/financial/reconciliation/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
-              {
-                label: "Vendas e recebíveis", href: "__group:sales-reconciliation", icon: Wallet, show: isDefaultAdmin,
-                children: [
-                  { label: "PDV × Stone", href: "/dashboard/financial/sales-reconciliation", icon: ClipboardCheck, show: isDefaultAdmin },
-                  { label: "Antecipações Stone", href: "/dashboard/financial/stone-anticipations", icon: Wallet, show: isDefaultAdmin },
-                ],
-              },
+              { label: "Fechamento de caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.view },
+              { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: !permissions.financial?.view && permissions.financial?.cashDeposits?.view },
+              { label: "Vendas e recebimentos", href: "/dashboard/financial/sales-reconciliation", icon: ClipboardCheck, show: isDefaultAdmin },
+              { label: "Extratos bancários", href: "/dashboard/financial/reconciliation/bank-statements", icon: Landmark, show: permissions.financial?.audits?.view },
+              { label: "Faturas de cartão de crédito", href: "/dashboard/financial/reconciliation/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
             ],
           },
           {
@@ -360,7 +342,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   }
 
   const activeHref = useMemo(() => {
-    return navigationActiveHref(flatItems.map(item => item.href), pathname, searchParams.toString());
+    const hrefs = flatItems.map(item => item.href);
+    return navigationActiveHref(hrefs, financialSidebarPath(pathname, hrefs), searchParams.toString());
   }, [flatItems, pathname, searchParams]);
 
   function isItemActive(item: NavItem) {

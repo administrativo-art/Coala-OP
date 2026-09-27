@@ -1,4 +1,5 @@
 import type { CashClosureChannel } from "./channel-normalization";
+import type { CashClosureDreSummary, CashDifferences, PdvSalesSource } from "./dre-contract";
 
 export type { CashClosureChannel };
 
@@ -48,6 +49,7 @@ export type CashClosureCashMovementKind = "supply" | "withdrawal";
 
 export type CashClosureCashMovement = {
   id: string;
+  identitySource?: "provider" | "synthetic";
   kind: CashClosureCashMovementKind;
   amountCents: number;
   occurredAt: string;
@@ -72,6 +74,7 @@ export type CashClosureLineMetadata = {
 };
 
 export type BuiltCashClosureLine = {
+  pdvSales?: PdvSalesSource;
   operatorId: string;
   operatorName: string;
   channel: CashClosureChannel;
@@ -95,6 +98,7 @@ export type BuiltCashClosureLine = {
  * e independentes do Caixa e do Financeiro.
  */
 export type BuiltCashClosure = {
+  pdvSales?: PdvSalesSource;
   workspaceId: string;
   kioskId: string;
   kioskName: string;
@@ -163,6 +167,8 @@ export type CashDepositPeriodPolicy = {
 };
 
 export type CashClosure = {
+  pdvSales?: PdvSalesSource;
+  finalizedCashDifferences?: CashDifferences;
   id: string;
   workspaceId: string;
   kioskId: string;
@@ -221,6 +227,8 @@ export type CashClosure = {
 };
 
 export type CashClosureOperator = {
+  pdvSales?: PdvSalesSource;
+  cashDifferences?: CashDifferences;
   id: string;
   closureId: string;
   workspaceId: string;
@@ -243,6 +251,7 @@ export type CashClosureOperator = {
   cashDeposit: CashClosureDepositState;
   countingSessionId?: string | null;
   countingSessionFinalizedAt?: string | null;
+  approvedSourceHash?: string | null;
   approvedWithDivergence: boolean;
   approvedAt: string | null;
   approvedBy: string | null;
@@ -254,6 +263,8 @@ export type CashClosureOperator = {
 };
 
 export type CashClosureLine = {
+  pdvSales?: PdvSalesSource;
+  pdvSourceMissing?: boolean;
   id: string;
   closureId: string;
   workspaceId: string;
@@ -288,6 +299,9 @@ export type CashClosureLine = {
 };
 
 export type CashClosureAuditAction =
+  | "withdrawal_expense_created"
+  | "withdrawal_expense_linked"
+  | "withdrawal_unlinked"
   | "created_from_pdv"
   | "pdv_resynced"
   | "reported_amount_updated"
@@ -348,7 +362,7 @@ export type CashClosureWithLines = {
   operators: CashClosureOperator[];
 };
 
-export type CashClosureMonthlySummary = {
+export type CashClosureMonthlySummary = Partial<Omit<CashClosureDreSummary, "dreRevenueTotalCents">> & {
   id: string;
   workspaceId: string;
   kioskId: string;
@@ -365,8 +379,8 @@ export type CashClosureMonthlySummary = {
   expectedTotalCents: number;
   countedTotalCents: number;
   differenceTotalCents: number;
-  /** Receita da DRE: PDV nos operadores em aberto e valor conferido nos finalizados. */
-  dreRevenueTotalCents: number;
+  /** Integral PDV. Only trustworthy with the current version and complete coverage. */
+  dreRevenueTotalCents: number | null;
   countedCashCents: number;
   allocatedCashCents: number;
   issuedCashCents: number;

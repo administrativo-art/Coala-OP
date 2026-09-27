@@ -16,6 +16,18 @@ Na [`PendingAuditExpensesPage`](../../../src/features/financial/pages/pending-au
 
 ## Dados e acesso
 
+### Navegação financeira — etapa local de 2026-09-26
+
+Despesas permanece entrada direta. O grupo **Conciliação e fechamento** reúne Fechamento de caixa, Vendas e recebimentos, Extratos bancários e Faturas de cartão de crédito. **Fechamento mensal não está implementado nem aparece como placeholder**. Depósitos seguem na navegação interna do fechamento, com entrada alternativa preservada para perfil somente de depósitos; antecipações continuam acessíveis em Vendas e recebimentos. As permissões anteriores de cada fluxo são mantidas, inclusive restrição administrativa de PDV × Stone e antecipações; o layout financeiro continua exigindo `financial.view`.
+
+O [destino canônico de extratos](../../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx) usa [BankStatementsPage](../../../src/features/financial/pages/bank-statements-page.tsx), `PageContainer` e `PageHeader`, e só monta o `FinancialImportPage` compartilhado com `audits.view`. Não existe novo motor, coleção, listener ou API. Importação/edição/efetivação continuam condicionadas às permissões específicas do importador e do servidor/regras existentes. Consultas completas legadas permanecem dívida prévia, não uma nova convenção.
+
+Despesas preserva Cobranças recebidas, Autorizações bancárias, Novo lançamento, Importar extrato e acesso a Faturas. O atalho Extratos e o upload enviam ao destino central; após upload usam o ID da sessão criada e preservam filtros locais da lista para retorno. A página antiga `expenses?view=audits` e a rota `expenses/import` redirecionam mantendo sessão/ledger. Retorno é restrito ao caminho local de Despesas, sem protocolos externos ou ciclo para a auditoria. O workspace não é montado em duplicidade na aba de despesas.
+
+O importador exibe controles de upload também na forma embutida canônica, respeitando `audits.import`; diálogos `uploadOnly` continuam sem barra completa. O botão legado “Sincronizar bancos”, sem handler, foi retirado em vez de apresentar uma ação que não executa nada. Nenhum dado ou regra de conciliação foi migrado por essa reorganização.
+
+Regressões de roteamento/contexto/permissão estrutural: [testes de navegação](../../../tests/unit/financial-reconciliation-navigation.test.ts). O [teste HTTP local](../../../tests/e2e-api/financial-navigation.test.mts) verifica redirecionamentos reais e resposta dos destinos, sem navegador, credenciais, leitura ou escrita financeira. Após `npm run build`, executar `node --import tsx --test tests/e2e-api/financial-navigation.test.mts` num worktree sem arquivos `.env*`; ele abre e encerra seu próprio servidor loopback com projeto fictício `demo-coala-financial-navigation`. Não equivale a homologação visual nem a revisão integral dos escritores financeiros. Teste em observação, sem alteração do workflow de publicação.
+
 | Dado | Operação e controle observado |
 | --- | --- |
 | `expenses` | CRUD no banco financeiro pelo SDK cliente; [regras financeiras](../../../firestore.financial.rules) distinguem `view/create/edit/delete` e validam plano de contas e individualização conforme operação. Outras permissões também podem ler, como DRE e auditoria. |

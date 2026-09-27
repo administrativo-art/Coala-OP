@@ -51,6 +51,8 @@ import {
 } from "@/features/financial/lib/expense-person-allocations";
 import { expenseProvisionIdentity } from "@/features/financial/lib/expense-provisions";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import type { SourceSettlement } from "../../lib/source-settlement";
+import { SourceSettlementNotice } from "./source-settlement-notice";
 import {
   ADMIN_REFERENCE_RESULT_CENTER,
   expenseReferenceCenterFields,
@@ -474,6 +476,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const [seriesUpdateScope, setSeriesUpdateScope] = useState<ExpenseSeriesUpdateScope>("single");
   const [pendingSeriesValues, setPendingSeriesValues] = useState<ExpenseFormValues | null>(null);
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
+  const [sourceSettlement, setSourceSettlement] = useState<SourceSettlement | null>(null);
   const [inboxBillingIdentity, setInboxBillingIdentity] = useState<FinancialInboxBillingIdentity | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
@@ -1265,6 +1268,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           if (!data || !active) return;
         }
 
+        setSourceSettlement(data.sourceSettlement ?? null);
         const nextOpenCompetence = startOfMonth(addMonths(new Date(), 1));
         const storedPolicy = data.rateioPolicy as ExpenseRateioPolicy | undefined;
         const loadedApportionments = (storedPolicy?.participants || data.apportionments || [
@@ -2130,6 +2134,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   }
 
   async function handleValidatedSubmit(values: ExpenseFormValues) {
+    if (editId && sourceSettlement) return;
     if (editId && loadedRecurrenceGroupId && hasSeriesSharedChanges()) {
       setPendingSeriesValues(values);
       setSeriesUpdateScope("single");
@@ -2177,6 +2182,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   }
 
   const isDraftFlow = !editId || loadedStatus === "draft";
+  if (editId && sourceSettlement) return <SourceSettlementNotice source={sourceSettlement} cancelled={loadedStatus === "cancelled"} />;
   const drawerTitle = editId ? "Editar despesa" : "Lançar nova despesa";
   const drawerSubtitle = "Provisione um compromisso financeiro do plano de contas.";
 

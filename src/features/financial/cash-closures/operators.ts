@@ -5,6 +5,7 @@ import type {
   CashClosureOperator,
   CashClosureStatus,
 } from "./types";
+import { isCents, linePdvSalesSource, pdvSalesCents, sumCashDifferences, sumPdvSales } from "./dre-contract";
 
 function documentIdPart(value: string) {
   return value.trim().replaceAll("/", "%2F");
@@ -30,6 +31,13 @@ export function emptyCashClosureDepositState(): CashClosureDepositState {
 }
 
 function aggregateOperatorLines(lines: CashClosureLine[]) {
+  const cashDifferences = sumCashDifferences(lines.filter(line => line.channel === "cash").map(line => {
+    const difference = isCents(line.countedCents) && isCents(line.expectedCents)
+      ? line.countedCents - line.expectedCents : null;
+    return { version: 1 as const,
+      shortageCents: difference === null ? null : Math.max(0, -difference),
+      surplusCents: difference === null ? null : Math.max(0, difference) };
+  }));
   let expectedTotalCents = 0;
   let reportedTotalCents = 0;
   let countedTotalCents = 0;
@@ -61,6 +69,8 @@ function aggregateOperatorLines(lines: CashClosureLine[]) {
   }
 
   return {
+    pdvSales: sumPdvSales(lines.map(linePdvSalesSource)),
+    cashDifferences,
     expectedTotalCents,
     reportedTotalCents,
     countedTotalCents,
@@ -111,6 +121,7 @@ export function buildCashClosureOperators(input: {
       cashDeposit,
       countingSessionId: existing?.countingSessionId ?? null,
       countingSessionFinalizedAt: existing?.countingSessionFinalizedAt ?? null,
+      approvedSourceHash: existing?.approvedSourceHash ?? null,
       approvedWithDivergence: approved
         ? aggregates.divergentLineCount > 0 || aggregates.reportedDivergentLineCount > 0
         : existing?.approvedWithDivergence ?? false,
@@ -198,6 +209,10 @@ export function withCashClosureOperatorAggregate(
   if (operators.length === 0) {
     return {
       ...closure,
+      finalizedCashDifferences: closure.finalizedCashDifferences
+        ?? (closure.operatorCount === 0 && pdvSalesCents(closure.pdvSales) !== null
+          ? sumCashDifferences([])
+          : { version: 1, shortageCents: null, surplusCents: null }),
       finalizedOperatorCount: closure.finalizedOperatorCount ?? (closure.status === "approved" ? closure.operatorCount : 0),
       finalizedCountedTotalCents: closure.finalizedCountedTotalCents ?? (closure.status === "approved" ? closure.countedTotalCents : 0),
       finalizedDifferenceTotalCents: closure.finalizedDifferenceTotalCents ?? (closure.status === "approved" ? closure.differenceTotalCents : 0),
@@ -210,6 +225,7 @@ export function withCashClosureOperatorAggregate(
   const status = closureStatusFromOperators(closure.status, operators);
   return {
     ...closure,
+    finalizedCashDifferences: sumCashDifferences(approved.map(operator => operator.cashDifferences)),
     status,
     operatorCount: operators.length,
     finalizedOperatorCount: approved.length,

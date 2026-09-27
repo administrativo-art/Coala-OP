@@ -1,4 +1,5 @@
 kind,source,symbol,guide,note
+api,src/app/api/financial/acquirer-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Previa e apropriacao de taxas explicitas; admin padrao e escopo revalidados; sem novo debito bancario.
 api,src/app/api/admin/fix-receipts/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-consumption/route.ts,,docs/engineering/flows/stock-analysis.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-goals/route.ts,,docs/engineering/flows/goals.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -99,6 +100,7 @@ api,src/app/api/financial/cash-closures/[closureId]/finalize/route.ts,,docs/engi
 api,src/app/api/financial/cash-closures/[closureId]/reopen/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/[closureId]/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts,,docs/engineering/flows/cash-closures.md,Classificacao transacional de sangrias com autenticacao e escopo de unidade/workspace; GET sem escrita.
 api,src/app/api/financial/cash-closures/months/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/overview/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.

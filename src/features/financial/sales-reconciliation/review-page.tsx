@@ -8,6 +8,7 @@ import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AcquirerFeesPanel } from "../acquirer-fees/fees-panel";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import { formatStoneMoney } from "../agent/presentation";
 import type { DailySalesResult } from "./query";
@@ -81,10 +82,10 @@ export function SalesReviewPage() {
   const rows = result?.cases.filter(row => channel === "all" || row.channel === channel) ?? [];
   const selectClass = "w-full rounded-md border bg-background p-2";
   return <PageContainer variant="wide" className="space-y-6 py-6">
-    <header><h1 className="text-2xl font-semibold">PDV × Stone · comparação de vendas</h1>
-      <p className="text-muted-foreground">Sugestões por unidade, dia e meio de pagamento. Toda correspondência depende de conferência.</p></header>
+    <header><h1 className="text-2xl font-semibold">Vendas e recebimentos</h1>
+      <p className="text-muted-foreground">PDV × Stone: comparação por unidade, dia e meio de pagamento. Toda correspondência depende de conferência.</p></header>
     <div role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-      Somente leitura. O recorte contém um StoneCode e pode não cobrir todas as vendas da unidade. Pix depende de arquivo processado e validado. Não há confirmação bancária, lançamento ou fechamento automático.
+      A comparação de vendas é somente leitura. O recorte contém um StoneCode e pode não cobrir todas as vendas da unidade. Pix depende de arquivo processado e validado. O registro de taxas fica no painel separado e exige confirmação explícita; não há fechamento automático.
     </div>
     <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={busy} onClick={() => load()}>{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</Button>
       {cursor && <Button variant="outline" disabled={busy} onClick={() => load(cursor)}>Mais vínculos</Button>}
@@ -141,5 +142,6 @@ export function SalesReviewPage() {
       </details>
       <ul className="list-disc pl-5 text-sm text-muted-foreground">{result.limitations.map(text => <li key={text}>{text}</li>)}</ul>
     </section>}
+    {mapping && code && <AcquirerFeesPanel key={`${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} />}
   </PageContainer>;
 }

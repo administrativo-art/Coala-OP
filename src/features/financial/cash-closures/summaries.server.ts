@@ -3,7 +3,8 @@ import "server-only";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { CASH_CLOSURE_TIMEZONE } from "./date";
 import { withPdvAutomaticClosureTotals } from "./persistence";
-import { cashClosureDreRevenueCents, cashClosureSummaryCounts } from "./summary-counts";
+import { cashClosureSummaryCounts } from "./summary-counts";
+import { summarizeCashClosureDre } from "./dre-contract";
 import type { CashClosure, CashClosureMonthlySummary, CashClosureUnitSummary } from "./types";
 
 const MONTHLY = "cashClosureMonthlySummaries";
@@ -68,7 +69,7 @@ function summaryFromClosures(input: {
     expectedTotalCents: closures.reduce((total, closure) => total + closure.expectedTotalCents, 0),
     countedTotalCents: closures.reduce((total, closure) => total + closure.finalizedCountedTotalCents, 0),
     differenceTotalCents: closures.reduce((total, closure) => total + closure.finalizedDifferenceTotalCents, 0),
-    dreRevenueTotalCents: cashClosureDreRevenueCents(closures),
+    ...summarizeCashClosureDre(closures),
     countedCashCents: closures.reduce((total, closure) => total + closure.finalizedCountedCashCents, 0),
     allocatedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "allocatedCents"), 0),
     issuedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "issuedCents"), 0),
@@ -81,16 +82,15 @@ function summaryFromClosures(input: {
   };
 }
 
-async function closuresForMonth(workspaceId: string, kioskId: string, year: number, month: number) {
+async function closuresForMonth(transaction: FirebaseFirestore.Transaction, workspaceId: string, kioskId: string, year: number, month: number) {
   const maximumClosureCount = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const snapshot = await financialDbAdmin
+  const snapshot = await transaction.get(financialDbAdmin
     .collection("cashClosures")
     .where("workspaceId", "==", workspaceId)
     .where("kioskId", "==", kioskId)
     .where("year", "==", year)
     .where("month", "==", month)
-    .limit(maximumClosureCount + 1)
-    .get();
+    .limit(maximumClosureCount + 1));
   if (snapshot.size > maximumClosureCount) {
     throw new Error("Existe mais de um fechamento diário para a unidade nesta competência.");
   }
@@ -98,8 +98,10 @@ async function closuresForMonth(workspaceId: string, kioskId: string, year: numb
 }
 
 export async function refreshCashClosureSummaries(closure: CashClosure) {
+  return financialDbAdmin.runTransaction(async transaction => {
   const now = new Date().toISOString();
   const monthlyClosures = await closuresForMonth(
+    transaction,
     closure.workspaceId,
     closure.kioskId,
     closure.year,
@@ -117,8 +119,7 @@ export async function refreshCashClosureSummaries(closure: CashClosure) {
     month: closure.month,
     now,
   });
-  const batch = financialDbAdmin.batch();
-  batch.set(financialDbAdmin.collection(MONTHLY).doc(monthlyId), monthly);
+  transaction.set(financialDbAdmin.collection(MONTHLY).doc(monthlyId), monthly);
 
   const current = currentPeriod();
   if (closure.year === current.year && closure.month === current.month) {
@@ -138,10 +139,10 @@ export async function refreshCashClosureSummaries(closure: CashClosure) {
       currentYear: current.year,
       currentMonth: current.month,
     };
-    batch.set(financialDbAdmin.collection(UNITS).doc(unitId), unit);
+    transaction.set(financialDbAdmin.collection(UNITS).doc(unitId), unit);
   }
-  await batch.commit();
   return monthly;
+  });
 }
 
 export async function listCashClosureMonthlySummaries(workspaceId: string, kioskId: string) {

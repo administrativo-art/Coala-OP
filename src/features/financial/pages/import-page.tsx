@@ -3413,8 +3413,8 @@ export function FinancialImportPage({
     : null;
   const selectedSessionMonthKey = selectedSession ? getSessionMonthKey(selectedSession) : null;
   const cardWorkspaceReturnTo = selectedSession && selectedLedgerCard
-    ? `${FINANCIAL_ROUTES.importExpenses}?session=${encodeURIComponent(selectedSession.id)}&ledger=${encodeURIComponent(`credit_card:${selectedLedgerCard.id}`)}`
-    : FINANCIAL_ROUTES.importExpenses;
+    ? `${FINANCIAL_ROUTES.bankStatements}?session=${encodeURIComponent(selectedSession.id)}&ledger=${encodeURIComponent(`credit_card:${selectedLedgerCard.id}`)}`
+    : FINANCIAL_ROUTES.bankStatements;
 
   useEffect(() => {
     if (!sessionLedgerView.startsWith("credit_card:")) return;
@@ -4147,15 +4147,15 @@ export function FinancialImportPage({
 
   return (
     <div className={cn("mx-auto w-full max-w-[1460px] space-y-4", embedded && "max-w-none")}>
-      {!embedded ? (
+      {!embedded || (showImportControls && !uploadOnly) ? (
         <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 px-5 py-4 shadow-sm backdrop-blur">
-          <div>
+          {!embedded ? <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Financeiro / Importações</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight">Importar extrato bancário</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API.
             </p>
-          </div>
+          </div> : null}
           <div className="flex flex-wrap items-end gap-2">
             {canImportAudits ? (
               <>
@@ -4186,10 +4186,6 @@ export function FinancialImportPage({
                 </Select>
               </>
             ) : null}
-            <Button variant="outline" size="sm" className="h-9 rounded-xl" disabled={isProcessing}>
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Sincronizar bancos
-            </Button>
             {canImportAudits ? (
               <Button
                 size="sm"
@@ -7304,7 +7300,7 @@ export function FinancialImportPage({
           <CardContent className="flex min-h-[180px] items-center justify-center p-6 text-center">
             <div className="space-y-2">
               <p className="text-base font-semibold">Nenhuma sessão aberta para auditoria</p>
-              <p className="text-sm text-muted-foreground">Use o botão “Importar extrato” em Despesas para carregar um novo arquivo.</p>
+              <p className="text-sm text-muted-foreground">Importe um extrato por esta tela ou pelo atalho em Despesas. Se o botão não estiver disponível, solicite a permissão de importação.</p>
             </div>
           </CardContent>
         </Card>

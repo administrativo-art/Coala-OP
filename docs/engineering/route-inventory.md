@@ -81,7 +81,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/expiry` | [page.tsx](../../src/app/dashboard/expiry/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx) |
 
-## financial (29)
+## financial (30)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
@@ -100,16 +100,17 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/financial/dre` | [page.tsx](../../src/app/dashboard/financial/dre/page.tsx) | [dre-page.tsx](../../src/features/financial/pages/dre-page.tsx) |
 | `dashboard/financial/expenses/@modal/(.)new` | [page.tsx](../../src/app/dashboard/financial/expenses/@modal/%28.%29new/page.tsx) | [new-expense-page.tsx](../../src/features/financial/pages/new-expense-page.tsx) |
 | `dashboard/financial/expenses/authorizations` | [page.tsx](../../src/app/dashboard/financial/expenses/authorizations/page.tsx) | [payment-requests-page.tsx](../../src/features/financial/payment-requests/payment-requests-page.tsx) |
-| `dashboard/financial/expenses/card-statements` | [page.tsx](../../src/app/dashboard/financial/expenses/card-statements/page.tsx) | [card-statements-page.tsx](../../src/features/financial/pages/card-statements-page.tsx) |
-| `dashboard/financial/expenses/import` | [page.tsx](../../src/app/dashboard/financial/expenses/import/page.tsx) | [import-page.tsx](../../src/features/financial/pages/import-page.tsx) |
+| `dashboard/financial/expenses/card-statements` | [page.tsx](../../src/app/dashboard/financial/expenses/card-statements/page.tsx) | [constants.ts](../../src/features/financial/lib/constants.ts), [reconciliation-navigation.ts](../../src/features/financial/lib/reconciliation-navigation.ts) |
+| `dashboard/financial/expenses/import` | [page.tsx](../../src/app/dashboard/financial/expenses/import/page.tsx) | [reconciliation-navigation.ts](../../src/features/financial/lib/reconciliation-navigation.ts) |
 | `dashboard/financial/expenses/inbox` | [page.tsx](../../src/app/dashboard/financial/expenses/inbox/page.tsx) | [financial-inbox-page.tsx](../../src/features/financial/inbox/financial-inbox-page.tsx) |
 | `dashboard/financial/expenses/new` | [page.tsx](../../src/app/dashboard/financial/expenses/new/page.tsx) | [new-expense-page.tsx](../../src/features/financial/pages/new-expense-page.tsx) |
-| `dashboard/financial/expenses` | [page.tsx](../../src/app/dashboard/financial/expenses/page.tsx) | [expenses-page.tsx](../../src/features/financial/pages/expenses-page.tsx) |
+| `dashboard/financial/expenses` | [page.tsx](../../src/app/dashboard/financial/expenses/page.tsx) | [expenses-page.tsx](../../src/features/financial/pages/expenses-page.tsx), [reconciliation-navigation.ts](../../src/features/financial/lib/reconciliation-navigation.ts) |
 | `dashboard/financial/expenses/pending-audit` | [page.tsx](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx) | [pending-audit-expenses-page.tsx](../../src/features/financial/pages/pending-audit-expenses-page.tsx) |
 | `dashboard/financial/financial-flow` | [page.tsx](../../src/app/dashboard/financial/financial-flow/page.tsx) | Redireciona para `/dashboard/financial/cash-flow` |
 | `dashboard/financial/inbox` | [page.tsx](../../src/app/dashboard/financial/inbox/page.tsx) | Redireciona para `/dashboard/financial/expenses/inbox` |
 | `dashboard/financial` | [page.tsx](../../src/app/dashboard/financial/page.tsx) | [financial-dashboard-page.tsx](../../src/features/financial/pages/financial-dashboard-page.tsx) |
 | `dashboard/financial/payment-requests` | [page.tsx](../../src/app/dashboard/financial/payment-requests/page.tsx) | Redireciona para `/dashboard/financial/expenses/authorizations` |
+| `dashboard/financial/reconciliation/bank-statements` | [page.tsx](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx) | [bank-statements-page.tsx](../../src/features/financial/pages/bank-statements-page.tsx) |
 | `dashboard/financial/reconciliation/card-statements` | [page.tsx](../../src/app/dashboard/financial/reconciliation/card-statements/page.tsx) | [card-statements-page.tsx](../../src/features/financial/pages/card-statements-page.tsx) |
 | `dashboard/financial/sales-reconciliation` | [page.tsx](../../src/app/dashboard/financial/sales-reconciliation/page.tsx) | [review-page.tsx](../../src/features/financial/sales-reconciliation/review-page.tsx) |
 | `dashboard/financial/settings` | [page.tsx](../../src/app/dashboard/financial/settings/page.tsx) | Redireciona para `/dashboard/settings` |
@@ -328,4 +329,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **156 páginas** no checkout usado para a geração.
+Total: **157 páginas** no checkout usado para a geração.

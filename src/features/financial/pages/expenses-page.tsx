@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SourceSettlementNotice } from "@/features/financial/components/expenses/source-settlement-notice";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   deleteDoc,
@@ -46,6 +47,7 @@ import { UberRecognitionStatus } from "@/features/financial/components/expenses/
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import { bankStatementsHref } from "@/features/financial/lib/reconciliation-navigation";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import {
@@ -888,13 +890,20 @@ export function ExpensesPage() {
     }
   }
 
+  // Filters may have changed locally without changing the URL yet.
+  const expenseContextQuery = new URLSearchParams({
+    search, status: statusFilter, origin: originFilter, date_from: dateFrom, date_to: dateTo,
+    competence: competenceMonth, supplier: supplierFilter, account_plan: accountPlanFilter,
+    unit: unitFilter, payment_type: paymentTypeFilter,
+  }).toString();
+
   function setExpensesView(view: "expenses" | "audits") {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(expenseContextQuery);
     if (view === "audits") {
-      params.set("view", "audits");
-    } else {
-      params.delete("view");
+      router.push(bankStatementsHref(params.toString(), { fromExpenses: true }));
+      return;
     }
+    params.delete("view");
     const nextQuery = params.toString();
     router.replace(`${FINANCIAL_ROUTES.expenses}${nextQuery ? `?${nextQuery}` : ""}`);
   }
@@ -926,6 +935,13 @@ export function ExpensesPage() {
               <FileUp className="mr-2 h-4 w-4" /> Importar extrato
             </Button>
           )}
+          {canViewCardStatements && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={FINANCIAL_ROUTES.cardStatements}>
+                <CreditCard className="mr-2 h-4 w-4" /> Faturas de cartão
+              </Link>
+            </Button>
+          )}
           {permissions.financial?.expenses?.create && (
             <Button size="sm" asChild>
               <Link href={FINANCIAL_ROUTES.newExpense}>
@@ -954,7 +970,7 @@ export function ExpensesPage() {
             >
               <span className="flex items-center justify-center gap-2">
                 <FileCheck2 className="h-4 w-4 group-data-[state=active]:text-primary" />
-                <span>Auditorias</span>
+                <span>Extratos bancários</span>
               </span>
             </TabsTrigger>
           </TabsList>
@@ -1498,7 +1514,7 @@ export function ExpensesPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              {permissions.financial?.expenses?.edit && !expense.budgetMigration && (
+                              {permissions.financial?.expenses?.edit && !expense.budgetMigration && !expense.sourceSettlement && (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1527,9 +1543,9 @@ export function ExpensesPage() {
                                 resultCenterNameById={resultCenterNameById}
                                 canViewPersonnelCosts={canViewPersonnelCosts}
                                 canViewExpenses={canViewExpenses}
-                                canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration}
-                                canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration}
-                                canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration}
+                                canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration && !expense.sourceSettlement}
+                                canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement}
+                                canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration && !expense.sourceSettlement}
                                 finalizingAudit={finalizingAuditId === expense.id}
                                 onFinalizeAudit={() => void handleFinalizeAudit(expense)}
                                 onPay={() => setPayTarget({
@@ -1739,6 +1755,7 @@ export function ExpensesPage() {
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
                       </div>
                       <UberRecognitionStatus record={expense} compact />
+                      {expense.sourceSettlement && <SourceSettlementNotice source={expense.sourceSettlement} cancelled={expense.status === "cancelled"} />}
 
                       {expense.originModule === "purchasing" && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1793,7 +1810,7 @@ export function ExpensesPage() {
                                   Finalizar auditoria
                                 </DropdownMenuItem>
                               )}
-                            {permissions.financial?.expenses?.pay && ["pending", "partially_paid"].includes(expense.status) && (
+                            {permissions.financial?.expenses?.pay && !expense.sourceSettlement && ["pending", "partially_paid"].includes(expense.status) && (
                               <DropdownMenuItem
                                 onClick={() =>
                                   setPayTarget({
@@ -1806,14 +1823,14 @@ export function ExpensesPage() {
                                 Registrar pagamento
                               </DropdownMenuItem>
                             )}
-                            {permissions.financial?.expenses?.edit && !expense.budgetMigration && (
+                            {permissions.financial?.expenses?.edit && !expense.budgetMigration && !expense.sourceSettlement && (
                               <DropdownMenuItem asChild>
                                 <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
                                   {expense.status === "draft" ? "Continuar rascunho" : "Editar"}
                                 </Link>
                               </DropdownMenuItem>
                             )}
-                            {permissions.financial?.expenses?.delete && !expense.budgetMigration && expense.originModule !== "purchasing" && (
+                            {permissions.financial?.expenses?.delete && !expense.budgetMigration && !expense.sourceSettlement && expense.originModule !== "purchasing" && (
                               <DropdownMenuItem onClick={() => setDeleteTarget(expense)}>
                                 <Trash2 className="mr-2 h-4 w-4" /> Excluir
                               </DropdownMenuItem>
@@ -1832,7 +1849,8 @@ export function ExpensesPage() {
           </TabsContent>
 
           <TabsContent value="audits" className="space-y-6">
-            <FinancialImportPage embedded showImportControls={false} />
+            <p className="text-sm text-muted-foreground">A conferência dos extratos tem um acesso próprio em Conciliação e fechamento.</p>
+            <Button asChild variant="outline"><Link href={bankStatementsHref(expenseContextQuery, { fromExpenses: true })}>Abrir extratos bancários</Link></Button>
           </TabsContent>
         </Tabs>
       ) : null}
@@ -1847,9 +1865,9 @@ export function ExpensesPage() {
             <FinancialImportPage
               embedded
               uploadOnly
-              onImportComplete={() => {
+              onImportComplete={(sessionId) => {
                 setIsImportDialogOpen(false);
-                setExpensesView("audits");
+                router.push(bankStatementsHref(expenseContextQuery, { sessionId, fromExpenses: true }));
               }}
             />
           </div>

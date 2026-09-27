@@ -275,6 +275,13 @@ service cloud.firestore {
         .hasAny(['hasPersonAllocations', 'personAllocations']);
     }
 
+    function preservesSourceSettlement() {
+      return (!resource.data.keys().hasAny(['sourceSettlement', 'sourceSettlementReversal'])
+          && !request.resource.data.keys().hasAny(['sourceSettlement', 'sourceSettlementReversal']))
+        || (resource.data.keys().hasAny(['sourceSettlement'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'attachments', 'attachmentUrls', 'updatedAt', 'updatedBy']));
+    }
+
     function isCardStatementAuditUpdate() {
       return resource.data.get('importedFrom', null) == 'card_statement'
         && request.resource.data.get('importedFrom', null) == 'card_statement'
@@ -398,18 +405,19 @@ service cloud.firestore {
     match /expenses/{expenseId} {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre()
         || canViewAudits() || canViewCardStatements() || canViewPersonnelCosts();
-      allow create: if !request.resource.data.keys().hasAny(['budgetMigration']) && (isCardStatementImportCreate(request.resource.data)
+      allow create: if !request.resource.data.keys().hasAny(['budgetMigration', 'sourceSettlement', 'sourceSettlementReversal']) && (isCardStatementImportCreate(request.resource.data)
         || (canCreateExpenses()
           && hasValidExpenseAccount(request.resource.data)
           && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
           && hasValidExpenseIndividualization(request.resource.data)));
       // Conversion is an administrative server transaction. Preserve its tombstone/history.
       allow update: if !resource.data.keys().hasAny(['budgetMigration'])
-        && !request.resource.data.keys().hasAny(['budgetMigration']) && ((canEditExpenses()
+        && !request.resource.data.keys().hasAny(['budgetMigration'])
+        && preservesSourceSettlement()
+        && (isCardStatementAuditUpdate() || (canEditExpenses()
           && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
-          && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data))))
-        || isCardStatementAuditUpdate());
-      allow delete: if canDeleteExpenses() && !resource.data.keys().hasAny(['budgetMigration']);
+          && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data)))));
+      allow delete: if canDeleteExpenses() && !resource.data.keys().hasAny(['budgetMigration', 'sourceSettlement', 'sourceSettlementReversal']);
     }
 
     match /payments/{paymentId} {

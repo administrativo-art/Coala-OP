@@ -111,10 +111,11 @@ function parseMovement(input: {
   const classified = paymentMethodId ? input.paymentMethodById.get(paymentMethodId) : undefined;
   const paymentMethodName = directPaymentMethodName ?? classified?.name ?? null;
   const normalizedPaymentName = paymentMethodName ? normalizeName(paymentMethodName) : "";
-  const id = text(field(source, ["codigo", "Codigo", "id", "Id", "codMovimento", "codigoMovimento"]))
-    ?? `${input.kind}-${date}-${input.index}`;
+  const providerId = text(field(source, ["codigo", "Codigo", "id", "Id", "codMovimento", "codigoMovimento"]));
+  const id = providerId ?? `${input.kind}-${date}-${input.index}`;
   return {
     id,
+    identitySource: providerId ? "provider" : "synthetic",
     kind: input.kind,
     amountCents: toCents(numericAmount),
     occurredAt,

@@ -1,5 +1,20 @@
 {
   "indexes": [
+    { "collectionGroup": "financialAcquirerFeeBatches", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "stoneCode", "order": "ASCENDING" }, { "fieldPath": "referenceDate", "order": "ASCENDING" }, { "fieldPath": "source", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }, { "fieldPath": "totalValue", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }, { "fieldPath": "totalValue", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "competenceMonth", "order": "ASCENDING" }, { "fieldPath": "resultCenterId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }
+    ] },
     { "collectionGroup": "financialBudgets", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "purchaseMonths", "arrayConfig": "CONTAINS" }
     ] },

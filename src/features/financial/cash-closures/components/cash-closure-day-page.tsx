@@ -1,5 +1,7 @@
 "use client";
 
+import { CashWithdrawalsPanel } from "./cash-withdrawals-panel";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
@@ -583,6 +585,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
     {!countingSessionId && data.closure.status !== "approved" && <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900"><span>O acesso direto permite informar os valores do Caixa, mas a conferência do Financeiro e a finalização só ficam disponíveis dentro de uma sessão de contagem.</span><Button asChild size="sm" variant="outline" className="shrink-0 border-amber-300 bg-white"><Link href="/dashboard/financial/cash-closures/sessions/new">Abrir sessão</Link></Button></div>}
 
     {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
+    <CashWithdrawalsPanel key={data.closure.id} data={data} editable={!working} />
     {data.closure.finalizedOperatorCount > 0 && <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
       <CardHeader className="pb-3"><CardTitle className="text-base">{countingSessionIds.length > 0 ? "Sessão da contagem" : "Referência do depósito"}</CardTitle></CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
