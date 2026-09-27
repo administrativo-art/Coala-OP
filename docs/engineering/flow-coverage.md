@@ -9,7 +9,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
 | `assets` | 1 | Traçado | [Cadastro e movimentação](flows/assets.md) — percurso complementado; verificação integrada pendente |
-| `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — percurso complementado; verificação integrada pendente |
+| `card-statements` | 2 | Traçado | [Prévia, importação e fechamento](flows/card-statements.md) — projeção por compra/parcela coberta localmente; verificação integrada pendente |
 | `cash-closures` | 6 | Traçado | [Sincronização PDV e contagem](flows/cash-closures.md) — classificação/gate/UI implementados; integração e HTTP autenticado em emulador aprovados; não certifica todos os depósitos nem UI no navegador |
 | `cash-deposits` | 1 | Traçado | [Lote, cobrança Inter e conciliação](flows/cash-deposits.md) — percurso complementado; verificação integrada pendente |
 | `cash-flow` | 3 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
@@ -42,7 +42,7 @@ Classificação inicial: **156/156 páginas** — 115 ativas, 8 de navegação, 
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
-| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — percurso complementado; verificação integrada pendente |
+| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — contrato financeiro do cartão coberto localmente; verificação integrada pendente |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |

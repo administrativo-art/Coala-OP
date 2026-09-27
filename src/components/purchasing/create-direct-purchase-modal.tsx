@@ -363,6 +363,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
         paymentCondition: values.paymentCondition,
         installmentsCount: values.paymentCondition === 'installments' ? values.installmentsCount : undefined,
         paymentDueDate: values.paymentDueDate,
+        purchaseDate: isCardPayment(values.paymentMethod) ? values.paymentDueDate : undefined,
         estimatedReceiptDate:
           values.receiptMode === 'immediate_pickup'
             ? new Date().toISOString()

@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-09-27, ajuste local de compras no cartão: a sincronização de compras passa a gravar o contrato canônico do cartão e a competência de cada parcela; a listagem projeta parcelas em suas faturas sem duplicar o valor integral. A decisão de negócio e a correção operacional de setembro (VT duplicado e série Odontoprev no último dia do mês) foram registradas nos guias financeiros. Testes focados cobrem cálculo de ciclo e agrupamento; integração completa, interface e publicação continuam pendentes. Os grupos permanecem Traçados.
+
 2026-09-26, entrega local de sangrias: classificação/vínculo transacionais, quitação na origem protegida e gate de finalização descritos em [fechamento de caixa](flows/cash-closures.md). Testes focados sem navegador; UI, revisão integrada e publicação ainda não concluídas. Não altera o estado de homologação global abaixo.
 
 ## Entrega documental para a main

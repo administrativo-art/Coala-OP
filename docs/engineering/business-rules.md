@@ -20,6 +20,16 @@ Origem: respostas expressas nesta conversa durante a continuação F01/F02/F04, 
 | Consulta por placa de patrimônio | Exigir login e permissão. | Confirmado pelo usuário na continuação do item 7; endereço do QR preservado, dados por API com `assets.view` e histórico com `assets.viewHistory`. |
 | Transição genérica do RH | Permitir saltos e retrocessos. | Destino deve ser uma etapa reconhecida; preservar guardas existentes de saída. Não impor adjacência. |
 
+## Decisões confirmadas pelo usuário em 2026-09-27
+
+Origem: instruções expressas nesta conversa sobre a posição financeira de setembro e as recorrências seguintes.
+
+| Tema | Regra aprovada | Alcance |
+| --- | --- | --- |
+| Vale-transporte de setembro/2026 | Manter apenas os pagamentos reais e retirar as provisões individuais que ficaram duplicadas. | Cancelamento auditável das sete provisões e de suas obrigações abertas; preservar os dois lançamentos pagos e seus vínculos bancários. |
+| Compras no cartão de crédito | Cada compra confirmada é uma linha real detalhada dentro da fatura do cartão; não deve aparecer como uma provisão avulsa fora dela. | Projetar a compra e cada parcela na competência da fatura. A conciliação ocorre quando a fatura/extrato entra; o pagamento da fatura não cria uma segunda despesa econômica. |
+| Odontoprev | Vencimento no último dia civil de cada mês, usando o dia 31 quando existir. | Ajustar setembro/2026 e as ocorrências futuras da série. A provisão não cria por si só um débito no extrato nem prova agendamento bancário. |
+
 Ao acrescentar uma regra: registre **enunciado, estado, responsável ou decisão que a aprovou, data e fonte**. Não marque uma hipótese, sugestão da IA ou documento de planejamento como aprovada.
 
 ## Confronto com a main 70aaab65
