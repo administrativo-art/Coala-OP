@@ -39,10 +39,10 @@ test("usa somente o saldo informado pela fonte bancária", () => {
   assert.equal(getImportAuditSourceBalance(item("c", "2026-08-12", 40, { valor: 40 })), null);
 });
 
-test("progresso considera auditadas, efetivadas e ignoradas como tratadas", () => {
+test("progresso mantém auditadas como pendentes e conta somente conciliadas ou ignoradas", () => {
   assert.deepEqual(
     getImportAuditProgress({ total: 10, pending: 3, audited: 2, completed: 4, ignored: 1 }),
-    { total: 10, treated: 7, percentage: 70 },
+    { total: 10, treated: 5, percentage: 50 },
   );
   assert.deepEqual(
     getImportAuditProgress({ total: 0, pending: 0, audited: 0, completed: 0, ignored: 0 }),

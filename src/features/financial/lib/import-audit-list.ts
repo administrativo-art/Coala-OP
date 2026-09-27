@@ -121,8 +121,7 @@ export function getImportAuditProgress(summary: ImportSessionSummary) {
   const treated = Math.min(
     total,
     Math.max(
-      (Number(summary.audited) || 0) +
-        (Number(summary.completed) || 0) +
+      (Number(summary.completed) || 0) +
         (Number(summary.ignored) || 0),
       0,
     ),

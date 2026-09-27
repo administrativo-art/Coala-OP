@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "../components/financial-access-guard";
 import { expensesReturnHref } from "../lib/reconciliation-navigation";
 import { FinancialImportPage } from "./import-page";
@@ -19,7 +18,7 @@ export function BankStatementsPage() {
   }
   return <PageContainer variant="wide" className="space-y-6 pb-10">
     <PageHeader title="Extratos bancários" description="Importe o extrato, confira as movimentações e vincule cada uma ao registro correspondente."
-      actions={<Button asChild variant="outline"><Link href={expensesReturnHref(searchParams.get("returnTo"))}>Voltar a Despesas</Link></Button>} />
+      actions={<BackButton fallbackHref={expensesReturnHref(searchParams.get("returnTo"))} label="Voltar às despesas" />} />
     <FinancialImportPage embedded />
   </PageContainer>;
 }
