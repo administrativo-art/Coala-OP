@@ -81,12 +81,13 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/expiry` | [page.tsx](../../src/app/dashboard/expiry/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx) |
 
-## financial (30)
+## financial (31)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/financial/assets` | [page.tsx](../../src/app/dashboard/financial/assets/page.tsx) | [asset-management.tsx](../../src/components/asset-management.tsx) |
 | `dashboard/financial/beneficiaries` | [page.tsx](../../src/app/dashboard/financial/beneficiaries/page.tsx) | Redireciona para `/dashboard/registration/entities` |
+| `dashboard/financial/budget-comparison` | [page.tsx](../../src/app/dashboard/financial/budget-comparison/page.tsx) | [budget-comparison-page.tsx](../../src/features/financial/pages/budget-comparison-page.tsx) |
 | `dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]` | [page.tsx](../../src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]/page.tsx) | [cash-closure-day-page.tsx](../../src/features/financial/cash-closures/components/cash-closure-day-page.tsx) |
 | `dashboard/financial/cash-closures/[kioskId]/[year]/[month]` | [page.tsx](../../src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/page.tsx) | [cash-closure-calendar-page.tsx](../../src/features/financial/cash-closures/components/cash-closure-calendar-page.tsx) |
 | `dashboard/financial/cash-closures/[kioskId]` | [page.tsx](../../src/app/dashboard/financial/cash-closures/[kioskId]/page.tsx) | [cash-closure-months-page.tsx](../../src/features/financial/cash-closures/components/cash-closure-months-page.tsx) |
@@ -329,4 +330,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **157 páginas** no checkout usado para a geração.
+Total: **158 páginas** no checkout usado para a geração.

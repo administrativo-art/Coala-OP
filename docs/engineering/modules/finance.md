@@ -13,4 +13,4 @@ Os caminhos abaixo apontam o primeiro fluxo a inspecionar. Operações financeir
 
 **Permissões e verificação.** Examine a autorização da rota acionada, depois repositório/serviço e cron/webhook correspondente. Testes disponíveis incluem [`financial-inbox-payment-safety.test.ts`](../../../tests/unit/financial-inbox-payment-safety.test.ts), [`purchase-financial-expenses.test.ts`](../../../tests/unit/purchase-financial-expenses.test.ts) e outros em `tests/unit`. **Lacuna:** os documentos de implantação registram decisões de momentos diferentes; valide estados atuais no código.
 
-Orçamentos por categoria/projeto e simulação no caixa: [guia de orçamentos](../flows/financial-budgets.md).
+Orçamentos por categoria/projeto, [consulta orçamento × despesas](../../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](../flows/financial-budgets.md).

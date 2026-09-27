@@ -88,6 +88,7 @@ api,src/app/api/financial/budget-rules/route.ts,,docs/engineering/flows/financia
 api,src/app/api/financial/budgets/[id]/coverage/route.ts,,docs/engineering/flows/financial-budgets.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
 api,src/app/api/financial/budgets/[id]/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.
 api,src/app/api/financial/budgets/cash-projections/route.ts,,docs/engineering/flows/financial-budgets.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
+api,src/app/api/financial/budgets/centers/route.ts,,docs/engineering/flows/financial-budgets.md,GET sem escrita; catálogo histórico limitado e todas as unidades autorizadas.
 api,src/app/api/financial/budgets/forecast-conversion/route.ts,,docs/engineering/flows/financial-budgets.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
 api,src/app/api/financial/budgets/person-references/route.ts,,docs/engineering/flows/financial-budgets.md,"Rota adicionada na main70aaab65; conferir schemas, permissao e consumidores."
 api,src/app/api/financial/budgets/route.ts,,docs/engineering/flows/financial-budgets.md,Orcamentos na main; conferir escopo por acao e gatilho.

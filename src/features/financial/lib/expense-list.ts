@@ -7,7 +7,15 @@ export type ExpenseDueWeekGroup<T> = {
   endDate: Date | null;
   expenses: T[];
   totalValue: number;
+  weekNumber: number | null;
 };
+
+export function sumExpenseValues<T>(items: T[], getValue: (item: T) => number) {
+  return items.reduce((sum, item) => {
+    const value = Number(getValue(item));
+    return sum + (Number.isFinite(value) ? Math.round(value * 100) : 0);
+  }, 0) / 100;
+}
 
 export function compareExpenseCompetenceMonths(left: string, right: string) {
   return right.localeCompare(left);
@@ -67,6 +75,7 @@ export function groupExpensesByDueWeek<T>(
       endDate,
       expenses: [],
       totalValue: 0,
+      weekNumber: null,
     };
 
     current.expenses.push(expense);
@@ -78,5 +87,5 @@ export function groupExpensesByDueWeek<T>(
     if (!left.startDate) return 1;
     if (!right.startDate) return -1;
     return left.startDate.getTime() - right.startDate.getTime();
-  });
+  }).map((group, index) => ({ ...group, weekNumber: group.startDate ? index + 1 : null }));
 }

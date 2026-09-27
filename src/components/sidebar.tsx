@@ -1,5 +1,7 @@
 "use client";
 
+import { canViewBudgetComparison } from "@/features/financial/budgets/comparison";
+
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -290,6 +292,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Coala Financeiro", href: "/dashboard/financial/cash-flow/agent", icon: Wallet, show: isDefaultAdmin },
             ],
           },
+          { label: "Orçamento × despesas", href: "/dashboard/financial/budget-comparison", icon: ReceiptText, show: canViewBudgetComparison(permissions, isDefaultAdmin) },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],

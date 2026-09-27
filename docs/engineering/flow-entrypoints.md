@@ -113,16 +113,19 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `cash-flow`
 
-Páginas: [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
+Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 79.
+Arquivos locais percorridos: 91.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/agent` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/agent/route.ts`](../../src/app/api/financial/agent/route.ts)
 - `/api/financial/analysis-routines` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/analysis-routines/route.ts`](../../src/app/api/financial/analysis-routines/route.ts)
-- `/api/financial/budgets` — interface [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx); rota candidata [`src/app/api/financial/budgets/route.ts`](../../src/app/api/financial/budgets/route.ts)
+- `/api/financial/budgets` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/route.ts`](../../src/app/api/financial/budgets/route.ts)
+- `/api/financial/budgets/` — interface [`src/features/financial/components/settings/budget-coverage-editor.tsx`](../../src/features/financial/components/settings/budget-coverage-editor.tsx); rota candidata [`src/app/api/financial/budgets/[id]/route.ts`](../../src/app/api/financial/budgets/%5Bid%5D/route.ts)
 - `/api/financial/budgets/cash-projections` — interface [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx); rota candidata [`src/app/api/financial/budgets/cash-projections/route.ts`](../../src/app/api/financial/budgets/cash-projections/route.ts)
+- `/api/financial/budgets/centers` — interface [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx); rota candidata [`src/app/api/financial/budgets/centers/route.ts`](../../src/app/api/financial/budgets/centers/route.ts)
+- `/api/financial/budgets/person-references` — interface [`src/features/financial/components/settings/budget-api.ts`](../../src/features/financial/components/settings/budget-api.ts); rota candidata [`src/app/api/financial/budgets/person-references/route.ts`](../../src/app/api/financial/budgets/person-references/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/management-analysis` — interface [`src/features/financial/agent/management-page.tsx`](../../src/features/financial/agent/management-page.tsx); rota candidata [`src/app/api/financial/management-analysis/route.ts`](../../src/app/api/financial/management-analysis/route.ts)
 - `/api/financial/stone-future-receivables` — interface [`src/features/financial/receivables/receivables-page.tsx`](../../src/features/financial/receivables/receivables-page.tsx); rota candidata [`src/app/api/financial/stone-future-receivables/route.ts`](../../src/app/api/financial/stone-future-receivables/route.ts)
@@ -152,10 +155,12 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `expenses.edit` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 - `expenses.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 - `financial.cashFlow.create` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
-- `financial.cashFlow.view` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
+- `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `financial.expenses.view` — [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx)
 - `financial.financialFlow` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
 - `financial.personnelCosts.view` — [`src/features/financial/budgets/personnel-access.ts`](../../src/features/financial/budgets/personnel-access.ts)
-- `financial.view` — [`src/features/financial/budgets/personnel-access.ts`](../../src/features/financial/budgets/personnel-access.ts)
+- `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `paymentRequests.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 - `personnelCosts.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 - `settings.manageExpenseDescriptions` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
@@ -440,7 +445,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/expenses/pending-audit/page.tsx`](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 102.
+Arquivos locais percorridos: 105.
 
 Chamadas candidatas encontradas:
 
@@ -482,6 +487,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.audits.view` — [`src/features/financial/pages/bank-statements-page.tsx`](../../src/features/financial/pages/bank-statements-page.tsx)
 - `financial.cardStatements` — [`src/features/financial/pages/card-statements-page.tsx`](../../src/features/financial/pages/card-statements-page.tsx)
 - `financial.cardStatements.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
+- `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.expenses.create` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.expenses.delete` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.expenses.edit` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
@@ -494,7 +500,8 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.personnelCosts.view` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
 - `financial.reconciliation.classifyAdjustments` — [`src/features/financial/components/expenses/expense-financial-summary.tsx`](../../src/features/financial/components/expenses/expense-financial-summary.tsx)
 - `financial.settings.manageExpenseDescriptions` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
-- `financial.settings.view` — [`src/features/financial/pages/card-statements-page.tsx`](../../src/features/financial/pages/card-statements-page.tsx)
+- `financial.settings.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `financial.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 
 ## `financial-assets`
 
@@ -1350,7 +1357,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 218.
+Arquivos locais percorridos: 219.
 
 Chamadas candidatas encontradas:
 
