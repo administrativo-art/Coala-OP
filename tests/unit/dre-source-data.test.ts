@@ -27,7 +27,8 @@ test("agrega receita e CMV por unidade e competência e informa ficha ausente", 
     ],
   }];
   const result = summarizeDreSalesReports(reports, new Map([["simulation-a", 3]]));
-  assert.deepEqual(result.salesSummaries, [{ kioskId: "kiosk-1", year: 2026, month: 8, revenue: 25, cmv: 6 }]);
+  assert.deepEqual(result.salesSummaries, [{ kioskId: "kiosk-1", year: 2026, month: 8, revenue: 25, cmv: 6,
+    dates: ["2026-08-01"], hasUndatedReports: false }]);
   assert.deepEqual(result.missingSimulationIds, ["simulation-missing"]);
 });
 

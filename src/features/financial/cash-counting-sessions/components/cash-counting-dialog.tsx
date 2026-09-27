@@ -23,6 +23,7 @@ import { isCurrentDraftLoad, isCurrentDraftRevision, persistLatestDraft } from "
 import { formatBRL } from "@/features/financial/cash-closures/money";
 import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
 import { CentsInput } from "@/features/financial/cash-closures/components/cents-input";
+import { CashWithdrawalsPanel } from "@/features/financial/cash-closures/components/cash-withdrawals-panel";
 import { isPdvAutoCountedChannel } from "@/features/financial/cash-closures/channel-normalization";
 import type {
   CashClosureLine,
@@ -42,6 +43,7 @@ const COUNTING_GUIDE_STEPS = [
   { title: "Escolha turno/operador", description: "Abra o cartão de quem entregou o malote." },
   { title: "Conte por canal", description: "Preencha Caixa e Financeiro nos canais manuais." },
   { title: "Revise diferenças", description: "Justifique as faltas indicadas em vermelho." },
+  { title: "Classifique sangrias", description: "Informe a categoria ou vincule a despesa já cadastrada." },
   { title: "Finalize o operador", description: "Finalize e repita nos demais turnos." },
 ] as const;
 
@@ -428,6 +430,7 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          {data && !loading && !loadError && <div className="mb-4"><CashWithdrawalsPanel key={data.closure.id} data={data} editable={editable && !working} /></div>}
           {!date ? <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-stone-300 bg-stone-50 text-center"><div><Save className="mx-auto h-9 w-9 text-zinc-300" /><p className="mt-3 font-bold">Informe a data impressa no malote</p><p className="mt-1 text-sm text-zinc-500">Ao voltar, esta será a última data aberta da sessão.</p></div></div>
             : loading ? <div className="grid min-h-72 place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
             : loadError ? <div className="grid min-h-72 place-items-center rounded-2xl border border-rose-200 bg-rose-50/30 text-center"><div><AlertTriangle className="mx-auto h-8 w-8 text-rose-500" /><p className="mt-3 font-bold">Não foi possível carregar esta data</p><p className="mt-1 text-sm text-zinc-500">O rascunho local foi preservado. Tente carregar novamente.</p><Button variant="outline" className="mt-4 bg-white" onClick={() => void loadClosure(date)}><RefreshCw className="mr-2 h-4 w-4" />Tentar novamente</Button></div></div>

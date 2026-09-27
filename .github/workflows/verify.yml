@@ -36,6 +36,14 @@ jobs:
       - name: Enforce vulnerability ratchet
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run check:vulnerabilities
+      - name: Verify engineering map
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
+        run: |
+          python3 scripts/generate-route-inventory.py --check
+          python3 scripts/generate-surface-inventory.py --check
+          python3 scripts/check-flow-matrix.py
+          python3 scripts/generate-flow-entrypoints.py --check
+          python3 scripts/check-engineering-docs.py
       - name: Verify application
         if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run verify
@@ -141,6 +149,25 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 3
+
+  reconciliation-api-e2e:
+    name: reconciliation-api-e2e (observation)
+    if: github.base_ref != 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: node scripts/test-reconciliation-api-e2e.mjs
 
   expense-boleto-api-e2e:
     name: expense-boleto-api-e2e (observation)

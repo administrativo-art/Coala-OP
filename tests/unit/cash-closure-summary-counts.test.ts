@@ -31,10 +31,11 @@ test("resumo mensal separa dias pendentes de finalizações parciais", () => {
   });
 });
 
-test("receita da DRE mantém o PDV em aberto e aplica somente diferenças finalizadas", () => {
+test("receita da DRE usa exclusivamente fonte integral versionada", () => {
   assert.equal(cashClosureDreRevenueCents([
-    { expectedTotalCents: 10_000, finalizedDifferenceTotalCents: 500 },
-    { expectedTotalCents: 20_000, finalizedDifferenceTotalCents: -1_000 },
-    { expectedTotalCents: 30_000, finalizedDifferenceTotalCents: 0 },
-  ]), 59_500);
+    { date: "2026-09-01", pdvSales: { version: 1, amountCents: 10_000 } },
+    { date: "2026-09-02", pdvSales: { version: 1, amountCents: 20_000 } },
+    { date: "2026-09-03", pdvSales: { version: 1, amountCents: 30_000 } },
+  ]), 60_000);
+  assert.equal(cashClosureDreRevenueCents([{ date: "2026-09-01" }]), null);
 });
