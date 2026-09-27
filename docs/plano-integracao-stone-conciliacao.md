@@ -2,6 +2,8 @@
 
 **Status:** plano para implementação incremental
 
+**Decisão posterior (2026-09-26):** para o escopo Coala, sangrias são despesas classificadas obrigatoriamente na contagem; não transferências genéricas. Faltas/sobras físicas usam resultado calculado e justificativa livre, sem investigação obrigatória. Receita integral, taxas explícitas e competência gerencial seguem os contratos atualizados em [DRE](engineering/flows/dre.md), [fechamento diário](engineering/flows/cash-closures.md) e [taxas](engineering/flows/stone-sales-review.md). Propostas conflitantes abaixo são históricas; fechamento mensal/backfill real não estão autorizados nesta entrega local.
+
 **Competência inicial do backfill:** agosto de 2026
 
 **Unidades:** Whopping, Tirirical e João Paulo

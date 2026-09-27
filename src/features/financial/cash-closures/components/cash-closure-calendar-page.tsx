@@ -91,7 +91,7 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
         <CardContent className="!p-0">
           <p className="px-[18px] pt-3 text-[9.5px] font-extrabold uppercase tracking-[.08em] text-zinc-400">Fechamento</p>
           <div className="grid min-h-[54px] grid-cols-3 items-center px-[18px] pb-3 pt-1.5">{[
-            ["Vendas no PDV", formatBRL(totals.expected), ""],
+            ["Esperado para conferência", formatBRL(totals.expected), ""],
             ["Conferido", hasFinalizedClosure ? formatBRL(totals.counted) : "—", ""],
             ["Diferença", !hasFinalizedClosure ? "—" : formatBRL(totals.difference), totals.difference === 0 ? "text-emerald-700" : "text-rose-700"],
           ].map(([label, value, valueClass], index) => <div key={label} className={cn("min-w-0 px-3 first:pl-0", index > 0 && "border-l border-stone-100")}><p className="whitespace-nowrap text-[10.5px] font-semibold leading-4 text-zinc-400">{label}</p><strong className={cn("mt-0.5 block whitespace-nowrap font-mono text-[14px] leading-5 xl:text-[16px]", valueClass)}>{value}</strong></div>)}</div>

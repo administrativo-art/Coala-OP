@@ -9,7 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_DRE_START_MONTH_KEY, FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection } from "@/features/financial/lib/repositories";
-import { formatCurrency } from "@/features/financial/lib/utils";
+import { formatCurrency as currency } from "@/features/financial/lib/utils";
 import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
 import {
   financialExpenseCompetenceMonth,
@@ -33,8 +33,8 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
-import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
-import type { DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
+import type { DreClosureUnitMonthSummary, DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
+import { aggregateDreRevenue, dreRevenueUnitIds, selectDreRevenue } from "@/features/financial/dre/revenue-selection";
 import type {
   DreCmvCriterion,
   DreStockCmvPayload,
@@ -48,8 +48,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function pct(value: number, base: number) {
-  if (base <= 0) return "—";
+  if (!Number.isFinite(value) || !Number.isFinite(base) || base <= 0) return "—";
   return `${((value / base) * 100).toFixed(1)}%`;
+}
+
+// NaN propagates unavailable inputs only inside this view's arithmetic; never persisted/exported.
+function formatCurrency(value: number) {
+  return Number.isFinite(value) ? currency(value) : "Indisponível";
 }
 
 function KpiCard({ label, value, sub, color = "" }: { label: string; value: string; sub?: string; color?: string }) {
@@ -141,7 +146,7 @@ export function DrePage() {
   const [expenses, setExpenses] = useState<FinancialExpenseDreDocument[]>([]);
   const [budgetPlanning, setBudgetPlanning] = useState<BudgetPlanningComparison[]>([]);
   const [salesSummaries, setSalesSummaries] = useState<DreSalesUnitMonthSummary[]>([]);
-  const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<CashClosureMonthlySummary[]>([]);
+  const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<DreClosureUnitMonthSummary[]>([]);
   const [missingSimulationIds, setMissingSimulationIds] = useState<string[]>([]);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loadingSource, setLoadingSource] = useState(true);
@@ -173,7 +178,7 @@ export function DrePage() {
     }).then((payload) => {
       if (cancelled) return;
       setSalesSummaries(payload.salesSummaries ?? []);
-      setClosureRevenueSummaries((payload.closureSummaries ?? []) as CashClosureMonthlySummary[]);
+      setClosureRevenueSummaries(payload.closureSummaries ?? []);
       setExpenses(payload.expenses ?? []);
       setBudgetPlanning(payload.budgetPlanning ?? []);
       setMissingSimulationIds(payload.missingSimulationIds ?? []);
@@ -219,10 +224,6 @@ export function DrePage() {
     || loadingSource
     || (cmvCriterion === "stock_movement" && loadingStockCmv);
 
-  if (!permissions.financial?.dre) {
-    return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
-  }
-
   // ── derived maps ────────────────────────────────────────────────────────────
 
   const kioskNameById = useMemo(() => {
@@ -259,14 +260,6 @@ export function DrePage() {
     ? null
     : (resultCenterNameByKioskId[unitFilter] ?? kioskNameById[unitFilter] ?? null);
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
-  const closureRevenueByUnitMonth = useMemo(() => new Map(closureRevenueSummaries.map((summary) => [
-    `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
-    (summary.dreRevenueTotalCents ?? summary.expectedTotalCents + summary.differenceTotalCents) / 100,
-  ])), [closureRevenueSummaries]);
-  const salesByUnitMonth = useMemo(() => new Map(salesSummaries.map((summary) => [
-    `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
-    summary,
-  ])), [salesSummaries]);
   const stockCmvByUnitMonth = useMemo(() => new Map((stockCmvPayload?.stockSummaries ?? []).map((summary) => [
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
     summary,
@@ -274,15 +267,16 @@ export function DrePage() {
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
-  function getRevenue(monthKey: string): number {
+  function getRevenue(monthKey: string) {
+    const [year, month] = monthKey.split("-").map(Number);
+    const pdvUnitIds = dreRevenueUnitIds(kiosks, closureRevenueSummaries, salesSummaries);
     const unitIds = selectedKioskId
       ? [selectedKioskId]
-      : Array.from(new Set([...kiosks.map((kiosk) => kiosk.id), ...salesSummaries.map((summary) => summary.kioskId)]));
-    return unitIds.reduce((total, kioskId) => {
-      const countedRevenue = closureRevenueByUnitMonth.get(`${kioskId}:${monthKey}`);
-      if (countedRevenue !== undefined) return total + countedRevenue;
-      return total + (salesByUnitMonth.get(`${kioskId}:${monthKey}`)?.revenue ?? 0);
-    }, 0);
+      : pdvUnitIds;
+    const units = unitIds.map(kioskId => ({ kioskId, ...selectDreRevenue({ kioskId, year, month,
+      closureSummaries: closureRevenueSummaries, salesSummaries }) }));
+    return { ...aggregateDreRevenue(units), units,
+      costOnlyUnit: !!selectedKioskId && !pdvUnitIds.includes(selectedKioskId) };
   }
 
   function getCompositionCmv(monthKey: string): number {
@@ -339,7 +333,10 @@ export function DrePage() {
           resultCenterNames: resultCenterNameMap,
         });
     const expenseAt = (position: string | null) => expenseCalculation.totalsByPosition[position ?? "null"] ?? 0;
-    const revBruta = getRevenue(monthKey);
+    const revenueSource = getRevenue(monthKey);
+    const revBruta = (revenueSource.revenueCents ?? NaN) / 100;
+    const cashShortage = (revenueSource.cashShortageCents ?? NaN) / 100;
+    const cashSurplus = (revenueSource.cashSurplusCents ?? NaN) / 100;
     const impostos = expenseAt("impostos_deducoes");
     const recLiq = revBruta - impostos;
 
@@ -357,7 +354,7 @@ export function DrePage() {
     const ocupacao = expenseAt("ocupacao");
     const semCategoria = expenseAt(null);
     const totalFixos = pessoal + despOp + ocupacao + semCategoria;
-    const resOp = margContr - totalFixos;
+    const resOp = margContr - totalFixos - cashShortage + cashSurplus;
 
     const recFin = expenseAt("receita_financeira");
     const despFin = expenseAt("despesas_financeiras");
@@ -367,10 +364,13 @@ export function DrePage() {
     const irCsll = expenseAt("impostos_resultado");
     const lucroLiq = lair - irCsll;
 
-    const margContPct = recLiq > 0 ? margContr / recLiq : 0;
-    const pe = margContPct > 0 ? totalFixos / margContPct : 0;
+    const margContPct = !Number.isFinite(recLiq) ? NaN : recLiq > 0 ? margContr / recLiq : 0;
+    const pe = !Number.isFinite(margContPct) ? NaN : margContPct > 0 ? totalFixos / margContPct : 0;
 
     return {
+      revenueSource,
+      cashShortage,
+      cashSurplus,
       revBruta,
       impostos,
       recLiq,
@@ -415,20 +415,20 @@ export function DrePage() {
       const [y, m] = key.split("-").map(Number);
       return {
         month: format(new Date(y, m - 1, 1), "MMM/yy", { locale: ptBR }),
-        receita: revBruta,
+        receita: Number.isFinite(revBruta) ? revBruta : null,
         cmv,
-        margBruta,
+        margBruta: Number.isFinite(margBruta) ? margBruta : null,
         despesas: totalFixos,
-        resultado: lucroLiq,
+        resultado: Number.isFinite(lucroLiq) ? lucroLiq : null,
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, chartMonthKeys, closureRevenueByUnitMonth, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
+  }, [accounts, chartMonthKeys, closureRevenueSummaries, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, selectedMonth, closureRevenueByUnitMonth, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
+    [accounts, selectedMonth, closureRevenueSummaries, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
   );
   const stockValuationIssueCount = (stockCmvPayload?.missingProductIds.length ?? 0)
     + (stockCmvPayload?.missingBaseProductIds.length ?? 0)
@@ -554,6 +554,7 @@ export function DrePage() {
   // ── export ───────────────────────────────────────────────────────────────────
 
   function exportCsv() {
+    if (loading || sourceError || (viewMode !== "people" && !Number.isFinite(metrics.lucroLiq))) return;
     if (viewMode === "people") {
       if (!canExportPersonnelCosts) return;
       const rows = [
@@ -609,6 +610,8 @@ export function DrePage() {
       ["(-) Despesas operacionais", formatCurrency(despOp), pct(despOp, recLiq)],
       ["(-) Ocupação", formatCurrency(ocupacao), pct(ocupacao, recLiq)],
       ["(-) Não classificado", formatCurrency(semCategoria), pct(semCategoria, recLiq)],
+      ["(-) Faltas de caixa", formatCurrency(metrics.cashShortage), pct(metrics.cashShortage, recLiq)],
+      ["(+) Sobras de caixa", formatCurrency(metrics.cashSurplus), pct(metrics.cashSurplus, recLiq)],
       ["= EBIT (Resultado Operacional)", formatCurrency(resOp), pct(resOp, recLiq)],
       ["(+) Receita financeira", formatCurrency(recFin), pct(recFin, recLiq)],
       ["(-) Despesas financeiras", formatCurrency(despFin), pct(despFin, recLiq)],
@@ -628,8 +631,13 @@ export function DrePage() {
 
   // ── render ───────────────────────────────────────────────────────────────────
 
+  if (!permissions.financial?.dre) {
+    return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
+  }
+
   return (
     <PageContainer variant="wide" className="space-y-6">
+      {metrics.revenueSource.costOnlyUnit && <p className="rounded-xl border p-4 text-sm text-muted-foreground">Esta unidade não possui origem de vendas no PDV. Suas despesas continuam incluídas na DRE; receita e resultado isolado não são apurados neste filtro.</p>}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -708,7 +716,8 @@ export function DrePage() {
             <Button
               variant="outline"
               onClick={exportCsv}
-              disabled={Boolean(sourceError)
+              disabled={loading || Boolean(sourceError)
+                || (viewMode !== "people" && !Number.isFinite(metrics.lucroLiq))
                 || Boolean(stockCmvError && cmvCriterion === "stock_movement")
                 || cmvIntegrityIssue
                 || expenseContractIssues.length > 0}
@@ -720,6 +729,26 @@ export function DrePage() {
       </div>
 
       {!sourceError && <BudgetPlanningComparisonCard rows={budgetPlanning} month={selectedMonth} unitId={unitFilter} />}
+      {!loading && !sourceError && metrics.revenueSource.issues.length > 0 && (
+        <div role="status" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p><strong>DRE parcial — confira as fontes.</strong> Vendas vêm integralmente do PDV. Faltas e sobras vêm apenas das contagens finalizadas, na competência de origem.</p>
+          {metrics.revenueSource.units.filter(unit => unit.issues.length > 0).map(unit => (
+            <p key={unit.kioskId}>{kioskNameById[unit.kioskId] ?? unit.kioskId}: {unit.revenueCents === null ? "receita integral não comprovada; " : ""}{unit.cashShortageCents === null ? "diferenças de caixa indisponíveis; " : ""}{unit.pendingOperatorCount === null ? "finalizações sem cobertura comprovada" : `${unit.pendingOperatorCount} contagem(ns) pendente(s)`}.</p>
+          ))}
+          <p>Dados ausentes ou resumos antigos não são zero. Revise a sincronização/conferência na origem; atualizar esta tela apenas relê os dados. Esta cobertura não representa fechamento mensal.</p>
+          <Link className="underline" href="/dashboard/financial/cash-closures">Abrir fechamento de caixa</Link>
+        </div>
+      )}
+      {!loading && !sourceError && (
+        <Card>
+          <CardHeader><CardTitle>Caixa em espécie — competência de origem</CardTitle><CardDescription>As sangrias já reduzem o dinheiro esperado na contagem. Na DRE, entram uma única vez como despesas nas categorias escolhidas, sem reduzir o faturamento do PDV.</CardDescription></CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            <KpiCard label="Vendas integrais do PDV" value={formatCurrency(metrics.revBruta)} />
+            <KpiCard label="(−) Faltas de caixa" value={formatCurrency(metrics.cashShortage)} color="text-rose-700" />
+            <KpiCard label="(+) Sobras de caixa" value={formatCurrency(metrics.cashSurplus)} color="text-emerald-700" />
+          </CardContent>
+        </Card>
+      )}
       {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
       {!sourceError && cmvCriterion === "composition" && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
       {!sourceError && cmvCriterion === "stock_movement" && stockCmvError && (
@@ -1014,6 +1043,8 @@ export function DrePage() {
                 { type: "line", label: "(-) Despesas operacionais", value: despOp, negative: true, detailsKey: "despesas_operacionais" },
                 { type: "line", label: "(-) Ocupação", value: ocupacao, negative: true, detailsKey: "ocupacao" },
                 ...(semCategoria > 0 ? [{ type: "line" as const, label: "(-) Não classificado", value: semCategoria, negative: true, muted: true, detailsKey: "null" }] : []),
+                { type: "line", label: "(-) Faltas de caixa", value: metrics.cashShortage, negative: true },
+                { type: "line", label: "(+) Sobras de caixa", value: metrics.cashSurplus },
                 { type: "subtotal", label: "= EBIT (Resultado Operacional)", value: resOp, variant: resOp >= 0 ? "green" : "rose" },
                 { type: "kpi", label: "Margem Operacional %", value: pct(resOp, recLiq) },
                 { type: "divider" },

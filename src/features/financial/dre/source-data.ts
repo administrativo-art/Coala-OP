@@ -1,6 +1,7 @@
 import type { SalesReport } from "@/types";
 import type { BudgetPlanningComparison } from "../budgets/projection-view";
 import type { FinancialExpenseDreDocument } from "@/features/financial/lib/expense-accounting-contract";
+import type { CashClosureDreSummary } from "../cash-closures/dre-contract";
 
 export class DreSourceLimitError extends Error {
   readonly reason: "reports" | "simulations" | "expenses";
@@ -18,6 +19,19 @@ export type DreSalesUnitMonthSummary = {
   month: number;
   revenue: number;
   cmv: number;
+  /** Coverage witnesses only: item price × quantity is not the integral payments source. */
+  dates?: string[];
+  hasUndatedReports?: boolean;
+};
+
+export type DreClosureUnitMonthSummary = Partial<CashClosureDreSummary> & {
+  id: string;
+  kioskId: string;
+  year: number;
+  month: number;
+  closureCount?: number;
+  expectedTotalCents: number;
+  differenceTotalCents: number;
 };
 
 export type DreSourceDataStats = {
@@ -31,15 +45,7 @@ export type DreSourceDataPayload = {
   budgetPlanning?: BudgetPlanningComparison[];
   expenses: FinancialExpenseDreDocument[];
   salesSummaries: DreSalesUnitMonthSummary[];
-  closureSummaries: Array<{
-    id: string;
-    kioskId: string;
-    year: number;
-    month: number;
-    expectedTotalCents: number;
-    differenceTotalCents: number;
-    dreRevenueTotalCents?: number;
-  }>;
+  closureSummaries: DreClosureUnitMonthSummary[];
   missingSimulationIds: string[];
   stats: DreSourceDataStats;
 };
@@ -66,7 +72,14 @@ export function summarizeDreSalesReports(
       month: report.month,
       revenue: 0,
       cmv: 0,
+      dates: [],
+      hasUndatedReports: false,
     };
+    const maximumDay = new Date(Date.UTC(report.year, report.month, 0)).getUTCDate();
+    if (Number.isInteger(report.day) && report.day! >= 1 && report.day! <= maximumDay) {
+      const date = `${report.year}-${String(report.month).padStart(2, "0")}-${String(report.day).padStart(2, "0")}`;
+      current.dates = [...new Set([...(current.dates ?? []), date])].sort();
+    } else current.hasUndatedReports = true;
     for (const item of report.items) {
       current.revenue += item.quantity * (item.unitPrice ?? 0);
       if (!item.simulationId) continue;

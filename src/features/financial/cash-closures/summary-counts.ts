@@ -1,4 +1,5 @@
 import type { CashClosureStatus } from "./types";
+import { summarizeCashClosureDre, type CashClosureDreSource } from "./dre-contract";
 
 type CashClosureSummaryCountSource = {
   status: CashClosureStatus;
@@ -18,12 +19,6 @@ export function cashClosureSummaryCounts(closures: CashClosureSummaryCountSource
   };
 }
 
-export function cashClosureDreRevenueCents(closures: Array<{
-  expectedTotalCents: number;
-  finalizedDifferenceTotalCents: number;
-}>) {
-  return closures.reduce(
-    (total, closure) => total + closure.expectedTotalCents + closure.finalizedDifferenceTotalCents,
-    0,
-  );
+export function cashClosureDreRevenueCents(closures: CashClosureDreSource[]) {
+  return summarizeCashClosureDre(closures).dreRevenueTotalCents;
 }

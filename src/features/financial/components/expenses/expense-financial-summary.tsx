@@ -12,8 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { SourceSettlementNotice } from "./source-settlement-notice";
+import type { SourceSettlement } from "../../lib/source-settlement";
 
 type ExpenseSummarySource = {
+  sourceSettlement?: SourceSettlement & { closureId?: string };
   id: string;
   status?: string;
   totalValue?: number;
@@ -123,6 +126,8 @@ export function ExpenseFinancialSummary({
     ? null
     : summary.actualAmountCents - summary.forecastAmountCents;
   const settlementAmountCents = summary.settlementAmountCents ?? summary.actualAmountCents;
+
+  if (expense.sourceSettlement) return <SourceSettlementNotice source={expense.sourceSettlement} cancelled={expense.status === "cancelled"} />;
 
   async function openDetails() {
     setOpen(true);

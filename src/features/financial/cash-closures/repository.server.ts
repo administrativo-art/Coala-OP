@@ -2,6 +2,10 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { Transaction } from "firebase-admin/firestore";
+import type { ServerUserContext } from "@/lib/auth-server";
+import { assertCashClosureAccess, assertCashClosureDivergenceApproval } from "./access.server";
+import { assertWithdrawalsClassified } from "./withdrawal-classification.server";
+import { withdrawalFailure } from "./withdrawal-classification";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { isPdvAutoCountedChannel } from "./channel-normalization";
@@ -824,9 +828,13 @@ export async function finalizeCashClosure(id: string, actor: CashClosureActor) {
     const now = new Date().toISOString();
     const ref = closureRef(id);
     const result = await financialDbAdmin.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(ref);
+      const [snapshot, linesSnapshot] = await Promise.all([
+        transaction.get(ref), transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      ]);
       if (!snapshot.exists) throw new Error("Fechamento não encontrado.");
       const closure = snapshotValue<CashClosure>(snapshot);
+      if (!linesSnapshot.empty) withdrawalFailure("SOURCE_CHANGED", "O fechamento recebeu movimentos. Atualize a consulta antes de finalizar.");
+      await assertWithdrawalsClassified(transaction, closure, []);
       assertCashClosureTransition(closure.status, "approved");
       const next = {
         ...closure,
@@ -859,9 +867,10 @@ export async function finalizeCashClosureOperator(
   id: string,
   operatorId: string,
   actor: CashClosureActor,
-  allocation:
+  allocation: (
     | { countingSessionId: string; canManageSessionOfOthers?: boolean }
-    | { legacyImmediateAllocation: true },
+    | { legacyImmediateAllocation: true }
+  ) & { authorizationContext?: ServerUserContext },
 ) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
@@ -901,6 +910,13 @@ export async function finalizeCashClosureOperator(
       throw new Error(`A contagem de ${currentOperator.operatorName} já foi finalizada.`);
     }
     const operatorLines = normalized.lines.filter((line) => line.operatorId === operatorId);
+    if (allocation.authorizationContext) {
+      const context = allocation.authorizationContext;
+      if (closure.workspaceId !== context.workspace_id) withdrawalFailure("WORKSPACE", "Fechamento fora do workspace.", "AUTHORIZATION");
+      assertCashClosureAccess(context, "approve", closure.kioskId);
+      assertCashClosureDivergenceApproval(context, closure.kioskId, operatorLines);
+    }
+    await assertWithdrawalsClassified(transaction, closure, normalized.lines, operatorId);
     if (operatorLines.some((line) => line.reportedCents === null || line.countedCents === null)) {
       throw new Error(`Preencha as contagens do Caixa e do Financeiro de ${currentOperator.operatorName} antes de finalizar.`);
     }
@@ -924,6 +940,7 @@ export async function finalizeCashClosureOperator(
       : null;
     const finalizedOperator: CashClosureOperator = {
       ...currentOperator,
+      approvedSourceHash: closure.sourceHash,
       status: "approved",
       cashDeposit: cashDepositAfterFinalization(
         currentOperator.cashDeposit,
@@ -947,6 +964,8 @@ export async function finalizeCashClosureOperator(
     const next = withCashClosureOperatorAggregate(
       {
         ...recomputeCashClosureFromLines(closure, normalized.lines, now),
+        pdvChangedAfterApproval: closure.pdvChangedAfterApproval && !operators.every(operator =>
+          operator.status === "approved" && operator.approvedSourceHash === closure.sourceHash),
         cashDepositPolicy,
         cashDepositPolicyReason: periodPolicySnapshot.exists
           ? String(periodPolicySnapshot.data()?.reason ?? "Competência usada somente na DRE")

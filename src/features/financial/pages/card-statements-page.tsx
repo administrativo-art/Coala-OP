@@ -917,7 +917,7 @@ export function CardStatementsWorkspace({
           <Button asChild variant="ghost" size="sm" className="-ml-3 mb-2">
             <Link href={FINANCIAL_ROUTES.expenses}><ArrowLeft className="mr-2 h-4 w-4" />Voltar às despesas</Link>
           </Button>
-          <h1 className="text-2xl font-bold tracking-tight">Faturas de cartão</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Faturas de cartão de crédito</h1>
           <p className="mt-1 text-sm text-muted-foreground">Previsão mensal, conferência das cobranças e conciliação do pagamento bancário.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -933,7 +933,7 @@ export function CardStatementsWorkspace({
             </Button>
           ) : null}
           <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
-            <Link href={FINANCIAL_ROUTES.importExpenses}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
+            <Link href={FINANCIAL_ROUTES.bankStatements}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
           </Button>
         </div>
       </div> : null}
@@ -1677,7 +1677,7 @@ export function CardStatementsWorkspace({
                         <p>Importe ou confira o extrato bancário para localizar o pagamento.</p>
                         {permissions.financial?.audits?.view ? (
                           <Button asChild variant="outline" size="sm" className="mt-3 h-8 rounded-lg bg-white text-[11px]">
-                            <Link href={FINANCIAL_ROUTES.importExpenses}>Abrir conferência</Link>
+                            <Link href={FINANCIAL_ROUTES.bankStatements}>Abrir conferência</Link>
                           </Button>
                         ) : null}
                       </div>

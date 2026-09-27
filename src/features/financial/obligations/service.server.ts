@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assertExpenseAllowsNewPayment } from "../lib/source-settlement";
 import { FieldValue, Timestamp, type WriteBatch } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -117,6 +118,14 @@ export async function queueMatchedBankPayment(params: {
   chargeExpenseId?: string | null;
   settlePaymentRequest?: boolean;
 }): Promise<MatchedBankPaymentResult> {
+  assertExpenseAllowsNewPayment(params.expense);
+  // This legacy writer uses a batch, not a transaction. Protect its later
+  // commit against a concurrent source settlement after this fresh read.
+  const targetExpense = await financialDbAdmin.collection("expenses").doc(params.expenseId).get();
+  if (targetExpense.exists) {
+    assertExpenseAllowsNewPayment(targetExpense.data() ?? {});
+    params.batch.update(targetExpense.ref, { updatedAt: Timestamp.now() }, { lastUpdateTime: targetExpense.updateTime! });
+  }
   const actualAmountCents = params.expense.provisionType === "forecast"
     ? null
     : moneyToCents(params.expense.totalValue);
@@ -576,6 +585,7 @@ export async function registerReportedPayment(
     const expenseSnapshot = await transaction.get(expenseRef);
     if (!expenseSnapshot.exists) throw new Error("Despesa não encontrada.");
     const expense = expenseSnapshot.data() ?? {};
+    assertExpenseAllowsNewPayment(expense);
     if (["draft", "cancelled", "reconciled"].includes(String(expense.status))) {
       throw new Error("Esta despesa não pode receber um pagamento manual.");
     }

@@ -30,7 +30,7 @@ export function CashControlNavigation({ active, crumbs = [] }: CashControlNaviga
             : "border border-stone-200 bg-white text-zinc-500 hover:border-pink-300 hover:text-pink-700",
         )}
       >
-        Fechamento do caixa
+        Fechamento de caixa
       </Link>
       {permissions.financial?.cashDeposits?.view && <Link
         href="/dashboard/financial/cash-deposits"

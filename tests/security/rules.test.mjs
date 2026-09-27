@@ -34,6 +34,42 @@ const rules = {
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
 
+test("despesa quitada na origem protege financeiro e permite notas/anexos; cliente não forja origem", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-source-settlement", firestore: { rules: rules.financial } });
+  try {
+    await env.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await setDoc(doc(db, "accounts/source-expense"), { name: "Limpeza", active: true, isGroup: false });
+      for (const kind of ["cash_withdrawal", "acquirer_fee"]) {
+        await setDoc(doc(db, `expenses/${kind}`), { status: "paid", accountPlan: "source-expense", accountId: "source-expense", totalValue: 10, sourceSettlement: { version: 1, kind } });
+      }
+      await setDoc(doc(db, "expenses/ordinary-source-test"), { status: "pending", accountPlan: "source-expense", accountId: "source-expense" });
+      await setDoc(doc(db, "accounts/source-other"), { name: "Outra", active: true, isGroup: false });
+      await setDoc(doc(db, "expenses/source-card-legacy"), { status: "paid", accountPlan: "source-expense", accountId: "source-expense", importedFrom: "card_statement", sourceSettlement: { kind: "acquirer_fee" } });
+      await setDoc(doc(db, "expenses/card-ordinary"), { status: "pending", accountPlan: "source-expense", accountId: "source-expense", importedFrom: "card_statement" });
+    });
+    const db = env.authenticatedContext("admin", { isDefaultAdmin: true, financial: { view: true, expenses: { view: true, create: true, edit: true, delete: true } } }).firestore();
+    for (const kind of ["cash_withdrawal", "acquirer_fee"]) {
+      const target = doc(db, `expenses/${kind}`);
+      await assertSucceeds(updateDoc(target, { notes: "Comprovante", attachments: [{ name: "recibo" }] }));
+      await assertFails(updateDoc(target, { totalValue: 20 }));
+      await assertFails(updateDoc(target, { status: "pending" }));
+      await assertFails(updateDoc(target, { sourceSettlement: null }));
+      await assertFails(setDoc(target, { status: "paid", accountPlan: "source-expense", accountId: "source-expense" }));
+      await assertFails(deleteDoc(target));
+    }
+    await assertSucceeds(setDoc(doc(db, "expenses/ordinary-source-create"), { status: "pending", accountPlan: "source-expense", accountId: "source-expense" }));
+    await assertFails(setDoc(doc(db, "expenses/forged-source"), { status: "paid", accountPlan: "source-expense", accountId: "source-expense", sourceSettlement: { kind: "cash_withdrawal" } }));
+    await assertFails(updateDoc(doc(db, "expenses/ordinary-source-test"), { sourceSettlement: {} }));
+    await assertFails(setDoc(doc(db, "financialSourceSettlements/forged"), { active: true }));
+    await assertFails(setDoc(doc(db, "cashClosures/forged/withdrawals/forged"), { active: true }));
+    const auditor = env.authenticatedContext("auditor", { isDefaultAdmin: true, financial: { view: true, cardStatements: { audit: true } } }).firestore();
+    const reclassify = { accountPlan: "source-other", accountId: "source-other" };
+    await assertSucceeds(updateDoc(doc(auditor, "expenses/card-ordinary"), reclassify));
+    await assertFails(updateDoc(doc(auditor, "expenses/source-card-legacy"), reclassify));
+  } finally { await env.cleanup(); }
+});
+
 test("previsão transferida para orçamento não pode ser reativada, apagada ou forjada pelo cliente", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-budget-conversion", firestore: { rules: rules.financial } });
   try {

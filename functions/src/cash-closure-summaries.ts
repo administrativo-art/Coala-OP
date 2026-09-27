@@ -1,6 +1,7 @@
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { summarizeCashClosureDre, type CashClosureDreSource } from './cash-closure-dre';
 
 const financialDb = getFirestore('coala-financeiro');
 const REINFORCEMENT_PAGE_SIZE = 500;
@@ -46,14 +47,14 @@ function maxText(values: string[]) {
 }
 
 async function recomputeSummary(workspaceId: string, kioskId: string, year: number, month: number) {
+  return financialDb.runTransaction(async transaction => {
   const maximumClosureCount = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const snapshot = await financialDb.collection('cashClosures')
+  const snapshot = await transaction.get(financialDb.collection('cashClosures')
     .where('workspaceId', '==', workspaceId)
     .where('kioskId', '==', kioskId)
     .where('year', '==', year)
     .where('month', '==', month)
-    .limit(maximumClosureCount + 1)
-    .get();
+    .limit(maximumClosureCount + 1));
   if (snapshot.size > maximumClosureCount) {
     throw new Error('Existe mais de um fechamento diário para a unidade nesta competência.');
   }
@@ -74,9 +75,7 @@ async function recomputeSummary(workspaceId: string, kioskId: string, year: numb
     expectedTotalCents: closures.reduce((sum, item) => sum + number(item.expectedTotalCents), 0),
     countedTotalCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedCountedTotalCents', 'countedTotalCents'), 0),
     differenceTotalCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedDifferenceTotalCents', 'differenceTotalCents'), 0),
-    dreRevenueTotalCents: closures.reduce((sum, item) => sum
-      + number(item.expectedTotalCents)
-      + finalizedNumber(item, 'finalizedDifferenceTotalCents', 'differenceTotalCents'), 0),
+    ...summarizeCashClosureDre(closures as CashClosureDreSource[]),
     countedCashCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedCountedCashCents', 'countedCashCents'), 0),
     allocatedCashCents: closures.filter((item) => ['allocated', 'issued', 'paid', 'adjusted'].includes(text(item.cashDeposit?.status))).reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),
     issuedCashCents: closures.filter((item) => ['issued', 'paid'].includes(text(item.cashDeposit?.status))).reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),
@@ -85,16 +84,15 @@ async function recomputeSummary(workspaceId: string, kioskId: string, year: numb
     lastApprovedDate: maxText(closures.filter((item) => item.status === 'approved').map((item) => text(item.date))),
     updatedAt: now,
   };
-  const batch = financialDb.batch();
-  batch.set(financialDb.collection('cashClosureMonthlySummaries').doc(id), summary);
+  transaction.set(financialDb.collection('cashClosureMonthlySummaries').doc(id), summary);
   const current = currentPeriod();
   if (year === current.year && month === current.month) {
     const unitId = `${workspaceId}_${kioskId}`;
-    batch.set(financialDb.collection('cashClosureUnitSummaries').doc(unitId), {
+    transaction.set(financialDb.collection('cashClosureUnitSummaries').doc(unitId), {
       ...summary, id: unitId, currentYear: year, currentMonth: month,
     });
   }
-  await batch.commit();
+  });
 }
 
 export const cashClosureSummaryWritten = onDocumentWritten({

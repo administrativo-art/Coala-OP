@@ -62,6 +62,14 @@ function pickNumber(row: Record<string, unknown>, ...keys: string[]): number {
   return 0;
 }
 
+function hasFiniteNumber(row: Record<string, unknown>, ...keys: string[]): boolean {
+  return keys.some(key => {
+    const value = row[key];
+    return (typeof value === "number" || typeof value === "string" && value.trim() !== "")
+      && Number.isFinite(Number(value));
+  });
+}
+
 function pickBoolean(row: Record<string, unknown>, ...keys: string[]): boolean {
   for (const key of keys) {
     const value = row[key];
@@ -106,18 +114,27 @@ export function parsePdvCoupons(raw: unknown): ParsePdvCouponsResult {
     const isCancelled = isPdvCouponMarkedCancelled(row);
     const isStorned = pickBoolean(row, "isestornado", "IsEstornado");
     const totalAmount = pickNumber(row, "valortotal", "ValorTotal");
+    if (!isCancelled && !hasFiniteNumber(row, "valortotal", "ValorTotal")) {
+      parseWarnings.push(`Cupom ${couponId}: total ausente ou inválido; receita integral indisponível.`);
+    }
 
     const rawItems = pdvCouponItems(row);
     const hasExplicitItemCancellation = hasExplicitPdvItemCancellation(row);
 
     const rawPayments = pickArray(row, "formaPgtos", "FormaPgtos", "formapgtos");
     const paymentRows: ParsedFormaPagamento[] = rawPayments.flatMap((entry) => {
-      if (!entry || typeof entry !== "object") return [];
+      if (!entry || typeof entry !== "object") {
+        parseWarnings.push(`Cupom ${couponId}: forma de pagamento inválida foi ignorada.`);
+        return [];
+      }
       const formRow = entry as Record<string, unknown>;
       const rawName = pickString(formRow, "nome", "Nome");
       if (!rawName) {
         parseWarnings.push(`Cupom ${couponId}: forma de pagamento sem campo "nome" foi ignorada.`);
         return [];
+      }
+      if (!hasFiniteNumber(formRow, "valortotal", "ValorTotal")) {
+        parseWarnings.push(`Cupom ${couponId}: valor de pagamento ausente ou inválido; receita integral indisponível.`);
       }
       return [{ rawName, amount: pickNumber(formRow, "valortotal", "ValorTotal") }];
     });

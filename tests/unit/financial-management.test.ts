@@ -3,11 +3,16 @@ import test from "node:test";
 import { analyzeManagement, managementPeriod, managementRequestSchema, FEE_ACCOUNTS } from "../../src/features/financial/agent/management";
 import type { DreSourceDataPayload } from "../../src/features/financial/dre/source-data";
 import type { ReceivablePeriodResult } from "../../src/features/financial/receivables/period-review";
+import { summarizeCashClosureDre } from "../../src/features/financial/cash-closures/dre-contract";
 const request = managementRequestSchema.parse({ kioskId: "unit", mappingId: "mapping", stoneCode: "123", month: "2026-09" });
 function source(): DreSourceDataPayload { return { expenses: [
   { id: "expense", accountingContractVersion: 1, competenceMonth: "2026-09", status: "paid", totalValue: 100,
     accountId: "cost", resultCenter: "unit", hasAccountAllocations: false, hasPersonAllocations: false, isApportioned: false },
-], salesSummaries: [{ kioskId: "unit", year: 2026, month: 9, revenue: 1000, cmv: 200 }], closureSummaries: [], missingSimulationIds: [],
+], salesSummaries: [{ kioskId: "unit", year: 2026, month: 9, revenue: 1000, cmv: 200,
+  dates: ["2026-09-01"], hasUndatedReports: false }], closureSummaries: [{ id: "unit-09", kioskId: "unit", year: 2026, month: 9,
+    closureCount: 1, expectedTotalCents: 100_000, differenceTotalCents: 0,
+    ...summarizeCashClosureDre([{ date: "2026-09-01", pdvSales: { version: 1, amountCents: 100_000 },
+      finalizedCashDifferences: { version: 1, shortageCents: 0, surplusCents: 0 } }]) }], missingSimulationIds: [],
 stats: { expenseDocuments: 1, salesReportDocuments: 1, closureSummaryDocuments: 0, simulationDocuments: 1 } }; }
 function input() { return { request, source: source(), accounts: { cost: { name: "Cost", drePosition: "despesas_operacionais", isDreAccount: true } },
   centerName: "Unit", centerNames: { unit: "Unit" }, cash: { movements: [], excludedCount: 0, confirmedBalance: null }, receivables: null }; }
@@ -57,4 +62,24 @@ test("reported payments stay separate from bank-confirmed cash", () => {
     { id: "c", date: "2026-09-02", status: "forecast", direction: "out", amountCents: 500, expenseId: "expense" },
   ] } });
   assert.equal(result.cash.bankInCents, 2000); assert.equal(result.cash.forecastOutCents, 500);
+});
+
+test("management separates integral PDV and cash differences and rejects legacy revenue", () => {
+  const data = input();
+  Object.assign(data.source.closureSummaries[0], {
+    expectedTotalCents: 90_000, differenceTotalCents: -25_000,
+    dreCashShortageTotalCents: 10_000, dreCashSurplusTotalCents: 2_000,
+  });
+  const month = analyzeManagement(data).months[1];
+  assert.equal(month.revenue, 1000);
+  assert.equal(month.result, 620);
+  assert.equal(month.dreSource.cashShortageCents, 10_000);
+  assert.equal(month.dreSource.cashSurplusCents, 2_000);
+  delete data.source.closureSummaries[0].dreVersion;
+  const legacy = analyzeManagement(data);
+  assert.equal(legacy.months[1].revenue, null);
+  assert.equal(legacy.months[1].result, null);
+  assert.ok(legacy.alerts.some(alert => alert.code === "dre_source_coverage"));
+  data.source.closureSummaries = [];
+  assert.equal(analyzeManagement(data).months[1].revenue, null);
 });
