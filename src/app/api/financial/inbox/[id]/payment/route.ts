@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-
 import { createInboxBarcodePaymentRequest } from "@/features/financial/payment-requests/service.server";
+import { inboxBarcodePaymentPreparationSchema } from "@/features/financial/payment-requests/inbox-barcode";
 import { requireUser } from "@/lib/auth-server";
-
-const schema = z.object({
-  scheduledFor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  barcode: z.string().trim().max(80).optional(),
-});
 
 export const runtime = "nodejs";
 
@@ -24,7 +18,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       return NextResponse.json({ error: "Sem permissão para preparar pagamentos bancários." }, { status: 403 });
     }
     const { id } = await context.params;
-    const input = schema.parse(await request.json());
+    const input = inboxBarcodePaymentPreparationSchema.parse(await request.json());
     const paymentRequest = await createInboxBarcodePaymentRequest({ inboxMessageId: id, workspaceId: actor.workspace_id, ...input }, {
       uid: actor.decoded.uid,
       email: actor.decoded.email,

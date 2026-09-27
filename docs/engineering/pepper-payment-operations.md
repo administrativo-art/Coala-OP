@@ -17,7 +17,7 @@ Antes de delegar, anuncie o nome completo, confira que não existe outro especia
 - Quando a API Coala não oferecer busca filtrada de despesas, o comando `lookup` pode consultar o Firestore em modo somente leitura, com a mesma sessão Firebase do operador e suas regras de acesso, sem Admin SDK/IAM. Sua allowlist fixa campo, coleção e limite; recusa de permissão é bloqueio, não motivo para trocar por credencial privilegiada. O POST `runQuery` não grava dados. Essa exceção não autoriza escritas diretas.
 - Se não houver despesa, confirmar com o usuário o cadastro e os dados contábeis que o documento não comprova. Não inferir unidade de outro pagamento ao mesmo fornecedor.
 - Manter a data solicitada. Data não útil, data rejeitada ou alteração devolvida pelo banco deve ser informada; não antecipar ou postergar silenciosamente.
-- Preparar, autorizar no Coala e enviar são etapas distintas. Antes de cada escrita, conferir novamente o estado e a ordem específica. Resultado incerto ou envio anterior bloqueia reenvio automático.
+- Preparar, autorizar no Coala e enviar são etapas distintas. A CLI pode preparar cobranças da caixa por ID exato somente depois de conferir despesa, centavos, data, CNPJ e código completo contra a mensagem; o snapshot devolvido precisa coincidir integralmente. Antes de cada escrita, conferir novamente o estado e a ordem específica. Resultado incerto ou envio anterior bloqueia repetição automática.
 - A aprovação final no Inter pertence ao usuário. Envio aceito, aguardando aprovação e agendado não significam pago. Relatar separadamente estado Coala e observação bancária.
 
 ## Validação e exceções

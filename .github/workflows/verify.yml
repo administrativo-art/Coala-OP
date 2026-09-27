@@ -170,7 +170,7 @@ jobs:
       - run: node scripts/test-reconciliation-api-e2e.mjs
 
   expense-boleto-api-e2e:
-    name: expense-boleto-api-e2e (observation)
+    name: barcode-payment-api-e2e (observation)
     if: github.base_ref != 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 15

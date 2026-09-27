@@ -11,12 +11,18 @@ node --import tsx scripts/financial/coala-authenticated-payment.mts status --ema
 node --import tsx scripts/financial/coala-authenticated-payment.mts find --email EMAIL --query FORNECEDOR --view work
 node --import tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount --value CENTAVOS
 node --import tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
+node --import tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
 ```
 
 Sem `--email`, o login pede o endereço no terminal antes da senha. `--email EMAIL`
 continua aceito para uso não interativo do endereço; a senha sempre é digitada
 no terminal interativo. O login valida a conta também na API do Coala antes de
 salvar o refresh token.
+
+`prepare` lê a cobrança por ID exato e, antes da escrita, confere estado vinculado,
+ausência de pedido/pagamento, despesa, valor, código completo, data e CNPJ válido.
+A resposta precisa devolver um snapshot idêntico; resultado incerto exige consulta da
+cobrança e não permite repetição automática.
 
 `authorize` e `send` são comandos distintos. Ambos exigem que valor em centavos,
 data programada, CPF/CNPJ do beneficiário, ID da despesa e código completo
