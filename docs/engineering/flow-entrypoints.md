@@ -36,7 +36,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/reconciliation/card-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/card-statements/page.tsx).
 
-Arquivos locais percorridos: 21.
+Arquivos locais percorridos: 23.
 
 Chamadas candidatas encontradas:
 
@@ -451,13 +451,10 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/expenses/pending-audit/page.tsx`](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 105.
+Arquivos locais percorridos: 103.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/card-statements/` — interface [`src/features/financial/pages/card-statements-page.tsx`](../../src/features/financial/pages/card-statements-page.tsx)
-- `/api/financial/card-statements/import` — interface [`src/features/financial/pages/card-statements-page.tsx`](../../src/features/financial/pages/card-statements-page.tsx); rota candidata [`src/app/api/financial/card-statements/import/route.ts`](../../src/app/api/financial/card-statements/import/route.ts)
-- `/api/financial/card-statements/import-preview` — interface [`src/features/financial/pages/card-statements-page.tsx`](../../src/features/financial/pages/card-statements-page.tsx); rota candidata [`src/app/api/financial/card-statements/import-preview/route.ts`](../../src/app/api/financial/card-statements/import-preview/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/expenses/` — interface [`src/features/financial/components/expenses/expense-boleto-panel.tsx`](../../src/features/financial/components/expenses/expense-boleto-panel.tsx)
 - `/api/financial/import-sessions/` — interface [`src/features/financial/pages/import-page.tsx`](../../src/features/financial/pages/import-page.tsx); rota candidata [`src/app/api/financial/import-sessions/[sessionId]/route.ts`](../../src/app/api/financial/import-sessions/%5BsessionId%5D/route.ts)
@@ -491,7 +488,6 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.audits` — [`src/features/financial/pages/import-page.tsx`](../../src/features/financial/pages/import-page.tsx)
 - `financial.audits.import` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.audits.view` — [`src/features/financial/pages/bank-statements-page.tsx`](../../src/features/financial/pages/bank-statements-page.tsx)
-- `financial.cardStatements` — [`src/features/financial/pages/card-statements-page.tsx`](../../src/features/financial/pages/card-statements-page.tsx)
 - `financial.cardStatements.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
 - `financial.expenses.create` — [`src/features/financial/components/expenses/expense-form.tsx`](../../src/features/financial/components/expenses/expense-form.tsx)
