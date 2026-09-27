@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useChannels } from '@/hooks/use-channels';
-import { convertValue } from '@/lib/conversion';
+import { calculateProductCompositionCmv } from '@/lib/product-composition-cmv';
 import { buildPriceOverrideId, calculateSimulationMetrics, resolveEffectivePrice } from '@/lib/pricing-context';
 import { canViewTechnicalSheets } from '@/lib/commercial-permissions';
 import { resolveBatchArchivedStatus, type BatchSimulationStatusUpdate } from '@/lib/product-simulation-batch';
@@ -89,33 +89,10 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         return rawSimulations.map(sim => {
             const items = simulationItems.filter(item => item.simulationId === sim.id);
-            let totalCmv = 0;
+            const composition = calculateProductCompositionCmv(items, new Map(baseProducts.map(base => [base.id, base])));
+            // Keep the existing partial preview while explicitly marking missing cost inputs.
+            const totalCmv = composition.totalCmv ?? composition.lines.reduce((sum, line) => sum + line.totalCmv, 0);
 
-            items.forEach(item => {
-                const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-                if (!baseProduct || !item.quantity) return;
-
-                let partialCost = 0;
-                
-                const costSource = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
-                
-                if (item.useDefault) {
-                    if(costSource > 0) {
-                        partialCost = item.quantity * costSource;
-                    }
-                } else if (item.overrideCostPerUnit && item.overrideUnit) {
-                    try {
-                        const valueInBase = convertValue(1, item.overrideUnit, baseProduct.unit, baseProduct.category);
-                        if (valueInBase > 0) {
-                            partialCost = item.quantity * (item.overrideCostPerUnit / valueInBase);
-                        }
-                    } catch (e) {
-                        console.error(`Error calculating cost for item ${item.id} in simulation ${sim.id}:`, e);
-                    }
-                }
-                totalCmv += partialCost;
-            });
-            
             const salePrice = sim.salePrice || 0;
             const taxPercent = pricingParameters?.averageTaxPercentage || 0;
             const feePercent = pricingParameters?.averageCardFeePercentage || 0;
@@ -124,6 +101,7 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             return {
                 ...sim,
                 totalCmv,
+                cmvComplete: composition.complete,
                 profitValue: metrics.profitValue,
                 profitPercentage: metrics.profitPercentage,
                 markup: metrics.markup,
