@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { AppError } from "@/lib/observability/app-error";
 import { BudgetDomainError } from "./errors";
+import { canViewBudgetComparison } from "./comparison";
 import { canEditBudgetPersonnel } from "./personnel-access";
 import { assertBudgetCenterAccess } from "./references.server";
 
@@ -26,7 +27,7 @@ export function assertBudgetPermission(actor: ServerUserContext, action: "view" 
   const financial = actor.permissions.financial;
   const permitted = financial?.view && (action === "manage"
     ? financial.settings?.view && financial.settings?.manageBudgets
-    : financial.settings?.view || financial.cashFlow?.view);
+    : canViewBudgetComparison(actor.permissions, actor.isDefaultAdmin));
   if (!permitted) throw new AppError({ code: "BUDGET_FORBIDDEN", kind: "AUTHORIZATION" });
 }
 

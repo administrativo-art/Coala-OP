@@ -5,6 +5,7 @@ import {
   compareExpenseCompetenceMonths,
   consolidateExpenseObligations,
   groupExpensesByDueWeek,
+  sumExpenseValues,
 } from "../../src/features/financial/lib/expense-list";
 
 test("ordena competências em uma única sequência cronológica, sem retornar ao ano inicial", () => {
@@ -80,4 +81,21 @@ test("agrupa despesas por semanas de vencimento iniciadas na segunda-feira", () 
     { key: "2026-08-10", label: "10 a 16/08/2026", ids: ["c"], totalValue: 50 },
     { key: "without-due-date", label: "Sem vencimento definido", ids: ["d"], totalValue: 20 },
   ]);
+  assert.deepEqual(groups.map((group) => group.weekNumber), [1, 2, null]);
+});
+
+test("total da competência soma as mesmas obrigações das semanas e conserva centavos", () => {
+  const entries = [
+    { id: "expense", due: new Date("2026-09-30T12:00:00-03:00"), amount: 201.6 },
+    { id: "single-card-statement", due: new Date("2026-10-08T12:00:00-03:00"), amount: 1066.8 },
+    { id: "fraction-a", due: null, amount: 0.1 },
+    { id: "fraction-b", due: null, amount: 0.2 },
+  ];
+  const total = sumExpenseValues(entries, (entry) => entry.amount);
+  const groups = groupExpensesByDueWeek(entries, (entry) => entry.due, (entry) => entry.amount);
+  assert.equal(total, 1268.7);
+  assert.equal(sumExpenseValues(groups, (group) => group.totalValue), total);
+  assert.deepEqual(groups.map((group) => [group.weekNumber, group.label]), [[1, "28/09 a 04/10/2026"], [2, "05 a 11/10/2026"], [null, "Sem vencimento definido"]]);
+  assert.equal(sumExpenseValues(entries.filter((entry) => entry.id === "expense"), (entry) => entry.amount), 201.6);
+  assert.equal(sumExpenseValues([], () => 100), 0);
 });
