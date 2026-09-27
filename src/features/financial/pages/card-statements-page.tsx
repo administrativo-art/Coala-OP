@@ -7,8 +7,6 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { setDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import {
-  ArrowLeft,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -32,7 +30,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { FinancialCompetenceNavigator } from "@/features/financial/components/financial-competence-navigator";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import {
@@ -63,6 +63,7 @@ import {
   matchCardStatementExpenses,
 } from "@/features/financial/lib/card-statement-expense-matcher";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
+import { cardStatementsReturnHref } from "@/features/financial/lib/reconciliation-navigation";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -266,10 +267,9 @@ export function CardStatementsWorkspace({
 
   const cards = useMemo(
     () => paymentMethodCards(bankAccountsData || []).filter((card) => (
-      (!accountId || card.accountId === accountId) &&
-      (!paymentMethodId || card.methodId === paymentMethodId)
+      !accountId || card.accountId === accountId
     )),
-    [accountId, bankAccountsData, paymentMethodId]
+    [accountId, bankAccountsData]
   );
   const generatedGroups = useMemo(
     () => buildCardStatementGroups(expensesData || [], cards),
@@ -489,10 +489,10 @@ export function CardStatementsWorkspace({
       return;
     }
     if (!monthGroups.some((group) => `${group.card.accountId}:${group.card.methodId}` === selectedCardKey)) {
-      const first = monthGroups[0];
-      setSelectedCardKey(`${first.card.accountId}:${first.card.methodId}`);
+      const preferred = monthGroups.find((group) => group.card.methodId === paymentMethodId) ?? monthGroups[0];
+      setSelectedCardKey(`${preferred.card.accountId}:${preferred.card.methodId}`);
     }
-  }, [monthGroups, selectedCardKey]);
+  }, [monthGroups, paymentMethodId, selectedCardKey]);
 
   useEffect(() => {
     setSelectedLineIds([]);
@@ -894,6 +894,10 @@ export function CardStatementsWorkspace({
       done: valuesBalanced,
     },
   ];
+  const safeReturnHref = cardStatementsReturnHref(returnTo);
+  const backLabel = safeReturnHref.startsWith(FINANCIAL_ROUTES.bankStatements)
+    ? "Voltar ao extrato"
+    : "Voltar às despesas";
 
   return (
     <div className={cn(
@@ -914,9 +918,7 @@ export function CardStatementsWorkspace({
       />
       {!embedded ? <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Button asChild variant="ghost" size="sm" className="-ml-3 mb-2">
-            <Link href={FINANCIAL_ROUTES.expenses}><ArrowLeft className="mr-2 h-4 w-4" />Voltar às despesas</Link>
-          </Button>
+          <BackButton fallbackHref={safeReturnHref} label={backLabel} variant="ghost" className="-ml-3 mb-2" />
           <h1 className="text-2xl font-bold tracking-tight">Faturas de cartão de crédito</h1>
           <p className="mt-1 text-sm text-muted-foreground">Previsão mensal, conferência das cobranças e conciliação do pagamento bancário.</p>
         </div>
@@ -1200,25 +1202,13 @@ export function CardStatementsWorkspace({
       ) : (
         <>
           <div className="flex flex-col items-stretch gap-3 lg:flex-row">
-            <div className="flex w-full shrink-0 flex-col justify-between rounded-[14px] border bg-white p-3.5 shadow-sm lg:w-44">
-              <div>
-                <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Competência</p>
-                <p className="mt-2 flex items-center gap-2 text-sm font-extrabold capitalize tracking-tight">
-                  <CalendarDays className="h-4 w-4 text-primary" />
-                  {monthLabel(monthKey)}
-                </p>
-              </div>
-              <div className="mt-3 flex gap-1.5">
-                <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg bg-[#faf9f6] px-2 text-[11px]" onClick={() => setMonthKey(changeMonth(monthKey, -1))}>
-                  ← Anterior
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg bg-[#faf9f6] px-2 text-[11px]" onClick={() => setMonthKey(changeMonth(monthKey, 1))}>
-                  Próxima →
-                </Button>
-              </div>
-            </div>
+            <FinancialCompetenceNavigator
+              label={monthLabel(monthKey)}
+              onPrevious={() => setMonthKey(changeMonth(monthKey, -1))}
+              onNext={() => setMonthKey(changeMonth(monthKey, 1))}
+            />
 
-            <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div data-ui="financial-card-selector" className="grid min-w-0 flex-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {monthGroups.map((group) => {
                 const cardKey = `${group.card.accountId}:${group.card.methodId}`;
                 const statement = statementByKey.get(group.key);
@@ -1230,6 +1220,7 @@ export function CardStatementsWorkspace({
                   <button
                     key={group.key}
                     type="button"
+                    aria-pressed={selected}
                     onClick={() => {
                       setSelectedCardKey(cardKey);
                       setLineStatusFilter("all");
@@ -2038,6 +2029,7 @@ export function CardStatementsPage() {
       fixedMonthKey={searchParams.get("month") || undefined}
       accountId={searchParams.get("accountId") || undefined}
       paymentMethodId={searchParams.get("paymentMethodId") || undefined}
+      returnTo={searchParams.get("returnTo") || undefined}
     />
   );
 }

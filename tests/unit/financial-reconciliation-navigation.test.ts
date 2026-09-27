@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { navigationActiveHref } from "../../src/lib/navigation-active-href";
-import { bankStatementsHref, expensesReturnHref, financialSearchQuery, financialSidebarPath } from "../../src/features/financial/lib/reconciliation-navigation";
+import {
+  bankStatementsHref,
+  cardStatementsHref,
+  cardStatementsReturnHref,
+  expensesReturnHref,
+  financialSearchQuery,
+  financialSidebarPath,
+} from "../../src/features/financial/lib/reconciliation-navigation";
 import { FINANCIAL_ROUTES } from "../../src/features/financial/lib/constants";
 
 const root = "/dashboard/financial";
@@ -71,9 +78,12 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   assert.match(bankPage, /permissions\.financial\?\.audits\?\.view !== true/);
   assert.ok(bankPage.indexOf("FinancialAccessGuard title=") < bankPage.indexOf("<FinancialImportPage embedded"));
   assert.match(bankPage, /<PageContainer variant="wide"/);
+  assert.match(bankPage, /<BackButton/);
   const importer = read("src/features/financial/pages/import-page.tsx");
   assert.match(importer, /url\.searchParams\.set\("session", sessionId\)/);
-  assert.match(importer, /url\.searchParams\.set\("ledger", view\)/);
+  assert.doesNotMatch(importer, /CardStatementsWorkspace/);
+  assert.match(importer, /cardStatementsHref/);
+  assert.match(importer, /FinancialCompetenceNavigator/);
   assert.match(importer, /!embedded \|\| \(showImportControls && !uploadOnly\)/);
   assert.match(importer, /FINANCIAL_ROUTES.bankStatements/);
 });
@@ -87,13 +97,29 @@ test("upload abre a sessão criada, preserva filtros de Despesas e não herda ca
   assert.equal(url.searchParams.get("returnTo"), `${expenses}?unit=u1&status=pending&competence=2026-09`);
 });
 
-test("atalho antigo preserva sessão/ledger e a volta não redireciona de novo à auditoria", () => {
+test("atalho antigo preserva sessão, remove ledger e a volta não redireciona de novo à auditoria", () => {
   const url = new URL(bankStatementsHref("view=audits&session=s1&ledger=credit_card%3Ac1&unit=u1", { fromExpenses: true }), "https://navigation.local");
   assert.equal(url.searchParams.get("view"), null);
   assert.equal(url.searchParams.get("session"), "s1");
-  assert.equal(url.searchParams.get("ledger"), "credit_card:c1");
+  assert.equal(url.searchParams.get("ledger"), null);
   assert.equal(url.searchParams.get("returnTo"), `${expenses}?unit=u1`);
   assert.equal(bankStatementsHref(), FINANCIAL_ROUTES.bankStatements);
+});
+
+test("atalho de cartão abre a página dedicada com competência, conta, cartão e retorno seguro", () => {
+  const returnTo = `${FINANCIAL_ROUTES.bankStatements}?session=s%2F1&ledger=credit_card%3Aold`;
+  const url = new URL(cardStatementsHref({
+    monthKey: "2026-09",
+    accountId: "a/1",
+    paymentMethodId: "c/1",
+    returnTo,
+  }), "https://navigation.local");
+
+  assert.equal(url.pathname, FINANCIAL_ROUTES.cardStatements);
+  assert.equal(url.searchParams.get("month"), "2026-09");
+  assert.equal(url.searchParams.get("accountId"), "a/1");
+  assert.equal(url.searchParams.get("paymentMethodId"), "c/1");
+  assert.equal(url.searchParams.get("returnTo"), `${FINANCIAL_ROUTES.bankStatements}?session=s%2F1`);
 });
 
 test("redirecionamento de fatura preserva cartão/conta/mês e parâmetros repetidos", () => {
@@ -113,6 +139,14 @@ test("retorno recusa destinos externos, protocolos e ciclos", () => {
   assert.equal(expensesReturnHref(`${expenses}?view=audits&session=s1&ledger=c1&returnTo=bad&search=energia`), `${expenses}?search=energia`);
 });
 
+test("retorno das faturas aceita apenas Despesas ou o extrato bancário", () => {
+  assert.equal(cardStatementsReturnHref(`${FINANCIAL_ROUTES.bankStatements}?session=s1&ledger=credit_card%3Ac1`), `${FINANCIAL_ROUTES.bankStatements}?session=s1`);
+  assert.equal(cardStatementsReturnHref(`${expenses}?search=energia`), `${expenses}?search=energia`);
+  for (const value of [null, "https://evil.invalid", "//evil.invalid", "/dashboard", `${expenses}/new`]) {
+    assert.equal(cardStatementsReturnHref(value), expenses);
+  }
+});
+
 test("depósitos e antecipações mantêm item pai selecionado sem conceder visibilidade", () => {
   const cash = `${root}/cash-closures`;
   const deposits = `${root}/cash-deposits`;
@@ -123,4 +157,21 @@ test("depósitos e antecipações mantêm item pai selecionado sem conceder visi
   assert.equal(financialSidebarPath(deposits, [deposits]), deposits);
   assert.equal(financialSidebarPath(anticipation, [expenses]), anticipation);
   assert.equal(financialSidebarPath(`${cash}/sessions/s1`, [cash]), `${cash}/sessions/s1`);
+});
+
+test("conciliação segue o contrato visual documentado", () => {
+  const importer = read("src/features/financial/pages/import-page.tsx");
+  const cards = read("src/features/financial/pages/card-statements-page.tsx");
+  const guide = read("docs/engineering/ui-design-system.md");
+  const navigator = read("src/features/financial/components/financial-competence-navigator.tsx");
+
+  assert.match(importer, /<FinancialCompetenceNavigator/);
+  assert.match(cards, /<FinancialCompetenceNavigator/);
+  assert.match(cards, /data-ui="financial-card-selector"/);
+  assert.match(navigator, /\bAnterior\b/);
+  assert.match(navigator, /Próxima/);
+  assert.match(guide, /Importar → Auditar → Fechar/);
+  assert.match(guide, /\*\*Pendente\*\*/);
+  assert.match(guide, /\*\*Conciliada\*\*/);
+  assert.match(guide, /Use `BackButton`/);
 });
