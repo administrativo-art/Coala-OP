@@ -7,23 +7,24 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { getBudgetPlanningComparisons } from "../budgets/projections.server";
 import type { BudgetExpense } from "../lib/budget-consumption";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
-import type { ProductSimulation, SalesReport } from "@/types";
+import type { SalesReport } from "@/types";
 import {
   financialExpenseDreWithoutPresentationDetails,
   normalizeFinancialExpenseForDre,
 } from "@/features/financial/lib/expense-accounting-contract";
 import {
-  chunkDreSimulationIds,
   DreSourceLimitError,
   summarizeDreSalesReports,
   type DreSourceDataPayload,
 } from "./source-data";
 
+import { buildCmvPeriod, loadCmvClosures, loadCurrentCompositionCosts } from "./cmv-closure.server";
+
 const SALES_PAGE_SIZE = 500;
 const EXPENSE_PAGE_SIZE = 500;
 const MAX_REPORTS_PER_PERIOD = 5_000;
 const MAX_EXPENSES_PER_PERIOD = 5_000;
-const MAX_SIMULATIONS_PER_REQUEST = 5_000;
+
 
 async function listSalesReportsForPeriod(year: number, month: number, kioskIds: string[]) {
   const documents: FirebaseFirestore.QueryDocumentSnapshot[] = [];
@@ -101,27 +102,31 @@ export async function getDreSourceData(input: {
     .filter((expense) => expense.competenceMonth && requestedPeriods.has(expense.competenceMonth));
   const reports = reportDocuments.flatMap((document): SalesReport[] => {
     const data = document.data();
-    if (!allowedKiosks.has(String(data.kioskId ?? "")) || !Array.isArray(data.items)) return [];
-    return [{ id: document.id, ...data } as SalesReport];
+    if (!allowedKiosks.has(String(data.kioskId ?? ""))) return [];
+    return [{ ...data, id: document.id } as SalesReport];
   });
-  const simulationIds = reports.flatMap((report) => report.items.map((item) => item.simulationId));
-  const simulationChunks = chunkDreSimulationIds(simulationIds);
-  const uniqueSimulationCount = simulationChunks.reduce((total, ids) => total + ids.length, 0);
-  if (uniqueSimulationCount > MAX_SIMULATIONS_PER_REQUEST) {
-    throw new DreSourceLimitError("simulations");
-  }
-  const simulationDocuments = (
-    await Promise.all(simulationChunks.map((ids) => (
-      dbAdmin.getAll(...ids.map((id) => dbAdmin.collection("productSimulations").doc(id)))
-    )))
-  ).flat().filter((snapshot) => snapshot.exists);
-  const simulationCmv = new Map(simulationDocuments.flatMap((snapshot) => {
-    const simulation = { id: snapshot.id, ...snapshot.data() } as ProductSimulation;
-    return Number.isFinite(simulation.totalCmv)
-      ? [[snapshot.id, simulation.totalCmv] as const]
-      : [];
-  }));
+  const cmvClosures = await loadCmvClosures(input.workspaceId, input.kioskIds, input.periods);
+  const closureByKey = new Map(cmvClosures.map(closure => [`${closure.kioskId}:${closure.period}`, closure]));
+  const keyForReport = (report: SalesReport) => `${report.kioskId}:${report.year}-${String(report.month).padStart(2, "0")}`;
+  const liveReports = reports.filter(report => closureByKey.get(keyForReport(report))?.status !== "closed");
+  const simulationIds = liveReports.flatMap(report => Array.isArray(report.items) ? report.items.map(item => item?.simulationId) : []);
+  const currentCosts = await loadCurrentCompositionCosts(simulationIds);
+  const simulationCmv = new Map([...currentCosts.costs].flatMap(([id, result]) => result.complete && result.totalCmv !== null ? [[id, result.totalCmv] as const] : []));
   const sales = summarizeDreSalesReports(reports, simulationCmv);
+  const cmvPeriods = input.kioskIds.flatMap(kioskId => input.periods.map(period => {
+    const key = `${kioskId}:${period}`;
+    return buildCmvPeriod(kioskId, period, reports.filter(report => keyForReport(report) === key),
+      currentCosts.costs, closureByKey.get(key)).view;
+  }));
+  for (const cmv of cmvPeriods) {
+    const [year, month] = cmv.period.split("-").map(Number);
+    const summary = sales.salesSummaries.find(row => row.kioskId === cmv.kioskId && row.year === year && row.month === month);
+    if (summary) { summary.cmv = cmv.totalCmv ?? 0; summary.cmvComplete = cmv.complete; }
+    else if (cmv.status === "closed") sales.salesSummaries.push({ kioskId: cmv.kioskId, year, month,
+      revenue: 0, cmv: cmv.totalCmv!, cmvComplete: true, cmvOnly: true, dates: [], hasUndatedReports: true });
+  }
+  // Missing live compositions must not invalidate unrelated frozen months.
+  sales.missingSimulationIds = [...currentCosts.costs].filter(([, result]) => !result.complete).map(([id]) => id).sort();
 
   const closureRefs = input.kioskIds.flatMap((kioskId) => input.periods.map((period) => {
     const [year, month] = period.split("-").map(Number);
@@ -137,12 +142,14 @@ export async function getDreSourceData(input: {
     budgetPlanning: await getBudgetPlanningComparisons({ periods: input.periods, kioskIds: input.kioskIds,
       expenses: expenseDocuments.map((doc) => ({ ...doc.data(), id: doc.id } as BudgetExpense)), canViewPersonnel: input.canViewPersonnel === true }),
     expenses,
+    cmvPeriods,
     salesSummaries: sales.salesSummaries,
     closureSummaries,
     missingSimulationIds: sales.missingSimulationIds,
     stats: {
       salesReportDocuments: reportDocuments.length,
-      simulationDocuments: simulationDocuments.length,
+      ...currentCosts.stats,
+      cmvClosureDocuments: input.kioskIds.length * input.periods.length,
       closureSummaryDocuments: closureSnapshots.length,
       expenseDocuments: expenseDocuments.length,
     },

@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **356 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **357 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -160,6 +160,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/cash-deposits/reports` | GET | [src/app/api/financial/cash-deposits/reports/route.ts](../../src/app/api/financial/cash-deposits/reports/route.ts) | [cash-deposits](flows/cash-deposits.md) |
 | `/api/financial/cash-deposits/reports/export` | GET | [src/app/api/financial/cash-deposits/reports/export/route.ts](../../src/app/api/financial/cash-deposits/reports/export/route.ts) | [cash-deposits](flows/cash-deposits.md) |
 | `/api/financial/data` | GET | [src/app/api/financial/data/route.ts](../../src/app/api/financial/data/route.ts) | [cash-flow](flows/cash-flow.md) |
+| `/api/financial/dre/cmv-closure` | POST | [src/app/api/financial/dre/cmv-closure/route.ts](../../src/app/api/financial/dre/cmv-closure/route.ts) | [dre](flows/dre.md) |
 | `/api/financial/dre/source-data` | GET | [src/app/api/financial/dre/source-data/route.ts](../../src/app/api/financial/dre/source-data/route.ts) | [dre](flows/dre.md) |
 | `/api/financial/dre/stock-cmv` | GET | [src/app/api/financial/dre/stock-cmv/route.ts](../../src/app/api/financial/dre/stock-cmv/route.ts) | [dre](flows/dre.md) |
 | `/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]` | PATCH | [src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts](../../src/app/api/financial/expenses/%5BexpenseId%5D/adjustments/%5BadjustmentId%5D/route.ts) | [expenses](flows/expenses.md) |

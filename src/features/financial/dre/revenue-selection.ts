@@ -56,7 +56,7 @@ export function selectDreRevenue(input: {
   const matches = (row: { kioskId: string; year: number; month: number }) =>
     row.kioskId === input.kioskId && row.year === input.year && row.month === input.month;
   const rows = input.closureSummaries.filter(matches);
-  const sales = input.salesSummaries.filter(matches);
+  const sales = input.salesSummaries.filter(row => matches(row) && !row.cmvOnly);
   const result: DreRevenueSelection = {
     revenueCents: null, cashShortageCents: null, cashSurplusCents: null,
     revenueSource: "unavailable", revenueCoverage: "unavailable", cashDifferenceCoverage: "unavailable",
