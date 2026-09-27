@@ -71,11 +71,12 @@ import {
 import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
-import { CardStatementsWorkspace } from "@/features/financial/pages/card-statements-page";
+import { FinancialCompetenceNavigator } from "@/features/financial/components/financial-competence-navigator";
 import { AccountPlanTreeSelect } from "@/components/purchasing/account-plan-tree-select";
 import { ResultCenterSelect } from "@/components/purchasing/result-center-select";
 import { applyAliasesAndMatch, type PendingInstallment } from "@/features/financial/lib/import-matcher";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import { cardStatementsHref } from "@/features/financial/lib/reconciliation-navigation";
 import { parseCSV, CSV_BANK_PROFILES } from "@/features/financial/lib/parsers/csv";
 import { parseOFX } from "@/features/financial/lib/parsers/ofx";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
@@ -386,11 +387,11 @@ const IMPORT_ITEM_STATUS_META: Record<
     className: "border-amber-200 bg-amber-50 text-amber-700",
   },
   audited: {
-    label: "Auditada",
-    className: "border-blue-200 bg-blue-50 text-blue-700",
+    label: "Pendente",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
   },
   completed: {
-    label: "Efetivada",
+    label: "Conciliada",
     className: "border-emerald-200 bg-emerald-50 text-emerald-700",
   },
   ignored: {
@@ -674,7 +675,7 @@ function joinHistoryLabels(labels: string[]) {
 function getAuditHistoryMessage(entry: ImportSessionItemAuditHistory, isExpense: boolean) {
   const actorName = entry.actorName || "Usuário";
   if (entry.action === "effectuated") {
-    return `${actorName} efetivou ${isExpense ? "a despesa" : "a movimentação"} no financeiro.`;
+    return `${actorName} conciliou ${isExpense ? "a despesa" : "a movimentação"} no financeiro.`;
   }
   if (entry.action === "reopened") {
     return `${actorName} reabriu ${isExpense ? "a despesa" : "a movimentação"} para correção.`;
@@ -1798,7 +1799,6 @@ export function FinancialImportPage({
   const [reopenItemId, setReopenItemId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState("");
   const [closeStatementDialogOpen, setCloseStatementDialogOpen] = useState(false);
-  const [sessionLedgerView, setSessionLedgerView] = useState("checking_account");
   const visibleOpenSessions = useMemo(
     () =>
       statementAccountId
@@ -1826,35 +1826,23 @@ export function FinancialImportPage({
     []
   );
 
-  const selectSessionLedgerView = useCallback((view: string) => {
-    setSessionLedgerView(view);
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (view === "checking_account") url.searchParams.delete("ledger");
-    else url.searchParams.set("ledger", view);
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, []);
-
   const handleSelectSession = useCallback(
     (session: ImportSession) => {
       setSelectedSessionId(session.id);
       setCurrentSession(session);
       setExpandedItemId(null);
-      selectSessionLedgerView("checking_account");
       setIsSessionDirty(false);
       replaceSessionUrl(session.id);
     },
-    [replaceSessionUrl, selectSessionLedgerView]
+    [replaceSessionUrl]
   );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sessionFromUrl = new URL(window.location.href).searchParams.get("session");
-    const ledgerFromUrl = new URL(window.location.href).searchParams.get("ledger");
     if (sessionFromUrl) {
       setSelectedSessionId((current) => current ?? sessionFromUrl);
     }
-    if (ledgerFromUrl) setSessionLedgerView(ledgerFromUrl);
   }, []);
 
   useEffect(() => {
@@ -2375,7 +2363,8 @@ export function FinancialImportPage({
       }
       refreshImportSessions();
       const confirmationToast = toast({
-        title: "Auditoria confirmada — aguardando efetivação",
+        title: "Auditoria confirmada.",
+        description: "O item permanece pendente até a conciliação.",
         duration: 4_000,
       });
       window.setTimeout(confirmationToast.dismiss, 4_000);
@@ -2698,7 +2687,7 @@ export function FinancialImportPage({
     const auditedItems = currentSession.items.filter((item) => item.status === "audited");
 
     if (auditedItems.length === 0) {
-      toast({ variant: "destructive", title: "Nenhum item auditado pronto para efetivar." });
+      toast({ variant: "destructive", title: "Nenhum item conferido está disponível para conciliação." });
       return;
     }
 
@@ -3185,10 +3174,10 @@ export function FinancialImportPage({
       setCurrentSession(updatedSession);
       setIsSessionDirty(false);
       refreshImportSessions();
-      toast({ title: `${auditedItems.length} item(ns) efetivado(s) com sucesso.` });
+      toast({ title: `${auditedItems.length} item(ns) conciliado(s) com sucesso.` });
     } catch (error) {
       console.error(error);
-      toast({ variant: "destructive", title: "Erro ao efetivar a sessão." });
+      toast({ variant: "destructive", title: "Erro ao conciliar a sessão." });
     } finally {
       setIsProcessing(false);
     }
@@ -3232,13 +3221,13 @@ export function FinancialImportPage({
       setIsSessionDirty(false);
       setExpandedItemId(openNext ? getNextPendingItemId(nextItems, itemId, directionFilter) ?? itemId : null);
       refreshImportSessions();
-      const successToast = toast({ title: "Movimentação efetivada no financeiro.", duration: 4_000 });
+      const successToast = toast({ title: "Movimentação conciliada no financeiro.", duration: 4_000 });
       window.setTimeout(successToast.dismiss, 4_000);
     } catch (error) {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Não foi possível efetivar esta movimentação.",
+        title: "Não foi possível conciliar esta movimentação.",
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
@@ -3316,7 +3305,7 @@ export function FinancialImportPage({
       toast({
         variant: "destructive",
         title: "Ainda existem movimentações em tratamento.",
-        description: "Efetive ou ignore todos os itens antes de fechar o extrato.",
+        description: "Concilie ou ignore todos os itens antes de fechar o extrato.",
       });
       return;
     }
@@ -3326,7 +3315,7 @@ export function FinancialImportPage({
       await patchImportSession(currentSession.id, { action: "close_statement" });
       toast({
         title: "Extrato fechado e consolidado.",
-        description: `${currentSession.summary.completed} itens efetivados e ${currentSession.summary.ignored} ignorados.`,
+        description: `${currentSession.summary.completed} itens conciliados e ${currentSession.summary.ignored} ignorados.`,
       });
       setCurrentSession(null);
       setSelectedSessionId(null);
@@ -3405,22 +3394,7 @@ export function FinancialImportPage({
   const selectedSessionAccount = selectedSession
     ? accounts.find((account) => account.id === selectedSession.statementAccountId) ?? null
     : null;
-  const selectedSessionCards = (canViewCardStatements ? selectedSessionAccount?.paymentMethods || [] : []).filter(
-    (method) => method.type === "credit_card"
-  );
-  const selectedLedgerCard = sessionLedgerView.startsWith("credit_card:")
-    ? selectedSessionCards.find((method) => method.id === sessionLedgerView.slice("credit_card:".length)) ?? null
-    : null;
   const selectedSessionMonthKey = selectedSession ? getSessionMonthKey(selectedSession) : null;
-  const cardWorkspaceReturnTo = selectedSession && selectedLedgerCard
-    ? `${FINANCIAL_ROUTES.bankStatements}?session=${encodeURIComponent(selectedSession.id)}&ledger=${encodeURIComponent(`credit_card:${selectedLedgerCard.id}`)}`
-    : FINANCIAL_ROUTES.bankStatements;
-
-  useEffect(() => {
-    if (!sessionLedgerView.startsWith("credit_card:")) return;
-    if (!selectedSession || !bankAccountsData) return;
-    if (!selectedLedgerCard) selectSessionLedgerView("checking_account");
-  }, [bankAccountsData, selectSessionLedgerView, selectedLedgerCard, selectedSession, sessionLedgerView]);
 
   const selectedStatementAccountLabel = selectedSession
     ? getAccountDisplayLabel(accounts, selectedSession.statementAccountId, selectedSession.statementAccountName)
@@ -3445,7 +3419,8 @@ export function FinancialImportPage({
     () =>
       selectedSession
         ? getSortedItems(selectedSession.items).filter((item) => {
-            if (itemStatusFilter !== "all" && item.status !== itemStatusFilter) return false;
+            if (itemStatusFilter === "pending" && item.status !== "pending" && item.status !== "audited") return false;
+            if (itemStatusFilter !== "all" && itemStatusFilter !== "pending" && item.status !== itemStatusFilter) return false;
             if (directionFilter === "in") return item.amount >= 0;
             if (directionFilter === "out") return item.amount < 0;
             return true;
@@ -3540,11 +3515,11 @@ export function FinancialImportPage({
           done: selectedValidation.expenseValid,
         },
         {
-          label: "Marcar receita como auditada",
+          label: "Confirmar auditoria da receita",
           done: selectedDetailItem.status === "audited" || selectedDetailItem.status === "completed",
         },
         {
-          label: "Efetivar receita no fluxo financeiro",
+          label: "Conciliar receita no fluxo financeiro",
           done: selectedDetailItem.status === "completed",
         },
       ];
@@ -3572,11 +3547,11 @@ export function FinancialImportPage({
         done: selectedValidation.expenseValid,
       },
       {
-        label: "Item auditado",
+        label: "Auditoria confirmada",
         done: selectedDetailItem.status === "audited" || selectedDetailItem.status === "completed",
       },
       {
-        label: "Efetivado no financeiro",
+        label: "Conciliado no financeiro",
         done: selectedDetailItem.status === "completed",
       },
     ];
@@ -3992,11 +3967,11 @@ export function FinancialImportPage({
       if (failedIds.length > 0) {
         toast({
           variant: "destructive",
-          title: `${successfulIds.length} efetivada(s); ${failedIds.length} não concluída(s).`,
+          title: `${successfulIds.length} conciliada(s); ${failedIds.length} não concluída(s).`,
           description: "Os itens que falharam continuam selecionados para revisão.",
         });
       } else {
-        toast({ title: `${successfulIds.length} movimentação(ões) efetivada(s) no financeiro.` });
+        toast({ title: `${successfulIds.length} movimentação(ões) conciliada(s) no financeiro.` });
       }
     } finally {
       setIsProcessing(false);
@@ -4074,34 +4049,17 @@ export function FinancialImportPage({
         {
           label: "Auditar",
           meta:
-            selectedSessionCounts.pending === 0
-              ? "cadastros completos"
-              : `${selectedSessionCounts.pending} pendente${
-                  selectedSessionCounts.pending === 1 ? "" : "s"
-                }`,
-          done: selectedSessionCounts.pending === 0,
-        },
-        {
-          label: "Efetivar",
-          meta:
-            selectedSessionCounts.audited === 0
-              ? "nada na fila"
-              : `${selectedSessionCounts.audited} aguardando`,
-          done: selectedSessionCounts.audited === 0,
+            selectedSessionCounts.pending + selectedSessionCounts.audited > 0
+              ? `${selectedSessionCounts.pending + selectedSessionCounts.audited} pendente${
+                  selectedSessionCounts.pending + selectedSessionCounts.audited === 1 ? "" : "s"
+                }`
+              : "cadastros completos",
+          done: selectedSessionCounts.pending === 0 && selectedSessionCounts.audited === 0,
         },
         {
           label: "Fechar",
           meta: canCloseStatement ? "liberado" : "bloqueado",
           done: false,
-        },
-        {
-          label: "Cartões",
-          meta: selectedSessionCards.length
-            ? `${selectedSessionCards.length} fatura${
-                selectedSessionCards.length === 1 ? "" : "s"
-              } vinculada${selectedSessionCards.length === 1 ? "" : "s"}`
-            : "nenhum cartão",
-          done: selectedSessionCards.length === 0,
         },
       ]
     : [];
@@ -4110,7 +4068,7 @@ export function FinancialImportPage({
   const statementCloseChecklist = selectedSession
     ? [
         {
-          label: "Movimentações auditadas",
+          label: "Auditoria concluída",
           meta:
             selectedSessionCounts.pending === 0
               ? "Nenhum item com cadastro incompleto."
@@ -4118,19 +4076,12 @@ export function FinancialImportPage({
           ok: selectedSessionCounts.pending === 0,
         },
         {
-          label: "Fila de efetivação vazia",
+          label: "Fila de conciliação vazia",
           meta:
             selectedSessionCounts.audited === 0
-              ? "Todos os auditados já foram efetivados."
-              : `${selectedSessionCounts.audited} item(ns) aguardando efetivação.`,
+              ? "Todos os itens conferidos já foram conciliados."
+              : `${selectedSessionCounts.audited} item(ns) aguardando conciliação.`,
           ok: selectedSessionCounts.audited === 0,
-        },
-        {
-          label: "Fatura do cartão conferida",
-          meta: selectedSessionCards.length
-            ? `${selectedSessionCards.length} cartão(ões) vinculado(s) — confira na aba do cartão.`
-            : "Nenhum cartão vinculado a esta conta.",
-          ok: selectedSessionCards.length === 0,
         },
       ]
     : [];
@@ -4229,47 +4180,27 @@ export function FinancialImportPage({
         <div className="space-y-3">
           {/* Competência + contas bancárias do mês */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-            <div className="flex shrink-0 flex-col justify-between rounded-2xl border border-border/70 bg-card p-3.5 lg:w-[188px]">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Competência
-              </p>
-              <div className="mt-2">
-                <p className="text-[15px] font-bold leading-tight tracking-tight">{activeMonthLabel}</p>
-                <p className="mt-0.5 text-[10.5px] text-muted-foreground">{activeMonthMeta}</p>
-              </div>
-              <div className="mt-3 flex gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 flex-1 rounded-lg px-0"
-                  disabled={activeMonthIndex <= 0}
-                  aria-label="Competência anterior"
-                  onClick={() => goToAdjacentMonth(-1)}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 flex-1 rounded-lg px-0"
-                  disabled={activeMonthIndex < 0 || activeMonthIndex >= availableMonthKeys.length - 1}
-                  aria-label="Próxima competência"
-                  onClick={() => goToAdjacentMonth(1)}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
+            <FinancialCompetenceNavigator
+              label={activeMonthLabel}
+              meta={activeMonthMeta}
+              previousDisabled={activeMonthIndex <= 0}
+              nextDisabled={activeMonthIndex < 0 || activeMonthIndex >= availableMonthKeys.length - 1}
+              onPrevious={() => goToAdjacentMonth(-1)}
+              onNext={() => goToAdjacentMonth(1)}
+            />
 
-            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(280px,0.8fr)_minmax(520px,1.7fr)]">
+              <div className="grid content-start gap-3">
               {monthSessions.map((session) => {
                 const account = accounts.find((entry) => entry.id === session.statementAccountId);
                 const isActive = session.id === selectedSession.id;
                 const progress = getImportAuditProgress(session.summary);
                 const financials = getSessionFinancialSummary(session);
                 const ready = progress.percentage === 100;
+                const cards = canViewCardStatements
+                  ? (account?.paymentMethods ?? []).filter((method) => method.type === "credit_card")
+                  : [];
+                const sessionMonthKey = getSessionMonthKey(session) ?? activeMonthKey ?? "";
                 const meta = [
                   account?.agency ? `AG ${account.agency}` : null,
                   account?.accountNumber ? `CC ${account.accountNumber}` : null,
@@ -4277,17 +4208,21 @@ export function FinancialImportPage({
                   .filter(Boolean)
                   .join(" · ");
                 return (
-                  <button
+                  <div
                     key={session.id}
-                    type="button"
-                    onClick={() => handleSelectSession(session)}
                     className={cn(
-                      "flex flex-col rounded-2xl border bg-card p-4 text-left transition-shadow",
+                      "flex flex-col rounded-2xl border bg-card p-3 text-left transition-shadow",
                       isActive
                         ? "border-primary shadow-md ring-1 ring-primary/20"
                         : "border-border/70 shadow-sm hover:border-primary/40"
                     )}
                   >
+                    <button
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => handleSelectSession(session)}
+                      className="w-full p-1 text-left"
+                    >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <span
@@ -4345,7 +4280,7 @@ export function FinancialImportPage({
                             ready ? "text-emerald-600" : "text-amber-600"
                           )}
                         >
-                          {progress.treated}/{progress.total} tratadas
+                          {progress.treated}/{progress.total} resolvidas
                         </p>
                       </div>
                     </div>
@@ -4358,9 +4293,143 @@ export function FinancialImportPage({
                         style={{ width: `${progress.percentage}%` }}
                       />
                     </div>
-                  </button>
+                    </button>
+                    {cards.length > 0 ? (
+                      <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3">
+                        {cards.map((method) => (
+                          <Button
+                            key={method.id}
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-full justify-start rounded-lg px-2.5 text-[10.5px]"
+                          >
+                            <Link
+                              href={cardStatementsHref({
+                                monthKey: sessionMonthKey,
+                                accountId: session.statementAccountId,
+                                paymentMethodId: method.id,
+                                returnTo: `${FINANCIAL_ROUTES.bankStatements}?session=${encodeURIComponent(session.id)}`,
+                              })}
+                            >
+                              <CreditCard className="mr-2 h-3.5 w-3.5" />
+                              <span className="truncate">
+                                Auditar {method.label || "cartão"}{method.lastDigits ? ` · final ${method.lastDigits}` : ""}
+                              </span>
+                            </Link>
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
+              </div>
+
+              <div
+                data-ui="statement-reconciliation-summary"
+                className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[14px] font-bold tracking-tight">Conciliação</h3>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "rounded-full px-2 py-0 text-[9px] font-semibold",
+                      statementProgress.percentage === 100
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                    )}
+                  >
+                    {statementProgress.percentage === 100
+                      ? "Pronto para fechar"
+                      : `${statementProgress.percentage}% resolvido`}
+                  </Badge>
+                </div>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(180px,0.65fr)_minmax(280px,1fr)]">
+                  <div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] text-muted-foreground">Conciliadas ou ignoradas</span>
+                      <span className="font-mono text-[13px] font-bold">
+                        {statementProgress.treated} de {statementProgress.total}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-full",
+                          statementProgress.percentage === 100 ? "bg-emerald-500" : "bg-primary"
+                        )}
+                        style={{ width: `${statementProgress.percentage}%` }}
+                      />
+                      <div
+                        className="h-full bg-[repeating-linear-gradient(135deg,#f6cfe4,#f6cfe4_4px,#f0eae4_4px,#f0eae4_8px)]"
+                        style={{ width: `${100 - statementProgress.percentage}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <span className="text-[11px] text-muted-foreground">Pendentes</span>
+                      <span className="font-mono text-[13px] font-bold text-amber-600">
+                        {statementProgress.total - statementProgress.treated}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-emerald-950/30">
+                      <p className="text-[9.5px] font-semibold text-emerald-700/80 dark:text-emerald-400/80">Entradas</p>
+                      <p className="mt-0.5 font-mono text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
+                        {formatCurrency(statementFinancials.entries)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-rose-50 px-2.5 py-2 dark:bg-rose-950/30">
+                      <p className="text-[9.5px] font-semibold text-rose-700/80 dark:text-rose-400/80">Saídas</p>
+                      <p className="mt-0.5 font-mono text-[12px] font-bold text-rose-700 dark:text-rose-400">
+                        {formatCurrency(statementFinancials.exits)}
+                      </p>
+                    </div>
+                    <div className="col-span-2 flex items-center justify-between rounded-xl bg-muted/60 px-2.5 py-2">
+                      <span className="text-[11px] text-muted-foreground">Saldo do período</span>
+                      <span className={cn("font-mono text-[12px] font-bold", statementFinancials.balance < 0 ? "text-rose-600" : "text-emerald-600")}>
+                        {statementFinancials.balance < 0 ? "− " : "+ "}{formatCurrency(Math.abs(statementFinancials.balance))}
+                      </span>
+                    </div>
+                    <div className="col-span-2 flex items-center justify-between px-0.5">
+                      <span className="text-[10.5px] text-muted-foreground">Unidade</span>
+                      <span className="text-[10.5px] font-semibold text-foreground">{statementUnitName || "Não vinculada"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 border-t border-border/60 pt-3 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-end">
+                  <div>
+                    <p className="text-[8.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Para fechar o extrato</p>
+                    <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                      {statementCloseChecklist.map((entry) => (
+                        <div key={entry.label} className="flex items-start gap-2 rounded-lg bg-muted/30 px-2.5 py-2">
+                          <span className={cn("mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-bold text-white", entry.ok ? "bg-emerald-500" : "bg-amber-500")}>
+                            {entry.ok ? <Check className="h-3 w-3" /> : "!"}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-semibold">{entry.label}</p>
+                            <p className="mt-0.5 text-[9.5px] text-muted-foreground">{entry.meta}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    className="h-10 w-full rounded-xl text-[12px] font-bold"
+                    onClick={() => setCloseStatementDialogOpen(true)}
+                    disabled={!canManageAudits || isProcessing || !canCloseStatement}
+                    title={!canCloseStatement ? "Concilie ou ignore todos os itens antes de fechar." : "Consolidar e fechar este extrato."}
+                  >
+                    Fechar extrato
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -4412,22 +4481,7 @@ export function FinancialImportPage({
             </div>
           ) : null}
 
-            {selectedLedgerCard ? (
-              <Card
-                data-testid="card-statement-pane"
-                className="h-[min(680px,calc(100vh-320px))] min-h-[520px] overflow-hidden rounded-2xl border-border/70 bg-white shadow-sm"
-              >
-                <CardStatementsWorkspace
-                  embedded
-                  fixedMonthKey={selectedSessionMonthKey || undefined}
-                  accountId={selectedSession.statementAccountId}
-                  paymentMethodId={selectedLedgerCard.id}
-                  returnTo={cardWorkspaceReturnTo}
-                />
-              </Card>
-            ) : (
-              <>
-              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_348px]">
+            <div className="grid items-start gap-4">
             <div
               data-testid="transactions-pane"
               className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
@@ -4477,9 +4531,8 @@ export function FinancialImportPage({
                         </span>
                       </button>
                       {([
-                        ["pending", "Pendentes", selectedSessionCounts.pending, "border-amber-300 bg-amber-50 text-amber-700"],
-                        ["audited", "Auditadas", selectedSessionCounts.audited, "border-sky-300 bg-sky-50 text-sky-700"],
-                        ["completed", "Efetivadas", selectedSessionCounts.completed, "border-emerald-300 bg-emerald-50 text-emerald-700"],
+                        ["pending", "Pendentes", selectedSessionCounts.pending + selectedSessionCounts.audited, "border-amber-300 bg-amber-50 text-amber-700"],
+                        ["completed", "Conciliadas", selectedSessionCounts.completed, "border-emerald-300 bg-emerald-50 text-emerald-700"],
                       ] as const).map(([value, label, count, activeClass], index) => (
                         <Fragment key={value}>
                           {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" /> : null}
@@ -4495,7 +4548,7 @@ export function FinancialImportPage({
                           >
                             <span className={cn(
                               "h-1.5 w-1.5 rounded-full",
-                              value === "pending" ? "bg-amber-500" : value === "audited" ? "bg-sky-500" : "bg-emerald-500"
+                              value === "pending" ? "bg-amber-500" : "bg-emerald-500"
                             )} />
                             {label}
                             <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[9px] leading-none">{count}</span>
@@ -4577,7 +4630,7 @@ export function FinancialImportPage({
                       disabled={
                         !canIgnoreAudits || isProcessing || isSavingSession || isSessionDirty || bulkIgnorableItems.length === 0
                       }
-                      title="Somente movimentações pendentes ou auditadas podem ser ignoradas."
+                      title="Somente movimentações pendentes podem ser ignoradas."
                       onClick={() => setBulkIgnoreDialogOpen(true)}
                     >
                       Ignorar ({bulkIgnorableItems.length})
@@ -4589,11 +4642,11 @@ export function FinancialImportPage({
                       disabled={
                         !canEffectuateAudits || isProcessing || isSavingSession || isSessionDirty || bulkEffectuatableItems.length === 0
                       }
-                      title="Efetiva somente itens cuja auditoria já foi confirmada."
+                      title="Concilia somente itens cuja auditoria já foi confirmada."
                       onClick={() => setBulkEffectuateDialogOpen(true)}
                     >
                       {isProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                      Efetivar ({bulkEffectuatableItems.length})
+                      Conciliar ({bulkEffectuatableItems.length})
                     </Button>
                   </div>
                 </div>
@@ -4821,7 +4874,7 @@ export function FinancialImportPage({
                 </div>
                 <div>
                   <p className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Tratadas
+                    Resolvidas
                   </p>
                   <p className="mt-0.5 font-mono text-[13px] font-bold tracking-tight">
                     {statementProgress.treated} de {statementProgress.total}
@@ -4830,175 +4883,6 @@ export function FinancialImportPage({
               </div>
             </div>
 
-            {/* Trilho: Conciliação + Cartões desta conta */}
-            <div className="flex flex-col gap-3.5 xl:sticky xl:top-4">
-              <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[14px] font-bold tracking-tight">Conciliação</h3>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "rounded-full px-2 py-0 text-[9px] font-semibold",
-                      statementProgress.percentage === 100
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-amber-200 bg-amber-50 text-amber-700"
-                    )}
-                  >
-                    {statementProgress.percentage === 100
-                      ? "Pronto para fechar"
-                      : `${statementProgress.percentage}% conciliado`}
-                  </Badge>
-                </div>
-
-                <div className="mt-3.5">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[11px] text-muted-foreground">Tratadas</span>
-                    <span className="font-mono text-[13px] font-bold">
-                      {statementProgress.treated} de {statementProgress.total}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        "h-full",
-                        statementProgress.percentage === 100 ? "bg-emerald-500" : "bg-primary"
-                      )}
-                      style={{ width: `${statementProgress.percentage}%` }}
-                    />
-                    <div
-                      className="h-full bg-[repeating-linear-gradient(135deg,#f6cfe4,#f6cfe4_4px,#f0eae4_4px,#f0eae4_8px)]"
-                      style={{ width: `${100 - statementProgress.percentage}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-[11px] text-muted-foreground">Pendentes de tratamento</span>
-                    <span className="font-mono text-[13px] font-bold text-amber-600">
-                      {statementProgress.total - statementProgress.treated}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-3.5 grid grid-cols-2 gap-2">
-                  <div className="rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-emerald-950/30">
-                    <p className="text-[9.5px] font-semibold text-emerald-700/80 dark:text-emerald-400/80">
-                      Entradas
-                    </p>
-                    <p className="mt-0.5 font-mono text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
-                      {formatCurrency(statementFinancials.entries)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-rose-50 px-2.5 py-2 dark:bg-rose-950/30">
-                    <p className="text-[9.5px] font-semibold text-rose-700/80 dark:text-rose-400/80">
-                      Saídas
-                    </p>
-                    <p className="mt-0.5 font-mono text-[12px] font-bold text-rose-700 dark:text-rose-400">
-                      {formatCurrency(statementFinancials.exits)}
-                    </p>
-                  </div>
-                  <div className="col-span-2 flex items-center justify-between rounded-xl bg-muted/60 px-2.5 py-2">
-                    <span className="text-[11px] text-muted-foreground">Saldo do período</span>
-                    <span
-                      className={cn(
-                        "font-mono text-[12px] font-bold",
-                        statementFinancials.balance < 0 ? "text-rose-600" : "text-emerald-600"
-                      )}
-                    >
-                      {statementFinancials.balance < 0 ? "− " : "+ "}
-                      {formatCurrency(Math.abs(statementFinancials.balance))}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex items-center justify-between px-0.5">
-                    <span className="text-[10.5px] text-muted-foreground">Unidade</span>
-                    <span className="text-[10.5px] font-semibold text-foreground">
-                      {statementUnitName || "Não vinculada"}
-                    </span>
-                  </div>
-                </div>
-
-                <p className="mt-4 text-[8.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Para fechar o extrato
-                </p>
-                <div className="mt-2 flex flex-col">
-                  {statementCloseChecklist.map((entry) => (
-                    <div
-                      key={entry.label}
-                      className="flex items-start gap-2 border-b border-border/50 py-2 last:border-b-0"
-                    >
-                      <span
-                        className={cn(
-                          "mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-bold text-white",
-                          entry.ok ? "bg-emerald-500" : "bg-amber-500"
-                        )}
-                      >
-                        {entry.ok ? <Check className="h-3 w-3" /> : "!"}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={cn(
-                            "text-[12px] font-semibold",
-                            entry.ok ? "text-foreground/80" : "text-foreground"
-                          )}
-                        >
-                          {entry.label}
-                        </p>
-                        <p className="mt-0.5 text-[10.5px] text-muted-foreground">{entry.meta}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Button
-                  type="button"
-                  className="mt-4 h-11 w-full rounded-xl text-[13px] font-bold"
-                  onClick={() => setCloseStatementDialogOpen(true)}
-                  disabled={!canManageAudits || isProcessing || !canCloseStatement}
-                  title={
-                    !canCloseStatement
-                      ? "Efetive ou ignore todos os itens antes de fechar."
-                      : "Consolidar e fechar este extrato."
-                  }
-                >
-                  Fechar extrato
-                </Button>
-              </div>
-
-              <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
-                <h3 className="text-[14px] font-bold tracking-tight">Cartões desta conta</h3>
-                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
-                  {selectedSessionCards.length
-                    ? "O pagamento da fatura aparece no extrato e é conciliado sem criar despesa nova."
-                    : "Nenhum cartão de crédito vinculado a esta conta neste período."}
-                </p>
-                {selectedSessionCards.length ? (
-                  <div className="mt-3 flex flex-col gap-2">
-                    {selectedSessionCards.map((method) => {
-                      const view = `credit_card:${method.id}`;
-                      return (
-                        <button
-                          key={method.id}
-                          type="button"
-                          onClick={() => selectSessionLedgerView(view)}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                            sessionLedgerView === view
-                              ? "border-primary/60 bg-primary/[0.06]"
-                              : "border-border bg-muted/40 hover:border-primary/40"
-                          )}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <CreditCard className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span className="truncate text-[12px] font-bold">
-                              Cartão{method.lastDigits ? ` •••• ${method.lastDigits}` : " de crédito"}
-                            </span>
-                          </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
               </div>
 
             <Sheet
@@ -5036,12 +4920,12 @@ export function FinancialImportPage({
                       <SheetTitle className="mt-1">Conferir e classificar movimentação</SheetTitle>
                       <SheetDescription className="mt-1">
                         {selectedDetailItem?.financialDraft.movementKind === "transfer"
-                          ? "Confira as duas contas antes de confirmar. A transferência só será registrada na efetivação."
+                          ? "Confira as duas contas antes de confirmar. A transferência só será registrada na conciliação."
                           : selectedDetailItem && selectedDetailItem.amount >= 0
-                          ? "Complete o cadastro financeiro antes de confirmar. A receita só será registrada na efetivação."
+                          ? "Complete o cadastro financeiro antes de confirmar. A receita só será registrada na conciliação."
                           : selectedDetailItem && isCardStatementSettlementItem(selectedDetailItem)
-                          ? "Confira a origem do pagamento. A liquidação da fatura só será registrada na efetivação."
-                          : "Complete o cadastro integral antes de confirmar. A despesa só será criada ou baixada na efetivação."}
+                          ? "Confira a origem do pagamento. A liquidação da fatura só será registrada na conciliação."
+                          : "Complete o cadastro integral antes de confirmar. A despesa só será criada ou baixada na conciliação."}
                       </SheetDescription>
                     </div>
                     {selectedDetailItem ? (
@@ -5175,12 +5059,12 @@ export function FinancialImportPage({
                   item.rawDescription.trim().length >= 3;
                 const classificationStepComplete = validation.expenseValid;
                 const auditStepLabels = isTransferMovement
-                  ? ["Conta de origem", "Conta de destino", "Efetivação"]
+                  ? ["Conta de origem", "Conta de destino", "Conciliação"]
                   : isIncomingMovement
-                  ? ["Origem e extrato", "Categoria", "Efetivação"]
+                  ? ["Origem e extrato", "Categoria", "Conciliação"]
                   : isCardStatementSettlementItem(item)
-                  ? ["Origem e extrato", "Liquidação", "Efetivação"]
-                  : ["Origem e extrato", "Classificação", "Efetivação"];
+                  ? ["Origem e extrato", "Liquidação", "Conciliação"]
+                  : ["Origem e extrato", "Classificação", "Conciliação"];
                 const auditStepCompleted = [
                   originStepComplete,
                   classificationStepComplete,
@@ -5266,13 +5150,13 @@ export function FinancialImportPage({
                   ? [
                       "Registra a saída na conta de origem e a entrada na conta de destino.",
                       "Concilia as duas pontas sem criar despesa ou receita.",
-                      "Marca a movimentação do extrato como efetivada.",
+                      "Marca a movimentação do extrato como conciliada.",
                     ]
                   : isIncomingMovement
                   ? [
                       "Registra a receita bancária no fluxo de caixa.",
                       "Usa a conta, a forma e a descrição conferidas.",
-                      "Marca a movimentação do extrato como efetivada.",
+                      "Marca a movimentação do extrato como conciliada.",
                     ]
                   : isCardStatementSettlementItem(item)
                   ? [
@@ -5287,7 +5171,7 @@ export function FinancialImportPage({
                         ? [`Registra ${formatCurrency(paymentChargeDifference)} de juros e multa em despesa financeira separada.`]
                         : []),
                       "Não cria uma despesa duplicada.",
-                      "Marca a movimentação do extrato como efetivada.",
+                      "Marca a movimentação do extrato como conciliada.",
                     ]
                   : item.expenseDraft.mode === "purchase"
                   ? [
@@ -5299,12 +5183,12 @@ export function FinancialImportPage({
                   ? [
                       "Cria as despesas divididas já liquidadas.",
                       "Respeita os valores ou percentuais definidos em cada lançamento.",
-                      "Marca a movimentação do extrato como efetivada.",
+                      "Marca a movimentação do extrato como conciliada.",
                     ]
                   : [
                       "Cria a despesa já liquidada com o cadastro informado.",
                       "Lança o valor no plano de contas e nas unidades definidas.",
-                      "Marca a movimentação do extrato como efetivada.",
+                      "Marca a movimentação do extrato como conciliada.",
                     ];
                 return (
                   <div className="mx-auto min-w-0 max-w-[960px] space-y-4 px-6 pb-6 pt-3">
@@ -5349,9 +5233,9 @@ export function FinancialImportPage({
                             )}
                           >
                             {item.status === "completed"
-                              ? "Efetivada"
+                              ? "Conciliada"
                               : item.status === "audited"
-                              ? "Auditada"
+                              ? "Pendente"
                               : item.status === "ignored"
                               ? "Ignorada"
                               : "Pendente"}
@@ -5504,7 +5388,7 @@ export function FinancialImportPage({
 
                     {item.status === "completed" ? (
                       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
-                        Esta movimentação está efetivada. Reabra o item para alterar os dados da auditoria.
+                        Esta movimentação está conciliada. Reabra o item para alterar os dados da auditoria.
                       </div>
                     ) : null}
 
@@ -6000,7 +5884,7 @@ export function FinancialImportPage({
                                 className="h-10 rounded-xl bg-muted/35 text-sm"
                                 aria-label="Tipo de lançamento"
                               />
-                              <p className="text-[10px] text-muted-foreground">Será criada já liquidada na efetivação.</p>
+                              <p className="text-[10px] text-muted-foreground">Será criada já liquidada na conciliação.</p>
                             </div>
 
                             <div className="space-y-1.5 md:col-span-2">
@@ -6956,7 +6840,7 @@ export function FinancialImportPage({
                           <span className="grid h-6 w-6 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
                             <Check className="h-4 w-4" />
                           </span>
-                          <p className="text-sm font-semibold">Revisar e efetivar</p>
+                          <p className="text-sm font-semibold">Revisar e conciliar</p>
                         </div>
                         <dl className="divide-y overflow-hidden rounded-xl border">
                           {reviewRows.map(([label, value]) => (
@@ -6977,7 +6861,7 @@ export function FinancialImportPage({
                         </dl>
                         <div className="mt-4 rounded-xl border bg-muted/20 p-4">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            O que acontece ao efetivar
+                            O que acontece ao conciliar
                           </p>
                           <div className="mt-3 space-y-2">
                             {effectConsequences.map((consequence) => (
@@ -6995,7 +6879,7 @@ export function FinancialImportPage({
 
                     <div className="sticky bottom-0 z-20 rounded-2xl border border-zinc-200 bg-background/95 p-4 shadow-lg backdrop-blur">
                       <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
-                        {auditStep < 2 ? `${auditStep + 1}. ${auditStepLabels[auditStep]}` : "3. Auditoria e efetivação"}
+                        {auditStep < 2 ? `${auditStep + 1}. ${auditStepLabels[auditStep]}` : "3. Auditoria e conciliação"}
                       </p>
                       {auditStep === 2 && !validation.ready && item.status !== "completed" && item.status !== "ignored" ? (
                         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -7068,7 +6952,7 @@ export function FinancialImportPage({
                                   disabled={!validation.ready || !canEffectuateAudits || isProcessing || isSavingSession}
                                   onClick={() => void effectuateItem(item.id, false)}
                                 >
-                                  Efetivar e fechar
+                                  Conciliar e fechar
                                 </Button>
                                 <Button
                                   type="button"
@@ -7078,7 +6962,7 @@ export function FinancialImportPage({
                                   onClick={() => void effectuateItem(item.id)}
                                 >
                                   {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                  Efetivar e próximo
+                                  Conciliar e próximo
                                 </Button>
                               </>
                             ) : (
@@ -7188,8 +7072,6 @@ export function FinancialImportPage({
               </div>
               </SheetContent>
             </Sheet>
-              </>
-            )}
         </div>
       ) : statementAccountId && visibleOpenSessions.length === 0 ? (
         <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
@@ -7312,7 +7194,7 @@ export function FinancialImportPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Ignorar movimentações selecionadas?</AlertDialogTitle>
             <AlertDialogDescription>
-              {bulkIgnorableItems.length} item(ns) pendente(s) ou auditado(s) deixarão de gerar lançamentos financeiros. Eles poderão ser reabertos individualmente enquanto o extrato estiver aberto.
+              {bulkIgnorableItems.length} item(ns) pendente(s) deixarão de gerar lançamentos financeiros. Eles poderão ser reabertos individualmente enquanto o extrato estiver aberto.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -7335,9 +7217,9 @@ export function FinancialImportPage({
       <AlertDialog open={bulkEffectuateDialogOpen} onOpenChange={setBulkEffectuateDialogOpen}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Efetivar movimentações selecionadas?</AlertDialogTitle>
+            <AlertDialogTitle>Conciliar movimentações selecionadas?</AlertDialogTitle>
             <AlertDialogDescription>
-              {bulkEffectuatableItems.length} item(ns) auditado(s) serão registrados no financeiro. Confirme somente se as classificações e os vínculos estiverem corretos.
+              {bulkEffectuatableItems.length} item(ns) pendente(s) serão registrados no financeiro. Confirme somente se as classificações e os vínculos estiverem corretos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -7350,7 +7232,7 @@ export function FinancialImportPage({
               }}
             >
               {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Sim, efetivar
+              Sim, conciliar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -7366,7 +7248,7 @@ export function FinancialImportPage({
       >
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Reabrir movimentação efetivada?</AlertDialogTitle>
+            <AlertDialogTitle>Reabrir movimentação conciliada?</AlertDialogTitle>
             <AlertDialogDescription>
               A conciliação será desfeita somente para este item. A movimentação bancária permanece no extrato e volta para Pendente.
             </AlertDialogDescription>
@@ -7408,7 +7290,7 @@ export function FinancialImportPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Fechar e consolidar o extrato?</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão consolidados {currentSession?.summary.completed ?? 0} itens efetivados e {currentSession?.summary.ignored ?? 0} ignorados. Depois do fechamento, os itens não poderão ser alterados isoladamente.
+              Serão consolidados {currentSession?.summary.completed ?? 0} itens conciliados e {currentSession?.summary.ignored ?? 0} ignorados. Depois do fechamento, os itens não poderão ser alterados isoladamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
