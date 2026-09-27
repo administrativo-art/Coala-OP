@@ -102,5 +102,53 @@ test("HTTP autenticado: sangria → despesa única → contagem → DRE; Pix ret
   const feeExpense = (await financial.collection("expenses").doc(posted.data.record.expenseId).get()).data(); assert.ok(feeExpense);
   assert.equal(feeExpense.competenceMonth, "2026-08"); assert.equal(feeExpense.sourceSettlement.settledOn, "2026-09-01");
   assert.equal(feeExpense.cashEffectIncludedInNetReceivable, true);
+  await t.test("HTTP CMV: custo atual → confirmação → congelamento → alteração de vendas → reabertura", async () => {
+    const simulationId = "api-cmv-shake", ingredientId = "api-cmv-milk", period = "2026-08";
+    const saleRef = db.collection("salesReports").doc("api-cmv-sales");
+    const saleItem = { sku: "api-cmv", productName: "Milkshake fictício", simulationId, quantity: 2, unitPrice: 15 };
+    await Promise.all([
+      db.collection("productSimulations").doc(simulationId).set({ name: "Ficha fictícia", totalCmv: 999 }),
+      db.collection("productSimulationItems").doc("api-cmv-random-item").set({ simulationId, baseProductId: ingredientId, quantity: 2, useDefault: true }),
+      db.collection("baseProducts").doc(ingredientId).set({ name: "Leite fictício", category: "Volume", unit: "l", initialCostPerUnit: 1, lastEffectivePrice: { pricePerUnit: 3 } }),
+      saleRef.set({ kioskId, year: 2026, month: 8, day: 31, createdAt: "2026-08-31T12:00:00Z", items: [saleItem] }),
+    ]);
+    const sourcePath = `/api/financial/dre/source-data?kioskId=${kioskId}&period=${period}`;
+    const cmvPath = "/api/financial/dre/cmv-closure";
+    const readCmv = async () => {
+      const result = await call(sourcePath);
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+      return result.data.cmvPeriods[0];
+    };
+    const makeClose = (view: { revision: number; sourceFingerprint: string }) => ({ action: "close", kioskId, period,
+      expectedRevision: view.revision, expectedSourceFingerprint: view.sourceFingerprint, salesReviewed: true });
+    let view = await readCmv();
+    assert.equal(view.totalCmv, 12); assert.equal(view.status, "open");
+    const readerToken = await user("cmv-reader", false);
+    await db.collection("profiles").doc("cmv-reader").update({ permissions: { financial: { view: true, dre: true } } });
+    await db.collection("users").doc("cmv-reader").update({ unitIds: [kioskId] });
+    const readerView = await call(sourcePath, undefined, "GET", readerToken);
+    assert.equal(readerView.status, 200, JSON.stringify(readerView.data));
+    assert.deepEqual(readerView.data.cmvCapabilities, { canClose: false, canReopen: false });
+    assert.equal((await call(cmvPath, makeClose(view), "POST", null)).status, 401);
+    assert.equal((await call(cmvPath, makeClose(view), "POST", readerToken)).status, 403);
+    assert.equal((await call(cmvPath, { ...makeClose(view), salesReviewed: false })).status, 400);
+    const closed = await call(cmvPath, makeClose(view));
+    assert.equal(closed.status, 200, JSON.stringify(closed.data));
+    assert.equal((await call(cmvPath, makeClose(view))).data.idempotent, true);
+    await db.collection("baseProducts").doc(ingredientId).update({ "lastEffectivePrice.pricePerUnit": 5 });
+    view = await readCmv();
+    assert.equal(view.totalCmv, 12); assert.equal(view.status, "closed"); assert.equal(view.sourceChanged, false);
+    await saleRef.update({ items: [{ ...saleItem, quantity: 3 }] });
+    view = await readCmv();
+    assert.equal(view.totalCmv, 12); assert.equal(view.sourceChanged, true);
+    const reopened = await call(cmvPath, { action: "reopen", kioskId, period, expectedRevision: view.revision, reason: "Venda tardia conferida no teste" });
+    assert.equal(reopened.status, 200, JSON.stringify(reopened.data));
+    view = await readCmv();
+    assert.equal(view.status, "open"); assert.equal(view.totalCmv, 30);
+    const reclosed = await call(cmvPath, makeClose(view));
+    assert.equal(reclosed.status, 200, JSON.stringify(reclosed.data));
+    assert.equal((await readCmv()).totalCmv, 30);
+    assert.equal(reclosed.data.revision, 3);
+  });
   for (const collection of ["payments", "paymentSplits", "transactions", "bankPaymentRequests"]) assert.equal((await financial.collection(collection).limit(1).get()).empty, true);
 });

@@ -115,7 +115,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 91.
+Arquivos locais percorridos: 93.
 
 Chamadas candidatas encontradas:
 
@@ -135,10 +135,12 @@ Chamadas candidatas encontradas:
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
+- `baseProducts` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `kiosks` — [`src/features/financial/agent/management.server.ts`](../../src/features/financial/agent/management.server.ts)
-- `productSimulations` — [`src/features/financial/dre/source-data.server.ts`](../../src/features/financial/dre/source-data.server.ts)
+- `productSimulationItems` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
+- `productSimulations` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `profiles` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
-- `salesReports` — [`src/features/financial/dre/source-data.server.ts`](../../src/features/financial/dre/source-data.server.ts)
+- `salesReports` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `users` — [`src/features/financial/budgets/references.server.ts`](../../src/features/financial/budgets/references.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
@@ -154,8 +156,11 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `expenses.create` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 - `expenses.edit` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
 - `expenses.view` — [`src/features/financial/lib/server-access.ts`](../../src/features/financial/lib/server-access.ts)
+- `financial.cashClosures.approve` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
+- `financial.cashClosures.reopen` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `financial.cashFlow.create` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
 - `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
+- `financial.dre` — [`src/features/financial/dre/cmv-closure.server.ts`](../../src/features/financial/dre/cmv-closure.server.ts)
 - `financial.expenses.view` — [`src/features/financial/pages/budget-comparison-page.tsx`](../../src/features/financial/pages/budget-comparison-page.tsx)
 - `financial.financialFlow` — [`src/features/financial/pages/cash-flow-page.tsx`](../../src/features/financial/pages/cash-flow-page.tsx)
 - `financial.personnelCosts.view` — [`src/features/financial/budgets/personnel-access.ts`](../../src/features/financial/budgets/personnel-access.ts)
@@ -402,11 +407,12 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx).
 
-Arquivos locais percorridos: 35.
+Arquivos locais percorridos: 42.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
+- `/api/financial/dre/cmv-closure` — interface [`src/features/financial/components/dre/cmv-closing-panel.tsx`](../../src/features/financial/components/dre/cmv-closing-panel.tsx); rota candidata [`src/app/api/financial/dre/cmv-closure/route.ts`](../../src/app/api/financial/dre/cmv-closure/route.ts)
 - `/api/financial/dre/source-data` — interface [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx); rota candidata [`src/app/api/financial/dre/source-data/route.ts`](../../src/app/api/financial/dre/source-data/route.ts)
 - `/api/financial/dre/stock-cmv` — interface [`src/features/financial/pages/dre-page.tsx`](../../src/features/financial/pages/dre-page.tsx); rota candidata [`src/app/api/financial/dre/stock-cmv/route.ts`](../../src/app/api/financial/dre/stock-cmv/route.ts)
 

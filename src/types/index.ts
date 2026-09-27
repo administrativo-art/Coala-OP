@@ -665,6 +665,8 @@ export type ProductSimulation = {
   salePrice: number;
   profitGoal?: number | null;
   totalCmv: number;
+  /** Derived preview flag; financial readers calculate or use a frozen snapshot. */
+  cmvComplete?: boolean;
   profitValue: number;
   profitPercentage: number;
   markup: number;

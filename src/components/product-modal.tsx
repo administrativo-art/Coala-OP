@@ -123,6 +123,7 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
           <DialogDescription className="sr-only">
             {isInstructionMode ? 'Ficha técnica de instrução da mercadoria.' : isCompleteSheetMode ? 'Ficha técnica completa da mercadoria.' : 'Edição de custos, preços e ficha técnica da mercadoria.'}
           </DialogDescription>
+          {simulation.cmvComplete === false && <p role="alert" className="mx-6 mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">CMV incompleto: confira ingredientes e custos. Os valores e margens desta ficha são uma prévia parcial.</p>}
           {/* Header */}
           <div className="flex-shrink-0 border-b border-[#eeece7] px-6 py-5 pr-14">
             <div className="flex justify-between items-start">

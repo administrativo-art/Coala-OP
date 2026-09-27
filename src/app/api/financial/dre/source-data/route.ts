@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth-server";
 import { canAccessUnit } from "@/lib/unit-access";
+import { cmvCapabilities } from "@/features/financial/dre/cmv-closure.server";
 import { getDreSourceData } from "@/features/financial/dre/source-data.server";
 import { DreSourceLimitError } from "@/features/financial/dre/source-data";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
@@ -62,5 +63,5 @@ export const GET = withApiErrorHandling({
     }
     throw cause;
   });
-  return NextResponse.json(payload, { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json({ ...payload, cmvCapabilities: cmvCapabilities(context) }, { headers: { "Cache-Control": "private, no-store" } });
 });

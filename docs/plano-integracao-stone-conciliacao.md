@@ -4,6 +4,8 @@
 
 **Decisão posterior (2026-09-26):** para o escopo Coala, sangrias são despesas classificadas obrigatoriamente na contagem; não transferências genéricas. Faltas/sobras físicas usam resultado calculado e justificativa livre, sem investigação obrigatória. Receita integral, taxas explícitas e competência gerencial seguem os contratos atualizados em [DRE](engineering/flows/dre.md), [fechamento diário](engineering/flows/cash-closures.md) e [taxas](engineering/flows/stone-sales-review.md). Propostas conflitantes abaixo são históricas; fechamento mensal/backfill real não estão autorizados nesta entrega local.
 
+**Decisão posterior (2026-09-27) — CMV da DRE:** aprovada a atualização do CMV por composição enquanto aberto e seu congelamento **manual**, por unidade/competência, na confirmação do fechamento. Usa-se o custo vigente nessa confirmação, inclusive se feita no mês seguinte. A entrega atual acrescenta somente o fechamento do CMV na DRE; o fechamento financeiro geral permanece planejado. O contrato de integração está em [7.5.1](#751-cmv-no-fechamento-financeiro-mensal) e no [guia DRE](engineering/flows/dre.md#cmv-atual-e-fechamento-manual--2026-09-27). A ferramenta de simulação de preço não é a origem do problema e não é removida nesta correção.
+
 **Competência inicial do backfill:** agosto de 2026
 
 **Unidades:** Whopping, Tirirical e João Paulo
@@ -430,6 +432,29 @@ Assim, a liquidação alimenta o realizado uma única vez e a passagem Stone →
 - Uma revisão tardia do PDV ou Stone marca o período `stale`; não altera silenciosamente um mês fechado.
 - Reabertura exige permissão, motivo e auditoria.
 
+### 7.5.1 CMV no fechamento financeiro mensal
+
+Regra aprovada em 2026-09-27:
+
+- Fichas técnicas e precificação continuam usando o custo atual dos insumos. O congelamento afeta somente o CMV por composição da DRE, inclusive sua exportação e a análise gerencial que consome a mesma fonte. O critério de movimentação de estoque permanece separado.
+- Enquanto o CMV estiver aberto, o servidor calcula quantidades vendidas × custo atual da composição, com custos automáticos, overrides e conversões. Não usa o `totalCmv` antigo salvo no cadastro.
+- O gatilho é a confirmação humana do fechamento, depois da conferência das vendas. Não há congelamento automático na virada do calendário. Meses em curso ou futuros não podem ser fechados.
+- Exemplo: fechar setembro em 3 de outubro guarda as quantidades vendidas em setembro com os custos vigentes na confirmação de 3 de outubro. Esse é um critério gerencial aprovado, não a reconstrução do custo de cada venda.
+- O registro por workspace/unidade/competência guarda quantidades, custos unitários, composição e preços aplicados, total, referência temporal, versão da fórmula, autor e revisão. Uma nova compra ou edição da ficha não muda o registro fechado.
+- Vendas tardias, cancelamentos, remapeamentos ou remoção dos relatórios sinalizam fonte alterada. O CMV congelado é preservado; resultado e exportação ficam pendentes até revisão. Reabertura exige permissão, motivo e auditoria, mantém a revisão anterior e permite nova confirmação com custos vigentes.
+- Ausência de relatório não comprova zero vendas. Relatório explícito vazio pode representar zero; ficha/insumo/custo inválido impede fechar. Leitura não faz backfill nem cria fechamento.
+
+**Integração obrigatória na implantação do fechamento geral:**
+
+1. Reutilizar `mutateCmvClosure` em [`cmv-closure.server.ts`](../src/features/financial/dre/cmv-closure.server.ts), seus schemas, autorização, revisão e conferência de fontes. Não criar outro cálculo, coleção de snapshots ou job de congelamento de CMV.
+2. O fechamento geral deve exigir CMV congelado e sem divergência nas unidades/competências abrangidas e registrar o identificador/revisão utilizado. Se já estiver fechado e íntegro, reutilizar a revisão, sem recalcular silenciosamente por causa da data do fechamento geral.
+3. Reabertura do CMV após fechamento geral deverá participar da reabertura auditada do período ou marcar o fechamento geral como pendente antes da correção. O fechamento geral não pode continuar válido referenciando revisão aberta, substituída ou fonte de vendas alterada. Revisão de receita/despesa que não altere a base de vendas do CMV não exige recalcular CMV automaticamente.
+4. As fontes e o snapshot do CMV ficam no banco operacional `coala`, com head, revisão e auditoria na mesma transação. O futuro fechamento financeiro usa outro banco: implementar intenção/estado de coordenação observável, idempotência e retomada, sem prometer transação atômica entre bancos. Só anunciar o fechamento geral concluído quando os pré-requisitos e a revisão referenciada estiverem confirmados.
+5. O controle hoje exibido no DRE deve ser incorporado ou encaminhado pelo fechamento geral mantendo a mesma operação. Até essa integração, o estado deve se chamar **CMV congelado**, nunca **DRE fechado**. Receita e despesas continuam seguindo suas próprias regras.
+6. Preservar segregação: leitura DRE não autoriza fechar/reabrir. Hoje são reutilizadas `financial.cashClosures.approve` e `financial.cashClosures.reopen`, além de `financial.view`, `financial.dre` e acesso à unidade. A futura tela não pode ampliar esses direitos por oferecer uma ação geral.
+
+Critérios de aceite da integração futura: preço/ficha alterado não muda CMV fechado; retry não duplica fechamento; revisão tardia exige conferência; reabertura preserva histórico; fechamento geral referencia a revisão correta e não permanece válido após sua invalidação; falha entre bancos pode ser retomada sem concluir parcialmente; consolidado não fecha com CMV pendente em uma unidade.
+
 ### 7.6 Previsão do fluxo de caixa
 
 A primeira versão será uma previsão de caixa contratado/conhecido, não uma estimativa estatística de vendas futuras. A janela padrão terá 91 dias corridos, incluindo a data de referência, com consolidação semanal opcional.
@@ -627,7 +652,7 @@ Evoluir a área para `Financeiro > Conciliação`, preservando as telas operacio
 1. `Extratos bancários` — tela existente, agora compatível com contas Inter e Stone;
 2. `Vendas PDV × Stone` — nova;
 3. `Recebíveis Stone` — nova;
-4. `Fechamento mensal` — nova;
+4. `Fechamento mensal` — nova, integrando o contrato de CMV da seção 7.5.1;
 5. `Execuções da integração` — nova e restrita a administradores.
 
 Caixa, sangrias e depósitos não formam uma aba paralela. Seus resumos aparecem como evidência no fechamento mensal, com links para as telas existentes de fechamento, contagem e depósito.
@@ -657,6 +682,8 @@ KPIs:
 **Saída:** fluxo completo de revisão e fechamento sem depender de acesso direto ao portal Stone.
 
 ### Fase 8 — DRE e fluxo de caixa
+
+O fechamento de CMV por composição já tem contrato próprio na seção 7.5.1. Esta fase deve reutilizá-lo, inclusive estado/revisão em exportações, e não voltar a ler custo persistido no cadastro ou recalcular competências congeladas.
 
 Na DRE, adicionar `Critério da receita`:
 
@@ -779,7 +806,10 @@ Diretrizes:
 - depósito e transferência interna alteram contas, mas têm efeito consolidado zero;
 - visão por unidade não divide artificialmente saldo de conta compartilhada;
 - ausência de estimativa de vendas futuras é sinalizada e não gera entradas inventadas;
-- período fechado e revisão tardia.
+- período fechado e revisão tardia;
+- CMV aberto acompanha custo atual e CMV fechado preserva quantidade/custo/total;
+- alterações de venda após congelamento sinalizam divergência sem sobrescrever custo;
+- reabertura e novo fechamento preservam revisões e auditam autor/motivo.
 
 ### Contrato e integração
 
@@ -787,6 +817,8 @@ Diretrizes:
 - autenticação e sanitização de erros;
 - rotas e permissões;
 - transações de decisão + auditoria + resumo;
+- congelamento de CMV concorrente/idempotente, permissões por ação/unidade e confirmação obsoleta;
+- coordenação entre fechamento geral e revisão de CMV, inclusive falha entre bancos e retomada;
 - compatibilidade do núcleo bancário com `inter_api` e `stone_api`;
 - vínculo único entre liquidação Stone e lançamento bancário existente;
 - links para fechamento e depósito originais sem escrita paralela;
@@ -806,7 +838,9 @@ Diretrizes:
 7. conferir saldos Stone, Inter, por unidade e consolidado;
 8. liquidar e verificar substituição da previsão pelo realizado;
 9. transferir Stone → Inter e verificar efeito consolidado zero;
-10. reabrir após revisão tardia.
+10. reabrir após revisão tardia;
+11. fechar CMV, alterar preço e verificar imutabilidade; alterar vendas e verificar pendência;
+12. reabrir CMV com motivo, fechar nova revisão e conferir referência do fechamento geral.
 
 Mudanças comuns devem manter `npm run check` verde. Mudanças de rotas, fronteiras server/client ou build devem manter `npm run verify` verde. Regras do Firestore exigem `npm run check:rules`.
 

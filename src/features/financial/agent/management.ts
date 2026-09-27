@@ -46,13 +46,15 @@ export function analyzeManagement(input: {
     const dreSource = selectDreRevenue({ kioskId: request.kioskId, year, month: monthNumber,
       closureSummaries: source.closureSummaries, salesSummaries: source.salesSummaries });
     const revenue = dreSource.revenueCents === null ? null : dreSource.revenueCents / 100;
-    const cmv = sales.length && !source.missingSimulationIds.length ? sales.reduce((sum, row) => sum + row.cmv, 0) : null;
+    const cmvPeriod = source.cmvPeriods?.find(row => row.kioskId === request.kioskId && row.period === month);
+    const cmv = cmvPeriod ? cmvPeriod.totalCmv : sales.length && sales.every(row => row.cmvComplete !== false)
+      && !source.missingSimulationIds.length ? sales.reduce((sum, row) => sum + row.cmv, 0) : null;
     const at = (key: string) => calculation.totalsByPosition[key] ?? 0;
     // Same expense positions as the official DRE; CMV is computed separately.
     const expenseTotal = ["impostos_deducoes", "custos_variaveis", "pessoal", "despesas_operacionais",
       "ocupacao", "null", "despesas_financeiras", "despesa_nao_operacional", "impostos_resultado"]
       .reduce((sum, key) => sum + at(key), 0);
-    const result = revenue !== null && cmv !== null && !calculation.issues.length
+    const result = !cmvPeriod?.sourceChanged && revenue !== null && cmv !== null && !calculation.issues.length
       && dreSource.cashShortageCents !== null && dreSource.cashSurplusCents !== null
       ? revenue - cmv - expenseTotal - dreSource.cashShortageCents / 100 + dreSource.cashSurplusCents / 100
         + at("receita_financeira") + at("receita_nao_operacional") : null;
@@ -60,7 +62,7 @@ export function analyzeManagement(input: {
       expenseId: row.expenseId, accountId: row.accountPlanId, accountName: row.accountPlanName, position, amount: row.amount,
     }))).sort((a, b) => b.amount - a.amount);
     // Retain the historical basis union for existing presentation consumers.
-    return { month, revenue, revenueBasis: dreSource.revenueSource as "cash_closure" | "pdv" | "unavailable", dreSource, cmv,
+    return { month, revenue, revenueBasis: dreSource.revenueSource as "cash_closure" | "pdv" | "unavailable", dreSource, cmv, cmvPeriod,
       expenseTotal, result, margin: result !== null && revenue !== null && revenue > 0 ? result / revenue : null,
       positions: calculation.totalsByPosition, issues: calculation.issues, topExpenses: lines.slice(0, 20) };
   });
@@ -94,6 +96,8 @@ export function analyzeManagement(input: {
     projectedBalanceCents: null, // Incomplete portfolio and account scope: never fabricate a closing balance.
   };
   const alerts: { code: string; severity: "high" | "review"; title: string; evidence: string; href: string }[] = [];
+  if (current.cmvPeriod?.sourceChanged || current.cmvPeriod?.complete === false) alerts.push({ code: "dre_cmv_quality", severity: "high",
+    title: "Conferir CMV da DRE", evidence: current.cmvPeriod.diagnostics.join(", "), href: "/dashboard/financial/dre" });
   if (current.dreSource.revenueCoverage !== "complete" || current.dreSource.cashDifferenceCoverage !== "complete") alerts.push({ code: "dre_source_coverage", severity: "high",
     title: "Conferir fontes da DRE", evidence: current.dreSource.issues.join(", "), href: "/dashboard/financial/dre" });
   if (current.dreSource.pendingOperatorCount !== 0) alerts.push({ code: "dre_pending_counting", severity: "review",

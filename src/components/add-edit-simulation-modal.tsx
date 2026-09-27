@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateProductCompositionCmv } from "@/lib/product-composition-cmv";
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
-import { getUnitsForCategory, unitCategories, type UnitCategory, convertValue } from '@/lib/conversion';
+import { getUnitsForCategory, unitCategories, type UnitCategory } from '@/lib/conversion';
 import { useProducts } from '@/hooks/use-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -226,60 +227,22 @@ useEffect(() => {
   const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
   const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
   
-   const { cmv, partialCosts, itemImpacts, top3Impacts } = useMemo(() => {
-    let totalCmv = 0;
+   const { cmv, partialCosts, itemImpacts, top3Impacts, cmvComplete } = useMemo(() => {
+    const items = watchedItems.map((item, index) => ({ ...item, quantity: Number(item.quantity), overrideCostPerUnit: item.overrideCostPerUnit == null ? undefined : Number(item.overrideCostPerUnit), id: item.id || `draft-${index}`, simulationId: "draft" }));
+    const composition = calculateProductCompositionCmv(items, new Map(baseProducts.map(base => [base.id, base])));
+    const linesById = new Map(composition.lines.map(line => [line.itemId, line]));
+    const total = composition.totalCmv ?? composition.lines.reduce((sum, line) => sum + line.totalCmv, 0);
     const partials: Record<number, number> = {};
-    const impacts: { index: number; name: string; cost: number; percentage: number }[] = [];
-
-    watchedItems.forEach((item, index) => {
-        const baseProduct = baseProducts.find(bp => bp.id === item.baseProductId);
-        if (!baseProduct || !item.quantity) {
-            partials[index] = 0;
-            return;
-        }
-
-        try {
-            let partialCost = 0;
-            
-            const costPerUnit = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
-            
-            if (item.useDefault) {
-                if(costPerUnit > 0) {
-                    partialCost = item.quantity * costPerUnit;
-                }
-            } else if (item.overrideCostPerUnit && item.overrideUnit) {
-                const valueInBase = convertValue(1, item.overrideUnit, baseProduct.unit, baseProduct.category);
-                if (valueInBase > 0) {
-                     partialCost = item.quantity * (item.overrideCostPerUnit / valueInBase);
-                }
-            }
-            
-            partials[index] = partialCost;
-            totalCmv += partialCost;
-            impacts.push({ index, name: baseProduct.name, cost: partialCost, percentage: 0 });
-
-        } catch (e) {
-            console.error("Error calculating CMV for item:", item, e);
-            partials[index] = 0;
-        }
+    const impacts = items.map((item, index) => {
+      const line = linesById.get(item.id);
+      const cost = line?.totalCmv ?? 0;
+      partials[index] = cost;
+      return { index, name: line?.baseProductName ?? "Insumo sem custo", cost, percentage: total > 0 ? cost / total * 100 : 0 };
     });
-
-    if (totalCmv > 0) {
-        impacts.forEach(impact => {
-            impact.percentage = (impact.cost / totalCmv) * 100;
-        });
-    }
-    
-    const sortedImpacts = [...impacts].sort((a,b) => b.cost - a.cost);
-
-    return { 
-        cmv: totalCmv,
-        partialCosts: partials,
-        itemImpacts: new Map(impacts.map(i => [i.index, i.percentage])),
-        top3Impacts: sortedImpacts.slice(0, 3)
-    };
+    return { cmv: total, cmvComplete: composition.complete, partialCosts: partials,
+      itemImpacts: new Map(impacts.map(item => [item.index, item.percentage])),
+      top3Impacts: [...impacts].sort((a, b) => b.cost - a.cost).slice(0, 3) };
   }, [watchedItems, baseProducts]);
-
 
   const { netRevenue, taxValue, feeValue, contributionMargin, contributionMarginPercentage } = useMemo(() => {
     const price = watchedSalePrice || 0;
@@ -448,6 +411,7 @@ useEffect(() => {
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
+          {!cmvComplete && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">CMV incompleto: confira os ingredientes, as quantidades e os custos. Os valores exibidos são uma prévia parcial.</p>}
             <ScrollArea className="flex-1 px-6">
               <div className="space-y-5 py-5">
                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">

@@ -126,6 +126,7 @@ api,src/app/api/financial/cash-deposits/reports/export/route.ts,,docs/engineerin
 api,src/app/api/financial/cash-deposits/reports/route.ts,,docs/engineering/flows/cash-deposits.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-deposits/route.ts,,docs/engineering/flows/cash-deposits.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/data/route.ts,,docs/engineering/flows/cash-flow.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/dre/cmv-closure/route.ts,,docs/engineering/flows/dre.md,POST fechar/reabrir CMV por unidade e competencia; transacao e autorizacao por acao.
 api,src/app/api/financial/dre/source-data/route.ts,,docs/engineering/flows/dre.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/dre/stock-cmv/route.ts,,docs/engineering/flows/dre.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts,,docs/engineering/flows/expenses.md,Destino de investigacao; conferir metodo e ramo no handler.
