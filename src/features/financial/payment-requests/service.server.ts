@@ -11,6 +11,7 @@ import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/inte
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoSchema } from "./expense-boleto";
+import { inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
@@ -121,7 +122,13 @@ export async function createInboxBarcodePaymentRequest(input: {
   workspaceId: string;
   scheduledFor: string;
   barcode?: string;
+  beneficiaryDocument: string;
 }, actor: PaymentActor) {
+  const preparation = inboxBarcodePaymentPreparationSchema.parse({
+    scheduledFor: input.scheduledFor,
+    barcode: input.barcode,
+    beneficiaryDocument: input.beneficiaryDocument,
+  });
   const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(input.inboxMessageId);
   const messageSnapshot = await messageRef.get();
   if (!messageSnapshot.exists) throw new Error("Cobrança recebida não encontrada.");
@@ -133,17 +140,12 @@ export async function createInboxBarcodePaymentRequest(input: {
   if (message.existingBankPayment?.transactionId) {
     throw new Error("A parcela já possui um pagamento no Banco Inter. Confira o agendamento existente.");
   }
-  if (message.status !== "linked") {
-    throw new Error("Somente a cobrança principal vinculada pode preparar um pagamento.");
-  }
-  const existing = await findPaymentRequestBySource("financial_inbox", input.inboxMessageId);
-  if (existing) return existing;
   if (!message.linkedExpenseId) throw new Error("Vincule a cobrança a uma despesa antes de preparar o pagamento.");
-  const code = normalizePaymentBarcode(String(input.barcode || message.classification?.barcode || ""));
+  const code = normalizePaymentBarcode(String(preparation.barcode || message.classification?.barcode || ""));
   if (!code) throw new Error("A cobrança não possui uma linha digitável válida com 44, 46, 47 ou 48 dígitos.");
   const dueDate = String(message.classification?.dueDate || "");
   if (!isValidIsoDate(dueDate)) throw new Error("Confirme o vencimento antes de preparar o pagamento.");
-  const scheduledFor = String(input.scheduledFor || "");
+  const scheduledFor = preparation.scheduledFor;
   const today = todayInBelem();
   if (!isValidIsoDate(scheduledFor) || scheduledFor < today) {
     throw new Error("A data do pagamento não pode estar no passado.");
@@ -153,6 +155,22 @@ export async function createInboxBarcodePaymentRequest(input: {
   }
   const amountCents = Number(message.classification?.amountCents);
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error("Confirme o valor antes de preparar o pagamento.");
+  const beneficiaryDocument = preparation.beneficiaryDocument;
+  const existing = await findPaymentRequestBySource("financial_inbox", input.inboxMessageId);
+  if (existing) {
+    return assertMatchingInboxBarcodeRequest(existing, {
+      inboxMessageId: input.inboxMessageId,
+      expenseId: String(message.linkedExpenseId),
+      code,
+      dueDate,
+      scheduledFor,
+      beneficiaryDocument,
+      amountCents,
+    });
+  }
+  if (message.status !== "linked") {
+    throw new Error("Somente a cobrança principal vinculada pode preparar um pagamento.");
+  }
 
   const now = new Date().toISOString();
   const ref = paymentRequestRef(`inbox_${input.inboxMessageId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 170)}`);
@@ -172,7 +190,7 @@ export async function createInboxBarcodePaymentRequest(input: {
       maskedCode: maskPaymentBarcode(code)!,
       dueDate,
       scheduledFor,
-      beneficiaryDocument: null,
+      beneficiaryDocument,
     },
     amount: amountCents / 100,
     description: String(message.subject || "Pagamento de cobrança").trim().slice(0, 140),
@@ -200,9 +218,17 @@ export async function createInboxBarcodePaymentRequest(input: {
   try {
     await batch.commit();
   } catch (error) {
-    const code = (error as { code?: number | string })?.code;
-    if (code === 6 || code === "already-exists" || String((error as Error)?.message).includes("ALREADY_EXISTS")) {
-      return getPaymentRequest(ref.id);
+    const errorCode = (error as { code?: number | string })?.code;
+    if (errorCode === 6 || errorCode === "already-exists" || String((error as Error)?.message).includes("ALREADY_EXISTS")) {
+      return assertMatchingInboxBarcodeRequest(await getPaymentRequest(ref.id), {
+        inboxMessageId: input.inboxMessageId,
+        expenseId: String(message.linkedExpenseId),
+        code,
+        dueDate,
+        scheduledFor,
+        beneficiaryDocument,
+        amountCents,
+      });
     }
     throw error;
   }
@@ -211,6 +237,29 @@ export async function createInboxBarcodePaymentRequest(input: {
     amount: request.amount, paymentRail: "barcode", scheduledFor,
   });
   return request;
+}
+
+function assertMatchingInboxBarcodeRequest(existing: BankPaymentRequest, expected: {
+  inboxMessageId: string;
+  expenseId: string;
+  code: string;
+  dueDate: string;
+  scheduledFor: string;
+  beneficiaryDocument: string;
+  amountCents: number;
+}) {
+  if (existing.sourceType !== "financial_inbox"
+    || existing.sourceId !== expected.inboxMessageId
+    || existing.expenseId !== expected.expenseId
+    || existing.paymentRail !== "barcode"
+    || existing.barcodeSnapshot.code !== expected.code
+    || existing.barcodeSnapshot.dueDate !== expected.dueDate
+    || existing.barcodeSnapshot.scheduledFor !== expected.scheduledFor
+    || existing.barcodeSnapshot.beneficiaryDocument !== expected.beneficiaryDocument
+    || Math.round(existing.amount * 100) !== expected.amountCents) {
+    throw new Error("A solicitação bancária existente diverge dos dados confirmados. Faça a conferência antes de continuar.");
+  }
+  return existing;
 }
 
 export async function authorizePaymentRequest(id: string, actor: PaymentActor) {

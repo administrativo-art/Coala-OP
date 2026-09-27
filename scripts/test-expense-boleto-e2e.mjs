@@ -9,7 +9,7 @@ if (!java && process.platform === "darwin") {
 }
 java ||= ["/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home", "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"].find(path => existsSync(`${path}/bin/java`));
 if (!java || !existsSync(`${java}/bin/java`)) throw new Error("Java 11+ é necessário.");
-const child = spawn("node_modules/.bin/firebase", ["emulators:exec", "--project", projectId, "--config", "firebase.boleto-e2e.json", "--only", "auth,firestore,storage", "node --import tsx --test tests/e2e-api/expense-boleto.test.mts"], {
+const child = spawn("node_modules/.bin/firebase", ["emulators:exec", "--project", projectId, "--config", "firebase.boleto-e2e.json", "--only", "auth,firestore,storage", "node --import tsx --test --test-concurrency=1 tests/e2e-api/expense-boleto.test.mts tests/e2e-api/financial-inbox-payment.test.mts"], {
   stdio: "inherit", env: { ...process.env, JAVA_HOME: java, PATH: `${java}/bin:${process.env.PATH}`, NODE_ENV: "test", FIREBASE_PROJECT_ID: projectId, NEXT_PUBLIC_FIREBASE_PROJECT_ID: projectId, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${projectId}.firebasestorage.app`, GOOGLE_CLOUD_PROJECT: projectId, GCLOUD_PROJECT: projectId, NEXT_PUBLIC_WORKSPACE_ID: "coala", NEXT_PUBLIC_USE_FIREBASE_EMULATOR: "true", NEXT_DIST_DIR: ".next-boleto-e2e" },
 });
 child.on("exit", code => process.exit(code ?? 1));
