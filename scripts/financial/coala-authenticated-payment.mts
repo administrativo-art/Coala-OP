@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
-import { validatePaymentCliAction } from "./payment-cli-contract";
+import { validatePaymentCliAction, validatePaymentCliPreparation } from "./payment-cli-contract";
 import { paymentReadPath, summarizePaymentRead } from "./payment-cli-read-contract";
 import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-contract";
 import { PaymentCliError, paymentCliErrorMessage, paymentCliFetch, paymentCliJson } from "./payment-cli-transport";
@@ -34,6 +34,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount|expense-supplier|expense-account|expense-account-center|expense-unit-month|expense-center-due-month --value VALOR
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
   npx tsx scripts/financial/coala-authenticated-payment.mts status --email EMAIL --id REQUEST_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
 
@@ -149,6 +150,24 @@ async function coalaPost(token: string, id: string, action: "authorize" | "submi
   return body.request;
 }
 
+async function coalaPrepareInbox(token: string, id: string, input: {
+  scheduledFor: string;
+  beneficiaryDocument: string;
+  barcode: string;
+}) {
+  const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/payment`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a preparação (HTTP ${response.status}). O resultado pode ser incerto; consulte a cobrança antes de tentar novamente.`);
+  const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
+  if (!body?.request || typeof body.request !== "object") {
+    throw new PaymentCliError("O Coala não confirmou a solicitação esperada após preparar. Consulte a cobrança; não repita o comando automaticamente.");
+  }
+  return body.request;
+}
+
 async function login(email: string) {
   let password = await hiddenPassword();
   let credentials: Record<string, unknown>;
@@ -209,7 +228,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "authorize", "send"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "prepare", "authorize", "send"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -254,6 +273,27 @@ async function main() {
   const id = requireOption("id");
   if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da solicitação inválido.");
   const token = await renewedToken(email);
+  if (command === "prepare") {
+    const amountCents = Number(requireOption("amount-cents"));
+    const scheduledFor = requireOption("scheduled-for");
+    const beneficiaryDocument = requireOption("beneficiary-document").replace(/\D/g, "");
+    const expenseId = requireOption("expense-id");
+    const barcode = requireOption("barcode").replace(/[.\s-]/g, "");
+    const body = await coalaRead(token, paymentReadPath({ command: "inspect", id }));
+    const message = body.message;
+    if (!message || typeof message !== "object" || Array.isArray(message)) throw new PaymentCliError("O Coala não retornou a cobrança esperada. Nenhuma ação foi feita.");
+    validatePaymentCliPreparation({ message: message as Record<string, unknown>, inboxMessageId: id,
+      amountCents, scheduledFor, beneficiaryDocument, expenseId, barcode });
+    const current = await coalaPrepareInbox(token, id, { scheduledFor, beneficiaryDocument, barcode });
+    try {
+      if (current.sourceId !== id) throw new Error("source");
+      validatePaymentCliAction({ request: current, action: "authorize", amountCents,
+        scheduledFor, beneficiaryDocument, expenseId, barcode });
+    } catch {
+      throw new PaymentCliError("O Coala não confirmou os dados esperados após preparar. Consulte a solicitação; não repita o comando automaticamente.");
+    }
+    return printStatus(current);
+  }
   const request = (await coalaGet(token)).find((item) => item.id === id);
   if (!request) throw new PaymentCliError("A solicitação não apareceu entre as 100 mais recentes da consulta autenticada. Consulte pelo Coala; nenhuma ação foi feita.");
   if (command === "status") return printStatus(request);

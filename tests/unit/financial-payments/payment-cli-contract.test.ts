@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validatePaymentCliAction } from "../../../scripts/financial/payment-cli-contract";
+import { validatePaymentCliAction, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
 
 const order = {
   sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_1", expenseId: "expense_1",
@@ -42,4 +42,20 @@ test("recusa datas impossíveis, ações desconhecidas e estados posteriores", (
     assert.throws(() => validatePaymentCliAction({ request: { ...order, status }, action: "send", ...expected }));
   }
   assert.throws(() => validatePaymentCliAction({ request: { ...order, paymentRail: "pix" }, action: "authorize", ...expected }));
+});
+
+test("prepara somente a cobrança vinculada sem ordem ou pagamento anterior", () => {
+  const input = {
+    message: {
+      id: "inbox_123", status: "linked", linkedExpenseId: "expense_1", paymentRequestId: null,
+      classification: { amountCents: 106680, dueDate: "2026-09-30", barcode: expected.barcode },
+      existingBankPayment: null, existingSettlement: null,
+    },
+    inboxMessageId: "inbox_123", ...expected,
+  };
+  assert.doesNotThrow(() => validatePaymentCliPreparation(input));
+  assert.throws(() => validatePaymentCliPreparation({ ...input, message: { ...input.message, paymentRequestId: "request_1" } }));
+  assert.throws(() => validatePaymentCliPreparation({ ...input, message: { ...input.message, linkedExpenseId: "expense_2" } }));
+  assert.throws(() => validatePaymentCliPreparation({ ...input, beneficiaryDocument: "00000000000000" }));
+  assert.throws(() => validatePaymentCliPreparation({ ...input, barcode: `9${expected.barcode.slice(1)}` }));
 });
