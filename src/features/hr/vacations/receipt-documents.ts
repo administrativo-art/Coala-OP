@@ -47,7 +47,9 @@ export function vacationReceiptDocuments(receipt: Receipt): DPVacationReceiptDoc
 }
 
 export function activeVacationReceiptDocuments(receipt: Receipt) {
-  return vacationReceiptDocuments(receipt).filter((document) => document.status !== 'superseded');
+  return vacationReceiptDocuments(receipt).filter((document) => (
+    document.status !== 'superseded' && document.status !== 'discarded'
+  ));
 }
 
 export function vacationReceiptCandidateScore(
@@ -90,7 +92,7 @@ export function suggestVacationReceiptDocument(
   expected: VacationReceiptExpectedValues,
 ) {
   return [...documents]
-    .filter((document) => document.status !== 'superseded')
+    .filter((document) => document.status !== 'superseded' && document.status !== 'discarded')
     .sort((left, right) => {
       const scoreDifference = vacationReceiptCandidateScore(right, expected) - vacationReceiptCandidateScore(left, expected);
       if (scoreDifference !== 0) return scoreDifference;

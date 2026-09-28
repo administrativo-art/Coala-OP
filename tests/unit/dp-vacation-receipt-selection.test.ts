@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  activeVacationReceiptDocuments,
   suggestVacationReceiptDocument,
   vacationReceiptCandidateScore,
   vacationReceiptDocuments,
@@ -95,4 +96,29 @@ test('documentos de rodada anterior não voltam à sugestão após correção', 
   const superseded = { ...document('old', analysis({ documentTypeCode: 'VACATION_RECEIPT' })), status: 'superseded' as const };
   const current = document('new', analysis({ documentTypeCode: 'UNKNOWN_DOCUMENT' }));
   assert.equal(suggestVacationReceiptDocument([superseded, current], {})?.id, 'new');
+});
+
+test('documento descartado não volta à sugestão do copiloto', () => {
+  const discarded = { ...document('old', analysis({ documentTypeCode: 'VACATION_RECEIPT' })), status: 'discarded' as const };
+  const current = document('new', analysis({ documentTypeCode: 'UNKNOWN_DOCUMENT' }));
+  assert.equal(suggestVacationReceiptDocument([discarded, current], {})?.id, 'new');
+});
+
+test('documento descartado é excluído da lista de documentos ativos', () => {
+  const active = document('active', analysis({ documentTypeCode: 'UNKNOWN_DOCUMENT' }));
+  const discarded = { ...document('gone', analysis({ documentTypeCode: 'VACATION_RECEIPT' })), status: 'discarded' as const };
+  const receipt = { documents: [active, discarded] } as unknown as DPVacationWorkflow['receipt'];
+
+  const documents = activeVacationReceiptDocuments(receipt);
+  assert.equal(documents.length, 1);
+  assert.equal(documents[0].id, 'active');
+});
+
+test('quando todos os documentos estão descartados não há sugestão nem documento ativo', () => {
+  const first = { ...document('one', analysis({ documentTypeCode: 'VACATION_RECEIPT' })), status: 'discarded' as const };
+  const second = { ...document('two', analysis({ documentTypeCode: 'UNKNOWN_DOCUMENT' })), status: 'discarded' as const };
+  const receipt = { documents: [first, second] } as unknown as DPVacationWorkflow['receipt'];
+
+  assert.equal(suggestVacationReceiptDocument([first, second], {}), null);
+  assert.deepEqual(activeVacationReceiptDocuments(receipt), []);
 });

@@ -149,13 +149,13 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
           ? { current: 5, completedThrough: 6 }
           : { current: 0, completedThrough: 0 };
 
-  return <PageContainer variant="default" className="max-w-[1320px] space-y-5 pb-10">
-    <CashControlNavigation active="closures" crumbs={[
+  return <PageContainer variant="wide" surface className="space-y-5 pb-10">
+    <CashControlNavigation crumbs={[
       { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" },
       { label: `Sessão ${session.id.slice(0, 8)}` },
     ]} />
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-[27px] font-black tracking-tight">Sessão de contagem</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11px] font-black", session.status === "completed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : session.status === "cancelled" ? "bg-stone-100 text-zinc-500" : "border-amber-200 bg-amber-50 text-amber-800")}>{STATUS_LABEL[session.status]}</Badge></div><p className="mt-1.5 text-sm font-medium text-zinc-500">Aberta por {session.openedByName} · <span className="font-mono text-xs">{session.id.slice(0, 8)}</span></p></div>
+      <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">Sessão de contagem</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11px] font-bold", session.status === "completed" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : session.status === "cancelled" ? "bg-stone-100 text-zinc-500" : "border-amber-200 bg-amber-50 text-amber-800")}>{STATUS_LABEL[session.status]}</Badge></div><p className="mt-1.5 text-sm text-muted-foreground">Aberta por {session.openedByName} · <span className="font-mono text-xs">{session.id.slice(0, 8)}</span></p></div>
       {session.status === "open" && canCount && <div className="flex flex-wrap gap-2">{session.finalizedOperatorCount === 0 && <Button variant="outline" className="h-10 rounded-xl border-rose-200 text-rose-700" disabled={working} onClick={() => setCancelOpen(true)}><XCircle className="mr-2 h-4 w-4" />Cancelar sessão</Button>}<Button className="h-10 rounded-xl bg-emerald-700 font-bold hover:bg-emerald-800" disabled={working || session.finalizedOperatorCount === 0} onClick={() => void finishSession()}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Finalizar sessão de contagem</Button></div>}
       {session.status === "counted" && canComposeDeposit && <Button asChild className="h-10 rounded-xl bg-pink-600 font-bold hover:bg-pink-700"><Link href={`/dashboard/financial/cash-deposits?sessionId=${encodeURIComponent(session.id)}`}>Continuar no depósito<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}
     </div>

@@ -43,8 +43,10 @@ test("sidebar reúne conciliação e fechamento sem antecipar fechamento mensal"
   assert.match(reconciliation, /label: "Faturas de cartão de crédito".*show: permissions\.financial\?\.cardStatements\?\.view/);
   assert.match(reconciliation, /label: "Vendas e recebimentos".*show: isDefaultAdmin/);
   assert.match(reconciliation, /label: "Fechamento de caixa".*show: permissions\.financial\?\.view/);
-  assert.match(reconciliation, /label: "Depósitos".*show: !permissions\.financial\?\.view && permissions\.financial\?\.cashDeposits\?\.view/);
+  assert.match(reconciliation, /label: "Fechamento de caixa"[\s\S]*label: "Depósitos"/);
+  assert.match(reconciliation, /label: "Depósitos".*show: permissions\.financial\?\.cashDeposits\?\.view/);
   assert.match(source, /label: "Coala Financeiro".*show: isDefaultAdmin/);
+  assert.doesNotMatch(source, /label: "Orçamento × despesas"/);
   for (const label of ["Despesas", "Fechamento de caixa", "Visão do caixa"]) {
     assert.ok(source.includes(`label: "${label}"`));
   }
@@ -68,17 +70,19 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   assert.match(page, /ainda não estão disponíveis neste agente/);
   assert.match(read("src/features/financial/pages/card-statements-page.tsx"), /if \(!canViewCardStatements\)/);
   const expensesPage = read("src/features/financial/pages/expenses-page.tsx");
-  assert.doesNotMatch(expensesPage, /<FinancialImportPage embedded showImportControls=\{false\} \/>/);
-  assert.match(expensesPage, /onImportComplete=\{\(sessionId\) =>/);
-  assert.match(expensesPage, /bankStatementsHref\(expenseContextQuery, \{ sessionId, fromExpenses: true \}\)/);
-  assert.match(expensesPage, /const expenseContextQuery = new URLSearchParams\(/);
-  for (const value of ["status: statusFilter", "unit: unitFilter", "competence: competenceMonth", "date_from: dateFrom", "date_to: dateTo", "supplier: supplierFilter", "account_plan: accountPlanFilter"]) assert.ok(expensesPage.includes(value));
-  for (const label of ["Cobranças recebidas", "Autorizações bancárias", "Importar extrato", "Novo lançamento", "Faturas de cartão"]) assert.ok(expensesPage.includes(label));
+  assert.match(expensesPage, /<FinancialImportPage/);
+  assert.doesNotMatch(expensesPage, /<TabsList|Extratos bancários<\/span>/);
+  assert.match(expensesPage, /<PageHeader/);
+  assert.match(expensesPage, /<PageContainer variant="wide" surface/);
+  for (const label of ["Cobranças recebidas", "Autorizações bancárias", "Ações", "Orçamento × despesas", "Importar extrato", "Novo lançamento"]) assert.ok(expensesPage.includes(label));
+  assert.doesNotMatch(expensesPage, /Acessos rápidos/);
+  assert.ok(expensesPage.indexOf("> Novo lançamento") < expensesPage.indexOf("<Menu className="));
+  assert.doesNotMatch(expensesPage, />\s*Faturas de cartão\s*</);
   const bankPage = read("src/features/financial/pages/bank-statements-page.tsx");
   assert.match(bankPage, /permissions\.financial\?\.audits\?\.view !== true/);
-  assert.ok(bankPage.indexOf("FinancialAccessGuard title=") < bankPage.indexOf("<FinancialImportPage embedded"));
+  assert.ok(bankPage.indexOf("FinancialAccessGuard title=") < bankPage.indexOf("<FinancialImportPage"));
   assert.match(bankPage, /<PageContainer variant="wide"/);
-  assert.match(bankPage, /<BackButton/);
+  assert.match(bankPage, /back=\{\{/);
   const importer = read("src/features/financial/pages/import-page.tsx");
   assert.match(importer, /url\.searchParams\.set\("session", sessionId\)/);
   assert.doesNotMatch(importer, /CardStatementsWorkspace/);
@@ -147,31 +151,116 @@ test("retorno das faturas aceita apenas Despesas ou o extrato bancário", () => 
   }
 });
 
-test("depósitos e antecipações mantêm item pai selecionado sem conceder visibilidade", () => {
+test("páginas contextuais mantêm o item pai selecionado sem conceder visibilidade", () => {
   const cash = `${root}/cash-closures`;
   const deposits = `${root}/cash-deposits`;
+  const budgetComparison = `${root}/budget-comparison`;
   const sales = `${root}/sales-reconciliation`;
   const anticipation = `${root}/stone-anticipations`;
   assert.equal(financialSidebarPath(deposits, [cash, sales]), cash);
+  assert.equal(financialSidebarPath(deposits, [cash, deposits, sales]), deposits);
   assert.equal(financialSidebarPath(anticipation, [cash, sales]), sales);
   assert.equal(financialSidebarPath(deposits, [deposits]), deposits);
   assert.equal(financialSidebarPath(anticipation, [expenses]), anticipation);
+  assert.equal(financialSidebarPath(budgetComparison, [expenses]), expenses);
+  assert.equal(financialSidebarPath(budgetComparison, [budgetComparison, expenses]), budgetComparison);
   assert.equal(financialSidebarPath(`${cash}/sessions/s1`, [cash]), `${cash}/sessions/s1`);
+});
+
+test("orçamento × despesas segue o padrão contextual de Despesas", () => {
+  const page = read("src/features/financial/pages/budget-comparison-page.tsx");
+  const expensesPage = read("src/features/financial/pages/expenses-page.tsx");
+  assert.match(page, /<PageContainer variant="wide" surface/);
+  assert.match(page, /<PageHeader/);
+  assert.match(page, /back=\{\{ fallbackHref: expensesHref, parentLabel: "Despesas" \}\}/);
+  assert.match(expensesPage, /FINANCIAL_ROUTES\.budgetComparison/);
+});
+
+test("painel financeiro segue a superfície ampla sem duplicar a sidebar", () => {
+  const page = read("src/features/financial/pages/financial-dashboard-page.tsx");
+  assert.match(page, /<PageContainer variant="wide" surface/);
+  assert.match(page, /<PageHeader/);
+  assert.doesNotMatch(page, /function ShortcutCard|<ShortcutCard/);
+  assert.match(page, /rounded-\[18px\]/);
+});
+
+test("pendência de auditoria filtra Despesas sem abrir uma página dedicada", () => {
+  const expensesPage = read("src/features/financial/pages/expenses-page.tsx");
+  const kpis = read("src/features/financial/components/expenses/kpi-flow-strip.tsx");
+  const legacyRoute = read("src/app/dashboard/financial/expenses/pending-audit/page.tsx");
+  assert.match(expensesPage, /onAuditClick=\{\(\) => setStatusFilter\("pending_audit"\)\}/);
+  assert.match(expensesPage, /auditActive=\{statusFilter === "pending_audit"\}/);
+  assert.match(expensesPage, /periodLabel=\{activePeriodLabel\}/);
+  assert.match(expensesPage, /const shouldGroupByDueWeek = Boolean\(dateFrom \|\| dateTo \|\| activeCompetenceLabel\)/);
+  assert.doesNotMatch(kpis, /auditHref|next\/link/);
+  assert.match(kpis, /onClick=\{onAuditClick\}/);
+  assert.match(legacyRoute, /redirect\(`\$\{FINANCIAL_ROUTES\.expenses\}\?status=pending_audit`\)/);
+});
+
+test("Despesas oferece limpeza completa dos filtros e retorna ao mês atual", () => {
+  const expensesPageSource = read("src/features/financial/pages/expenses-page.tsx");
+  assert.match(expensesPageSource, /function clearExpenseFilters\(\)/);
+  assert.match(expensesPageSource, /setStatusFilter\("all"\)/);
+  assert.match(expensesPageSource, /setDateFrom\(format\(startOfMonth\(now\), "yyyy-MM-dd"\)\)/);
+  assert.match(expensesPageSource, /setDateTo\(format\(endOfMonth\(now\), "yyyy-MM-dd"\)\)/);
+  assert.match(expensesPageSource, /setCompetenceMonth\("all"\)/);
+  assert.match(expensesPageSource, /setUnitFilter\("all"\)/);
+  assert.match(expensesPageSource, />\s*Limpar filtros\s*</);
+});
+
+test("linhas semanais de Despesas usam colunas fixas para manter o alinhamento", () => {
+  const expensesPageSource = read("src/features/financial/pages/expenses-page.tsx");
+  assert.match(expensesPageSource, /grid-cols-\[16px_16px_210px_160px_120px_minmax\(160px,1fr\)\]/);
+  assert.match(expensesPageSource, /min-w-\[760px\]/);
 });
 
 test("conciliação segue o contrato visual documentado", () => {
   const importer = read("src/features/financial/pages/import-page.tsx");
   const cards = read("src/features/financial/pages/card-statements-page.tsx");
+  const bankStatements = read("src/features/financial/pages/bank-statements-page.tsx");
+  const pageHeader = read("src/components/layout/page-header.tsx");
+  const pageContainer = read("src/components/layout/page-container.tsx");
+  const deposits = read("src/features/financial/cash-deposits/cash-deposits-page.tsx");
+  const cashControlNavigation = read("src/features/financial/cash-closures/components/cash-control-navigation.tsx");
   const guide = read("docs/engineering/ui-design-system.md");
   const navigator = read("src/features/financial/components/financial-competence-navigator.tsx");
 
   assert.match(importer, /<FinancialCompetenceNavigator/);
   assert.match(cards, /<FinancialCompetenceNavigator/);
   assert.match(cards, /data-ui="financial-card-selector"/);
+  assert.match(cards, /<PageContainer variant="wide"/);
+  assert.doesNotMatch(cards, /max-w-\[1360px\]/);
+  assert.match(cards, /back=\{\{ fallbackHref: safeReturnHref, parentLabel: backParentLabel \}\}/);
+  assert.doesNotMatch(cards, /Voltar ao extrato/);
+  assert.match(importer, /data-ui="statement-overview-grid"/);
+  assert.match(importer, /onClick=\{\(\) => setImportDialogOpen\(true\)\}/);
+  assert.match(importer, /Informe o formato do arquivo e a conta bancária/);
+  assert.match(bankStatements, /parentLabel: "Despesas"/);
+  assert.match(bankStatements, /showImportControls=\{false\}/);
+  assert.match(pageHeader, /data-ui="page-breadcrumb"/);
+  assert.match(pageHeader, /<BackButton/);
+  assert.match(pageHeader, /titleSize === 'compact'/);
+  assert.match(pageContainer, /financial-page-surface/);
+  assert.doesNotMatch(cashControlNavigation, /Depósitos|Coala · Financeiro/);
+  assert.match(importer, /data-ui="statement-card-close"/);
+  assert.match(importer, /data-ui="statement-card-selector"/);
+  assert.match(importer, /Selecione o cartão/);
+  assert.doesNotMatch(importer, /statementCloseChecklist/);
   assert.match(navigator, /\bAnterior\b/);
   assert.match(navigator, /Próxima/);
   assert.match(guide, /Importar → Auditar → Fechar/);
+  assert.match(guide, /Importar → Conciliar → Fechar → Pagamento/);
+  assert.match(cards, /label: "Conciliar"/);
+  assert.match(cards, /label: "Pagamento"/);
+  assert.doesNotMatch(cards, /label: "Auditar"/);
+  assert.doesNotMatch(cards, /label: "Conferir"/);
   assert.match(guide, /\*\*Pendente\*\*/);
   assert.match(guide, /\*\*Conciliada\*\*/);
-  assert.match(guide, /Use `BackButton`/);
+  assert.match(guide, /Use a opção `back` de `PageHeader`/);
+  assert.match(guide, /texto-base em `14px`/);
+  assert.match(guide, /Itens permanentes do módulo ficam na sidebar/);
+  assert.match(deposits, /<PageContainer variant="wide" surface/);
+  assert.match(deposits, /<PageHeader[\s\S]*titleSize="compact"/);
+  assert.doesNotMatch(deposits, /Financeiro <span[^>]*>›<\/span> Depósitos em dinheiro/);
+  assert.match(deposits, /bg-zinc-900/);
 });

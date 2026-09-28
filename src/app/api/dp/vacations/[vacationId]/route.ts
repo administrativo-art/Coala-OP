@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { updateVacationSchema } from '@/features/hr/vacations/schemas';
 import {
   deleteVacation,
+  discardVacationReceiptDocument,
   finalizeVacationWorkflow,
   generateVacationNotice,
   prepareVacationPayment,
@@ -60,6 +61,9 @@ export const PATCH = withApiErrorHandling({
   }
   if (input.action === 'select_receipt_document') {
     return NextResponse.json({ vacation: await selectVacationReceiptDocument(request, id, input.documentId) });
+  }
+  if (input.action === 'discard_receipt_document') {
+    return NextResponse.json({ vacation: await discardVacationReceiptDocument(request, id, input.documentId) });
   }
   if (input.action === 'review_receipt') {
     return NextResponse.json({ vacation: await reviewVacationReceipt(request, id, input) });
