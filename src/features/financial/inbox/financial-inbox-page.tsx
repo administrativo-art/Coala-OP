@@ -839,7 +839,7 @@ export function FinancialInboxPage() {
   }
 
   return (
-    <PageContainer variant="default" className="space-y-5 pb-28">
+    <PageContainer variant="default" surface className="space-y-5 pb-28">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <Link href={FINANCIAL_ROUTES.expenses} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">

@@ -9,7 +9,6 @@ import {
   BarChart3,
   CircleDollarSign,
   Landmark,
-  Settings,
   Wallet,
 } from "lucide-react";
 import { useFinancialDashboardIndicators } from "@/features/financial/hooks/use-dashboard-indicators";
@@ -26,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 
 type ExpenseFilters = {
   dateFrom: string;
@@ -57,41 +58,14 @@ function KpiCard({
   icon: React.ElementType;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon className="h-4 w-4 text-primary" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-xl font-bold">{value}</div>
+    <Card className="rounded-[18px] border-[#e3e1dc] bg-white shadow-sm">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[13px] font-bold text-muted-foreground">{label}</p>
+          <Icon className="h-4 w-4 text-[#db2777]" />
+        </div>
+        <div className="mt-3 font-mono text-xl font-semibold">{value}</div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ShortcutCard({
-  href,
-  title,
-  description,
-}: {
-  href: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Card className="transition-colors hover:border-primary/40">
-      <CardHeader>
-        <CardTitle className="text-lg">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button asChild variant="outline" size="sm">
-          <Link href={href}>
-            Abrir
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
       </CardContent>
     </Card>
   );
@@ -171,20 +145,20 @@ function ExpenseFiltersBar({
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Data inicial</p>
-        <Input type="date" value={filters.dateFrom} onChange={(event) => onChange({ ...filters, dateFrom: event.target.value })} />
+        <Input className="h-9 rounded-[11px] text-[13px]" type="date" value={filters.dateFrom} onChange={(event) => onChange({ ...filters, dateFrom: event.target.value })} />
       </div>
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Data final</p>
-        <Input type="date" value={filters.dateTo} onChange={(event) => onChange({ ...filters, dateTo: event.target.value })} />
+        <Input className="h-9 rounded-[11px] text-[13px]" type="date" value={filters.dateTo} onChange={(event) => onChange({ ...filters, dateTo: event.target.value })} />
       </div>
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Competência</p>
-        <Input type="month" value={filters.competenceMonth} onChange={(event) => onChange({ ...filters, competenceMonth: event.target.value })} />
+        <Input className="h-9 rounded-[11px] text-[13px]" type="month" value={filters.competenceMonth} onChange={(event) => onChange({ ...filters, competenceMonth: event.target.value })} />
       </div>
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
         <Select value={filters.supplier} onValueChange={(value) => onChange({ ...filters, supplier: value })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 rounded-[11px] text-[13px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             {suppliers.map((supplier) => (
@@ -196,7 +170,7 @@ function ExpenseFiltersBar({
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Status</p>
         <Select value={filters.status} onValueChange={(value) => onChange({ ...filters, status: value })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 rounded-[11px] text-[13px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="pending">Em aberto</SelectItem>
@@ -212,7 +186,7 @@ function ExpenseFiltersBar({
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
         <Select value={filters.accountPlan} onValueChange={(value) => onChange({ ...filters, accountPlan: value })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 rounded-[11px] text-[13px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             {accountPlans.map((accountPlan) => (
@@ -235,11 +209,11 @@ function ExpenseList({
   resultCenter?: string;
 }) {
   return expenses.length === 0 ? (
-    <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+    <p className="rounded-[14px] border border-[#e3e1dc] bg-[#faf9f6] p-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
   ) : (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {expenses.map((expense) => (
-        <div key={expense.id} className="flex items-center justify-between gap-4 rounded-lg border p-3">
+        <div key={expense.id} className="flex items-center justify-between gap-4 rounded-[12px] border border-[#e3e1dc] bg-white p-3">
           <div className="min-w-0">
             <p className="truncate font-medium">{expense.description}</p>
             <p className="truncate text-xs text-muted-foreground">
@@ -276,12 +250,12 @@ function ExpenseSection({
   accountPlans: string[];
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+    <Card className="rounded-[18px] border-[#e3e1dc] bg-white shadow-sm">
+      <CardHeader className="border-b border-[#ebe9e4] px-4 py-4">
+        <CardTitle className="text-base font-bold">{title}</CardTitle>
+        <CardDescription className="mt-1 text-sm">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 p-4">
         <ExpenseFiltersBar
           filters={filters}
           onChange={onFiltersChange}
@@ -307,10 +281,12 @@ export function FinancialDashboardPage() {
 
   if (!permissions.financial?.dashboard) {
     return (
-      <FinancialAccessGuard
-        title="Painel financeiro"
-        description="Seu perfil não possui permissão para visualizar o painel consolidado do financeiro."
-      />
+      <PageContainer variant="wide" surface>
+        <FinancialAccessGuard
+          title="Painel financeiro"
+          description="Seu perfil não possui permissão para visualizar o painel consolidado do financeiro."
+        />
+      </PageContainer>
     );
   }
 
@@ -369,17 +345,15 @@ export function FinancialDashboardPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1220px] space-y-6 pb-10">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Painel financeiro</h1>
-        <p className="text-muted-foreground">
-          Visão consolidada do módulo financeiro para {user?.username ?? "o usuário atual"}.
-        </p>
-      </div>
+    <PageContainer variant="wide" surface className="space-y-6 pb-10">
+      <PageHeader
+        title="Painel financeiro"
+        description={`Visão consolidada do módulo financeiro para ${user?.username ?? "o usuário atual"}.`}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {loading ? (
-          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28 w-full" />)
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28 w-full rounded-[18px]" />)
         ) : (
           <>
             <KpiCard
@@ -407,44 +381,6 @@ export function FinancialDashboardPage() {
               icon={Landmark}
             />
           </>
-        )}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
-        {(permissions.financial?.expenses?.view || permissions.financial?.audits?.view || permissions.financial?.cardStatements?.view) && (
-          <ShortcutCard
-            href={permissions.financial?.expenses?.view || permissions.financial?.audits?.view ? FINANCIAL_ROUTES.expenses : FINANCIAL_ROUTES.cardStatements}
-            title="Despesas"
-            description="Lançamento, edição, contas a pagar e importação de extratos."
-          />
-        )}
-        {permissions.financial?.expenses?.view && (
-          <ShortcutCard
-            href={FINANCIAL_ROUTES.inbox}
-            title="Caixa de cobranças"
-            description="E-mails e documentos recebidos para revisão antes do lançamento."
-          />
-        )}
-        {(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow) && (
-          <ShortcutCard
-            href={FINANCIAL_ROUTES.cashFlow}
-            title="Fluxo de caixa"
-            description="Visão global do realizado, previsto e saldo projetado."
-          />
-        )}
-        {permissions.financial?.dre && (
-          <ShortcutCard
-            href={FINANCIAL_ROUTES.dre}
-            title="DRE"
-            description="Resultado do período com comparativos por competência."
-          />
-        )}
-        {permissions.financial?.settings?.view && (
-          <ShortcutCard
-            href={FINANCIAL_ROUTES.settings}
-            title="Configurações"
-            description="Cadastros financeiros, contas bancárias e aliases de importação."
-          />
         )}
       </div>
 
@@ -483,7 +419,7 @@ export function FinancialDashboardPage() {
 
       <div className="space-y-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Unidades</h2>
+          <h2 className="text-lg font-bold tracking-tight">Unidades</h2>
           <p className="text-sm text-muted-foreground">Cada card abaixo permite acessar e filtrar as despesas de uma unidade específica.</p>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
@@ -496,20 +432,20 @@ export function FinancialDashboardPage() {
             );
 
             return (
-              <Card key={kiosk.id}>
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card key={kiosk.id} className="rounded-[18px] border-[#e3e1dc] bg-white shadow-sm">
+                <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-[#ebe9e4] px-4 py-4">
                   <div>
-                    <CardTitle>{kiosk.name}</CardTitle>
+                    <CardTitle className="text-base font-bold">{kiosk.name}</CardTitle>
                     <CardDescription>{unitExpenses.length} despesa(s) após os filtros.</CardDescription>
                   </div>
-                  <Button asChild variant="outline" size="sm">
+                  <Button asChild variant="outline" size="sm" className="h-9 rounded-[11px] bg-white px-[14px] text-[13px] font-extrabold">
                     <Link href={`${FINANCIAL_ROUTES.expenses}?search=${encodeURIComponent(kiosk.name)}`}>
                       Abrir despesas
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 p-4">
                   <ExpenseFiltersBar
                     filters={filters}
                     onChange={(next) => setUnitFilters((current) => ({ ...current, [kiosk.id]: next }))}
@@ -527,6 +463,6 @@ export function FinancialDashboardPage() {
           })}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

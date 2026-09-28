@@ -537,7 +537,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
   }
   if (loading) return <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!data) {
-    return <PageContainer variant="default" className="max-w-[1320px] space-y-4 pb-10">
+    return <PageContainer variant="wide" surface className="space-y-4 pb-10">
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
         <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void goToNextDay()} disabled={nextDayIsFuture || !!working} title={nextDayIsFuture ? "O próximo dia ainda não está disponível." : undefined}>{working === "next-day" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Próximo dia{working !== "next-day" && <ArrowRight className="ml-2 h-4 w-4" />}</Button>
@@ -550,11 +550,11 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
     </PageContainer>;
   }
 
-  return <PageContainer variant="default" className="max-w-[1320px] space-y-4 pb-10">
-    <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: data.closure.kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel, href: monthHref }, { label: date.split("-").reverse().join("/") }]} />
+  return <PageContainer variant="wide" surface className="space-y-4 pb-10">
+    <CashControlNavigation crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: data.closure.kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel, href: monthHref }, { label: date.split("-").reverse().join("/") }]} />
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <div className="flex flex-wrap items-center gap-2.5"><h1 className="text-[26px] font-black tracking-tight">{data.closure.kioskName}</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11.5px] font-extrabold", data.closure.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ["pending_review", "reopened"].includes(data.closure.status) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-100 text-zinc-500")}>{STATUS_LABEL[data.closure.status]}</Badge></div>
+        <div className="flex flex-wrap items-center gap-2.5"><h1 className="text-2xl font-bold tracking-tight">{data.closure.kioskName}</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11.5px] font-bold", data.closure.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ["pending_review", "reopened"].includes(data.closure.status) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-100 text-zinc-500")}>{STATUS_LABEL[data.closure.status]}</Badge></div>
         <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">
           Fechamento de {date.split("-").reverse().join("/")} · {groups.length} {groups.length === 1 ? "operador" : "operadores"} · {data.lines.length} {data.lines.length === 1 ? "lançamento" : "lançamentos"}
         </p>

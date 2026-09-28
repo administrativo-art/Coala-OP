@@ -13,6 +13,17 @@
   }
 }
 
+/* Superfície tipográfica canônica do módulo Financeiro. */
+.financial-page-surface {
+  font-family: 'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.financial-page-surface :where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
 @layer base {
   body {
     background: var(--bg);

@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,26 +66,29 @@ function BudgetComparisonContent() {
   const visible = loadedScope === scope && !loading ? budgets.filter((budget) => budget.active) : [];
   const totals = budgetComparisonTotals(visible);
 
-  return <PageContainer variant="wide" className="space-y-6 pb-10">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">Orçamento × despesas</h1>
-      <p className="mt-1 text-muted-foreground">Compare o planejamento com os boletos e despesas da mesma competência.</p></div>
-      {canViewExpenses && <Button variant="outline" asChild><Link href={FINANCIAL_ROUTES.expenses}>Ver despesas</Link></Button>}
-    </div>
-    <div className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1"><Label htmlFor="comparison-month">Competência</Label><Input id="comparison-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="w-44" /></div>
-      <div className="min-w-64 space-y-1"><Label htmlFor="comparison-center">Centro de custo</Label><Select value={center} onValueChange={setCenter}><SelectTrigger id="comparison-center"><SelectValue placeholder="Selecione um centro" /></SelectTrigger><SelectContent>
+  const expensesHref = `${FINANCIAL_ROUTES.expenses}?competence=${month}`;
+
+  return <PageContainer variant="wide" surface className="space-y-6 pb-10">
+    <PageHeader
+      title="Orçamento × despesas"
+      description="Compare o planejamento com os boletos e despesas da mesma competência."
+      back={{ fallbackHref: expensesHref, parentLabel: "Despesas" }}
+    />
+    <div className="grid gap-4 rounded-[18px] border border-[#e3e1dc] bg-white p-4 shadow-sm sm:grid-cols-[176px_minmax(240px,360px)_auto] sm:items-end">
+      <div className="space-y-1.5"><Label htmlFor="comparison-month" className="text-[13px] font-bold">Competência</Label><Input id="comparison-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="h-10 w-full rounded-[11px]" /></div>
+      <div className="space-y-1.5"><Label htmlFor="comparison-center" className="text-[13px] font-bold">Centro de custo</Label><Select value={center} onValueChange={setCenter}><SelectTrigger id="comparison-center" className="h-10 rounded-[11px]"><SelectValue placeholder="Selecione um centro" /></SelectTrigger><SelectContent>
         {allUnits && <SelectItem value="all">Todos os centros</SelectItem>}{centers.map((option) => <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>)}
       </SelectContent></Select></div>
-      <Button variant="outline" disabled={loading || !ready || !center} onClick={() => void refresh()}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
+      <Button className="h-10 rounded-[11px] px-4 text-[13px] font-extrabold sm:justify-self-start" variant="outline" disabled={loading || !ready || !center} onClick={() => void refresh()}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
     </div>
-    {(error || catalogError) && <p role="alert" className="rounded-lg border border-red-200 p-4 text-red-700">{catalogError || error}</p>}
+    {(error || catalogError) && <p role="alert" className="rounded-[14px] border border-red-200 bg-red-50 p-4 text-red-700">{catalogError || error}</p>}
     {loading && !catalogError ? <p role="status">Carregando comparação…</p> : !error && !catalogError && <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
         ["Previsto no orçamento", totals.planned], ["Valor em despesas", totals.committed], ["Diferença orçamentária", totals.difference], ["Compra ainda esperada", totals.expected],
-      ].map(([label, value]) => <Card key={String(label)}><CardContent className="p-4"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 font-mono text-2xl font-semibold">{typeof value === "number" ? formatCurrency(value / 100) : "Não definida"}</p></CardContent></Card>)}</div>
-      <p className="text-sm text-muted-foreground">{totals.documentCount} documento(s) distinto(s). O valor em despesas considera boletos abertos e pagos; pagar não soma esse valor novamente. A compra ainda esperada considera os encerramentos confirmados.</p>
-      {!visible.length && <p className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">{ready && !center ? "Nenhum centro autorizado disponível." : "Nenhum orçamento ativo nesta competência e centro."}</p>}
-      {visible.map((budget) => <Card key={budget.id}><CardHeader><CardTitle>{budget.name}</CardTitle><p className="text-sm text-muted-foreground">{budget.resultCenterName || "Todos os centros"}</p></CardHeader><CardContent>
+      ].map(([label, value]) => <Card key={String(label)} className="rounded-[18px] border-[#e3e1dc] shadow-sm"><CardContent className="p-4"><p className="text-[13px] font-bold text-muted-foreground">{label}</p><p className="mt-1 font-mono text-xl font-semibold">{typeof value === "number" ? formatCurrency(value / 100) : "Não definida"}</p></CardContent></Card>)}</div>
+      <p className="rounded-[14px] bg-white/60 px-4 py-3 text-sm text-muted-foreground">{totals.documentCount} documento(s) distinto(s). O valor em despesas considera boletos abertos e pagos; pagar não soma esse valor novamente. A compra ainda esperada considera os encerramentos confirmados.</p>
+      {!visible.length && <p className="rounded-[18px] border border-[#e3e1dc] bg-white p-10 text-center text-muted-foreground shadow-sm">{ready && !center ? "Nenhum centro autorizado disponível." : "Nenhum orçamento ativo nesta competência e centro."}</p>}
+      {visible.map((budget) => <Card key={budget.id} className="rounded-[18px] border-[#e3e1dc] shadow-sm"><CardHeader><CardTitle className="text-base font-bold">{budget.name}</CardTitle><p className="text-sm text-muted-foreground">{budget.resultCenterName || "Todos os centros"}</p></CardHeader><CardContent>
         <div className="grid gap-3 sm:grid-cols-3">{[["Previsto", budget.budgetedAmountCents], ["Valor em despesas", budget.consumedAmountCents], ["Diferença", budget.balanceAmountCents]].map(([label, value]) => <div key={String(label)}><p className="text-xs text-muted-foreground">{label}</p><strong className="font-mono">{formatCurrency(Number(value) / 100)}</strong></div>)}</div>
         {budget.issues.length > 0 && <p role="status" className="mt-3 text-sm text-amber-700">{budget.issues.join(" ")}</p>}
         <BudgetDetails budget={budget} accounts={[]} canManage={false} canViewPersonnel={canViewPersonnel} canEditPersonnel={false} canViewExpenses={canViewExpenses} defaultOpen onSaved={refresh} />
