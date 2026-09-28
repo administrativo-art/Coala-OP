@@ -1,0 +1,23 @@
+# Vagas, candidatos e banco de talentos
+
+**Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
+
+**Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.
+
+A [página de recrutamento](../../../src/app/dashboard/hr/recruitment/page.tsx) usa [`RecruitmentShell`](../../../src/components/hr/recruitment/recruitment-shell.tsx), com permissões `recruitment.view/manage` e `recruitment.pipeline.view/manage`, além de acessos DP. A tela chama [vagas](../../../src/app/api/hr/openings/route.ts), [candidatos](../../../src/app/api/hr/candidates/route.ts) e endpoints por ID. Vagas persistem em `jobOpenings` no banco RH e validam vínculos com `jobRoles`, `jobFunctions`, `dp_units` e `dp_shiftDefinitions`. Candidatos usam `candidates` e `applications`; a atualização pode criar/vincular `onboardingProcesses` na [rota por ID](../../../src/app/api/hr/candidates/[id]/route.ts).
+
+Há [listagem pública de vagas](../../../src/app/api/hr/openings/public/route.ts) e [formulário público do banco de talentos](../../../src/app/api/hr/recruitment/forms/talent-pool/public/route.ts), além da [configuração interna do formulário](../../../src/app/api/hr/recruitment/forms/talent-pool/route.ts). Essas entradas públicas exigem revisão de campos expostos, retenção e defesa contra abuso. Para mudança de status ou passagem a admissão, consultar [integração RH](onboarding-non-pj-creation.md). Ainda é necessário conferir todas as transições, autorização método a método, uploads, documentos e dados sensíveis antes de marcar `Verificado`. `npm run check` passou; não há verificação integrada registrada para esta cadeia.
+
+## Superfícies públicas e passagem para admissão
+
+A [lista pública](../../../src/app/api/hr/openings/public/route.ts) respeita a flag de disponibilidade, seleciona vagas abertas na janela de candidatura e devolve campos públicos com opções ativas de unidade/cargo/função. Falha capturada devolve lista vazia. [`apply`](../../../src/app/api/hr/apply/route.ts) valida campos, vaga/janela e URL de currículo, aplica controles de abuso e procura candidato por e-mail; grava candidato e candidatura em lote, usando identidade da candidatura derivada de candidato/vaga. A consulta anterior por e-mail não é garantia transacional de unicidade.
+
+O [upload](../../../src/app/api/hr/upload/route.ts) aceita acesso interno de RH ou elegibilidade pública. No público, há flag, campo isca e limites em memória; vaga precisa estar aberta/no prazo, banco de talentos tem ramo próprio e integração exige token válido, processo não encerrado e documento pendente/reprovado para substituição. Aceita PDF/JPEG/PNG até 10 MB, confere assinatura de arquivo e rejeita PDF criptografado; foto exige JPEG/PNG. Salva em Storage com nome único/token de download, seguido por hash/extração/auditoria. Essa escrita não é atômica com a candidatura; limites em memória não garantem quota compartilhada entre instâncias.
+
+No [PATCH de candidato](../../../src/app/api/hr/candidates/[id]/route.ts), `assertHrAccess` exige gestão. O status pertence aos valores de [`recruitment-pipeline`](../../../src/lib/recruitment-pipeline.ts); isso não impõe uma matriz geral de transições consecutivas. Reativação exige vaga aberta, verifica candidatura duplicada, normaliza etapa e pode reutilizar dados, gravando candidato/candidatura em lote antes da auditoria. Atualização normal e seus efeitos posteriores são sequenciais.
+
+Ao contratar, valida empregador ativo/CNPJ, resolve cargo/função/modelos e reutiliza integração existente ou ID determinístico por candidato/candidatura. Grava `onboardingProcesses` e dispara os efeitos de criação aplicáveis; não recria indiscriminadamente integrações existentes. Continuação: [criação da integração](onboarding-non-pj-creation.md), [controle de etapas](onboarding-stage-control.md) e [ativação](onboarding-activation.md). Conferir candidato, candidatura e processo antes de retomar falha parcial. Testes de abuso, privacidade, duplicidade concorrente, permissão e reexecução continuam pendentes.
+
+## Evidências da etapa 2
+
+A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.

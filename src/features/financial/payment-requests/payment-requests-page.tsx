@@ -449,7 +449,7 @@ export function PaymentRequestsPage() {
   ];
 
   return (
-    <PageContainer variant="compact" className="space-y-5 pb-24">
+    <PageContainer variant="compact" surface className="space-y-5 pb-24">
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

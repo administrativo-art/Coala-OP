@@ -1,7 +1,5 @@
 "use client";
 
-import { canViewBudgetComparison } from "@/features/financial/budgets/comparison";
-
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -264,7 +262,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             href: "/dashboard/financial/expenses",
             icon: ReceiptText,
             show: permissions.financial?.expenses?.view
-              || permissions.financial?.audits?.view
               || permissions.financial?.inbox?.view
               || permissions.financial?.paymentRequests?.view,
           },
@@ -275,7 +272,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             show: permissions.financial?.view || permissions.financial?.cashDeposits?.view || permissions.financial?.audits?.view || permissions.financial?.cardStatements?.view || isDefaultAdmin,
             children: [
               { label: "Fechamento de caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.view },
-              { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: !permissions.financial?.view && permissions.financial?.cashDeposits?.view },
+              { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
               { label: "Vendas e recebimentos", href: "/dashboard/financial/sales-reconciliation", icon: ClipboardCheck, show: isDefaultAdmin },
               { label: "Extratos bancários", href: "/dashboard/financial/reconciliation/bank-statements", icon: Landmark, show: permissions.financial?.audits?.view },
               { label: "Faturas de cartão de crédito", href: "/dashboard/financial/reconciliation/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
@@ -292,7 +289,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Coala Financeiro", href: "/dashboard/financial/cash-flow/agent", icon: Wallet, show: isDefaultAdmin },
             ],
           },
-          { label: "Orçamento × despesas", href: "/dashboard/financial/budget-comparison", icon: ReceiptText, show: canViewBudgetComparison(permissions, isDefaultAdmin) },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],

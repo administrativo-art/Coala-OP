@@ -663,7 +663,7 @@ export function DrePage() {
   }
 
   return (
-    <PageContainer variant="wide" className="space-y-6">
+    <PageContainer variant="wide" surface className="space-y-6">
       {metrics.revenueSource.costOnlyUnit && <p className="rounded-xl border p-4 text-sm text-muted-foreground">Esta unidade não possui origem de vendas no PDV. Suas despesas continuam incluídas na DRE; receita e resultado isolado não são apurados neste filtro.</p>}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
