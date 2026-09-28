@@ -231,7 +231,7 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
     finally { setSaving(false); }
   }
 
-  return <PageContainer variant="wide" className="space-y-5">
+  return <PageContainer variant="wide" surface className="space-y-5">
     <PageHeader title="Orçamentos" description="Planeje por categoria e centro de custo; confira o comprometido e a compra ainda esperada."
       actions={canManage && <Button disabled={saving || !scopeAllowed} onClick={() => setFormOpen(!formOpen)}><Plus className="mr-2 h-4 w-4" />{formOpen ? "Fechar cadastro" : "Novo orçamento"}</Button>} />
     <div className="space-y-2"><Label htmlFor="budget-center">Escopo do cadastro e filtro da consulta</Label>
