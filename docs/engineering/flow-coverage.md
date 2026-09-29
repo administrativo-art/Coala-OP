@@ -64,6 +64,6 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 
 Total inicial: **53 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
 
-Na integração documental da main, nenhum grupo é promovido a Verificado pelas execuções do worktree de correções. São 53 grupos traçados, 72 guias de subfluxo e validação comportamental parcial.
+Na integração documental da main, nenhum grupo é promovido a Verificado pelas execuções do worktree de correções. São 53 grupos traçados, 73 guias de subfluxo e validação comportamental parcial.
 
 Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.

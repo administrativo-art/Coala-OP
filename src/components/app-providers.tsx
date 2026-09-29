@@ -45,6 +45,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   const isStandaloneEscala = pathname === '/escala';
   const isPlayerRoute = pathname?.startsWith('/player');
   const isSignageRoute = pathname?.startsWith('/signage');
+  const isInstagramScheduleRoute = pathname?.startsWith('/instagram-programacao');
 
   if (isStandaloneEscala || isPlayerRoute) {
     return (
@@ -64,6 +65,20 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             <KiosksProvider>
               {children}
             </KiosksProvider>
+          </AuthProvider>
+        </ProfilesProvider>
+        <Toaster />
+      </ThemeProvider>
+    );
+  }
+
+  if (isInstagramScheduleRoute) {
+    return (
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} forcedTheme="light" disableTransitionOnChange>
+        <ProfilesProvider>
+          <AuthProvider>
+            <ClientErrorObserver />
+            {children}
           </AuthProvider>
         </ProfilesProvider>
         <Toaster />
