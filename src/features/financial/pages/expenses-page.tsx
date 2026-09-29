@@ -16,18 +16,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
   CalendarDays,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   CreditCard,
-  FileCheck2,
   FilePlus2,
   FileUp,
   Inbox,
+  Menu,
   MoreHorizontal,
   Pencil,
-  ReceiptText,
+  RotateCcw,
   Search,
   Trash2,
   ShieldCheck,
@@ -116,13 +117,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
 import { expenseDisplayStatus as getExpenseStatusKey, expenseDisplayAmounts, expenseAwaitingConfirmation, expenseCashForecastAmount, showExpenseInOperationalList } from "@/features/financial/lib/expense-display-state";
 import { canViewBudgetComparison } from "@/features/financial/budgets/comparison";
 import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
@@ -389,6 +390,19 @@ function accountPlanBreadcrumb(plan: any, plansById: Map<string, any>) {
   return labels.join(" › ");
 }
 
+function expensePeriodLabel(dateFrom: string, dateTo: string, competenceMonth: string) {
+  const displayDate = (value: string) => {
+    const [year, month, day] = value.split("-");
+    return year && month && day ? `${day}/${month}/${year}` : value;
+  };
+
+  if (dateFrom && dateTo) return `${displayDate(dateFrom)} a ${displayDate(dateTo)}`;
+  if (dateFrom) return `Desde ${displayDate(dateFrom)}`;
+  if (dateTo) return `Até ${displayDate(dateTo)}`;
+  if (competenceMonth !== "all") return `Competência ${competenceMonth.slice(5, 7)}/${competenceMonth.slice(0, 4)}`;
+  return "Todo o histórico";
+}
+
 export function ExpensesPage() {
   const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
@@ -440,10 +454,9 @@ export function ExpensesPage() {
   const canViewInbox = permissions.financial?.inbox?.view === true;
   const canViewPaymentRequests = permissions.financial?.paymentRequests?.view === true;
   const loading = expensesLoading || (canViewCardStatements && cardStatementsLoading);
-  const currentView = canAccessAudits && (!canViewExpenses || searchParams.get("view") === "audits") ? "audits" : "expenses";
   const searchParamsKey = searchParams.toString();
 
-  if (!canViewExpenses && !canAccessAudits && !canViewInbox && !canViewPaymentRequests) {
+  if (!canViewExpenses && !canViewInbox && !canViewPaymentRequests) {
     return (
       <FinancialAccessGuard
         title="Despesas"
@@ -452,9 +465,9 @@ export function ExpensesPage() {
     );
   }
 
-  if (!canViewExpenses && !canAccessAudits && (canViewInbox || canViewPaymentRequests)) {
+  if (!canViewExpenses && (canViewInbox || canViewPaymentRequests)) {
     return (
-      <PageContainer variant="default" className="space-y-6 pb-10">
+      <PageContainer variant="default" surface className="space-y-6 pb-10">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
           <p className="text-muted-foreground">Seu perfil possui acesso aos fluxos operacionais liberados dentro de contas a pagar.</p>
@@ -720,14 +733,15 @@ export function ExpensesPage() {
     });
   }, [cardStatementsData, competenceMonth, dateFrom, dateTo, expenseSort, expenses, filtered]);
   const scopedDisplayEntryCount = scopedDisplayEntries.length;
-  const filteredCountLabel = `${filteredDisplayEntries.length} de ${scopedDisplayEntryCount}`;
   const filteredTotalValue = sumExpenseValues(filteredDisplayEntries,
     (entry) => entry.kind === "expense" ? Number(entry.expense.totalValue) || 0 : entry.statement.totalValue);
   const activeCompetenceLabel = competenceMonth !== "all"
     ? `${competenceMonth.slice(5, 7)}/${competenceMonth.slice(0, 4)}`
     : null;
+  const activePeriodLabel = expensePeriodLabel(dateFrom, dateTo, competenceMonth);
+  const shouldGroupByDueWeek = Boolean(dateFrom || dateTo || activeCompetenceLabel);
   const expenseListRows = useMemo<ExpenseListRow[]>(() => {
-    if (!activeCompetenceLabel) {
+    if (!shouldGroupByDueWeek) {
       return filteredDisplayEntries;
     }
 
@@ -742,7 +756,7 @@ export function ExpensesPage() {
       { kind: "week" as const, group },
       ...group.expenses.map((entry) => ({ ...entry, dueWeekKey: group.key })),
     ]);
-  }, [activeCompetenceLabel, expenseSort, filteredDisplayEntries]);
+  }, [expenseSort, filteredDisplayEntries, shouldGroupByDueWeek]);
 
   function toggleDueWeek(weekKey: string) {
     setCollapsedDueWeeks((current) => {
@@ -759,6 +773,55 @@ export function ExpensesPage() {
       : { key, direction: "asc" });
   }
 
+  function clearExpenseFilters() {
+    const now = new Date();
+    setSearch("");
+    setStatusFilter("all");
+    setOriginFilter("all");
+    setPeriodPreset("current_month");
+    setDateFrom(format(startOfMonth(now), "yyyy-MM-dd"));
+    setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
+    setCompetenceMonth("all");
+    setSupplierFilter("all");
+    setAccountPlanFilter("all");
+    setUnitFilter("all");
+    setPaymentTypeFilter("all");
+    setExpandedExpenseId(null);
+    setCollapsedDueWeeks(new Set());
+    router.replace(FINANCIAL_ROUTES.expenses, { scroll: false });
+  }
+
+  const pendingAuditScope = useMemo(() => {
+    const now = startOfDay(new Date());
+    return consolidatedExpenses.filter((expense) => {
+      if (!showExpenseInOperationalList(expense, "all")) return false;
+      if (getExpenseStatusKey(expense, now) !== "pending_audit") return false;
+      const target = searchParams.get("expense");
+      if (target && expense.id !== target) return false;
+      return matchesBaseFilters(expense, {
+        accountPlanMap,
+        cardStatements: cardStatementsData || [],
+        resultCenterNameById,
+        search,
+        originFilter,
+        dateFrom,
+        dateTo,
+        competenceMonth,
+        supplierFilter,
+        accountPlanFilter,
+        unitFilter: financialUnitFilter,
+        paymentTypeFilter,
+        now,
+      });
+    });
+  }, [accountPlanFilter, accountPlanMap, cardStatementsData, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, searchParams, supplierFilter]);
+  const pendingAuditCount = pendingAuditScope.length;
+  const pendingAuditValue = pendingAuditScope.reduce((sum, expense) => sum + expenseValueForResultCenter(
+    expense,
+    financialUnitFilter === "all" ? undefined : financialUnitFilter,
+    resultCenterNameById,
+  ), 0);
+
   const kpis = useMemo(() => {
     const now = startOfDay(new Date());
     const in7Days = endOfDay(addDays(now, 7));
@@ -767,7 +830,9 @@ export function ExpensesPage() {
     let overdue = 0;
     let paid = 0;
     let dueSoon = 0;
-    let pendingAudit = 0;
+    let launchedOpen = 0;
+    let reconciledProvisionOpen = 0;
+    let auditOpen = 0;
 
     scopedExpenses.forEach((expense) => {
       const due = toDate(expense.dueDate);
@@ -782,42 +847,17 @@ export function ExpensesPage() {
       const balance = amounts.open * ratio;
       open += balance;
       paid += amounts.paid * ratio;
+      if (balance > 0) {
+        if (getExpenseStatusKey(expense, now) === "pending_audit") auditOpen += balance;
+        else if (expense.reconciledProvisionId) reconciledProvisionOpen += balance;
+        else launchedOpen += balance;
+      }
       if (due && due < now) overdue += balance;
       if (due && due >= now && due <= in7Days) dueSoon += balance;
     });
 
-    expenses.forEach((expense) => {
-      const computedStatus = getExpenseStatusKey(expense, now);
-      if (computedStatus === "pending_audit") {
-        pendingAudit += expense.totalValue || 0;
-      }
-    });
-
-    transactions.forEach((transaction) => {
-      if (
-        transaction.importedFrom === "bank_statement" &&
-        transaction.direction === "out" &&
-        transaction.auditStatus === "pending"
-      ) {
-        pendingAudit += Number(transaction.amount) || 0;
-      }
-    });
-
-    return { open, overdue, paid, dueSoon, pendingAudit };
-  }, [expenses, financialUnitFilter, resultCenterNameById, scopedExpenses, transactions]);
-
-  const pendingAuditCount = useMemo(() => {
-    const now = startOfDay(new Date());
-    const expenseCount = expenses.filter((expense) => getExpenseStatusKey(expense, now) === "pending_audit").length;
-    const transactionCount = transactions.filter(
-      (transaction) =>
-        transaction.importedFrom === "bank_statement" &&
-        transaction.direction === "out" &&
-        transaction.auditStatus === "pending"
-    ).length;
-
-    return expenseCount + transactionCount;
-  }, [expenses, transactions]);
+    return { open, launchedOpen, reconciledProvisionOpen, auditOpen, overdue, paid, dueSoon, pendingAudit: pendingAuditValue };
+  }, [financialUnitFilter, pendingAuditValue, resultCenterNameById, scopedExpenses]);
 
   useEffect(() => {
     if (loading || !expandedExpenseId) return;
@@ -900,92 +940,70 @@ export function ExpensesPage() {
     competence: competenceMonth, supplier: supplierFilter, account_plan: accountPlanFilter,
     unit: unitFilter, payment_type: paymentTypeFilter,
   }).toString();
-
-  function setExpensesView(view: "expenses" | "audits") {
-    const params = new URLSearchParams(expenseContextQuery);
-    if (view === "audits") {
-      router.push(bankStatementsHref(params.toString(), { fromExpenses: true }));
-      return;
-    }
-    params.delete("view");
-    const nextQuery = params.toString();
-    router.replace(`${FINANCIAL_ROUTES.expenses}${nextQuery ? `?${nextQuery}` : ""}`);
-  }
+  const auditReturnParams = new URLSearchParams(expenseContextQuery);
+  auditReturnParams.set("status", "pending_audit");
+  const expensesAuditReturnHref = `${FINANCIAL_ROUTES.expenses}?${auditReturnParams}`;
 
   return (
-    <PageContainer variant="default" className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
-          <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canViewBudgetComparison(permissions, isDefaultAdmin) && <Button variant="outline" size="sm" asChild><Link href={`${FINANCIAL_ROUTES.budgetComparison}${competenceMonth !== "all" ? `?month=${competenceMonth}` : ""}`}>Orçamento × despesas</Link></Button>}
-          {canViewInbox && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={FINANCIAL_ROUTES.inbox}>
-                <Inbox className="mr-2 h-4 w-4" /> Cobranças recebidas
-              </Link>
-            </Button>
-          )}
-          {permissions.financial?.paymentRequests?.view && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={FINANCIAL_ROUTES.paymentRequests}>
-                <ShieldCheck className="mr-2 h-4 w-4" /> Autorizações bancárias
-              </Link>
-            </Button>
-          )}
-          {canImportAudits && (
-            <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)}>
-              <FileUp className="mr-2 h-4 w-4" /> Importar extrato
-            </Button>
-          )}
-          {canViewCardStatements && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={FINANCIAL_ROUTES.cardStatements}>
-                <CreditCard className="mr-2 h-4 w-4" /> Faturas de cartão
-              </Link>
-            </Button>
-          )}
+    <PageContainer variant="wide" surface className="space-y-6 pb-10">
+      <PageHeader
+        title="Despesas"
+        description="Painel consolidado de despesas, contas a pagar e histórico de liquidações."
+        actions={<>
           {permissions.financial?.expenses?.create && (
-            <Button size="sm" asChild>
+            <Button size="sm" asChild className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]">
               <Link href={FINANCIAL_ROUTES.newExpense}>
                 <FilePlus2 className="mr-2 h-4 w-4" /> Novo lançamento
               </Link>
             </Button>
           )}
-        </div>
-      </div>
+          {(canViewInbox || permissions.financial?.paymentRequests?.view || canViewBudgetComparison(permissions, isDefaultAdmin) || canImportAudits) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 rounded-[11px] bg-white px-[14px] text-[13px] font-extrabold">
+                  <Menu className="mr-2 h-4 w-4" /> Ações
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {canViewInbox && (
+                  <DropdownMenuItem asChild>
+                    <Link href={FINANCIAL_ROUTES.inbox}>
+                      <Inbox className="mr-2 h-4 w-4" /> Cobranças recebidas
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {permissions.financial?.paymentRequests?.view && (
+                  <DropdownMenuItem asChild>
+                    <Link href={FINANCIAL_ROUTES.paymentRequests}>
+                      <ShieldCheck className="mr-2 h-4 w-4" /> Autorizações bancárias
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {canViewBudgetComparison(permissions, isDefaultAdmin) && (
+                  <DropdownMenuItem asChild>
+                    <Link href={`${FINANCIAL_ROUTES.budgetComparison}${competenceMonth !== "all" ? `?month=${competenceMonth}` : ""}`}>
+                      <BarChart3 className="mr-2 h-4 w-4" /> Orçamento × despesas
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {canImportAudits && (
+                  <DropdownMenuItem onSelect={() => setIsImportDialogOpen(true)}>
+                    <FileUp className="mr-2 h-4 w-4" /> Importar extrato
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </>}
+      />
 
-      {canAccessAudits ? (
-        <Tabs value={currentView} onValueChange={(value) => setExpensesView(value as "expenses" | "audits")} className="space-y-6">
-          <TabsList className={cn("grid h-auto w-full max-w-[360px] rounded-xl border bg-card p-1 shadow-sm", canViewExpenses ? "grid-cols-2" : "grid-cols-1")}>
-            {canViewExpenses ? <TabsTrigger
-              value="expenses"
-              className="group rounded-lg px-4 py-2.5 text-sm font-semibold"
-            >
-              <span className="flex items-center justify-center gap-2">
-                <ReceiptText className="h-4 w-4 group-data-[state=active]:text-primary" />
-                <span>Despesas</span>
-              </span>
-            </TabsTrigger> : null}
-            <TabsTrigger
-              value="audits"
-              className="group rounded-lg px-4 py-2.5 text-sm font-semibold"
-            >
-              <span className="flex items-center justify-center gap-2">
-                <FileCheck2 className="h-4 w-4 group-data-[state=active]:text-primary" />
-                <span>Extratos bancários</span>
-              </span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="expenses" className="space-y-6">
       <KpiFlowStrip
         kpis={kpis}
         openCount={scopedExpenses.filter((expense) => expenseDisplayAmounts(expense).open > 0).length}
         auditCount={pendingAuditCount}
-        auditHref={FINANCIAL_ROUTES.pendingAuditExpenses}
+        auditActive={statusFilter === "pending_audit"}
+        onAuditClick={() => setStatusFilter("pending_audit")}
+        periodLabel={activePeriodLabel}
       />
 
       <div className="space-y-2">
@@ -1129,7 +1147,16 @@ export function ExpensesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <span className="col-span-2 justify-self-end whitespace-nowrap text-xs text-muted-foreground md:col-span-1">{filteredCountLabel}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={clearExpenseFilters}
+              className="h-8 rounded-lg bg-background px-2.5 text-xs font-semibold"
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              Limpar filtros
+            </Button>
           </div>
           {activeCompetenceLabel ? (
             <div
@@ -1220,24 +1247,21 @@ export function ExpensesPage() {
                           <td colSpan={7} className="p-0">
                             <button
                               type="button"
-                              className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                              className="grid w-full min-w-[760px] grid-cols-[16px_16px_210px_160px_120px_minmax(160px,1fr)] items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
                               aria-expanded={!isCollapsed}
                               aria-label={`${isCollapsed ? "Expandir" : "Recolher"} ${row.group.weekNumber ? `semana ${row.group.weekNumber}` : "grupo sem vencimento"} · ${row.group.label}`}
                               onClick={() => toggleDueWeek(row.group.key)}
                             >
-                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-primary transition-transform", !isCollapsed && "rotate-90")} />
-                                <CalendarDays className="h-3.5 w-3.5 text-primary" />
-                                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/75">
-                                  {row.group.weekNumber ? `Semana ${row.group.weekNumber} · vencimento` : "Sem vencimento"}
-                                </span>
-                                <span className="text-xs font-semibold text-foreground">{row.group.label}</span>
-                                <span className="text-[10.5px] text-muted-foreground">
-                                  {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
-                                </span>
-                                <span className="h-3.5 w-px bg-primary/15" />
-                                <span className="whitespace-nowrap font-mono text-xs font-semibold text-foreground">Total: {formatCurrency(row.group.totalValue)}</span>
-                              </div>
+                              <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-primary transition-transform", !isCollapsed && "rotate-90")} />
+                              <CalendarDays className="h-3.5 w-3.5 text-primary" />
+                              <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/75">
+                                {row.group.weekNumber ? `Semana ${row.group.weekNumber} · vencimento` : "Sem vencimento"}
+                              </span>
+                              <span className="whitespace-nowrap text-xs font-semibold text-foreground">{row.group.label}</span>
+                              <span className="whitespace-nowrap text-[10.5px] text-muted-foreground">
+                                {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
+                              </span>
+                              <span className="whitespace-nowrap border-l border-primary/15 pl-3 font-mono text-xs font-semibold text-foreground">Total: {formatCurrency(row.group.totalValue)}</span>
                             </button>
                           </td>
                         </tr>
@@ -1774,7 +1798,7 @@ export function ExpensesPage() {
                           {expense.purchaseOrderId && (
                             <PurchaseOrderItemsLink
                               orderId={expense.purchaseOrderId}
-                              href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
+                              href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(expensesAuditReturnHref)}`}
                               label="Abrir pedido"
                             />
                           )}
@@ -1855,17 +1879,8 @@ export function ExpensesPage() {
           </div>
         </CardContent>
       </Card>
-          </TabsContent>
-
-          <TabsContent value="audits" className="space-y-6">
-            <p className="text-sm text-muted-foreground">A conferência dos extratos tem um acesso próprio em Conciliação e fechamento.</p>
-            <Button asChild variant="outline"><Link href={bankStatementsHref(expenseContextQuery, { fromExpenses: true })}>Abrir extratos bancários</Link></Button>
-          </TabsContent>
-        </Tabs>
-      ) : null}
-
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="max-w-4xl rounded-3xl p-0 overflow-hidden">
+        <DialogContent className="max-w-4xl overflow-hidden rounded-3xl p-0">
           <DialogHeader className="px-6 pt-6">
             <DialogTitle>Importar extrato</DialogTitle>
             <DialogDescription>Selecione a conta do extrato e importe um arquivo OFX ou CSV para abrir uma nova sessão de auditoria.</DialogDescription>

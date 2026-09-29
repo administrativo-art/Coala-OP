@@ -48,7 +48,7 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
       }).catch(() => { if (active) setLoaded(false); });
     return () => { active = false; };
   }, [api, isDefaultAdmin]);
-  if (!isDefaultAdmin) return <PageContainer><p role="alert">Consulta restrita à administração.</p></PageContainer>;
+  if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
   const mapping = mappings.find(value => value.id === selected);
   const clear = () => { setResult(null); setError(""); setPage(0); setFilter("all"); };
   const task = async (work: () => Promise<void>) => {
@@ -63,8 +63,8 @@ export function ReceivablesPage({ agentEntry = false }: { agentEntry?: boolean }
   });
   const rows = result?.rows.filter(row => receivableRowMatches(row, filter)) ?? [];
   const selectClass = "w-full rounded-md border bg-background p-2";
-  return <PageContainer variant="wide" className="space-y-6 py-6">
-    <header><h1 className="text-2xl font-semibold">{agentEntry ? "Coala Financeiro · Recebíveis" : "Recebíveis Stone"}</h1>
+  return <PageContainer variant="wide" surface className="space-y-6 py-6">
+    <header><h1 className="text-2xl font-bold tracking-tight">{agentEntry ? "Coala Financeiro · Recebíveis" : "Recebíveis Stone"}</h1>
       <p className="text-muted-foreground">Carteira atualizada pelos arquivos diários da Stone e conferência detalhada por período.</p></header>
     {agentEntry && <FinancialAnalysisNavigation topic="receivables" />}
     <div role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
