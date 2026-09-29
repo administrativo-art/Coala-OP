@@ -114,3 +114,5 @@ env:
     value: "https://coala-gotenberg-qsrxz2aeqa-rj.a.run.app"
   - variable: NEXT_PUBLIC_APP_URL
     value: "https://op.coalashakes.com"
+  - variable: INSTAGRAM_SCHEDULER_ALLOWED_EMAILS
+    value: "tiagobrasilll@gmail.com"
