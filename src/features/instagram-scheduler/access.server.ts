@@ -14,10 +14,14 @@ function configuredEmails() {
 
 export function requireInstagramSchedulerAccess(context: ServerUserContext) {
   const allowedEmails = configuredEmails();
-  const email = context.userDoc.email?.trim().toLowerCase() ?? "";
+  const authenticatedEmail = context.decoded.email?.trim().toLowerCase() ?? "";
+  const storedEmail = context.userDoc.email?.trim().toLowerCase() ?? "";
 
   if (allowedEmails.size > 0) {
-    if (email && allowedEmails.has(email)) return;
+    if (
+      (authenticatedEmail && allowedEmails.has(authenticatedEmail))
+      || (storedEmail && allowedEmails.has(storedEmail))
+    ) return;
   } else if (context.isDefaultAdmin) {
     return;
   }
