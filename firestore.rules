@@ -900,6 +900,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Fila do Instagram — contém URLs de entrega e estado interno; acesso apenas pelo servidor.
+    match /instagramScheduledPosts/{scheduleId} {
+      allow read, write: if false;
+    }
+
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
       allow read, write: if false;

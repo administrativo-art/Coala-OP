@@ -36,6 +36,11 @@ service firebase.storage {
       allow read, write: if false;
     }
 
+    // Mídias agendadas são carregadas pela CLI administrativa e entregues à Meta por token de objeto.
+    match /instagram/{allPaths=**} {
+      allow read, write: if false;
+    }
+
     // Arquivos server-side são acessados somente por URLs com token específico.
     match /{allPaths=**} {
       allow read, write: if false;
