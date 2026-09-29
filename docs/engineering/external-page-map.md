@@ -1,6 +1,6 @@
 # Páginas fora do dashboard: destino de investigação
 
-Este mapa manual liga as **20 páginas** do [inventário gerado](surface-inventory.md) aos fluxos que devem ser abertos em uma investigação. É classificação de entrada, não prova de que autenticação, tokens ou dados estejam corretos. As APIs correspondentes precisam ser conferidas no código antes de mudar comportamento.
+Este mapa manual liga as **21 páginas** do [inventário gerado](surface-inventory.md) aos fluxos que devem ser abertos em uma investigação. É classificação de entrada, não prova de que autenticação, tokens ou dados estejam corretos. As APIs correspondentes precisam ser conferidas no código antes de mudar comportamento.
 
 | Página | Caminho de investigação | Papel observado / limite |
 | --- | --- | --- |
@@ -15,6 +15,7 @@ Este mapa manual liga as **20 páginas** do [inventário gerado](surface-invento
 | [`/escala`](../../src/app/%28modules%29/escala/page.tsx) | [Escalas DP](flows/dp-schedules.md) | `EscalaView`; conferir se a rota é pública ou exige sessão. |
 | [`/ferias/contabilidade/[token]`](../../src/app/ferias/contabilidade/%5Btoken%5D/page.tsx) | [Contador de férias](flows/vacation-accountant-dispatch.md) | Recibos/retorno por token. |
 | [`/forgot-password`](../../src/app/forgot-password/page.tsx) | [Acesso e privacidade](access-and-privacy.md) | Limite por hash de e-mail, Auth, envio e registro em etapas distintas; recuperação externa não homologada. |
+| [`/instagram-programacao`](../../src/app/instagram-programacao/page.tsx) | [Publicação no Instagram](flows/instagram-publishing.md), [acesso e privacidade](access-and-privacy.md) | Página autenticada, sem navegação; mostra somente a fila criada pelo Coala e depende de autorização revalidada pela API. |
 | [`/login`](../../src/app/login/page.tsx) | [Acesso e privacidade](access-and-privacy.md), [pessoas](flows/people-access.md) | Sessão, bloqueios e retorno; autenticação não substitui permissão da operação. |
 | [`/patrimonio/[code]`](../../src/app/patrimonio/%5Bcode%5D/page.tsx) | [Patrimônio](flows/assets.md) | Consulta pública por código e histórico via Admin SDK nesta base; login/permissão aprovados ainda não implementados. Ver [patrimônio](flows/assets.md). |
 | [`/player`](../../src/app/player/page.tsx) | [Sinalização](flows/signage.md) | Player de sinalização. |

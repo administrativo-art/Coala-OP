@@ -18,6 +18,7 @@ import {
   type HrLoginAccessPayload,
 } from "@/features/hr/lib/client";
 import { isPublicRecruitmentHost as isRecruitmentHost } from "@/lib/public-recruitment-host";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -25,6 +26,10 @@ const loginSchema = z.object({
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
+
+function loginDestination() {
+  return resolveSafeReturnPath(new URLSearchParams(window.location.search).get("next"));
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -52,7 +57,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && !loginAccessGate) {
-      router.push("/dashboard");
+      router.push(loginDestination());
     }
   }, [isAuthenticated, loading, loginAccessGate, router]);
 
@@ -93,7 +98,7 @@ export default function LoginPage() {
         payload.evaluation.reason === "after_shift_extension_active"
       ) {
         await recordLoginAccess();
-        router.push("/dashboard");
+        router.push(loginDestination());
         return;
       }
 
