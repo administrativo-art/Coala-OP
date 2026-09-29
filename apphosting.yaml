@@ -115,4 +115,4 @@ env:
   - variable: NEXT_PUBLIC_APP_URL
     value: "https://op.coalashakes.com"
   - variable: INSTAGRAM_SCHEDULER_ALLOWED_EMAILS
-    value: "tiagobrasilll@gmail.com"
+    value: "administrativo@coalashakes.com"
