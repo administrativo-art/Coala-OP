@@ -57,6 +57,9 @@ export function serializeInstagramSchedule(doc: DocumentSnapshot): InstagramSche
           : null,
     })),
     shareToFeed: data.shareToFeed !== false,
+    storyMentions: Array.isArray(data.storyMentions)
+      ? data.storyMentions.filter((value): value is string => typeof value === "string").slice(0, 20)
+      : [],
     location:
       typeof data.location?.id === "string" && typeof data.location?.name === "string"
         ? { id: data.location.id, name: data.location.name }

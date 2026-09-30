@@ -12,9 +12,9 @@ GET de primeiro acesso consulta o estado do token; POST valida senha e pré-requ
 
 ## Programação exclusiva do Instagram
 
-[`/instagram-programacao`](../../src/app/instagram-programacao/page.tsx) fica fora do dashboard e não possui entrada no menu. A ausência na navegação não concede sigilo: a API correspondente exige Firebase Auth, resolve usuário/perfil no servidor e chama `requireInstagramSchedulerAccess`. Com `INSTAGRAM_SCHEDULER_ALLOWED_EMAILS` configurado, a lista é restrita aos e-mails informados; sem configuração, somente administrador padrão passa. A coleção `instagramScheduledPosts` e o prefixo `storage/instagram` negam acesso direto do cliente.
+[`/instagram-programacao`](../../src/app/instagram-programacao/page.tsx) fica fora do dashboard e não possui entrada no menu. A ausência na navegação não concede sigilo: as APIs de programação e biblioteca exigem Firebase Auth, resolvem usuário/perfil no servidor e chamam `requireInstagramSchedulerAccess`. Com `INSTAGRAM_SCHEDULER_ALLOWED_EMAILS` configurado, a lista é restrita aos e-mails informados; sem configuração, somente administrador padrão passa. As coleções `instagramScheduledPosts` e `instagramMediaLibrary` ficam no banco nomeado `coala-signage`, usado pelo Marketing, e negam acesso direto do cliente; o prefixo `storage/instagram` mantém a mesma negação no bucket principal.
 
-O retorno depois do login aceita apenas caminho interno validado por [`resolveSafeReturnPath`](../../src/lib/safe-return-path.ts). A resposta da listagem omite URLs de entrega, tokens de objeto, leases e identificadores internos dos contêineres. Segredo e estados de publicação estão descritos no [fluxo do Instagram](flows/instagram-publishing.md).
+O retorno depois do login aceita apenas caminho interno validado por [`resolveSafeReturnPath`](../../src/lib/safe-return-path.ts). As respostas omitem URLs de entrega, caminhos de objeto, tokens, leases e identificadores internos dos contêineres. Cada prévia revalida sessão, workspace, documento e prefixo esperado antes de ler o Storage. A grade publicada expõe ao cliente somente metadados e URLs temporárias de mídia que a própria Meta retorna para exibição, nunca o token usado na consulta. Segredo, mutações e estados de publicação estão descritos no [fluxo do Instagram](flows/instagram-publishing.md).
 
 ## Pedidos de privacidade e incidentes
 

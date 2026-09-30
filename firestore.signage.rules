@@ -8,6 +8,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Marketing do Instagram — acesso somente pelas APIs e pelo job com Admin SDK.
+    match /instagramScheduledPosts/{scheduleId} {
+      allow read, write: if false;
+    }
+
+    match /instagramMediaLibrary/{mediaId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

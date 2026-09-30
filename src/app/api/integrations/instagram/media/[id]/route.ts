@@ -16,58 +16,58 @@ import { withApiErrorHandling } from "@/lib/observability/api-error";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: Promise<{ id: string; index: string }> };
+type RouteContext = { params: Promise<{ id: string }> };
 
 export const GET = withApiErrorHandling<RouteContext>(
   {
     source: "api",
-    operation: "previewInstagramScheduledMedia",
-    routeOrJob: "/api/integrations/instagram/schedule/[id]/media/[index]",
+    operation: "previewInstagramMediaLibrary",
+    routeOrJob: "/api/integrations/instagram/media/[id]",
   },
   async (request: NextRequest, { params }) => {
     const context = await requireUser(request);
     requireInstagramSchedulerAccess(context);
 
-    const { id, index: rawIndex } = await params;
-    const index = Number(rawIndex);
-    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || !Number.isInteger(index) || index < 0 || index > 9) {
+    const { id } = await params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
       throw new AppError({
-        code: "INSTAGRAM_PREVIEW_NOT_FOUND",
+        code: "INSTAGRAM_LIBRARY_MEDIA_NOT_FOUND",
         kind: "NOT_FOUND",
-        safeMessage: "Prévia não encontrada.",
+        safeMessage: "Mídia não encontrada.",
         reportable: false,
       });
     }
 
-    let snapshot = await marketingDbAdmin.collection("instagramScheduledPosts").doc(id).get();
+    let snapshot = await marketingDbAdmin.collection("instagramMediaLibrary").doc(id).get();
     if (!snapshot.exists && shouldReadLegacyMarketingDatabase()) {
-      snapshot = await legacyMarketingDbAdmin.collection("instagramScheduledPosts").doc(id).get();
+      snapshot = await legacyMarketingDbAdmin.collection("instagramMediaLibrary").doc(id).get();
     }
     const data = snapshot.data();
-    const media = Array.isArray(data?.media) ? data.media[index] : null;
+    const expectedPrefix = `instagram/library/${context.workspace_id}/${id}/`;
     if (
-      !snapshot.exists ||
-      data?.workspace_id !== context.workspace_id ||
-      media?.kind !== "image" ||
-      typeof media?.objectPath !== "string" ||
-      !media.objectPath.startsWith(`instagram/scheduled/${id}/`)
+      !snapshot.exists
+      || data?.workspace_id !== context.workspace_id
+      || typeof data.objectPath !== "string"
+      || !data.objectPath.startsWith(expectedPrefix)
+      || !["image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"].includes(data.contentType)
     ) {
       throw new AppError({
-        code: "INSTAGRAM_PREVIEW_NOT_FOUND",
+        code: "INSTAGRAM_LIBRARY_MEDIA_NOT_FOUND",
         kind: "NOT_FOUND",
-        safeMessage: "Prévia não encontrada.",
+        safeMessage: "Mídia não encontrada.",
         reportable: false,
       });
     }
 
     const [buffer] = await getStorage(adminApp)
       .bucket(firebaseClientConfig.storageBucket)
-      .file(media.objectPath)
+      .file(data.objectPath)
       .download();
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": media.contentType === "image/jpeg" ? "image/jpeg" : "application/octet-stream",
+        "Content-Type": data.contentType,
+        "Content-Length": String(buffer.byteLength),
         "Cache-Control": "private, no-store",
         "Content-Disposition": "inline",
         "X-Content-Type-Options": "nosniff",
