@@ -39,6 +39,12 @@ function dateOnly(offsetDays = 0) {
   return isoDate(offsetDays).slice(0, 10);
 }
 
+// A listagem de despesas abre em "Mês atual"; datas relativas a hoje ou fixas saem do filtro na virada do mês.
+function currentMonthDate(day: number) {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export default async function seedE2E() {
   assertFirestoreEmulatorSafety({ projectId: PROJECT_ID });
   if (!process.env.FIREBASE_AUTH_EMULATOR_HOST) {
@@ -321,8 +327,8 @@ export default async function seedE2E() {
     supplier: "Telefônica Brasil S.A.",
     status: "pending",
     totalValue: 249.9,
-    dueDate: "2026-09-15",
-    installments: [{ number: 1, value: 249.9, dueDate: "2026-09-15", status: "pending" }],
+    dueDate: currentMonthDate(15),
+    installments: [{ number: 1, value: 249.9, dueDate: currentMonthDate(15), status: "pending" }],
     billingIdentity: {
       supplierTaxId: null,
       customerAccount: "00192837",
@@ -338,11 +344,11 @@ export default async function seedE2E() {
     supplier: "Fornecedor Automatizado",
     status: "pending",
     totalValue: 77.31,
-    dueDate: "2026-09-30",
+    dueDate: currentMonthDate(28),
     installments: [{
       number: 1,
       value: 77.31,
-      dueDate: "2026-09-30",
+      dueDate: currentMonthDate(28),
       status: "pending",
       bankLine: E2E_FINANCIAL_INBOX_BARCODE,
     }],
@@ -354,11 +360,11 @@ export default async function seedE2E() {
     supplier: "Uber do Brasil",
     status: "pending",
     totalValue: 38.7,
-    dueDate: isoDate(1),
+    dueDate: currentMonthDate(28),
     competenceDate: now,
     accountId: "account-e2e",
     resultCenter: "Operação E2E",
-    installments: [{ number: 1, value: 38.7, dueDate: isoDate(1), status: "pending" }],
+    installments: [{ number: 1, value: 38.7, dueDate: currentMonthDate(28), status: "pending" }],
     uberCandidate: true,
     uberProvider: "uber",
     uberRecognitionStatus: "matched",
@@ -396,7 +402,7 @@ export default async function seedE2E() {
       confidence: "high",
       supplierName: "Vivo",
       competence: "2026-08",
-      dueDate: "2026-09-15",
+      dueDate: currentMonthDate(15),
       amountCents: 24990,
       barcode: null,
       barcodeMasked: null,
@@ -442,7 +448,7 @@ export default async function seedE2E() {
       description: "Vivo móvel · Linha (98) 99999-1234",
       supplier: "Telefônica Brasil S.A.",
       amountCents: 24990,
-      dueDate: "2026-09-15",
+      dueDate: currentMonthDate(15),
       reasons: ["mesmo valor", "mesmo vencimento", "mesmo favorecido", "mesma linha telefônica"],
       paymentState: "needs_scheduling",
       existingBankPayment: null,
@@ -495,7 +501,7 @@ export default async function seedE2E() {
       confidence: "high",
       supplierName: "Fornecedor Automatizado",
       competence: null,
-      dueDate: "2026-09-30",
+      dueDate: currentMonthDate(28),
       amountCents: 7731,
       barcode: E2E_FINANCIAL_INBOX_BARCODE,
       barcodeMasked: "23793••••••••••••••••••••••••••••••13884",
