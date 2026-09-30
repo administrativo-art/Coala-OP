@@ -37,6 +37,12 @@ export const instagramScheduleInputSchema = z
     caption: z.string().max(2_200).default(""),
     media: z.array(instagramMediaInputSchema).min(1).max(10),
     shareToFeed: z.boolean().default(true),
+    storyMentions: z.array(
+      z.string()
+        .trim()
+        .transform((value) => value.replace(/^@/, ""))
+        .pipe(z.string().regex(/^[A-Za-z0-9._]{1,30}$/, "Usuário do Instagram inválido.")),
+    ).max(20).default([]),
     location: z
       .object({
         id: z.string().regex(/^\d+$/, "A localização deve usar um ID numérico da Meta."),
@@ -86,16 +92,70 @@ export const instagramScheduleInputSchema = z
       });
     }
 
-    if (input.format === "story" && input.media.length !== 1) {
+    if (input.format === "story" && (input.media.length < 1 || input.media.length > 10)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["media"],
-        message: "Um story exige exatamente uma mídia.",
+        message: "Uma sequência de Stories aceita de 1 a 10 mídias.",
+      });
+    }
+
+    if (input.format !== "story" && input.storyMentions.length > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["storyMentions"],
+        message: "Menções invisíveis estão disponíveis somente para Stories.",
       });
     }
   });
 
 export type InstagramScheduleInput = z.infer<typeof instagramScheduleInputSchema>;
+
+const instagramScheduleIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/, "Agendamento inválido.");
+
+const instagramScheduleUpdateSchema = z.object({
+  scheduledAt: z.string().datetime({ offset: true }).optional(),
+  mediaOrder: z.array(z.number().int().nonnegative()).min(1).max(10).optional(),
+}).strict().refine(
+  (value) => value.scheduledAt !== undefined || value.mediaOrder !== undefined,
+  "Informe ao menos uma alteração.",
+);
+
+export const instagramScheduleMutationSchema = z.union([
+  instagramScheduleUpdateSchema,
+  z.object({
+    swapWithId: instagramScheduleIdSchema,
+  }).strict(),
+]);
+
+export type InstagramScheduleMutation = z.infer<typeof instagramScheduleMutationSchema>;
+
+export const instagramMediaLibraryKinds = ["image", "video"] as const;
+export type InstagramMediaLibraryKind = (typeof instagramMediaLibraryKinds)[number];
+
+export const instagramMediaLibraryFolderSchema = z
+  .string()
+  .trim()
+  .min(1, "Informe uma pasta.")
+  .max(80, "A pasta deve ter até 80 caracteres.")
+  .regex(/^[^/\\\u0000-\u001f]+$/, "Nome de pasta inválido.");
+
+export type InstagramMediaLibraryItem = {
+  id: string;
+  fileName: string;
+  folder: string;
+  kind: InstagramMediaLibraryKind;
+  contentType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  previewUrl: string;
+  createdAt: string;
+};
 
 export type InstagramScheduleListItem = {
   id: string;
@@ -113,6 +173,7 @@ export type InstagramScheduleListItem = {
     previewUrl: string | null;
   }>;
   shareToFeed: boolean;
+  storyMentions: string[];
   location: { id: string; name: string } | null;
   attempts: number;
   publishedAt: string | null;
@@ -120,6 +181,21 @@ export type InstagramScheduleListItem = {
   safeError: string | null;
   errorEventId: string | null;
   createdAt: string;
+};
+
+export type InstagramPublishedFeedItem = {
+  id: string;
+  format: Exclude<InstagramPublicationFormat, "story">;
+  caption: string;
+  previewUrl: string;
+  permalink: string;
+  publishedAt: string;
+  childrenCount: number;
+};
+
+export type InstagramPublishedFeedProfile = {
+  username: string;
+  profilePictureUrl: string | null;
 };
 
 export const instagramFormatLabels: Record<InstagramPublicationFormat, string> = {

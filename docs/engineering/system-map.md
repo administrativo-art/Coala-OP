@@ -30,6 +30,7 @@
 | Auditoria de estoque e sessões de contagem | [`audit/page.tsx`](../../src/app/dashboard/audit/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
 | Unidades, configurações, permissões e logs de auditoria | [`settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`api/audit/logs`](../../src/app/api/audit/logs/route.ts) | [Plataforma e integrações](modules/platform-integrations.md) |
 | Sinalização, TV, site público, integrações e webhooks | [`signage/page.tsx`](../../src/app/dashboard/signage/page.tsx), [`api/integrations`](../../src/app/api/integrations) | [Plataforma e integrações](modules/platform-integrations.md) |
+| Programação do Instagram, calendário, grade e biblioteca de mídia | [`instagram-programacao/page.tsx`](../../src/app/instagram-programacao/page.tsx), [`api/integrations/instagram`](../../src/app/api/integrations/instagram) | [Publicação no Instagram](flows/instagram-publishing.md); [acesso e privacidade](access-and-privacy.md) |
 | Rotas antigas `import`, `items`, `manager-diary`, `predefined` e `team` | [Entradas desativadas](dashboard-areas.md) | Retornam `null`; localizar o fluxo ativo pelo assunto |
 
 Para uma pergunta ou mudança, siga o [procedimento de investigação](investigation-harness.md), abra o guia pertinente e confira a implementação. [Regras aprovadas e comportamento implementado](business-rules.md) ficam separados; [verificações](verification.md) são escolhidas pelo impacto. Guias amplos dão caminhos e contratos observáveis, mas **não certificam todas as regras internas** de cada tela.

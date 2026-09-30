@@ -905,6 +905,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Biblioteca editorial do Instagram — arquivos e metadados passam somente pelas APIs protegidas.
+    match /instagramMediaLibrary/{mediaId} {
+      allow read, write: if false;
+    }
+
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
       allow read, write: if false;
