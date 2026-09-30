@@ -19,13 +19,13 @@ export function StoneAnticipationsPage({ agentEntry = false }: { agentEntry?: bo
   const [result, setResult] = useState<StoneAnticipationReview | null>(null);
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState("all");
-  if (!isDefaultAdmin) return <PageContainer><p role="alert">Consulta restrita à administração.</p></PageContainer>;
+  if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
   const ordered = result ? result.rows.filter(row => filter === "all" || row.status === filter).sort((a, b) => {
     const rank = { paid_early: 0, needs_review: 1, regular_payment: 2 };
     return rank[a.status] - rank[b.status] || a.transactionId.localeCompare(b.transactionId);
   }) : [];
-  return <PageContainer variant="wide" className="space-y-6 py-6">
-    <header><h1 className="text-2xl font-semibold">{agentEntry ? "Coala Financeiro" : "Conferência de antecipações Stone"}</h1>
+  return <PageContainer variant="wide" surface className="space-y-6 py-6">
+    <header><h1 className="text-2xl font-bold tracking-tight">{agentEntry ? "Coala Financeiro" : "Conferência de antecipações Stone"}</h1>
       {agentEntry && <p className="text-sm text-muted-foreground">Análises guiadas de antecipações e recebíveis por período. Carteira completa, DRE e análise geral de caixa ainda não estão disponíveis neste agente.</p>}
       <p className="text-muted-foreground">Pagamentos comparados com as parcelas originais. Somente leitura, sem baixas ou lançamentos na DRE.</p></header>
     {agentEntry && <FinancialAnalysisNavigation topic="anticipations" />}

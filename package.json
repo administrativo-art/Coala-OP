@@ -57,7 +57,9 @@
     "migrate:profile-compliance": "node --import tsx scripts/migrate-profile-compliance-v1.mts",
     "sync:profile-compliance-cache": "node --import tsx scripts/sync-profile-compliance-cache.mts",
     "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs",
-    "audit:cli": "node scripts/cli-session-audit.mjs"
+    "audit:cli": "node scripts/cli-session-audit.mjs",
+    "instagram:schedule": "node --import tsx scripts/instagram-schedule.mts",
+    "instagram:migrate-marketing-db": "node --import tsx scripts/migrate-instagram-marketing-db.mts"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.4",
@@ -75,7 +77,9 @@
     "postcss": "$postcss",
     "protobufjs": "7.6.3",
     "qs": "6.16.0",
-    "ws": "8.21.0"
+    "undici": "6.28.1",
+    "ws": "8.21.0",
+    "brace-expansion": "5.0.12"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -34,6 +34,7 @@ export {
   uberSftpDailySync,
   uberTransactionCandidateWritten,
 } from './uber-sftp/jobs.js';
+export { instagramPublishingScheduler } from './instagram-publishing-job.js';
 
 setGlobalOptions({ maxInstances: 10 });
 

@@ -15,7 +15,6 @@ import {
   filterCashCountingSessions,
   type CashCountingSessionFilter,
 } from "@/features/financial/cash-counting-sessions/session-filter";
-import { CashControlNavigation } from "./cash-control-navigation";
 import { formatBRL } from "../money";
 
 type UnitItem = {
@@ -74,9 +73,8 @@ export function CashClosuresOverviewPage() {
 
   if (!canBrowseCatalog) return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso ao módulo financeiro.</div>;
 
-  return <PageContainer variant="default" className="max-w-[1320px] space-y-[18px] pb-10">
-    <CashControlNavigation active="closures" />
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-[11.5px] font-extrabold uppercase tracking-[.12em] text-emerald-700">Controle de caixa</p><h1 className="mt-1.5 text-3xl font-black tracking-tight">Fechamento do caixa</h1><p className="mt-1.5 text-sm font-medium text-zinc-500">{canViewClosures ? "Abra uma sessão para contar malotes ou consulte uma unidade." : "Consulte as unidades e suas competências disponíveis."}</p></div><div className="flex gap-2">{canViewClosures && permissions.financial?.cashClosures?.approve && <Button asChild className="h-[42px] rounded-xl bg-pink-600 px-4 font-bold hover:bg-pink-700"><Link href="/dashboard/financial/cash-closures/sessions/new"><Plus className="mr-2 h-4 w-4" />Nova sessão</Link></Button>}<Button variant="outline" className="h-[42px] rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div></div>
+  return <PageContainer variant="wide" surface className="space-y-[18px] pb-10">
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-[11px] font-bold uppercase tracking-[.12em] text-emerald-700">Controle de caixa</p><h1 className="mt-1.5 text-2xl font-bold tracking-tight">Fechamento do caixa</h1><p className="mt-1.5 text-sm text-muted-foreground">{canViewClosures ? "Abra uma sessão para contar malotes ou consulte uma unidade." : "Consulte as unidades e suas competências disponíveis."}</p></div><div className="flex gap-2">{canViewClosures && permissions.financial?.cashClosures?.approve && <Button asChild className="h-[42px] rounded-xl bg-pink-600 px-4 font-bold hover:bg-pink-700"><Link href="/dashboard/financial/cash-closures/sessions/new"><Plus className="mr-2 h-4 w-4" />Nova sessão</Link></Button>}<Button variant="outline" className="h-[42px] rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div></div>
     {canViewClosures && !loading && sessions.length > 0 && <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><h2 className="text-lg font-black">Sessões de contagem</h2><p className="text-xs font-medium text-zinc-400">Por padrão, somente sessões ativas ficam visíveis.</p></div>

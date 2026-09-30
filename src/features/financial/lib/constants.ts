@@ -35,7 +35,6 @@ export const FINANCIAL_ROUTES = {
   dre: "/dashboard/financial/dre",
   expenses: "/dashboard/financial/expenses",
   inbox: "/dashboard/financial/expenses/inbox",
-  pendingAuditExpenses: "/dashboard/financial/expenses/pending-audit",
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
   bankStatements: "/dashboard/financial/reconciliation/bank-statements",

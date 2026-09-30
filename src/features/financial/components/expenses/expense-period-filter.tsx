@@ -109,6 +109,11 @@ export function ExpensePeriodFilter({
     setOpen(false);
   }
 
+  function selectEntireMonth(month: Date) {
+    setDraftPreset("custom");
+    setDraftRange({ from: startOfMonth(month), to: endOfMonth(month) });
+  }
+
   const hasIncompleteRange = Boolean(draftRange?.from && !draftRange.to);
 
   return (
@@ -175,6 +180,20 @@ export function ExpensePeriodFilter({
               locale={ptBR}
               showOutsideDays={false}
               className="p-0"
+              components={{
+                CaptionLabel: ({ id, displayMonth }) => (
+                  <button
+                    id={id}
+                    type="button"
+                    title="Selecionar o mês inteiro"
+                    aria-label={`Selecionar ${format(displayMonth, "MMMM 'de' yyyy", { locale: ptBR })} inteiro`}
+                    className="rounded-md px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => selectEntireMonth(displayMonth)}
+                  >
+                    {format(displayMonth, "MMMM yyyy", { locale: ptBR })}
+                  </button>
+                ),
+              }}
               classNames={{
                 cell: "relative h-9 w-9 p-0 text-center text-sm focus-within:relative focus-within:z-20",
                 day_selected: "rounded-lg bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",

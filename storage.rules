@@ -36,6 +36,11 @@ service firebase.storage {
       allow read, write: if false;
     }
 
+    // Mídias agendadas e da biblioteca são administradas apenas por APIs/CLI server-side.
+    match /instagram/{allPaths=**} {
+      allow read, write: if false;
+    }
+
     // Arquivos server-side são acessados somente por URLs com token específico.
     match /{allPaths=**} {
       allow read, write: if false;

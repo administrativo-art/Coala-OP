@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **357 rotas de API** e **20 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **363 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **43 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -19,6 +19,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/escala` | [src/app/(modules)/escala/page.tsx](../../src/app/%28modules%29/escala/page.tsx) | [dp-schedules](flows/dp-schedules.md) |
 | `/ferias/contabilidade/[token]` | [src/app/ferias/contabilidade/[token]/page.tsx](../../src/app/ferias/contabilidade/%5Btoken%5D/page.tsx) | [vacation-accountant-dispatch](flows/vacation-accountant-dispatch.md) |
 | `/forgot-password` | [src/app/forgot-password/page.tsx](../../src/app/forgot-password/page.tsx) | [access-and-privacy](access-and-privacy.md) |
+| `/instagram-programacao` | [src/app/instagram-programacao/page.tsx](../../src/app/instagram-programacao/page.tsx) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/login` | [src/app/login/page.tsx](../../src/app/login/page.tsx) | [access-and-privacy](access-and-privacy.md) |
 | `/patrimonio/[code]` | [src/app/patrimonio/[code]/page.tsx](../../src/app/patrimonio/%5Bcode%5D/page.tsx) | [assets](flows/assets.md) |
 | `/player` | [src/app/player/page.tsx](../../src/app/player/page.tsx) | [signage](flows/signage.md) |
@@ -308,6 +309,12 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/integrations/bizneo/shift-templates` | GET | [src/app/api/integrations/bizneo/shift-templates/route.ts](../../src/app/api/integrations/bizneo/shift-templates/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/integrations/bizneo/sync-taxons` | GET | [src/app/api/integrations/bizneo/sync-taxons/route.ts](../../src/app/api/integrations/bizneo/sync-taxons/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
 | `/api/integrations/bizneo/sync-users` | GET | [src/app/api/integrations/bizneo/sync-users/route.ts](../../src/app/api/integrations/bizneo/sync-users/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
+| `/api/integrations/instagram/feed` | GET | [src/app/api/integrations/instagram/feed/route.ts](../../src/app/api/integrations/instagram/feed/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/media` | GET, POST | [src/app/api/integrations/instagram/media/route.ts](../../src/app/api/integrations/instagram/media/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/media/[id]` | GET | [src/app/api/integrations/instagram/media/[id]/route.ts](../../src/app/api/integrations/instagram/media/%5Bid%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/schedule` | GET, POST | [src/app/api/integrations/instagram/schedule/route.ts](../../src/app/api/integrations/instagram/schedule/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/schedule/[id]` | PATCH | [src/app/api/integrations/instagram/schedule/[id]/route.ts](../../src/app/api/integrations/instagram/schedule/%5Bid%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/schedule/[id]/media/[index]` | GET | [src/app/api/integrations/instagram/schedule/[id]/media/[index]/route.ts](../../src/app/api/integrations/instagram/schedule/%5Bid%5D/media/%5Bindex%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/integrations/pdvlegal/filiais` | GET | [src/app/api/integrations/pdvlegal/filiais/route.ts](../../src/app/api/integrations/pdvlegal/filiais/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/inspect` | GET | [src/app/api/integrations/pdvlegal/inspect/route.ts](../../src/app/api/integrations/pdvlegal/inspect/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/sync` | GET | [src/app/api/integrations/pdvlegal/sync/route.ts](../../src/app/api/integrations/pdvlegal/sync/route.ts) | [pdv-sync](flows/pdv-sync.md) |
@@ -411,6 +418,7 @@ Inclui **42 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `financialBudgetGeneration` | `onSchedule` | [functions/src/financial-budget-jobs.ts](../../functions/src/financial-budget-jobs.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `financialInboxMaintenance` | `onSchedule` | [functions/src/financial-inbox-jobs.ts](../../functions/src/financial-inbox-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `hourlyPdvSync` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `instagramPublishingScheduler` | `onSchedule` | [functions/src/instagram-publishing-job.ts](../../functions/src/instagram-publishing-job.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `interCobrancaReconciliation` | `onSchedule` | [functions/src/inter-cobranca-jobs.ts](../../functions/src/inter-cobranca-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `interPaymentReconciliation` | `onSchedule` | [functions/src/inter-payment-jobs.ts](../../functions/src/inter-payment-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `interStatementSync` | `onSchedule` | [functions/src/inter-statement-jobs.ts](../../functions/src/inter-statement-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |

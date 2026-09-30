@@ -23,7 +23,7 @@ Os sete [achados ampliados](surface-audit.md) permanecem adiados. O [registro de
 
 ## Cobertura e evidências
 
-156 páginas internas; 20 externas; 352 handlers de API; 42 exports de Functions; 414 superfícies na matriz ampliada; 53 grupos; 72 guias de subfluxo. Todos os grupos permanecem parciais quanto à homologação. Conferência de referências e geração não prova segurança/atomicidade.
+158 páginas internas; 21 externas; 359 handlers de API; 43 exports de Functions; 423 superfícies na matriz ampliada; 53 grupos; 73 guias de subfluxo. Todos os grupos permanecem parciais quanto à homologação. Conferência de referências e geração não prova segurança/atomicidade.
 
 Verificações locais aprovadas: `npm run check` (exit 0, 1.487 testes, tipos, lint, contrato de erro, skills e agentes), cinco verificadores documentais (138 documentos, 53 grupos) e `git diff --cached --check`. Log local: `.ai-work/development-technology/map-integration/check-main.log`. Uma checagem anterior foi interrompida ao atualizar a base; somente a execução completa em `70aaab65` é usada como evidência. As verificações obrigatórias do PR permanecem como condição de integração. Revisão adicional somente leitura de Gandalf (Sol solicitado) conferiu extração RH, férias, orçamentos, employee-documents e card-statements. Os dois últimos mudaram apenas referências textuais de persona, sem exigir mudança funcional no guia.
 

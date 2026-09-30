@@ -6,28 +6,42 @@ const kpiFlowStripSource = readFileSync(
   "src/features/financial/components/expenses/kpi-flow-strip.tsx",
   "utf8",
 );
+const periodFilterSource = readFileSync(
+  "src/features/financial/components/expenses/expense-period-filter.tsx",
+  "utf8",
+);
 
-test("faixa de KPIs preserva as medidas centrais do handoff", () => {
-  assert.match(kpiFlowStripSource, /grid gap-\[14px\]/);
+test("faixa de KPIs usa um único painel com três colunas", () => {
   assert.equal(
     [...kpiFlowStripSource.matchAll(/rounded-\[18px\]/g)].length,
-    3,
+    1,
   );
-  assert.equal(
-    [...kpiFlowStripSource.matchAll(/px-5 py-\[18px\]/g)].length,
-    3,
-  );
-  assert.match(kpiFlowStripSource, /text-\[34px\] font-extrabold/);
-  assert.match(kpiFlowStripSource, /h-\[9px\].*rounded-\[6px\].*bg-\[#eef0f2\]/);
-  assert.match(kpiFlowStripSource, /mt-\[14px\].*gap-x-\[22px\]/);
+  assert.match(kpiFlowStripSource, /lg:grid-cols-\[minmax\(0,1\.45fr\)_minmax\(0,1\.15fr\)_minmax\(240px,\.78fr\)\]/);
+  assert.match(kpiFlowStripSource, />Período<\/span>/);
+  assert.equal([...kpiFlowStripSource.matchAll(/\{periodLabel\}/g)].length, 1);
+  assert.match(kpiFlowStripSource, /text-\[30px\] font-extrabold/);
 });
 
-test("faixa de KPIs usa a paleta do handoff nos três estágios", () => {
-  for (const color of ["#e11d48", "#f59e0b", "#3b82f6", "#047857", "#8b5cf6", "#6d28d9"]) {
+test("faixa de KPIs preserva hierarquia, paleta e composição financeira", () => {
+  for (const color of ["#e11d48", "#f59e0b", "#3b82f6", "#7c3aed", "#6d28d9", "#fbf6ff"]) {
     assert.match(kpiFlowStripSource, new RegExp(color));
   }
 
   assert.match(kpiFlowStripSource, /A pagar no período/);
-  assert.match(kpiFlowStripSource, /Pago no período/);
+  assert.match(kpiFlowStripSource, /Total do período/);
+  assert.match(kpiFlowStripSource, /const periodTotal = kpis\.paid \+ kpis\.open/);
+  assert.match(kpiFlowStripSource, /formatCurrency\(periodTotal\)/);
+  for (const label of ["Pago", "Lançamentos a pagar", "Provisões conc. a pagar", "Em auditoria"]) {
+    assert.match(kpiFlowStripSource, new RegExp(label));
+  }
   assert.match(kpiFlowStripSource, /Pendente auditoria/);
+  assert.match(kpiFlowStripSource, /periodLabel/);
+  assert.match(kpiFlowStripSource, /aria-pressed=\{auditActive\}/);
+});
+
+test("filtro de vencimento permite selecionar o mês inteiro pelo título", () => {
+  assert.match(periodFilterSource, /function selectEntireMonth\(month: Date\)/);
+  assert.match(periodFilterSource, /from: startOfMonth\(month\), to: endOfMonth\(month\)/);
+  assert.match(periodFilterSource, /CaptionLabel:/);
+  assert.match(periodFilterSource, /title="Selecionar o mês inteiro"/);
 });

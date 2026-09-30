@@ -1,5 +1,6 @@
-import { PendingAuditExpensesPage } from "@/features/financial/pages/pending-audit-expenses-page";
+import { redirect } from "next/navigation";
+import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 
 export default function Page() {
-  return <PendingAuditExpensesPage />;
+  redirect(`${FINANCIAL_ROUTES.expenses}?status=pending_audit`);
 }

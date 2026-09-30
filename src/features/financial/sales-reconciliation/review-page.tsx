@@ -61,7 +61,7 @@ export function SalesReviewPage() {
   const [issuePage, setIssuePage] = useState(0);
   const active = useRef<AbortController | null>(null);
   useEffect(() => () => { active.current?.abort(); }, []);
-  if (!isDefaultAdmin) return <PageContainer><p role="alert">Consulta restrita à administração.</p></PageContainer>;
+  if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
   const mapping = mappings.find(m => m.id === selected);
   const clear = () => { setResult(null); setError(""); setPage(0); setIssuePage(0); setChannel("all"); };
   const task = async (run: (signal: AbortSignal) => Promise<void>) => {
@@ -81,8 +81,8 @@ export function SalesReviewPage() {
   });
   const rows = result?.cases.filter(row => channel === "all" || row.channel === channel) ?? [];
   const selectClass = "w-full rounded-md border bg-background p-2";
-  return <PageContainer variant="wide" className="space-y-6 py-6">
-    <header><h1 className="text-2xl font-semibold">Vendas e recebimentos</h1>
+  return <PageContainer variant="wide" surface className="space-y-6 py-6">
+    <header><h1 className="text-2xl font-bold tracking-tight">Vendas e recebimentos</h1>
       <p className="text-muted-foreground">PDV × Stone: comparação por unidade, dia e meio de pagamento. Toda correspondência depende de conferência.</p></header>
     <div role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
       A comparação de vendas é somente leitura. O recorte contém um StoneCode e pode não cobrir todas as vendas da unidade. Pix depende de arquivo processado e validado. O registro de taxas fica no painel separado e exige confirmação explícita; não há fechamento automático.

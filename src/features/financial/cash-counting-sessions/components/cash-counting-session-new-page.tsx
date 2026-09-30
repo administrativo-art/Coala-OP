@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, LockKeyhole, Store } from "lucide-react";
+import { Loader2, LockKeyhole, Store } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,14 +85,13 @@ export function CashCountingSessionNewPage() {
   }
 
   if (!permissions.financial?.cashClosures?.approve) return null;
-  return <PageContainer variant="compact" className="max-w-[880px] space-y-5 pb-10">
-    <CashControlNavigation active="closures" crumbs={[
+  return <PageContainer variant="compact" surface className="space-y-5 pb-10">
+    <CashControlNavigation crumbs={[
       { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" },
       { label: "Nova sessão" },
     ]} />
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-3xl font-black tracking-tight">Abrir sessão de contagem</h1><p className="mt-1.5 text-sm font-medium text-zinc-500">Selecione as unidades. A data de cada malote será informada durante a contagem.</p></div>
-      <Button asChild variant="outline" className="rounded-xl"><Link href="/dashboard/financial/cash-closures"><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Link></Button>
+      <div><h1 className="text-2xl font-bold tracking-tight">Abrir sessão de contagem</h1><p className="mt-1.5 text-sm text-muted-foreground">Selecione as unidades. A data de cada malote será informada durante a contagem.</p></div>
     </div>
 
     <Card className="overflow-hidden rounded-[18px] border-stone-200 bg-[#fffefb]">

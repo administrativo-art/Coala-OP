@@ -276,6 +276,15 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           },
         }),
         setDoc(doc(db, "assets/asset-1"), { name: "Notebook" }),
+        setDoc(doc(db, "instagramScheduledPosts/schedule-1"), {
+          workspace_id: "coala",
+          status: "scheduled",
+          deliveryUrl: "https://example.invalid/private-token",
+        }),
+        setDoc(doc(db, "instagramMediaLibrary/library-1"), {
+          workspace_id: "coala",
+          objectPath: "instagram/library/coala/library-1/post.jpg",
+        }),
         setDoc(doc(db, "lots/lot-1"), {
           kioskId: "kiosk-1",
           productId: "product-1",
@@ -302,6 +311,16 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
         ref(storage, "hr/resumes/internal/private.pdf"),
         new Uint8Array([0x25, 0x50, 0x44, 0x46]),
         { contentType: "application/pdf" },
+      );
+      await uploadBytes(
+        ref(storage, "instagram/scheduled/schedule-1/post.jpg"),
+        new Uint8Array([0xff, 0xd8, 0xff]),
+        { contentType: "image/jpeg" },
+      );
+      await uploadBytes(
+        ref(storage, "instagram/library/coala/library-1/post.jpg"),
+        new Uint8Array([0xff, 0xd8, 0xff]),
+        { contentType: "image/jpeg" },
       );
     });
 
@@ -391,12 +410,30 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
 
     await assertFails(getDoc(doc(basic.firestore(), "assets/asset-1")));
     await assertSucceeds(getDoc(doc(assetViewer.firestore(), "assets/asset-1")));
+    await assertFails(getDoc(doc(basic.firestore(), "instagramScheduledPosts/schedule-1")));
+    await assertFails(getDoc(doc(admin.firestore(), "instagramScheduledPosts/schedule-1")));
+    await assertFails(setDoc(doc(admin.firestore(), "instagramScheduledPosts/forged"), {
+      workspace_id: "coala",
+      status: "scheduled",
+    }));
+    await assertFails(getDoc(doc(basic.firestore(), "instagramMediaLibrary/library-1")));
+    await assertFails(getDoc(doc(admin.firestore(), "instagramMediaLibrary/library-1")));
+    await assertFails(setDoc(doc(admin.firestore(), "instagramMediaLibrary/forged"), {
+      workspace_id: "coala",
+    }));
 
     await assertFails(getDownloadURL(ref(basic.storage(), "hr/resumes/internal/private.pdf")));
     await assertFails(listAll(ref(basic.storage(), "hr/resumes/internal")));
     await assertFails(uploadBytes(
       ref(basic.storage(), "assets/asset-1/forged.jpg"),
       new Uint8Array([1, 2, 3]),
+      { contentType: "image/jpeg" },
+    ));
+    await assertFails(getDownloadURL(ref(admin.storage(), "instagram/scheduled/schedule-1/post.jpg")));
+    await assertFails(getDownloadURL(ref(admin.storage(), "instagram/library/coala/library-1/post.jpg")));
+    await assertFails(uploadBytes(
+      ref(admin.storage(), "instagram/scheduled/schedule-1/forged.jpg"),
+      new Uint8Array([0xff, 0xd8, 0xff]),
       { contentType: "image/jpeg" },
     ));
     await assertSucceeds(uploadBytes(

@@ -36,7 +36,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/reconciliation/card-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/card-statements/page.tsx).
 
-Arquivos locais percorridos: 23.
+Arquivos locais percorridos: 25.
 
 Chamadas candidatas encontradas:
 
@@ -55,7 +55,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/%5Bday%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/page.tsx`](../../src/app/dashboard/financial/cash-closures/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/%5BsessionId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/new/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/new/page.tsx).
 
-Arquivos locais percorridos: 56.
+Arquivos locais percorridos: 58.
 
 Chamadas candidatas encontradas:
 
@@ -84,7 +84,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.cashDeposits` — [`src/features/financial/cash-closures/access.server.ts`](../../src/features/financial/cash-closures/access.server.ts)
 - `financial.cashDeposits.adjust` — [`src/features/financial/cash-closures/components/cash-closure-day-page.tsx`](../../src/features/financial/cash-closures/components/cash-closure-day-page.tsx)
 - `financial.cashDeposits.issue` — [`src/features/financial/cash-counting-sessions/components/cash-counting-session-page.tsx`](../../src/features/financial/cash-counting-sessions/components/cash-counting-session-page.tsx)
-- `financial.cashDeposits.view` — [`src/features/financial/cash-closures/components/cash-control-navigation.tsx`](../../src/features/financial/cash-closures/components/cash-control-navigation.tsx)
+- `financial.cashDeposits.view` — [`src/features/financial/cash-counting-sessions/components/cash-counting-session-page.tsx`](../../src/features/financial/cash-counting-sessions/components/cash-counting-session-page.tsx)
 - `financial.expenses` — [`src/features/financial/cash-closures/components/cash-withdrawals-panel.tsx`](../../src/features/financial/cash-closures/components/cash-withdrawals-panel.tsx)
 - `financial.view` — [`src/features/financial/cash-closures/access.server.ts`](../../src/features/financial/cash-closures/access.server.ts)
 
@@ -92,7 +92,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-deposits/page.tsx`](../../src/app/dashboard/financial/cash-deposits/page.tsx).
 
-Arquivos locais percorridos: 19.
+Arquivos locais percorridos: 20.
 
 Chamadas candidatas encontradas:
 
@@ -109,13 +109,13 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `financial.cashDeposits.adjust` — [`src/features/financial/cash-deposits/cash-deposits-page.tsx`](../../src/features/financial/cash-deposits/cash-deposits-page.tsx)
 - `financial.cashDeposits.cancel` — [`src/features/financial/cash-deposits/cash-deposits-page.tsx`](../../src/features/financial/cash-deposits/cash-deposits-page.tsx)
 - `financial.cashDeposits.issue` — [`src/features/financial/cash-deposits/cash-deposits-page.tsx`](../../src/features/financial/cash-deposits/cash-deposits-page.tsx)
-- `financial.cashDeposits.view` — [`src/features/financial/cash-closures/components/cash-control-navigation.tsx`](../../src/features/financial/cash-closures/components/cash-control-navigation.tsx)
+- `financial.cashDeposits.view` — [`src/features/financial/cash-deposits/cash-deposits-page.tsx`](../../src/features/financial/cash-deposits/cash-deposits-page.tsx)
 
 ## `cash-flow`
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 93.
+Arquivos locais percorridos: 94.
 
 Chamadas candidatas encontradas:
 
@@ -449,9 +449,9 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 ## `expenses`
 
-Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/expenses/pending-audit/page.tsx`](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
+Páginas: [`src/app/dashboard/financial/expenses/new/page.tsx`](../../src/app/dashboard/financial/expenses/new/page.tsx), [`src/app/dashboard/financial/expenses/page.tsx`](../../src/app/dashboard/financial/expenses/page.tsx), [`src/app/dashboard/financial/reconciliation/bank-statements/page.tsx`](../../src/app/dashboard/financial/reconciliation/bank-statements/page.tsx).
 
-Arquivos locais percorridos: 103.
+Arquivos locais percorridos: 101.
 
 Chamadas candidatas encontradas:
 
@@ -486,7 +486,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
 - `financial.audits` — [`src/features/financial/pages/import-page.tsx`](../../src/features/financial/pages/import-page.tsx)
-- `financial.audits.import` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
+- `financial.audits.import` — [`src/features/financial/pages/bank-statements-page.tsx`](../../src/features/financial/pages/bank-statements-page.tsx)
 - `financial.audits.view` — [`src/features/financial/pages/bank-statements-page.tsx`](../../src/features/financial/pages/bank-statements-page.tsx)
 - `financial.cardStatements.view` — [`src/features/financial/pages/expenses-page.tsx`](../../src/features/financial/pages/expenses-page.tsx)
 - `financial.cashFlow.view` — [`src/features/financial/budgets/comparison.ts`](../../src/features/financial/budgets/comparison.ts)
@@ -509,7 +509,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/assets/page.tsx`](../../src/app/dashboard/financial/assets/page.tsx).
 
-Arquivos locais percorridos: 24.
+Arquivos locais percorridos: 25.
 
 Chamadas candidatas encontradas:
 
@@ -561,7 +561,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/page.tsx`](../../src/app/dashboard/financial/page.tsx).
 
-Arquivos locais percorridos: 17.
+Arquivos locais percorridos: 19.
 
 Chamadas candidatas encontradas:
 
@@ -573,14 +573,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `financial.audits.view` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
-- `financial.cardStatements.view` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
-- `financial.cashFlow.view` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
 - `financial.dashboard` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
-- `financial.dre` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
-- `financial.expenses.view` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
-- `financial.financialFlow` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
-- `financial.settings.view` — [`src/features/financial/pages/financial-dashboard-page.tsx`](../../src/features/financial/pages/financial-dashboard-page.tsx)
 
 ## `forms`
 
