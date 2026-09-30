@@ -397,20 +397,20 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     : null;
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) void requestClose(); }}>
-    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl p-0 sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[1080px]">
-      <DialogHeader className="space-y-0 border-b border-stone-100 px-4 py-4 text-left sm:px-6">
+    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] min-w-0 max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl bg-[#f4f2ec] p-0 sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[min(1080px,calc(100vw-2rem))] sm:p-0">
+      <DialogHeader className="min-w-0 space-y-0 rounded-t-2xl bg-transparent px-6 pb-3 pt-6 text-left sm:px-10 sm:pb-4 sm:pt-8">
         <div className="flex items-start justify-between gap-4 pr-1">
-          <div><DialogTitle className="text-xl font-black">Contar malote</DialogTitle><DialogDescription className="mt-1">{unit.name} · o rascunho é salvo sem finalizar o operador.</DialogDescription></div>
+          <div className="min-w-0"><DialogTitle className="text-lg font-bold tracking-tight">Contar malote</DialogTitle><DialogDescription className="sr-only">Contagem do malote da unidade {unit.name}.</DialogDescription></div>
           <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full" aria-label="Fechar contagem" disabled={changingDate} onClick={() => void requestClose()}><X className="h-4 w-4" /></Button>
         </div>
-        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/80 p-3">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">Passo a passo da contagem</p>
-          <ol className="flex gap-2 overflow-x-auto pb-1" aria-label="Etapas para contar e finalizar o malote">
+        <div className="mt-6 min-w-0 rounded-xl border border-stone-200 bg-transparent p-4 sm:mt-8 sm:p-5">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-foreground">Passo a passo da contagem</p>
+          <ol className="grid min-w-0 grid-flow-col auto-cols-[minmax(168px,1fr)] gap-2 overflow-x-auto pb-1 lg:grid-flow-row lg:grid-cols-3 lg:overflow-visible lg:pb-0" aria-label="Etapas para contar e finalizar o malote">
             {COUNTING_GUIDE_STEPS.map((step, index) => {
               const finalStep = index === COUNTING_GUIDE_STEPS.length - 1;
-              return <li key={step.title} className={cn("flex min-w-[176px] flex-1 items-start gap-2.5 rounded-xl border bg-white p-3", finalStep ? "border-emerald-200" : "border-stone-200")}>
+              return <li key={step.title} className={cn("flex min-w-0 items-start gap-3 rounded-lg border bg-[#fffefb] p-4", finalStep ? "border-emerald-200" : "border-stone-200")}>
                 <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black text-white", finalStep ? "bg-emerald-700" : "bg-zinc-900")}>{index + 1}</span>
-                <span className="min-w-0"><strong className="block text-[11.5px] leading-4">{step.title}</strong><span className="mt-0.5 block text-[10.5px] leading-4 text-zinc-500">{step.description}</span></span>
+                <span className="min-w-0"><strong className="block text-xs font-bold leading-4">{step.title}</strong><span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{step.description}</span></span>
               </li>;
             })}
           </ol>
@@ -418,8 +418,10 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
       </DialogHeader>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="grid gap-3 border-b border-stone-100 bg-stone-50/70 px-4 py-3 sm:grid-cols-[minmax(220px,320px)_1fr] sm:items-end sm:px-6">
-          <label><span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-zinc-500">Data impressa no malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
+        <div className="grid gap-3 bg-transparent px-6 py-3 sm:grid-cols-[minmax(260px,360px)_1fr] sm:items-center sm:px-10">
+          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+            <label><span className="mb-2 block text-[11px] font-bold uppercase tracking-[.1em] text-muted-foreground">Data impressa no malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
+          </div>
           <div className="flex min-h-8 items-center gap-2 text-xs text-zinc-500 sm:justify-end">
             {changingDate && <><Loader2 className="h-4 w-4 animate-spin" />Abrindo a data…</>}
             {saveState === "dirty" && <><AlertTriangle className="h-4 w-4 text-amber-600" />Alterações pendentes</>}
@@ -429,7 +431,7 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-10 sm:py-8">
           {data && !loading && !loadError && <div className="mb-4"><CashWithdrawalsPanel key={data.closure.id} data={data} editable={editable && !working} /></div>}
           {!date ? <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-stone-300 bg-stone-50 text-center"><div><Save className="mx-auto h-9 w-9 text-zinc-300" /><p className="mt-3 font-bold">Informe a data impressa no malote</p><p className="mt-1 text-sm text-zinc-500">Ao voltar, esta será a última data aberta da sessão.</p></div></div>
             : loading ? <div className="grid min-h-72 place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></div>

@@ -85,7 +85,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/financial/assets` | [page.tsx](../../src/app/dashboard/financial/assets/page.tsx) | [asset-management.tsx](../../src/components/asset-management.tsx) |
+| `dashboard/financial/assets` | [page.tsx](../../src/app/dashboard/financial/assets/page.tsx) | [asset-management.tsx](../../src/components/asset-management.tsx), [page-container.tsx](../../src/components/layout/page-container.tsx) |
 | `dashboard/financial/beneficiaries` | [page.tsx](../../src/app/dashboard/financial/beneficiaries/page.tsx) | Redireciona para `/dashboard/registration/entities` |
 | `dashboard/financial/budget-comparison` | [page.tsx](../../src/app/dashboard/financial/budget-comparison/page.tsx) | [budget-comparison-page.tsx](../../src/features/financial/pages/budget-comparison-page.tsx) |
 | `dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]` | [page.tsx](../../src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]/page.tsx) | [cash-closure-day-page.tsx](../../src/features/financial/cash-closures/components/cash-closure-day-page.tsx) |
@@ -106,7 +106,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/financial/expenses/inbox` | [page.tsx](../../src/app/dashboard/financial/expenses/inbox/page.tsx) | [financial-inbox-page.tsx](../../src/features/financial/inbox/financial-inbox-page.tsx) |
 | `dashboard/financial/expenses/new` | [page.tsx](../../src/app/dashboard/financial/expenses/new/page.tsx) | [new-expense-page.tsx](../../src/features/financial/pages/new-expense-page.tsx) |
 | `dashboard/financial/expenses` | [page.tsx](../../src/app/dashboard/financial/expenses/page.tsx) | [expenses-page.tsx](../../src/features/financial/pages/expenses-page.tsx), [reconciliation-navigation.ts](../../src/features/financial/lib/reconciliation-navigation.ts) |
-| `dashboard/financial/expenses/pending-audit` | [page.tsx](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx) | [pending-audit-expenses-page.tsx](../../src/features/financial/pages/pending-audit-expenses-page.tsx) |
+| `dashboard/financial/expenses/pending-audit` | [page.tsx](../../src/app/dashboard/financial/expenses/pending-audit/page.tsx) | [constants.ts](../../src/features/financial/lib/constants.ts) |
 | `dashboard/financial/financial-flow` | [page.tsx](../../src/app/dashboard/financial/financial-flow/page.tsx) | Redireciona para `/dashboard/financial/cash-flow` |
 | `dashboard/financial/inbox` | [page.tsx](../../src/app/dashboard/financial/inbox/page.tsx) | Redireciona para `/dashboard/financial/expenses/inbox` |
 | `dashboard/financial` | [page.tsx](../../src/app/dashboard/financial/page.tsx) | [financial-dashboard-page.tsx](../../src/features/financial/pages/financial-dashboard-page.tsx) |

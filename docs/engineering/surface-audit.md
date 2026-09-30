@@ -7,7 +7,7 @@ Levantamento original em `3f64b3c` com alterações locais, adaptado à main `70
 - **352 handlers App Router, 20 páginas externas e 42 exports de Functions**: cada entrada tem classificação explícita em [surface-flow-matrix.csv](surface-flow-matrix.csv), fonte e guia no [inventário gerado](surface-inventory.md). Contagem por arquivo de handler, não por método HTTP nem subação de catch-all.
 - Functions são resolvidas pelos exports e reexports de `functions/src/index.ts`, sem importar/executar os módulos. Símbolos auxiliares não exportados pelo entrypoint não são contados como funções implantáveis.
 - A matriz não atribui automaticamente autorização pelo nome de uma pasta. Ela aponta o guia para investigação; os contratos aprofundados de webhooks/jobs e entradas compartilhadas estão em [runtime-surfaces](runtime-surfaces.md) e [access-and-privacy](access-and-privacy.md).
-- Permanecem **53 grupos do dashboard / 72 guias em flows**, com **0 grupos verificados / 53 parciais**. Os complementos transversais cobrem autenticação/privacidade/auditoria/reparos e processamento sem tela, sem inventar páginas para aumentar essa contagem.
+- Permanecem **53 grupos do dashboard / 73 guias em flows**, com **0 grupos verificados / 53 parciais**. Os complementos transversais cobrem autenticação/privacidade/auditoria/reparos e processamento sem tela, sem inventar páginas para aumentar essa contagem.
 - Catch-alls de [compras](../../src/app/api/purchasing/%5B...path%5D/route.ts) e [cadastros](../../src/app/api/registry/%5B...path%5D/route.ts) concentram várias ações. Uma linha de inventário não substitui a leitura de cada ramo; mapas gerados a partir de páginas não alcançam todos eles.
 
 ## Achados adicionais e trabalho de correção

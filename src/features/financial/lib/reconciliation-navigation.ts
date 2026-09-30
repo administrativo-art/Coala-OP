@@ -62,8 +62,11 @@ export function cardStatementsReturnHref(value?: string | null): string {
 
 /** Keep the owning sidebar entry selected for the existing internal steps. */
 export function financialSidebarPath(pathname: string, visibleHrefs: string[]): string {
+  if (visibleHrefs.includes(pathname)) return pathname;
+
   const parents: Record<string, string> = {
     "/dashboard/financial/cash-deposits": "/dashboard/financial/cash-closures",
+    "/dashboard/financial/budget-comparison": FINANCIAL_ROUTES.expenses,
     "/dashboard/financial/stone-anticipations": "/dashboard/financial/sales-reconciliation",
   };
   const parent = parents[pathname];

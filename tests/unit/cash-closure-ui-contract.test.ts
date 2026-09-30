@@ -27,6 +27,10 @@ const depositsRouteSource = readFileSync(
   path.join(process.cwd(), "src/app/api/financial/cash-deposits/route.ts"),
   "utf8",
 );
+const cashControlNavigationSource = readFileSync(
+  path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-control-navigation.tsx"),
+  "utf8",
+);
 
 test("contagem do Caixa não oferece atalho para copiar o esperado do PDV", () => {
   assert.doesNotMatch(dayPageSource, /Usar esperado/);
@@ -50,6 +54,15 @@ test("modal mostra todos os canais, as duas origens de justificativa e as três 
   assert.match(countingDialogSource, /Caixa × PDV/);
   assert.match(countingDialogSource, /Financeiro × Caixa/);
   assert.match(countingDialogSource, /Financeiro × PDV/);
+});
+
+test("modal de contagem respeita a viewport e o fluxo interno usa o retorno canônico", () => {
+  assert.match(countingDialogSource, /max-w-\[min\(1080px,calc\(100vw-2rem\)\)\]/);
+  assert.match(countingDialogSource, /lg:grid-cols-3/);
+  assert.match(countingDialogSource, /overflow-x-auto/);
+  assert.match(cashControlNavigationSource, /<PageHeader/);
+  assert.match(cashControlNavigationSource, /fallbackHref/);
+  assert.doesNotMatch(cashControlNavigationSource, /Depósitos|Coala · Financeiro/);
 });
 
 test("nova sessão escolhe somente unidades", () => {

@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ChevronRight,
   CreditCard,
-  FileSearch,
   Loader2,
   RefreshCw,
   Repeat2,
@@ -19,6 +18,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/layout/page-container";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -30,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BackButton } from "@/components/navigation/back-button";
+import { PageHeader } from "@/components/layout/page-header";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FinancialCompetenceNavigator } from "@/features/financial/components/financial-competence-navigator";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
@@ -110,7 +110,7 @@ type CardStatementsWorkspaceProps = {
   returnTo?: string;
 };
 
-type CardLineStatusFilter = "all" | "pending" | "audited" | "historical" | "reconciled";
+type CardLineStatusFilter = "all" | "pending" | "historical" | "reconciled";
 type CardStatementRegistrationMode = "standard" | "historical_before_dre";
 type CardLineSourceFilter = "all" | "forecast" | "actual";
 
@@ -351,7 +351,13 @@ export function CardStatementsWorkspace({
   }, [selectedGroup]);
   const visibleCardLines = useMemo(() => {
     return (selectedGroup?.lines || []).filter((line) => {
-      if (lineStatusFilter !== "all" && getCardLineAuditStatus(line) !== lineStatusFilter) return false;
+      const status = getCardLineAuditStatus(line);
+      if (
+        lineStatusFilter !== "all" &&
+        (lineStatusFilter === "pending"
+          ? status !== "pending" && status !== "audited"
+          : status !== lineStatusFilter)
+      ) return false;
       if (lineSourceFilter === "forecast") return isCardLineForecast(line);
       if (lineSourceFilter === "actual") return !isCardLineForecast(line);
       return true;
@@ -549,7 +555,7 @@ export function CardStatementsWorkspace({
         { merge: true }
       );
       refreshStatements();
-      toast({ title: "Fatura conferida e fechada." });
+      toast({ title: "Fatura conciliada e fechada." });
     } catch (error) {
       console.error(error);
       toast({ variant: "destructive", title: "Não foi possível salvar a fatura." });
@@ -564,7 +570,7 @@ export function CardStatementsWorkspace({
     if (reconciled && issues.length > 0) {
       toast({
         variant: "destructive",
-        title: "Complete a auditoria deste item.",
+        title: "Revise os dados deste item.",
         description: `Revise: ${issues.join(", ")}.`,
       });
       return;
@@ -584,7 +590,7 @@ export function CardStatementsWorkspace({
       refreshExpenses();
     } catch (error) {
       console.error(error);
-      toast({ variant: "destructive", title: "Não foi possível atualizar a conferência." });
+      toast({ variant: "destructive", title: "Não foi possível atualizar a conciliação." });
     } finally {
       setWorking(null);
     }
@@ -595,8 +601,8 @@ export function CardStatementsWorkspace({
     if (selectedReadyLines.length === 0) {
       toast({
         variant: "destructive",
-        title: "Nenhuma cobrança está pronta para conferência.",
-        description: "Conclua a auditoria dos itens pendentes ou selecione cobranças auditadas.",
+        title: "Nenhuma cobrança está apta à conciliação.",
+        description: "Revise os itens pendentes ou selecione cobranças já revisadas.",
       });
       return;
     }
@@ -614,13 +620,13 @@ export function CardStatementsWorkspace({
       setSelectedLineIds([]);
       refreshExpenses();
       toast({
-        title: `${selectedReadyLines.length} cobrança${selectedReadyLines.length === 1 ? " conferida" : "s conferidas"}.`,
+        title: `${selectedReadyLines.length} cobrança${selectedReadyLines.length === 1 ? " conciliada" : "s conciliadas"}.`,
         description: selectedReadyLines.length < selectedCardLines.length
-          ? "Os demais itens selecionados ainda precisam de auditoria ou já estavam conferidos."
+          ? "Os demais itens selecionados ainda precisam de revisão ou já estavam conciliados."
           : undefined,
       });
     } catch {
-      toast({ variant: "destructive", title: "Não foi possível concluir a conferência em lote." });
+      toast({ variant: "destructive", title: "Não foi possível concluir a conciliação em lote." });
     } finally {
       setWorking(null);
     }
@@ -786,7 +792,7 @@ export function CardStatementsWorkspace({
       refreshStatements();
       refreshExpenses();
       toast({
-        title: result?.historical ? "Fatura registrada como histórico." : "Fatura importada para auditoria.",
+        title: result?.historical ? "Fatura registrada como histórico." : "Fatura importada para conciliação.",
         description: [
           result?.created ? `${result.created} nova(s)` : null,
           result?.linked ? `${result.linked} vinculada(s)` : null,
@@ -794,7 +800,7 @@ export function CardStatementsWorkspace({
           result?.removed ? `${result.removed} removida(s) da versão ativa` : null,
           result?.skipped ? `${result.skipped} já importada(s)` : null,
           result?.reopened ? "fatura reaberta" : null,
-          result?.historical ? "conferência dispensada antes da DRE" : null,
+          result?.historical ? "conciliação dispensada antes da DRE" : null,
         ].filter(Boolean).join(" · ") || "Itens registrados sem efetivação automática.",
       });
     } catch (error) {
@@ -821,6 +827,8 @@ export function CardStatementsWorkspace({
     : 0;
   const auditStepDone = historicalRegistration || (selectedGroupLineCount > 0 && allLinesAuditComplete);
   const conferenceStepDone = historicalRegistration || allLinesReconciled;
+  const pendingVisibleCount = selectedLineCounts.pending + selectedLineCounts.audited;
+  const reconciliationStepDone = auditStepDone && conferenceStepDone;
   const workflowBase = [
     {
       label: "Importar",
@@ -828,20 +836,15 @@ export function CardStatementsWorkspace({
       done: officialTotal > 0,
     },
     {
-      label: "Auditar",
+      label: "Conciliar",
       meta: historicalRegistration
-        ? "dispensada antes da DRE"
-        : selectedLineCounts.pending === 0 && selectedGroupLineCount > 0
-        ? "cadastros completos"
+        ? "registro histórico"
+        : pendingVisibleCount === 0 && selectedGroupLineCount > 0
+        ? `${reconciledCount} de ${selectedGroupLineCount} conciliadas`
         : selectedGroupLineCount === 0
           ? "aguardando cobranças"
-          : `${selectedLineCounts.pending} com pendência`,
-      done: auditStepDone,
-    },
-    {
-      label: "Conferir",
-      meta: historicalRegistration ? "registro histórico" : `${reconciledCount} de ${selectedGroupLineCount}`,
-      done: conferenceStepDone,
+          : `${pendingVisibleCount} pendente(s)`,
+      done: reconciliationStepDone,
     },
     {
       label: "Fechar",
@@ -849,8 +852,8 @@ export function CardStatementsWorkspace({
       done: statementStatus === "closed" || statementStatus === "paid",
     },
     {
-      label: "Conciliar",
-      meta: statementStatus === "paid" ? "pagamento conciliado" : "aguardando extrato",
+      label: "Pagamento",
+      meta: statementStatus === "paid" ? "conciliado" : "aguardando extrato",
       done: statementStatus === "paid",
     },
   ];
@@ -862,17 +865,17 @@ export function CardStatementsWorkspace({
   });
   const closeChecklist = [
     {
-      label: historicalRegistration ? "Histórico anterior à DRE" : "Cadastros auditados",
+      label: historicalRegistration ? "Histórico anterior à DRE" : "Dados das cobranças revisados",
       meta: historicalRegistration
-        ? `Competência preservada sem conferência; a DRE começa em ${format(new Date(`${FINANCIAL_DRE_START_MONTH_KEY}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })}.`
+        ? `Competência preservada sem conciliação; a DRE começa em ${format(new Date(`${FINANCIAL_DRE_START_MONTH_KEY}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })}.`
         : auditStepDone
         ? "Nenhuma cobrança com cadastro incompleto."
-        : `${selectedLineCounts.pending} cobrança(s) exigem auditoria antes da conferência.`,
+        : `${selectedLineCounts.pending} cobrança(s) exigem revisão antes da conciliação.`,
       done: auditStepDone,
     },
     {
-      label: historicalRegistration ? "Conferência dispensada" : "Cobranças conferidas",
-      meta: historicalRegistration ? "As linhas não foram marcadas como auditadas." : `${reconciledCount} de ${selectedGroupLineCount} conferidas.`,
+      label: historicalRegistration ? "Conciliação dispensada" : "Cobranças conciliadas",
+      meta: historicalRegistration ? "As linhas foram preservadas como histórico." : `${reconciledCount} de ${selectedGroupLineCount} conciliadas.`,
       done: conferenceStepDone,
     },
     {
@@ -895,16 +898,16 @@ export function CardStatementsWorkspace({
     },
   ];
   const safeReturnHref = cardStatementsReturnHref(returnTo);
-  const backLabel = safeReturnHref.startsWith(FINANCIAL_ROUTES.bankStatements)
-    ? "Voltar ao extrato"
-    : "Voltar às despesas";
+  const backParentLabel = safeReturnHref.startsWith(FINANCIAL_ROUTES.bankStatements)
+    ? "Extratos bancários"
+    : "Despesas";
 
   return (
     <div className={cn(
       "mx-auto w-full",
       embedded
         ? "h-full max-w-none overflow-hidden bg-white"
-        : "max-w-[1360px] space-y-4 rounded-[22px] bg-[#f4f2ec] px-4 py-5 pb-8 shadow-sm sm:px-6"
+        : "max-w-none space-y-4"
     )}>
       <input
         ref={cardStatementFileRef}
@@ -916,17 +919,16 @@ export function CardStatementsWorkspace({
           if (file) void readCardStatementFile(file);
         }}
       />
-      {!embedded ? <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <BackButton fallbackHref={safeReturnHref} label={backLabel} variant="ghost" className="-ml-3 mb-2" />
-          <h1 className="text-2xl font-bold tracking-tight">Faturas de cartão de crédito</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Previsão mensal, conferência das cobranças e conciliação do pagamento bancário.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canImportCardStatements && selectedGroup ? (
+      {!embedded ? (
+        <PageHeader
+          title="Faturas de cartão de crédito"
+          description="Previsão mensal, conciliação das cobranças e do pagamento bancário."
+          back={{ fallbackHref: safeReturnHref, parentLabel: backParentLabel }}
+          actions={canImportCardStatements && selectedGroup ? (
             <Button
               type="button"
-              className="h-10 rounded-xl"
+              size="sm"
+              className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]"
               disabled={importingStatement}
               onClick={() => cardStatementFileRef.current?.click()}
             >
@@ -934,11 +936,8 @@ export function CardStatementsWorkspace({
               {importingStatement ? "Analisando fatura..." : "Importar fatura"}
             </Button>
           ) : null}
-          <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
-            <Link href={FINANCIAL_ROUTES.bankStatements}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
-          </Button>
-        </div>
-      </div> : null}
+        />
+      ) : null}
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
@@ -977,15 +976,14 @@ export function CardStatementsWorkspace({
 
             <div className="space-y-1">
               <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Status <span className="normal-case tracking-normal text-muted-foreground/60">· fluxo da conferência</span>
+                Status <span className="normal-case tracking-normal text-muted-foreground/60">· fluxo da conciliação</span>
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
                 {([
                   ["all", "Todos", selectedLineCounts.all, "border-zinc-300 bg-zinc-100 text-zinc-800", "bg-zinc-500"],
-                  ["pending", "Pendentes", selectedLineCounts.pending, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
-                  ["audited", "Auditadas", selectedLineCounts.audited, "border-sky-300 bg-sky-50 text-sky-700", "bg-sky-500"],
+                  ["pending", "Pendentes", pendingVisibleCount, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
                   ["historical", "Histórico", selectedLineCounts.historical, "border-stone-300 bg-stone-100 text-stone-700", "bg-stone-500"],
-                  ["reconciled", "Conferidas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
+                  ["reconciled", "Conciliadas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
                 ] as const).map(([value, label, count, activeClass, dotClass], index) => (
                   <div key={value} className="flex items-center gap-1.5">
                     {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" /> : null}
@@ -1073,13 +1071,11 @@ export function CardStatementsWorkspace({
                   const forecast = isCardLineForecast(line);
                   const installmentNumber = Number(line.installmentNumber || line.expense.installmentNumber || 0);
                   const installmentTotal = Number(line.installmentTotal || line.expense.installmentTotal || 0);
-                  const statusMeta = status === "pending"
+                  const statusMeta = status === "pending" || status === "audited"
                     ? { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" }
-                    : status === "audited"
-                    ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
                     : status === "historical"
                     ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
-                    : { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+                    : { label: "Conciliada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
                   return (
                     <div
                       key={line.lineId}
@@ -1114,11 +1110,11 @@ export function CardStatementsWorkspace({
                         {canAuditCardStatements && selectedStatement?.status !== "paid" && status !== "historical" ? (
                           <>
                             <Button size="sm" variant="ghost" className="h-7 max-w-0 overflow-hidden px-0 text-[10px] opacity-0 transition-all group-hover:max-w-24 group-hover:px-2 group-hover:opacity-100" asChild>
-                              <Link href={expenseEditHref(line.expense.id, returnTo)}>Auditar</Link>
+                              <Link href={expenseEditHref(line.expense.id, returnTo)}>Revisar</Link>
                             </Button>
                             {status === "audited" ? (
                               <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" disabled={working === line.lineId} onClick={() => void toggleLine(line, true)}>
-                                {working === line.lineId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Conferir"}
+                                {working === line.lineId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Conciliar"}
                               </Button>
                             ) : null}
                           </>
@@ -1145,7 +1141,7 @@ export function CardStatementsWorkspace({
               <p className="mt-1 font-mono text-xs font-semibold">{formatCurrency(selectedGroup.provisionedTotal)}</p>
             </div>
             <div>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Conferido</p>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Conciliado</p>
               <p className="mt-1 font-mono text-xs font-semibold">{formatCurrency(selectedGroup.reconciledTotal)}</p>
             </div>
             <div>
@@ -1162,7 +1158,7 @@ export function CardStatementsWorkspace({
           ) : selectedStatement?.status === "closed" ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sky-200 bg-sky-50 px-4 py-2 text-xs text-sky-800">
               <span>
-                {historicalRegistration ? "Histórico anterior à DRE · conferência dispensada. " : ""}
+                {historicalRegistration ? "Histórico anterior à DRE · conciliação dispensada. " : ""}
                 {paymentCandidates.length > 0 ? `${paymentCandidates.length} pagamento(s) compatível(is) encontrado(s) no extrato.` : "Nenhum pagamento compatível encontrado no extrato."}
               </span>
               {canReconcileCardStatements ? paymentCandidates.slice(0, 1).map((candidate) => (
@@ -1262,7 +1258,7 @@ export function CardStatementsWorkspace({
                       <div className="text-right">
                         <p className="text-[10.5px] text-muted-foreground">Vence {format(group.dueDate, "dd/MM")}</p>
                         <p className={cn("mt-0.5 text-[10.5px] font-extrabold", groupReconciledCount === group.lines.length && group.lines.length > 0 ? "text-emerald-700" : "text-amber-700")}>
-                          {groupReconciledCount}/{group.lines.length} conferidas
+                          {groupReconciledCount}/{group.lines.length} conciliadas
                         </p>
                       </div>
                     </div>
@@ -1332,10 +1328,9 @@ export function CardStatementsWorkspace({
                     <span className="mr-0.5 text-[8.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Fluxo</span>
                     {([
                       ["all", "Todos", selectedLineCounts.all, "border-zinc-300 bg-zinc-100 text-zinc-800", "bg-zinc-500"],
-                      ["pending", "Pendentes", selectedLineCounts.pending, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
-                      ["audited", "Auditadas", selectedLineCounts.audited, "border-sky-300 bg-sky-50 text-sky-700", "bg-sky-500"],
+                      ["pending", "Pendentes", pendingVisibleCount, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
                       ["historical", "Histórico", selectedLineCounts.historical, "border-stone-300 bg-stone-100 text-stone-700", "bg-stone-500"],
-                      ["reconciled", "Conferidas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
+                      ["reconciled", "Conciliadas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
                     ] as const).map(([value, label, count, activeClass, dotClass], index) => (
                       <div key={value} className="flex items-center gap-1.5">
                         {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" /> : null}
@@ -1382,7 +1377,7 @@ export function CardStatementsWorkspace({
                   <div className="mx-4 mt-3 flex flex-wrap items-center gap-2.5 rounded-xl border border-pink-200 bg-pink-50/70 px-3 py-2.5 sm:mx-[18px]">
                     <span className="text-xs font-extrabold text-pink-700">{selectedCardLines.length} cobrança(s) selecionada(s)</span>
                     <span className="text-[11.5px] text-pink-700/70">
-                      {selectedReadyLines.length} pronta(s) · {selectedCardLines.length - selectedReadyLines.length} precisam de auditoria ou já foram conferidas
+                      {selectedReadyLines.length} apta(s) · {selectedCardLines.length - selectedReadyLines.length} precisam de revisão ou já foram conciliadas
                     </span>
                     <div className="ml-auto flex gap-2">
                       <Button variant="outline" size="sm" className="h-8 rounded-lg bg-white text-[11px]" disabled={working === "bulk-lines"} onClick={() => setSelectedLineIds([])}>
@@ -1390,7 +1385,7 @@ export function CardStatementsWorkspace({
                       </Button>
                       <Button size="sm" className="h-8 rounded-lg text-[11px] font-extrabold" disabled={working === "bulk-lines" || selectedReadyLines.length === 0} onClick={() => void confirmSelectedLines()}>
                         {working === "bulk-lines" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                        Conferir selecionadas
+                        Conciliar selecionadas
                       </Button>
                     </div>
                   </div>
@@ -1415,7 +1410,7 @@ export function CardStatementsWorkspace({
                       <span>Descrição</span>
                       <span>Origem</span>
                       <span className="text-right">Valor</span>
-                      <span className="text-right">Conferência</span>
+                      <span className="text-right">Conciliação</span>
                     </div>
 
                     <div className="max-h-[560px] overflow-y-auto">
@@ -1441,13 +1436,11 @@ export function CardStatementsWorkspace({
                             const installmentNumber = Number(line.installmentNumber || line.expense.installmentNumber || 0);
                             const installmentTotal = Number(line.installmentTotal || line.expense.installmentTotal || 0);
                             const selected = selectedLineIdSet.has(line.lineId);
-                            const statusMeta = status === "pending"
+                            const statusMeta = status === "pending" || status === "audited"
                               ? { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" }
-                              : status === "audited"
-                                ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
-                                : status === "historical"
+                              : status === "historical"
                                   ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
-                                : { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+                                : { label: "Conciliada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
                             return (
                               <div
                                 key={line.lineId}
@@ -1492,7 +1485,7 @@ export function CardStatementsWorkspace({
                                   {canAuditCardStatements && statementStatus !== "paid" && status !== "historical" ? (
                                     status === "pending" ? (
                                       <Button asChild variant="outline" size="sm" className="h-7 rounded-lg px-2.5 text-[10.5px] font-bold">
-                                        <Link href={expenseEditHref(line.expense.id, returnTo)}>Auditar item</Link>
+                                        <Link href={expenseEditHref(line.expense.id, returnTo)}>Revisar item</Link>
                                       </Button>
                                     ) : (
                                       <Button
@@ -1502,7 +1495,7 @@ export function CardStatementsWorkspace({
                                         disabled={working === line.lineId || working === "bulk-lines"}
                                         onClick={() => void toggleLine(line, status !== "reconciled")}
                                       >
-                                        {working === line.lineId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : status === "audited" ? "Conferir" : "Desfazer"}
+                                        {working === line.lineId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : status === "audited" ? "Conciliar" : "Desfazer"}
                                       </Button>
                                     )
                                   ) : null}
@@ -1521,7 +1514,7 @@ export function CardStatementsWorkspace({
                   {[
                     ["Itens lançados", postedTotal, "text-foreground"],
                     ["Provisionado", selectedGroup.provisionedTotal, "text-cyan-700"],
-                    ["Conferido", reconciledTotal, "text-emerald-700"],
+                    ["Conciliado", reconciledTotal, "text-emerald-700"],
                     ["Total da fatura", officialTotal, "text-foreground"],
                   ].map(([label, value, color]) => (
                     <div key={String(label)}>
@@ -1544,7 +1537,7 @@ export function CardStatementsWorkspace({
                           : "border-amber-200 bg-amber-50 text-amber-700"
                       )}>
                         {valuesBalanced
-                          ? "Valores conferem"
+                          ? "Valores batem"
                           : difference === null
                             ? "Total não informado"
                             : `Diferença de ${formatCurrency(Math.abs(difference))}`}
@@ -1668,7 +1661,7 @@ export function CardStatementsWorkspace({
                         <p>Importe ou confira o extrato bancário para localizar o pagamento.</p>
                         {permissions.financial?.audits?.view ? (
                           <Button asChild variant="outline" size="sm" className="mt-3 h-8 rounded-lg bg-white text-[11px]">
-                            <Link href={FINANCIAL_ROUTES.bankStatements}>Abrir conferência</Link>
+                            <Link href={FINANCIAL_ROUTES.bankStatements}>Abrir extrato bancário</Link>
                           </Button>
                         ) : null}
                       </div>
@@ -1714,7 +1707,7 @@ export function CardStatementsWorkspace({
               Revisar análise da Mel
             </DialogTitle>
             <DialogDescription className="mt-1.5 text-xs leading-relaxed">
-              A Mel interpreta a fatura, mas você decide o que será adicionado. Nada é auditado, efetivado ou pago automaticamente.
+              A Mel interpreta a fatura, mas você decide o que será adicionado. Nada é conciliado, efetivado ou pago automaticamente.
             </DialogDescription>
           </DialogHeader>
           {importPreview ? (
@@ -1905,7 +1898,7 @@ export function CardStatementsWorkspace({
                             <p className="mt-0.5 truncate">
                               {revision.previousDescription || "Despesa vinculada"} · {formatCurrency(revision.previousAmount || 0)} → {formatCurrency(line.amount)}
                             </p>
-                            <p className="mt-0.5">A linha voltará para conferência.</p>
+                            <p className="mt-0.5">A linha voltará para conciliação.</p>
                           </div>
                         ) : (
                           <>
@@ -1983,7 +1976,7 @@ export function CardStatementsWorkspace({
           ) : null}
           <DialogFooter className="shrink-0 flex-col gap-3 border-t border-[#f0ece3] bg-[#faf9f6] px-6 py-[15px] sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-md text-left text-[11.5px] leading-relaxed text-muted-foreground">
-              No fluxo normal, os itens entram pendentes de auditoria. O registro histórico dispensa a conferência, mas não efetua pagamentos.
+              No fluxo normal, os itens entram pendentes de revisão e conciliação. O registro histórico dispensa a conciliação, mas não efetua pagamentos.
             </p>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
               <Button variant="outline" className="h-10 rounded-xl bg-white px-4 text-[12.5px] font-bold" disabled={importingStatement} onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
@@ -2025,11 +2018,13 @@ export function CardStatementsWorkspace({
 export function CardStatementsPage() {
   const searchParams = useSearchParams();
   return (
-    <CardStatementsWorkspace
-      fixedMonthKey={searchParams.get("month") || undefined}
-      accountId={searchParams.get("accountId") || undefined}
-      paymentMethodId={searchParams.get("paymentMethodId") || undefined}
-      returnTo={searchParams.get("returnTo") || undefined}
-    />
+    <PageContainer variant="wide" surface className="space-y-6 pb-10">
+      <CardStatementsWorkspace
+        fixedMonthKey={searchParams.get("month") || undefined}
+        accountId={searchParams.get("accountId") || undefined}
+        paymentMethodId={searchParams.get("paymentMethodId") || undefined}
+        returnTo={searchParams.get("returnTo") || undefined}
+      />
+    </PageContainer>
   );
 }

@@ -59,7 +59,7 @@ src/app/dashboard/financial/expenses/import/page.tsx,redirect,expenses,/dashboar
 src/app/dashboard/financial/expenses/inbox/page.tsx,active,financial-inbox,
 src/app/dashboard/financial/expenses/new/page.tsx,active,expenses,
 src/app/dashboard/financial/expenses/page.tsx,active,expenses,
-src/app/dashboard/financial/expenses/pending-audit/page.tsx,active,expenses,
+src/app/dashboard/financial/expenses/pending-audit/page.tsx,redirect,expenses,/dashboard/financial/expenses?status=pending_audit
 src/app/dashboard/financial/financial-flow/page.tsx,redirect,cash-flow,/dashboard/financial/cash-flow
 src/app/dashboard/financial/inbox/page.tsx,redirect,financial-inbox,/dashboard/financial/expenses/inbox
 src/app/dashboard/financial/page.tsx,active,financial-overview,Painel com indicadores

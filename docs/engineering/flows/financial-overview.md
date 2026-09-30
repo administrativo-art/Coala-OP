@@ -1,4 +1,4 @@
-# Painel financeiro: indicadores e atalhos
+# Painel financeiro: indicadores e acompanhamento
 
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
@@ -6,7 +6,7 @@
 
 ## Entrada e percurso
 
-A [página financeira](../../../src/app/dashboard/financial/page.tsx) monta [`FinancialDashboardPage`](../../../src/features/financial/pages/financial-dashboard-page.tsx). A tela exige `financial.dashboard` para exibir; atalhos de despesas, auditoria, cartões, caixa, DRE e configurações dependem de suas permissões específicas. Além de planos de contas e quiosques, a página lê `expenses` diretamente com [`useFinancialCollection`](../../../src/features/financial/hooks/use-financial-collection.tsx). O hook [`useFinancialDashboardIndicators`](../../../src/features/financial/hooks/use-dashboard-indicators.ts) lê **novamente** `expenses`, além de `transactions` e `payments`, e calcula indicadores no cliente. Cada leitura direta usa `getDocs` da coleção inteira; o fallback [`GET /api/financial/data`](../../../src/app/api/financial/data/route.ts) também lê coleção inteira após checagem de caminho.
+A [página financeira](../../../src/app/dashboard/financial/page.tsx) monta [`FinancialDashboardPage`](../../../src/features/financial/pages/financial-dashboard-page.tsx). A tela exige `financial.dashboard` para exibir e concentra indicadores e listas de acompanhamento; não repete os destinos permanentes já disponíveis na sidebar. Além de planos de contas e quiosques, a página lê `expenses` diretamente com [`useFinancialCollection`](../../../src/features/financial/hooks/use-financial-collection.tsx). O hook [`useFinancialDashboardIndicators`](../../../src/features/financial/hooks/use-dashboard-indicators.ts) lê **novamente** `expenses`, além de `transactions` e `payments`, e calcula indicadores no cliente. Cada leitura direta usa `getDocs` da coleção inteira; o fallback [`GET /api/financial/data`](../../../src/app/api/financial/data/route.ts) também lê coleção inteira após checagem de caminho.
 
 O hook soma despesas abertas, vencimentos em 30 dias, receita de transações de entrada, saídas e pagamentos reportados, e calcula `dre` e `cash` por fórmulas locais. A [página](../../../src/features/financial/pages/financial-dashboard-page.tsx) filtra listas de despesas por competência, vencimento, fornecedor, status e plano de contas **após** o carregamento. O indicador local chamado `dre` não deve ser tratado como equivalente à [DRE detalhada](dre.md) sem comparar fontes, exclusões e períodos; o mesmo vale para o saldo frente ao [fluxo de caixa](cash-flow.md).
 
