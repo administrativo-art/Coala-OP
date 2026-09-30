@@ -55,10 +55,10 @@ export function ManagementPage() {
     const data = await api<{ items: Routine[] }>("/api/financial/analysis-routines", { signal });
     if (!signal.aborted) { setRoutines(data.items); setRoutineLoaded(true); }
   }
-  if (!isDefaultAdmin) return <PageContainer><p role="alert">Análises restritas à administração.</p></PageContainer>;
+  if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Análises restritas à administração.</p></PageContainer>;
   const selectClass = "w-full rounded-md border bg-background p-2";
-  return <PageContainer variant="wide" className="space-y-6 py-6">
-    <header><h1 className="text-2xl font-semibold">Coala Financeiro · análise integrada</h1><p>DRE, taxas, caixa, desvios e acompanhamento. Nenhuma decisão financeira automática.</p></header>
+  return <PageContainer variant="wide" surface className="space-y-6 py-6">
+    <header><h1 className="text-2xl font-bold tracking-tight">Coala Financeiro · análise integrada</h1><p className="mt-1 text-sm text-muted-foreground">DRE, taxas, caixa, desvios e acompanhamento. Nenhuma decisão financeira automática.</p></header>
     <FinancialAnalysisNavigation topic="management" />
     <div role="note" className="rounded border p-4">Cobertura parcial e explícita. Recebível não é saldo bancário. Orçamento informado é cenário de análise, não aprovação.</div>
     <Button disabled={busy} variant="outline" onClick={() => task(async signal => {

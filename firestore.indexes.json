@@ -536,6 +536,64 @@
       ]
     },
     {
+      "collectionGroup": "instagramScheduledPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "workspace_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduledAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "instagramScheduledPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "workspace_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "wakeAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "instagramMediaLibrary",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "workspace_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "shifts",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

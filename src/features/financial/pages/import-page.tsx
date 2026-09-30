@@ -1517,11 +1517,15 @@ export function FinancialImportPage({
   showImportControls = true,
   uploadOnly = false,
   onImportComplete,
+  importDialogOpen: controlledImportDialogOpen,
+  onImportDialogOpenChange,
 }: {
   embedded?: boolean;
   showImportControls?: boolean;
   uploadOnly?: boolean;
   onImportComplete?: (sessionId: string) => void;
+  importDialogOpen?: boolean;
+  onImportDialogOpenChange?: (open: boolean) => void;
 } = {}) {
   const { firebaseUser, permissions, user, users } = useAuth();
   const { entities } = useEntities();
@@ -1798,6 +1802,12 @@ export function FinancialImportPage({
   const [supplierSearch, setSupplierSearch] = useState("");
   const [reopenItemId, setReopenItemId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState("");
+  const [localImportDialogOpen, setLocalImportDialogOpen] = useState(false);
+  const importDialogOpen = controlledImportDialogOpen ?? localImportDialogOpen;
+  const setImportDialogOpen = useCallback((open: boolean) => {
+    setLocalImportDialogOpen(open);
+    onImportDialogOpenChange?.(open);
+  }, [onImportDialogOpenChange]);
   const [closeStatementDialogOpen, setCloseStatementDialogOpen] = useState(false);
   const visibleOpenSessions = useMemo(
     () =>
@@ -4037,6 +4047,7 @@ export function FinancialImportPage({
     selectedSessionCounts.all > 0 &&
     selectedSessionCounts.pending === 0 &&
     selectedSessionCounts.audited === 0;
+  const statementPendingCount = selectedSessionCounts.pending + selectedSessionCounts.audited;
 
   const statementSteps = selectedSession
     ? [
@@ -4048,12 +4059,7 @@ export function FinancialImportPage({
         },
         {
           label: "Auditar",
-          meta:
-            selectedSessionCounts.pending + selectedSessionCounts.audited > 0
-              ? `${selectedSessionCounts.pending + selectedSessionCounts.audited} pendente${
-                  selectedSessionCounts.pending + selectedSessionCounts.audited === 1 ? "" : "s"
-                }`
-              : "cadastros completos",
+          meta: `${statementPendingCount}/${selectedSessionCounts.all}`,
           done: selectedSessionCounts.pending === 0 && selectedSessionCounts.audited === 0,
         },
         {
@@ -4064,27 +4070,6 @@ export function FinancialImportPage({
       ]
     : [];
   const statementCurrentStepIndex = statementSteps.findIndex((step) => !step.done);
-
-  const statementCloseChecklist = selectedSession
-    ? [
-        {
-          label: "Auditoria concluída",
-          meta:
-            selectedSessionCounts.pending === 0
-              ? "Nenhum item com cadastro incompleto."
-              : `${selectedSessionCounts.pending} item(ns) exigem auditoria.`,
-          ok: selectedSessionCounts.pending === 0,
-        },
-        {
-          label: "Fila de conciliação vazia",
-          meta:
-            selectedSessionCounts.audited === 0
-              ? "Todos os itens conferidos já foram conciliados."
-              : `${selectedSessionCounts.audited} item(ns) aguardando conciliação.`,
-          ok: selectedSessionCounts.audited === 0,
-        },
-      ]
-    : [];
 
   if (!canViewAudits) {
     return (
@@ -4109,48 +4094,10 @@ export function FinancialImportPage({
           </div> : null}
           <div className="flex flex-wrap items-end gap-2">
             {canImportAudits ? (
-              <>
-                <Select value={fileType} onValueChange={(value) => setFileType(value as "ofx" | "csv")}>
-                  <SelectTrigger className="h-9 w-[92px] rounded-xl text-xs font-semibold uppercase">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ofx">OFX</SelectItem>
-                    <SelectItem value="csv">CSV</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={statementAccountId || "none"}
-                  onValueChange={(value) => setStatementAccountId(value === "none" ? "" : value)}
-                >
-                  <SelectTrigger className="h-9 w-[240px] rounded-xl text-xs">
-                    <SelectValue placeholder="Conta do extrato" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Conta do extrato…</SelectItem>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {getAccountOptionLabel(account, unitNameById)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </>
-            ) : null}
-            {canImportAudits ? (
               <Button
                 size="sm"
                 className="h-9 rounded-xl"
-                onClick={() => {
-                  if (!statementAccountId) {
-                    toast({
-                      variant: "destructive",
-                      title: "Selecione a conta vinculada ao extrato antes de importar.",
-                    });
-                    return;
-                  }
-                  fileRef.current?.click();
-                }}
+                onClick={() => setImportDialogOpen(true)}
                 disabled={isProcessing}
               >
                 <Upload className="mr-2 h-4 w-4" />
@@ -4176,6 +4123,60 @@ export function FinancialImportPage({
         }}
       />
 
+      <AlertDialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <AlertDialogContent className="rounded-2xl sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Importar extrato bancário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Informe o formato do arquivo e a conta bancária à qual o extrato pertence.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-4 py-2 sm:grid-cols-[120px_minmax(0,1fr)]">
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Formato</p>
+              <Select value={fileType} onValueChange={(value) => setFileType(value as "ofx" | "csv")}>
+                <SelectTrigger className="h-10 rounded-xl text-xs font-semibold uppercase">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ofx">OFX</SelectItem>
+                  <SelectItem value="csv">CSV</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Conta do extrato</p>
+              <Select
+                value={statementAccountId || "none"}
+                onValueChange={(value) => setStatementAccountId(value === "none" ? "" : value)}
+              >
+                <SelectTrigger className="h-10 rounded-xl text-xs">
+                  <SelectValue placeholder="Selecione a conta" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Selecione a conta…</SelectItem>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {getAccountOptionLabel(account, unitNameById)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!statementAccountId || isProcessing}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Selecionar arquivo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {selectedSession ? (
         <div className="space-y-3">
           {/* Competência + contas bancárias do mês */}
@@ -4189,7 +4190,10 @@ export function FinancialImportPage({
               onNext={() => goToAdjacentMonth(1)}
             />
 
-            <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(280px,0.8fr)_minmax(520px,1.7fr)]">
+            <div
+              data-ui="statement-overview-grid"
+              className="grid min-w-0 flex-1 gap-3 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.7fr)]"
+            >
               <div className="grid content-start gap-3">
               {monthSessions.map((session) => {
                 const account = accounts.find((entry) => entry.id === session.statementAccountId);
@@ -4197,6 +4201,10 @@ export function FinancialImportPage({
                 const progress = getImportAuditProgress(session.summary);
                 const financials = getSessionFinancialSummary(session);
                 const ready = progress.percentage === 100;
+                const canCloseSession =
+                  session.summary.total > 0 &&
+                  session.summary.pending === 0 &&
+                  session.summary.audited === 0;
                 const cards = canViewCardStatements
                   ? (account?.paymentMethods ?? []).filter((method) => method.type === "credit_card")
                   : [];
@@ -4294,33 +4302,86 @@ export function FinancialImportPage({
                       />
                     </div>
                     </button>
-                    {cards.length > 0 ? (
-                      <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3">
-                        {cards.map((method) => (
-                          <Button
-                            key={method.id}
-                            asChild
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-full justify-start rounded-lg px-2.5 text-[10.5px]"
-                          >
-                            <Link
-                              href={cardStatementsHref({
-                                monthKey: sessionMonthKey,
-                                accountId: session.statementAccountId,
-                                paymentMethodId: method.id,
-                                returnTo: `${FINANCIAL_ROUTES.bankStatements}?session=${encodeURIComponent(session.id)}`,
-                              })}
+                    <div
+                      data-ui="statement-card-actions"
+                      className={cn(
+                        "mt-3 grid gap-1.5 border-t border-border/60 pt-3",
+                        cards.length > 0 && "sm:grid-cols-2"
+                      )}
+                    >
+                      {cards.length > 0 ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              data-ui="statement-card-selector"
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-full justify-start rounded-lg px-2.5 text-[10.5px]"
                             >
-                              <CreditCard className="mr-2 h-3.5 w-3.5" />
-                              <span className="truncate">
-                                Auditar {method.label || "cartão"}{method.lastDigits ? ` · final ${method.lastDigits}` : ""}
-                              </span>
-                            </Link>
-                          </Button>
-                        ))}
-                      </div>
-                    ) : null}
+                              <CreditCard className="h-3.5 w-3.5" />
+                              <span className="truncate">Conciliar cartão</span>
+                              <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-[min(320px,calc(100vw-2rem))] rounded-xl p-2">
+                            <p className="px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                              Selecione o cartão
+                            </p>
+                            <div className="mt-1 grid gap-1">
+                              {cards.map((method) => (
+                                <Button
+                                  key={method.id}
+                                  asChild
+                                  variant="ghost"
+                                  className="h-auto min-h-10 w-full justify-start rounded-lg px-2.5 py-2 text-left"
+                                >
+                                  <Link
+                                    href={cardStatementsHref({
+                                      monthKey: sessionMonthKey,
+                                      accountId: session.statementAccountId,
+                                      paymentMethodId: method.id,
+                                      returnTo: `${FINANCIAL_ROUTES.bankStatements}?session=${encodeURIComponent(session.id)}`,
+                                    })}
+                                  >
+                                    <CreditCard className="h-4 w-4 shrink-0" />
+                                    <span className="min-w-0">
+                                      <span className="block truncate text-[11px] font-semibold">
+                                        {method.label || "Cartão de crédito"}
+                                      </span>
+                                      <span className="block truncate text-[9.5px] font-normal text-muted-foreground">
+                                        {method.lastDigits ? `Final ${method.lastDigits}` : "Cartão vinculado à conta"}
+                                      </span>
+                                    </span>
+                                  </Link>
+                                </Button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      ) : null}
+                      <Button
+                        data-ui="statement-card-close"
+                        type="button"
+                        variant={canCloseSession ? "default" : "outline"}
+                        size="sm"
+                        className="h-8 w-full rounded-lg px-2.5 text-[10.5px] font-bold"
+                        disabled={!canManageAudits || isProcessing || !canCloseSession}
+                        title={
+                          !canManageAudits
+                            ? "Seu perfil não pode fechar extratos."
+                            : !canCloseSession
+                              ? "Concilie ou ignore todos os itens antes de fechar."
+                              : "Consolidar e fechar este extrato."
+                        }
+                        onClick={() => {
+                          handleSelectSession(session);
+                          setCloseStatementDialogOpen(true);
+                        }}
+                      >
+                        Fechar extrato
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -4330,53 +4391,9 @@ export function FinancialImportPage({
                 data-ui="statement-reconciliation-summary"
                 className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[14px] font-bold tracking-tight">Conciliação</h3>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "rounded-full px-2 py-0 text-[9px] font-semibold",
-                      statementProgress.percentage === 100
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-amber-200 bg-amber-50 text-amber-700"
-                    )}
-                  >
-                    {statementProgress.percentage === 100
-                      ? "Pronto para fechar"
-                      : `${statementProgress.percentage}% resolvido`}
-                  </Badge>
-                </div>
+                <h3 className="text-[14px] font-bold tracking-tight">Resumo do extrato</h3>
 
-                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(180px,0.65fr)_minmax(280px,1fr)]">
-                  <div>
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[11px] text-muted-foreground">Conciliadas ou ignoradas</span>
-                      <span className="font-mono text-[13px] font-bold">
-                        {statementProgress.treated} de {statementProgress.total}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          "h-full",
-                          statementProgress.percentage === 100 ? "bg-emerald-500" : "bg-primary"
-                        )}
-                        style={{ width: `${statementProgress.percentage}%` }}
-                      />
-                      <div
-                        className="h-full bg-[repeating-linear-gradient(135deg,#f6cfe4,#f6cfe4_4px,#f0eae4_4px,#f0eae4_8px)]"
-                        style={{ width: `${100 - statementProgress.percentage}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-baseline justify-between">
-                      <span className="text-[11px] text-muted-foreground">Pendentes</span>
-                      <span className="font-mono text-[13px] font-bold text-amber-600">
-                        {statementProgress.total - statementProgress.treated}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-emerald-950/30">
                       <p className="text-[9.5px] font-semibold text-emerald-700/80 dark:text-emerald-400/80">Entradas</p>
                       <p className="mt-0.5 font-mono text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
@@ -4399,35 +4416,6 @@ export function FinancialImportPage({
                       <span className="text-[10.5px] text-muted-foreground">Unidade</span>
                       <span className="text-[10.5px] font-semibold text-foreground">{statementUnitName || "Não vinculada"}</span>
                     </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-2 border-t border-border/60 pt-3 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-end">
-                  <div>
-                    <p className="text-[8.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Para fechar o extrato</p>
-                    <div className="mt-1 grid gap-1 sm:grid-cols-2">
-                      {statementCloseChecklist.map((entry) => (
-                        <div key={entry.label} className="flex items-start gap-2 rounded-lg bg-muted/30 px-2.5 py-2">
-                          <span className={cn("mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-bold text-white", entry.ok ? "bg-emerald-500" : "bg-amber-500")}>
-                            {entry.ok ? <Check className="h-3 w-3" /> : "!"}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-semibold">{entry.label}</p>
-                            <p className="mt-0.5 text-[9.5px] text-muted-foreground">{entry.meta}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    className="h-10 w-full rounded-xl text-[12px] font-bold"
-                    onClick={() => setCloseStatementDialogOpen(true)}
-                    disabled={!canManageAudits || isProcessing || !canCloseStatement}
-                    title={!canCloseStatement ? "Concilie ou ignore todos os itens antes de fechar." : "Consolidar e fechar este extrato."}
-                  >
-                    Fechar extrato
-                  </Button>
                 </div>
               </div>
             </div>

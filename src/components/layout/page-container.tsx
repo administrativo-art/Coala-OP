@@ -16,6 +16,7 @@ type PageContainerProps<TElement extends ElementType = "div"> = {
   children: ReactNode;
   className?: string;
   variant?: PageContainerVariant;
+  surface?: boolean;
 } & Omit<ComponentPropsWithoutRef<TElement>, "as" | "children" | "className">;
 
 export function PageContainer<TElement extends ElementType = "div">({
@@ -23,13 +24,19 @@ export function PageContainer<TElement extends ElementType = "div">({
   children,
   className,
   variant = "default",
+  surface = false,
   ...props
 }: PageContainerProps<TElement>) {
   const Component = as ?? "div";
 
   return (
     <Component
-      className={cn("mx-auto w-full min-w-0", PAGE_CONTAINER_WIDTH_CLASS[variant], className)}
+      className={cn(
+        "mx-auto w-full min-w-0",
+        PAGE_CONTAINER_WIDTH_CLASS[variant],
+        surface && "financial-page-surface rounded-[22px] bg-[#f4f2ec] p-4 shadow-sm sm:p-6",
+        className
+      )}
       {...props}
     >
       {children}
