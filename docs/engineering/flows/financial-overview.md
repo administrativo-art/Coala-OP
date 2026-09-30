@@ -28,4 +28,4 @@ A [verificação por grupo](../flow-verification.md) aponta testes disponíveis 
 
 ## Inicialização e permissões
 
-O [bootstrap financeiro](../../../src/app/api/financial/bootstrap/route.ts) tenta sincronizar claims antes do documento financeiro do usuário. O bootstrap ainda tenta transportar a matriz financeira nos claims nesta base. A correção local F07 não foi integrada; ver [acesso de pessoas](people-access.md). Isso não comprova os indicadores ou recortes contábeis deste painel.
+O [bootstrap financeiro](../../../src/app/api/financial/bootstrap/route.ts) grava o documento financeiro do usuário (`users/{uid}` no banco financeiro) e remove do token o claim `financial` legado; as permissões financeiras não trafegam em claims (ver [acesso de pessoas](people-access.md)). Isso não comprova os indicadores ou recortes contábeis deste painel.

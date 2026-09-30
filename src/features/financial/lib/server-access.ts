@@ -9,7 +9,6 @@ type DecodedLike = {
   uid?: string;
   profileId?: unknown;
   isDefaultAdmin?: unknown;
-  financial?: unknown;
 };
 
 function mergeRecursive(target: Record<string, unknown>, source: Record<string, unknown>) {
@@ -102,17 +101,10 @@ export async function resolveFinancialPermissions(decoded: DecodedLike) {
     lookupError = error instanceof Error ? error.message : "Falha ao ler permissões do OP.";
   }
 
-  const tokenFinancialPermissions =
-    decoded.financial &&
-    typeof decoded.financial === "object" &&
-    !Array.isArray(decoded.financial)
-      ? (decoded.financial as PermissionSet["financial"])
-      : null;
-
   const permissions =
     profilePermissions || isDefaultAdmin
       ? buildPermissions(profilePermissions, isDefaultAdmin)
-      : tokenFinancialPermissions;
+      : null;
 
   return {
     isDefaultAdmin,
