@@ -18,7 +18,7 @@ const fact = (source: "pdv" | "stone", overrides: Partial<SalesMatchFact> = {}):
 });
 const pair = (p: Partial<SalesMatchFact> = {}, s: Partial<SalesMatchFact> = {}) => match({ pdvFacts: [fact("pdv", p)], stoneSales: [fact("stone", s)] });
 
-test("adapts real XML and PDV envelopes without writes, bank confirmation or auto approval", () => {
+test("adapts real XML and PDV envelopes and auto-checks a unique compatible pair without writes or bank confirmation", () => {
   const result = review();
   assert.equal(result.stoneSales[0].grossAmountCents, 600);
   assert.equal(result.stoneSales[0].id, "000123");
@@ -26,10 +26,11 @@ test("adapts real XML and PDV envelopes without writes, bank confirmation or aut
   assert.equal(result.pdvFacts[0].status, "pending");
   assert.equal(result.cases[0].matchBasis, "unique_amount_time");
   assert.equal(result.cases[0].confidence, "medium");
-  assert.equal(result.cases[0].reviewStatus, "pending_review");
+  assert.equal(result.cases[0].kind, "matched");
+  assert.equal(result.cases[0].reviewStatus, "auto_checked");
   assert.equal(result.coverage, "partial");
   assert.equal(result.bankReceiptConfirmed, false);
-  assert.doesNotMatch(JSON.stringify(result), /private-card|CardNumber|matched_auto/);
+  assert.doesNotMatch(JSON.stringify(result), /private-card|CardNumber/);
 });
 
 test("exact cents accepts trailing zeros and refuses rounding, locale ambiguity and unsafe integers", () => {
@@ -67,7 +68,7 @@ test("PDV aliases, cash change and divided payments retain payment-level evidenc
   assert.deepEqual(result.pdvFacts.map(f => f.grossAmountCents), [300, 100]);
   assert.equal(result.issues.length, 0);
   assert.equal(new Set(result.pdvFacts.map(f => f.id)).size, 2);
-  assert.equal(result.cases[0].reviewStatus, "pending_review");
+  assert.equal(result.cases[0].reviewStatus, "attention_required");
 });
 
 test("conflicting aliases and payment totals are explicit issues", () => {
@@ -87,10 +88,10 @@ test("unknown channels, invalid dates and out-of-day rows remain visible issues"
 
 test("cancellation, refund and item cancellation are not all collapsed into approved or fully cancelled", () => {
   for (const [extra, status] of [[{ IsCancelado: true }, "cancelled"], [{ IsEstornado: 1 }, "refunded"],
-    [{ IsCancelado: true, Itens: [{ IsCancelado: true }] }, "pending"]] as const) {
+    [{ IsCancelado: true, Itens: [{ IsCancelado: true }] }, "partial_cancellation"]] as const) {
     const result = review([coupon(extra)]);
     assert.equal(result.pdvFacts[0].status, status);
-    assert.equal(result.cases[0].reviewStatus, "pending_review");
+    assert.equal(result.cases[0].reviewStatus, "attention_required");
   }
 });
 
@@ -132,7 +133,7 @@ test("all bounds reject the whole input, never truncate to a misleading partial 
   assert.throws(() => match({ pdvFacts: [], stoneSales: [], timeWindowMs: 999999 }));
 });
 
-test("exact provider ID explains amount/status/unit discrepancies but does not auto-approve", () => {
+test("exact provider ID auto-checks a compatible pair and exposes amount/status/unit divergences", () => {
   const identifiers = { providerTransactionId: "000123" };
   assert.equal(pair({ identifiers }, { identifiers, grossAmountCents: 500 })[0].kind, "amount_mismatch");
   assert.equal(pair({ identifiers }, { identifiers, status: "refunded" })[0].kind, "status_mismatch");
@@ -141,7 +142,7 @@ test("exact provider ID explains amount/status/unit discrepancies but does not a
   const exact = pair({ identifiers }, { identifiers })[0];
   assert.equal(exact.confidence, "high");
   assert.equal(exact.kind, "matched");
-  assert.equal(exact.reviewStatus, "pending_review");
+  assert.equal(exact.reviewStatus, "auto_checked");
 });
 
 test("punctuation, case and leading zeros in provider IDs are never erased", () => {
@@ -166,12 +167,19 @@ test("coupon number is not assumed to be a Stone merchant order", () => {
   assert.ok(result.every(c => c.matchBasis === "unmatched"));
 });
 
-test("heuristics stay pending and ambiguous same-value sales are not chosen arbitrarily", () => {
+test("a unique amount/time pair is auto-checked while ambiguous same-value sales are not chosen arbitrarily", () => {
   assert.equal(pair()[0].confidence, "medium");
-  assert.equal(pair()[0].reviewStatus, "pending_review");
+  assert.equal(pair()[0].reviewStatus, "auto_checked");
   const result = match({ pdvFacts: [fact("pdv")], stoneSales: [fact("stone"), fact("stone", { id: "s2" })] });
   assert.equal(result[0].kind, "ambiguous");
+  assert.equal(result[0].reviewStatus, "attention_required");
   assert.deepEqual(result[0].stoneSaleIds, ["s2", "stone"]);
+});
+
+test("missing provider status in the PDV is compatible with an approved Stone capture", () => {
+  const result = pair({ status: "pending" }, { status: "approved" })[0];
+  assert.equal(result.kind, "matched");
+  assert.equal(result.reviewStatus, "auto_checked");
 });
 
 test("workspace, date, channel and unit boundaries prevent heuristic cross-matching", () => {

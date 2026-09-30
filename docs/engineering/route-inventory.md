@@ -81,7 +81,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/expiry` | [page.tsx](../../src/app/dashboard/expiry/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx) |
 
-## financial (31)
+## financial (32)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
@@ -116,6 +116,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/financial/sales-reconciliation` | [page.tsx](../../src/app/dashboard/financial/sales-reconciliation/page.tsx) | [review-page.tsx](../../src/features/financial/sales-reconciliation/review-page.tsx) |
 | `dashboard/financial/settings` | [page.tsx](../../src/app/dashboard/financial/settings/page.tsx) | Redireciona para `/dashboard/settings` |
 | `dashboard/financial/stone-anticipations` | [page.tsx](../../src/app/dashboard/financial/stone-anticipations/page.tsx) | [stone-anticipations-page.tsx](../../src/features/financial/pages/stone-anticipations-page.tsx) |
+| `dashboard/financial/stone-receipts` | [page.tsx](../../src/app/dashboard/financial/stone-receipts/page.tsx) | [receipts-page.tsx](../../src/features/financial/receipts-reconciliation/receipts-page.tsx) |
 
 ## forms (6)
 
@@ -330,4 +331,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **158 páginas** no checkout usado para a geração.
+Total: **159 páginas** no checkout usado para a geração.

@@ -5,11 +5,11 @@ continua em `/dashboard/financial/expenses?view=audits`, usando o mesmo
 `FinancialImportPage` embutido, sessões, vínculos, modais e APIs. Acesso antigo por
 Despesas e `/expenses/import` permanece. Não há redirecionamento ou migração.
 
-Conciliação agrupa Extrato bancário, Faturas de cartão e Vendas e recebíveis
-(por enquanto, apenas Antecipações Stone). Fluxo de caixa fica imediatamente abaixo,
-com Visão do caixa e Coala Financeiro. A agenda futura completa não ganha um link
-inoperante: será incluída quando implementada. O agente indica seu escopo atual de
-antecipações, sem prometer DRE, saldo bancário ou carteira completa.
+Conciliação agrupa Extrato bancário, Faturas de cartão, **Conciliação de vendas** e
+**Recebimentos Stone**. O primeiro compara PDV × Stone e abre nas divergências; o
+segundo reúne carteira, antecipações e taxas praticadas sem tratar pagamento Stone
+como crédito bancário. Fluxo de caixa fica imediatamente abaixo, com Visão do caixa,
+Recebíveis e Coala Financeiro.
 
 Faturas de cartão mantém o destino em Contas a pagar e recebe uma segunda entrada
 em `/reconciliation/card-statements`, reutilizando `CardStatementsPage`. O agente
@@ -20,11 +20,11 @@ e Antecipações reutilizam `StoneAnticipationsPage`, sem duplicação de cadast
 - Extrato: `financial.audits.view`; ações continuam nas permissões atuais da auditoria.
 - Faturas: `financial.cardStatements.view`; importar, auditar, fechar e conciliar
   continuam exigindo as permissões específicas existentes no componente e APIs.
-- Antecipações e agente: administrador padrão, tanto no componente quanto nas APIs.
+- Vendas, Recebimentos Stone, antecipações e agente: administrador padrão, tanto nos componentes quanto nas APIs.
 - Visão do caixa: permissões existentes `cashFlow.view`/`financialFlow`.
 - Layout Financeiro mantém `financial.view`. Nenhuma nova permissão ou migração.
-- Zero queries, listeners, polling ou escritas adicionados à sidebar. Entradas novas
-  montam um único componente existente; não pré-carregam um segundo módulo de dados.
+- Zero queries, listeners, polling ou escritas adicionados à sidebar. Recebimentos
+  carrega o catálogo paginado somente por ação e monta taxas apenas após vínculo escolhido.
 
 ## Verificação
 
