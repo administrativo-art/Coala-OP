@@ -120,7 +120,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
-import { expenseDisplayStatus as getExpenseStatusKey, expenseDisplayAmounts, expenseAwaitingConfirmation, expenseCashForecastAmount, showExpenseInOperationalList } from "@/features/financial/lib/expense-display-state";
+import { cardStatementDisplayAmounts, cardStatementHasOverdueBalance, expenseDisplayStatus as getExpenseStatusKey, expenseDisplayAmounts, expenseAwaitingConfirmation, expenseCashForecastAmount, expenseHasOverdueBalance, showExpenseInOperationalList } from "@/features/financial/lib/expense-display-state";
 import { canViewBudgetComparison } from "@/features/financial/budgets/comparison";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
@@ -643,12 +643,16 @@ export function ExpensesPage() {
         }
         const computedStatus = getExpenseStatusKey(expense, now);
 
+        const cardStatementOverdueCandidate = statusFilter === "overdue"
+          && expense.plannedPaymentMethodType === "credit_card";
         const matchesStatus =
           statusFilter === "all" ||
           (statusFilter === "reconciled" && Boolean(expense.reconciledProvisionId)) ||
           (statusFilter === "pending" && ["pending", "due_soon", "overdue"].includes(computedStatus)) ||
+          cardStatementOverdueCandidate ||
+          (statusFilter === "overdue" && expenseHasOverdueBalance(expense, now)) ||
           computedStatus === "pending_audit" && statusFilter === "pending_audit" ||
-          computedStatus === statusFilter;
+          (statusFilter !== "overdue" && computedStatus === statusFilter);
 
         return matchesStatus;
       })
@@ -710,7 +714,12 @@ export function ExpensesPage() {
       statementDateFrom: dateFrom ? new Date(`${dateFrom}T00:00:00`) : null,
       statementDateTo: dateTo ? new Date(`${dateTo}T23:59:59`) : null,
     });
-    return entries.sort((left, right) => {
+    return entries.filter((entry) => {
+      if (statusFilter !== "overdue") return true;
+      return entry.kind === "card_statement"
+        ? cardStatementHasOverdueBalance(entry.statement, startOfDay(new Date()))
+        : expenseHasOverdueBalance(entry.expense, startOfDay(new Date()));
+    }).sort((left, right) => {
       const leftComparable = left.kind === "expense"
         ? left.expense
         : {
@@ -731,7 +740,7 @@ export function ExpensesPage() {
         ? compareExpensesByValue(leftComparable, rightComparable, expenseSort.direction)
         : compareExpensesByDueDateDirection(leftComparable, rightComparable, expenseSort.direction);
     });
-  }, [cardStatementsData, competenceMonth, dateFrom, dateTo, expenseSort, expenses, filtered]);
+  }, [cardStatementsData, competenceMonth, dateFrom, dateTo, expenseSort, expenses, filtered, statusFilter]);
   const scopedDisplayEntryCount = scopedDisplayEntries.length;
   const filteredTotalValue = sumExpenseValues(filteredDisplayEntries,
     (entry) => entry.kind === "expense" ? Number(entry.expense.totalValue) || 0 : entry.statement.totalValue);
@@ -834,30 +843,75 @@ export function ExpensesPage() {
     let reconciledProvisionOpen = 0;
     let auditOpen = 0;
 
-    scopedExpenses.forEach((expense) => {
-      const due = toDate(expense.dueDate);
-      const scopedValue = expenseValueForResultCenter(
-        expense,
-        financialUnitFilter === "all" ? undefined : financialUnitFilter,
-        resultCenterNameById
-      );
-      const amounts = expenseDisplayAmounts(expense);
-      const totalValue = Number(expense.totalValue) || 0;
-      const ratio = totalValue > 0 ? scopedValue / totalValue : 1;
-      const balance = amounts.open * ratio;
-      open += balance;
-      paid += amounts.paid * ratio;
-      if (balance > 0) {
-        if (getExpenseStatusKey(expense, now) === "pending_audit") auditOpen += balance;
-        else if (expense.reconciledProvisionId) reconciledProvisionOpen += balance;
-        else launchedOpen += balance;
+    const scopedExpenseIds = new Set(scopedExpenses.map((expense) => String(expense.id)));
+
+    scopedDisplayEntries.forEach((entry) => {
+      if (entry.kind === "expense") {
+        const expense = entry.expense;
+        const due = toDate(expense.dueDate);
+        const scopedValue = expenseValueForResultCenter(
+          expense,
+          financialUnitFilter === "all" ? undefined : financialUnitFilter,
+          resultCenterNameById
+        );
+        const amounts = expenseDisplayAmounts(expense);
+        const totalValue = Number(expense.totalValue) || 0;
+        const ratio = totalValue > 0 ? scopedValue / totalValue : 1;
+        const balance = amounts.open * ratio;
+        open += balance;
+        paid += amounts.paid * ratio;
+        if (balance > 0) {
+          if (getExpenseStatusKey(expense, now) === "pending_audit") auditOpen += balance;
+          else if (expense.reconciledProvisionId) reconciledProvisionOpen += balance;
+          else launchedOpen += balance;
+        }
+        if (expenseHasOverdueBalance(expense, now)) overdue += balance;
+        if (due && due >= now && due <= in7Days) dueSoon += balance;
+        return;
       }
-      if (due && due < now) overdue += balance;
-      if (due && due >= now && due <= in7Days) dueSoon += balance;
+
+      const statement = entry.statement;
+      const allLineTotal = statement.lines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+      const netScale = allLineTotal > 0 ? statement.totalValue / allLineTotal : 0;
+      const scopedLines = statement.lines.flatMap((line) => {
+        const expense = line.expense;
+        if (!scopedExpenseIds.has(String(expense.id))) return [];
+        const expenseTotal = Number(expense.totalValue) || 0;
+        const unitValue = expenseValueForResultCenter(
+          expense,
+          financialUnitFilter === "all" ? undefined : financialUnitFilter,
+          resultCenterNameById,
+        );
+        const unitRatio = expenseTotal > 0 ? unitValue / expenseTotal : 1;
+        return [{ expense, value: Number(line.amount || 0) * netScale * unitRatio }];
+      });
+      const scopedStatementValue = scopedLines.reduce((sum, line) => sum + line.value, 0);
+      const amounts = cardStatementDisplayAmounts({ ...statement, totalValue: scopedStatementValue });
+      open += amounts.open;
+      paid += amounts.paid;
+      if (amounts.open > 0) {
+        scopedLines.forEach(({ expense, value }) => {
+          if (getExpenseStatusKey(expense, now) === "pending_audit") auditOpen += value;
+          else if (expense.reconciledProvisionId) reconciledProvisionOpen += value;
+          else launchedOpen += value;
+        });
+      }
+      if (cardStatementHasOverdueBalance({ ...statement, totalValue: scopedStatementValue }, now)) {
+        overdue += amounts.open;
+      }
+      if (statement.dueDate && statement.dueDate >= now && statement.dueDate <= in7Days) {
+        dueSoon += amounts.open;
+      }
     });
 
     return { open, launchedOpen, reconciledProvisionOpen, auditOpen, overdue, paid, dueSoon, pendingAudit: pendingAuditValue };
-  }, [financialUnitFilter, pendingAuditValue, resultCenterNameById, scopedExpenses]);
+  }, [financialUnitFilter, pendingAuditValue, resultCenterNameById, scopedDisplayEntries, scopedExpenses]);
+
+  const openDisplayEntryCount = useMemo(() => scopedDisplayEntries.filter((entry) => (
+    entry.kind === "card_statement"
+      ? cardStatementDisplayAmounts(entry.statement).open > 0
+      : expenseDisplayAmounts(entry.expense).open > 0
+  )).length, [scopedDisplayEntries]);
 
   useEffect(() => {
     if (loading || !expandedExpenseId) return;
@@ -999,7 +1053,7 @@ export function ExpensesPage() {
 
       <KpiFlowStrip
         kpis={kpis}
-        openCount={scopedExpenses.filter((expense) => expenseDisplayAmounts(expense).open > 0).length}
+        openCount={openDisplayEntryCount}
         auditCount={pendingAuditCount}
         auditActive={statusFilter === "pending_audit"}
         onAuditClick={() => setStatusFilter("pending_audit")}

@@ -61,6 +61,39 @@ test("mantém despesas que não pertencem a uma fatura como linhas independentes
   assert.deepEqual(entries, [{ kind: "expense", expense: ordinaryExpense }]);
 });
 
+test("documento vazio da competência não apaga as linhas projetadas da fatura", () => {
+  const projected = {
+    id: "uber-setembro",
+    description: "Corrida por aplicativo - 04/09/2026 | Uber",
+    supplier: "Uber",
+    totalValue: 12.81,
+    status: "pending",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    plannedPaymentMethodLabel: "Cartão Crédito Inter - 1127",
+    cardStatementKey: "inter:card-1127:2026-09",
+    cardStatementMonthKey: "2026-09",
+    competenceDate: new Date("2026-09-01T12:00:00-03:00"),
+    dueDate: new Date("2026-10-12T12:00:00-03:00"),
+  };
+  const entries = groupExpensesByCardStatement([projected], {
+    statements: [{
+      id: "inter__card-1127__2026-09",
+      key: "inter:card-1127:2026-09",
+      monthKey: "2026-09",
+      status: "open",
+      allocations: [],
+    }],
+  });
+
+  assert.equal(entries[0]?.kind, "card_statement");
+  if (entries[0]?.kind !== "card_statement") return;
+  assert.equal(entries[0].statement.official, false);
+  assert.equal(entries[0].statement.lineCount, 1);
+  assert.equal(entries[0].statement.totalValue, 12.81);
+});
+
 test("separa o histórico anterior à DRE da fila de auditoria", () => {
   const entries = groupExpensesByCardStatement([{
     id: "historical-charge",

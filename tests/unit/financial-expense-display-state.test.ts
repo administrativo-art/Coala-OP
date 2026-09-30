@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expenseCashForecastAmount, expenseDisplayAmounts, expenseDisplayStatus, showExpenseInOperationalList } from "../../src/features/financial/lib/expense-display-state";
+import { cardStatementDisplayAmounts, cardStatementHasOverdueBalance, expenseCashForecastAmount, expenseDisplayAmounts, expenseDisplayStatus, expenseHasOverdueBalance, showExpenseInOperationalList } from "../../src/features/financial/lib/expense-display-state";
 import { buildExpenseLifecycleData } from "../../src/features/financial/lib/cash-flow-analysis";
 
 const now = new Date("2026-09-27T12:00:00-03:00");
@@ -33,6 +33,47 @@ test("vencimento é data de Belém e mantém auditoria e pagamento reportado sep
   assert.equal(expenseDisplayStatus({ ...pending, dueDate: "2026-09-28" }, now), "pending");
   assert.equal(expenseDisplayStatus({ ...pending, paymentState: "reported_paid" }, now), "reported_paid");
   assert.equal(expenseDisplayStatus({ ...pending, originModule: "purchasing", originStatus: "pending_audit" }, now), "pending_audit");
+});
+
+test("saldo vencido independe do rótulo principal usado na linha", () => {
+  const partial = {
+    status: "partially_paid",
+    totalValue: 500,
+    dueDate: "2026-09-26",
+    settlementSummary: { balanceAmountCents: 40000, principalSettledAmountCents: 10000 },
+  };
+  const pendingAudit = {
+    status: "pending",
+    originModule: "purchasing",
+    originStatus: "pending_audit",
+    totalValue: 250,
+    dueDate: "2026-09-26",
+  };
+
+  assert.equal(expenseDisplayStatus(partial, now), "partially_paid");
+  assert.equal(expenseHasOverdueBalance(partial, now), true);
+  assert.equal(expenseDisplayStatus(pendingAudit, now), "pending_audit");
+  assert.equal(expenseHasOverdueBalance(pendingAudit, now), true);
+  assert.equal(expenseHasOverdueBalance({ ...partial, dueDate: "2026-09-27" }, now), false);
+  assert.equal(expenseHasOverdueBalance({ ...partial, settlementSummary: { balanceAmountCents: 0 } }, now), false);
+});
+
+test("fatura paga não transforma o saldo futuro da compra parcelada em vencido", () => {
+  const paidStatement = {
+    status: "paid",
+    dueDate: "2026-09-12",
+    totalValue: 195.10,
+  };
+  const futureStatement = {
+    status: "open",
+    dueDate: "2026-10-12",
+    totalValue: 195.10,
+  };
+
+  assert.deepEqual(cardStatementDisplayAmounts(paidStatement), { open: 0, paid: 195.10 });
+  assert.equal(cardStatementHasOverdueBalance(paidStatement, now), false);
+  assert.deepEqual(cardStatementDisplayAmounts(futureStatement), { open: 195.10, paid: 0 });
+  assert.equal(cardStatementHasOverdueBalance(futureStatement, now), false);
 });
 
 test("provisão convertida sai da lista operacional, continua consultável em canceladas", () => {
