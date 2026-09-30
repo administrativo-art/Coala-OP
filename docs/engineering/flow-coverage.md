@@ -25,7 +25,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
 | `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
-| `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e KPIs cobertos por contratos locais; verificação integrada pendente |
+| `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
 | `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — percurso complementado; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |

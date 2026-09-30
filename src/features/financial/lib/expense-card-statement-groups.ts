@@ -212,6 +212,10 @@ function statementMap(statements: ExpenseCardStatementDocument[]) {
   return byIdentity;
 }
 
+function statementHasOfficialComposition(statement: ExpenseCardStatementDocument | undefined) {
+  return Boolean(statement && Array.isArray(statement.allocations) && statement.allocations.length > 0);
+}
+
 function installmentLines<T extends GroupableCardExpense>(
   expense: T,
   identity: StatementIdentity,
@@ -368,10 +372,10 @@ export function groupExpensesByCardStatement<T extends GroupableCardExpense>(
     let groupedExpense = false;
     let matchedStatementPeriod = false;
     identities.forEach((identity) => {
-      const officialStatement = statements.get(identity.key) ?? statements.get(identity.statementId);
-      if (!statementIdentityMatchesPeriod(identity, officialStatement ?? null, options)) return;
+      const statementDocument = statements.get(identity.key) ?? statements.get(identity.statementId);
+      if (!statementIdentityMatchesPeriod(identity, statementDocument ?? null, options)) return;
       matchedStatementPeriod = true;
-      if (!officialStatement && !cardExpenseIsActiveStatementLine(expense)) return;
+      if (!statementHasOfficialComposition(statementDocument) && !cardExpenseIsActiveStatementLine(expense)) return;
       groupedExpense = true;
       const current = grouped.get(identity.key);
       if (current) {
@@ -393,7 +397,8 @@ export function groupExpensesByCardStatement<T extends GroupableCardExpense>(
   return ordered.map((entry) => {
     if (entry.kind === "expense") return entry;
     const group = grouped.get(entry.key)!;
-    const officialStatement = statements.get(group.identity.key) ?? statements.get(group.identity.statementId);
+    const statementDocument = statements.get(group.identity.key) ?? statements.get(group.identity.statementId);
+    const officialStatement = statementHasOfficialComposition(statementDocument) ? statementDocument : undefined;
     return {
       kind: "card_statement",
       statement: officialStatement

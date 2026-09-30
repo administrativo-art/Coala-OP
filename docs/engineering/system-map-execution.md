@@ -33,6 +33,8 @@ Atualização local de 2026-09-27: extratos e faturas compartilham o navegador d
 
 Atualização local de 2026-09-27: o padrão visual do Extrato foi estendido às superfícies do Financeiro, com largura centralizada, retorno canônico e navegação lateral coerente. Em Despesas, auditoria tornou-se filtro contextual, o período é explícito e a faixa única de KPIs fecha `Total do período = Pago + A pagar`; a rota dedicada antiga apenas redireciona. Contratos de UI, navegação e documentação foram executados sem navegador; o grupo continua Traçado porque a homologação integrada dos motores financeiros permanece pendente.
 
+Atualização local de 2026-09-30: o KPI e o filtro de despesas vencidas passaram a compartilhar a obrigação exibida. Para cartão, o cálculo ocorre por parcela/fatura: a conciliação de uma fatura paga não transforma o saldo futuro da compra parcelada em atraso. A competência do cartão também passou a fechar e vencer no ciclo seguinte; no Inter 5/12, setembro fecha em 05/10 e vence em 12/10. Os contratos possuem testes unitários; a homologação integrada do Financeiro permanece pendente e o grupo continua Traçado.
+
 Começar pela linha pertinente do [mapa](system-map.md), seguir [harness](investigation-harness.md) e conferir fontes atuais. Usar inventário quando faltar caminho. Registrar o [uso real](map-usage.md) no chamado, sem contadores inventados.
 
 Mudança de página, rota ou export exige regenerar inventário e revisar matriz. Mudança de comportamento, schema, permissão, integração ou consumidor exige atualizar o guia no mesmo trabalho, mesmo se nenhum caminho mudou. Incluir novas dependências e preservar a distinção entre [regra aprovada](business-rules.md) e comportamento implementado. Ver [verificação](verification.md) para os comandos.

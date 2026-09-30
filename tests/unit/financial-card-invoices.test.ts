@@ -25,13 +25,16 @@ const card: CreditCardInstrument = {
   dueDay: 12,
 };
 
-test("atribui compras antes e depois do fechamento às faturas corretas", () => {
+test("mantém compras do mês na mesma competência e vence a fatura no mês seguinte", () => {
   const beforeClosing = resolveCardStatementCycle(new Date(2026, 7, 3, 12), card);
   const afterClosing = resolveCardStatementCycle(new Date(2026, 7, 6, 12), card);
 
   assert.equal(beforeClosing.monthKey, "2026-08");
+  assert.equal(afterClosing.monthKey, "2026-08");
+  assert.equal(beforeClosing.closingDate.getMonth(), 8);
+  assert.equal(beforeClosing.closingDate.getDate(), 5);
+  assert.equal(beforeClosing.dueDate.getMonth(), 8);
   assert.equal(beforeClosing.dueDate.getDate(), 12);
-  assert.equal(afterClosing.monthKey, "2026-09");
 });
 
 test("trata corretamente cartões cujo vencimento ocorre no mês seguinte ao fechamento", () => {
@@ -41,20 +44,20 @@ test("trata corretamente cartões cujo vencimento ocorre no mês seguinte ao fec
     dueDay: 5,
   });
 
-  assert.equal(cycle.monthKey, "2026-09");
-  assert.equal(cycle.closingDate.getMonth(), 7);
-  assert.equal(cycle.dueDate.getMonth(), 8);
+  assert.equal(cycle.monthKey, "2026-08");
+  assert.equal(cycle.closingDate.getMonth(), 8);
+  assert.equal(cycle.dueDate.getMonth(), 9);
 });
 
-test("reconstrói um ciclo vazio a partir do mês de vencimento", () => {
+test("reconstrói um ciclo vazio a partir da competência", () => {
   const cycle = resolveCardStatementCycleFromMonth("2026-09", {
     ...card,
     closingDay: 28,
     dueDay: 5,
   });
 
-  assert.equal(cycle.dueDate.getMonth(), 8);
-  assert.equal(cycle.closingDate.getMonth(), 7);
+  assert.equal(cycle.dueDate.getMonth(), 10);
+  assert.equal(cycle.closingDate.getMonth(), 9);
   assert.equal(cycle.key, "inter:card-1234:2026-09");
 });
 
@@ -113,11 +116,13 @@ test("agrupa despesas recorrentes e parcelas sem transformar a fatura em nova de
   ], [card]);
 
   assert.equal(groups.length, 2);
-  assert.equal(groups[0]?.projectedTotal, 620);
-  assert.equal(groups[0]?.reconciledTotal, 120);
-  assert.equal(groups[0]?.recurringCount, 1);
-  assert.equal(groups[0]?.lines[1]?.installmentNumber, 1);
-  assert.equal(groups[1]?.projectedTotal, 500);
+  const july = groups.find((group) => group.monthKey === "2026-07");
+  const august = groups.find((group) => group.monthKey === "2026-08");
+  assert.equal(july?.projectedTotal, 620);
+  assert.equal(july?.reconciledTotal, 120);
+  assert.equal(july?.recurringCount, 1);
+  assert.equal(july?.lines[1]?.installmentNumber, 1);
+  assert.equal(august?.projectedTotal, 500);
 });
 
 test("usa a fatura explícita da parcela e não reaplica o fechamento sobre seu vencimento", () => {
@@ -145,10 +150,12 @@ test("usa a fatura explícita da parcela e não reaplica o fechamento sobre seu 
   }], [card]);
 
   const august = groups.find((group) => group.monthKey === "2026-08");
-  const october = groups.find((group) => group.monthKey === "2026-10");
-  assert.deepEqual(august?.lines.map((line) => line.installmentNumber), [1, 2]);
-  assert.deepEqual(october?.lines.map((line) => line.installmentNumber), [3]);
-  assert.equal(groups.some((group) => group.monthKey === "2026-11"), false);
+  const july = groups.find((group) => group.monthKey === "2026-07");
+  const september = groups.find((group) => group.monthKey === "2026-09");
+  assert.deepEqual(july?.lines.map((line) => line.installmentNumber), [1]);
+  assert.deepEqual(august?.lines.map((line) => line.installmentNumber), [2]);
+  assert.deepEqual(september?.lines.map((line) => line.installmentNumber), [3]);
+  assert.equal(groups.some((group) => group.monthKey === "2026-10"), false);
 });
 
 test("mantém as oito parcelas em oito faturas quando cada parcela tem competência congelada", () => {
@@ -362,7 +369,7 @@ test("oculta da versão ativa itens removidos sem apagar a despesa histórica", 
   }], [card]);
 
   assert.equal(groups.length, 1);
-  assert.equal(groups[0]?.monthKey, "2026-09");
+  assert.equal(groups[0]?.monthKey, "2026-08");
   assert.equal(groups[0]?.lines.length, 1);
   assert.equal(groups[0]?.lines[0]?.installmentNumber, 2);
 });
