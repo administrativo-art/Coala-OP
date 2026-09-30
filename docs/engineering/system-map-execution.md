@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-09-29, implementação local do workspace editorial do Instagram: calendário e grade usam a fila limitada existente, reagendamento e troca de datas são transacionais e a biblioteca grava mídia privada com autorização no servidor. Contratos, regras e testes locais foram ampliados; não houve navegador, publicação na Meta, escrita em produção nem homologação visual. A mudança não promove os grupos internos para Verificado.
+
 2026-09-27, correção local da preparação de cobrança recebida: a API e a interface passam a exigir CNPJ válido do favorecido, o snapshot de código de barras preserva essa identidade e repetições só reutilizam pedidos integralmente iguais. A CLI autenticada ganhou preparação com preflight da mensagem, mantendo preparação, autorização e envio separados. Testes unitários e E2E em emuladores cobrem identidade, permissão, idempotência e divergência; nenhuma ordem bancária real foi executada nessa validação. Os grupos permanecem Traçados.
 
 2026-09-27, ajuste local de compras no cartão: a sincronização de compras passa a gravar o contrato canônico do cartão e a competência de cada parcela; a listagem projeta parcelas em suas faturas sem duplicar o valor integral. A decisão de negócio e a correção operacional de setembro (VT duplicado e série Odontoprev no último dia do mês) foram registradas nos guias financeiros. Testes focados cobrem cálculo de ciclo e agrupamento; integração completa, interface e publicação continuam pendentes. Os grupos permanecem Traçados.

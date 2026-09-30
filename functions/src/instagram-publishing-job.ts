@@ -4,10 +4,16 @@ import { logger } from "firebase-functions";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
+import {
+  hasAmbiguousInstagramPublish,
+  normalizeInstagramStoryProgress,
+  type InstagramPublicationProgress,
+} from "./instagram-story-sequence.js";
+
 const metaSystemUserToken = defineSecret("META_SYSTEM_USER_TOKEN");
 const metaGraphApiVersion = defineString("META_GRAPH_API_VERSION", { default: "v25.0" });
 
-const db = getFirestore("coala");
+const db = getFirestore("coala-signage");
 const COLLECTION = "instagramScheduledPosts";
 const WORKSPACE_ID = "coala";
 const MAX_ATTEMPTS = 4;
@@ -27,15 +33,11 @@ type PublicationDocument = {
   leaseId?: string;
   caption?: string;
   shareToFeed?: boolean;
+  storyMentions?: string[];
   location?: { id?: string; name?: string } | null;
   media?: MediaItem[];
   attempts?: number;
-  progress?: {
-    childContainerIds?: string[];
-    parentContainerId?: string;
-    publishRequestStartedAt?: Timestamp;
-    publishedMediaId?: string;
-  };
+  progress?: InstagramPublicationProgress<Timestamp>;
 };
 
 class MetaGraphError extends Error {
@@ -135,6 +137,18 @@ function validateDocument(data: PublicationDocument) {
       throw new Error("Mídia inválida no agendamento.");
     }
   }
+  if (data.format === "feed_image" && (data.media.length !== 1 || data.media[0]?.kind !== "image")) {
+    throw new Error("Uma publicação de feed exige exatamente uma imagem.");
+  }
+  if (data.format === "reel" && (data.media.length !== 1 || data.media[0]?.kind !== "video")) {
+    throw new Error("Um Reel exige exatamente um vídeo.");
+  }
+  if (data.format === "carousel" && (data.media.length < 2 || data.media.length > 10)) {
+    throw new Error("Um carrossel exige de duas a dez mídias.");
+  }
+  if (data.format === "story" && data.media.length > 10) {
+    throw new Error("Uma sequência de Stories aceita no máximo dez mídias.");
+  }
 }
 
 async function saveProgress(ref: DocumentReference, leaseId: string, progress: Record<string, unknown>) {
@@ -144,7 +158,14 @@ async function saveProgress(ref: DocumentReference, leaseId: string, progress: R
     if (!data || data.status !== "processing" || data.leaseId !== leaseId) {
       throw new Error("O agendamento perdeu a posse de processamento.");
     }
-    transaction.update(ref, { progress, updatedAt: Timestamp.now() });
+    const now = Timestamp.now();
+    const leaseExpiresAt = Timestamp.fromMillis(now.toMillis() + LEASE_MILLISECONDS);
+    transaction.update(ref, {
+      progress,
+      updatedAt: now,
+      leaseExpiresAt,
+      wakeAt: leaseExpiresAt,
+    });
   });
 }
 
@@ -186,15 +207,7 @@ async function prepareContainer(
     return progress.parentContainerId;
   }
 
-  if (data.format === "story") {
-    const item = media[0]!;
-    progress.parentContainerId = await createContainer(instagramAccountId, token, {
-      media_type: "STORIES",
-      [item.kind === "video" ? "video_url" : "image_url"]: item.deliveryUrl,
-    });
-    await saveProgress(ref, leaseId, progress);
-    return progress.parentContainerId;
-  }
+  if (data.format === "story") throw new Error("Sequências de Stories usam o publicador dedicado.");
 
   const childContainerIds = [...(progress.childContainerIds ?? [])];
   for (let index = childContainerIds.length; index < media.length; index += 1) {
@@ -221,6 +234,80 @@ async function prepareContainer(
   return progress.parentContainerId;
 }
 
+async function publishStorySequence(
+  ref: DocumentReference,
+  data: PublicationDocument,
+  leaseId: string,
+  token: string,
+  publicationState: { requestStarted: boolean },
+) {
+  const progress = normalizeInstagramStoryProgress(data.media!.length, data.progress);
+  const media = data.media!;
+  const storyMentions = (data.storyMentions ?? [])
+    .filter((username) => /^[A-Za-z0-9._]{1,30}$/.test(username))
+    .slice(0, 20);
+
+  for (let index = 0; index < media.length; index += 1) {
+    const item = media[index]!;
+    const itemProgress = progress.storyItems[index]!;
+    if (itemProgress.publishedMediaId) continue;
+
+    if (!itemProgress.containerId) {
+      itemProgress.containerId = await createContainer(data.instagramAccountId!, token, {
+        media_type: "STORIES",
+        [item.kind === "video" ? "video_url" : "image_url"]: item.deliveryUrl,
+        ...(storyMentions.length > 0
+          ? { user_tags: JSON.stringify(storyMentions.map((username) => ({ username }))) }
+          : {}),
+      });
+      await saveProgress(ref, leaseId, progress);
+    }
+
+    await waitForContainer(itemProgress.containerId, token);
+    itemProgress.publishRequestStartedAt = Timestamp.now();
+    await saveProgress(ref, leaseId, progress);
+    publicationState.requestStarted = true;
+
+    const result = await graphRequest<{ id?: string }>(
+      "POST",
+      `${data.instagramAccountId}/media_publish`,
+      token,
+      { creation_id: itemProgress.containerId },
+    );
+    if (!result.id) throw new Error("A Meta não retornou o identificador do Story publicado.");
+
+    itemProgress.publishedMediaId = result.id;
+    itemProgress.publishedAt = Timestamp.now();
+    await saveProgress(ref, leaseId, progress);
+    publicationState.requestStarted = false;
+  }
+
+  const publishedMediaIds = progress.storyItems
+    .map((item) => item.publishedMediaId)
+    .filter((id): id is string => Boolean(id));
+  if (publishedMediaIds.length !== media.length) {
+    throw new Error("A sequência de Stories terminou com itens sem confirmação.");
+  }
+
+  await ref.update({
+    status: "published",
+    publishedAt: Timestamp.now(),
+    publishedMediaId: publishedMediaIds[publishedMediaIds.length - 1],
+    publishedMediaIds,
+    permalink: null,
+    leaseId: null,
+    leaseExpiresAt: null,
+    wakeAt: null,
+    safeError: null,
+    errorEventId: null,
+    updatedAt: Timestamp.now(),
+  });
+  logger.info("[instagramPublishingScheduler] story sequence completed", {
+    scheduleId: ref.id,
+    publishedMediaIds,
+  });
+}
+
 async function claim(ref: DocumentReference) {
   const leaseId = randomUUID();
   const now = Timestamp.now();
@@ -234,7 +321,7 @@ async function claim(ref: DocumentReference) {
     const expiredLease = data.status === "processing" && (data.leaseExpiresAt?.toMillis() ?? 0) <= now.toMillis();
     if (!scheduledReady && !expiredLease) return null;
 
-    if (expiredLease && data.progress?.publishRequestStartedAt && !data.progress.publishedMediaId) {
+    if (expiredLease && hasAmbiguousInstagramPublish(data.progress)) {
       transaction.update(ref, {
         status: "manual_review",
         safeError: "A confirmação da publicação foi interrompida. Verifique o Instagram antes de tentar novamente.",
@@ -327,10 +414,14 @@ async function processPublication(ref: DocumentReference, token: string) {
   const claimed = await claim(ref);
   if (!claimed) return;
   const { data, leaseId } = claimed;
-  let publishStarted = false;
+  const publicationState = { requestStarted: false };
 
   try {
     validateDocument(data);
+    if (data.format === "story") {
+      await publishStorySequence(ref, data, leaseId, token, publicationState);
+      return;
+    }
     const containerId = await prepareContainer(ref, data, leaseId, token);
     await waitForContainer(containerId, token);
 
@@ -340,7 +431,7 @@ async function processPublication(ref: DocumentReference, token: string) {
       publishRequestStartedAt: Timestamp.now(),
     };
     await saveProgress(ref, leaseId, progress);
-    publishStarted = true;
+    publicationState.requestStarted = true;
 
     const result = await graphRequest<{ id?: string }>(
       "POST",
@@ -381,7 +472,7 @@ async function processPublication(ref: DocumentReference, token: string) {
       publishedMediaId: result.id,
     });
   } catch (error) {
-    await recordFailure(ref, leaseId, data, error, publishStarted);
+    await recordFailure(ref, leaseId, data, error, publicationState.requestStarted);
   }
 }
 

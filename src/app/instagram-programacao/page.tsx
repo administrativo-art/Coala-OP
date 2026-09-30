@@ -1,160 +1,127 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AlertCircle,
-  CalendarClock,
-  CheckCircle2,
-  ExternalLink,
-  Film,
-  ImageIcon,
-  Loader2,
-  MapPin,
-  RefreshCw,
-} from "lucide-react";
+import { Loader2, Menu } from "lucide-react";
 
+import { CalendarView } from "@/features/instagram-scheduler/calendar-view";
 import {
-  instagramFormatLabels,
-  instagramStatusLabels,
-  type InstagramPublicationStatus,
-  type InstagramScheduleListItem,
+  CreateScheduleDialog,
+  type CreateInstagramScheduleInput,
+} from "@/features/instagram-scheduler/create-schedule-dialog";
+import type {
+  InstagramMediaLibraryItem,
+  InstagramPublishedFeedItem,
+  InstagramPublishedFeedProfile,
+  InstagramScheduleListItem,
 } from "@/features/instagram-scheduler/contracts";
+import { FeedGridView } from "@/features/instagram-scheduler/feed-grid-view";
+import { MediaLibraryView } from "@/features/instagram-scheduler/media-library-view";
+import { SchedulePostEditor } from "@/features/instagram-scheduler/schedule-post-editor";
+import {
+  InstagramWorkspaceSidebar,
+  type InstagramWorkspaceView,
+} from "@/features/instagram-scheduler/workspace-sidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
+import { dateKeyInBelem } from "@/features/instagram-scheduler/workspace-utils";
 
-type ScheduleResponse = { items?: InstagramScheduleListItem[]; error?: { message?: string } };
-
-const statusClass: Record<InstagramPublicationStatus, string> = {
-  uploading: "border-violet-200 bg-violet-50 text-violet-700",
-  scheduled: "border-sky-200 bg-sky-50 text-sky-700",
-  processing: "border-amber-200 bg-amber-50 text-amber-700",
-  published: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  failed: "border-red-200 bg-red-50 text-red-700",
-  manual_review: "border-orange-200 bg-orange-50 text-orange-700",
-  cancelled: "border-slate-200 bg-slate-100 text-slate-600",
+type ScheduleResponse = { items?: InstagramScheduleListItem[] };
+type MediaResponse = { items?: InstagramMediaLibraryItem[] };
+type PublishedFeedResponse = {
+  items?: InstagramPublishedFeedItem[];
+  profile?: InstagramPublishedFeedProfile;
 };
 
-const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Belem",
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-function formattedDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Horário indisponível" : dateFormatter.format(date);
-}
-
-function fileSize(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function ImagePreview({
-  url,
-  token,
-  alt,
-}: {
-  url: string;
-  token: string | null;
-  alt: string;
-}) {
-  const [source, setSource] = useState<string | null>(null);
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    const controller = new AbortController();
-    let objectUrl: string | null = null;
-
-    void fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Prévia indisponível.");
-        return response.blob();
-      })
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        setSource(objectUrl);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      controller.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [token, url]);
-
-  if (!source) {
-    return (
-      <div className="flex aspect-[4/5] items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-        <Loader2 className="h-5 w-5 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="relative overflow-hidden rounded-2xl bg-slate-100 shadow-inner">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={source}
-          alt={alt}
-          className="aspect-[4/5] w-full object-contain"
-          onLoad={(event) => {
-            setDimensions({
-              width: event.currentTarget.naturalWidth,
-              height: event.currentTarget.naturalHeight,
-            });
-          }}
-        />
-      </div>
-      {dimensions && (
-        <p className="mt-2 text-center text-xs font-semibold text-slate-500">
-          {dimensions.width} × {dimensions.height} px · proporção {(dimensions.width / dimensions.height).toFixed(3)}
-        </p>
-      )}
-    </div>
-  );
-}
+const validViews = new Set<InstagramWorkspaceView>(["calendar", "feed", "media"]);
 
 export default function InstagramProgramacaoPage() {
   const router = useRouter();
+  const request = useAuthenticatedApi();
   const { firebaseUser, isAuthenticated, loading: authLoading, logout } = useAuth();
-  const [items, setItems] = useState<InstagramScheduleListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeView, setActiveView] = useState<InstagramWorkspaceView>("calendar");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [createDate, setCreateDate] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [schedules, setSchedules] = useState<InstagramScheduleListItem[]>([]);
+  const [libraryItems, setLibraryItems] = useState<InstagramMediaLibraryItem[]>([]);
+  const [publishedItems, setPublishedItems] = useState<InstagramPublishedFeedItem[]>([]);
+  const [instagramProfile, setInstagramProfile] = useState<InstagramPublishedFeedProfile | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [publishedLoading, setPublishedLoading] = useState(false);
+  const [publishedLoaded, setPublishedLoaded] = useState(false);
+  const [publishedError, setPublishedError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewToken, setPreviewToken] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const say = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast((current) => current === message ? null : current), 2_800);
+  }, []);
 
   const loadSchedule = useCallback(async () => {
     if (!firebaseUser) return;
-    setLoading(true);
+    setScheduleLoading(true);
     setError(null);
     try {
-      const token = await firebaseUser.getIdToken();
-      setPreviewToken(token);
-      const response = await fetch("/api/integrations/instagram/schedule", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
+      const response = await request<ScheduleResponse>("/api/integrations/instagram/schedule", {
+        fallbackError: "Não foi possível carregar a programação.",
       });
-      const payload = (await response.json().catch(() => null)) as ScheduleResponse | null;
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Não foi possível carregar a programação.");
-      }
-      setItems(payload?.items ?? []);
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Não foi possível carregar a programação.",
-      );
+      setSchedules(response.items ?? []);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar a programação.");
     } finally {
-      setLoading(false);
+      setScheduleLoading(false);
     }
-  }, [firebaseUser]);
+  }, [firebaseUser, request]);
+
+  const loadLibrary = useCallback(async () => {
+    if (!firebaseUser) return;
+    setLibraryLoading(true);
+    setError(null);
+    try {
+      const response = await request<MediaResponse>("/api/integrations/instagram/media", {
+        fallbackError: "Não foi possível carregar a biblioteca.",
+      });
+      setLibraryItems(response.items ?? []);
+      setLibraryLoaded(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar a biblioteca.");
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, [firebaseUser, request]);
+
+  const loadPublishedFeed = useCallback(async () => {
+    if (!firebaseUser) return;
+    setPublishedLoading(true);
+    setPublishedError(null);
+    try {
+      const response = await request<PublishedFeedResponse>("/api/integrations/instagram/feed", {
+        fallbackError: "Não foi possível carregar a grade atual do Instagram.",
+      });
+      setPublishedItems(response.items ?? []);
+      setInstagramProfile(response.profile ?? null);
+      setPublishedLoaded(true);
+    } catch (cause) {
+      setPublishedError(cause instanceof Error ? cause.message : "Não foi possível carregar a grade atual do Instagram.");
+    } finally {
+      setPublishedLoading(false);
+    }
+  }, [firebaseUser, request]);
+
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const requested = search.get("view");
+    if (requested && validViews.has(requested as InstagramWorkspaceView)) {
+      setActiveView(requested as InstagramWorkspaceView);
+    }
+    setEditingId(search.get("post"));
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -164,174 +131,261 @@ export default function InstagramProgramacaoPage() {
     if (!authLoading && firebaseUser) void loadSchedule();
   }, [authLoading, firebaseUser, isAuthenticated, loadSchedule, router]);
 
-  const totals = useMemo(
-    () => ({
-      scheduled: items.filter((item) => item.status === "scheduled").length,
-      published: items.filter((item) => item.status === "published").length,
-      attention: items.filter((item) => ["failed", "manual_review"].includes(item.status)).length,
-    }),
-    [items],
-  );
+  useEffect(() => {
+    if (activeView === "media" && firebaseUser && !libraryLoaded && !libraryLoading) {
+      void loadLibrary();
+    }
+  }, [activeView, firebaseUser, libraryLoaded, libraryLoading, loadLibrary]);
 
-  if (authLoading || (!isAuthenticated && loading)) {
+  useEffect(() => {
+    if (activeView === "feed" && firebaseUser && !publishedLoaded && !publishedLoading) {
+      void loadPublishedFeed();
+    }
+  }, [activeView, firebaseUser, loadPublishedFeed, publishedLoaded, publishedLoading]);
+
+  useEffect(() => {
+    if (createDate && firebaseUser && !publishedLoaded && !publishedLoading) {
+      void loadPublishedFeed();
+    }
+  }, [createDate, firebaseUser, loadPublishedFeed, publishedLoaded, publishedLoading]);
+
+  function selectView(view: InstagramWorkspaceView) {
+    setActiveView(view);
+    setEditingId(null);
+    setMobileOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", view);
+    url.searchParams.delete("post");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }
+
+  function openEditor(item: InstagramScheduleListItem) {
+    setEditingId(item.id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", activeView);
+    url.searchParams.set("post", item.id);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }
+
+  function closeEditor() {
+    setEditingId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("post");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }
+
+  async function mutateSchedule(
+    id: string,
+    body: { scheduledAt?: string; mediaOrder?: number[] } | { swapWithId: string },
+  ) {
+    setError(null);
+    await request(`/api/integrations/instagram/schedule/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      json: body,
+      fallbackError: "Não foi possível alterar o agendamento.",
+    });
+    await loadSchedule();
+  }
+
+  async function reschedule(id: string, scheduledAt: string) {
+    try {
+      await mutateSchedule(id, { scheduledAt });
+      say("Data e horário atualizados com segurança.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível alterar o agendamento.");
+      return false;
+    }
+  }
+
+  async function updateSchedule(
+    id: string,
+    changes: { scheduledAt?: string; mediaOrder?: number[] },
+  ) {
+    try {
+      await mutateSchedule(id, changes);
+      say(changes.mediaOrder
+        ? "Ordem dos Stories e agendamento atualizados."
+        : "Data e horário atualizados com segurança.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível alterar o agendamento.");
+      return false;
+    }
+  }
+
+  async function swapSchedules(id: string, swapWithId: string) {
+    try {
+      await mutateSchedule(id, { swapWithId });
+      say("As datas das publicações foram trocadas.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível trocar as datas.");
+    }
+  }
+
+  async function uploadFiles(files: File[], folder: string) {
+    if (!files.length) return;
+    setUploading(true);
+    setError(null);
+    let completed = 0;
+    try {
+      for (const file of files) {
+        const form = new FormData();
+        form.set("file", file);
+        form.set("folder", folder);
+        await request("/api/integrations/instagram/media", {
+          method: "POST",
+          body: form,
+          fallbackError: `Não foi possível enviar ${file.name}.`,
+        });
+        completed += 1;
+      }
+      await loadLibrary();
+      say(completed === 1 ? "Arquivo adicionado à biblioteca." : `${completed} arquivos adicionados à biblioteca.`);
+    } catch (cause) {
+      if (completed > 0) await loadLibrary();
+      setError(cause instanceof Error ? cause.message : "Não foi possível concluir o upload.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function createSchedule(input: CreateInstagramScheduleInput) {
+    setCreating(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("format", input.format);
+      form.set("scheduledAt", input.scheduledAt);
+      form.set("caption", input.caption);
+      form.set("shareToFeed", String(input.shareToFeed));
+      form.set("storyMentions", JSON.stringify(input.storyMentions));
+      if (input.location) {
+        form.set("locationId", input.location.id);
+        form.set("locationName", input.location.name);
+      }
+      input.files.forEach((file) => form.append("media", file));
+      await request("/api/integrations/instagram/schedule", {
+        method: "POST",
+        body: form,
+        fallbackError: "Não foi possível criar o agendamento.",
+      });
+      await loadSchedule();
+      setCreateDate(null);
+      say(input.format === "story" && input.files.length > 1
+        ? `Sequência com ${input.files.length} Stories agendada.`
+        : "Publicação agendada.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível criar o agendamento.");
+      return false;
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  if (authLoading || (!isAuthenticated && scheduleLoading)) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f7f6f2] text-slate-600">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando acesso…
+      <main className="flex min-h-screen items-center justify-center bg-[#FAF5EF] text-[#7A5646]">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
+        Carregando acesso…
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f6f2] text-slate-950">
-      <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
-        <header className="flex flex-col gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#c4187a]">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#e91e8c]" />
-              Coala One · acesso exclusivo
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Programação do Instagram
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Publicações programadas pelo Coala para <strong>@coalashakes</strong>. Agendamentos
-              feitos diretamente no Instagram ou no Business Suite permanecem nas agendas desses serviços.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void loadSchedule()}
-              disabled={loading}
-              className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold shadow-sm transition hover:border-slate-400 disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Atualizar
-            </button>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="h-11 rounded-xl px-4 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-800"
-            >
-              Sair
-            </button>
-          </div>
-        </header>
+    <main className="flex min-h-screen bg-[#FAF5EF] font-sans text-[#4A1A04]">
+      <InstagramWorkspaceSidebar
+        activeView={activeView}
+        email={firebaseUser?.email}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
+        onSelect={selectView}
+        onCreate={() => setCreateDate(dateKeyInBelem(new Date()))}
+        onFutureFeature={(label) => say(`${label} será implementado em uma próxima etapa.`)}
+        onLogout={() => void logout()}
+      />
 
-        <section className="grid gap-3 py-6 sm:grid-cols-3">
-          <div className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
-            <CalendarClock className="mb-4 h-5 w-5 text-sky-600" />
-            <div className="text-3xl font-extrabold">{totals.scheduled}</div>
-            <div className="text-sm text-slate-500">programadas</div>
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-[#EADFD3] bg-[#F4ECE2] px-4 py-2.5 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="grid h-10 w-10 place-items-center rounded-lg border border-[#EADFD3] bg-white"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <div className="relative h-9 w-20 overflow-hidden" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/instagram/coala-logo.png" alt="" className="absolute left-[-14px] top-[-37px] h-auto w-[108px] max-w-none" />
           </div>
-          <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-            <CheckCircle2 className="mb-4 h-5 w-5 text-emerald-600" />
-            <div className="text-3xl font-extrabold">{totals.published}</div>
-            <div className="text-sm text-slate-500">publicadas</div>
-          </div>
-          <div className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm">
-            <AlertCircle className="mb-4 h-5 w-5 text-orange-600" />
-            <div className="text-3xl font-extrabold">{totals.attention}</div>
-            <div className="text-sm text-slate-500">precisam de atenção</div>
-          </div>
-        </section>
+          <span className="text-[12px] font-bold text-[#7A5646]">Programação Instagram</span>
+        </div>
 
         {error && (
-          <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
-            {error}
+          <div role="alert" className="flex items-center justify-between gap-4 border-b border-[#E8B9B3] bg-[#FBE4E1] px-4 py-2.5 text-[13px] font-semibold text-[#A52E24] md:px-7">
+            <span>{error}</span>
+            <button type="button" onClick={() => setError(null)} className="shrink-0 underline">Fechar</button>
           </div>
         )}
 
-        <section className="space-y-4" aria-live="polite">
-          {loading && items.length === 0 ? (
-            <div className="flex min-h-52 items-center justify-center rounded-3xl border border-slate-200 bg-white text-sm text-slate-500 shadow-sm">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando programação…
-            </div>
-          ) : items.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
-              <CalendarClock className="mx-auto mb-4 h-9 w-9 text-slate-300" />
-              <h2 className="text-lg font-bold">Nenhuma publicação programada pelo Coala</h2>
-              <p className="mt-2 text-sm text-slate-500">O primeiro teste aparecerá aqui assim que for criado.</p>
-            </div>
-          ) : (
-            items.map((item) => (
-              <article key={item.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
-                  {item.media[0]?.previewUrl ? (
-                    <ImagePreview
-                      url={item.media[0].previewUrl}
-                      token={previewToken}
-                      alt={`Prévia de ${instagramFormatLabels[item.format].toLowerCase()} programado`}
-                    />
-                  ) : (
-                    <div className="flex aspect-[4/5] items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                      {item.media.some((media) => media.kind === "video") ? (
-                        <Film className="h-8 w-8" />
-                      ) : (
-                        <ImageIcon className="h-8 w-8" />
-                      )}
-                    </div>
-                  )}
-                  <div>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex min-w-0 gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-pink-50 text-[#c4187a]">
-                      {item.media.some((media) => media.kind === "video") ? (
-                        <Film className="h-5 w-5" />
-                      ) : (
-                        <ImageIcon className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-extrabold">{instagramFormatLabels[item.format]}</h2>
-                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass[item.status]}`}>
-                          {instagramStatusLabels[item.status]}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm font-semibold text-slate-700">{formattedDate(item.scheduledAt)}</p>
-                      {item.location && (
-                        <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600">
-                          <MapPin className="h-4 w-4 text-[#c4187a]" /> {item.location.name}
-                        </p>
-                      )}
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                        {item.caption || (item.format === "story" ? "Story sem legenda" : "Sem legenda")}
-                      </p>
-                    </div>
-                  </div>
-                  {item.permalink && (
-                    <a
-                      href={item.permalink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm font-bold text-[#c4187a] hover:underline"
-                    >
-                      Ver no Instagram <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                  {item.media.map((media, index) => (
-                    <span key={`${media.fileName}-${index}`} className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600">
-                      {media.fileName} · {fileSize(media.sizeBytes)}
-                    </span>
-                  ))}
-                </div>
-
-                {item.safeError && (
-                  <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {item.safeError}
-                    {item.errorEventId ? ` · referência ${item.errorEventId}` : ""}
-                  </div>
-                )}
-                  </div>
-                </div>
-              </article>
-            ))
-          )}
-        </section>
+        {editingId && schedules.find((item) => item.id === editingId) ? (
+          <SchedulePostEditor
+            item={schedules.find((item) => item.id === editingId)!}
+            onClose={closeEditor}
+            onUpdate={updateSchedule}
+          />
+        ) : activeView === "calendar" ? (
+          <CalendarView
+            items={schedules}
+            loading={scheduleLoading}
+            onRefresh={() => void loadSchedule()}
+            onCreate={setCreateDate}
+            onOpen={openEditor}
+            onReschedule={reschedule}
+          />
+        ) : activeView === "feed" ? (
+          <FeedGridView
+            items={schedules}
+            publishedItems={publishedItems}
+            profile={instagramProfile}
+            liveLoading={publishedLoading}
+            liveError={publishedError}
+            onRefreshLive={() => void loadPublishedFeed()}
+            onSwap={swapSchedules}
+            onOpen={openEditor}
+          />
+        ) : activeView === "media" ? (
+          <MediaLibraryView
+            libraryItems={libraryItems}
+            schedules={schedules}
+            loading={libraryLoading}
+            uploading={uploading}
+            onUpload={uploadFiles}
+            onFutureFeature={(label) => say(`${label} será implementado em uma próxima etapa.`)}
+          />
+        ) : null}
       </div>
+
+      {toast && (
+        <div role="status" className="fixed bottom-6 left-1/2 z-[90] max-w-[90vw] -translate-x-1/2 rounded-[10px] bg-[#4A1A04] px-4 py-2.5 text-[13px] font-bold text-white shadow-2xl">
+          {toast}
+        </div>
+      )}
+
+      {createDate && (
+        <CreateScheduleDialog
+          initialDate={createDate}
+          busy={creating}
+          schedules={schedules}
+          publishedItems={publishedItems}
+          publishedLoading={publishedLoading}
+          publishedError={publishedError}
+          onClose={() => !creating && setCreateDate(null)}
+          onCreate={createSchedule}
+        />
+      )}
     </main>
   );
 }

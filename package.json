@@ -58,7 +58,8 @@
     "sync:profile-compliance-cache": "node --import tsx scripts/sync-profile-compliance-cache.mts",
     "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs",
     "audit:cli": "node scripts/cli-session-audit.mjs",
-    "instagram:schedule": "node --import tsx scripts/instagram-schedule.mts"
+    "instagram:schedule": "node --import tsx scripts/instagram-schedule.mts",
+    "instagram:migrate-marketing-db": "node --import tsx scripts/migrate-instagram-marketing-db.mts"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.4",
@@ -130,6 +131,7 @@
     "firebase-admin": "^13.7.0",
     "genkit": "^1.0.0",
     "glob": "^13.0.6",
+    "google-auth-library": "^9.15.1",
     "hono": "^4.12.25",
     "html5-qrcode": "^2.3.8",
     "immer": "^10.1.1",

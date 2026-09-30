@@ -67,3 +67,5 @@ Total inicial: **53 grupos**. Atualize estado, documentos e contagem junto com c
 Na integração documental da main, nenhum grupo é promovido a Verificado pelas execuções do worktree de correções. São 53 grupos traçados, 73 guias de subfluxo e validação comportamental parcial.
 
 Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.
+
+Atualização de 2026-09-29: o workspace externo de [publicação no Instagram](flows/instagram-publishing.md) ganhou calendário, grade do feed e biblioteca privada, com mutações protegidas e consultas limitadas. A superfície fica fora da matriz das páginas internas e não altera a contagem dos 53 grupos; validação real com Meta e homologação visual permanecem pendentes.
