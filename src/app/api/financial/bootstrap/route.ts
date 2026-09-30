@@ -66,10 +66,6 @@ function serializeValue(value: unknown): unknown {
   return value;
 }
 
-function sameJsonShape(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
 export async function POST(request: NextRequest) {
   try {
     const decoded = await verifyAuth(request);
@@ -107,17 +103,10 @@ export async function POST(request: NextRequest) {
       console.warn("[Financial bootstrap] Failed to read OP user/profile context.", lookupError);
     }
 
-    const tokenFinancialPermissions =
-      decoded.financial &&
-      typeof decoded.financial === "object" &&
-      !Array.isArray(decoded.financial)
-        ? (decoded.financial as Record<string, unknown>)
-        : null;
-
     const financialPermissions =
       profilePermissions || isDefaultAdmin
         ? buildPermissions(profilePermissions, isDefaultAdmin)
-        : tokenFinancialPermissions;
+        : null;
 
     const payload = {
       username:
@@ -144,26 +133,19 @@ export async function POST(request: NextRequest) {
       syncedAt: FieldValue.serverTimestamp(),
     };
 
-    let claimsSynced: "already-present" | "updated" | "failed" = "failed";
-    if (financialPermissions) {
-      try {
-        const authUser = await authAdmin.getUser(decoded.uid);
-        const currentClaims = authUser.customClaims ?? {};
-        const nextClaims = {
-          ...currentClaims,
-          financial: financialPermissions,
-        };
-
-        claimsSynced = sameJsonShape(currentClaims.financial ?? null, financialPermissions)
-          ? "already-present"
-          : "updated";
-
-        if (claimsSynced === "updated") {
-          await authAdmin.setCustomUserClaims(decoded.uid, nextClaims);
-        }
-      } catch (claimsError) {
-        console.warn("[Financial bootstrap] Failed to sync financial claims.", claimsError);
+    // As permissões financeiras vivem só em users/{uid} do banco financeiro. O claim `financial`
+    // estourava o limite de 1000 caracteres do Firebase Auth e ficava desatualizado; remove o legado.
+    let legacyClaimRemoved = false;
+    try {
+      const authUser = await authAdmin.getUser(decoded.uid);
+      const claims: Record<string, unknown> = { ...(authUser.customClaims ?? {}) };
+      if ("financial" in claims) {
+        delete claims.financial;
+        await authAdmin.setCustomUserClaims(decoded.uid, claims);
+        legacyClaimRemoved = true;
       }
+    } catch (claimsError) {
+      console.warn("[Financial bootstrap] Failed to remove legacy financial claim.", claimsError);
     }
 
     let userDocSynced = false;
@@ -190,7 +172,7 @@ export async function POST(request: NextRequest) {
         ...savedData,
       },
       userLookupStatus,
-      claimsSynced,
+      legacyClaimRemoved,
       userDocSynced,
     });
   } catch (error: unknown) {

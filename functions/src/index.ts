@@ -1213,7 +1213,7 @@ export const onProfileChange = onDocumentWritten(
     const promises = usersSnap.docs.map(async (userDoc) => {
       const active = userDoc.data().isActive !== false && userDoc.data().active !== false;
       await Promise.all([
-        auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin, financial: financialPermissions }),
+        auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin }),
         financialDb.collection('users').doc(userDoc.id).set({
           profileId,
           active,

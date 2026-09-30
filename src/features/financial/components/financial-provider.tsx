@@ -80,9 +80,6 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
       }
 
       const payload = await response.json();
-      if (payload.claimsSynced === "updated") {
-        await firebaseUser.getIdToken(true);
-      }
       setUser(payload.user ?? null);
       setReady(true);
     } catch (syncError) {

@@ -39,6 +39,8 @@ test("despesa quitada na origem protege financeiro e permite notas/anexos; clien
   try {
     await env.withSecurityRulesDisabled(async context => {
       const db = context.firestore();
+      await setDoc(doc(db, "users/admin"), { active: true, isDefaultAdmin: true, permissions: { view: true, expenses: { view: true, create: true, edit: true, delete: true } } });
+      await setDoc(doc(db, "users/auditor"), { active: true, isDefaultAdmin: true, permissions: { view: true, cardStatements: { audit: true } } });
       await setDoc(doc(db, "accounts/source-expense"), { name: "Limpeza", active: true, isGroup: false });
       for (const kind of ["cash_withdrawal", "acquirer_fee"]) {
         await setDoc(doc(db, `expenses/${kind}`), { status: "paid", accountPlan: "source-expense", accountId: "source-expense", totalValue: 10, sourceSettlement: { version: 1, kind } });
@@ -48,7 +50,7 @@ test("despesa quitada na origem protege financeiro e permite notas/anexos; clien
       await setDoc(doc(db, "expenses/source-card-legacy"), { status: "paid", accountPlan: "source-expense", accountId: "source-expense", importedFrom: "card_statement", sourceSettlement: { kind: "acquirer_fee" } });
       await setDoc(doc(db, "expenses/card-ordinary"), { status: "pending", accountPlan: "source-expense", accountId: "source-expense", importedFrom: "card_statement" });
     });
-    const db = env.authenticatedContext("admin", { isDefaultAdmin: true, financial: { view: true, expenses: { view: true, create: true, edit: true, delete: true } } }).firestore();
+    const db = env.authenticatedContext("admin", { isDefaultAdmin: true }).firestore();
     for (const kind of ["cash_withdrawal", "acquirer_fee"]) {
       const target = doc(db, `expenses/${kind}`);
       await assertSucceeds(updateDoc(target, { notes: "Comprovante", attachments: [{ name: "recibo" }] }));
@@ -63,7 +65,7 @@ test("despesa quitada na origem protege financeiro e permite notas/anexos; clien
     await assertFails(updateDoc(doc(db, "expenses/ordinary-source-test"), { sourceSettlement: {} }));
     await assertFails(setDoc(doc(db, "financialSourceSettlements/forged"), { active: true }));
     await assertFails(setDoc(doc(db, "cashClosures/forged/withdrawals/forged"), { active: true }));
-    const auditor = env.authenticatedContext("auditor", { isDefaultAdmin: true, financial: { view: true, cardStatements: { audit: true } } }).firestore();
+    const auditor = env.authenticatedContext("auditor", { isDefaultAdmin: true }).firestore();
     const reclassify = { accountPlan: "source-other", accountId: "source-other" };
     await assertSucceeds(updateDoc(doc(auditor, "expenses/card-ordinary"), reclassify));
     await assertFails(updateDoc(doc(auditor, "expenses/source-card-legacy"), reclassify));
@@ -75,17 +77,34 @@ test("previsão transferida para orçamento não pode ser reativada, apagada ou 
   try {
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
+      await setDoc(doc(db, "users/admin"), { active: true, isDefaultAdmin: true, permissions: { view: true, expenses: { view: true, create: true, edit: true, delete: true } } });
       await setDoc(doc(db, "accounts/vt"), { name: "VT", active: true, isGroup: false });
       await setDoc(doc(db, "expenses/converted"), { status: "cancelled", accountId: "vt", budgetMigration: { operationId: "test" } });
       await setDoc(doc(db, "expenses/ordinary"), { status: "pending", accountId: "vt" });
     });
-    const db = env.authenticatedContext("admin", { isDefaultAdmin: true, financial: { view: true, expenses: { view: true, create: true, edit: true, delete: true } } }).firestore();
+    const db = env.authenticatedContext("admin", { isDefaultAdmin: true }).firestore();
     await assertSucceeds(updateDoc(doc(db, "expenses/ordinary"), { notes: "Revisão normal" }));
     await assertFails(updateDoc(doc(db, "expenses/converted"), { status: "provisioned" }));
     await assertFails(deleteDoc(doc(db, "expenses/converted")));
     await assertFails(updateDoc(doc(db, "expenses/ordinary"), { budgetMigration: { operationId: "forged" } }));
     await assertFails(setDoc(doc(db, "expenses/forged"), { status: "cancelled", accountId: "vt", budgetMigration: { operationId: "forged" } }));
     await assertFails(getDoc(doc(db, "financialBudgetConversions/test")));
+  } finally { await env.cleanup(); }
+});
+
+test("claim financial do token não concede acesso; só o users/{uid} do banco financeiro vale", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-financial-claim", firestore: { rules: rules.financial } });
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "users/revoked"), { active: true, isDefaultAdmin: false, permissions: { view: false, expenses: { view: false } } });
+      await setDoc(doc(db, "users/granted"), { active: true, isDefaultAdmin: false, permissions: { view: true, expenses: { view: true } } });
+      await setDoc(doc(db, "expenses/e1"), { status: "pending", accountId: "a" });
+    });
+    const stale = { view: true, expenses: { view: true, create: true, edit: true, delete: true } };
+    await assertFails(getDoc(doc(env.authenticatedContext("no-doc", { financial: stale }).firestore(), "expenses/e1")));
+    await assertFails(getDoc(doc(env.authenticatedContext("revoked", { financial: stale }).firestore(), "expenses/e1")));
+    await assertSucceeds(getDoc(doc(env.authenticatedContext("granted", {}).firestore(), "expenses/e1")));
   } finally { await env.cleanup(); }
 });
 
