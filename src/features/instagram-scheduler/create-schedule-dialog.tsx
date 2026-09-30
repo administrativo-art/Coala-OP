@@ -512,9 +512,9 @@ export function CreateScheduleDialog({
   }, [date, minimumSchedule, time]);
 
   useEffect(() => {
-    const urls = files.map((file) => URL.createObjectURL(file));
-    setDraftMediaUrls(urls);
-    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+    const objectUrls = files.map((file) => URL.createObjectURL(file));
+    setDraftMediaUrls(objectUrls.map((url) => encodeURI(url)));
+    return () => objectUrls.forEach((url) => URL.revokeObjectURL(url));
   }, [files]);
 
   function changeFormat(next: InstagramPublicationFormat) {
