@@ -22,7 +22,7 @@ test("authorized daily query combines both real transport adapters, parser and m
   assert.equal(resolutions, 2); assert.equal(calls.length, 3);
   assert.equal(result.pdvFilialId, salesBinding.pdvFilialId);
   assert.equal(result.mappingId, salesRequest.mappingId);
-  assert.equal(result.cases.length, 1); assert.equal(result.cases[0].reviewStatus, "pending_review");
+  assert.equal(result.cases.length, 1); assert.equal(result.cases[0].reviewStatus, "auto_checked");
   assert.equal(result.bankReceiptConfirmed, false); assert.equal(result.coverage, "partial");
 });
 

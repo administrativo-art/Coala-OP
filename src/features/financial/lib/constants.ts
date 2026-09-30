@@ -39,6 +39,9 @@ export const FINANCIAL_ROUTES = {
   importExpenses: "/dashboard/financial/expenses/import",
   bankStatements: "/dashboard/financial/reconciliation/bank-statements",
   cardStatements: "/dashboard/financial/reconciliation/card-statements",
+  salesReconciliation: "/dashboard/financial/sales-reconciliation",
+  stoneReceipts: "/dashboard/financial/stone-receipts",
+  stoneAnticipations: "/dashboard/financial/stone-anticipations",
   settings: "/dashboard/financial/settings",
   paymentRequests: "/dashboard/financial/expenses/authorizations",
 } as const;

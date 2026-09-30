@@ -67,7 +67,7 @@ export function financialSidebarPath(pathname: string, visibleHrefs: string[]): 
   const parents: Record<string, string> = {
     "/dashboard/financial/cash-deposits": "/dashboard/financial/cash-closures",
     "/dashboard/financial/budget-comparison": FINANCIAL_ROUTES.expenses,
-    "/dashboard/financial/stone-anticipations": "/dashboard/financial/sales-reconciliation",
+    [FINANCIAL_ROUTES.stoneAnticipations]: FINANCIAL_ROUTES.stoneReceipts,
   };
   const parent = parents[pathname];
   return parent && visibleHrefs.includes(parent) ? parent : pathname;

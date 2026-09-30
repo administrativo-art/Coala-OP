@@ -48,9 +48,16 @@ function total(facts: SalesMatchFact[]) {
   return facts.reduce((sum, fact) => sum + fact.grossAmountCents, 0);
 }
 
-function sameStatuses(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
-  return [...new Set(pdv.map((fact) => fact.status))].sort().join(",")
-    === [...new Set(stone.map((fact) => fact.status))].sort().join(",");
+function statusesAreCompatible(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
+  const pdvStatuses = [...new Set(pdv.map((fact) => fact.status))].sort();
+  const stoneStatuses = [...new Set(stone.map((fact) => fact.status))].sort();
+
+  // O PDV Legal não informa aprovação da adquirente. Nesse recorte, `pending`
+  // representa ausência desse dado, não uma venda pendente na Stone.
+  if (pdvStatuses.length === 1 && pdvStatuses[0] === "pending"
+    && stoneStatuses.length === 1 && stoneStatuses[0] === "approved") return true;
+
+  return pdvStatuses.join(",") === stoneStatuses.join(",");
 }
 
 function deterministicKey(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
@@ -78,8 +85,7 @@ function buildCase(
   else if (stone.length === 0) kind = "pdv_only";
   else if (kioskIds.length !== 1) kind = "unit_mismatch";
   else if (pdvGrossAmountCents !== stoneGrossAmountCents) kind = "amount_mismatch";
-  else if (all.some(fact => fact.status === "pending")) kind = "ambiguous";
-  else if (!sameStatuses(pdv, stone)) kind = "status_mismatch";
+  else if (!statusesAreCompatible(pdv, stone)) kind = "status_mismatch";
   else kind = "matched";
 
   return {
@@ -98,7 +104,9 @@ function buildCase(
     kind,
     matchBasis: basis,
     confidence,
-    reviewStatus: "pending_review",
+    reviewStatus: kind === "matched" && basis !== "candidate_group"
+      ? "auto_checked"
+      : "attention_required",
   };
 }
 
@@ -229,8 +237,9 @@ export function suggestSalesReconciliationCases(input: {
     componentStone.forEach((id) => visitedStone.add(id));
     const pdv = [...componentPdv].map((id) => pdvById.get(id)!);
     const stone = [...componentStone].map((id) => stoneById.get(id)!);
-    const unambiguousGroup = (pdv.length === 1 || stone.length === 1) && total(pdv) === total(stone);
-    cases.push(buildCase(pdv, stone, "candidate_group", unambiguousGroup ? "medium" : "none", !unambiguousGroup && (pdv.length > 1 || stone.length > 1)));
+    // Somar um grupo pode fechar o valor sem provar qual captura pertence a
+    // qual pagamento. Grupos nunca são aprovados automaticamente.
+    cases.push(buildCase(pdv, stone, "candidate_group", "none", true));
     componentPdv.forEach((id) => unmatchedPdv.delete(id));
     componentStone.forEach((id) => unmatchedStone.delete(id));
   }

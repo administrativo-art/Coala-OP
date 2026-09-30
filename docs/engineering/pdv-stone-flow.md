@@ -36,11 +36,14 @@ Respostas com envelope/paginação não comprovados serão recusadas, não trunc
 ## Validação
 
 Implementados `POST /api/financial/pdv-stone-review` e a página
-`/dashboard/financial/sales-reconciliation`, em Conciliação → Vendas e recebíveis.
+`/dashboard/financial/sales-reconciliation`, em Conciliação → Conciliação de vendas.
 A tela usa `PageContainer wide`, o cliente autenticado existente, catálogo paginado
-manual e tabelas de sugestões/apontamentos paginadas. Mudar seleção limpa o resultado;
+manual e tabelas de divergências/apontamentos paginadas. Mudar seleção limpa o resultado;
 o retorno também precisa corresponder à unidade, vínculo, conta, código e dia escolhidos.
-Sem aprovação, compensação de cancelamentos ou soma apresentada como caixa disponível.
+Pares individuais compatíveis por identificador forte ou por valor único na janela de
+cinco minutos são marcados como conferidos automaticamente; grupos, conflitos e
+ausências continuam em atenção. Essa classificação não é baixa, liquidação, compensação
+de cancelamentos nem soma apresentada como caixa disponível.
 
 Corpo da API limitado por streaming a 2 KiB, com prazo de leitura de 10 segundos.
 Autorização ocorre antes de ler o corpo. Consulta dos provedores em paralelo, com

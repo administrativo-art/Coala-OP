@@ -1,4 +1,4 @@
-# Stone: consulta de antecipações e comparação PDV × Stone
+# Stone: vendas, recebimentos, taxas e antecipações
 
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
@@ -10,7 +10,13 @@ A [página de antecipações](../../../src/app/dashboard/financial/stone-anticip
 
 ## Comparação de vendas (`sales-reconciliation`)
 
-A [página PDV × Stone](../../../src/app/dashboard/financial/sales-reconciliation/page.tsx) monta [`SalesReviewPage`](../../../src/features/financial/sales-reconciliation/review-page.tsx), restrita na tela ao administrador padrão. Ela carrega o vínculo oficial, escolhe unidade/StoneCode/dia e chama [`POST /api/financial/pdv-stone-review`](../../../src/app/api/financial/pdv-stone-review/route.ts). A rota repete a autorização de administrador e chama [`queryDailySales`](../../../src/features/financial/sales-reconciliation/query.ts) com fontes PDV, agenda Stone e Pix validado, limitando a duração da consulta. A página confere IDs do vínculo/conta/escopo na resposta e apresenta sugestões de correspondência, divergências e apontamentos de fonte. O resultado é somente leitura; não confirma banco, lança pagamento nem fecha venda automaticamente.
+A [página PDV × Stone](../../../src/app/dashboard/financial/sales-reconciliation/page.tsx) monta [`SalesReviewPage`](../../../src/features/financial/sales-reconciliation/review-page.tsx), restrita na tela ao administrador padrão. Ela carrega o vínculo oficial, escolhe unidade/StoneCode/dia e chama [`POST /api/financial/pdv-stone-review`](../../../src/app/api/financial/pdv-stone-review/route.ts). A rota repete a autorização de administrador e chama [`queryDailySales`](../../../src/features/financial/sales-reconciliation/query.ts) com fontes PDV, agenda Stone e Pix validado, limitando a duração da consulta. A página confere IDs do vínculo/conta/escopo na resposta, abre no filtro de divergências e mantém a opção **Todas** para inspeção integral. O resultado é somente leitura; não confirma banco, lança pagamento nem fecha venda automaticamente.
+
+## Recebimentos Stone (`sales-reconciliation`)
+
+A [página Recebimentos Stone](../../../src/app/dashboard/financial/stone-receipts/page.tsx) monta [`StoneReceiptsPage`](../../../src/features/financial/receipts-reconciliation/receipts-page.tsx), também restrita ao administrador padrão. Ela separa carteira/previsões, antecipações, taxas praticadas e crédito bancário. A tela reutiliza o catálogo paginado de vínculos somente quando solicitado e monta [`AcquirerFeesPanel`](../../../src/features/financial/acquirer-fees/fees-panel.tsx) apenas após unidade e StoneCode serem escolhidos. A página de vendas não carrega nem grava taxas.
+
+Pagamento informado pela Stone continua diferente de crédito confirmado no banco. O módulo direciona ao extrato existente, mas ainda não executa a comparação Stone paga × crédito Inter. Exportação de evidências está prevista para uma etapa posterior; não há ação de contestação.
 
 ## Dados, dependências e verificação
 
@@ -20,7 +26,7 @@ Os dois fluxos dependem do vínculo Stone/unidade/conta em [`configuration.serve
 
 [`runFinancialAgent`](../../../src/features/financial/agent/service.ts) aceita apenas intenção `review_anticipations`, valida administrador e vínculo novamente no serviço e consulta revisão XML por data de pagamento. Cálculo/linhas são determinísticos; IA recebe apenas contagens e IDs de ações para reordenar a lista permitida, com validação de cardinalidade/IDs e fallback. Não altera valores nem grava caixa/DRE. [`configuration.server`](../../../src/features/financial/agent/configuration.server.ts) lista catálogos por página e salva `stoneMerchantMappings` em transação com revisão esperada, validação de vínculos/vigências e evento de auditoria. Mudança concorrente exige recarregar.
 
-[`queryDailySales`](../../../src/features/financial/sales-reconciliation/query.ts) valida data já publicada, vínculo oficial/filial, coleta PDV e Stone e revalida vínculo após coleta; alteração durante consulta é conflito. [Matching](../../../src/features/financial/sales-reconciliation/matching.ts) usa identificador de provedor, NSU/autorização/terminal e pedido; conflito ou multiplicidade impede correspondência alta. Candidatos por janela/valor podem formar grupos, mas totais iguais sozinhos não resolvem identificação ambígua. Casos distinguem só-PDV/só-Stone, unidade não mapeada/diferente, valor, status e ambiguidades, sempre `pending_review`.
+[`queryDailySales`](../../../src/features/financial/sales-reconciliation/query.ts) valida data já publicada, vínculo oficial/filial, coleta PDV e Stone e revalida vínculo após coleta; alteração durante consulta é conflito. [Matching](../../../src/features/financial/sales-reconciliation/matching.ts) usa identificador de provedor, NSU/autorização/terminal e pedido; conflito ou multiplicidade impede correspondência alta. Um par individual compatível por chave forte ou por valor único na janela de cinco minutos recebe `auto_checked`. Grupo por soma/horário, ausência, conflito, diferença ou vínculo incompleto recebe `attention_required`. O estado `pending` do PDV significa que o PDV não comprova a aprovação da adquirente; isoladamente ele não contradiz uma captura `approved` da Stone. Isso não transforma a conferência em liquidação nem comprova recebimento.
 
 [Pix](../../../src/features/financial/sales-reconciliation/pix-source.server.ts) lê snapshot de `stonePixConciliationFiles` e até 501 linhas em transação somente leitura; máximo aceito 500. [`reviewPixSnapshot`](../../../src/features/financial/sales-reconciliation/pix-source.ts) confere documento/workspace/dia/hash/contagem/unicidade, StoneCode/terminal, IDs de evento/e2e, status pago, valores coerentes e ausência de estorno. Incompleto vira `pending`; registros inválidos são excluídos, não transformados em venda confirmada. A rota tem timeout de 110 segundos. Correspondências não persistem baixas financeiras. Testes de fonte ausente, duplicata, atraso e mudança de vínculo continuam necessários.
 
@@ -28,7 +34,7 @@ Os dois fluxos dependem do vínculo Stone/unidade/conta em [`configuration.serve
 
 ## Apropriação de taxas explícitas — 2026-09-26
 
-O [painel de taxas](../../../src/features/financial/acquirer-fees/fees-panel.tsx) é separado da comparação de vendas. [GET/POST acquirer-fees](../../../src/app/api/financial/acquirer-fees/route.ts) exige administrador padrão no servidor. Prévia não grava. Cadastro/vínculo/correção/auditoria usam transação, revalidando workspace, mapping/vigência, centro exclusivo da unidade, conta-folha ativa de despesa e snapshot Pix. Sem permissão nova.
+O [painel de taxas](../../../src/features/financial/acquirer-fees/fees-panel.tsx) fica em Recebimentos Stone e é separado da comparação de vendas. [GET/POST acquirer-fees](../../../src/app/api/financial/acquirer-fees/route.ts) exige administrador padrão no servidor. Prévia não grava. Cadastro/vínculo/correção/auditoria usam transação, revalidando workspace, mapping/vigência, centro exclusivo da unidade, conta-folha ativa de despesa e snapshot Pix. Sem permissão nova.
 
 - Pix: taxa explícita de evento pago elegível identificado por e2e/evento. Competência da venda; retenção no dia do evento financeiro. Datas futuras/anteriores à venda ficam pendentes.
 - Cartão: MDR explícito por parcela na competência da venda; antecipação explícita confirmada na competência do evento. Moeda não BRL, estorno, parcialidade ou origem ambígua não geram taxa presumida.
@@ -41,5 +47,9 @@ Despesa `paid`, `sourceSettlement.kind=acquirer_fee`, `cashEffectIncludedInNetRe
 Catálogos501 contas/51 centros sob escolha de grupo; candidatos25+sentinela, histórico100+sentinela. Sem polling. Corpo2048 bytes/10s, consulta110s. [Unitários](../../../tests/unit/acquirer-fees.test.ts), [integração](../../../tests/integration/acquirer-fees.test.mjs), [HTTP em emuladores](../../../tests/e2e-api/financial-reconciliation.test.mts).
 
 Fontes primárias consultadas em 2026-09-26: [Stone Installments](https://conciliacao.stone.com.br/reference/installments), [AccountType](https://conciliacao.stone.com.br/reference/accounttype), [FinancialTransactionsAccounts](https://conciliacao.stone.com.br/reference/financialtransactionsaccounts), [arquivo Pix](https://conciliacao.stone.com.br/reference/estrutura-do-arquivo-pix).
+
+### Taxa contratada × taxa praticada
+
+O arquivo atual pode trazer o MDR praticado, mas o repositório não possui tabela contratual versionada por modalidade/vigência nem regra contratual de arredondamento. Portanto a interface identifica a cobertura das duas fontes e não calcula “cobrado a mais” enquanto faltar a evidência contratual. A etapa futura deve cadastrar ou importar a fonte oficial do contrato, preservar sua vigência e então comparar por transação/modalidade. Valor ausente não vira zero e residual bruto−líquido não vira taxa presumida.
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
