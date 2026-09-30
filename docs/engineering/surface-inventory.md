@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **359 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **363 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **43 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -309,7 +309,11 @@ Inclui **43 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/integrations/bizneo/shift-templates` | GET | [src/app/api/integrations/bizneo/shift-templates/route.ts](../../src/app/api/integrations/bizneo/shift-templates/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/integrations/bizneo/sync-taxons` | GET | [src/app/api/integrations/bizneo/sync-taxons/route.ts](../../src/app/api/integrations/bizneo/sync-taxons/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
 | `/api/integrations/bizneo/sync-users` | GET | [src/app/api/integrations/bizneo/sync-users/route.ts](../../src/app/api/integrations/bizneo/sync-users/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
-| `/api/integrations/instagram/schedule` | GET | [src/app/api/integrations/instagram/schedule/route.ts](../../src/app/api/integrations/instagram/schedule/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/feed` | GET | [src/app/api/integrations/instagram/feed/route.ts](../../src/app/api/integrations/instagram/feed/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/media` | GET, POST | [src/app/api/integrations/instagram/media/route.ts](../../src/app/api/integrations/instagram/media/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/media/[id]` | GET | [src/app/api/integrations/instagram/media/[id]/route.ts](../../src/app/api/integrations/instagram/media/%5Bid%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/schedule` | GET, POST | [src/app/api/integrations/instagram/schedule/route.ts](../../src/app/api/integrations/instagram/schedule/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/schedule/[id]` | PATCH | [src/app/api/integrations/instagram/schedule/[id]/route.ts](../../src/app/api/integrations/instagram/schedule/%5Bid%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/integrations/instagram/schedule/[id]/media/[index]` | GET | [src/app/api/integrations/instagram/schedule/[id]/media/[index]/route.ts](../../src/app/api/integrations/instagram/schedule/%5Bid%5D/media/%5Bindex%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/integrations/pdvlegal/filiais` | GET | [src/app/api/integrations/pdvlegal/filiais/route.ts](../../src/app/api/integrations/pdvlegal/filiais/route.ts) | [pdv-sync](flows/pdv-sync.md) |
 | `/api/integrations/pdvlegal/inspect` | GET | [src/app/api/integrations/pdvlegal/inspect/route.ts](../../src/app/api/integrations/pdvlegal/inspect/route.ts) | [pdv-sync](flows/pdv-sync.md) |

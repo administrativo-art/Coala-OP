@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { access, open, readFile, stat } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
-import { applicationDefault, initializeApp } from "firebase-admin/app";
+import { applicationDefault, cert, initializeApp, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import sharp from "sharp";
@@ -15,6 +15,7 @@ const DEFAULT_PROJECT_ID = "smart-converter-752gf";
 const DEFAULT_BUCKET = "smart-converter-752gf.firebasestorage.app";
 const DEFAULT_INSTAGRAM_ACCOUNT_ID = "17841476184089270";
 const DEFAULT_WORKSPACE_ID = "coala";
+const MARKETING_DATABASE_ID = "coala-signage";
 
 type Args = {
   format?: string;
@@ -23,6 +24,7 @@ type Args = {
   caption?: string;
   captionFile?: string;
   shareToFeed: boolean;
+  storyMentions: string[];
   dryRun: boolean;
   id?: string;
   projectId: string;
@@ -38,9 +40,9 @@ function usage(): never {
   npm run instagram:schedule -- --format feed_image --media ./foto.jpg --at 2026-09-29T10:00:00-03:00 --caption "Legenda"
   npm run instagram:schedule -- --format carousel --media ./1.jpg --media ./2.jpg --at 2026-09-29T10:00:00-03:00 --caption-file ./legenda.txt
   npm run instagram:schedule -- --format reel --media ./video.mp4 --at 2026-09-29T10:00:00-03:00
-  npm run instagram:schedule -- --format story --media ./story.jpg --at 2026-09-29T10:00:00-03:00
+  npm run instagram:schedule -- --format story --media ./story-1.jpg --media ./story-2.jpg --at 2026-09-29T10:00:00-03:00
 
-Opções: --dry-run, --share-to-feed true|false, --location-id ID --location-name "Nome", --id ID\n`);
+Opções: --dry-run, --share-to-feed true|false, --mention usuario, --location-id ID --location-name "Nome", --id ID\n`);
   process.exit(2);
 }
 
@@ -54,6 +56,7 @@ function parseArgs(argv: string[]): Args {
   const args: Args = {
     media: [],
     shareToFeed: true,
+    storyMentions: [],
     dryRun: false,
     projectId: process.env.FIREBASE_PROJECT_ID ?? DEFAULT_PROJECT_ID,
     bucket: process.env.FIREBASE_STORAGE_BUCKET ?? DEFAULT_BUCKET,
@@ -70,6 +73,7 @@ function parseArgs(argv: string[]): Args {
       case "--caption": args.caption = nextValue(argv, index++, option); break;
       case "--caption-file": args.captionFile = nextValue(argv, index++, option); break;
       case "--share-to-feed": args.shareToFeed = nextValue(argv, index++, option) !== "false"; break;
+      case "--mention": args.storyMentions.push(nextValue(argv, index++, option)); break;
       case "--id": args.id = nextValue(argv, index++, option); break;
       case "--project": args.projectId = nextValue(argv, index++, option); break;
       case "--bucket": args.bucket = nextValue(argv, index++, option); break;
@@ -173,6 +177,7 @@ async function main() {
     caption,
     media,
     shareToFeed: args.shareToFeed,
+    storyMentions: args.storyMentions,
     location:
       args.locationId && args.locationName
         ? { id: args.locationId, name: args.locationName }
@@ -189,13 +194,18 @@ async function main() {
     })),
     captionCharacters: input.caption.length,
     shareToFeed: input.shareToFeed,
+    storyMentions: input.storyMentions,
     location: input.location?.name ?? null,
     dryRun: args.dryRun,
   });
   if (args.dryRun) return;
 
-  const app = initializeApp({ credential: applicationDefault(), projectId: args.projectId });
-  const db = getFirestore(app, "coala");
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  const credential = serviceAccountPath
+    ? cert(JSON.parse(await readFile(resolve(serviceAccountPath), "utf8")) as ServiceAccount)
+    : applicationDefault();
+  const app = initializeApp({ credential, projectId: args.projectId });
+  const db = getFirestore(app, MARKETING_DATABASE_ID);
   const bucket = getStorage(app).bucket(args.bucket);
   const ref = args.id
     ? db.collection("instagramScheduledPosts").doc(args.id)
@@ -211,6 +221,7 @@ async function main() {
     scheduledAt: Timestamp.fromDate(scheduledAt),
     caption: input.caption,
     shareToFeed: input.shareToFeed,
+    storyMentions: input.storyMentions,
     location: input.location ?? null,
     media: [],
     attempts: 0,

@@ -116,3 +116,9 @@ env:
     value: "https://op.coalashakes.com"
   - variable: INSTAGRAM_SCHEDULER_ALLOWED_EMAILS
     value: "administrativo@coalashakes.com"
+  - variable: META_SYSTEM_USER_TOKEN
+    secret: META_SYSTEM_USER_TOKEN
+  - variable: META_INSTAGRAM_ACCOUNT_ID
+    value: "17841476184089270"
+  - variable: META_GRAPH_API_VERSION
+    value: "v25.0"
