@@ -1,7 +1,6 @@
 import "server-only";
 
-import { GoogleAuth } from "google-auth-library";
-
+import { adminApp } from "@/lib/firebase-admin";
 import { AppError } from "@/lib/observability/app-error";
 
 import {
@@ -29,15 +28,16 @@ function firebaseProjectId() {
 }
 
 async function tokenFromSecretManager() {
-  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
-  const accessToken = await auth.getAccessToken();
-  if (!accessToken) throw new Error("Credencial Google indisponível.");
+  const credential = adminApp.options.credential;
+  if (!credential) throw new Error("Credencial Google indisponível.");
+  const accessToken = await credential.getAccessToken();
+  if (!accessToken.access_token) throw new Error("Credencial Google indisponível.");
 
   const projectId = firebaseProjectId();
   const secretName = process.env.META_SYSTEM_USER_TOKEN_SECRET ?? "META_SYSTEM_USER_TOKEN";
   const url = `https://secretmanager.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(secretName)}/versions/latest:access`;
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { Authorization: `Bearer ${accessToken.access_token}` },
     signal: AbortSignal.timeout(15_000),
     cache: "no-store",
   });
