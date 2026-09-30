@@ -10,14 +10,6 @@ service cloud.firestore {
       return isAuth() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function hasFinancialClaims() {
-      return isAuth() && request.auth.token.get('financial', null) != null;
-    }
-
-    function financialClaims() {
-      return request.auth.token.get('financial', {});
-    }
-
     function userData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -25,8 +17,7 @@ service cloud.firestore {
     function hasFinancialAccess() {
       return (hasUserDoc()
         && userData().active == true
-        && userData().permissions.view == true)
-        || (hasFinancialClaims() && financialClaims().view == true);
+        && userData().permissions.view == true);
     }
 
     function isFinancialAdmin() {
@@ -35,46 +26,37 @@ service cloud.firestore {
     }
 
     function canViewDashboard() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.dashboard == true)
-        || (hasFinancialClaims() && financialClaims().dashboard == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.dashboard == true);
     }
 
     function canViewCashFlow() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.cashFlow.view == true)
-        || (hasFinancialClaims() && financialClaims().cashFlow.view == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.cashFlow.view == true);
     }
 
     function canCreateCashFlow() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.cashFlow.create == true)
-        || (hasFinancialClaims() && financialClaims().cashFlow.create == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.cashFlow.create == true);
     }
 
     function canViewExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.view == true)
-        || (hasFinancialClaims() && financialClaims().expenses.view == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.view == true);
     }
 
     function canCreateExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.create == true)
-        || (hasFinancialClaims() && financialClaims().expenses.create == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.create == true);
     }
 
     function canEditExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.edit == true)
-        || (hasFinancialClaims() && financialClaims().expenses.edit == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.edit == true);
     }
 
     function canPayExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.pay == true)
-        || (hasFinancialClaims() && financialClaims().expenses.pay == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.pay == true);
     }
 
     function financialGroupPerm(group, key) {
       return isFinancialAdmin()
         || (hasUserDoc() && hasFinancialAccess()
-          && userData().permissions.get(group, {}).get(key, false) == true)
-        || (hasFinancialClaims()
-          && financialClaims().get(group, {}).get(key, false) == true);
+          && userData().permissions.get(group, {}).get(key, false) == true);
     }
 
     function canViewAudits() { return financialGroupPerm('audits', 'view'); }
@@ -91,42 +73,33 @@ service cloud.firestore {
     function canViewPersonnelCosts() { return financialGroupPerm('personnelCosts', 'view'); }
     function canEditPersonnelCosts() { return canViewPersonnelCosts() && financialGroupPerm('personnelCosts', 'edit'); }
     function canDeleteExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.delete == true)
-        || (hasFinancialClaims() && financialClaims().expenses.delete == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.delete == true);
     }
 
     function canViewFinancialFlow() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.financialFlow == true)
-        || (hasFinancialClaims() && financialClaims().financialFlow == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.financialFlow == true);
     }
 
     function canViewDre() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.dre == true)
-        || (hasFinancialClaims() && financialClaims().dre == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.dre == true);
     }
 
     function canViewCashClosures() {
       return isFinancialAdmin()
         || (hasUserDoc() && hasFinancialAccess()
-          && userData().permissions.get('cashClosures', {}).get('view', false) == true)
-        || (hasFinancialClaims()
-          && financialClaims().get('cashClosures', {}).get('view', false) == true);
+          && userData().permissions.get('cashClosures', {}).get('view', false) == true);
     }
 
     function canEditCashClosures() {
       return isFinancialAdmin()
         || (hasUserDoc() && hasFinancialAccess()
-          && userData().permissions.get('cashClosures', {}).get('edit', false) == true)
-        || (hasFinancialClaims()
-          && financialClaims().get('cashClosures', {}).get('edit', false) == true);
+          && userData().permissions.get('cashClosures', {}).get('edit', false) == true);
     }
 
     function canViewCashDeposits() {
       return isFinancialAdmin()
         || (hasUserDoc() && hasFinancialAccess()
-          && userData().permissions.get('cashDeposits', {}).get('view', false) == true)
-        || (hasFinancialClaims()
-          && financialClaims().get('cashDeposits', {}).get('view', false) == true);
+          && userData().permissions.get('cashDeposits', {}).get('view', false) == true);
     }
 
     function canAccessKiosk(kioskId) {
@@ -147,38 +120,32 @@ service cloud.firestore {
     }
 
     function canViewSettings() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.settings.view == true)
-        || (hasFinancialClaims() && financialClaims().settings.view == true);
+      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.settings.view == true);
     }
 
     function canManageAccountPlans() {
       return isFinancialAdmin()
-        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageAccountPlans == true)
-        || (hasFinancialClaims() && financialClaims().settings.manageAccountPlans == true);
+        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageAccountPlans == true);
     }
 
     function canManageResultCenters() {
       return isFinancialAdmin()
-        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageResultCenters == true)
-        || (hasFinancialClaims() && financialClaims().settings.manageResultCenters == true);
+        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageResultCenters == true);
     }
 
     function canManageBankAccounts() {
       return isFinancialAdmin()
-        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageBankAccounts == true)
-        || (hasFinancialClaims() && financialClaims().settings.manageBankAccounts == true);
+        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageBankAccounts == true);
     }
 
     function canManageImportAliases() {
       return isFinancialAdmin()
-        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageImportAliases == true)
-        || (hasFinancialClaims() && financialClaims().settings.manageImportAliases == true);
+        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageImportAliases == true);
     }
 
     function canManageExpenseDescriptions() {
       return isFinancialAdmin()
-        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageExpenseDescriptions == true)
-        || (hasFinancialClaims() && financialClaims().settings.manageExpenseDescriptions == true);
+        || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageExpenseDescriptions == true);
     }
 
     function canReadExpenseDescriptions() {
