@@ -297,24 +297,14 @@ export function resolveCardStatementCycle(
   if (!chargeDateKey) throw new Error("Data da cobrança inválida.");
   const chargeYear = Number(chargeDateKey.slice(0, 4));
   const chargeMonthIndex = Number(chargeDateKey.slice(5, 7)) - 1;
-  const currentClosingDate = dateAtDay(chargeYear, chargeMonthIndex, closingDay);
-  const closesInCurrentMonth = chargeDate.getTime() <= currentClosingDate.getTime();
-  const closingMonthOffset = closesInCurrentMonth ? 0 : 1;
-  const closingDate = dateAtDay(
-    chargeYear,
-    chargeMonthIndex + closingMonthOffset,
-    closingDay
-  );
+  const monthKey = `${chargeYear}-${String(chargeMonthIndex + 1).padStart(2, "0")}`;
+  const closingDate = dateAtDay(chargeYear, chargeMonthIndex + 1, closingDay);
   const dueMonthOffset = dueDay <= closingDay ? 1 : 0;
-  const closingMonthKey = financialMonthKey(closingDate);
-  if (!closingMonthKey) throw new Error("Data de fechamento inválida.");
   const dueDate = dateAtDay(
-    Number(closingMonthKey.slice(0, 4)),
-    Number(closingMonthKey.slice(5, 7)) - 1 + dueMonthOffset,
+    chargeYear,
+    chargeMonthIndex + 1 + dueMonthOffset,
     dueDay
   );
-  const monthKey = financialMonthKey(dueDate);
-  if (!monthKey) throw new Error("Data de vencimento inválida.");
 
   return {
     key: `${card.accountId}:${card.methodId}:${monthKey}`,
@@ -334,9 +324,9 @@ export function resolveCardStatementCycleFromMonth(
   const monthIndex = Number(match[2]) - 1;
   const closingDay = positiveDay(card.closingDay, 25);
   const dueDay = positiveDay(card.dueDay, 5);
-  const dueDate = dateAtDay(year, monthIndex, dueDay);
-  const closingMonthOffset = dueDay <= closingDay ? -1 : 0;
-  const closingDate = dateAtDay(year, monthIndex + closingMonthOffset, closingDay);
+  const closingDate = dateAtDay(year, monthIndex + 1, closingDay);
+  const dueMonthOffset = dueDay <= closingDay ? 2 : 1;
+  const dueDate = dateAtDay(year, monthIndex + dueMonthOffset, dueDay);
 
   return {
     key: `${card.accountId}:${card.methodId}:${monthKey}`,
@@ -384,8 +374,14 @@ function installmentCycleFromDueDate(
   dueDate: Date,
   card: Pick<CreditCardInstrument, "accountId" | "methodId" | "closingDay" | "dueDay">
 ) {
-  const monthKey = financialMonthKey(dueDate);
-  if (!monthKey) return null;
+  const dueMonthKey = financialMonthKey(dueDate);
+  if (!dueMonthKey) return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(dueMonthKey);
+  if (!match) return null;
+  const dueMonthIndex = Number(match[2]) - 1;
+  const competenceOffset = positiveDay(card.dueDay, 5) <= positiveDay(card.closingDay, 25) ? -2 : -1;
+  const competenceDate = new Date(Date.UTC(Number(match[1]), dueMonthIndex + competenceOffset, 1));
+  const monthKey = `${competenceDate.getUTCFullYear()}-${String(competenceDate.getUTCMonth() + 1).padStart(2, "0")}`;
   return resolveCardStatementCycleFromMonth(monthKey, card);
 }
 
@@ -476,7 +472,11 @@ export function buildCardStatementGroups(
         : [{
             lineId: expense.id,
             chargeDate: cardExpenseChargeDate(expense),
-            cycle: storedCycle,
+            cycle: storedCycle ?? (
+              !cardDateFromUnknown(expense.cardChargeDate) && cardDateFromUnknown(expense.dueDate)
+                ? installmentCycleFromDueDate(cardDateFromUnknown(expense.dueDate)!, card)
+                : null
+            ),
             value: Number(expense.totalValue),
             reconciled: expense.cardReconciliationStatus === "reconciled",
             installmentNumber: undefined,
