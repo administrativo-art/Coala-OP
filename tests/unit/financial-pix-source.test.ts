@@ -45,7 +45,7 @@ test("stored candidate flag cannot override amounts, identity, duplicates or loc
   duplicate.rows.push({ ...duplicate.rows[0], rowId: "b".repeat(64) });
   assert.equal(reviewPixSnapshot(duplicate).facts.length, 0);
 });
-test("daily query compares Pix only when source is available and never approves suggestions", async () => {
+test("daily query compares Pix only when source is available and auto-checks compatible unique pairs", async () => {
   const dependencies = { resolveBinding: async () => salesBinding,
     readPdv: async () => [{ codcupom: "pix-coupon", dtrecebimento: "2026-09-20 10:22:35", valortotal: "6.00", formaPgtos: [{ nome: "PIX", valortotal: "6.00" }] }],
     readStone: async () => reviewXml, now: () => new Date("2026-09-22T12:00:00Z") };
@@ -54,7 +54,8 @@ test("daily query compares Pix only when source is available and never approves 
   });
   assert.equal(result.pix.status, "available"); assert.equal(result.uncomparedPdvFacts.length, 0);
   assert.ok(result.cases.some(row => row.channel === "pix" && row.pdvFactIds.length && row.stoneSaleIds.length));
-  assert.ok(result.cases.every(row => row.reviewStatus === "pending_review"));
+  assert.equal(result.cases.find(row => row.channel === "pix")?.reviewStatus, "auto_checked");
+  assert.equal(result.cases.find(row => row.channel === "debit_card")?.reviewStatus, "attention_required");
   const missing = await queryDailySales(salesRequest, { isDefaultAdmin: true, workspace_id: "coala" }, dependencies);
   assert.equal(missing.uncomparedPdvFacts.length, 1); assert.ok(missing.cases.every(row => row.channel !== "pix"));
 });

@@ -70,7 +70,9 @@ function pdvFacts(raw: unknown, scope: DailySalesScope, issues: SalesSourceIssue
     // Missing/unknown PDV status is not evidence of provider approval.
     const rawStorno = field(row, ["isestornado", "IsEstornado"]);
     const storned = coupon.isStorned || rawStorno === 1;
-    const status = storned ? "refunded" : coupon.isCancelled && !coupon.hasExplicitItemCancellation ? "cancelled" : "pending";
+    const status = storned ? "refunded"
+      : coupon.isCancelled && coupon.hasExplicitItemCancellation ? "partial_cancellation"
+        : coupon.isCancelled ? "cancelled" : "pending";
     coupon.paymentRows.forEach((payment, paymentIndex) => {
       const { channel } = normalizeChannel(payment.rawName);
       if (channel === "cash") return;
@@ -131,10 +133,10 @@ export function reviewDailySales(input: { scope: DailySalesScope; pdvCoupons: un
     limitations: [
       "Comparação de um dia e um StoneCode, não da carteira ou de todos os adquirentes da unidade.",
       "Ausência de par no recorte não comprova venda ausente; o PDV pode incluir outros adquirentes.",
-      "O PDV consultado não fornece vínculo transacional comprovado nem aprovação Stone; valor e horário geram apenas sugestões.",
+      "O PDV consultado não fornece aprovação da adquirente. Pares individuais únicos por valor e janela de cinco minutos são conferidos automaticamente dentro deste recorte; agrupamentos continuam pendentes.",
       "Pix não foi comparado: exige arquivo próprio e vínculo comprovado do terminal à unidade.",
       "Cancelamentos, estornos e chargebacks Stone exigem o histórico da venda; ficam como evidências pendentes, sem compensar totais.",
-      "Nenhuma sugestão aprova conciliação, lança receita/despesa ou confirma recebimento bancário.",
+      "A conferência automática valida somente a compatibilidade PDV × Stone do recorte; não lança receita/despesa nem confirma recebimento bancário.",
     ],
   };
 }

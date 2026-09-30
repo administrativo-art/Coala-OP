@@ -1337,16 +1337,16 @@ Chamadas candidatas encontradas:
 
 ## `sales-reconciliation`
 
-Páginas: [`src/app/dashboard/financial/sales-reconciliation/page.tsx`](../../src/app/dashboard/financial/sales-reconciliation/page.tsx).
+Páginas: [`src/app/dashboard/financial/sales-reconciliation/page.tsx`](../../src/app/dashboard/financial/sales-reconciliation/page.tsx), [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 31.
+Arquivos locais percorridos: 36.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/fees-panel.tsx`](../../src/features/financial/acquirer-fees/fees-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/pdv-stone-review` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/pdv-stone-review/route.ts`](../../src/app/api/financial/pdv-stone-review/route.ts)
-- `/api/financial/stone-mappings` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
+- `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 
 ## `settings`
 
