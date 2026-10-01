@@ -45,6 +45,7 @@ export type SalesReconciliationMatchBasis =
   | "nsu_authorization_terminal"
   | "merchant_order"
   | "unique_amount_time"
+  | "daily_amount_multiset"
   | "candidate_group"
   | "unmatched";
 
