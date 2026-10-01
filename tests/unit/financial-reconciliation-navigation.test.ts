@@ -42,7 +42,7 @@ test("sidebar reúne conciliação e fechamento sem antecipar fechamento mensal"
   assert.match(reconciliation, /label: "Extratos bancários", href: "\/dashboard\/financial\/reconciliation\/bank-statements".*show: permissions\.financial\?\.audits\?\.view/);
   assert.match(reconciliation, /label: "Faturas de cartão de crédito".*show: permissions\.financial\?\.cardStatements\?\.view/);
   assert.match(reconciliation, /label: "Conciliação de vendas".*show: isDefaultAdmin/);
-  assert.match(reconciliation, /label: "Recebimentos Stone".*show: isDefaultAdmin/);
+  assert.match(reconciliation, /label: "Conciliação de recebimentos".*show: isDefaultAdmin/);
   assert.match(reconciliation, /label: "Fechamento de caixa".*show: permissions\.financial\?\.view/);
   assert.match(reconciliation, /label: "Fechamento de caixa"[\s\S]*label: "Depósitos"/);
   assert.match(reconciliation, /label: "Depósitos".*show: permissions\.financial\?\.cashDeposits\?\.view/);
@@ -69,11 +69,18 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   assert.match(read("src/app/dashboard/financial/stone-receipts/page.tsx"), /<StoneReceiptsPage \/>/);
   const receiptsPage = read("src/features/financial/receipts-reconciliation/receipts-page.tsx");
   assert.match(receiptsPage, /if \(!isDefaultAdmin\)/);
+  assert.match(receiptsPage, /useEffect\(\(\) => \{[\s\S]*stone-mappings\?resource=mappings/);
+  assert.match(receiptsPage, /Selecione a unidade primeiro/);
   assert.match(receiptsPage, /Taxa contratada/);
   assert.match(receiptsPage, /Taxa praticada/);
   assert.doesNotMatch(receiptsPage, />Abrir contestação</);
+  assert.doesNotMatch(receiptsPage, /href="\/dashboard\/financial\/sales-reconciliation"/);
   const salesPage = read("src/features/financial/sales-reconciliation/review-page.tsx");
+  assert.match(salesPage, /useEffect\(\(\) => \{[\s\S]*stone-mappings\?resource=mappings/);
+  assert.match(salesPage, /financialDateKey\(new Date\(Date\.now\(\) - 86_400_000\)\)/);
+  assert.match(salesPage, /Selecione a unidade primeiro/);
   assert.doesNotMatch(salesPage, /AcquirerFeesPanel/);
+  assert.doesNotMatch(salesPage, /href="\/dashboard\/financial\/(stone-receipts|stone-anticipations)"/);
   assert.match(salesPage, /Divergências \(\{attentionCount\}\)/);
   assert.match(salesPage, /caseReasons\[row\.kind\]/);
   const page = read("src/features/financial/pages/stone-anticipations-page.tsx");

@@ -274,7 +274,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Fechamento de caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.view },
               { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
               { label: "Conciliação de vendas", href: "/dashboard/financial/sales-reconciliation", icon: ClipboardCheck, show: isDefaultAdmin },
-              { label: "Recebimentos Stone", href: "/dashboard/financial/stone-receipts", icon: DollarSign, show: isDefaultAdmin },
+              { label: "Conciliação de recebimentos", href: "/dashboard/financial/stone-receipts", icon: DollarSign, show: isDefaultAdmin },
               { label: "Extratos bancários", href: "/dashboard/financial/reconciliation/bank-statements", icon: Landmark, show: permissions.financial?.audits?.view },
               { label: "Faturas de cartão de crédito", href: "/dashboard/financial/reconciliation/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
             ],

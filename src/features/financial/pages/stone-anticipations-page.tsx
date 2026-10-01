@@ -29,7 +29,7 @@ export function StoneAnticipationsPage({ agentEntry = false }: { agentEntry?: bo
       {agentEntry && <p className="text-sm text-muted-foreground">Análises guiadas de antecipações e recebíveis por período. Carteira completa, DRE e análise geral de caixa ainda não estão disponíveis neste agente.</p>}
       <p className="text-muted-foreground">Pagamentos comparados com as parcelas originais. Somente leitura, sem baixas ou lançamentos na DRE.</p></header>
     {agentEntry && <FinancialAnalysisNavigation topic="anticipations" />}
-    {!agentEntry && <Button asChild variant="outline"><Link href="/dashboard/financial/stone-receipts">Voltar a Recebimentos Stone</Link></Button>}
+    {!agentEntry && <Button asChild variant="outline"><Link href="/dashboard/financial/stone-receipts">Voltar a Conciliação de recebimentos</Link></Button>}
     <AnticipationWorkspace onResult={value => { setResult(value); setPage(0); setFilter("all"); }} />
     <p className="text-sm text-muted-foreground">Consulta manual de até 31 datas de origem. Não representa o saldo total a receber. O vínculo oficial é validado no servidor em cada consulta.</p>
     {result && <section className="space-y-4" aria-label="Resultado da conferência">
