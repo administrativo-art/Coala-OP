@@ -64,7 +64,11 @@ export function reviewPixSnapshot(input: { head: unknown; rows: unknown[]; docum
     facts.push({ id: `pix:${row.rowId}`, source: "stone", workspaceId: input.scope.workspaceId,
       kioskId: input.scope.kioskId, businessDate: input.scope.referenceDate, soldAt: e.createdAtUtc,
       channel: "pix", grossAmountCents: a.gross, status: "approved",
-      identifiers: { providerTransactionId: e.e2eId, terminalId: identity.terminalSerialNumber } });
+      identifiers: {
+        providerTransactionId: e.e2eId,
+        providerEventId: e.eventId,
+        terminalId: identity.terminalSerialNumber,
+      } });
     // Keep the sales review unchanged; fee settlement needs the financial event,
     // never the file's capture day. Invalid/future events remain pending for fees.
     const eventTime = Date.parse(e.providerDateTimeUtc);

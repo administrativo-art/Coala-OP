@@ -28,6 +28,16 @@ function providerKey(fact: SalesMatchFact) {
   return scopedKey(fact, normalizedId(fact.identifiers.providerTransactionId));
 }
 
+function sharedEventId(fact: SalesMatchFact) {
+  return normalizedId(fact.source === "pdv"
+    ? fact.identifiers.nsu
+    : fact.identifiers.providerEventId);
+}
+
+function providerEventKey(fact: SalesMatchFact) {
+  return scopedKey(fact, sharedEventId(fact));
+}
+
 function authorizationKey(fact: SalesMatchFact) {
   const nsu = normalizedId(fact.identifiers.nsu);
   const authorization = normalizedId(fact.identifiers.authorizationCode);
@@ -111,6 +121,9 @@ function buildCase(
 }
 
 function identifiersConflict(left: SalesMatchFact, right: SalesMatchFact) {
+  const leftEventId = sharedEventId(left);
+  const rightEventId = sharedEventId(right);
+  if (leftEventId !== null && rightEventId !== null && leftEventId !== rightEventId) return true;
   return (["providerTransactionId", "nsu", "authorizationCode", "terminalId", "merchantOrderId"] as const)
     .some(key => {
       const a = normalizedId(left.identifiers[key]);
@@ -142,6 +155,7 @@ function amountMultiset(facts: SalesMatchFact[]) {
 }
 
 function hasSharedIdentifierField(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
+  if (pdv.some(fact => sharedEventId(fact) !== null) && stone.some(fact => sharedEventId(fact) !== null)) return true;
   return (["providerTransactionId", "nsu", "authorizationCode", "terminalId", "merchantOrderId"] as const)
     .some(key => (
       pdv.some(fact => normalizedId(fact.identifiers[key]) !== null)
@@ -228,6 +242,7 @@ export function suggestSalesReconciliationCases(input: {
   }
 
   matchByKey("provider_transaction_id", providerKey);
+  matchByKey("provider_event_id", providerEventKey);
   matchByKey("nsu_authorization_terminal", authorizationKey);
   matchByKey("merchant_order", merchantOrderKey);
 
