@@ -76,8 +76,12 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   assert.doesNotMatch(receiptsPage, />Abrir contestação</);
   assert.doesNotMatch(receiptsPage, /href="\/dashboard\/financial\/sales-reconciliation"/);
   const salesPage = read("src/features/financial/sales-reconciliation/review-page.tsx");
+  const salesRoute = read("src/app/dashboard/financial/sales-reconciliation/page.tsx");
   assert.match(salesPage, /useEffect\(\(\) => \{[\s\S]*stone-mappings\?resource=mappings/);
-  assert.match(salesPage, /financialDateKey\(new Date\(Date\.now\(\) - 86_400_000\)\)/);
+  assert.match(salesRoute, /const now = new Date\(\)/);
+  assert.match(salesRoute, /financialDateKey\(now\)/);
+  assert.match(salesRoute, /latestPublishedDate\(now\)/);
+  assert.match(salesPage, /calendarToday[\s\S]*publishedThrough/);
   assert.match(salesPage, /Selecione a unidade primeiro/);
   assert.doesNotMatch(salesPage, /AcquirerFeesPanel/);
   assert.doesNotMatch(salesPage, /href="\/dashboard\/financial\/(stone-receipts|stone-anticipations)"/);

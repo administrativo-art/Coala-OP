@@ -6,7 +6,8 @@ assertFirestoreEmulatorSafety({ projectId: "demo-coala-repository", databaseId: 
 const { financialDbAdmin: db } = await import("../../src/lib/firebase-financial-admin.ts");
 const { queryDailySales } = await import("../../src/features/financial/sales-reconciliation/query.ts");
 const { dailySalesReviewId } = await import("../../src/features/financial/sales-reconciliation/review-state.ts");
-const { saveDailySalesReview, SALES_REVIEW_COLLECTION } = await import("../../src/features/financial/sales-reconciliation/review-state.server.ts");
+const { listDailySalesReviewCalendar, readDailySalesReviewSnapshot, saveDailySalesReview,
+  SALES_REVIEW_COLLECTION, SALES_REVIEW_SNAPSHOT_COLLECTION } = await import("../../src/features/financial/sales-reconciliation/review-state.server.ts");
 const { salesBinding, salesRequest, reviewCoupons, reviewXml } = await import("../fixtures/pdv-stone-review.ts");
 
 const roots = [];
@@ -25,20 +26,33 @@ async function fixture(suffix) {
     now: () => new Date("2026-09-22T12:00:00Z"),
   });
   const root = db.collection(SALES_REVIEW_COLLECTION).doc(dailySalesReviewId(result));
-  roots.push(root);
-  return { result, root };
+  const snapshot = db.collection(SALES_REVIEW_SNAPSHOT_COLLECTION).doc(dailySalesReviewId(result));
+  roots.push(root, snapshot);
+  return { result, root, snapshot };
 }
 
 test("daily review persistence is idempotent and reopens a closed day after changed evidence", async () => {
-  const { result, root } = await fixture("state");
+  const { result, root, snapshot } = await fixture("state");
   const [first, retry] = await Promise.all([
     saveDailySalesReview(result, "admin", new Date("2026-09-22T12:00:00Z")),
     saveDailySalesReview(result, "admin", new Date("2026-09-22T12:01:00Z")),
   ]);
   assert.equal(first.status, "closed");
   assert.equal(retry.status, "closed");
+  assert.equal(first.snapshotAvailable, true);
   assert.equal((await root.get()).get("revision"), 1);
+  assert.equal((await root.get()).get("snapshotVersion"), 1);
+  assert.equal((await snapshot.get()).get("encoding"), "gzip-json");
   assert.equal((await root.collection("revisions").get()).size, 1);
+  const identity = { workspaceId: result.scope.workspaceId, kioskId: result.scope.kioskId,
+    mappingId: result.mappingId, stoneCode: result.scope.stoneCode, referenceDate: result.scope.referenceDate };
+  const stored = await readDailySalesReviewSnapshot(identity);
+  assert.equal(stored?.review.status, "closed");
+  assert.deepEqual(stored?.cases, result.cases);
+  const calendar = await listDailySalesReviewCalendar({ ...identity, from: result.scope.referenceDate, through: result.scope.referenceDate });
+  assert.equal(calendar.length, 1);
+  assert.equal(calendar[0].snapshotAvailable, true);
+  assert.equal(calendar[0].status, "closed");
 
   const changed = structuredClone(result);
   changed.collectedAt = "2026-09-22T14:00:00.000Z";
@@ -51,6 +65,8 @@ test("daily review persistence is idempotent and reopens a closed day after chan
   assert.equal(reopened.revision, 2);
   assert.equal(reopened.sourceChanged, true);
   assert.equal(reopened.reopenedReason, "source_changed");
+  assert.equal(reopened.snapshotAvailable, true);
+  assert.equal((await readDailySalesReviewSnapshot(identity))?.review.status, "attention_required");
   assert.equal((await root.collection("revisions").get()).size, 2);
 });
 
