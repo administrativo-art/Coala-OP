@@ -16,6 +16,16 @@ export type SalesSourceIdentifiers = {
   merchantOrderId?: string | null;
 };
 
+export type PdvSaleAdjustment = {
+  type: "item_cancellation";
+  originalAmountCents: number;
+  cancelledAmountCents: number;
+  finalAmountCents: number;
+  lastCancellationAt: string | null;
+  finalizedAt: string;
+  finalizedAfterCancellation: boolean;
+};
+
 export type SalesMatchFact = {
   id: string;
   source: "pdv" | "stone";
@@ -28,6 +38,7 @@ export type SalesMatchFact = {
   status: ReconciliationSaleStatus;
   couponId?: string | null;
   identifiers: SalesSourceIdentifiers;
+  adjustment?: PdvSaleAdjustment;
 };
 
 export type SalesReconciliationCaseKind =
