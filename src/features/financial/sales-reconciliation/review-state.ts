@@ -32,6 +32,7 @@ export type DailySalesReviewRecord = {
   closedBy: string | null;
   reopenedAt: string | null;
   reopenedReason: "source_changed" | null;
+  snapshotVersion?: 1;
 };
 
 export type DailySalesReviewView = {
@@ -45,6 +46,7 @@ export type DailySalesReviewView = {
   reopenedReason: "source_changed" | null;
   sourceChanged: boolean;
   checkedAt: string;
+  snapshotAvailable: boolean;
 };
 
 export type DailySalesApiResult = DailySalesResult & { review: DailySalesReviewView };
@@ -55,11 +57,30 @@ const view = (record: DailySalesReviewRecord, id: string, sourceChanged: boolean
   id, status: record.status, revision: record.revision, summary: record.summary,
   reviewedAt: record.reviewedAt, closedAt: record.closedAt, reopenedAt: record.reopenedAt,
   reopenedReason: record.reopenedReason, sourceChanged, checkedAt,
+  snapshotAvailable: record.snapshotVersion === 1,
 });
 
+export type DailySalesReviewIdentity = {
+  workspaceId: string;
+  kioskId: string;
+  mappingId: string;
+  stoneCode: string;
+  referenceDate: string;
+};
+
+export function dailySalesReviewIdentityId(identity: DailySalesReviewIdentity) {
+  return digest([identity.workspaceId, identity.kioskId, identity.mappingId,
+    identity.stoneCode, identity.referenceDate]);
+}
+
 export function dailySalesReviewId(result: DailySalesResult) {
-  return digest([result.scope.workspaceId, result.scope.kioskId, result.mappingId,
-    result.scope.stoneCode, result.scope.referenceDate]);
+  return dailySalesReviewIdentityId({
+    workspaceId: result.scope.workspaceId,
+    kioskId: result.scope.kioskId,
+    mappingId: result.mappingId,
+    stoneCode: result.scope.stoneCode,
+    referenceDate: result.scope.referenceDate,
+  });
 }
 
 export function dailySalesSourceFingerprint(result: DailySalesResult) {

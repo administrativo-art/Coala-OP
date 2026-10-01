@@ -71,6 +71,24 @@
       ]
     },
     {
+      "collectionGroup": "stoneMerchantMappings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dailySalesReviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "mappingId", "order": "ASCENDING" },
+        { "fieldPath": "stoneCode", "order": "ASCENDING" },
+        { "fieldPath": "referenceDate", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "bankPaymentRequests",
       "queryScope": "COLLECTION",
       "fields": [

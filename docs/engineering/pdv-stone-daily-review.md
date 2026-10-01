@@ -129,3 +129,13 @@ Validação executada:
 O comando `verify` com cache normal não teve uma segunda execução verde; o check
 e a compilação sem cache foram validados separadamente. A máquina continua com
 pouco espaço livre. Nenhum arquivo do usuário ou cache de outra branch foi removido.
+
+## Incremento de calendário e automação — 2026-10-01
+
+O trabalho local `2026-10-01-pdv-stone-calendar` conecta o estado diário já versionado a uma visão anual e mensal. A entrada cobre janeiro de 2026 até o mês atual; dia sem documento é `não verificado`, nunca fechado por ausência. Dias fora da vigência do vínculo e ainda não publicados são neutros e não entram no percentual. Uma revisão fechada que recebe nova fonte divergente é destacada como `reaberta por informação tardia` e abre a mesma tela detalhada por link profundo.
+
+`GET /api/financial/pdv-stone-review` lista no máximo 366 cabeçalhos filtrados e lê um snapshot diário por ID determinístico. O POST continua sendo a única operação de coleta e agora persiste, na mesma transação do cabeçalho/revisão, um snapshot JSON comprimido dos fatos normalizados. Não persiste XML bruto, segredo ou número de cartão. O teto de 850 KB comprimidos/8 MB brutos evita ultrapassar o documento; acima dele, o estado permanece salvo sem snapshot e uma abertura volta às fontes.
+
+A rotina proposta usa `stoneSalesReviewScheduler` e `/api/jobs/stone-sales-review/reconcile`, protegidos pelo segredo Stone já existente. São nove execuções diárias, um vínculo/StoneCode por rodízio, até seis datas e duas coletas simultâneas. O primeiro slot revisita um dos sete dias recentes; os demais avançam o backfill desde `2026-01-01`, respeitando `validFrom`/`validTo`. O cursor concluído fica estacionado na próxima data ainda não publicada para não perder dias novos; nos primeiros sete dias do mês também percorre o mês anterior. Falha não avança o cursor e a persistência por fingerprint torna repetição segura.
+
+Preflight conservador: a visão anual devolve até 366 documentos por abertura (1.830/dia em cinco aberturas); o catálogo agendado devolve até 100 vínculos por execução e, em nove execuções, até 900 leituras/dia no limite cadastral, mais as leituras limitadas de revisão/cursores. O teto externo é 54 pares PDV/Stone/dia, com duas chamadas simultâneas. Não há polling ou listener. Implantação, chamadas reais e política de retenção do snapshot permanecem pendentes.

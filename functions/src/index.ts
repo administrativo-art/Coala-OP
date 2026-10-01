@@ -18,6 +18,7 @@ export { onFieldUpdate } from './rh/field-update.js';
 export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automations.js';
 export { stonePortfolioDailySync } from './stone-portfolio-job.js';
 export { stonePixDailyRequest } from './stone-pix-job.js';
+export { stoneSalesReviewScheduler } from './stone-sales-review-job.js';
 export { onTermination, lgpdScheduledCleanup } from './rh/termination.js';
 export { checkFieldMapConsistency } from './rh/propagation.js';
 export { cashClosureDailySync } from './cash-closure-jobs.js';
