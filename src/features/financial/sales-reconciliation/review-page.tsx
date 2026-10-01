@@ -15,7 +15,8 @@ import type { ReconciliationSalesChannel, SalesMatchFact, SuggestedSalesReconcil
 import { CaseDetailPanel, StatusBadge } from "./review-case-panel";
 import {
   addDays, bases, caseBadgeLabel, caseTime, channelOrder, channels, factLabel, filterCases, formatDateKey, isAttention,
-  issueReasons, kindsShort, money, pixSourceLabels, reviewStatuses, saleStatuses, summarizeChannel,
+  issueReasons, kindsShort, money, pixSourceLabels, reviewStatuses, saleStatuses, stoneEventLabels,
+  summarizeChannel,
 } from "./review-view";
 import type { CaseFilter, ChannelFilter, KindFilter } from "./review-view";
 
@@ -273,7 +274,7 @@ export function SalesReviewPage() {
   const currentIssuePage = Math.min(issuePage, issuePages - 1);
   const reviewStatus = result?.review.status;
   const verdictTone = reviewStatus === "closed" ? "ok" : reviewStatus === "awaiting_source" ? "warn" : "bad";
-  const verdictTitle = reviewStatus === "closed" ? "Tudo conferido"
+  const verdictTitle = reviewStatus === "closed" ? reviewStatuses.closed
     : totals.attention ? `${totals.attention} divergência(s) para revisar`
       : result ? reviewStatuses[result.review.status] : "";
   const mappingLabel = mapping ? `${mapping.kioskName} — ${mapping.accountName}` : "";
@@ -624,7 +625,7 @@ export function SalesReviewPage() {
                 <span className="break-all font-mono text-[#374151]">{event.transactionId}</span>
                 <span className="text-right font-mono">{event.capturedAmount ?? "Não informado"}</span>
                 <span className="text-right font-mono text-[#7c8189]">{event.canceledAmount ?? "Não informado"}</span>
-                <span className="font-mono text-[11px] text-[#7c8189]">{Object.entries(event.events).map(([name, count]) => `${name}: ${count}`).join(" · ")}</span>
+                <span className="font-mono text-[11px] text-[#7c8189]">{Object.entries(event.events).map(([name, count]) => `${stoneEventLabels[name] ?? name}: ${count}`).join(" · ")}</span>
               </div>)}
             </div></div>
           </> : null}

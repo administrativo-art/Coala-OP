@@ -199,12 +199,20 @@ test("Stone payment events do not duplicate captured revenue", () => {
 });
 
 test("Stone cancellation in either section blocks the original capture and preserves an issue", () => {
-  for (const event of ["Cancellations", "CancellationCharges", "Chargebacks", "ChargebackRefunds"]) {
+  const adverseEvents = [
+    ["Cancellations", "cancellation_event"],
+    ["CancellationCharges", "cancellation_charge_event"],
+    ["Chargebacks", "chargeback_event"],
+    ["ChargebackRefunds", "chargeback_refund_event"],
+  ] as const;
+  for (const [event, reason] of adverseEvents) {
     const cancelled = sale().replace("<Captures>1", "<Captures>0").replace(`<${event}>0`, `<${event}>1`);
     const result = review([coupon()], file(sale(), cancelled));
     assert.equal(result.stoneSales.length, 0);
-    assert.equal(result.issues.length, 2);
-    assert.ok(result.issues.every(i => i.reason === "cancellation_event"));
+    assert.equal(result.issues.length, 1);
+    assert.ok(result.issues.every(i => i.reason === reason));
+    assert.match(result.issues[0].reference, /file-1/);
+    assert.doesNotMatch(result.issues[0].reference, /FinancialTransactions/);
     assert.equal(result.stoneEvents[1].events[event], 1);
   }
 });

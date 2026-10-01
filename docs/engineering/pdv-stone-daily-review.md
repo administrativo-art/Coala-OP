@@ -51,10 +51,12 @@ usam códigos 1/3; crédito e pré-pago crédito, 2/4, conforme o
 [contrato AccountType Stone](https://conciliacao.stone.com.br/reference/accounttype).
 Outros códigos ficam pendentes. Movimentos da seção de contas não duplicam receita.
 
-Conforme o [contrato Transaction](https://conciliacao.stone.com.br/reference/transaction-1),
-eventos dizem respeito ao dia do arquivo e detalhes da captura podem estar ausentes
-nos outros eventos. Cancelamentos, estornos e chargebacks não são compensados como
-novas vendas negativas: ficam nas evidências, com IDs, valores e contadores originais.
+Conforme os contratos [Transaction](https://conciliacao.stone.com.br/reference/transaction-1)
+e [Events](https://conciliacao.stone.com.br/reference/events-copy), eventos dizem respeito
+ao dia do arquivo e detalhes da captura podem estar ausentes nos outros eventos.
+Cancelamento/estorno, desconto de cancelamento, chargeback e estorno de chargeback têm
+apontamentos distintos na interface. Eles não são compensados como novas vendas negativas:
+ficam nas evidências, com IDs, valores e contadores originais.
 Um evento adverso em qualquer seção bloqueia a captura da mesma transação nesse arquivo.
 Isso não equivale a reconstruir o histórico completo da venda.
 

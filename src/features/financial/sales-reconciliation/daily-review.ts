@@ -15,8 +15,11 @@ export type SalesSourceIssue = {
   source: "pdv" | "stone"; reference: string;
   reason: "invalid_coupon" | "duplicate_coupon" | "invalid_payments" | "invalid_date" |
     "outside_day" | "unsupported_channel" | "invalid_amount" | "non_capture_event" |
-    "cancellation_event" | "unsupported_capture";
+    "cancellation_event" | "cancellation_charge_event" | "chargeback_event" |
+    "chargeback_refund_event" | "unsupported_capture";
 };
+type StoneAdverseIssueReason = Extract<SalesSourceIssue["reason"],
+  "cancellation_event" | "cancellation_charge_event" | "chargeback_event" | "chargeback_refund_event">;
 const record = z.record(z.unknown());
 const couponsSchema = z.array(record).max(MAX_SALES_REVIEW_FACTS);
 
@@ -45,6 +48,16 @@ function detailIdentifier(row: Record<string, unknown>, keys: string[]) {
 function providerName(row: Record<string, unknown>, keys: string[]) {
   const raw = field(row, keys);
   return typeof raw === "string" ? raw.trim().toUpperCase() : "";
+}
+
+function stoneAdverseIssueReasons(row: { events: Record<string, number>; canceledAmount: string | null }) {
+  const reasons: StoneAdverseIssueReason[] = [];
+  if (row.events.Cancellations > 0
+    || (row.canceledAmount !== null && exactSalesCents(row.canceledAmount) !== 0)) reasons.push("cancellation_event");
+  if (row.events.CancellationCharges > 0) reasons.push("cancellation_charge_event");
+  if (row.events.Chargebacks > 0) reasons.push("chargeback_event");
+  if (row.events.ChargebackRefunds > 0) reasons.push("chargeback_refund_event");
+  return reasons;
 }
 
 function pdvPaymentIdentifiers(payment: Record<string, unknown>, channel: ReconciliationSalesChannel): SalesSourceIdentifiers {
@@ -189,13 +202,23 @@ export function reviewDailySales(input: { scope: DailySalesScope; pdvCoupons: un
   const issues: SalesSourceIssue[] = [];
   const pdv = pdvFacts(input.pdvCoupons, scope, issues);
   const stone: SalesMatchFact[] = [];
-  const affectedIds = new Set(file.transactions.filter(row =>
-    ["Cancellations", "CancellationCharges", "Chargebacks", "ChargebackRefunds"].some(key => row.events[key] > 0)
-    || (row.canceledAmount !== null && exactSalesCents(row.canceledAmount) !== 0)).map(row => row.transactionId));
+  const adverseReasonsById = new Map<string, Set<StoneAdverseIssueReason>>();
+  for (const row of file.transactions) {
+    const reasons = stoneAdverseIssueReasons(row);
+    if (!reasons.length) continue;
+    const current = adverseReasonsById.get(row.transactionId) ?? new Set<StoneAdverseIssueReason>();
+    reasons.forEach(reason => current.add(reason));
+    adverseReasonsById.set(row.transactionId, current);
+  }
+  for (const [transactionId, reasons] of adverseReasonsById) {
+    reasons.forEach(reason => issues.push({ source: "stone",
+      reference: JSON.stringify([file.fileId, transactionId]), reason }));
+  }
   for (const row of file.transactions) {
     const issue = (reason: SalesSourceIssue["reason"]) => issues.push({ source: "stone",
       reference: JSON.stringify([file.fileId, row.sourceSection, row.transactionId]), reason });
-    if (affectedIds.has(row.transactionId)) { issue("cancellation_event"); continue; }
+    const adverseReasons = adverseReasonsById.get(row.transactionId);
+    if (adverseReasons) continue;
     // Account movements/payment events must never be imported as new sales.
     if (row.sourceSection !== "FinancialTransactions" || row.events.Captures === 0) { issue("non_capture_event"); continue; }
     const channel = row.accountTypeCode === "1" || row.accountTypeCode === "3" ? "debit_card"
