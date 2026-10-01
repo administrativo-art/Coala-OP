@@ -59,8 +59,8 @@ O solicitador diário e o webhook são descritos em [Stone: vendas](flows/stone-
 Cancelamentos
 Stone são evidências pendentes de histórico. O cadastro de filial PDV é atual, sem
 histórico de reassociações comprovado; a revalidação detecta mudanças durante a
-requisição, não reconstrói vigências passadas da filial. Não houve chamada aos
-provedores reais ou prova de cobertura com dados de produção.
+requisição, não reconstrói vigências passadas da filial. Nesta etapa original não houve
+chamada aos provedores reais ou prova de cobertura com dados de produção.
 
 Revisão de permissões: mantido `isDefaultAdmin` na página, item de navegação e rota.
 O layout financeiro existente exige `financial.view`; administradores padrão já
@@ -117,3 +117,18 @@ foram copiados para a documentação versionada.
 Preflight adicional: uma leitura por recorte em `dailySalesReviews`; duas escritas
 somente na primeira revisão ou quando o fingerprint muda. ID direto, sem scan,
 consulta, índice, listener ou migração. Permissão continua `isDefaultAdmin` no servidor.
+
+## Atualização local — identificador compartilhado do cartão (2026-10-01)
+
+Uma leitura PDV real, limitada ao dia e à filial investigados e sem gravação, confirmou
+que cada pagamento de cartão Stone da amostra possuía um único `detalhes[]`, com `nsu`
+textual e código de autorização. No caso reportado, o NSU era exatamente o
+`AcquirerTransactionKey` exibido pela Stone. O adaptador passa a preservar esses campos
+e promove o NSU a ID do provedor somente para débito/crédito com um único detalhe que
+identifique explicitamente a Stone. Outra adquirente, detalhe múltiplo, sentinela ou tipo
+inesperado mantém o fallback anterior, sem inventar identidade.
+
+Não há nova chamada, query, permissão, listener, polling ou migração. A próxima consulta
+de um fechamento antigo pode alterar seu fingerprint porque a evidência ficou mais forte;
+um dia ainda íntegro continua fechado e recebe no máximo a revisão já prevista. A validação
+real adicional não chamou a API Stone e não comprova aprovação PDV nem crédito bancário.
