@@ -4,6 +4,7 @@ import { FieldPath, FieldValue, Timestamp, type Transaction } from "firebase-adm
 import { financialDbAdmin as db } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { AppError } from "@/lib/observability/app-error";
+import { STONE_PIX_FILE_SCHEMA_VERSION } from "@/lib/integrations/stone/pix-storage-contract";
 import { financialExpenseAccountingFields, financialExpenseCompetenceMonth } from "../lib/expense-accounting-contract";
 import { sourceSettlementSummary } from "../lib/source-settlement";
 import { FINANCIAL_COLLECTIONS } from "../lib/constants";
@@ -62,7 +63,8 @@ async function validateStoredMapping(tx: Transaction, evidence: FeeEvidence, bat
   if (evidence.pixSource) {
     const head = await tx.get(db.collection("stonePixConciliationFiles").doc(evidence.pixSource.fileId));
     if (head.data()?.workspaceId !== context.workspace_id || head.data()?.referenceDate !== evidence.request.referenceDate
-      || head.data()?.status !== "processed" || head.data()?.sourceHash !== evidence.pixSource.sourceHash) fail("SOURCE_CHANGED", "Arquivo Pix mudou. Refaça a prévia.");
+      || head.data()?.status !== "processed" || head.data()?.schemaVersion !== STONE_PIX_FILE_SCHEMA_VERSION
+      || head.data()?.sourceHash !== evidence.pixSource.sourceHash) fail("SOURCE_CHANGED", "Arquivo Pix mudou. Refaça a prévia.");
   }
 }
 async function storedRecords(request: FeeRequest, context: FeeContext) {
