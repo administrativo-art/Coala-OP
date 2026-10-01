@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **368 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **370 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **45 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -313,6 +313,7 @@ Inclui **45 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/integrations/bizneo/sync-taxons` | GET | [src/app/api/integrations/bizneo/sync-taxons/route.ts](../../src/app/api/integrations/bizneo/sync-taxons/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
 | `/api/integrations/bizneo/sync-users` | GET | [src/app/api/integrations/bizneo/sync-users/route.ts](../../src/app/api/integrations/bizneo/sync-users/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
 | `/api/integrations/instagram/feed` | GET | [src/app/api/integrations/instagram/feed/route.ts](../../src/app/api/integrations/instagram/feed/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
+| `/api/integrations/instagram/insights` | GET | [src/app/api/integrations/instagram/insights/route.ts](../../src/app/api/integrations/instagram/insights/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/integrations/instagram/media` | GET, POST | [src/app/api/integrations/instagram/media/route.ts](../../src/app/api/integrations/instagram/media/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/integrations/instagram/media/[id]` | GET | [src/app/api/integrations/instagram/media/[id]/route.ts](../../src/app/api/integrations/instagram/media/%5Bid%5D/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/integrations/instagram/schedule` | GET, POST | [src/app/api/integrations/instagram/schedule/route.ts](../../src/app/api/integrations/instagram/schedule/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
@@ -346,6 +347,7 @@ Inclui **45 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/profile-compliance` | GET, POST | [src/app/api/profile-compliance/route.ts](../../src/app/api/profile-compliance/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/profile-compliance/overview` | GET | [src/app/api/profile-compliance/overview/route.ts](../../src/app/api/profile-compliance/overview/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/public/bio` | GET | [src/app/api/public/bio/route.ts](../../src/app/api/public/bio/route.ts) | [settings](flows/settings.md) |
+| `/api/public/bio/analytics` | POST | [src/app/api/public/bio/analytics/route.ts](../../src/app/api/public/bio/analytics/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/public/bio/media/[id]` | GET | [src/app/api/public/bio/media/[id]/route.ts](../../src/app/api/public/bio/media/%5Bid%5D/route.ts) | [settings](flows/settings.md) |
 | `/api/purchasing/[...path]` | GET, POST, PATCH, DELETE | [src/app/api/purchasing/[...path]/route.ts](../../src/app/api/purchasing/%5B...path%5D/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/registry/[...path]` | GET, POST, PATCH, DELETE | [src/app/api/registry/[...path]/route.ts](../../src/app/api/registry/%5B...path%5D/route.ts) | [registry](flows/registry.md) |
@@ -423,6 +425,7 @@ Inclui **45 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `financialBudgetGeneration` | `onSchedule` | [functions/src/financial-budget-jobs.ts](../../functions/src/financial-budget-jobs.ts) | [financial-budgets](flows/financial-budgets.md) |
 | `financialInboxMaintenance` | `onSchedule` | [functions/src/financial-inbox-jobs.ts](../../functions/src/financial-inbox-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `hourlyPdvSync` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `instagramInsightsSnapshotScheduler` | `onSchedule` | [functions/src/instagram-insights-snapshot-job.ts](../../functions/src/instagram-insights-snapshot-job.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `instagramPublishingScheduler` | `onSchedule` | [functions/src/instagram-publishing-job.ts](../../functions/src/instagram-publishing-job.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `interCobrancaReconciliation` | `onSchedule` | [functions/src/inter-cobranca-jobs.ts](../../functions/src/inter-cobranca-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `interPaymentReconciliation` | `onSchedule` | [functions/src/inter-payment-jobs.ts](../../functions/src/inter-payment-jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |

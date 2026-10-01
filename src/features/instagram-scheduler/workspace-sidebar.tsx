@@ -19,12 +19,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type InstagramWorkspaceView = "calendar" | "feed" | "media";
+export type InstagramWorkspaceView = "calendar" | "feed" | "media" | "bio" | "reports";
 
 type NavItem = {
   label: string;
   view?: InstagramWorkspaceView;
   icon: LucideIcon;
+  requiresBioAccess?: boolean;
 };
 
 const groups: Array<{ title: string; items: NavItem[] }> = [
@@ -49,14 +50,14 @@ const groups: Array<{ title: string; items: NavItem[] }> = [
     title: "Relacionar",
     items: [
       { label: "Caixa de entrada", icon: Inbox },
-      { label: "Link na bio", icon: Link2 },
+      { label: "Link na bio", view: "bio", icon: Link2, requiresBioAccess: true },
       { label: "Concorrentes", icon: Users },
     ],
   },
   {
     title: "Medir",
     items: [
-      { label: "Relatórios", icon: BarChart3 },
+      { label: "Relatórios", view: "reports", icon: BarChart3 },
       { label: "Anúncios", icon: Megaphone },
     ],
   },
@@ -72,6 +73,7 @@ const groups: Array<{ title: string; items: NavItem[] }> = [
 type InstagramWorkspaceSidebarProps = {
   activeView: InstagramWorkspaceView;
   email: string | null | undefined;
+  canManageBio: boolean;
   mobileOpen: boolean;
   onCloseMobile: () => void;
   onSelect: (view: InstagramWorkspaceView) => void;
@@ -83,6 +85,7 @@ type InstagramWorkspaceSidebarProps = {
 export function InstagramWorkspaceSidebar({
   activeView,
   email,
+  canManageBio,
   mobileOpen,
   onCloseMobile,
   onSelect,
@@ -151,7 +154,7 @@ export function InstagramWorkspaceSidebar({
                 <ChevronDown className="h-3 w-3" aria-hidden="true" />
               </h2>
               <div className="mt-0.5 space-y-0.5">
-                {group.items.map((item) => {
+                {group.items.filter((item) => !item.requiresBioAccess || canManageBio).map((item) => {
                   const active = item.view === activeView;
                   const Icon = item.icon;
                   return (

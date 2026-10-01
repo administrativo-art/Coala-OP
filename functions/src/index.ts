@@ -37,6 +37,7 @@ export {
   uberTransactionCandidateWritten,
 } from './uber-sftp/jobs.js';
 export { instagramPublishingScheduler } from './instagram-publishing-job.js';
+export { instagramInsightsSnapshotScheduler } from './instagram-insights-snapshot-job.js';
 
 setGlobalOptions({ maxInstances: 10 });
 
@@ -831,6 +832,7 @@ export const reconcilePdvSalesHistory = onSchedule({
           mode: 'reconciliation',
           runId,
         });
+        if (result.persistence === 'preview') throw new Error('Prévia não permitida no reconciliador agendado.');
         summary[result.persistence] += 1;
       } catch (error) {
         summary.failed += 1;

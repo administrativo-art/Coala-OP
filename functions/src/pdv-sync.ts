@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { convertValue } from './conversion.js';
+import { normalizePdvCouponRevenue, PDV_REVENUE_VERSION } from './pdv-revenue.js';
 import {
   decidePdvSnapshot,
   type PendingDecrease,
@@ -41,6 +42,12 @@ export type PdvSyncOptions = {
   catalog?: PdvSyncCatalog;
   mode?: 'live' | 'reconciliation' | 'manual';
   runId?: string;
+  /** Preview has no writes, including reconciliation state. */
+  dryRun?: boolean;
+  /** Maintenance must abort before writing if the source changed after preview. */
+  expectedMetrics?: Pick<PdvSnapshotMetrics, 'couponCount' | 'revenueCents'>;
+  /** Revenue-only repair preserves theoretical consumption when quantities match. */
+  revenueCorrection?: boolean;
 };
 
 /**
@@ -148,6 +155,7 @@ export async function getAccessToken() {
   params.append('password', PASSWORD);
   const authString = Buffer.from(`${COD_EMPRESA}:${API_TOKEN}`).toString('base64');
   const response = await fetch(`${BASE_URL}/token`, {
+    signal: AbortSignal.timeout(45_000),
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -180,6 +188,7 @@ async function fetchAllCouponsForDay(accessToken: string, date: string, filialId
   const COD_EMPRESA = getEnv('PDVLEGAL_COD_EMPRESA');
   const API_TOKEN = getEnv('PDVLEGAL_TOKEN');
   const response = await fetch(`${BASE_URL}/cupom/get/${date}/${date}/${filialId}`, {
+    signal: AbortSignal.timeout(45_000),
     headers: { 'Authorization': `Bearer ${accessToken}`, 'CodEmpresa': COD_EMPRESA, 'Token': API_TOKEN },
   });
   if (!response.ok) {
@@ -487,7 +496,8 @@ async function persistPdvSnapshot(
       syncMode: options.mode ?? 'live',
       syncRunId: options.runId ?? null,
     });
-    transaction.set(consumptionRef, {
+    if (!options.revenueCorrection || existingMetrics?.itemQuantity !== snapshot.metrics.itemQuantity
+      || existingMetrics?.couponCount !== snapshot.metrics.couponCount) transaction.set(consumptionRef, {
       ...snapshot.consumptionReport,
       createdAt: existingCreatedAt ?? now.toISOString(),
       updatedAt: now.toISOString(),
@@ -603,7 +613,10 @@ export async function syncDayAdmin(
   const token = options.accessToken ?? await getAccessToken();
   const coupons = await fetchAllCouponsForDay(token, dateStr, pdvFilialId);
   if (!coupons || coupons.length === 0) {
-    const persistence = await recordEmptyPdvResponse(dateStr, kioskId, db, options);
+    if (options.expectedMetrics && (options.expectedMetrics.couponCount || options.expectedMetrics.revenueCents)) {
+      throw new PdvApiError('Fonte PDV mudou após a prévia; nenhuma escrita realizada.', 'PREVIEW_CHANGED');
+    }
+    const persistence = options.dryRun ? 'preview' as const : await recordEmptyPdvResponse(dateStr, kioskId, db, options);
     console.log(`[PDV Sync] ${dateStr} ${kioskId}: sem cupons; persistência ${persistence}.`);
     return {
       success: true,
@@ -612,16 +625,9 @@ export async function syncDayAdmin(
       diagnostics: emptyDiagnostics(),
       warnings: [] as string[],
       persistence,
+      metrics: { couponCount: 0, itemQuantity: 0, revenueCents: 0, fingerprint: 'empty' },
+      accounting: { sourceCouponRevenueCents: 0, sourceGrossRevenueCents: 0, sourceItemsFallbackCount: 0 },
     };
-  }
-
-  // Log estrutura do primeiro cupom e primeiro item para diagnóstico
-  const firstCoupon = coupons[0];
-  console.log(`[PDV Sync] ${dateStr} cupom[0] keys:`, Object.keys(firstCoupon).join(', '));
-  const firstItems = firstCoupon.Itens || firstCoupon.itens;
-  if (Array.isArray(firstItems) && firstItems.length > 0) {
-    console.log(`[PDV Sync] ${dateStr} item[0] keys:`, Object.keys(firstItems[0]).join(', '));
-    console.log(`[PDV Sync] ${dateStr} item[0] sample:`, JSON.stringify(firstItems[0]).slice(0, 300));
   }
 
   const catalog = options.catalog ?? await loadPdvSyncCatalog(db);
@@ -643,6 +649,9 @@ export async function syncDayAdmin(
 
   // Revenue tracking for goals
   let dailyRevenueCents = 0;
+  let sourceCouponRevenueCents = 0;
+  let sourceGrossRevenueCents = 0;
+  let sourceItemsFallbackCount = 0;
   const revenueCentsByOperator: Record<string, number> = {};
   // Quantity per operator per product (simulationId)
   const productQtyByOperator: Record<string, Record<string, number>> = {};
@@ -658,6 +667,10 @@ export async function syncDayAdmin(
     const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
     const hasAnyItemExplicitlyCancelled = rawItems.some((item: any) => item.iscancelado === true);
     if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) { diag.couponsCancelled++; continue; }
+    const monetary = normalizePdvCouponRevenue(coupon);
+    sourceCouponRevenueCents += monetary.revenueCents;
+    sourceGrossRevenueCents += monetary.grossCents;
+    if (monetary.source === 'items_fallback') sourceItemsFallbackCount++;
     const couponTime = coupon.dtrecebimento || coupon.dtabertura || rawItems.find((i: any) => i.dtmovimento)?.dtmovimento || '';
     const hour = extractBrazilHour(couponTime);
     hourlySales[hour] = (hourlySales[hour] || 0) + 1;
@@ -666,13 +679,12 @@ export async function syncDayAdmin(
     // Operador do cupom (quem recebeu o pagamento)
     const couponOperatorId = coupon.usuariorecebimento_id ?? null;
 
-    for (const item of rawItems) {
+    for (const [itemIndex, item] of rawItems.entries()) {
       diag.itemsSeen++;
       if (item.iscancelado) { diag.itemsCancelled++; continue; }
       const possibleSkus = [item.codigoVenda, item.codproduto, item.codProdutoExterno, item.CodRef, item.Codigo].filter(Boolean).map(c => c.toString().trim());
       const qty = Number(item.quantidade || item.Quantidade || 0);
-      // valortotal já é o total do item (qty × preço − desconto + acréscimo)
-      const itemRevenueCents = cents(item.valortotal ?? item.ValorTotal);
+      const itemRevenueCents = monetary.itemRevenueCents[itemIndex];
       if (!itemRevenueCents) diag.itemsZeroValue++;
 
       // Accumulate revenue for goals
@@ -789,11 +801,11 @@ export async function syncDayAdmin(
     (sum, item) => sum + cents(item.quantity * item.unitPrice),
     0,
   );
-  if (reportRevenueCents !== dailyRevenueCents) {
+  if (reportRevenueCents !== dailyRevenueCents || dailyRevenueCents !== sourceCouponRevenueCents) {
     throw new PdvApiError(
       `Invariante de faturamento violada em ${kioskId}/${dateStr}.`,
       'REVENUE_INVARIANT_FAILED',
-      `api=${dailyRevenueCents};report=${reportRevenueCents}`,
+      `coupon=${sourceCouponRevenueCents};items=${dailyRevenueCents};report=${reportRevenueCents}`,
     );
   }
 
@@ -807,6 +819,7 @@ export async function syncDayAdmin(
   const sourceCouponCount = Object.values(hourlySales).reduce((sum, value) => sum + value, 0);
   const sourceItemQuantity = reportItems.reduce((sum, item) => sum + item.quantity, 0);
   const sourceFingerprint = createHash('sha256').update(stableStringify({
+    revenueAccountingVersion: PDV_REVENUE_VERSION,
     items: reportItems,
     hourlySales,
     productHourlySales,
@@ -816,7 +829,11 @@ export async function syncDayAdmin(
     diagnostics: diag,
   })).digest('hex');
   const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
-  const persistence = await persistPdvSnapshot(dateStr, kioskId, {
+  if (options.expectedMetrics && (options.expectedMetrics.revenueCents !== dailyRevenueCents
+    || options.expectedMetrics.couponCount !== sourceCouponCount)) {
+    throw new PdvApiError('Fonte PDV mudou após a prévia; nenhuma escrita realizada.', 'PREVIEW_CHANGED');
+  }
+  const snapshot = {
     reportId,
     report: {
       reportName: `Sincronização Automática ${dateStr}`,
@@ -831,6 +848,11 @@ export async function syncDayAdmin(
       combos,
       productQtyByOperator,
       syncDiagnostics: diag,
+      revenueAccountingVersion: PDV_REVENUE_VERSION,
+      sourceCouponRevenueCents,
+      sourceGrossRevenueCents,
+      sourceAdjustmentCents: dailyRevenueCents - sourceGrossRevenueCents,
+      sourceItemsFallbackCount,
     },
     consumptionReport: {
       reportName: `Sincronização Automática ${dateStr}`,
@@ -854,7 +876,8 @@ export async function syncDayAdmin(
     },
     dailyRevenue,
     revenueByOperator,
-  }, db, options);
+  };
+  const persistence = options.dryRun ? 'preview' as const : await persistPdvSnapshot(dateStr, kioskId, snapshot, db, options);
 
 
   console.log(
@@ -862,5 +885,5 @@ export async function syncDayAdmin(
     + `cupons ${sourceCouponCount}, persistência ${persistence}.`,
   );
 
-  return { success: true, count: coupons.length, dailyRevenue, diagnostics: diag, warnings, persistence };
+  return { success: true, count: coupons.length, dailyRevenue, diagnostics: diag, warnings, persistence, metrics: snapshot.metrics, accounting: { sourceCouponRevenueCents, sourceGrossRevenueCents, sourceItemsFallbackCount } };
 }

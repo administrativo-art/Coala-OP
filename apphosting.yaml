@@ -126,3 +126,5 @@ env:
     value: "17841476184089270"
   - variable: META_GRAPH_API_VERSION
     value: "v25.0"
+  - variable: BIO_ANALYTICS_INGEST_TOKEN
+    secret: BIO_ANALYTICS_INGEST_TOKEN
