@@ -56,6 +56,37 @@ test("promotes a single Stone card NSU to the shared provider transaction ID", (
   assert.equal(result.cases[0].reviewStatus, "auto_checked");
 });
 
+test("matches PDV Pix NSU to the Stone eventId even when the E2E and times differ", () => {
+  const result = match({
+    pdvFacts: [fact("pdv", {
+      channel: "pix",
+      grossAmountCents: 800,
+      soldAt: "2026-09-20T09:32:39-03:00",
+      identifiers: { nsu: "event-1" },
+    })],
+    stoneSales: [fact("stone", {
+      channel: "pix",
+      grossAmountCents: 800,
+      soldAt: "2026-09-20T09:25:11-03:00",
+      identifiers: { providerTransactionId: "e2e-1", providerEventId: "event-1", terminalId: "TERM-1" },
+    })],
+  });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].matchBasis, "provider_event_id");
+  assert.equal(result[0].confidence, "high");
+  assert.equal(result[0].reviewStatus, "auto_checked");
+});
+
+test("does not use amount fallback when the PDV NSU conflicts with the Stone eventId", () => {
+  const result = pair(
+    { channel: "pix", identifiers: { nsu: "pdv-event" }, soldAt: "2026-09-20T09:32:39-03:00" },
+    { channel: "pix", identifiers: { providerEventId: "stone-event" }, soldAt: "2026-09-20T09:25:11-03:00" },
+  );
+  assert.equal(result.length, 2);
+  assert.ok(result.every(row => row.matchBasis === "unmatched"));
+  assert.ok(result.every(row => row.reviewStatus === "attention_required"));
+});
+
 test("keeps PDV detail identifiers conservative for another provider, null sentinels and multiple operations", () => {
   const otherProvider = review([coupon({
     formaPgtos: [{

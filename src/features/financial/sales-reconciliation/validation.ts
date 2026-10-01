@@ -30,7 +30,7 @@ const factSchema = z.object({
   grossAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
   status: z.enum(["approved", "pending", "partial_cancellation", "cancelled", "refunded", "chargeback"]),
   couponId: optionalId,
-  identifiers: z.object({ providerTransactionId: optionalId, nsu: optionalId,
+  identifiers: z.object({ providerTransactionId: optionalId, providerEventId: optionalId, nsu: optionalId,
     authorizationCode: optionalId, terminalId: optionalId, merchantOrderId: optionalId }).strict(),
   adjustment: adjustmentSchema.optional(),
 }).strict().refine(fact => {

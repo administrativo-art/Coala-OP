@@ -75,9 +75,13 @@ Não foi inventado um terminal comum nem uma equivalência entre status do cupom
 da adquirente: o estado desconhecido permanece na evidência, mas não cria uma divergência
 falsa quando o restante do par individual é compatível.
 
-Pix PDV aparece em `uncomparedPdvFacts`, não como venda ausente na Stone. A fonte Pix
-é separada do XML e ainda exige associação comprovada de terminal à unidade. O
-arquivo corporativo não pode ser atribuído integralmente a uma unidade por conveniência.
+Pix PDV aparece em `uncomparedPdvFacts`, não como venda ausente na Stone, quando a fonte
+Pix ainda está ausente ou parcial. Na fonte completa, o `eventId` Stone é preservado
+junto do E2E; se coincidir exatamente com o NSU do PDV, forma a chave compartilhada
+`NSU PDV = eventId Stone` e a captura pode ser conferida com confiança alta, mesmo fora
+da janela temporal. A fonte Pix é separada do XML e ainda exige associação comprovada
+de terminal à unidade. O arquivo corporativo não pode ser atribuído integralmente a
+uma unidade por conveniência.
 
 ## Limites, custo e permissões
 
@@ -101,10 +105,10 @@ centavos exatos, escopo, ausência de fonte, Pix, aliases, duplicidades, pagamen
 dividido, troco, datas, cancelamentos, eventos de conta, tipos de cartão, limites,
 conflitos de identificadores, ambiguidades e isolamento de unidade/workspace.
 Fixtures sintéticas cobrem também detalhe Stone único, outro provedor, sentinelas e
-pagamento agregado. Em 2026-10-01, uma leitura PDV real, limitada ao dia/filial já em
-escopo e sem gravação, confirmou o contrato de `detalhes`: cartões Stone tinham um NSU
-textual por pagamento e o caso reportado possuía o mesmo valor do identificador Stone
-exibido ao usuário. A API Stone real não foi chamada nesta validação adicional.
+pagamento agregado. Em 2026-10-01, uma leitura real limitada ao dia/filial já em escopo
+e sem gravação confirmou que o cupom reportado e o registro Pix Stone correspondente
+compartilhavam o mesmo `eventId`/NSU, além do E2E separado. A API Stone real não
+foi chamada nesta validação adicional.
 
 Não foi criado E2E neste incremento: não existe nova rota nem mudança em fluxo
 crítico acessível. O próximo incremento deve conectar coleta limitada, autorização,
