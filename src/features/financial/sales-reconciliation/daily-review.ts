@@ -6,7 +6,7 @@ import { normalizeChannel } from "../cash-closures/channel-normalization";
 import { closureDateFromIso } from "../cash-closures/date";
 import { suggestSalesReconciliationCases } from "./matching";
 import { exactSalesCents, invalidSalesReview, MAX_SALE_CENTS, MAX_SALES_REVIEW_FACTS, reviewDate, reviewId, reviewTimestamp } from "./validation";
-import type { SalesMatchFact } from "./types";
+import type { ReconciliationSalesChannel, SalesMatchFact, SalesSourceIdentifiers } from "./types";
 
 const scopeSchema = z.object({ workspaceId: reviewId, kioskId: reviewId,
   stoneCode: z.string().regex(/^\d{1,20}$/), referenceDate: reviewDate }).strict();
@@ -31,6 +31,45 @@ function couponId(row: Record<string, unknown>) {
   const value = typeof raw === "number" && Number.isSafeInteger(raw) ? String(raw) : raw;
   const parsed = reviewId.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function detailIdentifier(row: Record<string, unknown>, keys: string[]) {
+  const raw = field(row, keys);
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (!value || /^(?:null|undefined)$/i.test(value)) return null;
+  const parsed = reviewId.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function providerName(row: Record<string, unknown>, keys: string[]) {
+  const raw = field(row, keys);
+  return typeof raw === "string" ? raw.trim().toUpperCase() : "";
+}
+
+function pdvPaymentIdentifiers(payment: Record<string, unknown>, channel: ReconciliationSalesChannel): SalesSourceIdentifiers {
+  const rawDetails = field(payment, ["detalhes", "Detalhes"]);
+  // A payment row can aggregate more than one operation. Without exactly one
+  // detail, no individual identifier can safely be attached to the fact.
+  if (!Array.isArray(rawDetails) || rawDetails.length !== 1) return {};
+  const parsed = record.safeParse(rawDetails[0]);
+  if (!parsed.success) return {};
+  const detail = parsed.data;
+  const nsu = detailIdentifier(detail, ["nsu", "Nsu", "NSU"]);
+  const authorizationCode = detailIdentifier(detail,
+    ["codigoautorizacao", "codigoAutorizacao", "CodigoAutorizacao"]);
+  const explicitlyStone = [
+    providerName(detail, ["subadquirente", "SubAdquirente"]),
+    providerName(detail, ["adquirente", "Adquirente"]),
+    providerName(detail, ["gateway", "Gateway"]),
+  ].includes("STONE");
+  const card = channel === "credit_card" || channel === "debit_card";
+
+  return {
+    ...(nsu && card && explicitlyStone ? { providerTransactionId: nsu } : {}),
+    ...(nsu ? { nsu } : {}),
+    ...(authorizationCode ? { authorizationCode } : {}),
+  };
 }
 
 function pdvTimestampMillis(value: string) {
@@ -131,7 +170,8 @@ function pdvFacts(raw: unknown, scope: DailySalesScope, issues: SalesSourceIssue
         kioskId: scope.kioskId, businessDate: scope.referenceDate, soldAt: coupon.timestamp, channel,
         // Take the validated raw decimal, not the legacy parser's float conversion.
         grossAmountCents: exactSalesCents(field(payments[paymentIndex], ["valortotal", "ValorTotal"]))!,
-        status, couponId: id, identifiers: {}, ...(adjustment ? { adjustment } : {}) });
+        status, couponId: id, identifiers: pdvPaymentIdentifiers(payments[paymentIndex], channel),
+        ...(adjustment ? { adjustment } : {}) });
     });
   });
   if (facts.length > MAX_SALES_REVIEW_FACTS) invalidSalesReview();

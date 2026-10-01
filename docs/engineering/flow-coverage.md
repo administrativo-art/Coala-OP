@@ -47,7 +47,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
-| `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — arquivos Pix e estado diário persistidos; fechamento/reabertura idempotentes e cancelamento anterior ao pagamento cobertos localmente; não valida scheduler/webhook/provedor real nem liquidação bancária |
+| `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — arquivos Pix e estado diário persistidos; fechamento/reabertura, cancelamento anterior ao pagamento e NSU Stone do PDV cobertos; amostra real confirmou somente o contrato PDV, sem homologar API Stone, scheduler/webhook ou liquidação bancária |
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — entrada independente para carteira, antecipações, taxas e confirmação bancária; integração Stone/banco real pendente |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
