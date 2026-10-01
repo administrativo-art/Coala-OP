@@ -155,3 +155,54 @@ test('reconcilia cupom tardio, período encerrado e respostas regressivas atomic
   assert.equal((await dbAdmin.collection('salesReports').doc(REPORT_ID).get()).get('sourceCouponCount'), 1);
   assert.equal((await dbAdmin.collection('pdvSyncReconciliationStates').doc(STATE_ID).get()).get('reason'), 'empty_after_data');
 });
+
+test('receita líquida confere com cupons, relatório e metas; prévia não escreve', async (t) => {
+  await cleanup();
+  t.after(cleanup);
+  await Promise.all([
+    dbAdmin.collection('goalPeriods').doc(PERIOD_ID).set({
+      kioskId: KIOSK_ID, templateType: 'revenue', status: 'closed',
+      startDate: Timestamp.fromDate(new Date('2026-08-01T03:00:00Z')),
+      endDate: Timestamp.fromDate(new Date('2026-09-01T02:59:59Z')),
+      currentValue: 0, dailyProgress: {}, shifts: [],
+    }),
+    dbAdmin.collection('employeeGoals').doc(EMPLOYEE_GOAL_ID).set({
+      periodId: PERIOD_ID, kioskId: KIOSK_ID, employeeId: USER_ID,
+      currentValue: 0, dailyProgress: {},
+    }),
+    dbAdmin.collection('users').doc(USER_ID).set({
+      assignedKioskIds: [KIOSK_ID], pdvOperatorIds: { [KIOSK_ID]: 'operator-1' },
+    }),
+  ]);
+  const originalFetch = globalThis.fetch;
+  let coupons = [
+    { ...coupon('discount-item', '15:00'), valortotal: 12, Itens: [{ ...coupon('x', '15:00').Itens[0], valortotal: 15, valordesconto: 3 }] },
+    { ...coupon('discount-header', '16:00'), valortotal: 6, valordesconto: 1 },
+  ];
+  globalThis.fetch = async () => new Response(JSON.stringify(coupons), { status: 200 });
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const options = { accessToken: 'test-token', catalog, mode: 'manual', runId: 'discount-test' };
+  const preview = await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, { ...options, dryRun: true });
+  assert.equal(preview.persistence, 'preview');
+  assert.equal(preview.dailyRevenue, 18);
+  assert.equal((await dbAdmin.collection('salesReports').doc(REPORT_ID).get()).exists, false);
+  assert.equal((await dbAdmin.collection('pdvSyncReconciliationStates').doc(STATE_ID).get()).exists, false);
+  assert.equal((await dbAdmin.collection('goalPeriods').doc(PERIOD_ID).get()).get('currentValue'), 0);
+  await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options);
+  const report = (await dbAdmin.collection('salesReports').doc(REPORT_ID).get()).data();
+  assert.equal(report.sourceRevenueCents, 1800);
+  assert.equal(report.sourceCouponRevenueCents, 1800);
+  assert.equal(report.sourceAdjustmentCents, -400);
+  assert.equal(report.revenueAccountingVersion, 2);
+  assert.equal(report.items.reduce((s, it) => s + Math.round(it.quantity * it.unitPrice * 100), 0), 1800);
+  assert.equal((await dbAdmin.collection('goalPeriods').doc(PERIOD_ID).get()).get('currentValue'), 18);
+  assert.equal((await dbAdmin.collection('employeeGoals').doc(EMPLOYEE_GOAL_ID).get()).get('currentValue'), 18);
+  assert.equal((await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options)).persistence, 'unchanged');
+  await assert.rejects(syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, {
+    ...options, expectedMetrics: { couponCount: 2, revenueCents: 1900 },
+  }), { code: 'PREVIEW_CHANGED' });
+  assert.equal((await dbAdmin.collection('salesReports').doc(REPORT_ID).get()).get('sourceRevenueCents'), 1800);
+  coupons = [{ ...coupon('bad', '15:00'), valortotal: 99 }];
+  await assert.rejects(syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options), { code: 'PDV_REVENUE_CONTRACT_FAILED' });
+  assert.equal((await dbAdmin.collection('salesReports').doc(REPORT_ID).get()).get('sourceRevenueCents'), 1800);
+});

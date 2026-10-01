@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     const canSync =
       userContext.isDefaultAdmin ||
-      userContext.permissions.stock.analysis.consumption;
+      (userContext.permissions.stock.analysis.consumption && userContext.permissions.goals.manage);
     if (!canSync) {
       return NextResponse.json(
         { success: false, error: 'Sem permissão para sincronizar vendas do PDV.' },
