@@ -47,7 +47,8 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
-| `sales-reconciliation` | 2 | Traçado | [Vendas e Recebimentos Stone](flows/stone-sales-review.md) — taxas em módulo separado; conferência automática limitada a pares individuais; precisão/retry/escopo em emulador e Pix HTTP aprovados; não valida provedor real |
+| `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — conferência automática limitada a pares individuais; precisão/retry/escopo em emulador e Pix HTTP aprovados; não valida provedor real |
+| `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — entrada independente para carteira, antecipações, taxas e confirmação bancária; integração Stone/banco real pendente |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — percurso complementado; verificação integrada pendente |

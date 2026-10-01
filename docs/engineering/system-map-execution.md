@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-09-30, Vendas e Recebimentos passaram a ser grupos documentais independentes, acompanhando as rotas e entradas próprias já existentes. Os atalhos cruzados dos cabeçalhos foram removidos para que Vendas permaneça restrita ao comparador PDV × Stone e Recebimentos concentre carteira, taxas, antecipações e confirmação bancária. O catálogo inicial limitado de vínculos agora é carregado na entrada das duas páginas, sem disparar consulta à Stone; seleção dependente e atualização continuam explícitas. O levantamento passa a contabilizar 54 grupos; ambos permanecem Traçados.
+
 2026-09-29, implementação local do workspace editorial do Instagram: calendário e grade usam a fila limitada existente, reagendamento e troca de datas são transacionais e a biblioteca grava mídia privada com autorização no servidor. Contratos, regras e testes locais foram ampliados; não houve navegador, publicação na Meta, escrita em produção nem homologação visual. A mudança não promove os grupos internos para Verificado.
 
 2026-09-27, correção local da preparação de cobrança recebida: a API e a interface passam a exigir CNPJ válido do favorecido, o snapshot de código de barras preserva essa identidade e repetições só reutilizam pedidos integralmente iguais. A CLI autenticada ganhou preparação com preflight da mensagem, mantendo preparação, autorização e envio separados. Testes unitários e E2E em emuladores cobrem identidade, permissão, idempotência e divergência; nenhuma ordem bancária real foi executada nessa validação. Os grupos permanecem Traçados.
@@ -14,7 +16,7 @@
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
 | 2. Inventários | Atualizados com o cronograma de projetos: 156 páginas internas, 20 externas, 353 APIs e 42 exports de Functions. |
-| 3. Guias detalhados | 53/53 grupos traçados integralmente no levantamento estático; 0/53 verificados nesta base. Há 73 guias de subfluxo. |
+| 3. Guias detalhados | 54/54 grupos traçados integralmente no levantamento estático; 0/54 verificados nesta base. Há 73 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |
 | 6. Correções locais anteriores | Preservadas somente no worktree de origem; não incluídas na integração documental. |

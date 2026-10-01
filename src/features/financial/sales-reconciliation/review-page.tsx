@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Eye, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import { formatStoneMoney } from "../agent/presentation";
+import { financialDateKey } from "../lib/financial-dates";
 import type { DailySalesResult } from "./query";
 import type { SalesSourceIssue } from "./daily-review";
 import type {
@@ -128,7 +128,7 @@ export function SalesReviewPage() {
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState("");
   const [code, setCode] = useState("");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(() => financialDateKey(new Date(Date.now() - 86_400_000)) ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<DailySalesResult | null>(null);
@@ -138,7 +138,35 @@ export function SalesReviewPage() {
   const [issuePage, setIssuePage] = useState(0);
   const active = useRef<AbortController | null>(null);
 
-  useEffect(() => () => { active.current?.abort(); }, []);
+  useEffect(() => {
+    if (!isDefaultAdmin) return;
+    const controller = new AbortController();
+    active.current = controller;
+    setBusy(true);
+    setError("");
+    void api<CatalogPage<MappingView>>("/api/financial/stone-mappings?resource=mappings", { signal: controller.signal })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        setMappings(data.items);
+        setCursor(data.nextCursor);
+        setLoaded(true);
+        if (data.items.length === 1) {
+          setSelected(data.items[0].id);
+          setCode(data.items[0].stoneCodes[0] ?? "");
+        }
+      })
+      .catch(caught => {
+        if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível carregar os vínculos Stone.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBusy(false);
+        if (active.current === controller) active.current = null;
+      });
+    return () => {
+      controller.abort();
+      if (active.current === controller) active.current = null;
+    };
+  }, [api, isDefaultAdmin]);
 
   if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
 
@@ -173,8 +201,13 @@ export function SalesReviewPage() {
       ? [...new Map([...current, ...data.items].map(item => [item.id, item])).values()]
       : data.items);
     if (!next) {
-      setSelected("");
-      setCode("");
+      if (data.items.length === 1) {
+        setSelected(data.items[0].id);
+        setCode(data.items[0].stoneCodes[0] ?? "");
+      } else {
+        setSelected("");
+        setCode("");
+      }
     }
     setCursor(data.nextCursor);
     setLoaded(true);
@@ -211,10 +244,6 @@ export function SalesReviewPage() {
       title="Conciliação de vendas"
       description="Comparação automática das vendas do PDV com as capturas da Stone, por unidade, dia e meio de pagamento."
       back={{ fallbackHref: "/dashboard/financial", parentLabel: "Financeiro" }}
-      actions={<>
-        <Button variant="outline" asChild><Link href="/dashboard/financial/stone-receipts">Recebimentos Stone</Link></Button>
-        <Button variant="outline" asChild><Link href="/dashboard/financial/stone-anticipations">Antecipações e vínculos</Link></Button>
-      </>}
     />
 
     <div role="note" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
@@ -261,8 +290,8 @@ export function SalesReviewPage() {
               </select>
             </label>
             <label className="text-sm font-medium">StoneCode
-              <select required aria-label="StoneCode" className={selectClass} value={code} onChange={event => { setCode(event.target.value); clear(); }}>
-                <option value="">Selecione</option>
+              <select required disabled={!mapping} aria-label="StoneCode" className={selectClass} value={code} onChange={event => { setCode(event.target.value); clear(); }}>
+                <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
                 {mapping?.stoneCodes.map(item => <option key={item}>{item}</option>)}
               </select>
             </label>

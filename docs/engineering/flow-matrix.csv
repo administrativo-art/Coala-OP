@@ -69,7 +69,7 @@ src/app/dashboard/financial/reconciliation/bank-statements/page.tsx,active,expen
 src/app/dashboard/financial/sales-reconciliation/page.tsx,active,sales-reconciliation,
 src/app/dashboard/financial/settings/page.tsx,redirect,settings,/dashboard/settings
 src/app/dashboard/financial/stone-anticipations/page.tsx,active,stone,
-src/app/dashboard/financial/stone-receipts/page.tsx,active,sales-reconciliation,
+src/app/dashboard/financial/stone-receipts/page.tsx,active,stone-receipts,
 src/app/dashboard/forms/[id]/page.tsx,active,forms,
 src/app/dashboard/forms/[id]/view/page.tsx,active,forms,
 src/app/dashboard/forms/mine/page.tsx,active,forms,
