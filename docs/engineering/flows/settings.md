@@ -30,7 +30,7 @@ A [composição das abas](../../../src/app/dashboard/settings/page.tsx) aponta p
 
 ### Bio pública, IA e privacidade
 
-A [API da bio](../../../src/app/api/settings/public-bio/route.ts) usa `requireBioManager`, schema e revisão esperada. Salvar altera rascunho; publicar valida links/imagens e grava snapshot publicado em transação com controle de revisão. Upload de mídia é separado. A publicação consome a versão publicada, não cada edição de rascunho.
+A [API da bio](../../../src/app/api/settings/public-bio/route.ts) usa `requireBioManager`, schema e revisão esperada. Salvar altera rascunho; publicar valida links/imagens e grava snapshot publicado em transação com controle de revisão. Upload de mídia é separado. A publicação consome a versão publicada, não cada edição de rascunho. O mesmo componente de gestão é montado em **Link na bio** dentro de `/instagram-programacao`; não existe cópia do documento ou regra de publicação, e a entrada permanece escondida sem a permissão específica.
 
 A [consulta de gestão de IA](../../../src/app/api/settings/ai-management/route.ts) exige administrador padrão ou `settings.view` com `settings.viewAiCosts`; relatório de custo não implica autorização para alterar cobrança no provedor.
 

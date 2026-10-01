@@ -1,17 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { getFirestore, Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
-import { defineSecret, defineString } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+
+import { metaGraphApiVersion, metaSystemUserToken } from "./instagram-meta-config.js";
 
 import {
   hasAmbiguousInstagramPublish,
   normalizeInstagramStoryProgress,
   type InstagramPublicationProgress,
 } from "./instagram-story-sequence.js";
-
-const metaSystemUserToken = defineSecret("META_SYSTEM_USER_TOKEN");
-const metaGraphApiVersion = defineString("META_GRAPH_API_VERSION", { default: "v25.0" });
 
 const db = getFirestore("coala-signage");
 const COLLECTION = "instagramScheduledPosts";
