@@ -198,6 +198,85 @@ export type InstagramPublishedFeedProfile = {
   profilePictureUrl: string | null;
 };
 
+export const instagramInsightsDays = [7, 30, 90] as const;
+export type InstagramInsightsDays = (typeof instagramInsightsDays)[number];
+
+export type InstagramInsightTotals = {
+  views: number | null;
+  reach: number | null;
+  accountsEngaged: number | null;
+  totalInteractions: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  replies: number | null;
+  reposts: number | null;
+  follows: number | null;
+  unfollows: number | null;
+};
+
+export type InstagramInsightContentItem = {
+  id: string;
+  format: "Feed" | "Carrossel" | "Reel" | "Story";
+  caption: string;
+  previewUrl: string | null;
+  permalink: string | null;
+  publishedAt: string;
+  views: number | null;
+  reach: number | null;
+  totalInteractions: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  replies: number | null;
+  bioLinkClicks: number | null;
+  storyLinkClicks: number | null;
+};
+
+export type PublicBioAnalyticsReport = {
+  pageViews: number;
+  linkClicks: number;
+  galleryOpens: number;
+  clickThroughRate: number | null;
+  daily: Array<{ date: string; pageViews: number; linkClicks: number }>;
+  topLinks: Array<{ id: string; label: string; clicks: number }>;
+};
+
+export type InstagramInsightStoredDay = {
+  date: string;
+  followersCount: number | null;
+  mediaCount: number | null;
+  settled: boolean;
+  totals: InstagramInsightTotals;
+};
+
+export type InstagramInsightContentSnapshot = InstagramInsightContentItem & {
+  stage: "first48h" | "day7" | "day30";
+};
+
+export type InstagramInsightsHistory = {
+  daily: InstagramInsightStoredDay[];
+  stories: InstagramInsightContentItem[];
+  contentSnapshots: InstagramInsightContentSnapshot[];
+};
+
+export type InstagramInsightsReport = {
+  range: { days: InstagramInsightsDays; since: string; until: string };
+  profile: InstagramPublishedFeedProfile & {
+    followersCount: number | null;
+    mediaCount: number | null;
+  };
+  totals: InstagramInsightTotals;
+  reachSeries: Array<{ date: string; value: number }>;
+  content: InstagramInsightContentItem[];
+  activeStories: InstagramInsightContentItem[];
+  history: InstagramInsightsHistory;
+  bio: PublicBioAnalyticsReport;
+  notices: string[];
+};
+
 export const instagramFormatLabels: Record<InstagramPublicationFormat, string> = {
   feed_image: "Feed",
   carousel: "Carrossel",
