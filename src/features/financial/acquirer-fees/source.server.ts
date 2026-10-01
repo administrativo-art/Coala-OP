@@ -42,7 +42,8 @@ export async function queryFeeEvidence(raw: unknown, context: FeeContext, deps: 
   let payment: ReturnType<typeof parseStoneAgendaXml> | null = null;
   const originals: ReturnType<typeof parseStoneAgendaXml>[] = [];
   const pending: string[] = [];
-  let pix: PixSourceResult = { status: "not_configured", facts: [], excludedCount: 0, fileId: null };
+  let pix: PixSourceResult = { status: "not_configured", coverage: null,
+    facts: [], excludedCount: 0, fileId: null };
   if (request.source === "pix") pix = await deps.readPix({ workspaceId: context.workspace_id, kioskId: request.kioskId, stoneCode: request.stoneCode, referenceDate: request.referenceDate });
   else {
     payment = parseStoneAgendaXml(await deps.readStone(request), request);

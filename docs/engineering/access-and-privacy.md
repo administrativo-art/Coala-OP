@@ -16,6 +16,12 @@ GET de primeiro acesso consulta o estado do token; POST valida senha e pré-requ
 
 O retorno depois do login aceita apenas caminho interno validado por [`resolveSafeReturnPath`](../../src/lib/safe-return-path.ts). As respostas omitem URLs de entrega, caminhos de objeto, tokens, leases e identificadores internos dos contêineres. Cada prévia revalida sessão, workspace, documento e prefixo esperado antes de ler o Storage. A grade publicada expõe ao cliente somente metadados e URLs temporárias de mídia que a própria Meta retorna para exibição, nunca o token usado na consulta. Segredo, mutações e estados de publicação estão descritos no [fluxo do Instagram](flows/instagram-publishing.md).
 
+## Arquivos de conciliação Pix da Stone
+
+[`POST /api/jobs/stone-pix/request`](../../src/app/api/jobs/stone-pix/request/route.ts) é uma entrada exclusiva de máquina, protegida pelo mesmo segredo do sincronizador de carteira Stone; não aceita sessão de usuário como substituto. A credencial Basic da Stone permanece no servidor e nunca é retornada ao cliente. O transporte envia somente documento e data no caminho oficial V2 e não registra cabeçalhos ou corpo externo.
+
+O [webhook Stone](../../src/app/api/webhooks/stone/conciliation/route.ts) exige segredo próprio, aceita payload limitado, valida a URL de download e grava apenas hash da URL da notificação. Arquivos, pedidos e linhas ficam no banco financeiro e são lidos pela comparação autorizada; a tela recebe status, cobertura, contagens e casos derivados, sem credenciais nem URL assinada. A retenção desses arquivos ainda não possui rotina TTL documentada e deve ser definida antes de ampliar o histórico.
+
 ## Pedidos de privacidade e incidentes
 
 As [rotas de pedidos](../../src/app/api/privacy/requests/route.ts) e [incidentes](../../src/app/api/privacy/incidents/route.ts) usam [requirePrivacyUser](../../src/app/api/privacy/_lib.ts). O helper aceita administrador ou permissões como `settings.view`, gestão de usuários/perfis ou edição/desligamento de colaboradores. Isso descreve a política implementada, não aprova a amplitude de `settings.view` para alterações sensíveis.
