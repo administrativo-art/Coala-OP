@@ -52,8 +52,11 @@ cancelamento ao encerrar/falhar a requisição, teto de 110 segundos e limite PD
 Erros de integração são recriados por allowlist; corpos, tokens e mensagens externas
 não atravessam a fronteira nem são registrados por este leitor.
 
-Limites preservados: um StoneCode não cobre necessariamente todas as adquirentes;
-Pix continua fora da comparação até haver fonte e vínculo de terminal; cancelamentos
+Limites preservados: um StoneCode não cobre necessariamente todas as adquirentes.
+Pix entra somente quando o arquivo diário persistido possui identidade compatível com
+o vínculo; cobertura parcial mantém os pagamentos sem evidência como não comparados.
+O solicitador diário e o webhook são descritos em [Stone: vendas](flows/stone-sales-review.md).
+Cancelamentos
 Stone são evidências pendentes de histórico. O cadastro de filial PDV é atual, sem
 histórico de reassociações comprovado; a revalidação detecta mudanças durante a
 requisição, não reconstrói vigências passadas da filial. Não houve chamada aos

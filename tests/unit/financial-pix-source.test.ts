@@ -15,12 +15,14 @@ const payment = { id: "event-1", amount: "600", status: "paid", payment_method: 
   pix_transaction__detail__provider_datetime: "2026-09-20T13:22:36.000" };
 function snapshot() {
   return { scope, document, fileId: "pix-file", head: { workspaceId: "coala", document,
-    referenceDate: scope.referenceDate, status: "processed", sourceHash: hash, summary: { transactionCount: 1 } },
+    referenceDate: scope.referenceDate, status: "processed", schemaVersion: 1,
+    sourceHash: hash, summary: { transactionCount: 1 } },
     rows: parseStonePixCsv(Papa.unparse([payment])).transactions.map(row => ({ ...row, sourceHash: hash })) };
 }
 test("Pix source requires a complete matching generation and isolates StoneCode", () => {
   const result = reviewPixSnapshot(snapshot());
   assert.equal(result.status, "available"); assert.equal(result.facts.length, 1);
+  assert.equal(result.coverage, "complete");
   assert.equal(result.facts[0].grossAmountCents, 600);
   assert.equal(reviewPixSnapshot({ ...snapshot(), scope: { ...scope, stoneCode: "999" } }).facts.length, 0);
   for (const change of [{ workspaceId: "foreign" }, { document: "99999999999" },
@@ -45,6 +47,18 @@ test("stored candidate flag cannot override amounts, identity, duplicates or loc
   duplicate.rows.push({ ...duplicate.rows[0], rowId: "b".repeat(64) });
   assert.equal(reviewPixSnapshot(duplicate).facts.length, 0);
 });
+test("arquivo íntegro com identidade ausente tem cobertura parcial", () => {
+  const input = snapshot();
+  const missing = parseStonePixCsv(Papa.unparse([{ ...payment,
+    pix_transaction__additional_data: "[]",
+  }])).transactions[0];
+  input.rows = [{ ...missing, sourceHash: hash }];
+  const result = reviewPixSnapshot(input);
+  assert.equal(result.status, "available");
+  assert.equal(result.coverage, "partial");
+  assert.equal(result.facts.length, 0);
+  assert.equal(result.excludedCount, 1);
+});
 test("daily query compares Pix only when source is available and auto-checks compatible unique pairs", async () => {
   const dependencies = { resolveBinding: async () => salesBinding,
     readPdv: async () => [{ codcupom: "pix-coupon", dtrecebimento: "2026-09-20 10:22:35", valortotal: "6.00", formaPgtos: [{ nome: "PIX", valortotal: "6.00" }] }],
@@ -58,4 +72,22 @@ test("daily query compares Pix only when source is available and auto-checks com
   assert.equal(result.cases.find(row => row.channel === "debit_card")?.reviewStatus, "attention_required");
   const missing = await queryDailySales(salesRequest, { isDefaultAdmin: true, workspace_id: "coala" }, dependencies);
   assert.equal(missing.uncomparedPdvFacts.length, 1); assert.ok(missing.cases.every(row => row.channel !== "pix"));
+});
+test("cobertura Pix parcial não transforma pagamento sem par em falsa divergência", async () => {
+  const dependencies = { resolveBinding: async () => salesBinding,
+    readPdv: async () => [{ codcupom: "pix-coupon", dtrecebimento: "2026-09-20 10:22:35", valortotal: "6.00", formaPgtos: [{ nome: "PIX", valortotal: "6.00" }] }],
+    readStone: async () => reviewXml, now: () => new Date("2026-09-22T12:00:00Z") };
+  const input = snapshot();
+  const missingIdentity = parseStonePixCsv(Papa.unparse([{ ...payment,
+    pix_transaction__additional_data: "[]",
+  }])).transactions[0];
+  input.rows = [{ ...missingIdentity, sourceHash: hash }];
+  const result = await queryDailySales(salesRequest,
+    { isDefaultAdmin: true, workspace_id: "coala" }, {
+      ...dependencies, readPix: async () => reviewPixSnapshot(input),
+    });
+  assert.equal(result.pix.status, "available");
+  assert.equal(result.pix.coverage, "partial");
+  assert.equal(result.uncomparedPdvFacts.length, 1);
+  assert.ok(result.cases.every(row => row.channel !== "pix"));
 });

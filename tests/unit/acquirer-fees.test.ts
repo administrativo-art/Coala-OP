@@ -8,7 +8,7 @@ import { parseStoneAgendaXml } from "../../src/lib/integrations/stone/agenda-par
 import { cardXml } from "../helpers/acquirer-fee-fixtures";
 const request: FeeRequest = { kioskId: "unit", mappingId: "mapping", stoneCode: "123", referenceDate: "2026-10-01", source: "cards" };
 const parse = (date: string, paid: boolean, extras = "", fees?: string[]) => parseStoneAgendaXml(cardXml(date, paid, fees, extras), { stoneCode: "123", referenceDate: date });
-const noPix = { status: "not_configured" as const, facts: [], excludedCount: 0, fileId: null };
+const noPix = { status: "not_configured" as const, coverage: null, facts: [], excludedCount: 0, fileId: null };
 
 test("XML soma frações antes de centavos; MDR da venda e antecipação do evento não mudam de competência", () => {
   assert.equal(feeTotalCents(["0.004", "0.004"]), 1);
@@ -57,7 +57,8 @@ test("evidência Pix vem só das linhas validadas e usa e2e, não posição do a
     merchantIdentity: { version: 1, status: "identified", stoneCode: "123", terminalSerialNumber: "terminal" },
     reviewEvidence: { version: 1, eventId: "event", e2eId: "e2e", refundId: null, createdAtUtc: "2026-09-01T12:00:00Z", providerDateTimeUtc: "2026-09-01T12:00:01Z", eventKind: "payment",
       amounts: { gross: 1000, paid: 1000, canceled: 0, fee: 5, operation: 1000 }, issues: [], candidateForReview: true } };
-  const head = { ...scope, document: "12345678901", status: "processed", sourceHash: hash, summary: { transactionCount: 1 } };
+  const head = { ...scope, document: "12345678901", status: "processed", schemaVersion: 1,
+    sourceHash: hash, summary: { transactionCount: 1 } };
   const pix = reviewPixSnapshot({ head, rows: [row], document: head.document, fileId, scope });
   assert.equal(pix.feeEvidence?.[0].feeCents, 5);
   const first = collectFeeEvidence({ ...request, ...scope, source: "pix" }, "coala", null, [], pix).batches[0];
