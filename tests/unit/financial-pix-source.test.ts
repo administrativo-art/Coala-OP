@@ -24,6 +24,9 @@ test("Pix source requires a complete matching generation and isolates StoneCode"
   assert.equal(result.status, "available"); assert.equal(result.facts.length, 1);
   assert.equal(result.coverage, "complete");
   assert.equal(result.facts[0].grossAmountCents, 600);
+  assert.deepEqual(result.facts[0].identifiers, {
+    providerTransactionId: "e2e-1", providerEventId: "event-1", terminalId: "TERM-1",
+  });
   assert.equal(reviewPixSnapshot({ ...snapshot(), scope: { ...scope, stoneCode: "999" } }).facts.length, 0);
   for (const change of [{ workspaceId: "foreign" }, { document: "99999999999" },
     { status: "processing" }, { sourceHash: "b".repeat(64) }, { summary: { transactionCount: 2 } }]) {
@@ -73,6 +76,20 @@ test("daily query compares Pix only when source is available and auto-checks com
   const missing = await queryDailySales(salesRequest, { isDefaultAdmin: true, workspace_id: "coala" }, dependencies);
   assert.equal(missing.uncomparedPdvFacts.length, 1); assert.ok(missing.cases.every(row => row.channel !== "pix"));
 });
+
+test("daily query uses the shared PDV NSU and Stone eventId for Pix", async () => {
+  const dependencies = { resolveBinding: async () => salesBinding,
+    readPdv: async () => [{ codcupom: "pix-coupon", dtrecebimento: "2026-09-20 09:32:39", valortotal: "6.00", formaPgtos: [{ nome: "PIX", valortotal: "6.00", detalhes: [{ nsu: "event-1" }] }] }],
+    readStone: async () => reviewXml, now: () => new Date("2026-09-22T12:00:00Z") };
+  const result = await queryDailySales(salesRequest, { isDefaultAdmin: true, workspace_id: "coala" }, {
+    ...dependencies, readPix: async () => reviewPixSnapshot(snapshot()),
+  });
+  const pixCase = result.cases.find(row => row.channel === "pix");
+  assert.equal(pixCase?.matchBasis, "provider_event_id");
+  assert.equal(pixCase?.confidence, "high");
+  assert.equal(pixCase?.reviewStatus, "auto_checked");
+});
+
 test("cobertura Pix parcial não transforma pagamento sem par em falsa divergência", async () => {
   const dependencies = { resolveBinding: async () => salesBinding,
     readPdv: async () => [{ codcupom: "pix-coupon", dtrecebimento: "2026-09-20 10:22:35", valortotal: "6.00", formaPgtos: [{ nome: "PIX", valortotal: "6.00" }] }],

@@ -57,6 +57,7 @@ export const multisetReason = "Os valores e as quantidades coincidem no dia. A c
 
 export const bases: Record<SalesReconciliationMatchBasis, string> = {
   provider_transaction_id: "NSU PDV = ID Stone",
+  provider_event_id: "NSU PDV = eventId Stone",
   nsu_authorization_terminal: "NSU + autorização + terminal",
   merchant_order: "Referência explícita do pedido",
   unique_amount_time: "Par único por valor e janela de cinco minutos",
