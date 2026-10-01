@@ -1,0 +1,10 @@
+{
+  "period": "2026-10",
+  "history": { "from": "2026-09-17", "through": "2026-09-30", "complete": true },
+  "shifts": [],
+  "dayOffs": [],
+  "vacations": [],
+  "unavailabilities": [],
+  "fixedAssignments": [],
+  "fridayMatrix": { "employeeId": "leader", "unitId": "matriz", "basis": "role_holder" }
+}

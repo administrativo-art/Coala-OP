@@ -1,0 +1,16 @@
+{
+  "period": "2026-10",
+  "history": { "from": "2026-09-15", "through": "2026-09-30", "complete": true },
+  "shifts": [
+    { "id": "matrix-02", "employeeId": "leader", "unitId": "matriz", "date": "2026-10-02", "startTime": "09:00", "endTime": "17:00", "slot": "single" },
+    { "id": "matrix-09", "employeeId": "leader", "unitId": "matriz", "date": "2026-10-09", "startTime": "09:00", "endTime": "17:00", "slot": "single" },
+    { "id": "matrix-16", "employeeId": "leader", "unitId": "matriz", "date": "2026-10-16", "startTime": "09:00", "endTime": "17:00", "slot": "single" },
+    { "id": "matrix-23", "employeeId": "leader", "unitId": "matriz", "date": "2026-10-23", "startTime": "09:00", "endTime": "17:00", "slot": "single" },
+    { "id": "matrix-30", "employeeId": "leader", "unitId": "matriz", "date": "2026-10-30", "startTime": "09:00", "endTime": "17:00", "slot": "single" }
+  ],
+  "dayOffs": [],
+  "vacations": [],
+  "unavailabilities": [],
+  "fixedAssignments": [],
+  "fridayMatrix": { "employeeId": "leader", "unitId": "matriz", "basis": "role_holder" }
+}

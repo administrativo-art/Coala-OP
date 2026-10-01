@@ -1,0 +1,19 @@
+{
+  "period": "2026-10",
+  "standardTemplates": [{
+    "key": "lider-sexta",
+    "unitId": "matriz",
+    "shiftDefinitionId": "sexta-integral",
+    "slot": "single",
+    "count": 1,
+    "requiredRoleId": "lider"
+  }],
+  "dateOverrides": [],
+  "confirmed": {
+    "shiftDefinitions": true,
+    "standardPositions": true,
+    "slotClassifications": true,
+    "roleRequirements": true,
+    "specialDatesAndReinforcements": true
+  }
+}

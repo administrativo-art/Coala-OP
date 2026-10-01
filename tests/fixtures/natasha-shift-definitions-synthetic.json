@@ -1,0 +1,25 @@
+{
+  "status": "ready_for_confirmation",
+  "scope": "shift_definitions_for_requested_units",
+  "unitIds": ["matriz"],
+  "shiftDefinitions": [{
+    "id": "sexta-integral",
+    "code": "S1",
+    "name": "Sexta integral sintética",
+    "startTime": "09:00",
+    "endTime": "17:00",
+    "breakStart": null,
+    "breakEnd": null,
+    "daysOfWeek": [5],
+    "allowedUnitIds": ["matriz"],
+    "global": false
+  }],
+  "issues": [],
+  "evidence": {
+    "sourceQuery": "synthetic",
+    "sourceDocumentsRead": 1,
+    "definitionsOutsideScopeOmitted": 0,
+    "requiresHumanConfirmation": true,
+    "slotClassificationsIncluded": false
+  }
+}
