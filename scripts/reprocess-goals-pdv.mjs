@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { normalizePdvCouponRevenue } from '../functions/src/pdv-revenue.ts';
 
 const DEFAULT_PROJECT_ID = "smart-converter-752gf";
 const DEFAULT_DATABASE_ID = "coala";
@@ -149,10 +150,11 @@ function buildRevenueByOperator(coupons) {
     if (isCouponCancelled && !hasAnyCancelledItem) continue;
 
     const couponOperatorId = coupon.usuariorecebimento_id ?? null;
+    const monetary = normalizePdvCouponRevenue(coupon);
 
-    for (const item of rawItems) {
+    for (const [index, item] of rawItems.entries()) {
       if (item.iscancelado) continue;
-      const revenue = Number(item.valortotal || 0);
+      const revenue = monetary.itemRevenueCents[index] / 100;
       dailyRevenue += revenue;
 
       const operatorId = item.usuariooperador_id ?? couponOperatorId;
