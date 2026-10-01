@@ -14,6 +14,15 @@ export const reviewTimestamp = z.string().max(50).refine(value => {
   return !!parts && reviewDate.safeParse(parts[1]).success && Number.isFinite(new Date(parts[3] ? value.replace(" ", "T") : `${value.replace(" ", "T")}-03:00`).getTime());
 });
 const optionalId = reviewId.nullable().optional();
+const adjustmentSchema = z.object({
+  type: z.literal("item_cancellation"),
+  originalAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
+  cancelledAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
+  finalAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
+  lastCancellationAt: reviewTimestamp.nullable(),
+  finalizedAt: reviewTimestamp,
+  finalizedAfterCancellation: z.boolean(),
+}).strict().refine(value => value.originalAmountCents - value.cancelledAmountCents === value.finalAmountCents);
 const factSchema = z.object({
   id: reviewId, source: z.enum(["pdv", "stone"]), workspaceId: reviewId,
   kioskId: reviewId.nullable(), businessDate: reviewDate, soldAt: reviewTimestamp,
@@ -23,6 +32,7 @@ const factSchema = z.object({
   couponId: optionalId,
   identifiers: z.object({ providerTransactionId: optionalId, nsu: optionalId,
     authorizationCode: optionalId, terminalId: optionalId, merchantOrderId: optionalId }).strict(),
+  adjustment: adjustmentSchema.optional(),
 }).strict().refine(fact => {
   try { return closureDateFromIso(fact.soldAt) === fact.businessDate; } catch { return false; }
 });
