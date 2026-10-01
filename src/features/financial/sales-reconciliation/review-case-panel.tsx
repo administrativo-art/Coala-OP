@@ -5,7 +5,8 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SalesMatchFact, SuggestedSalesReconciliationCase } from "./types";
 import {
-  bases, caseBadgeLabel, caseReason, caseTime, channels, confidences, factLabel, isAttention, money, saleStatuses,
+  bases, caseBadgeLabel, caseReason, caseTime, channels, confidences, factLabel, isAttention, money,
+  providerTransactionLabels, saleStatuses,
 } from "./review-view";
 
 export const toneBadge = {
@@ -23,7 +24,7 @@ function FactCard({ fact }: { fact: SalesMatchFact }) {
   const [copied, setCopied] = useState(false);
   const providerTransactionId = fact.identifiers.providerTransactionId;
   const identifiers = ([
-    ["ID do provedor", providerTransactionId],
+    [providerTransactionLabels[fact.source], providerTransactionId],
     ["NSU", fact.identifiers.nsu === providerTransactionId ? null : fact.identifiers.nsu],
     ["Autorização", fact.identifiers.authorizationCode],
     ["Terminal", fact.identifiers.terminalId],

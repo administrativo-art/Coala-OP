@@ -56,13 +56,18 @@ export const caseReasons: Record<SalesReconciliationCaseKind, string> = {
 export const multisetReason = "Os valores e as quantidades coincidem no dia. A conferência vale para o conjunto e não identifica qual captura pertence a cada pagamento.";
 
 export const bases: Record<SalesReconciliationMatchBasis, string> = {
-  provider_transaction_id: "ID do provedor",
+  provider_transaction_id: "NSU PDV = ID Stone",
   nsu_authorization_terminal: "NSU + autorização + terminal",
   merchant_order: "Referência explícita do pedido",
   unique_amount_time: "Par único por valor e janela de cinco minutos",
   daily_amount_multiset: "Mesmo conjunto de valores e quantidades no dia",
   candidate_group: "Grupo de candidatos por horário",
   unmatched: "Sem par neste recorte",
+};
+
+export const providerTransactionLabels: Record<SalesMatchFact["source"], string> = {
+  pdv: "NSU informado pelo PDV",
+  stone: "ID da transação Stone",
 };
 
 export const confidences: Record<SuggestedSalesReconciliationCase["confidence"], string> = {
@@ -80,8 +85,20 @@ export const issueReasons: Record<SalesSourceIssue["reason"], string> = {
   unsupported_channel: "Meio de pagamento não comparável",
   invalid_amount: "Valor inválido ou com fração de centavo",
   non_capture_event: "Evento que não é uma nova venda",
-  cancellation_event: "Cancelamento, estorno ou chargeback exige o histórico da venda",
+  cancellation_event: "Cancelamento/estorno informado pela Stone exige conferir o histórico da venda",
+  cancellation_charge_event: "Desconto de cancelamento informado pela Stone exige conferir o histórico da venda",
+  chargeback_event: "Chargeback informado pela Stone exige conferir o histórico da venda",
+  chargeback_refund_event: "Estorno de chargeback informado pela Stone exige conferir o histórico da venda",
   unsupported_capture: "Captura incompleta ou não suportada",
+};
+
+export const stoneEventLabels: Record<string, string> = {
+  Captures: "Capturas",
+  Payments: "Pagamentos",
+  Cancellations: "Cancelamentos",
+  CancellationCharges: "Descontos de cancelamento",
+  Chargebacks: "Chargebacks",
+  ChargebackRefunds: "Estornos de chargeback",
 };
 
 export const saleStatuses: Record<SalesMatchFact["status"], string> = {
