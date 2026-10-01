@@ -22,6 +22,11 @@ Diferenças intencionais em relação ao motor anterior:
 
 - Par individual compatível por chave forte recebe `auto_checked`.
 - Valor + horário só recebe `auto_checked` quando existe um único par possível na janela de cinco minutos.
+- Depois dos pares individuais, o conjunto restante do mesmo dia, unidade e meio recebe
+  `auto_checked` quando tem pelo menos dois registros por fonte e o multiconjunto de valores
+  e quantidades é idêntico. A evidência permanece agrupada: o sistema não afirma qual captura
+  pertence a cada pagamento. Um valor isolado fora da janela, diferença de quantidade/valor
+  ou identificador explícito compartilhado e não resolvido continua em atenção.
 - Identificadores mantêm pontuação, caixa e zeros à esquerda; chaves compostas
   usam arrays JSON para não colidir quando um identificador contém separadores.
 - Cupom PDV não é presumido como referência de pedido Stone. Esse caminho exige
@@ -72,7 +77,8 @@ arquivo corporativo não pode ser atribuído integralmente a uma unidade por con
 - Um dia e um StoneCode; sempre `coverage: partial` e `bankReceiptConfirmed: false`.
 - Até 500 cupons, 500 fatos de pagamento PDV e 500 eventos Stone; excesso rejeita
   integralmente, sem truncar uma comparação silenciosamente.
-- Até 100 meios de pagamento por cupom. Busca temporal limitada a cinco minutos.
+- Até 100 meios de pagamento por cupom. Busca temporal individual limitada a cinco minutos;
+  a conferência agregada usa somente o conjunto restante do dia, da unidade e do meio.
 - Valores com fração não nula além de centavos ficam pendentes, sem arredondamento.
 - O PDV pode conter outras adquirentes; um lado sem par não prova falta no outro.
 - Nenhuma query, polling, listener, gravação ou chamada externa nova. Preflight

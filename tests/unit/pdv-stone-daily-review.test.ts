@@ -176,6 +176,58 @@ test("a unique amount/time pair is auto-checked while ambiguous same-value sales
   assert.deepEqual(result[0].stoneSaleIds, ["s2", "stone"]);
 });
 
+test("the complete remaining daily amount multiset reconciles without inventing individual pairs", () => {
+  const amounts = [3200, 1800, 500, 2000, 1200];
+  const pdvFacts = amounts.map((grossAmountCents, index) => fact("pdv", {
+    id: `p${index}`,
+    grossAmountCents,
+    status: "pending",
+    soldAt: `2026-09-20T09:${String(index).padStart(2, "0")}:00-03:00`,
+  }));
+  const stoneSales = [...amounts].reverse().map((grossAmountCents, index) => fact("stone", {
+    id: `s${index}`,
+    grossAmountCents,
+    soldAt: `2026-09-20T18:${String(index).padStart(2, "0")}:00-03:00`,
+  }));
+
+  const result = match({ pdvFacts, stoneSales });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].kind, "matched");
+  assert.equal(result[0].matchBasis, "daily_amount_multiset");
+  assert.equal(result[0].reviewStatus, "auto_checked");
+  assert.equal(result[0].confidence, "medium");
+  assert.equal(result[0].pdvGrossAmountCents, 8700);
+  assert.equal(result[0].stoneGrossAmountCents, 8700);
+  assert.equal(result[0].differenceAmountCents, 0);
+  assert.deepEqual(result[0].pdvFactIds, ["p0", "p1", "p2", "p3", "p4"]);
+  assert.deepEqual(result[0].stoneSaleIds, ["s0", "s1", "s2", "s3", "s4"]);
+});
+
+test("daily set fallback stays conservative for lone values, unequal multisets and explicit ID conflicts", () => {
+  const farStone = { soldAt: "2026-09-20T18:00:00-03:00" };
+  assert.ok(pair({}, farStone).every(row => row.matchBasis === "unmatched"));
+
+  const unequal = match({
+    pdvFacts: [fact("pdv", { id: "p1", grossAmountCents: 100 }), fact("pdv", { id: "p2", grossAmountCents: 200 })],
+    stoneSales: [fact("stone", { id: "s1", grossAmountCents: 100, ...farStone }), fact("stone", { id: "s2", grossAmountCents: 300, ...farStone })],
+  });
+  assert.ok(unequal.every(row => row.reviewStatus === "attention_required"));
+
+  const conflictingIds = match({
+    pdvFacts: [
+      fact("pdv", { id: "p1", grossAmountCents: 100, identifiers: { providerTransactionId: "pdv-1" } }),
+      fact("pdv", { id: "p2", grossAmountCents: 200, identifiers: { providerTransactionId: "pdv-2" } }),
+    ],
+    stoneSales: [
+      fact("stone", { id: "s1", grossAmountCents: 100, soldAt: farStone.soldAt, identifiers: { providerTransactionId: "stone-1" } }),
+      fact("stone", { id: "s2", grossAmountCents: 200, soldAt: farStone.soldAt, identifiers: { providerTransactionId: "stone-2" } }),
+    ],
+  });
+  assert.ok(conflictingIds.every(row => row.reviewStatus === "attention_required"));
+  assert.ok(conflictingIds.every(row => row.matchBasis === "unmatched"));
+});
+
 test("missing provider status in the PDV is compatible with an approved Stone capture", () => {
   const result = pair({ status: "pending" }, { status: "approved" })[0];
   assert.equal(result.kind, "matched");
@@ -195,12 +247,14 @@ test("case identities are collision-safe and result order does not depend on inp
   assert.equal(JSON.stringify({ p, s }), snapshot);
 });
 
-test("a dense maximum-sized day stays a single ambiguous group without dropping facts", () => {
+test("a dense maximum-sized day reconciles as one complete daily set without dropping facts", () => {
   const pdvFacts = Array.from({ length: 500 }, (_, i) => fact("pdv", { id: `p${i}` }));
   const stoneSales = Array.from({ length: 500 }, (_, i) => fact("stone", { id: `s${i}` }));
   const result = match({ pdvFacts, stoneSales });
   assert.equal(result.length, 1);
-  assert.equal(result[0].kind, "ambiguous");
+  assert.equal(result[0].kind, "matched");
+  assert.equal(result[0].matchBasis, "daily_amount_multiset");
+  assert.equal(result[0].reviewStatus, "auto_checked");
   assert.equal(result[0].pdvFactIds.length, 500);
   assert.equal(result[0].stoneSaleIds.length, 500);
 });
