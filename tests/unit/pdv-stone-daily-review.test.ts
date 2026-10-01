@@ -33,6 +33,55 @@ test("adapts real XML and PDV envelopes and auto-checks a unique compatible pair
   assert.doesNotMatch(JSON.stringify(result), /private-card|CardNumber/);
 });
 
+test("promotes a single Stone card NSU to the shared provider transaction ID", () => {
+  const detailedCoupon = coupon({
+    dtrecebimento: "2026-09-20 18:00:00",
+    formaPgtos: [{
+      nome: "CARTAO CREDITO",
+      valortotal: "6.00",
+      detalhes: [{ nsu: "000123", codigoautorizacao: "AUTH-9", subadquirente: " stone " }],
+    }],
+  });
+
+  const result = review([detailedCoupon], file(sale("000123", "6.00", "2")));
+
+  assert.deepEqual(result.pdvFacts[0].identifiers, {
+    providerTransactionId: "000123",
+    nsu: "000123",
+    authorizationCode: "AUTH-9",
+  });
+  assert.equal(result.cases.length, 1);
+  assert.equal(result.cases[0].matchBasis, "provider_transaction_id");
+  assert.equal(result.cases[0].confidence, "high");
+  assert.equal(result.cases[0].reviewStatus, "auto_checked");
+});
+
+test("keeps PDV detail identifiers conservative for another provider, null sentinels and multiple operations", () => {
+  const otherProvider = review([coupon({
+    formaPgtos: [{
+      nome: "CARTAO DEBITO",
+      valortotal: "6.00",
+      detalhes: [{ NSU: "000123", CodigoAutorizacao: "null", SubAdquirente: "CIELO" }],
+    }],
+  })]);
+  assert.deepEqual(otherProvider.pdvFacts[0].identifiers, { nsu: "000123" });
+  assert.equal(otherProvider.cases[0].matchBasis, "unique_amount_time");
+  assert.equal(otherProvider.cases[0].confidence, "medium");
+
+  const aggregated = review([coupon({
+    formaPgtos: [{
+      nome: "CARTAO DEBITO",
+      valortotal: "6.00",
+      detalhes: [
+        { nsu: "000123", codigoautorizacao: "A", subadquirente: "STONE" },
+        { nsu: "000124", codigoautorizacao: "B", subadquirente: "STONE" },
+      ],
+    }],
+  })]);
+  assert.deepEqual(aggregated.pdvFacts[0].identifiers, {});
+  assert.equal(aggregated.cases[0].matchBasis, "unique_amount_time");
+});
+
 test("exact cents accepts trailing zeros and refuses rounding, locale ambiguity and unsafe integers", () => {
   for (const input of ["6", "6.0", "6.000000000000", 6]) assert.equal(exactSalesCents(input), 600);
   assert.equal(exactSalesCents("0.29"), 29);
