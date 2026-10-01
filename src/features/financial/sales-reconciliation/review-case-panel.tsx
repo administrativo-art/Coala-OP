@@ -26,6 +26,7 @@ function FactCard({ fact }: { fact: SalesMatchFact }) {
   const identifiers = ([
     [providerTransactionLabels[fact.source], providerTransactionId],
     ["NSU", fact.identifiers.nsu === providerTransactionId ? null : fact.identifiers.nsu],
+    ["Event ID Stone", fact.identifiers.providerEventId],
     ["Autorização", fact.identifiers.authorizationCode],
     ["Terminal", fact.identifiers.terminalId],
     ["Pedido", fact.identifiers.merchantOrderId],

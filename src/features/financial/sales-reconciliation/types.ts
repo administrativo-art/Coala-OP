@@ -10,6 +10,8 @@ export type ReconciliationSaleStatus =
 
 export type SalesSourceIdentifiers = {
   providerTransactionId?: string | null;
+  /** Stable Stone Pix event identifier; the PDV exposes the same value as its NSU. */
+  providerEventId?: string | null;
   nsu?: string | null;
   authorizationCode?: string | null;
   terminalId?: string | null;
@@ -53,6 +55,7 @@ export type SalesReconciliationCaseKind =
 
 export type SalesReconciliationMatchBasis =
   | "provider_transaction_id"
+  | "provider_event_id"
   | "nsu_authorization_terminal"
   | "merchant_order"
   | "unique_amount_time"
