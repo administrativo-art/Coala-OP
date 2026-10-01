@@ -5,6 +5,12 @@ import {
   hasAmbiguousInstagramPublish,
   normalizeInstagramStoryProgress,
 } from "../../functions/src/instagram-story-sequence";
+import {
+  instagramContentSnapshotStage,
+  instagramSnapshotWindows,
+  parseInstagramSnapshotTotals,
+  parseInstagramStorySnapshot,
+} from "../../functions/src/instagram-insights-snapshot";
 
 import {
   instagramMediaLibraryFolderSchema,
@@ -23,6 +29,13 @@ import {
   parseInstagramPublishedFeed,
   parseInstagramPublishedProfile,
 } from "../../src/features/instagram-scheduler/published-feed";
+import {
+  mergeReachSeries,
+  parseAccountInsightTotals,
+  parseContentInsight,
+  parseReachSeries,
+  sumAccountInsightTotals,
+} from "../../src/features/instagram-scheduler/instagram-insights";
 import {
   calendarMonthKeys,
   dateKeyInBelem,
@@ -202,6 +215,125 @@ test("bloqueia edição depois que um quadro do Story já foi publicado", () => 
   assert.equal(hasPublishedInstagramStoryItem({
     storyItems: [{ publishedMediaId: "story-1" }, {}],
   }), true);
+});
+
+test("normaliza totais e série diária devolvidos pela Meta sem transformar ausência em zero", () => {
+  const totals = parseAccountInsightTotals({ data: [
+    { name: "views", total_value: { value: 1234 } },
+    { name: "reach", total_value: { value: 876 } },
+    { name: "follows_and_unfollows", total_value: { value: 8, breakdowns: [{ results: [
+      { dimension_values: ["FOLLOWER"], value: 11 },
+      { dimension_values: ["NON_FOLLOWER"], value: 3 },
+    ] }] } },
+  ] });
+  assert.equal(totals.views, 1234);
+  assert.equal(totals.reach, 876);
+  assert.equal(totals.follows, 11);
+  assert.equal(totals.unfollows, 3);
+  assert.equal(totals.saves, null);
+
+  assert.deepEqual(parseReachSeries({ data: [{ name: "reach", values: [
+    { value: 14, end_time: "2026-09-30T07:00:00+0000" },
+    { value: 21, end_time: "2026-10-01T07:00:00+0000" },
+  ] }] }), [
+    { date: "2026-09-30", value: 14 },
+    { date: "2026-10-01", value: 21 },
+  ]);
+});
+
+test("soma janelas da Meta e preserva métricas ausentes", () => {
+  const first = parseAccountInsightTotals({ data: [
+    { name: "views", total_value: { value: 120 } },
+    { name: "reach", total_value: { value: 80 } },
+  ] });
+  const second = parseAccountInsightTotals({ data: [
+    { name: "views", total_value: { value: 30 } },
+    { name: "reach", total_value: { value: 20 } },
+  ] });
+
+  const totals = sumAccountInsightTotals([first, second]);
+  assert.equal(totals.views, 150);
+  assert.equal(totals.reach, 100);
+  assert.equal(totals.saves, null);
+
+  assert.deepEqual(mergeReachSeries([
+    [{ date: "2026-09-30", value: 10 }, { date: "2026-10-01", value: 20 }],
+    [{ date: "2026-09-01", value: 5 }, { date: "2026-09-30", value: 2 }],
+  ]), [
+    { date: "2026-09-01", value: 5 },
+    { date: "2026-09-30", value: 12 },
+    { date: "2026-10-01", value: 20 },
+  ]);
+});
+
+test("monta as três janelas diárias que o coletor reapura", () => {
+  assert.deepEqual(instagramSnapshotWindows(new Date("2026-10-01T16:00:00.000Z")), [
+    { date: "2026-10-01", since: "1790823600", until: "1790870400", current: true, settled: false },
+    { date: "2026-09-30", since: "1790737200", until: "1790823599", current: false, settled: false },
+    { date: "2026-09-29", since: "1790650800", until: "1790737199", current: false, settled: true },
+  ]);
+});
+
+test("normaliza o retrato preservável de Story sem guardar URL de mídia temporária", () => {
+  const story = parseInstagramStorySnapshot({
+    id: "story_1",
+    caption: "Oferta do dia",
+    media_type: "VIDEO",
+    media_url: "https://cdn.example.com/temporary.mp4",
+    permalink: "https://www.instagram.com/stories/coalashakes/1/",
+    timestamp: "2026-10-01T12:00:00+0000",
+  }, { data: [
+    { name: "views", values: [{ value: 90 }] },
+    { name: "reach", values: [{ value: 72 }] },
+    { name: "link_clicks", values: [{ value: 5 }] },
+    { name: "profile_activity", total_value: { value: 7, breakdowns: [{ results: [
+      { dimension_values: ["BIO_LINK_CLICKED"], value: 4 },
+    ] }] } },
+  ] });
+  assert.equal(story?.views, 90);
+  assert.equal(story?.bioLinkClicks, 4);
+  assert.equal(story?.storyLinkClicks, 5);
+  assert.equal("mediaUrl" in (story ?? {}), false);
+});
+
+test("seleciona marcos de 48 horas, 7 dias e 30 dias para conteúdo", () => {
+  const now = new Date("2026-10-01T12:00:00.000Z");
+  assert.equal(instagramContentSnapshotStage("2026-09-30T12:00:00.000Z", now), "first48h");
+  assert.equal(instagramContentSnapshotStage("2026-09-24T11:00:00.000Z", now), "day7");
+  assert.equal(instagramContentSnapshotStage("2026-09-01T11:00:00.000Z", now), "day30");
+  assert.equal(instagramContentSnapshotStage("2026-09-20T12:00:00.000Z", now), null);
+
+  const totals = parseInstagramSnapshotTotals({ data: [
+    { name: "views", total_value: { value: 100 } },
+    { name: "follows_and_unfollows", total_value: { breakdowns: [{ results: [
+      { dimension_values: ["FOLLOWER"], value: 8 },
+      { dimension_values: ["NON_FOLLOWER"], value: 2 },
+    ] }] } },
+  ] });
+  assert.equal(totals.views, 100);
+  assert.equal(totals.follows, 8);
+  assert.equal(totals.unfollows, 2);
+});
+
+test("normaliza insights de conteúdo e identifica clique na bio atribuído a Story", () => {
+  const item = parseContentInsight({
+    id: "story-1",
+    media_type: "VIDEO",
+    timestamp: "2026-10-01T12:00:00+0000",
+    media_url: "https://cdn.example.com/story.mp4",
+  }, { data: [
+    { name: "views", values: [{ value: 90 }] },
+    { name: "reach", values: [{ value: 72 }] },
+    { name: "link_clicks", values: [{ value: 5 }] },
+    { name: "profile_activity", total_value: { value: 7, breakdowns: [{ results: [
+      { dimension_values: ["BIO_LINK_CLICKED"], value: 4 },
+      { dimension_values: ["EMAIL"], value: 3 },
+    ] }] } },
+  ] }, { story: true });
+  assert.equal(item?.format, "Story");
+  assert.equal(item?.views, 90);
+  assert.equal(item?.storyLinkClicks, 5);
+  assert.equal(item?.bioLinkClicks, 4);
 });
 
 test("permite mover somente conteúdo programado com antecedência mínima", () => {

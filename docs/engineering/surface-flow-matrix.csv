@@ -278,6 +278,7 @@ api,src/app/api/integrations/bizneo/shift-templates/route.ts,,docs/engineering/f
 api,src/app/api/integrations/bizneo/sync-taxons/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/bizneo/sync-users/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/instagram/feed/route.ts,,docs/engineering/flows/instagram-publishing.md,Leitura autenticada e limitada da grade publicada; consulta a Meta no servidor sem expor o token.
+api,src/app/api/integrations/instagram/insights/route.ts,,docs/engineering/flows/instagram-publishing.md,Relatorio autenticado sob demanda; combina Insights da Meta com contadores agregados da bio e limita a janela a 7 30 ou 90 dias.
 api,src/app/api/integrations/instagram/media/route.ts,,docs/engineering/flows/instagram-publishing.md,Listagem e upload privado da biblioteca; autenticacao autorizacao formato tamanho e workspace conferidos no servidor.
 api,src/app/api/integrations/instagram/media/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa protegida da biblioteca; valida usuario workspace documento e prefixo do objeto antes de ler o Storage.
 api,src/app/api/integrations/instagram/schedule/route.ts,,docs/engineering/flows/instagram-publishing.md,Fila server-side do Instagram; Firebase Auth e autorizacao exclusiva conferidas no handler.
@@ -311,6 +312,7 @@ api,src/app/api/profile-compliance/overview/route.ts,,docs/engineering/access-an
 api,src/app/api/profile-compliance/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/public/bio/media/[id]/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/public/bio/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/public/bio/analytics/route.ts,,docs/engineering/flows/instagram-publishing.md,Ingestao publica restrita e limitada de contadores anonimos da bio; aceita apenas eventos agregaveis encaminhados pelo site oficial.
 api,src/app/api/purchasing/[...path]/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/registry/[...path]/route.ts,,docs/engineering/flows/registry.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/registry/cnpj/[cnpj]/route.ts,,docs/engineering/flows/registry.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -390,6 +392,7 @@ function,functions/src/index.ts,reconcilePdvSalesHistory,docs/engineering/runtim
 function,functions/src/index.ts,syncBizneoUsersMonthly,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,syncGoalsForRange,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,terminateUser,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
+function,functions/src/instagram-insights-snapshot-job.ts,instagramInsightsSnapshotScheduler,docs/engineering/flows/instagram-publishing.md,onSchedule a cada 6 horas; preserva metricas Meta agregadas; deploy nao confirmado.
 function,functions/src/instagram-publishing-job.ts,instagramPublishingScheduler,docs/engineering/flows/instagram-publishing.md,onSchedule; fila limitada e segredo Meta; deploy nao confirmado.
 function,functions/src/inter-cobranca-jobs.ts,interCobrancaReconciliation,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/inter-payment-jobs.ts,interPaymentReconciliation,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
@@ -420,7 +423,7 @@ page,src/app/desligamento/documentos/[token]/page.tsx,,docs/engineering/flows/te
 page,src/app/document-preview/[id]/page.tsx,,docs/engineering/flows/document-generation.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/ferias/contabilidade/[token]/page.tsx,,docs/engineering/flows/vacation-accountant-dispatch.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/forgot-password/page.tsx,,docs/engineering/access-and-privacy.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
-page,src/app/instagram-programacao/page.tsx,,docs/engineering/flows/instagram-publishing.md,Workspace autenticado externo com calendario grade e biblioteca privada; demais modulos aparecem apenas como evolucao futura.
+page,src/app/instagram-programacao/page.tsx,,docs/engineering/flows/instagram-publishing.md,Workspace autenticado com calendario grade biblioteca editor autorizado da bio e relatorios Meta mais funil agregado da bio.
 page,src/app/login/page.tsx,,docs/engineering/access-and-privacy.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/patrimonio/[code]/page.tsx,,docs/engineering/flows/assets.md,Entrada externa classificada no external-page-map; publicidade nao presumida.

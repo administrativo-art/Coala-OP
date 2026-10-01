@@ -36,6 +36,7 @@ export {
   uberTransactionCandidateWritten,
 } from './uber-sftp/jobs.js';
 export { instagramPublishingScheduler } from './instagram-publishing-job.js';
+export { instagramInsightsSnapshotScheduler } from './instagram-insights-snapshot-job.js';
 
 setGlobalOptions({ maxInstances: 10 });
 

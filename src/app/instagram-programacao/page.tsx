@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Menu } from "lucide-react";
 
+import { PublicBioSettings } from "@/components/settings/public-bio-settings";
 import { CalendarView } from "@/features/instagram-scheduler/calendar-view";
 import {
   CreateScheduleDialog,
@@ -13,9 +14,12 @@ import type {
   InstagramMediaLibraryItem,
   InstagramPublishedFeedItem,
   InstagramPublishedFeedProfile,
+  InstagramInsightsDays,
+  InstagramInsightsReport,
   InstagramScheduleListItem,
 } from "@/features/instagram-scheduler/contracts";
 import { FeedGridView } from "@/features/instagram-scheduler/feed-grid-view";
+import { InsightsView } from "@/features/instagram-scheduler/insights-view";
 import { MediaLibraryView } from "@/features/instagram-scheduler/media-library-view";
 import { SchedulePostEditor } from "@/features/instagram-scheduler/schedule-post-editor";
 import {
@@ -33,12 +37,13 @@ type PublishedFeedResponse = {
   profile?: InstagramPublishedFeedProfile;
 };
 
-const validViews = new Set<InstagramWorkspaceView>(["calendar", "feed", "media"]);
+const validViews = new Set<InstagramWorkspaceView>(["calendar", "feed", "media", "bio", "reports"]);
 
 export default function InstagramProgramacaoPage() {
   const router = useRouter();
   const request = useAuthenticatedApi();
-  const { firebaseUser, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { firebaseUser, isAuthenticated, isDefaultAdmin, loading: authLoading, logout, permissions } = useAuth();
+  const canManageBio = isDefaultAdmin || (permissions.settings.view && permissions.settings.managePublicBio);
   const [activeView, setActiveView] = useState<InstagramWorkspaceView>("calendar");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [createDate, setCreateDate] = useState<string | null>(null);
@@ -53,6 +58,10 @@ export default function InstagramProgramacaoPage() {
   const [publishedLoading, setPublishedLoading] = useState(false);
   const [publishedLoaded, setPublishedLoaded] = useState(false);
   const [publishedError, setPublishedError] = useState<string | null>(null);
+  const [insights, setInsights] = useState<InstagramInsightsReport | null>(null);
+  const [insightsDays, setInsightsDays] = useState<InstagramInsightsDays>(30);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +123,22 @@ export default function InstagramProgramacaoPage() {
     }
   }, [firebaseUser, request]);
 
+  const loadInsights = useCallback(async (days: InstagramInsightsDays) => {
+    if (!firebaseUser) return;
+    setInsightsLoading(true);
+    setInsightsError(null);
+    try {
+      const response = await request<InstagramInsightsReport>(`/api/integrations/instagram/insights?days=${days}`, {
+        fallbackError: "Não foi possível carregar os relatórios do Instagram.",
+      });
+      setInsights(response);
+    } catch (cause) {
+      setInsightsError(cause instanceof Error ? cause.message : "Não foi possível carregar os relatórios do Instagram.");
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, [firebaseUser, request]);
+
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const requested = search.get("view");
@@ -142,6 +167,18 @@ export default function InstagramProgramacaoPage() {
       void loadPublishedFeed();
     }
   }, [activeView, firebaseUser, loadPublishedFeed, publishedLoaded, publishedLoading]);
+
+  useEffect(() => {
+    if (activeView === "reports" && firebaseUser) {
+      void loadInsights(insightsDays);
+    }
+  }, [activeView, firebaseUser, insightsDays, loadInsights]);
+
+  useEffect(() => {
+    if (!authLoading && activeView === "bio" && !canManageBio) selectView("calendar");
+    // selectView atualiza apenas estado e URL; esperar o bootstrap de permissões evita piscar conteúdo restrito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, authLoading, canManageBio]);
 
   useEffect(() => {
     if (createDate && firebaseUser && !publishedLoaded && !publishedLoading) {
@@ -298,6 +335,7 @@ export default function InstagramProgramacaoPage() {
       <InstagramWorkspaceSidebar
         activeView={activeView}
         email={firebaseUser?.email}
+        canManageBio={canManageBio}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
         onSelect={selectView}
@@ -364,6 +402,24 @@ export default function InstagramProgramacaoPage() {
             uploading={uploading}
             onUpload={uploadFiles}
             onFutureFeature={(label) => say(`${label} será implementado em uma próxima etapa.`)}
+          />
+        ) : activeView === "bio" && canManageBio ? (
+          <div className="mx-auto w-full max-w-[1440px] px-4 py-5 md:px-7 md:py-7">
+            <header className="mb-6">
+              <p className="text-xs font-extrabold uppercase tracking-[0.1em] text-[#D90F6F]">Relacionar</p>
+              <h1 className="mt-1 text-2xl font-black text-[#4A1A04] md:text-3xl">Link na bio</h1>
+              <p className="mt-1 text-sm text-[#7A5646]">Edite, visualize e publique a página oficial sem sair da programação do Instagram.</p>
+            </header>
+            <PublicBioSettings />
+          </div>
+        ) : activeView === "reports" ? (
+          <InsightsView
+            report={insights}
+            days={insightsDays}
+            loading={insightsLoading}
+            error={insightsError}
+            onDaysChange={setInsightsDays}
+            onRefresh={() => void loadInsights(insightsDays)}
           />
         ) : null}
       </div>
