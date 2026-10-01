@@ -14,7 +14,7 @@ import type {
   InstagramMediaLibraryItem,
   InstagramPublishedFeedItem,
   InstagramPublishedFeedProfile,
-  InstagramInsightsDays,
+  InstagramInsightsPeriod,
   InstagramInsightsReport,
   InstagramScheduleListItem,
 } from "@/features/instagram-scheduler/contracts";
@@ -59,7 +59,7 @@ export default function InstagramProgramacaoPage() {
   const [publishedLoaded, setPublishedLoaded] = useState(false);
   const [publishedError, setPublishedError] = useState<string | null>(null);
   const [insights, setInsights] = useState<InstagramInsightsReport | null>(null);
-  const [insightsDays, setInsightsDays] = useState<InstagramInsightsDays>(30);
+  const [insightsPeriod, setInsightsPeriod] = useState<InstagramInsightsPeriod>(30);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -123,12 +123,12 @@ export default function InstagramProgramacaoPage() {
     }
   }, [firebaseUser, request]);
 
-  const loadInsights = useCallback(async (days: InstagramInsightsDays) => {
+  const loadInsights = useCallback(async (period: InstagramInsightsPeriod) => {
     if (!firebaseUser) return;
     setInsightsLoading(true);
     setInsightsError(null);
     try {
-      const response = await request<InstagramInsightsReport>(`/api/integrations/instagram/insights?days=${days}`, {
+      const response = await request<InstagramInsightsReport>(`/api/integrations/instagram/insights?period=${period}`, {
         fallbackError: "Não foi possível carregar os relatórios do Instagram.",
       });
       setInsights(response);
@@ -170,9 +170,9 @@ export default function InstagramProgramacaoPage() {
 
   useEffect(() => {
     if (activeView === "reports" && firebaseUser) {
-      void loadInsights(insightsDays);
+      void loadInsights(insightsPeriod);
     }
-  }, [activeView, firebaseUser, insightsDays, loadInsights]);
+  }, [activeView, firebaseUser, insightsPeriod, loadInsights]);
 
   useEffect(() => {
     if (!authLoading && activeView === "bio" && !canManageBio) selectView("calendar");
@@ -415,11 +415,11 @@ export default function InstagramProgramacaoPage() {
         ) : activeView === "reports" ? (
           <InsightsView
             report={insights}
-            days={insightsDays}
+            period={insightsPeriod}
             loading={insightsLoading}
             error={insightsError}
-            onDaysChange={setInsightsDays}
-            onRefresh={() => void loadInsights(insightsDays)}
+            onPeriodChange={setInsightsPeriod}
+            onRefresh={() => void loadInsights(insightsPeriod)}
           />
         ) : null}
       </div>
