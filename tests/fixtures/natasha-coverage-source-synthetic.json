@@ -1,0 +1,26 @@
+{
+  "period": "2026-10",
+  "expectedUnitIds": ["matriz"],
+  "units": [{
+    "id": "matriz",
+    "isArchived": false,
+    "coverageMode": "fixed_hours",
+    "operatingHours": {
+      "0": { "isOpen": false },
+      "1": { "isOpen": false },
+      "2": { "isOpen": false },
+      "3": { "isOpen": false },
+      "4": { "isOpen": false },
+      "5": { "isOpen": true, "startTime": "09:00", "endTime": "17:00" },
+      "6": { "isOpen": false }
+    }
+  }],
+  "schedules": [],
+  "fixedHoursMinimumPeople": { "matriz": 1 },
+  "overrides": [],
+  "confirmed": {
+    "allUnits": true,
+    "dailyOpeningsAndExceptions": true,
+    "staffingMinimums": true
+  }
+}

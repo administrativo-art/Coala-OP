@@ -1,0 +1,23 @@
+{
+  "period": "2026-10",
+  "employees": [
+    { "id": "leader", "active": true, "allowedUnitIds": ["matriz"], "roleIds": ["lider"] }
+  ],
+  "positions": [
+    { "id": "m-02", "unitId": "matriz", "date": "2026-10-02", "startTime": "09:00", "endTime": "17:00", "slot": "single", "requiredRoleId": "lider" },
+    { "id": "m-09", "unitId": "matriz", "date": "2026-10-09", "startTime": "09:00", "endTime": "17:00", "slot": "single", "requiredRoleId": "lider" },
+    { "id": "m-16", "unitId": "matriz", "date": "2026-10-16", "startTime": "09:00", "endTime": "17:00", "slot": "single", "requiredRoleId": "lider" },
+    { "id": "m-23", "unitId": "matriz", "date": "2026-10-23", "startTime": "09:00", "endTime": "17:00", "slot": "single", "requiredRoleId": "lider" },
+    { "id": "m-30", "unitId": "matriz", "date": "2026-10-30", "startTime": "09:00", "endTime": "17:00", "slot": "single", "requiredRoleId": "lider" }
+  ],
+  "nextMonthKnownShifts": [],
+  "confirmed": {
+    "team": true,
+    "rolesAndUnitLinks": true,
+    "shiftPositions": true,
+    "vacations": true,
+    "unavailabilities": true,
+    "fixedAssignments": true,
+    "nextMonthCommitments": true
+  }
+}

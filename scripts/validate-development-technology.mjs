@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const roles = ['edna', 'gandalf', 'r2d2', 'rocket', 'shuri', 'trinity', 'velma'];
 const financialRoles = ['diana', 'hermione', 'leia', 'monica', 'pepper', 'sherlock', 'spock', 'tony'];
+const rhRoles = ['natasha'];
 const reviewers = new Set(['gandalf', 'rocket', 'trinity', 'velma']);
 
 function read(path) {
@@ -25,8 +26,8 @@ function projectFiles(directory, extension) {
 
 assert.deepEqual(
   projectFiles('.codex/agents', '.toml'),
-  [...roles, ...financialRoles].sort(),
-  'Os perfis Codex de desenvolvimento e financeiro devem coincidir',
+  [...roles, ...financialRoles, ...rhRoles].sort(),
+  'Os perfis Codex de desenvolvimento, financeiro e RH devem coincidir',
 );
 assert.deepEqual(projectFiles('.claude/agents', '.md'), roles, 'Os sete perfis Claude devem coincidir');
 
@@ -88,4 +89,21 @@ for (const role of financialRoles) {
   }
 }
 
-console.log('Departamento de Desenvolvimento e Tecnologia: sete perfis gerais e oito especialistas financeiros Codex válidos.');
+for (const role of rhRoles) {
+  const codexAgent = read(join('.codex/agents', `${role}.toml`));
+  assert.equal(tomlValue(codexAgent, 'name'), `"${role}"`);
+  assert.equal(tomlValue(codexAgent, 'sandbox_mode'), '"read-only"');
+  assert.match(codexAgent, /^developer_instructions\s*=\s*"""[\s\S]+"""/m);
+  assert.match(codexAgent, /Não delegue nem invoque outros agentes\./);
+  assert.match(codexAgent, /natasha:generate/);
+  assert.match(codexAgent, /natasha:collect-team/);
+  assert.match(codexAgent, /natasha:collect-availability/);
+  assert.match(codexAgent, /natasha:collect-shift-definitions/);
+  assert.match(codexAgent, /natasha:prepare-positions/);
+  assert.match(codexAgent, /ready_for_confirmation/);
+  assert.match(codexAgent, /search_limit/);
+  assert.match(codexAgent, /\[agents\]\s*enabled\s*=\s*false/m);
+  assert.doesNotMatch(codexAgent, /^model\s*=/m, `${role}: modelo deve ser escolhido por tarefa`);
+}
+
+console.log('Perfis Codex válidos: sete de desenvolvimento, oito financeiros e Natasha no RH.');

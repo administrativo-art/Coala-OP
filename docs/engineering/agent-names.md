@@ -29,3 +29,9 @@ Nomes encontrados no worktree `Coala-OP-financial-agent-hierarchy` em 2026-09-23
 | Mônica Geller | Numerário |
 | Spock | Controladoria |
 | Diana Prince | Revisão independente |
+
+## Departamento de Recursos Humanos
+
+| Nome | Papel | Configuração |
+| --- | --- | --- |
+| Natasha Romanoff | Montagem e revisão de escalas; piloto consultivo no Codex CLI | `natasha` |
