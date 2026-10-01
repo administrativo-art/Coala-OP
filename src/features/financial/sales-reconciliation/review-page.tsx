@@ -1,171 +1,85 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
+import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import type { CatalogPage, MappingView } from "../agent/configuration";
-import { formatStoneMoney } from "../agent/presentation";
 import { financialDateKey } from "../lib/financial-dates";
-import type { DailySalesApiResult, DailySalesReviewStatus } from "./review-state";
-import type { SalesSourceIssue } from "./daily-review";
-import type {
-  ReconciliationSalesChannel,
-  SalesMatchFact,
-  SalesReconciliationCaseKind,
-  SalesReconciliationMatchBasis,
-} from "./types";
+import type { DailySalesApiResult } from "./review-state";
+import type { ReconciliationSalesChannel, SalesMatchFact, SuggestedSalesReconciliationCase } from "./types";
+import { CaseDetailPanel, StatusBadge } from "./review-case-panel";
+import {
+  addDays, bases, caseBadgeLabel, caseTime, channelOrder, channels, factLabel, filterCases, formatDateKey, isAttention,
+  issueReasons, kindsShort, money, pixSourceLabels, reviewStatuses, saleStatuses, summarizeChannel,
+} from "./review-view";
+import type { CaseFilter, ChannelFilter, KindFilter } from "./review-view";
 
-const channels: Record<ReconciliationSalesChannel, string> = {
-  pix: "Pix",
-  debit_card: "Débito",
-  credit_card: "Crédito",
-};
+const PAGE_SIZE = 20;
+const ISSUE_PAGE_SIZE = 50;
+const UNCOMPARED_PREVIEW = 6;
 
-const kinds: Record<SalesReconciliationCaseKind, string> = {
-  matched: "Conferida automaticamente",
-  pdv_only: "Venda somente no PDV",
-  stone_only: "Captura somente na Stone",
-  amount_mismatch: "Valores diferentes",
-  status_mismatch: "Estados diferentes",
-  unit_mismatch: "Unidades diferentes",
-  unit_unmapped: "Unidade não identificada",
-  ambiguous: "Correspondência ambígua",
-};
+type CoverageTab = "pix" | "issues" | "events" | "limits";
 
-const caseReasons: Record<SalesReconciliationCaseKind, string> = {
-  matched: "Valor, unidade e evidências são compatíveis dentro deste recorte.",
-  pdv_only: "O pagamento aparece no PDV, mas não foi localizado na fonte Stone consultada.",
-  stone_only: "A captura aparece na Stone, mas não foi localizada no PDV deste recorte.",
-  amount_mismatch: "As evidências apontam para a mesma venda, porém os valores não coincidem.",
-  status_mismatch: "A situação informada pelo PDV diverge do evento encontrado na Stone.",
-  unit_mismatch: "As evidências relacionadas pertencem a unidades diferentes.",
-  unit_unmapped: "Uma das fontes não possui vínculo oficial com a unidade selecionada.",
-  ambiguous: "Há mais de uma combinação possível ou a evidência não identifica um par único.",
-};
+const label = "mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#9a9ba1]";
+const field = "h-[50px] w-full rounded-xl border border-[#e3ded3] bg-[#faf9f6] px-3.5 text-[13.5px] font-semibold text-[#1a1b1f] disabled:cursor-not-allowed disabled:opacity-55";
+const pager = "h-8 rounded-[9px] border border-[#e3ded3] bg-white px-3 text-xs font-bold text-[#374151] hover:bg-[#faf9f6] disabled:cursor-default disabled:opacity-45";
+const rowGrid = "grid min-w-[780px] grid-cols-[52px_64px_minmax(0,1fr)_minmax(0,1fr)_96px_minmax(0,1.25fr)] items-center gap-3.5 px-[18px]";
+const mono = "font-mono tabular-nums";
 
-const bases: Record<SalesReconciliationMatchBasis, string> = {
-  provider_transaction_id: "ID do provedor",
-  nsu_authorization_terminal: "NSU + autorização + terminal",
-  merchant_order: "Referência explícita do pedido",
-  unique_amount_time: "Par único por valor e janela de cinco minutos",
-  daily_amount_multiset: "Mesmo conjunto de valores e quantidades no dia",
-  candidate_group: "Grupo de candidatos por horário",
-  unmatched: "Sem par neste recorte",
-};
-
-const reasons: Record<SalesSourceIssue["reason"], string> = {
-  invalid_coupon: "Cupom sem identificação válida",
-  duplicate_coupon: "Cupom duplicado",
-  invalid_payments: "Pagamentos incompletos ou total divergente",
-  invalid_date: "Data inválida ou ausente",
-  outside_day: "Registro fora do dia",
-  unsupported_channel: "Meio de pagamento não comparável",
-  invalid_amount: "Valor inválido ou com fração de centavo",
-  non_capture_event: "Evento que não é uma nova venda",
-  cancellation_event: "Cancelamento, estorno ou chargeback exige o histórico da venda",
-  unsupported_capture: "Captura incompleta ou não suportada",
-};
-
-const statuses = {
-  approved: "Captura informada",
-  pending: "Aprovação não informada pelo PDV",
-  partial_cancellation: "Cancelamento parcial no PDV",
-  cancelled: "Cancelado",
-  refunded: "Estornado",
-  chargeback: "Chargeback",
-};
-
-const pixSourceLabels: Record<DailySalesApiResult["pix"]["status"], string> = {
-  available: "arquivo recebido",
-  requested: "solicitado à Stone; aguardando arquivo",
-  pending: "arquivo recebido; processamento ou formato pendente",
-  failed: "falha no recebimento ou processamento",
-  unavailable: "arquivo ainda não recebido",
-  not_configured: "integração não configurada",
-};
-
-const reviewStatuses: Record<DailySalesReviewStatus, string> = {
-  closed: "Dia fechado automaticamente",
-  attention_required: "Dia aberto: requer atenção",
-  awaiting_source: "Dia aberto: aguardando fonte",
-};
-
-const money = (cents: number) => {
-  const absolute = BigInt(Math.abs(cents));
-  return formatStoneMoney(`${cents < 0 ? "-" : ""}${absolute / BigInt(100)}.${String(absolute % BigInt(100)).padStart(2, "0")}`);
-};
-
-function Evidence({ ids, facts }: { ids: string[]; facts: SalesMatchFact[] }) {
-  const selected = facts.filter(fact => ids.includes(fact.id));
-  if (!selected.length) return <span className="text-muted-foreground">Não localizado</span>;
-  return <details>
-    <summary className="cursor-pointer font-medium">{ids.length} pagamento(s)</summary>
-    <ul className="mt-2 space-y-2">
-      {selected.map(fact => <li key={fact.id} className="break-all rounded-lg bg-muted/40 p-2">
-        {fact.couponId ? `Cupom ${fact.couponId}` : `Transação ${fact.id}`} · {money(fact.grossAmountCents)}
-        <br />{new Date(fact.soldAt).toLocaleString("pt-BR")} · {statuses[fact.status]}
-        {fact.adjustment ? <>
-          <br /><span className="text-xs font-medium text-emerald-800">
-            Cupom original {money(fact.adjustment.originalAmountCents)} · cancelado −{money(fact.adjustment.cancelledAmountCents)} · final {money(fact.adjustment.finalAmountCents)}
-          </span>
-          <br /><span className="text-xs text-muted-foreground">
-            {fact.adjustment.finalizedAfterCancellation
-              ? `Cancelado às ${fact.adjustment.lastCancellationAt?.slice(11, 19)}; pagamento final às ${fact.adjustment.finalizedAt.slice(11, 19)}.`
-              : "O horário do cancelamento não comprova que ocorreu antes do pagamento final."}
-          </span>
-        </> : null}
-        <br /><span className="text-xs text-muted-foreground">ID da evidência: {fact.id}</span>
-      </li>)}
-    </ul>
-  </details>;
+function Panel({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("rounded-2xl border border-[#e9e5dc] bg-white", className)} {...props}>{children}</div>;
 }
 
-function MetricCard({ label, value, tone = "neutral", detail }: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "success" | "danger";
-  detail?: string;
-}) {
-  const toneClass = tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-    : tone === "danger" ? "border-rose-200 bg-rose-50 text-rose-800"
-      : "border-border bg-card";
-  return <div className={`rounded-2xl border p-4 ${toneClass}`}>
-    <p className="text-xs font-bold uppercase tracking-[0.12em] opacity-75">{label}</p>
-    <p className="mt-2 font-mono text-2xl font-bold tabular-nums">{value}</p>
-    {detail ? <p className="mt-1 text-xs opacity-80">{detail}</p> : null}
+function Metric({ title, value, detail, tone = "neutral" }: { title: string; value: string; detail: string; tone?: "neutral" | "ok" | "bad" }) {
+  return <div className={cn("rounded-2xl border px-[18px] py-4", tone === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : tone === "bad" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-[#e9e5dc] bg-white")}>
+    <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] opacity-75">{title}</p>
+    <p className={cn(mono, "mt-2.5 text-[22px] font-bold tracking-tight")}>{value}</p>
+    <p className="mt-1 text-[11.5px] opacity-80">{detail}</p>
   </div>;
 }
 
-type CaseFilter = "attention" | "all" | "auto";
+function SideCell({ ids, facts, missing }: { ids: string[]; facts: Map<string, SalesMatchFact>; missing: string }) {
+  const list = ids.map(id => facts.get(id)).filter((fact): fact is SalesMatchFact => !!fact);
+  if (!list.length) return <div className="min-w-0"><p className="text-xs italic text-[#b8b3a9]">Não localizado</p><p className="mt-0.5 truncate text-[11px] text-[#9a9ba1]">{missing}</p></div>;
+  return <div className="min-w-0">
+    <p className={cn(mono, "text-[12.5px] font-semibold")}>{money(list.reduce((sum, fact) => sum + fact.grossAmountCents, 0))}</p>
+    <p className="mt-0.5 truncate text-[11px] text-[#9a9ba1]">{list.length > 1 ? `${list.length} pagamento(s) · ${factLabel(list[0])}…` : factLabel(list[0])}</p>
+  </div>;
+}
 
 export function SalesReviewPage() {
   const { isDefaultAdmin } = useAuth();
   const api = useAuthenticatedApi();
+  const yesterday = useMemo(() => financialDateKey(new Date(Date.now() - 86_400_000)) ?? "", []);
   const [mappings, setMappings] = useState<MappingView[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState("");
   const [code, setCode] = useState("");
-  const [date, setDate] = useState(() => financialDateKey(new Date(Date.now() - 86_400_000)) ?? "");
+  const [date, setDate] = useState(yesterday);
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [error, setError] = useState("");
   const [result, setResult] = useState<DailySalesApiResult | null>(null);
-  const [channel, setChannel] = useState<"all" | ReconciliationSalesChannel>("all");
+  const [channel, setChannel] = useState<ChannelFilter>("all");
   const [caseFilter, setCaseFilter] = useState<CaseFilter>("attention");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [page, setPage] = useState(0);
   const [issuePage, setIssuePage] = useState(0);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [unitOpen, setUnitOpen] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
+  const [coverageTab, setCoverageTab] = useState<CoverageTab>("pix");
+  const [showAllUncompared, setShowAllUncompared] = useState(false);
   const catalogActive = useRef<AbortController | null>(null);
   const reviewActive = useRef<AbortController | null>(null);
+  const unitRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isDefaultAdmin) return;
@@ -214,6 +128,9 @@ export function SalesReviewPage() {
     setPage(0);
     setIssuePage(0);
     setChannel("all");
+    setKindFilter("all");
+    setDetailKey(null);
+    setShowAllUncompared(false);
     void api<DailySalesApiResult>("/api/financial/pdv-stone-review", {
       method: "POST",
       signal: controller.signal,
@@ -227,6 +144,7 @@ export function SalesReviewPage() {
       }
       setResult(data);
       setCaseFilter(data.review.status === "closed" ? "auto" : "attention");
+      setCoverageTab(data.pix.status === "available" ? "issues" : "pix");
     }).catch(caught => {
       if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível consultar. Tente novamente.");
     }).finally(() => {
@@ -239,7 +157,55 @@ export function SalesReviewPage() {
     };
   }, [api, code, date, isDefaultAdmin, mapping?.accountId, mapping?.id, mapping?.kioskId, refreshVersion]);
 
-  if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
+  const allCases = result?.cases;
+  const view = useMemo(() => filterCases(allCases ?? [], { channel, caseFilter, kind: kindFilter }), [allCases, channel, caseFilter, kindFilter]);
+  const facts = useMemo(() => new Map<string, SalesMatchFact>([...(result?.pdvFacts ?? []), ...(result?.stoneSales ?? [])].map(fact => [fact.id, fact])), [result]);
+  const { rows } = view;
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const detailIndex = detailKey ? rows.findIndex(row => row.deterministicKey === detailKey) : -1;
+  const detail = detailIndex >= 0 ? rows[detailIndex] : null;
+
+  const moveDetail = (delta: number) => {
+    const next = Math.max(0, Math.min(rows.length - 1, detailIndex + delta));
+    if (detailIndex < 0 || next === detailIndex) return;
+    setDetailKey(rows[next].deterministicKey);
+    setPage(Math.floor(next / PAGE_SIZE));
+  };
+
+  const moveDetailRef = useRef(moveDetail);
+  moveDetailRef.current = moveDetail;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (unitOpen) setUnitOpen(false);
+        else if (detailKey) setDetailKey(null);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (!detailKey || target?.closest("input, select, textarea")) return;
+      if (event.key === "ArrowDown" || event.key === "j") { event.preventDefault(); moveDetailRef.current(1); }
+      if (event.key === "ArrowUp" || event.key === "k") { event.preventDefault(); moveDetailRef.current(-1); }
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      if (unitOpen && unitRef.current && !unitRef.current.contains(event.target as Node)) setUnitOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [detailKey, unitOpen]);
+
+  if (!isDefaultAdmin) {
+    return <PageContainer surface>
+      <div role="alert" className="mx-auto my-24 max-w-[420px] rounded-2xl border border-[#e9e5dc] bg-white px-[30px] py-7 text-center">
+        <p className="text-[15px] font-extrabold">Consulta restrita à administração.</p>
+        <p className="mt-1.5 text-[12.5px] text-[#7c8189]">Peça acesso a um administrador da conta para conferir vendas PDV × Stone.</p>
+      </div>
+    </PageContainer>;
+  }
 
   const busy = catalogBusy || reviewBusy;
   const clear = () => {
@@ -249,6 +215,8 @@ export function SalesReviewPage() {
     setIssuePage(0);
     setChannel("all");
     setCaseFilter("attention");
+    setKindFilter("all");
+    setDetailKey(null);
   };
   const load = async (next?: string) => {
     if (catalogActive.current) return;
@@ -280,219 +248,392 @@ export function SalesReviewPage() {
       if (catalogActive.current === controller) catalogActive.current = null;
     }
   };
+  const changeDate = (next: string) => { setDate(next); clear(); };
+  const nextDayDisabled = busy || !date || date >= yesterday;
+  const goCoverage = (tab: CoverageTab) => {
+    setCoverageTab(tab);
+    window.setTimeout(() => document.getElementById("cobertura-fontes")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+  };
+  const pickChannel = (value: ChannelFilter) => {
+    const next = summarizeChannel(allCases ?? [], value);
+    setChannel(value);
+    setCaseFilter(next.attention ? "attention" : "all");
+    setKindFilter("all");
+    setPage(0);
+    setDetailKey(null);
+  };
+  const pickCaseFilter = (value: CaseFilter) => { setCaseFilter(value); setKindFilter("all"); setPage(0); setDetailKey(null); };
 
-  const allCases = result?.cases ?? [];
-  const attentionCount = allCases.filter(row => row.reviewStatus === "attention_required").length;
-  const autoCount = allCases.filter(row => row.reviewStatus === "auto_checked").length;
-  const pdvTotal = allCases.reduce((sum, row) => sum + row.pdvGrossAmountCents, 0);
-  const stoneTotal = allCases.reduce((sum, row) => sum + row.stoneGrossAmountCents, 0);
-  const channelSummaries = (Object.entries(channels) as Array<[ReconciliationSalesChannel, string]>).map(([value, label]) => {
-    const channelCases = allCases.filter(row => row.channel === value);
-    const channelPdv = channelCases.reduce((sum, row) => sum + row.pdvGrossAmountCents, 0);
-    const channelStone = channelCases.reduce((sum, row) => sum + row.stoneGrossAmountCents, 0);
-    return {
-      value,
-      label,
-      pdv: channelPdv,
-      stone: channelStone,
-      difference: channelStone - channelPdv,
-      auto: channelCases.filter(row => row.reviewStatus === "auto_checked").length,
-      attention: channelCases.filter(row => row.reviewStatus === "attention_required").length,
-    };
-  });
-  const rows = allCases.filter(row => (
-    (channel === "all" || row.channel === channel)
-    && (caseFilter === "all" || caseFilter === "auto" && row.reviewStatus === "auto_checked"
-      || caseFilter === "attention" && row.reviewStatus === "attention_required")
-  ));
-  const selectClass = "mt-1 w-full rounded-xl border bg-background p-2.5";
+  const pixPending = !!result && result.pix.status !== "available";
+  const uncompared = result?.uncomparedPdvFacts ?? [];
+  const uncomparedSum = uncompared.reduce((sum, fact) => sum + fact.grossAmountCents, 0);
+  const totals = summarizeChannel(allCases ?? [], "all");
+  const issues = result?.issues ?? [];
+  const issuePages = Math.max(1, Math.ceil(issues.length / ISSUE_PAGE_SIZE));
+  const currentIssuePage = Math.min(issuePage, issuePages - 1);
+  const reviewStatus = result?.review.status;
+  const verdictTone = reviewStatus === "closed" ? "ok" : reviewStatus === "awaiting_source" ? "warn" : "bad";
+  const verdictTitle = reviewStatus === "closed" ? "Tudo conferido"
+    : totals.attention ? `${totals.attention} divergência(s) para revisar`
+      : result ? reviewStatuses[result.review.status] : "";
+  const mappingLabel = mapping ? `${mapping.kioskName} — ${mapping.accountName}` : "";
+  const statusLabel = reviewBusy ? "Comparando…" : catalogBusy ? "Carregando vínculos…" : error ? "⚠ Falha na consulta"
+    : result ? `✓ Atualizado ${new Date(result.collectedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+      : !mapping ? "Aguardando unidade" : !code ? "Aguardando StoneCode" : "Atualizando…";
 
-  return <PageContainer variant="wide" surface className="space-y-6 py-6">
+  const coverageTabs: Array<{ id: CoverageTab; label: string; dot: boolean }> = [
+    { id: "pix", label: "Fonte Pix", dot: pixPending },
+    { id: "issues", label: `Apontamentos fora da comparação (${issues.length})`, dot: issues.length > 0 },
+    { id: "events", label: `Eventos Stone originais (${result?.stoneEvents.length ?? 0})`, dot: false },
+    { id: "limits", label: "Limitações", dot: false },
+  ];
+
+  return <PageContainer variant="wide" surface className="space-y-4 py-6">
     <PageHeader
       title="Conciliação de vendas"
       description="Comparação automática das vendas do PDV com as capturas da Stone, por unidade, dia e meio de pagamento."
       back={{ fallbackHref: "/dashboard/financial", parentLabel: "Financeiro" }}
+      actions={<span className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-700">◉ Somente leitura</span>}
     />
 
-    <div role="note" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-      Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente. A tela abre nas divergências quando existem e nas conferidas quando o dia está íntegro; use <strong>Todas</strong> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.
+    <div role="note" className="flex items-start gap-2.5 rounded-xl border border-[#d3ecfb] bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-[1.55] text-sky-950">
+      <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+      <p className="min-w-0 flex-1">
+        Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente.
+        {howOpen ? <> A tela abre nas divergências quando existem e nas conferidas quando o dia está íntegro; use <b>Todas</b> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.</>
+          : " Esta conferência não confirma recebimento no banco."}
+      </p>
+      <button type="button" aria-expanded={howOpen} onClick={() => setHowOpen(value => !value)} className="shrink-0 text-xs font-bold text-sky-700">{howOpen ? "Menos" : "Como funciona"}</button>
     </div>
 
-    <Card className="rounded-2xl">
-      <CardHeader className="pb-3"><CardTitle className="text-base">Recorte da comparação</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" disabled={busy} onClick={() => load()}>
-            <RefreshCw className="mr-2 h-4 w-4" />{loaded ? "Atualizar vínculos" : "Carregar vínculos"}
-          </Button>
-          {cursor ? <Button variant="outline" disabled={busy} onClick={() => load(cursor)}>Mais vínculos</Button> : null}
-        </div>
-        {loaded && !mappings.length ? <p role="status">Cadastre o vínculo oficial entre unidade, StoneCode e conta antes de consultar.</p> : null}
-        <div className="space-y-3">
-          <fieldset disabled={busy} className="grid gap-3 md:grid-cols-3">
-            <label className="text-sm font-medium">Unidade / conta
-              <select required aria-label="Vínculo oficial" className={selectClass} value={selected} onChange={event => {
-                setSelected(event.target.value);
-                setCode(mappings.find(item => item.id === event.target.value)?.stoneCodes[0] ?? "");
-                clear();
-              }}>
-                <option value="">Selecione</option>
-                {mappings.map(item => <option key={item.id} value={item.id}>{item.kioskName} — {item.accountName}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-medium">StoneCode
-              <select required disabled={!mapping} aria-label="StoneCode" className={selectClass} value={code} onChange={event => { setCode(event.target.value); clear(); }}>
-                <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
-                {mapping?.stoneCodes.map(item => <option key={item}>{item}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-medium">Dia das vendas
-              <Input className="mt-1" required aria-label="Dia das vendas" type="date" value={date} onChange={event => { setDate(event.target.value); clear(); }} />
-            </label>
-          </fieldset>
-          <p className="text-sm text-muted-foreground">Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte. Ao escolher o recorte, a conferência é executada e registrada automaticamente.</p>
-          {mapping ? <p className="text-sm">Vigência do vínculo: {mapping.validFrom} a {mapping.validTo ?? "sem data final"}.</p> : null}
-          {mapping && code && date ? <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm font-medium" role="status">{reviewBusy ? "Conferindo e registrando o dia…" : result ? "Conferência carregada automaticamente." : error ? "Conferência não concluída." : "Preparando a conferência automática…"}</p>
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setRefreshVersion(value => value + 1)}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${reviewBusy ? "animate-spin" : ""}`} />Reconsultar fontes
-            </Button>
+    <Panel className="p-4 sm:px-[18px]">
+      <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div ref={unitRef} className="relative min-w-0">
+          <p className={label}>Unidade / conta</p>
+          <button type="button" aria-label="Vínculo oficial" aria-haspopup="listbox" aria-expanded={unitOpen} disabled={busy}
+            onClick={() => setUnitOpen(value => !value)}
+            className={cn(field, "flex items-center justify-between gap-2.5 text-left", unitOpen && "border-[#db2777] shadow-[0_0_0_3px_rgba(219,39,119,.12)]")}>
+            <span className="flex min-w-0 flex-col items-start gap-0.5">
+              <span className={cn("max-w-full truncate text-[13.5px]", mapping ? "font-bold" : "font-medium text-[#8a8f99]")}>
+                {catalogBusy ? "Carregando vínculos…" : mapping ? mappingLabel : mappings.length ? "Selecione" : "Nenhum vínculo carregado"}
+              </span>
+              <span className="max-w-full truncate text-[11px] font-normal text-[#9a9ba1]">
+                {mapping ? `${mapping.stoneCodes.length} StoneCode(s)` : `${mappings.length} vínculo(s) oficial(is)`}
+              </span>
+            </span>
+            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[#9a9ba1]" />
+          </button>
+          {unitOpen && !busy ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px] border border-[#e3ded3] bg-white shadow-[0_18px_40px_rgba(0,0,0,.14)]">
+            <div className="flex items-center justify-between border-b border-[#f0ece4] px-3.5 pb-2 pt-2.5">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#9a9ba1]">Vínculos oficiais · {mappings.length}</span>
+              <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 text-xs font-bold text-[#db2777]"><RefreshCw className="h-3 w-3" />{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</button>
+            </div>
+            <div role="listbox" aria-label="Vínculos oficiais" className="max-h-[290px] overflow-auto p-1.5">
+              {mappings.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === selected}
+                onClick={() => { setSelected(item.id); setCode(item.stoneCodes[0] ?? ""); setUnitOpen(false); clear(); }}
+                className={cn("flex w-full items-center justify-between gap-2.5 rounded-[10px] px-2.5 py-[9px] text-left hover:bg-[#fdf2f8]", item.id === selected && "bg-[#fdf2f8]")}>
+                <span className="flex min-w-0 flex-col items-start gap-0.5">
+                  <span className="text-[13px] font-bold">{item.kioskName}</span>
+                  <span className="text-[11px] text-[#9a9ba1]">{item.accountName} · {item.stoneCodes.length} StoneCode(s)</span>
+                </span>
+                <Check aria-hidden="true" className={cn("h-4 w-4 text-[#db2777]", item.id === selected ? "opacity-100" : "opacity-0")} />
+              </button>)}
+            </div>
+            {cursor ? <button type="button" onClick={() => void load(cursor)} className="h-10 w-full border-t border-[#f0ece4] bg-[#faf9f6] text-[12.5px] font-bold text-[#5f646c]">Mais vínculos</button> : null}
           </div> : null}
         </div>
-      </CardContent>
-    </Card>
 
-    {error ? <p role="alert" className="text-destructive">{error}</p> : null}
+        <div className="min-w-0">
+          <p className={label}>StoneCode</p>
+          <select aria-label="StoneCode" className={cn(field, "cursor-pointer")} disabled={busy || !mapping} value={code}
+            onChange={event => { setCode(event.target.value); clear(); }}>
+            <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
+            {mapping?.stoneCodes.map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
 
-    {result ? <section aria-label="Resultado da comparação" className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Vendas PDV comparadas" value={money(pdvTotal)} detail={`${result.pdvFacts.length} pagamentos digitais no PDV`} />
-        <MetricCard label="Capturas Stone" value={money(stoneTotal)} detail={`${result.stoneSales.length} eventos comparáveis`} />
-        <MetricCard label="Diferença Stone − PDV" value={money(stoneTotal - pdvTotal)} tone={stoneTotal === pdvTotal ? "success" : "danger"} />
-        <MetricCard label="Conferidas automaticamente" value={String(autoCount)} tone="success" detail="Pares individuais compatíveis" />
-        <MetricCard label="Divergências" value={String(attentionCount)} tone={attentionCount ? "danger" : "success"} detail={`${result.issues.length} apontamento(s) de fonte`} />
+        <div className="min-w-0">
+          <p className={label}>Dia das vendas</p>
+          <div className="flex h-[50px] overflow-hidden rounded-xl border border-[#e3ded3] bg-[#faf9f6]">
+            <button type="button" aria-label="Dia anterior" disabled={busy || !date} onClick={() => changeDate(addDays(date, -1))}
+              className="flex w-[38px] items-center justify-center border-r border-[#ebe7de] text-[#5f646c] hover:bg-[#f1eee7] disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
+            <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={yesterday}
+              onChange={event => changeDate(event.target.value)}
+              className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-none" />
+            <button type="button" aria-label="Próximo dia" disabled={nextDayDisabled} onClick={() => changeDate(addDays(date, 1))}
+              className="flex w-[38px] items-center justify-center border-l border-[#ebe7de] text-[#5f646c] hover:bg-[#f1eee7] disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
+          </div>
+        </div>
+
+        <div role="status" aria-live="polite" className={cn("flex h-[50px] min-w-[200px] items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[12.5px] font-bold",
+          error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-[#ebe7de] bg-[#faf9f6]", !error && result ? "text-emerald-700" : !error && "text-[#8a8f99]")}>
+          {busy ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-[#db2777]" /> : null}
+          <span className="flex-1">{statusLabel}</span>
+          {mapping && code && date ? <button type="button" aria-label="Reconsultar fontes" title="Reconsultar fontes" disabled={busy}
+            onClick={() => setRefreshVersion(value => value + 1)} className="rounded-md p-1 text-[#5f646c] hover:bg-[#efebe3] disabled:opacity-40">
+            <RefreshCw className={cn("h-3.5 w-3.5", reviewBusy && "animate-spin")} />
+          </button> : null}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-col justify-between gap-1 text-[11.5px] leading-normal sm:flex-row sm:gap-4">
+        <span className="text-[#374151]">{mapping ? `Vigência do vínculo: ${formatDateKey(mapping.validFrom)} a ${mapping.validTo ? formatDateKey(mapping.validTo) : "sem data final"}.` : ""}</span>
+        <span className="text-[#9a9ba1] sm:text-right">Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte. A conferência é executada e registrada automaticamente.</span>
+      </div>
+    </Panel>
+
+    {loaded && !mappings.length && !busy ? <div role="status" className="flex items-center justify-between gap-4 rounded-[14px] border border-amber-200 bg-amber-50 px-[18px] py-4">
+      <span className="text-[13px] text-amber-900">Cadastre o vínculo oficial entre unidade, StoneCode e conta antes de consultar.</span>
+      <button type="button" onClick={() => void load()} className="inline-flex h-[34px] items-center gap-1.5 rounded-[10px] border border-amber-300 bg-white px-3 text-xs font-bold text-amber-800"><RefreshCw className="h-3.5 w-3.5" />Atualizar vínculos</button>
+    </div> : null}
+
+    {error && !busy ? <div role="alert" className="flex items-center justify-between gap-4 rounded-[14px] border border-rose-200 bg-rose-50 px-[18px] py-4">
+      <div>
+        <p className="text-[13.5px] font-extrabold text-rose-800">Não foi possível comparar</p>
+        <p className="mt-[3px] text-[12.5px] text-rose-800">{error}</p>
+      </div>
+      {mapping && code && date ? <button type="button" onClick={() => setRefreshVersion(value => value + 1)} className="h-[34px] shrink-0 rounded-[10px] border border-rose-300 bg-white px-3 text-xs font-bold text-rose-700">Tentar novamente</button> : null}
+    </div> : null}
+
+    {!result && !error && !busy && mappings.length > 0 && !(mapping && code && date) ? <div className="rounded-2xl border-[1.5px] border-dashed border-[#dcd8cf] px-6 py-14 text-center">
+      <p className="text-[14.5px] font-extrabold">{mapping ? "Selecione o StoneCode" : "Escolha o recorte da comparação"}</p>
+      <p className="mt-[5px] text-[12.5px] text-[#8a8f99]">{mapping ? "A comparação carrega automaticamente assim que unidade, StoneCode e dia estiverem definidos." : "Selecione unidade / conta, StoneCode e dia das vendas. A comparação carrega automaticamente."}</p>
+    </div> : null}
+
+    {reviewBusy ? <div aria-hidden="true" className="grid animate-pulse gap-3 md:grid-cols-4">
+      {[0, 1, 2, 3].map(index => <div key={index} className="h-[132px] rounded-2xl bg-[#ebe7de]" />)}
+      <div className="h-[300px] rounded-2xl bg-[#ebe7de] md:col-span-4" />
+    </div> : null}
+
+    {result && !reviewBusy ? <section aria-label="Resultado da comparação" className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))]">
+        <div className={cn("rounded-2xl border bg-white px-[18px] py-4 md:col-span-2 xl:col-span-1", verdictTone === "ok" ? "border-emerald-200" : verdictTone === "warn" ? "border-amber-200" : "border-rose-200")}>
+          <div className="flex items-center gap-3">
+            <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[17px] font-extrabold",
+              verdictTone === "ok" ? "bg-emerald-50 text-emerald-700" : verdictTone === "warn" ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700")}>{verdictTone === "ok" ? "✓" : verdictTone === "warn" ? "…" : "⚠"}</span>
+            <div className="min-w-0">
+              <p className="text-[17px] font-extrabold tracking-tight">{verdictTitle}</p>
+              <p className="mt-0.5 text-[12.5px] text-[#5f646c]">{totals.auto} de {totals.list.length} casos conferidos automaticamente</p>
+            </div>
+          </div>
+          <div className="mt-3.5 flex h-2 overflow-hidden rounded-full bg-[#efe9e2]" aria-hidden="true">
+            <div className="bg-emerald-500" style={{ width: `${totals.list.length ? totals.auto / totals.list.length * 100 : 0}%` }} />
+            <div className="bg-rose-600" style={{ width: `${totals.list.length ? totals.attention / totals.list.length * 100 : 0}%` }} />
+          </div>
+          <div className="mt-[9px] flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-[#5f646c]">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />{totals.auto} conferidas automaticamente</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-600" />{totals.attention} divergências</span>
+            <button type="button" onClick={() => goCoverage("issues")} className="ml-auto font-bold text-amber-700">{issues.length} apontamento(s) de fonte →</button>
+          </div>
+          <p className="mt-2 text-[11px] text-[#9a9ba1]">Revisão {result.review.revision} · registrada em {new Date(result.review.reviewedAt).toLocaleString("pt-BR")}</p>
+          {result.review.sourceChanged ? <p className="mt-1 text-[11px] font-medium text-amber-800">As fontes mudaram desde a revisão anterior; o estado foi recalculado.</p> : null}
+        </div>
+        <Metric title="Vendas PDV comparadas" value={money(totals.pdv)} detail={`${result.pdvFacts.length} pagamentos digitais no PDV`} />
+        <Metric title="Capturas Stone" value={money(totals.stone)} detail={`${result.stoneSales.length} eventos comparáveis`} />
+        <Metric title="Diferença Stone − PDV" value={money(totals.difference)} tone={totals.difference === 0 ? "ok" : "bad"}
+          detail={totals.difference === 0 ? "Totais do dia batem" : "Totais do dia não batem"} />
       </div>
 
-      <Card className="overflow-hidden rounded-2xl">
-        <CardHeader className="pb-3"><CardTitle className="text-base">Resumo por meio de pagamento</CardTitle></CardHeader>
-        <CardContent className="p-0 sm:p-0">
-          <div className="overflow-x-auto"><div className="min-w-[720px]">
-            <div className="grid grid-cols-[1.2fr_repeat(3,1fr)_1.2fr] gap-3 border-y bg-muted/40 px-5 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-              <span>Meio</span><span className="text-right">PDV</span><span className="text-right">Stone</span><span className="text-right">Diferença</span><span className="text-right">Situação</span>
-            </div>
-            {channelSummaries.map(item => <button key={item.value} type="button" className="grid w-full grid-cols-[1.2fr_repeat(3,1fr)_1.2fr] gap-3 border-b px-5 py-3 text-left hover:bg-muted/30" onClick={() => { setChannel(item.value); setCaseFilter(item.attention ? "attention" : "all"); setPage(0); }}>
-              <span className="font-semibold">{item.label}</span>
-              <span className="text-right font-mono tabular-nums">{money(item.pdv)}</span>
-              <span className="text-right font-mono tabular-nums">{money(item.stone)}</span>
-              <span className={`text-right font-mono font-semibold tabular-nums ${item.difference ? "text-rose-700" : "text-emerald-700"}`}>{money(item.difference)}</span>
-              <span className={`text-right text-sm font-semibold ${item.attention ? "text-rose-700" : "text-emerald-700"}`}>{item.attention ? `${item.attention} divergência(s)` : `${item.auto} conferida(s)`}</span>
-            </button>)}
-          </div></div>
-        </CardContent>
-      </Card>
+      <div>
+        <div className="mb-[9px] mt-1 flex items-baseline gap-2.5">
+          <span className={cn(label, "mb-0")}>Resumo por meio de pagamento</span>
+          <span className="text-[11.5px] text-[#a3a099]">clique para filtrar a conferência</span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {(["all", ...channelOrder] as ChannelFilter[]).map(value => {
+            const item = summarizeChannel(result.cases, value);
+            const active = channel === value;
+            const pixOff = value === "pix" && pixPending;
+            const chip = pixOff ? { tone: "warn" as const, text: "Não comparado" }
+              : item.attention ? { tone: "bad" as const, text: `${item.attention} divergência(s)` }
+                : item.auto ? { tone: "ok" as const, text: `${item.auto} conferida(s)` }
+                  : { tone: "muted" as const, text: "Sem vendas" };
+            return <button key={value} type="button" aria-pressed={active} onClick={() => pickChannel(value)}
+              className={cn("block w-full rounded-[14px] border bg-white px-[15px] py-[13px] text-left", active ? "border-[1.5px] border-[#db2777] shadow-[0_0_0_3px_rgba(219,39,119,.1)]" : "border-[#e9e5dc] hover:border-[#d8d2c6]")}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-extrabold">{value === "all" ? "Todos os meios" : channels[value as ReconciliationSalesChannel]}</span>
+                <StatusBadge tone={chip.tone}>{chip.text}</StatusBadge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2.5 text-left">
+                {[["PDV", item.pdv], ["Stone", item.stone]].map(([title, amount]) => <div key={title}>
+                  <p className="text-[9.5px] font-extrabold uppercase tracking-[0.12em] text-[#9a9ba1]">{title}</p>
+                  <p className={cn(mono, "mt-[3px] text-[13.5px] font-semibold")}>{money(amount as number)}</p>
+                </div>)}
+              </div>
+              <div className="mt-[11px] flex items-center justify-between gap-2 border-t border-dashed border-[#ebe6dc] pt-[9px]">
+                <span className="text-[11.5px] text-[#8a8f99]">{pixOff ? "Fora da comparação" : "Diferença"}</span>
+                <span className={cn(mono, "text-[12.5px] font-bold", pixOff ? "text-amber-700" : item.difference ? "text-rose-700" : "text-emerald-700")}>
+                  {pixOff ? `${uncompared.length} pag. · ${money(uncomparedSum)}` : money(item.difference)}
+                </span>
+              </div>
+            </button>;
+          })}
+        </div>
+      </div>
 
-      <Card className="overflow-hidden rounded-2xl">
-        <CardHeader className="gap-4 border-b pb-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">Conferência do dia</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">{result.scope.referenceDate} · Filial PDV {result.pdvFilialId} · StoneCode {result.scope.stoneCode} · consulta {new Date(result.collectedAt).toLocaleString("pt-BR")}</p>
+      <div className={cn("grid items-start gap-4", detail ? "xl:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1")}>
+        <Panel className="min-w-0 overflow-hidden">
+          <div className="border-b border-[#f0ece4] px-[18px] pb-3.5 pt-4">
+            <h3 className="text-base font-extrabold tracking-tight">Conferência do dia</h3>
+            <p className="mt-1 text-xs text-[#7c8189]">
+              {formatDateKey(result.scope.referenceDate)} · Filial PDV {result.pdvFilialId} · StoneCode {result.scope.stoneCode} · consulta {new Date(result.collectedAt).toLocaleString("pt-BR")}
+            </p>
+            <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
+              <div role="group" aria-label="Filtrar situação" className="flex gap-[3px] rounded-[11px] bg-[#f4f2ec] p-[3px]">
+                {([
+                  { id: "attention", icon: "⚠ ", text: "Divergências", count: view.attention.length, tone: "bg-rose-50 text-rose-700" },
+                  { id: "all", icon: "", text: "Todas", count: view.inChannel.length, tone: "bg-[#efebe3] text-[#5f646c]" },
+                  { id: "auto", icon: "✓ ", text: "Conferidas", count: view.auto, tone: "bg-emerald-50 text-emerald-700" },
+                ] as const).map(tab => <button key={tab.id} type="button" aria-pressed={caseFilter === tab.id} onClick={() => pickCaseFilter(tab.id)}
+                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-bold", caseFilter === tab.id ? "bg-white text-[#1a1b1f] shadow-sm" : "text-[#7c8189]")}>
+                  {tab.icon}{tab.text}
+                  <span className={cn("inline-flex h-[18px] min-w-5 items-center justify-center rounded-full px-1.5 text-[10.5px]", tab.tone)}>{tab.count}</span>
+                </button>)}
+              </div>
+              <div role="group" aria-label="Filtrar meio de pagamento" className="flex gap-0.5">
+                {(["all", ...channelOrder] as ChannelFilter[]).map(value => <button key={value} type="button" aria-pressed={channel === value}
+                  onClick={() => { setChannel(value); setKindFilter("all"); setPage(0); setDetailKey(null); }}
+                  className={cn("h-[30px] rounded-lg px-[11px] text-[12.5px]", channel === value ? "bg-[#f1eee7] font-bold text-[#1a1b1f]" : "font-semibold text-[#7c8189]")}>
+                  {value === "all" ? "Todos" : channels[value as ReconciliationSalesChannel]}
+                </button>)}
+              </div>
             </div>
-            <div className="text-right">
-              <Badge variant="outline" className={result.review.status === "closed"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : result.review.status === "awaiting_source"
-                  ? "border-amber-200 bg-amber-50 text-amber-800"
-                  : "border-rose-200 bg-rose-50 text-rose-800"}>
-                {result.review.status === "closed" ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                  : result.review.status === "awaiting_source" ? <Clock3 className="mr-1 h-3.5 w-3.5" />
-                    : <AlertTriangle className="mr-1 h-3.5 w-3.5" />}
-                {reviewStatuses[result.review.status]}
-              </Badge>
-              <p className="mt-1 text-xs text-muted-foreground">Revisão {result.review.revision} · registrada em {new Date(result.review.reviewedAt).toLocaleString("pt-BR")}</p>
-              {result.review.sourceChanged ? <p className="mt-1 text-xs text-amber-800">As fontes mudaram desde a revisão anterior; o estado foi recalculado.</p> : null}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2" aria-label="Filtrar situação">
-            <Button size="sm" variant={caseFilter === "attention" ? "default" : "outline"} onClick={() => { setCaseFilter("attention"); setPage(0); }}>
-              <AlertTriangle className="mr-2 h-4 w-4" />Divergências ({attentionCount})
-            </Button>
-            <Button size="sm" variant={caseFilter === "all" ? "default" : "outline"} onClick={() => { setCaseFilter("all"); setPage(0); }}>Todas ({allCases.length})</Button>
-            <Button size="sm" variant={caseFilter === "auto" ? "default" : "outline"} onClick={() => { setCaseFilter("auto"); setPage(0); }}>
-              <CheckCircle2 className="mr-2 h-4 w-4" />Conferidas ({autoCount})
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2" aria-label="Filtrar meio de pagamento">
-            <Button size="sm" variant={channel === "all" ? "secondary" : "ghost"} onClick={() => { setChannel("all"); setPage(0); }}>Todos</Button>
-            {(Object.entries(channels) as Array<[ReconciliationSalesChannel, string]>).map(([value, label]) =>
-              <Button key={value} size="sm" variant={channel === value ? "secondary" : "ghost"} onClick={() => { setChannel(value); setPage(0); }}>{label}</Button>)}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0 sm:p-0">
-          {!rows.length ? <p className="p-6" role="status">{caseFilter === "attention" ? "Nenhuma divergência neste filtro." : "Nenhuma venda neste filtro."}</p> : <>
-            <div className="overflow-x-auto">
-              <table className="min-w-[940px] w-full text-sm">
-                <caption className="sr-only">Comparação de pagamentos do PDV com capturas Stone</caption>
-                <thead className="bg-muted/40"><tr>{["Meio", "PDV", "Stone", "Valor PDV", "Valor Stone", "Diferença", "Situação e motivo"].map(label => <th key={label} className="p-3 text-left text-xs uppercase tracking-wide text-muted-foreground">{label}</th>)}</tr></thead>
-                <tbody>{rows.slice(page * 50, (page + 1) * 50).map(row => <tr key={row.deterministicKey} className="border-t align-top">
-                  <td className="p-3 font-semibold">{channels[row.channel]}</td>
-                  <td className="p-3"><Evidence ids={row.pdvFactIds} facts={result.pdvFacts} /></td>
-                  <td className="p-3"><Evidence ids={row.stoneSaleIds} facts={result.stoneSales} /></td>
-                  <td className="p-3 font-mono tabular-nums">{money(row.pdvGrossAmountCents)}</td>
-                  <td className="p-3 font-mono tabular-nums">{money(row.stoneGrossAmountCents)}</td>
-                  <td className={`p-3 font-mono font-semibold tabular-nums ${row.differenceAmountCents ? "text-rose-700" : "text-emerald-700"}`}>{money(row.differenceAmountCents)}</td>
-                  <td className="max-w-[300px] p-3">
-                    <Badge variant="outline" className={row.reviewStatus === "auto_checked" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}>
-                      {row.reviewStatus === "auto_checked" ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <AlertTriangle className="mr-1 h-3.5 w-3.5" />}
-                      {row.kind === "matched" && row.matchBasis === "daily_amount_multiset"
-                        ? "Conjunto diário conferido"
-                        : kinds[row.kind]}
-                    </Badge>
-                    <p className="mt-2">{row.kind === "matched" && row.matchBasis === "daily_amount_multiset"
-                      ? "Os valores e as quantidades coincidem no dia. A conferência vale para o conjunto e não identifica qual captura pertence a cada pagamento."
-                      : caseReasons[row.kind]}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Critério: {bases[row.matchBasis]}</p>
-                  </td>
-                </tr>)}</tbody>
-              </table>
-            </div>
-            <div className="flex items-center gap-3 border-t p-4">
-              <Button variant="outline" disabled={!page} onClick={() => setPage(page - 1)}>Anterior</Button>
-              <span className="text-sm">Página {page + 1} de {Math.ceil(rows.length / 50)}</span>
-              <Button variant="outline" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>Próxima</Button>
-            </div>
-          </>}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl">
-        <CardHeader><CardTitle className="text-base">Cobertura e apontamentos das fontes</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <details>
-            <summary className="cursor-pointer font-medium">Fonte Pix: {pixSourceLabels[result.pix.status]}
-              {result.pix.coverage === "partial" ? " · cobertura parcial" : result.pix.coverage === "complete" ? " · cobertura completa" : ""}
-              {` · PDV não comparado (${result.uncomparedPdvFacts.length})`}</summary>
-            <p className="mt-2 text-sm text-muted-foreground">Arquivo: {result.pix.fileId ?? "não configurado"} · Registros excluídos: {result.pix.excludedCount}. Os dados recebidos ficam armazenados no Coala; a tela não solicita novamente um arquivo já processado. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
-            <div className="mt-3"><Evidence ids={result.uncomparedPdvFacts.map(fact => fact.id)} facts={result.uncomparedPdvFacts} /></div>
-          </details>
-          <details open={result.issues.length > 0}>
-            <summary className="cursor-pointer font-medium">Apontamentos fora da comparação ({result.issues.length})</summary>
-            <ul className="space-y-2 py-3">{result.issues.slice(issuePage * 50, (issuePage + 1) * 50).map((issue, index) =>
-              <li key={`${issuePage}:${index}`} className="break-all rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{issue.source.toUpperCase()} · {issue.reference}: {reasons[issue.reason]}</li>)}</ul>
-            {result.issues.length > 50 ? <div className="flex items-center gap-3">
-              <Button variant="outline" disabled={!issuePage} onClick={() => setIssuePage(issuePage - 1)}>Apontamentos anteriores</Button>
-              <span>{issuePage + 1} / {Math.ceil(result.issues.length / 50)}</span>
-              <Button variant="outline" disabled={(issuePage + 1) * 50 >= result.issues.length} onClick={() => setIssuePage(issuePage + 1)}>Mais apontamentos</Button>
+            {caseFilter === "attention" && view.kindCounts.size > 1 ? <div role="group" aria-label="Filtrar tipo de divergência" className="mt-[11px] flex flex-wrap gap-1.5">
+              {([["all", "Todos os tipos", view.attention.length], ...[...view.kindCounts].map(([kind, count]) => [kind, kindsShort[kind as keyof typeof kindsShort], count])] as Array<[KindFilter, string, number]>).map(([kind, text, count]) =>
+                <button key={kind} type="button" aria-pressed={view.kind === kind} onClick={() => { setKindFilter(kind); setPage(0); setDetailKey(null); }}
+                  className={cn("inline-flex h-[26px] items-center gap-[5px] whitespace-nowrap rounded-full border px-[11px] text-[11.5px] font-bold",
+                    view.kind === kind ? "border-[#1a1b1f] bg-[#1a1b1f] text-white" : "border-[#e3ded3] bg-white text-[#4b5058]")}>
+                  {text} <span className="opacity-60">{count}</span>
+                </button>)}
             </div> : null}
-          </details>
-          <details>
-            <summary className="cursor-pointer font-medium">Valores e contadores originais dos eventos Stone</summary>
-            <p className="mt-2 text-sm text-muted-foreground">Decimais originais da fonte, sem arredondamento.</p>
-            <ul className="mt-2 space-y-2">{result.stoneEvents.map(event => <li key={`${event.sourceSection}:${event.transactionId}`} className="break-all text-sm">{event.sourceSection} · {event.transactionId} · Bruto original: {event.capturedAmount ?? "Não informado"} · Cancelado original: {event.canceledAmount ?? "Não informado"}<br />{Object.entries(event.events).map(([name, count]) => `${name}: ${count}`).join(" · ")}</li>)}</ul>
-          </details>
-          <ul className="list-disc pl-5 text-sm text-muted-foreground">{result.limitations.map(text => <li key={text}>{text}</li>)}</ul>
-        </CardContent>
-      </Card>
+          </div>
+
+          {rows.length ? <>
+            <div className="overflow-x-auto">
+              <div role="table" aria-label="Comparação de pagamentos do PDV com capturas Stone">
+                <div role="row" className={cn(rowGrid, "h-[34px] bg-[#faf9f6] text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9a9ba1]")}>
+                  <span role="columnheader">Hora</span><span role="columnheader">Meio</span><span role="columnheader">PDV</span><span role="columnheader">Stone</span>
+                  <span role="columnheader" className="text-right">Diferença</span><span role="columnheader">Situação</span>
+                </div>
+                {rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map((row: SuggestedSalesReconciliationCase) => {
+                  const on = row.deterministicKey === detailKey;
+                  const attention = isAttention(row);
+                  return <div key={row.deterministicKey} role="row" tabIndex={0} aria-selected={on}
+                    onClick={() => setDetailKey(on ? null : row.deterministicKey)}
+                    onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDetailKey(on ? null : row.deterministicKey); } }}
+                    className={cn(rowGrid, "min-h-[58px] cursor-pointer border-t border-[#f4f1ea] py-[9px] hover:bg-[#fdf7fa]", on ? "bg-[#fdf2f8] shadow-[inset_3px_0_0_#db2777]" : "bg-white")}>
+                    <span role="cell" className="font-mono text-xs text-[#7c8189]">{caseTime(row, facts)}</span>
+                    <span role="cell" className="text-[12.5px] font-bold">{channels[row.channel]}</span>
+                    <div role="cell" className="min-w-0"><SideCell ids={row.pdvFactIds} facts={facts} missing="sem pagamento no PDV" /></div>
+                    <div role="cell" className="min-w-0"><SideCell ids={row.stoneSaleIds} facts={facts} missing="sem captura na Stone" /></div>
+                    <span role="cell" className={cn(mono, "text-right text-[12.5px] font-bold", row.differenceAmountCents ? "text-rose-700" : "text-emerald-700")}>{money(row.differenceAmountCents)}</span>
+                    <div role="cell" className="flex min-w-0 flex-col items-start gap-[3px]">
+                      <StatusBadge tone={attention ? "bad" : "ok"}>{attention ? "⚠" : "✓"} {caseBadgeLabel(row)}</StatusBadge>
+                      <span className="max-w-full truncate text-[11px] text-[#9a9ba1]">{bases[row.matchBasis]}</span>
+                    </div>
+                  </div>;
+                })}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0ece4] px-[18px] py-3">
+              <span className="text-xs text-[#8a8f99]">{currentPage * PAGE_SIZE + 1}–{Math.min(rows.length, (currentPage + 1) * PAGE_SIZE)} de {rows.length}</span>
+              <div className="flex items-center gap-2">
+                <button type="button" className={pager} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Anterior</button>
+                <span className="text-xs font-semibold text-[#5f646c]">Página {currentPage + 1} de {pageCount}</span>
+                <button type="button" className={pager} disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Próxima</button>
+              </div>
+            </div>
+          </> : <div role="status" className="px-6 py-11 text-center">
+            <p className="text-[13.5px] font-bold">
+              {channel === "pix" && pixPending ? "Pix não foi comparado neste dia." : caseFilter === "attention" ? "Nenhuma divergência neste filtro." : "Nenhuma venda neste filtro."}
+            </p>
+            {channel === "pix" && pixPending ? <>
+              <p className="mt-[5px] text-xs text-[#8a8f99]">{uncompared.length} pagamento(s) Pix do PDV ({money(uncomparedSum)}) aguardam o arquivo da fonte Pix.</p>
+              <button type="button" onClick={() => goCoverage("pix")} className="mt-3.5 h-[34px] rounded-[10px] border border-[#e3ded3] bg-white px-3.5 text-xs font-bold text-[#374151]">Ver fonte Pix</button>
+            </> : caseFilter === "attention" && view.auto ? <>
+              <p className="mt-[5px] text-xs text-[#8a8f99]">Todas as vendas deste recorte foram conferidas automaticamente.</p>
+              <button type="button" onClick={() => pickCaseFilter("auto")} className="mt-3.5 h-[34px] rounded-[10px] border border-[#e3ded3] bg-white px-3.5 text-xs font-bold text-[#374151]">Ver conferidas ({view.auto})</button>
+            </> : null}
+          </div>}
+        </Panel>
+
+        {detail ? <CaseDetailPanel row={detail} facts={facts} position={detailIndex} total={rows.length}
+          onPrev={() => moveDetail(-1)} onNext={() => moveDetail(1)} onClose={() => setDetailKey(null)} /> : null}
+      </div>
+
+      <Panel className="scroll-mt-4 overflow-hidden" id="cobertura-fontes">
+        <div className="px-[18px] pt-4">
+          <h3 className="text-base font-extrabold tracking-tight">Cobertura e apontamentos das fontes</h3>
+          <div role="tablist" className="mt-3 flex gap-0.5 overflow-x-auto border-b border-[#f0ece4]">
+            {coverageTabs.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={coverageTab === tab.id} onClick={() => setCoverageTab(tab.id)}
+              className={cn("-mb-px h-[38px] shrink-0 whitespace-nowrap border-b-2 px-[13px] text-[12.5px] font-bold", coverageTab === tab.id ? "border-[#db2777] text-[#1a1b1f]" : "border-transparent text-[#8a8f99]")}>
+              {tab.label}{tab.dot ? <span className="ml-[7px] inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle" /> : null}
+            </button>)}
+          </div>
+        </div>
+        <div className="px-[18px] pb-[18px] pt-4">
+          {coverageTab === "pix" ? <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <StatusBadge tone={pixPending ? "warn" : "ok"}>{pixPending ? "Pendente ou indisponível" : "Disponível no recorte"}</StatusBadge>
+              <span className="text-[12.5px] text-[#4b5058]">
+                Fonte: {pixSourceLabels[result.pix.status]}{result.pix.coverage === "partial" ? " · cobertura parcial" : result.pix.coverage === "complete" ? " · cobertura completa" : ""}
+                {" · "}Arquivo: <span className="font-mono">{result.pix.fileId ?? "não configurado"}</span> · Registros excluídos: {result.pix.excludedCount}
+              </span>
+            </div>
+            <p className="text-[12.5px] leading-[1.55] text-[#7c8189]">Os dados recebidos ficam armazenados no Coala; a tela não solicita novamente um arquivo já processado. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
+            <p className={cn(label, "mb-0 mt-1")}>PDV não comparado ({uncompared.length}){uncompared.length ? ` · ${money(uncomparedSum)}` : ""}</p>
+            {uncompared.length ? <div className="overflow-x-auto rounded-xl border border-[#efebe3]"><div className="min-w-[640px]">
+              <div className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] gap-3 bg-[#faf9f6] px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9a9ba1]">
+                <span>Hora</span><span>Cupom</span><span>ID da evidência</span><span>Situação</span><span className="text-right">Valor</span>
+              </div>
+              {(showAllUncompared ? uncompared : uncompared.slice(0, UNCOMPARED_PREVIEW)).map(fact => <div key={fact.id} className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] items-center gap-3 border-t border-[#f4f1ea] px-3.5 py-2 text-xs">
+                <span className="font-mono text-[#7c8189]">{new Date(fact.soldAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="font-semibold">{fact.couponId ? `Cupom ${fact.couponId}` : "—"}</span>
+                <span className="truncate font-mono text-[11px] text-[#a3a099]">{fact.id}</span>
+                <span className="text-[#5f646c]">{saleStatuses[fact.status]}</span>
+                <span className="text-right font-mono font-semibold">{money(fact.grossAmountCents)}</span>
+              </div>)}
+              {uncompared.length > UNCOMPARED_PREVIEW ? <button type="button" onClick={() => setShowAllUncompared(value => !value)} className="h-[38px] w-full border-t border-[#f0ece4] bg-[#faf9f6] text-xs font-bold text-[#5f646c]">
+                {showAllUncompared ? "Mostrar menos" : `Mostrar todos (${uncompared.length})`}
+              </button> : null}
+            </div></div> : null}
+          </div> : null}
+
+          {coverageTab === "issues" ? <div className="flex flex-col gap-1.5">
+            {issues.slice(currentIssuePage * ISSUE_PAGE_SIZE, (currentIssuePage + 1) * ISSUE_PAGE_SIZE).map((issue, index) =>
+              <div key={`${currentIssuePage}:${index}`} className="grid items-center gap-x-3 gap-y-1 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-[9px] text-[12.5px] text-amber-950 sm:grid-cols-[62px_minmax(0,260px)_minmax(0,1fr)]">
+                <span className="rounded-md bg-amber-100 py-[3px] text-center text-[10px] font-extrabold tracking-[0.1em]">{issue.source.toUpperCase()}</span>
+                <span className="break-all font-mono text-[11.5px]">{issue.reference}</span>
+                <span>{issueReasons[issue.reason]}</span>
+              </div>)}
+            {issues.length > ISSUE_PAGE_SIZE ? <div className="mt-2 flex items-center gap-2.5">
+              <button type="button" className={pager} disabled={currentIssuePage === 0} onClick={() => setIssuePage(currentIssuePage - 1)}>Apontamentos anteriores</button>
+              <span className="text-xs font-semibold text-[#5f646c]">{currentIssuePage + 1} / {issuePages}</span>
+              <button type="button" className={pager} disabled={currentIssuePage >= issuePages - 1} onClick={() => setIssuePage(currentIssuePage + 1)}>Mais apontamentos</button>
+            </div> : null}
+            {!issues.length ? <p className="text-[12.5px] text-[#8a8f99]">Nenhum apontamento fora da comparação.</p> : null}
+          </div> : null}
+
+          {coverageTab === "events" ? <>
+            <p className="mb-2.5 text-[12.5px] text-[#7c8189]">Decimais originais da fonte, sem arredondamento.</p>
+            <div className="max-h-[360px] overflow-auto rounded-xl border border-[#efebe3]"><div className="min-w-[760px]">
+              <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-[#faf9f6] px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9a9ba1]">
+                <span>Seção</span><span>Transação</span><span className="text-right">Bruto original</span><span className="text-right">Cancelado original</span><span>Contadores</span>
+              </div>
+              {result.stoneEvents.map(event => <div key={`${event.sourceSection}:${event.transactionId}`} className="grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] items-center gap-3 border-t border-[#f4f1ea] px-3.5 py-[7px] text-[11.5px]">
+                <span className="text-[#5f646c]">{event.sourceSection}</span>
+                <span className="break-all font-mono text-[#374151]">{event.transactionId}</span>
+                <span className="text-right font-mono">{event.capturedAmount ?? "Não informado"}</span>
+                <span className="text-right font-mono text-[#7c8189]">{event.canceledAmount ?? "Não informado"}</span>
+                <span className="font-mono text-[11px] text-[#7c8189]">{Object.entries(event.events).map(([name, count]) => `${name}: ${count}`).join(" · ")}</span>
+              </div>)}
+            </div></div>
+          </> : null}
+
+          {coverageTab === "limits" ? <ul className="list-disc space-y-1.5 pl-[18px] text-[12.5px] leading-normal text-[#5f646c]">
+            {result.limitations.map(text => <li key={text}>{text}</li>)}
+          </ul> : null}
+        </div>
+      </Panel>
     </section> : null}
   </PageContainer>;
 }

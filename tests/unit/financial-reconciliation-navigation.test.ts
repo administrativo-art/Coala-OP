@@ -81,8 +81,8 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   assert.match(salesPage, /Selecione a unidade primeiro/);
   assert.doesNotMatch(salesPage, /AcquirerFeesPanel/);
   assert.doesNotMatch(salesPage, /href="\/dashboard\/financial\/(stone-receipts|stone-anticipations)"/);
-  assert.match(salesPage, /Divergências \(\{attentionCount\}\)/);
-  assert.match(salesPage, /caseReasons\[row\.kind\]/);
+  assert.match(salesPage, /text: "Divergências", count: view\.attention\.length/);
+  assert.match(read("src/features/financial/sales-reconciliation/review-view.ts"), /caseReasons\[row\.kind\]/);
   const page = read("src/features/financial/pages/stone-anticipations-page.tsx");
   assert.match(page, /if \(!isDefaultAdmin\)/);
   assert.match(page, /ainda não estão disponíveis neste agente/);
