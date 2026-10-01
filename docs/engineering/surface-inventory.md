@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **364 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **367 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **44 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -85,6 +85,9 @@ Inclui **44 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/templates/[id]/text` | GET | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/%5Bid%5D/text/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]/workflow` | PATCH | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/%5Bid%5D/workflow/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/dp/bootstrap` | GET | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) | [dp-overview](flows/dp-overview.md) |
+| `/api/dp/natasha/availability` | GET | [src/app/api/dp/natasha/availability/route.ts](../../src/app/api/dp/natasha/availability/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/natasha/shift-definitions` | GET | [src/app/api/dp/natasha/shift-definitions/route.ts](../../src/app/api/dp/natasha/shift-definitions/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/natasha/team` | GET | [src/app/api/dp/natasha/team/route.ts](../../src/app/api/dp/natasha/team/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/coverage-demands/[date]` | PUT | [src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/coverage-demands/%5Bdate%5D/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/day-offs` | POST, DELETE | [src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/day-offs/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/shifts/[shiftId]` | PUT, PATCH, DELETE | [src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/%5BshiftId%5D/route.ts) | [dp-schedules](flows/dp-schedules.md) |
