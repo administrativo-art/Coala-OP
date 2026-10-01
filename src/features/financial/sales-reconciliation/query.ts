@@ -67,13 +67,25 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
   const result = reviewDailySales({ scope: { workspaceId: context.workspace_id, kioskId: request.kioskId,
     stoneCode: request.stoneCode, referenceDate: request.referenceDate }, pdvCoupons, stoneXml });
   const pix = dependencies.readPix ? await dependencies.readPix(result.scope)
-    : { status: "not_configured" as const, facts: [], excludedCount: 0, fileId: null };
+    : { status: "not_configured" as const, coverage: null, facts: [], excludedCount: 0, fileId: null };
   if (pix.status === "available") {
     result.stoneSales.push(...pix.facts);
-    result.cases = suggestSalesReconciliationCases({ pdvFacts: result.pdvFacts, stoneSales: result.stoneSales });
-    result.uncomparedPdvFacts = [];
+    const suggested = suggestSalesReconciliationCases({ pdvFacts: result.pdvFacts, stoneSales: result.stoneSales });
+    if (pix.coverage === "complete") {
+      result.cases = suggested;
+      result.uncomparedPdvFacts = [];
+    } else {
+      const unprovenPdvIds = new Set(suggested
+        .filter(row => row.channel === "pix" && row.stoneSaleIds.length === 0)
+        .flatMap(row => row.pdvFactIds));
+      result.cases = suggested.filter(row => !(row.channel === "pix" && row.stoneSaleIds.length === 0));
+      result.uncomparedPdvFacts = result.pdvFacts
+        .filter(fact => fact.channel === "pix" && unprovenPdvIds.has(fact.id));
+    }
     result.limitations = result.limitations.filter(text => !text.startsWith("Pix não foi comparado:"));
-    result.limitations.push(`Pix: arquivo limitado ao dia e StoneCode; ${pix.excludedCount} registro(s) não comparável(is). Não cobre cancelamentos de outros dias nem toda a conta.`);
+    result.limitations.push(pix.coverage === "complete"
+      ? "Pix: arquivo completo para o documento e dia; a comparação foi isolada pelo StoneCode identificado em cada registro."
+      : `Pix: cobertura parcial; ${pix.excludedCount} registro(s) sem evidência suficiente. Pagamentos do PDV sem par continuam como não comparados.`);
   }
   const after = validateBinding(await dependencies.resolveBinding(request, context.workspace_id), request, context.workspace_id);
   if (JSON.stringify(after) !== JSON.stringify(binding)) {
@@ -81,7 +93,8 @@ export async function queryDailySales(raw: unknown, context: { isDefaultAdmin: b
       safeMessage: "A unidade, filial ou vínculo Stone mudou durante a coleta. Consulte novamente." });
   }
   dependencies.signal?.throwIfAborted();
-  return { ...result, pix: { status: pix.status, excludedCount: pix.excludedCount, fileId: pix.fileId }, mappingId: binding.mapping.id, accountId: binding.mapping.accountId,
+  return { ...result, pix: { status: pix.status, coverage: pix.coverage,
+    excludedCount: pix.excludedCount, fileId: pix.fileId }, mappingId: binding.mapping.id, accountId: binding.mapping.accountId,
     pdvFilialId: binding.pdvFilialId, collectedAt: now().toISOString(),
     limitations: [...result.limitations, "A filial PDV segue o cadastro atual da unidade. Esta consulta não comprova o histórico de mudanças dessa associação."],
   };

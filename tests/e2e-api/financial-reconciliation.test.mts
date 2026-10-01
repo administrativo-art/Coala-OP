@@ -39,6 +39,11 @@ test("HTTP autenticado: sangria → despesa única → contagem → DRE; Pix ret
     await delay(500);
   }
   assert.ok(ready, logs);
+  const pixJobWithoutSecret = await fetch(`${origin}/api/jobs/stone-pix/request`, {
+    method: "POST",
+    signal: AbortSignal.timeout(60_000),
+  });
+  assert.equal(pixJobWithoutSecret.status, 401);
   async function user(uid: string, admin: boolean) {
     await auth.createUser({ uid, email: `${uid}@coala.test`, password: "test-only-password" });
     await auth.setCustomUserClaims(uid, { isDefaultAdmin: admin, profileId: uid });
@@ -89,7 +94,7 @@ test("HTTP autenticado: sangria → despesa única → contagem → DRE; Pix ret
   await financial.collection("bankAccounts").doc("api-e2e-bank").set({ workspaceId });
   await financial.collection("stoneMerchantMappings").doc(request.mappingId).set({ id: request.mappingId, workspaceId, kioskId, accountId: "api-e2e-bank", stoneCodes: ["123"], terminalIds: [], status: "active", validFrom: "2026-01-01", validTo: null });
   const document = "12345678000199", sourceHash = "a".repeat(64), file = financial.collection("stonePixConciliationFiles").doc(stonePixFileId(document, date));
-  await file.set({ workspaceId, document, referenceDate: date, status: "processed", sourceHash, summary: { transactionCount: 1 } });
+  await file.set({ workspaceId, document, referenceDate: date, status: "processed", schemaVersion: 1, sourceHash, summary: { transactionCount: 1 } });
   await file.collection("transactions").doc("event").set({ rowId: "b".repeat(64), sourceHash, status: "paid", paymentMethod: "pix", merchantIdentity: { version: 1, status: "identified", stoneCode: "123", terminalSerialNumber: "terminal" }, reviewEvidence: { version: 1, eventId: "api-e2e-event", e2eId: "api-e2e-e2e", refundId: null, createdAtUtc: "2026-09-01T02:59:00Z", providerDateTimeUtc: "2026-09-01T03:01:00Z", eventKind: "payment", amounts: { gross: 1000, paid: 1000, canceled: 0, fee: 5, operation: 1000 }, issues: [], candidateForReview: true } });
   const feePath = "/api/financial/acquirer-fees", feePreview = await call(feePath, { action: "preview", request });
   assert.equal(feePreview.status, 200, JSON.stringify(feePreview.data));

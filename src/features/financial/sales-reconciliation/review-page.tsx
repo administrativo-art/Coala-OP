@@ -83,6 +83,15 @@ const statuses = {
   chargeback: "Chargeback",
 };
 
+const pixSourceLabels: Record<DailySalesResult["pix"]["status"], string> = {
+  available: "arquivo recebido",
+  requested: "solicitado à Stone; aguardando arquivo",
+  pending: "arquivo recebido; processamento ou formato pendente",
+  failed: "falha no recebimento ou processamento",
+  unavailable: "arquivo ainda não recebido",
+  not_configured: "integração não configurada",
+};
+
 const money = (cents: number) => {
   const absolute = BigInt(Math.abs(cents));
   return formatStoneMoney(`${cents < 0 ? "-" : ""}${absolute / BigInt(100)}.${String(absolute % BigInt(100)).padStart(2, "0")}`);
@@ -401,8 +410,10 @@ export function SalesReviewPage() {
         <CardHeader><CardTitle className="text-base">Cobertura e apontamentos das fontes</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <details>
-            <summary className="cursor-pointer font-medium">Fonte Pix: {result.pix.status === "available" ? "disponível no recorte" : "pendente ou indisponível"} · PDV não comparado ({result.uncomparedPdvFacts.length})</summary>
-            <p className="mt-2 text-sm text-muted-foreground">Arquivo: {result.pix.fileId ?? "não configurado"} · Registros excluídos: {result.pix.excludedCount}. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
+            <summary className="cursor-pointer font-medium">Fonte Pix: {pixSourceLabels[result.pix.status]}
+              {result.pix.coverage === "partial" ? " · cobertura parcial" : result.pix.coverage === "complete" ? " · cobertura completa" : ""}
+              {` · PDV não comparado (${result.uncomparedPdvFacts.length})`}</summary>
+            <p className="mt-2 text-sm text-muted-foreground">Arquivo: {result.pix.fileId ?? "não configurado"} · Registros excluídos: {result.pix.excludedCount}. Os dados recebidos ficam armazenados no Coala; a tela não solicita novamente um arquivo já processado. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
             <div className="mt-3"><Evidence ids={result.uncomparedPdvFacts.map(fact => fact.id)} facts={result.uncomparedPdvFacts} /></div>
           </details>
           <details open={result.issues.length > 0}>
