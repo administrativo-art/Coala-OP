@@ -64,9 +64,14 @@ total e pagamentos, duplicidade e data inválida viram pendências explícitas. 
 monetários vêm dos campos brutos validados, sem round-trip pelo `number` do parser.
 Dinheiro/troco participa apenas da validação do total; pagamentos digitais mantêm
 índice e cupom. Cancelamento parcial de item não vira cancelamento total do cupom.
-Não foi inventado um campo NSU/autorização/terminal no PDV nem uma equivalência entre
-status do cupom e aprovação da adquirente: o estado desconhecido permanece na evidência,
-mas não cria uma divergência falsa quando o restante do par individual é compatível.
+Quando uma forma digital possui exatamente um objeto em `detalhes`, NSU e código de
+autorização textuais válidos são preservados. Em cartão, somente um detalhe que identifica
+explicitamente a Stone em `subadquirente`, `adquirente` ou `gateway` permite tratar o NSU
+como `providerTransactionId` e compará-lo ao `AcquirerTransactionKey`. Detalhe múltiplo,
+provedor diferente, valor vazio/sentinela ou tipo inesperado não produz essa equivalência.
+Não foi inventado um terminal comum nem uma equivalência entre status do cupom e aprovação
+da adquirente: o estado desconhecido permanece na evidência, mas não cria uma divergência
+falsa quando o restante do par individual é compatível.
 
 Pix PDV aparece em `uncomparedPdvFacts`, não como venda ausente na Stone. A fonte Pix
 é separada do XML e ainda exige associação comprovada de terminal à unidade. O
@@ -93,7 +98,11 @@ Testes permanentes em `tests/unit/pdv-stone-daily-review.test.ts`: XML + cupons,
 centavos exatos, escopo, ausência de fonte, Pix, aliases, duplicidades, pagamento
 dividido, troco, datas, cancelamentos, eventos de conta, tipos de cartão, limites,
 conflitos de identificadores, ambiguidades e isolamento de unidade/workspace.
-Fixtures sintéticas do contrato; não foi feita comprovação contra dados de produção.
+Fixtures sintéticas cobrem também detalhe Stone único, outro provedor, sentinelas e
+pagamento agregado. Em 2026-10-01, uma leitura PDV real, limitada ao dia/filial já em
+escopo e sem gravação, confirmou o contrato de `detalhes`: cartões Stone tinham um NSU
+textual por pagamento e o caso reportado possuía o mesmo valor do identificador Stone
+exibido ao usuário. A API Stone real não foi chamada nesta validação adicional.
 
 Não foi criado E2E neste incremento: não existe nova rota nem mudança em fluxo
 crítico acessível. O próximo incremento deve conectar coleta limitada, autorização,

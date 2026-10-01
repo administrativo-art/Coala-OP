@@ -21,9 +21,10 @@ export function StatusBadge({ tone, children }: { tone: keyof typeof toneBadge; 
 
 function FactCard({ fact }: { fact: SalesMatchFact }) {
   const [copied, setCopied] = useState(false);
+  const providerTransactionId = fact.identifiers.providerTransactionId;
   const identifiers = ([
-    ["ID do provedor", fact.identifiers.providerTransactionId],
-    ["NSU", fact.identifiers.nsu],
+    ["ID do provedor", providerTransactionId],
+    ["NSU", fact.identifiers.nsu === providerTransactionId ? null : fact.identifiers.nsu],
     ["Autorização", fact.identifiers.authorizationCode],
     ["Terminal", fact.identifiers.terminalId],
     ["Pedido", fact.identifiers.merchantOrderId],
