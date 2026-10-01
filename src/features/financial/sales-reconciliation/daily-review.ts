@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { parseStoneAgendaXml } from "../../../lib/integrations/stone/agenda-parser";
+import { isPdvItemCancelled, pdvCouponItems } from "../../../lib/integrations/pdv-coupon-ingestion";
 import { parsePdvCoupons } from "../cash-closures/pdv-coupon-parser";
 import { normalizeChannel } from "../cash-closures/channel-normalization";
 import { closureDateFromIso } from "../cash-closures/date";
 import { suggestSalesReconciliationCases } from "./matching";
-import { exactSalesCents, invalidSalesReview, MAX_SALES_REVIEW_FACTS, reviewDate, reviewId, reviewTimestamp } from "./validation";
+import { exactSalesCents, invalidSalesReview, MAX_SALE_CENTS, MAX_SALES_REVIEW_FACTS, reviewDate, reviewId, reviewTimestamp } from "./validation";
 import type { SalesMatchFact } from "./types";
 
 const scopeSchema = z.object({ workspaceId: reviewId, kioskId: reviewId,
@@ -30,6 +31,51 @@ function couponId(row: Record<string, unknown>) {
   const value = typeof raw === "number" && Number.isSafeInteger(raw) ? String(raw) : raw;
   const parsed = reviewId.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function pdvTimestampMillis(value: string) {
+  return new Date(/[Zz]$|[+-]\d{2}:?\d{2}$/.test(value)
+    ? value.replace(" ", "T") : `${value.replace(" ", "T")}-03:00`).getTime();
+}
+
+function itemCancellationAdjustment(row: Record<string, unknown>, finalAmountCents: number, finalizedAt: string) {
+  const items = pdvCouponItems(row);
+  if (!items.length) return undefined;
+  let originalAmountCents = 0;
+  let cancelledAmountCents = 0;
+  const cancellationTimes: string[] = [];
+  let cancelledItems = 0;
+  for (const item of items) {
+    const amount = exactSalesCents(field(item, ["valortotal", "ValorTotal"]));
+    if (amount === null) return undefined;
+    originalAmountCents += amount;
+    if (!Number.isSafeInteger(originalAmountCents) || originalAmountCents > MAX_SALE_CENTS) return undefined;
+    if (isPdvItemCancelled(item)) {
+      cancelledItems++;
+      cancelledAmountCents += amount;
+      if (!Number.isSafeInteger(cancelledAmountCents) || cancelledAmountCents > MAX_SALE_CENTS) return undefined;
+      const rawTimestamp = field(item, ["dtcancelamento", "DtCancelamento"]);
+      if (typeof rawTimestamp === "string" && reviewTimestamp.safeParse(rawTimestamp).success) {
+        cancellationTimes.push(rawTimestamp);
+      }
+    }
+  }
+  if (!cancelledItems || cancelledAmountCents <= 0
+    || originalAmountCents - cancelledAmountCents !== finalAmountCents) return undefined;
+  const allCancellationTimesKnown = cancellationTimes.length === cancelledItems;
+  const lastCancellationAt = allCancellationTimesKnown
+    ? [...cancellationTimes].sort((left, right) => pdvTimestampMillis(left) - pdvTimestampMillis(right)).at(-1) ?? null
+    : null;
+  return {
+    type: "item_cancellation" as const,
+    originalAmountCents,
+    cancelledAmountCents,
+    finalAmountCents,
+    lastCancellationAt,
+    finalizedAt,
+    finalizedAfterCancellation: lastCancellationAt !== null
+      && pdvTimestampMillis(finalizedAt) >= pdvTimestampMillis(lastCancellationAt),
+  };
 }
 
 /** Reuses cash-closure parsing only after rejecting its tolerant zero/ID fallbacks. */
@@ -70,8 +116,12 @@ function pdvFacts(raw: unknown, scope: DailySalesScope, issues: SalesSourceIssue
     // Missing/unknown PDV status is not evidence of provider approval.
     const rawStorno = field(row, ["isestornado", "IsEstornado"]);
     const storned = coupon.isStorned || rawStorno === 1;
+    const adjustment = coupon.hasExplicitItemCancellation
+      ? itemCancellationAdjustment(row, total, coupon.timestamp)
+      : undefined;
     const status = storned ? "refunded"
-      : coupon.isCancelled && coupon.hasExplicitItemCancellation ? "partial_cancellation"
+      : coupon.isCancelled && coupon.hasExplicitItemCancellation
+        ? adjustment?.finalizedAfterCancellation ? "pending" : "partial_cancellation"
         : coupon.isCancelled ? "cancelled" : "pending";
     coupon.paymentRows.forEach((payment, paymentIndex) => {
       const { channel } = normalizeChannel(payment.rawName);
@@ -81,7 +131,7 @@ function pdvFacts(raw: unknown, scope: DailySalesScope, issues: SalesSourceIssue
         kioskId: scope.kioskId, businessDate: scope.referenceDate, soldAt: coupon.timestamp, channel,
         // Take the validated raw decimal, not the legacy parser's float conversion.
         grossAmountCents: exactSalesCents(field(payments[paymentIndex], ["valortotal", "ValorTotal"]))!,
-        status, couponId: id, identifiers: {} });
+        status, couponId: id, identifiers: {}, ...(adjustment ? { adjustment } : {}) });
     });
   });
   if (facts.length > MAX_SALES_REVIEW_FACTS) invalidSalesReview();
