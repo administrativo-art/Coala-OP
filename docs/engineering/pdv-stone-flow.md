@@ -93,3 +93,27 @@ finais de cancelamento, aviso de filial atual e exibição de decimais originais
 Continuam os avisos preexistentes de top-level await em `firebase-rh`, dependência
 dinâmica protobuf e arquivo grande de recrutamento. Não foi necessário alterar a
 configuração de build neste incremento. Sem publicação ou comprovação com fonte real.
+
+## Atualização local — fechamento automático e cancelamento antes do pagamento (2026-10-01)
+
+O recorte deixou de depender do botão **Comparar vendas**. Unidade, StoneCode e dia
+válidos disparam uma consulta automática; não há polling. O resultado recebe um estado
+persistido no banco financeiro: `closed`, `attention_required` ou `awaiting_source`.
+O documento determinístico guarda fingerprint e resumo, e cada fonte nova cria uma
+revisão imutável em transação. Repetir a mesma evidência custa uma leitura direta e
+zero escrita. Fonte alterada que cria pendência reabre o dia; fonte alterada ainda
+íntegra mantém o dia fechado com nova revisão. Uma observação concorrente mais antiga
+não sobrescreve uma fonte diferente coletada depois. O fechamento não é liquidação, baixa,
+receita lançada nem confirmação de crédito bancário.
+
+Cancelamento parcial do cupom passou a distinguir ajuste anterior do pagamento de
+cancelamento posterior. A comparação só aceita o primeiro caso quando os valores de
+todos os itens são exatos, `original − cancelado = total final` e todo cancelamento
+possui horário não posterior a `dtrecebimento`. A evidência expõe original, cancelado
+e final. Sem essas provas, `partial_cancellation` continua em atenção. O caso real
+investigado fica somente no registro local da tarefa; identificadores operacionais não
+foram copiados para a documentação versionada.
+
+Preflight adicional: uma leitura por recorte em `dailySalesReviews`; duas escritas
+somente na primeira revisão ou quando o fingerprint muda. ID direto, sem scan,
+consulta, índice, listener ou migração. Permissão continua `isDefaultAdmin` no servidor.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Eye, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import { formatStoneMoney } from "../agent/presentation";
 import { financialDateKey } from "../lib/financial-dates";
-import type { DailySalesResult } from "./query";
+import type { DailySalesApiResult, DailySalesReviewStatus } from "./review-state";
 import type { SalesSourceIssue } from "./daily-review";
 import type {
   ReconciliationSalesChannel,
@@ -83,13 +83,19 @@ const statuses = {
   chargeback: "Chargeback",
 };
 
-const pixSourceLabels: Record<DailySalesResult["pix"]["status"], string> = {
+const pixSourceLabels: Record<DailySalesApiResult["pix"]["status"], string> = {
   available: "arquivo recebido",
   requested: "solicitado à Stone; aguardando arquivo",
   pending: "arquivo recebido; processamento ou formato pendente",
   failed: "falha no recebimento ou processamento",
   unavailable: "arquivo ainda não recebido",
   not_configured: "integração não configurada",
+};
+
+const reviewStatuses: Record<DailySalesReviewStatus, string> = {
+  closed: "Dia fechado automaticamente",
+  attention_required: "Dia aberto: requer atenção",
+  awaiting_source: "Dia aberto: aguardando fonte",
 };
 
 const money = (cents: number) => {
@@ -106,6 +112,16 @@ function Evidence({ ids, facts }: { ids: string[]; facts: SalesMatchFact[] }) {
       {selected.map(fact => <li key={fact.id} className="break-all rounded-lg bg-muted/40 p-2">
         {fact.couponId ? `Cupom ${fact.couponId}` : `Transação ${fact.id}`} · {money(fact.grossAmountCents)}
         <br />{new Date(fact.soldAt).toLocaleString("pt-BR")} · {statuses[fact.status]}
+        {fact.adjustment ? <>
+          <br /><span className="text-xs font-medium text-emerald-800">
+            Cupom original {money(fact.adjustment.originalAmountCents)} · cancelado −{money(fact.adjustment.cancelledAmountCents)} · final {money(fact.adjustment.finalAmountCents)}
+          </span>
+          <br /><span className="text-xs text-muted-foreground">
+            {fact.adjustment.finalizedAfterCancellation
+              ? `Cancelado às ${fact.adjustment.lastCancellationAt?.slice(11, 19)}; pagamento final às ${fact.adjustment.finalizedAt.slice(11, 19)}.`
+              : "O horário do cancelamento não comprova que ocorreu antes do pagamento final."}
+          </span>
+        </> : null}
         <br /><span className="text-xs text-muted-foreground">ID da evidência: {fact.id}</span>
       </li>)}
     </ul>
@@ -139,20 +155,23 @@ export function SalesReviewPage() {
   const [selected, setSelected] = useState("");
   const [code, setCode] = useState("");
   const [date, setDate] = useState(() => financialDateKey(new Date(Date.now() - 86_400_000)) ?? "");
-  const [busy, setBusy] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<DailySalesResult | null>(null);
+  const [result, setResult] = useState<DailySalesApiResult | null>(null);
   const [channel, setChannel] = useState<"all" | ReconciliationSalesChannel>("all");
   const [caseFilter, setCaseFilter] = useState<CaseFilter>("attention");
   const [page, setPage] = useState(0);
   const [issuePage, setIssuePage] = useState(0);
-  const active = useRef<AbortController | null>(null);
+  const catalogActive = useRef<AbortController | null>(null);
+  const reviewActive = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!isDefaultAdmin) return;
     const controller = new AbortController();
-    active.current = controller;
-    setBusy(true);
+    catalogActive.current = controller;
+    setCatalogBusy(true);
     setError("");
     void api<CatalogPage<MappingView>>("/api/financial/stone-mappings?resource=mappings", { signal: controller.signal })
       .then(data => {
@@ -169,18 +188,60 @@ export function SalesReviewPage() {
         if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível carregar os vínculos Stone.");
       })
       .finally(() => {
-        if (!controller.signal.aborted) setBusy(false);
-        if (active.current === controller) active.current = null;
+        if (!controller.signal.aborted) setCatalogBusy(false);
+        if (catalogActive.current === controller) catalogActive.current = null;
       });
     return () => {
       controller.abort();
-      if (active.current === controller) active.current = null;
+      if (catalogActive.current === controller) catalogActive.current = null;
     };
   }, [api, isDefaultAdmin]);
 
+  const mapping = mappings.find(item => item.id === selected);
+
+  useEffect(() => {
+    if (!isDefaultAdmin || !mapping || !code || !date) {
+      setResult(null);
+      setReviewBusy(false);
+      return;
+    }
+    const controller = new AbortController();
+    reviewActive.current?.abort();
+    reviewActive.current = controller;
+    setReviewBusy(true);
+    setError("");
+    setResult(null);
+    setPage(0);
+    setIssuePage(0);
+    setChannel("all");
+    void api<DailySalesApiResult>("/api/financial/pdv-stone-review", {
+      method: "POST",
+      signal: controller.signal,
+      json: { kioskId: mapping.kioskId, mappingId: mapping.id, stoneCode: code, referenceDate: date },
+    }).then(data => {
+      if (controller.signal.aborted) return;
+      if (data.mappingId !== mapping.id || data.accountId !== mapping.accountId
+        || data.scope.kioskId !== mapping.kioskId || data.scope.stoneCode !== code
+        || data.scope.referenceDate !== date) {
+        throw new AuthenticatedApiError("A resposta não corresponde à seleção. Recarregue os vínculos e consulte novamente.", 409, null);
+      }
+      setResult(data);
+      setCaseFilter(data.review.status === "closed" ? "auto" : "attention");
+    }).catch(caught => {
+      if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível consultar. Tente novamente.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setReviewBusy(false);
+      if (reviewActive.current === controller) reviewActive.current = null;
+    });
+    return () => {
+      controller.abort();
+      if (reviewActive.current === controller) reviewActive.current = null;
+    };
+  }, [api, code, date, isDefaultAdmin, mapping?.accountId, mapping?.id, mapping?.kioskId, refreshVersion]);
+
   if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
 
-  const mapping = mappings.find(item => item.id === selected);
+  const busy = catalogBusy || reviewBusy;
   const clear = () => {
     setResult(null);
     setError("");
@@ -189,39 +250,36 @@ export function SalesReviewPage() {
     setChannel("all");
     setCaseFilter("attention");
   };
-  const task = async (run: (signal: AbortSignal) => Promise<void>) => {
-    if (active.current) return;
+  const load = async (next?: string) => {
+    if (catalogActive.current) return;
     const controller = new AbortController();
-    active.current = controller;
-    setBusy(true);
-    clear();
+    catalogActive.current = controller;
+    setCatalogBusy(true);
+    setError("");
     try {
-      await run(controller.signal);
+      const data = await api<CatalogPage<MappingView>>(`/api/financial/stone-mappings?resource=mappings${next ? `&cursor=${encodeURIComponent(next)}` : ""}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setMappings(current => next
+        ? [...new Map([...current, ...data.items].map(item => [item.id, item])).values()]
+        : data.items);
+      if (!next) {
+        if (data.items.length === 1) {
+          setSelected(data.items[0].id);
+          setCode(data.items[0].stoneCodes[0] ?? "");
+        } else {
+          setSelected("");
+          setCode("");
+        }
+      }
+      setCursor(data.nextCursor);
+      setLoaded(true);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível consultar. Tente novamente.");
     } finally {
-      if (!controller.signal.aborted) setBusy(false);
-      if (active.current === controller) active.current = null;
+      if (!controller.signal.aborted) setCatalogBusy(false);
+      if (catalogActive.current === controller) catalogActive.current = null;
     }
   };
-  const load = (next?: string) => task(async signal => {
-    const data = await api<CatalogPage<MappingView>>(`/api/financial/stone-mappings?resource=mappings${next ? `&cursor=${encodeURIComponent(next)}` : ""}`, { signal });
-    if (signal.aborted) return;
-    setMappings(current => next
-      ? [...new Map([...current, ...data.items].map(item => [item.id, item])).values()]
-      : data.items);
-    if (!next) {
-      if (data.items.length === 1) {
-        setSelected(data.items[0].id);
-        setCode(data.items[0].stoneCodes[0] ?? "");
-      } else {
-        setSelected("");
-        setCode("");
-      }
-    }
-    setCursor(data.nextCursor);
-    setLoaded(true);
-  });
 
   const allCases = result?.cases ?? [];
   const attentionCount = allCases.filter(row => row.reviewStatus === "attention_required").length;
@@ -257,7 +315,7 @@ export function SalesReviewPage() {
     />
 
     <div role="note" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-      Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente. A tela abre mostrando somente as divergências; use <strong>Todas</strong> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.
+      Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente. A tela abre nas divergências quando existem e nas conferidas quando o dia está íntegro; use <strong>Todas</strong> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.
     </div>
 
     <Card className="rounded-2xl">
@@ -270,24 +328,7 @@ export function SalesReviewPage() {
           {cursor ? <Button variant="outline" disabled={busy} onClick={() => load(cursor)}>Mais vínculos</Button> : null}
         </div>
         {loaded && !mappings.length ? <p role="status">Cadastre o vínculo oficial entre unidade, StoneCode e conta antes de consultar.</p> : null}
-        <form className="space-y-3" onSubmit={event => {
-          event.preventDefault();
-          if (!mapping) return;
-          void task(async signal => {
-            const data = await api<DailySalesResult>("/api/financial/pdv-stone-review", {
-              method: "POST",
-              signal,
-              json: { kioskId: mapping.kioskId, mappingId: mapping.id, stoneCode: code, referenceDate: date },
-            });
-            if (signal.aborted) return;
-            if (data.mappingId !== mapping.id || data.accountId !== mapping.accountId
-              || data.scope.kioskId !== mapping.kioskId || data.scope.stoneCode !== code
-              || data.scope.referenceDate !== date) {
-              throw new AuthenticatedApiError("A resposta não corresponde à seleção. Recarregue os vínculos e consulte novamente.", 409, null);
-            }
-            setResult(data);
-          });
-        }}>
+        <div className="space-y-3">
           <fieldset disabled={busy} className="grid gap-3 md:grid-cols-3">
             <label className="text-sm font-medium">Unidade / conta
               <select required aria-label="Vínculo oficial" className={selectClass} value={selected} onChange={event => {
@@ -309,10 +350,15 @@ export function SalesReviewPage() {
               <Input className="mt-1" required aria-label="Dia das vendas" type="date" value={date} onChange={event => { setDate(event.target.value); clear(); }} />
             </label>
           </fieldset>
-          <p className="text-sm text-muted-foreground">Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte.</p>
+          <p className="text-sm text-muted-foreground">Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte. Ao escolher o recorte, a conferência é executada e registrada automaticamente.</p>
           {mapping ? <p className="text-sm">Vigência do vínculo: {mapping.validFrom} a {mapping.validTo ?? "sem data final"}.</p> : null}
-          <Button type="submit" disabled={busy || !mapping || !code || !date}>{busy ? "Comparando…" : "Comparar vendas"}</Button>
-        </form>
+          {mapping && code && date ? <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm font-medium" role="status">{reviewBusy ? "Conferindo e registrando o dia…" : result ? "Conferência carregada automaticamente." : error ? "Conferência não concluída." : "Preparando a conferência automática…"}</p>
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setRefreshVersion(value => value + 1)}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${reviewBusy ? "animate-spin" : ""}`} />Reconsultar fontes
+            </Button>
+          </div> : null}
+        </div>
       </CardContent>
     </Card>
 
@@ -352,7 +398,20 @@ export function SalesReviewPage() {
               <CardTitle className="text-lg">Conferência do dia</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">{result.scope.referenceDate} · Filial PDV {result.pdvFilialId} · StoneCode {result.scope.stoneCode} · consulta {new Date(result.collectedAt).toLocaleString("pt-BR")}</p>
             </div>
-            <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800"><Eye className="mr-1 h-3.5 w-3.5" />Somente leitura</Badge>
+            <div className="text-right">
+              <Badge variant="outline" className={result.review.status === "closed"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : result.review.status === "awaiting_source"
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-rose-200 bg-rose-50 text-rose-800"}>
+                {result.review.status === "closed" ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                  : result.review.status === "awaiting_source" ? <Clock3 className="mr-1 h-3.5 w-3.5" />
+                    : <AlertTriangle className="mr-1 h-3.5 w-3.5" />}
+                {reviewStatuses[result.review.status]}
+              </Badge>
+              <p className="mt-1 text-xs text-muted-foreground">Revisão {result.review.revision} · registrada em {new Date(result.review.reviewedAt).toLocaleString("pt-BR")}</p>
+              {result.review.sourceChanged ? <p className="mt-1 text-xs text-amber-800">As fontes mudaram desde a revisão anterior; o estado foi recalculado.</p> : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2" aria-label="Filtrar situação">
             <Button size="sm" variant={caseFilter === "attention" ? "default" : "outline"} onClick={() => { setCaseFilter("attention"); setPage(0); }}>

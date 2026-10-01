@@ -7,6 +7,7 @@ import { fetchPdvCouponsReadOnly } from "@/lib/integrations/pdv-coupon-read";
 import { fetchStoneAgendaXml } from "@/lib/integrations/stone/agenda-transport";
 import { readSalesReviewBody } from "@/features/financial/sales-reconciliation/request-body";
 import { readPixSalesSource } from "@/features/financial/sales-reconciliation/pix-source.server";
+import { saveDailySalesReview } from "@/features/financial/sales-reconciliation/review-state.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,8 @@ export const POST = withApiErrorHandling({ source: "api-financial", operation: "
       } }),
       readStone: query => fetchStoneAgendaXml(query, { apiKey: process.env.STONE_CONCILIATION_API_KEY, signal }),
     });
-    return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
+    const review = await saveDailySalesReview(result, context.decoded.uid);
+    return NextResponse.json({ ...result, review }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (signal.aborted) throw new AppError({ code: "SALES_REVIEW_CANCELLED", kind: "TRANSIENT_EXTERNAL",
       safeMessage: "A consulta foi cancelada ou excedeu o prazo. Tente novamente." });

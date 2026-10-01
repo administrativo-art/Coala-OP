@@ -95,6 +95,53 @@ test("cancellation, refund and item cancellation are not all collapsed into appr
   }
 });
 
+test("item cancelled before final payment keeps the net capture matched and exposes original, cancelled and final amounts", () => {
+  const adjustedCoupon = coupon({
+    dtrecebimento: "2026-09-20T16:06:38",
+    valortotal: "16.00",
+    formaPgtos: [{ nome: "CARTAO DEBITO", valortotal: "16.00" }],
+    IsCancelado: true,
+    Itens: [
+      { ValorTotal: "10.00", IsCancelado: false },
+      { ValorTotal: "8.00", IsCancelado: true, DtCancelamento: "2026-09-20T16:03:49" },
+      { ValorTotal: "6.00", IsCancelado: false },
+    ],
+  });
+  const stone = file(sale("000123", "16.00").replace("20260920102235", "20260920160641"));
+  const result = review([adjustedCoupon], stone);
+  assert.equal(result.pdvFacts[0].status, "pending");
+  assert.deepEqual(result.pdvFacts[0].adjustment, {
+    type: "item_cancellation",
+    originalAmountCents: 2400,
+    cancelledAmountCents: 800,
+    finalAmountCents: 1600,
+    lastCancellationAt: "2026-09-20T16:03:49",
+    finalizedAt: "2026-09-20T16:06:38",
+    finalizedAfterCancellation: true,
+  });
+  assert.equal(result.cases[0].kind, "matched");
+  assert.equal(result.cases[0].reviewStatus, "auto_checked");
+});
+
+test("item cancellation without proof that it preceded payment remains a status divergence", () => {
+  const adjustedCoupon = coupon({
+    dtrecebimento: "2026-09-20T16:06:38",
+    valortotal: "16.00",
+    formaPgtos: [{ nome: "CARTAO DEBITO", valortotal: "16.00" }],
+    IsCancelado: true,
+    Itens: [
+      { ValorTotal: "16.00", IsCancelado: false },
+      { ValorTotal: "8.00", IsCancelado: true, DtCancelamento: "2026-09-20T16:07:00" },
+    ],
+  });
+  const stone = file(sale("000123", "16.00").replace("20260920102235", "20260920160641"));
+  const result = review([adjustedCoupon], stone);
+  assert.equal(result.pdvFacts[0].status, "partial_cancellation");
+  assert.equal(result.pdvFacts[0].adjustment?.finalizedAfterCancellation, false);
+  assert.equal(result.cases[0].kind, "status_mismatch");
+  assert.equal(result.cases[0].reviewStatus, "attention_required");
+});
+
 test("Stone payment events do not duplicate captured revenue", () => {
   const payment = sale().replace("<Captures>1</Captures><Payments>0", "<Captures>0</Captures><Payments>1");
   const result = review([coupon()], file(sale(), payment));
