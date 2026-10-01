@@ -90,7 +90,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/financial/cash-deposits": "Depósitos",
   "/dashboard/financial/cash-flow": "Fluxo de caixa",
   "/dashboard/financial/stone-anticipations": "Antecipações Stone",
-  "/dashboard/financial/stone-receipts": "Recebimentos Stone",
+  "/dashboard/financial/stone-receipts": "Conciliação de recebimentos",
   "/dashboard/financial/sales-reconciliation": "Conciliação de vendas",
   "/dashboard/financial/financial-flow": "Fluxo de caixa",
   "/dashboard/financial/expenses/authorizations": "Autorizações bancárias",

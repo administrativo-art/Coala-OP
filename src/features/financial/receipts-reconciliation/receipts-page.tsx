@@ -51,7 +51,35 @@ export function StoneReceiptsPage() {
   const [error, setError] = useState("");
   const active = useRef<AbortController | null>(null);
 
-  useEffect(() => () => { active.current?.abort(); }, []);
+  useEffect(() => {
+    if (!isDefaultAdmin) return;
+    const controller = new AbortController();
+    active.current = controller;
+    setBusy(true);
+    setError("");
+    void api<CatalogPage<MappingView>>("/api/financial/stone-mappings?resource=mappings", { signal: controller.signal })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        setMappings(data.items);
+        setCursor(data.nextCursor);
+        setLoaded(true);
+        if (data.items.length === 1) {
+          setSelected(data.items[0].id);
+          setCode(data.items[0].stoneCodes[0] ?? "");
+        }
+      })
+      .catch(caught => {
+        if (!controller.signal.aborted) setError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível carregar os vínculos Stone.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBusy(false);
+        if (active.current === controller) active.current = null;
+      });
+    return () => {
+      controller.abort();
+      if (active.current === controller) active.current = null;
+    };
+  }, [api, isDefaultAdmin]);
 
   if (!isDefaultAdmin) return <PageContainer surface><p role="alert">Consulta restrita à administração.</p></PageContainer>;
 
@@ -86,10 +114,9 @@ export function StoneReceiptsPage() {
 
   return <PageContainer variant="wide" surface className="space-y-6 py-6">
     <PageHeader
-      title="Recebimentos Stone"
+      title="Conciliação de recebimentos"
       description="Agenda, parcelas pagas, taxas retidas e confirmação do crédito bancário em fluxos separados."
       back={{ fallbackHref: "/dashboard/financial", parentLabel: "Financeiro" }}
-      actions={<Button variant="outline" asChild><Link href="/dashboard/financial/sales-reconciliation">Conciliação de vendas</Link></Button>}
     />
 
     <div role="note" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
@@ -150,8 +177,8 @@ export function StoneReceiptsPage() {
             </select>
           </label>
           <label className="text-sm font-medium">StoneCode
-            <select aria-label="StoneCode" className={selectClass} value={code} onChange={event => setCode(event.target.value)}>
-              <option value="">Selecione</option>
+            <select disabled={!mapping} aria-label="StoneCode" className={selectClass} value={code} onChange={event => setCode(event.target.value)}>
+              <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
               {mapping?.stoneCodes.map(item => <option key={item}>{item}</option>)}
             </select>
           </label>
