@@ -32,7 +32,7 @@ async function fixture(suffix, { cards = false } = {}) {
   await own(db.collection("accounts").doc(accountPlanId)).set({ active: true, name: "Taxas", dre_position: "despesas_financeiras", is_dre_account: true, isGroup: false });
   await own(db.collection("resultCenters").doc(centerId)).set({ active: true, name: id, unitIds: [unit] });
   const pixRef = own(db.collection("stonePixConciliationFiles").doc(`${id}-pix`));
-  const head = { workspaceId: WORKSPACE_ID, document: "12345678000199", referenceDate: request.referenceDate, status: "processed", sourceHash: "a".repeat(64), summary: { transactionCount: 1 } };
+  const head = { workspaceId: WORKSPACE_ID, document: "12345678000199", referenceDate: request.referenceDate, status: "processed", schemaVersion: 1, sourceHash: "a".repeat(64), summary: { transactionCount: 1 } };
   await pixRef.set(head);
   const scope = { workspaceId: WORKSPACE_ID, kioskId: unit, stoneCode: merchant, referenceDate: request.referenceDate };
   const rows = [{ rowId: "b".repeat(64), sourceHash: head.sourceHash, status: "paid", paymentMethod: "pix",

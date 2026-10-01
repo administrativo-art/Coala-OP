@@ -6,7 +6,18 @@ type ExpenseState = {
   settlementSummary?: { reconciliationStatus?: string; balanceAmountCents?: number | null;
     principalSettledAmountCents?: number; settlementCreditsAmountCents?: number } | null;
 };
+type CardStatementState = {
+  status?: unknown;
+  dueDate?: unknown;
+  totalValue?: unknown;
+};
 const cents = (value: unknown) => Math.max(0, Math.round(Number(value) || 0));
+
+function expenseDueDateKey(expense: ExpenseState) {
+  return typeof expense.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(expense.dueDate)
+    ? expense.dueDate
+    : financialDateKey(expense.dueDate);
+}
 
 export function expenseAwaitingConfirmation(expense: ExpenseState) {
   return !["cancelled", "reconciled"].includes(expense.status ?? "") && (
@@ -30,8 +41,7 @@ export function expenseDisplayStatus(expense: ExpenseState, now: Date) {
   if (["reported_paid", "paid_divergent"].includes(expense.paymentState ?? "")) return expense.paymentState!;
   if (expense.status === "pending") {
     if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") return "pending_audit";
-    const due = typeof expense.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(expense.dueDate)
-      ? expense.dueDate : financialDateKey(expense.dueDate);
+    const due = expenseDueDateKey(expense);
     const today = financialDateKey(now);
     if (due && today && due <= today) return due < today ? "overdue" : "due_soon";
   }
@@ -45,6 +55,30 @@ export function expenseDisplayAmounts(expense: ExpenseState) {
   if (expense.status === "partially_paid") return { open: expenseCashForecastAmount(expense), paid: settled };
   if (expense.status === "pending") return { open: expenseCashForecastAmount(expense), paid: settled };
   return { open: 0, paid: 0 };
+}
+
+export function expenseHasOverdueBalance(expense: ExpenseState, now: Date) {
+  const due = expenseDueDateKey(expense);
+  const today = financialDateKey(now);
+  return Boolean(due && today && due < today && expenseDisplayAmounts(expense).open > 0);
+}
+
+export function cardStatementDisplayAmounts(statement: CardStatementState) {
+  const total = Math.max(0, Number(statement.totalValue) || 0);
+  return statement.status === "paid"
+    ? { open: 0, paid: total }
+    : { open: total, paid: 0 };
+}
+
+export function cardStatementHasOverdueBalance(statement: CardStatementState, now: Date) {
+  const due = financialDateKey(statement.dueDate);
+  const today = financialDateKey(now);
+  return Boolean(
+    due
+    && today
+    && due < today
+    && cardStatementDisplayAmounts(statement).open > 0
+  );
 }
 
 export function showExpenseInOperationalList(expense: ExpenseState, statusFilter: string) {

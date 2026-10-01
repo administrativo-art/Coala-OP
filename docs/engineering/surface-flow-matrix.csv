@@ -294,6 +294,7 @@ api,src/app/api/jobs/financial-inbox/maintenance/route.ts,,docs/engineering/runt
 api,src/app/api/jobs/inter/cobrancas/reconcile/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/jobs/inter/reconcile/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/jobs/inter/statements/sync/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/jobs/stone-pix/request/route.ts,,docs/engineering/flows/stone-sales-review.md,Solicitacao idempotente de arquivos Pix por data; segredo de maquina e entrega assincrona por webhook.
 api,src/app/api/mercadorias/export/route.ts,,docs/engineering/flows/registry.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/mercadorias/route.ts,,docs/engineering/flows/registry.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/observability/client-errors/route.ts,,docs/engineering/observability.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -404,6 +405,7 @@ function,functions/src/rh/termination.ts,lgpdScheduledCleanup,docs/engineering/r
 function,functions/src/rh/termination.ts,onTermination,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/stock-min-recalc.ts,recalculateMinimumStock,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/stone-portfolio-job.ts,stonePortfolioDailySync,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
+function,functions/src/stone-pix-job.ts,stonePixDailyRequest,docs/engineering/flows/stone-sales-review.md,onSchedule; solicita datas Pix ausentes e aguarda webhook; deploy nao confirmado.
 function,functions/src/uber-sftp/jobs.ts,uberExpenseCandidateWritten,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/uber-sftp/jobs.ts,uberSftpDailySync,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/uber-sftp/jobs.ts,uberTransactionCandidateWritten,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.

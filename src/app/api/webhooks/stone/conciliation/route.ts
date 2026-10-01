@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { after, NextRequest, NextResponse } from "next/server";
 
@@ -13,17 +13,23 @@ import {
 } from "@/lib/integrations/stone/pix-conciliation";
 import { AppError, reportSystemError, withApiErrorHandling } from "@/lib/observability";
 import { WORKSPACE_ID } from "@/lib/workspace";
+import {
+  STONE_PIX_FILE_COLLECTION,
+  STONE_PIX_FILE_SCHEMA_VERSION,
+  STONE_PIX_REQUEST_COLLECTION,
+} from "@/lib/integrations/stone/pix-storage-contract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const MAX_WEBHOOK_BODY_BYTES = 20_000;
 const MAX_CSV_BYTES = 10 * 1024 * 1024;
-const COLLECTION = "stonePixConciliationFiles";
+const PROCESSING_LEASE_MS = 10 * 60_000;
 
 function expectedDocument(): string | null {
   const value = process.env.STONE_CONCILIATION_DOCUMENT?.replace(/\D/g, "");
-  return value && /^\d{11,14}$/.test(value) ? value : null;
+  return value && /^(?:\d{11}|\d{14})$/.test(value) ? value : null;
 }
 
 function isAuthorized(request: NextRequest): boolean {
@@ -67,20 +73,36 @@ async function processPixFile(input: {
   url: string;
   receivedAt: string;
 }) {
-  const fileRef = financialDbAdmin.collection(COLLECTION)
+  const fileRef = financialDbAdmin.collection(STONE_PIX_FILE_COLLECTION)
     .doc(stonePixFileId(input.document, input.referenceDate));
+  const requestRef = financialDbAdmin.collection(STONE_PIX_REQUEST_COLLECTION).doc(fileRef.id);
+  const runId = randomUUID();
+  const notificationHash = createHash("sha256").update(input.url).digest("hex");
 
   try {
     const safeUrl = assertSafeStoneDownloadUrl(input.url);
-    await fileRef.set({
-      id: fileRef.id,
-      workspaceId: WORKSPACE_ID,
-      document: input.document,
-      referenceDate: input.referenceDate,
-      status: "processing",
-      receivedAt: input.receivedAt,
-      processingStartedAt: new Date().toISOString(),
-    }, { merge: true });
+    const acquired = await financialDbAdmin.runTransaction(async tx => {
+      const current = await tx.get(fileRef);
+      if (current.get("status") === "processed"
+        && current.get("schemaVersion") === STONE_PIX_FILE_SCHEMA_VERSION
+        && current.get("notificationHash") === notificationHash) return false;
+      if (current.get("status") === "processing"
+        && Number(current.get("processingLeaseExpiresAt") ?? 0) > Date.now()) return false;
+      tx.set(fileRef, {
+        id: fileRef.id,
+        workspaceId: WORKSPACE_ID,
+        document: input.document,
+        referenceDate: input.referenceDate,
+        status: "processing",
+        receivedAt: input.receivedAt,
+        processingStartedAt: new Date().toISOString(),
+        processingRunId: runId,
+        processingLeaseExpiresAt: Date.now() + PROCESSING_LEASE_MS,
+        notificationHash,
+      }, { merge: true });
+      return true;
+    });
+    if (!acquired) return;
 
     const response = await fetch(safeUrl, {
       cache: "no-store",
@@ -97,28 +119,66 @@ async function processPixFile(input: {
     const csv = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const parsed = parseStonePixCsv(csv);
     await replaceTransactions(fileRef, parsed.transactions, sourceHash);
-    await fileRef.set({
-      status: "processed",
-      processedAt: new Date().toISOString(),
-      sourceHash,
-      sourceBytes: bytes.byteLength,
-      summary: parsed.summary,
-      errorCode: null,
-    }, { merge: true });
+    await financialDbAdmin.runTransaction(async tx => {
+      const current = await tx.get(fileRef);
+      if (current.get("processingRunId") !== runId) {
+        throw new StonePixProcessingError("processing_lease_lost");
+      }
+      const processedAt = new Date().toISOString();
+      tx.set(fileRef, {
+        status: "processed",
+        schemaVersion: STONE_PIX_FILE_SCHEMA_VERSION,
+        processedAt,
+        sourceHash,
+        sourceBytes: bytes.byteLength,
+        summary: parsed.summary,
+        errorCode: null,
+        processingRunId: null,
+        processingLeaseExpiresAt: null,
+      }, { merge: true });
+      tx.set(requestRef, {
+        workspaceId: WORKSPACE_ID,
+        document: input.document,
+        referenceDate: input.referenceDate,
+        status: "processed",
+        processedAt,
+        sourceHash,
+        nextRetryAt: null,
+        errorCode: null,
+        updatedAt: processedAt,
+      }, { merge: true });
+    });
   } catch (error) {
     const errorCode = error instanceof StonePixProcessingError
       ? error.code
       : "processing_failed";
-    await fileRef.set({
-      id: fileRef.id,
-      workspaceId: WORKSPACE_ID,
-      document: input.document,
-      referenceDate: input.referenceDate,
-      status: "failed",
-      failedAt: new Date().toISOString(),
-      receivedAt: input.receivedAt,
-      errorCode,
-    }, { merge: true });
+    await financialDbAdmin.runTransaction(async tx => {
+      const current = await tx.get(fileRef);
+      if (current.exists && current.get("processingRunId") !== runId) return;
+      const failedAt = new Date().toISOString();
+      tx.set(fileRef, {
+        id: fileRef.id,
+        workspaceId: WORKSPACE_ID,
+        document: input.document,
+        referenceDate: input.referenceDate,
+        status: "failed",
+        failedAt,
+        receivedAt: input.receivedAt,
+        errorCode,
+        processingRunId: null,
+        processingLeaseExpiresAt: null,
+      }, { merge: true });
+      tx.set(requestRef, {
+        workspaceId: WORKSPACE_ID,
+        document: input.document,
+        referenceDate: input.referenceDate,
+        status: "failed",
+        failedAt,
+        errorCode,
+        nextRetryAt: Date.now() + 6 * 60 * 60_000,
+        updatedAt: failedAt,
+      }, { merge: true });
+    });
     reportSystemError({
       error: new StonePixProcessingError(errorCode),
       code: "STONE_PIX_FILE_PROCESSING_FAILED",
@@ -257,7 +317,7 @@ export const GET = withApiErrorHandling({
     });
   }
 
-  const fileRef = financialDbAdmin.collection(COLLECTION)
+  const fileRef = financialDbAdmin.collection(STONE_PIX_FILE_COLLECTION)
     .doc(stonePixFileId(document, referenceDate));
   const [file, transactionSnapshot] = await Promise.all([
     fileRef.get(),

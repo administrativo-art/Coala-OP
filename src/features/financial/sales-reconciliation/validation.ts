@@ -19,7 +19,7 @@ const factSchema = z.object({
   kioskId: reviewId.nullable(), businessDate: reviewDate, soldAt: reviewTimestamp,
   channel: z.enum(["pix", "credit_card", "debit_card"]),
   grossAmountCents: z.number().int().min(1).max(MAX_SALE_CENTS),
-  status: z.enum(["approved", "pending", "cancelled", "refunded", "chargeback"]),
+  status: z.enum(["approved", "pending", "partial_cancellation", "cancelled", "refunded", "chargeback"]),
   couponId: optionalId,
   identifiers: z.object({ providerTransactionId: optionalId, nsu: optionalId,
     authorizationCode: optionalId, terminalId: optionalId, merchantOrderId: optionalId }).strict(),

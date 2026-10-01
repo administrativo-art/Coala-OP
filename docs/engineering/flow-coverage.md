@@ -25,7 +25,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
 | `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
-| `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e KPIs cobertos por contratos locais; verificação integrada pendente |
+| `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
 | `financial-assets` | 1 | Traçado | [Mesma implementação de patrimônio](flows/assets.md) — percurso complementado; verificação integrada pendente |
 | `financial-inbox` | 2 | Traçado | [Recebimento, análise, vínculo e retenção](flows/financial-inbox.md) — percurso complementado; verificação integrada pendente |
 | `financial-overview` | 1 | Traçado | [Indicadores e atalhos](flows/financial-overview.md) — percurso complementado; verificação integrada pendente |
@@ -47,7 +47,8 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
-| `sales-reconciliation` | 1 | Traçado | [Comparação PDV × Stone](flows/stone-sales-review.md) — taxas explícitas em ação separada; precisão/retry/escopo em emulador e Pix HTTP aprovados; não valida provedor real |
+| `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — arquivos Pix solicitados por data e persistidos; idempotência, transporte e cobertura parcial cobertos localmente; não valida scheduler/webhook/provedor real |
+| `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — entrada independente para carteira, antecipações, taxas e confirmação bancária; integração Stone/banco real pendente |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — percurso complementado; verificação integrada pendente |

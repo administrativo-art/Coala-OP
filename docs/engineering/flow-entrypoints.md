@@ -2,7 +2,7 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **53**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **54**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
@@ -1339,12 +1339,10 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/financial/sales-reconciliation/page.tsx`](../../src/app/dashboard/financial/sales-reconciliation/page.tsx).
 
-Arquivos locais percorridos: 31.
+Arquivos locais percorridos: 26.
 
 Chamadas candidatas encontradas:
 
-- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/fees-panel.tsx`](../../src/features/financial/acquirer-fees/fees-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
-- `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/pdv-stone-review` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/pdv-stone-review/route.ts`](../../src/app/api/financial/pdv-stone-review/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/sales-reconciliation/review-page.tsx`](../../src/features/financial/sales-reconciliation/review-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 
@@ -1883,6 +1881,18 @@ Chamadas candidatas encontradas:
 
 - `/api/financial/agent` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/agent/route.ts`](../../src/app/api/financial/agent/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/agent/anticipation-workspace.tsx`](../../src/features/financial/agent/anticipation-workspace.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
+
+## `stone-receipts`
+
+Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
+
+Arquivos locais percorridos: 28.
+
+Chamadas candidatas encontradas:
+
+- `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/fees-panel.tsx`](../../src/features/financial/acquirer-fees/fees-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
+- `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
+- `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
 
 ## `tasks`
 

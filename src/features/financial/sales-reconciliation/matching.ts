@@ -48,9 +48,16 @@ function total(facts: SalesMatchFact[]) {
   return facts.reduce((sum, fact) => sum + fact.grossAmountCents, 0);
 }
 
-function sameStatuses(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
-  return [...new Set(pdv.map((fact) => fact.status))].sort().join(",")
-    === [...new Set(stone.map((fact) => fact.status))].sort().join(",");
+function statusesAreCompatible(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
+  const pdvStatuses = [...new Set(pdv.map((fact) => fact.status))].sort();
+  const stoneStatuses = [...new Set(stone.map((fact) => fact.status))].sort();
+
+  // O PDV Legal não informa aprovação da adquirente. Nesse recorte, `pending`
+  // representa ausência desse dado, não uma venda pendente na Stone.
+  if (pdvStatuses.length === 1 && pdvStatuses[0] === "pending"
+    && stoneStatuses.length === 1 && stoneStatuses[0] === "approved") return true;
+
+  return pdvStatuses.join(",") === stoneStatuses.join(",");
 }
 
 function deterministicKey(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
@@ -78,8 +85,7 @@ function buildCase(
   else if (stone.length === 0) kind = "pdv_only";
   else if (kioskIds.length !== 1) kind = "unit_mismatch";
   else if (pdvGrossAmountCents !== stoneGrossAmountCents) kind = "amount_mismatch";
-  else if (all.some(fact => fact.status === "pending")) kind = "ambiguous";
-  else if (!sameStatuses(pdv, stone)) kind = "status_mismatch";
+  else if (!statusesAreCompatible(pdv, stone)) kind = "status_mismatch";
   else kind = "matched";
 
   return {
@@ -98,7 +104,9 @@ function buildCase(
     kind,
     matchBasis: basis,
     confidence,
-    reviewStatus: "pending_review",
+    reviewStatus: kind === "matched" && basis !== "candidate_group"
+      ? "auto_checked"
+      : "attention_required",
   };
 }
 
@@ -119,6 +127,64 @@ function candidateEdge(left: SalesMatchFact, right: SalesMatchFact, windowMs: nu
   const leftTime = timestampMillis(left.soldAt);
   const rightTime = timestampMillis(right.soldAt);
   return leftTime !== null && rightTime !== null && Math.abs(leftTime - rightTime) <= windowMs;
+}
+
+function dailyScopeKey(fact: SalesMatchFact) {
+  return fact.kioskId
+    ? JSON.stringify([fact.workspaceId, fact.kioskId, fact.businessDate, fact.channel])
+    : null;
+}
+
+function amountMultiset(facts: SalesMatchFact[]) {
+  const counts = new Map<number, number>();
+  for (const fact of facts) counts.set(fact.grossAmountCents, (counts.get(fact.grossAmountCents) ?? 0) + 1);
+  return [...counts.entries()].sort(([left], [right]) => left - right);
+}
+
+function hasSharedIdentifierField(pdv: SalesMatchFact[], stone: SalesMatchFact[]) {
+  return (["providerTransactionId", "nsu", "authorizationCode", "terminalId", "merchantOrderId"] as const)
+    .some(key => (
+      pdv.some(fact => normalizedId(fact.identifiers[key]) !== null)
+      && stone.some(fact => normalizedId(fact.identifiers[key]) !== null)
+    ));
+}
+
+function matchRemainingDailyAmountMultisets(input: {
+  unmatchedPdv: Set<string>;
+  unmatchedStone: Set<string>;
+  pdvById: Map<string, SalesMatchFact>;
+  stoneById: Map<string, SalesMatchFact>;
+  cases: SuggestedSalesReconciliationCase[];
+}) {
+  const pdvScopes = new Map<string, SalesMatchFact[]>();
+  const stoneScopes = new Map<string, SalesMatchFact[]>();
+  for (const id of input.unmatchedPdv) {
+    const fact = input.pdvById.get(id)!;
+    const key = dailyScopeKey(fact);
+    if (key) pdvScopes.set(key, [...(pdvScopes.get(key) ?? []), fact]);
+  }
+  for (const id of input.unmatchedStone) {
+    const fact = input.stoneById.get(id)!;
+    const key = dailyScopeKey(fact);
+    if (key) stoneScopes.set(key, [...(stoneScopes.get(key) ?? []), fact]);
+  }
+
+  for (const key of [...pdvScopes.keys()].sort()) {
+    const pdv = pdvScopes.get(key) ?? [];
+    const stone = stoneScopes.get(key) ?? [];
+    // Um valor isolado fora da janela continua sem par. Este fallback prova
+    // apenas que o conjunto restante inteiro do dia coincide por valor e
+    // quantidade; ele não inventa a identidade de cada transação.
+    if (pdv.length < 2 || pdv.length !== stone.length) continue;
+    if (JSON.stringify(amountMultiset(pdv)) !== JSON.stringify(amountMultiset(stone))) continue;
+    // Se as duas fontes oferecem o mesmo tipo de identificador explícito, o
+    // matching forte já deveria tê-lo consumido. Não encobrir um conflito de ID
+    // com a igualdade dos totais do dia.
+    if (hasSharedIdentifierField(pdv, stone)) continue;
+    input.cases.push(buildCase(pdv, stone, "daily_amount_multiset", "medium"));
+    pdv.forEach(fact => input.unmatchedPdv.delete(fact.id));
+    stone.forEach(fact => input.unmatchedStone.delete(fact.id));
+  }
 }
 
 export function suggestSalesReconciliationCases(input: {
@@ -191,6 +257,8 @@ export function suggestSalesReconciliationCases(input: {
     }
   }
 
+  matchRemainingDailyAmountMultisets({ unmatchedPdv, unmatchedStone, pdvById, stoneById, cases });
+
   const visitedPdv = new Set<string>();
   const visitedStone = new Set<string>();
   for (const startPdvId of [...unmatchedPdv].sort()) {
@@ -229,8 +297,9 @@ export function suggestSalesReconciliationCases(input: {
     componentStone.forEach((id) => visitedStone.add(id));
     const pdv = [...componentPdv].map((id) => pdvById.get(id)!);
     const stone = [...componentStone].map((id) => stoneById.get(id)!);
-    const unambiguousGroup = (pdv.length === 1 || stone.length === 1) && total(pdv) === total(stone);
-    cases.push(buildCase(pdv, stone, "candidate_group", unambiguousGroup ? "medium" : "none", !unambiguousGroup && (pdv.length > 1 || stone.length > 1)));
+    // Somar um grupo pode fechar o valor sem provar qual captura pertence a
+    // qual pagamento. Grupos nunca são aprovados automaticamente.
+    cases.push(buildCase(pdv, stone, "candidate_group", "none", true));
     componentPdv.forEach((id) => unmatchedPdv.delete(id));
     componentStone.forEach((id) => unmatchedStone.delete(id));
   }

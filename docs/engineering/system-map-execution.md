@@ -1,6 +1,9 @@
 # Acompanhamento do mapa técnico
 
+2026-10-01, a integração Pix de Vendas ganhou solicitador diário idempotente: a API Stone é chamada uma vez por data ausente, a entrega assíncrona permanece no webhook e os arquivos ficam persistidos no banco financeiro para reaproveitamento. O contrato passou a versionar snapshots, expor pedido/erro e preservar Pix do PDV como não comparado quando o arquivo tem cobertura parcial. Transporte, datas, repetição e regressão foram cobertos localmente; scheduler, webhook e provedor reais continuam sem homologação, portanto Vendas permanece Traçado.
 2026-10-01, piloto local da Natasha para escalas: coletor CLI de escala por escopo, rotas/CLIs ainda não implantadas para equipe candidata, férias e definições de turno, adaptadores locais de demanda e posições, validadores, pré-voo e calculador de alternativas. As rotas usam permissões existentes, escopo de unidade, projeções mínimas e limites; testes são sintéticos. Classificação, quantidade, função e exceções das posições exigem decisões explícitas, e intervalo intrajornada ainda bloqueia a preparação. A disponibilidade não inclui folgas nem indisponibilidades externas. Não houve leitura de escala, pessoas, férias ou definições reais, geração com dados reais, edição no Coala ou integração com o editor. O grupo `dp-schedules` permanece Traçado; o piloto não homologa o fluxo operacional.
+
+2026-09-30, Vendas e Recebimentos passaram a ser grupos documentais independentes, acompanhando as rotas e entradas próprias já existentes. Os atalhos cruzados dos cabeçalhos foram removidos para que Vendas permaneça restrita ao comparador PDV × Stone e Recebimentos concentre carteira, taxas, antecipações e confirmação bancária. O catálogo inicial limitado de vínculos agora é carregado na entrada das duas páginas, sem disparar consulta à Stone; seleção dependente e atualização continuam explícitas. O levantamento passa a contabilizar 54 grupos; ambos permanecem Traçados.
 
 2026-09-29, implementação local do workspace editorial do Instagram: calendário e grade usam a fila limitada existente, reagendamento e troca de datas são transacionais e a biblioteca grava mídia privada com autorização no servidor. Contratos, regras e testes locais foram ampliados; não houve navegador, publicação na Meta, escrita em produção nem homologação visual. A mudança não promove os grupos internos para Verificado.
 
@@ -16,7 +19,7 @@
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
 | 2. Inventários | Atualizados com o cronograma de projetos: 156 páginas internas, 20 externas, 353 APIs e 42 exports de Functions. |
-| 3. Guias detalhados | 53/53 grupos traçados integralmente no levantamento estático; 0/53 verificados nesta base. Há 73 guias de subfluxo. |
+| 3. Guias detalhados | 54/54 grupos traçados integralmente no levantamento estático; 0/54 verificados nesta base. Há 73 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |
 | 6. Correções locais anteriores | Preservadas somente no worktree de origem; não incluídas na integração documental. |
@@ -34,6 +37,8 @@ Atualização local de 2026-09-26: navegação financeira reúne conciliação e
 Atualização local de 2026-09-27: extratos e faturas compartilham o navegador de competência e o padrão de retorno. O extrato não incorpora mais o workspace de cartão; cada card de conta abre a página dedicada, que mantém alternância entre todos os cartões da conta. Estados visíveis do extrato foram reduzidos a Pendente, Conciliada e Ignorada, sem mudar os estados persistidos. [Guia visual](ui-design-system.md), [Despesas](flows/expenses.md) e [faturas](flows/card-statements.md) registram o contrato. Testes dirigidos de navegação e progresso foram executados; fluxo financeiro integrado e validação visual em navegador permanecem pendentes, então os grupos continuam Traçados.
 
 Atualização local de 2026-09-27: o padrão visual do Extrato foi estendido às superfícies do Financeiro, com largura centralizada, retorno canônico e navegação lateral coerente. Em Despesas, auditoria tornou-se filtro contextual, o período é explícito e a faixa única de KPIs fecha `Total do período = Pago + A pagar`; a rota dedicada antiga apenas redireciona. Contratos de UI, navegação e documentação foram executados sem navegador; o grupo continua Traçado porque a homologação integrada dos motores financeiros permanece pendente.
+
+Atualização local de 2026-09-30: o KPI e o filtro de despesas vencidas passaram a compartilhar a obrigação exibida. Para cartão, o cálculo ocorre por parcela/fatura: a conciliação de uma fatura paga não transforma o saldo futuro da compra parcelada em atraso. A competência do cartão também passou a fechar e vencer no ciclo seguinte; no Inter 5/12, setembro fecha em 05/10 e vence em 12/10. Os contratos possuem testes unitários; a homologação integrada do Financeiro permanece pendente e o grupo continua Traçado.
 
 Começar pela linha pertinente do [mapa](system-map.md), seguir [harness](investigation-harness.md) e conferir fontes atuais. Usar inventário quando faltar caminho. Registrar o [uso real](map-usage.md) no chamado, sem contadores inventados.
 

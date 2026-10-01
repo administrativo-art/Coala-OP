@@ -3,6 +3,7 @@ import { MAX_SALE_CENTS, MAX_SALES_REVIEW_FACTS, reviewDate, reviewTimestamp } f
 import type { SalesMatchFact } from "./types";
 import type { DailySalesScope } from "./daily-review";
 import { closureDateFromIso } from "../cash-closures/date";
+import { STONE_PIX_FILE_SCHEMA_VERSION } from "@/lib/integrations/stone/pix-storage-contract";
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/);
 const cents = z.number().int().min(0).max(MAX_SALE_CENTS).nullable();
@@ -18,9 +19,11 @@ const rowSchema = z.object({
     issues: z.array(z.string().max(80)).max(20), candidateForReview: z.boolean() }),
 });
 const headSchema = z.object({ workspaceId: z.string(), document: z.string().regex(/^(?:\d{11}|\d{14})$/),
-  referenceDate: reviewDate, status: z.literal("processed"), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  referenceDate: reviewDate, status: z.literal("processed"), schemaVersion: z.literal(STONE_PIX_FILE_SCHEMA_VERSION),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   summary: z.object({ transactionCount: z.number().int().min(0).max(MAX_SALES_REVIEW_FACTS) }) });
-export type PixSourceResult = { status: "available" | "not_configured" | "unavailable" | "pending";
+export type PixSourceResult = { status: "available" | "not_configured" | "unavailable" | "requested" | "pending" | "failed";
+  coverage: "complete" | "partial" | null;
   facts: SalesMatchFact[]; excludedCount: number; fileId: string | null;
   sourceHash?: string;
   feeExcludedCount?: number;
@@ -29,7 +32,8 @@ export type PixSourceResult = { status: "available" | "not_configured" | "unavai
 /** Validate a single consistent, complete snapshot before filtering by StoneCode. */
 export function reviewPixSnapshot(input: { head: unknown; rows: unknown[]; document: string;
   fileId: string; scope: DailySalesScope; now?: Date }): PixSourceResult {
-  const pending: PixSourceResult = { status: "pending", facts: [], excludedCount: 0, fileId: input.fileId };
+  const pending: PixSourceResult = { status: "pending", coverage: null,
+    facts: [], excludedCount: 0, fileId: input.fileId };
   const head = headSchema.safeParse(input.head);
   const rows = z.array(rowSchema).max(MAX_SALES_REVIEW_FACTS).safeParse(input.rows);
   if (!head.success || !rows.success || head.data.workspaceId !== input.scope.workspaceId
@@ -68,5 +72,7 @@ export function reviewPixSnapshot(input: { head: unknown; rows: unknown[]; docum
     feeEvidence.push({ e2eId: e.e2eId, eventId: e.eventId, soldOn: input.scope.referenceDate,
       settledOn: closureDateFromIso(e.providerDateTimeUtc), feeCents: a.fee, grossCents: a.gross });
   }
-  return { status: "available", facts, excludedCount, fileId: input.fileId, sourceHash: head.data.sourceHash, feeEvidence, feeExcludedCount };
+  return { status: "available", coverage: excludedCount ? "partial" : "complete",
+    facts, excludedCount, fileId: input.fileId, sourceHash: head.data.sourceHash,
+    feeEvidence, feeExcludedCount };
 }

@@ -3,6 +3,7 @@ export type ReconciliationSalesChannel = "pix" | "debit_card" | "credit_card";
 export type ReconciliationSaleStatus =
   | "approved"
   | "pending"
+  | "partial_cancellation"
   | "cancelled"
   | "refunded"
   | "chargeback";
@@ -44,6 +45,7 @@ export type SalesReconciliationMatchBasis =
   | "nsu_authorization_terminal"
   | "merchant_order"
   | "unique_amount_time"
+  | "daily_amount_multiset"
   | "candidate_group"
   | "unmatched";
 
@@ -63,5 +65,5 @@ export type SuggestedSalesReconciliationCase = {
   kind: SalesReconciliationCaseKind;
   matchBasis: SalesReconciliationMatchBasis;
   confidence: "high" | "medium" | "none";
-  reviewStatus: "pending_review";
+  reviewStatus: "auto_checked" | "attention_required";
 };

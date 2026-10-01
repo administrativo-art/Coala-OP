@@ -7,8 +7,8 @@ rota pública, consulta a produção, persistência ou publicação. A etapa PDV
 do plano continua **parcial**: o motor agora recebe envelopes de cupons e XML real
 do contrato vigente, mas a coleta autenticada e a apresentação ainda não foram conectadas.
 
-Classificação: contrato entre fontes e regra financeira. Invariantes: coincidência
-não é confirmação; ausência no recorte não é ausência de venda; centavos não podem
+Classificação: contrato entre fontes e regra financeira. Invariantes: conferência
+automática não é liquidação; ausência no recorte não é ausência de venda; centavos não podem
 ser obtidos por arredondamento silencioso; movimentos de conta não são capturas.
 
 ## Reaproveitamento e correções
@@ -20,8 +20,13 @@ O worktree anterior e sua alteração em `apphosting.yaml` ficaram intactos.
 
 Diferenças intencionais em relação ao motor anterior:
 
-- Todas as sugestões permanecem `pending_review`, inclusive as de chave forte.
-- Valor + horário tem confiança média, nunca aprovação automática.
+- Par individual compatível por chave forte recebe `auto_checked`.
+- Valor + horário só recebe `auto_checked` quando existe um único par possível na janela de cinco minutos.
+- Depois dos pares individuais, o conjunto restante do mesmo dia, unidade e meio recebe
+  `auto_checked` quando tem pelo menos dois registros por fonte e o multiconjunto de valores
+  e quantidades é idêntico. A evidência permanece agrupada: o sistema não afirma qual captura
+  pertence a cada pagamento. Um valor isolado fora da janela, diferença de quantidade/valor
+  ou identificador explícito compartilhado e não resolvido continua em atenção.
 - Identificadores mantêm pontuação, caixa e zeros à esquerda; chaves compostas
   usam arrays JSON para não colidir quando um identificador contém separadores.
 - Cupom PDV não é presumido como referência de pedido Stone. Esse caminho exige
@@ -29,7 +34,9 @@ Diferenças intencionais em relação ao motor anterior:
 - Duplicidade de IDs rejeita a entrada; multiplicidade de chave forte é ambígua.
 - Identificadores fortes contraditórios impedem fallback por valor/horário.
 - Valores, datas, estados, fonte e limites são validados antes do matching.
-- Unidade desconhecida e estado pendente não permitem correspondência confirmada.
+- Unidade desconhecida continua em atenção. O `pending` normal do PDV significa ausência
+  de status da adquirente e é compatível com uma captura `approved` da Stone; estados
+  explícitos contraditórios continuam divergentes.
 
 ## Adaptação das fontes
 
@@ -58,7 +65,8 @@ monetários vêm dos campos brutos validados, sem round-trip pelo `number` do pa
 Dinheiro/troco participa apenas da validação do total; pagamentos digitais mantêm
 índice e cupom. Cancelamento parcial de item não vira cancelamento total do cupom.
 Não foi inventado um campo NSU/autorização/terminal no PDV nem uma equivalência entre
-status do cupom e aprovação da adquirente: estado desconhecido permanece pendente.
+status do cupom e aprovação da adquirente: o estado desconhecido permanece na evidência,
+mas não cria uma divergência falsa quando o restante do par individual é compatível.
 
 Pix PDV aparece em `uncomparedPdvFacts`, não como venda ausente na Stone. A fonte Pix
 é separada do XML e ainda exige associação comprovada de terminal à unidade. O
@@ -69,7 +77,8 @@ arquivo corporativo não pode ser atribuído integralmente a uma unidade por con
 - Um dia e um StoneCode; sempre `coverage: partial` e `bankReceiptConfirmed: false`.
 - Até 500 cupons, 500 fatos de pagamento PDV e 500 eventos Stone; excesso rejeita
   integralmente, sem truncar uma comparação silenciosamente.
-- Até 100 meios de pagamento por cupom. Busca temporal limitada a cinco minutos.
+- Até 100 meios de pagamento por cupom. Busca temporal individual limitada a cinco minutos;
+  a conferência agregada usa somente o conjunto restante do dia, da unidade e do meio.
 - Valores com fração não nula além de centavos ficam pendentes, sem arredondamento.
 - O PDV pode conter outras adquirentes; um lado sem par não prova falta no outro.
 - Nenhuma query, polling, listener, gravação ou chamada externa nova. Preflight

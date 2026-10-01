@@ -68,7 +68,7 @@ export function AcquirerFeesPanel({ kioskId, mappingId, stoneCode }: Pick<FeeReq
     await api("/api/financial/acquirer-fees", { method: "POST", json: action });
     await loadHistory(); setSelected(""); setMessage("Registro atualizado. Nenhum pagamento ou débito bancário foi criado.");
   });
-  return <Card><CardHeader><CardTitle>Taxas retidas pela Stone</CardTitle><CardDescription>Etapa separada da comparação de vendas. Primeiro consulte as evidências; depois confirme cada grupo como despesa quitada na origem. Não haverá outra saída no banco.</CardDescription></CardHeader>
+  return <Card className="rounded-2xl"><CardHeader><CardTitle className="text-base">Taxas praticadas e apropriação</CardTitle><CardDescription>Consulte as retenções explícitas da Stone e, em seguida, confirme cada grupo como despesa quitada na origem. Não haverá outra saída no banco.</CardDescription></CardHeader>
     <CardContent className="space-y-4">
       <fieldset disabled={busy} className="grid gap-3 md:grid-cols-2"><label className="text-sm">Fonte<select className="mt-1 w-full rounded-md border bg-background p-2" value={source} onChange={event => { setSource(event.target.value as FeeRequest["source"]); reset(); }}><option value="pix">Pix — arquivo já processado</option><option value="cards">Cartões e antecipação — arquivo de pagamentos</option></select></label>
         <label className="text-sm">{source === "pix" ? "Dia das vendas Pix" : "Dia do pagamento informado pela Stone"}<Input type="date" value={date} onChange={event => { setDate(event.target.value); reset(); }} /></label></fieldset>

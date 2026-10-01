@@ -90,7 +90,7 @@ test("não permite frete separado sem favorecido", () => {
   );
 });
 
-test("coloca a compra no crédito dentro da fatura posterior ao fechamento", () => {
+test("coloca a compra no crédito na competência da compra com vencimento no mês seguinte", () => {
   const plan = buildPurchaseExpensePaymentPlan({
     paymentMethod: "card_credit",
     purchaseDate: "2026-09-08",
@@ -99,9 +99,9 @@ test("coloca a compra no crédito dentro da fatura posterior ao fechamento", () 
   }, creditCard);
 
   assert.equal(plan.plannedPaymentMethodType, "credit_card");
-  assert.equal(plan.cardStatementKey, "inter:card-1127:2026-10");
-  assert.equal(plan.cardStatementMonthKey, "2026-10");
-  assert.equal(plan.cardStatementId, "inter__card-1127__2026-10");
+  assert.equal(plan.cardStatementKey, "inter:card-1127:2026-09");
+  assert.equal(plan.cardStatementMonthKey, "2026-09");
+  assert.equal(plan.cardStatementId, "inter__card-1127__2026-09");
   assert.equal(plan.cardChargeDate?.toISOString(), "2026-09-08T15:00:00.000Z");
   assert.equal(plan.dueDate.toISOString(), "2026-10-12T15:00:00.000Z");
   assert.equal(plan.cardReconciliationStatus, "pending");
@@ -122,8 +122,8 @@ test("distribui parcelas do cartão em faturas mensais sem duplicar o valor inte
     month: assignment.cardStatementMonthKey,
     dueDate: assignment.dueDate.toISOString(),
   })), [
-    { number: 1, month: "2026-10", dueDate: "2026-10-12T15:00:00.000Z" },
-    { number: 2, month: "2026-11", dueDate: "2026-11-12T15:00:00.000Z" },
+    { number: 1, month: "2026-09", dueDate: "2026-10-12T15:00:00.000Z" },
+    { number: 2, month: "2026-10", dueDate: "2026-11-12T15:00:00.000Z" },
   ]);
   assert.equal(plan.firstInstallmentDueDate?.toISOString(), "2026-10-12T15:00:00.000Z");
 });
