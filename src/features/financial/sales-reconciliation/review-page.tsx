@@ -56,6 +56,7 @@ const bases: Record<SalesReconciliationMatchBasis, string> = {
   nsu_authorization_terminal: "NSU + autorização + terminal",
   merchant_order: "Referência explícita do pedido",
   unique_amount_time: "Par único por valor e janela de cinco minutos",
+  daily_amount_multiset: "Mesmo conjunto de valores e quantidades no dia",
   candidate_group: "Grupo de candidatos por horário",
   unmatched: "Sem par neste recorte",
 };
@@ -247,7 +248,7 @@ export function SalesReviewPage() {
     />
 
     <div role="note" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-      Pares individuais compatíveis são conferidos automaticamente. A tela abre mostrando somente as divergências; use <strong>Todas</strong> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.
+      Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente. A tela abre mostrando somente as divergências; use <strong>Todas</strong> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.
     </div>
 
     <Card className="rounded-2xl">
@@ -375,9 +376,13 @@ export function SalesReviewPage() {
                   <td className="max-w-[300px] p-3">
                     <Badge variant="outline" className={row.reviewStatus === "auto_checked" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}>
                       {row.reviewStatus === "auto_checked" ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <AlertTriangle className="mr-1 h-3.5 w-3.5" />}
-                      {kinds[row.kind]}
+                      {row.kind === "matched" && row.matchBasis === "daily_amount_multiset"
+                        ? "Conjunto diário conferido"
+                        : kinds[row.kind]}
                     </Badge>
-                    <p className="mt-2">{caseReasons[row.kind]}</p>
+                    <p className="mt-2">{row.kind === "matched" && row.matchBasis === "daily_amount_multiset"
+                      ? "Os valores e as quantidades coincidem no dia. A conferência vale para o conjunto e não identifica qual captura pertence a cada pagamento."
+                      : caseReasons[row.kind]}</p>
                     <p className="mt-1 text-xs text-muted-foreground">Critério: {bases[row.matchBasis]}</p>
                   </td>
                 </tr>)}</tbody>
