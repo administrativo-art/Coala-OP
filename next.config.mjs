@@ -101,6 +101,11 @@ const nextConfig = {
     ],
   },
   webpack: (config, { dev }) => {
+    // Functions uses NodeNext .js imports; Next consumes the same TS sources.
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts'],
+    };
     if (dev) {
       config.cache = false;
     }

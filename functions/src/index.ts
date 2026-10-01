@@ -831,6 +831,7 @@ export const reconcilePdvSalesHistory = onSchedule({
           mode: 'reconciliation',
           runId,
         });
+        if (result.persistence === 'preview') throw new Error('Prévia não permitida no reconciliador agendado.');
         summary[result.persistence] += 1;
       } catch (error) {
         summary.failed += 1;
