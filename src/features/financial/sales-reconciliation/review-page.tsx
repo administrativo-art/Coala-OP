@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
@@ -9,8 +11,9 @@ import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/layout/page-header";
 import type { CatalogPage, MappingView } from "../agent/configuration";
-import { financialDateKey } from "../lib/financial-dates";
 import type { DailySalesApiResult } from "./review-state";
+import { buildSalesReviewYear, type DailySalesCalendarRecord, type SalesReviewCalendarResponse } from "./review-calendar";
+import { SalesReviewCalendarView } from "./review-calendar-view";
 import type { ReconciliationSalesChannel, SalesMatchFact, SuggestedSalesReconciliationCase } from "./types";
 import { CaseDetailPanel, StatusBadge } from "./review-case-panel";
 import {
@@ -53,21 +56,34 @@ function SideCell({ ids, facts, missing }: { ids: string[]; facts: Map<string, S
   </div>;
 }
 
-export function SalesReviewPage() {
+export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMappingId = "", initialStoneCode = "", calendarToday, publishedThrough }: {
+  initialDate?: string;
+  initialMonth?: string;
+  initialMappingId?: string;
+  initialStoneCode?: string;
+  calendarToday: string;
+  publishedThrough: string;
+}) {
   const { isDefaultAdmin } = useAuth();
   const api = useAuthenticatedApi();
-  const yesterday = useMemo(() => financialDateKey(new Date(Date.now() - 86_400_000)) ?? "", []);
+  const router = useRouter();
+  const year = Number(calendarToday.slice(0, 4));
   const [mappings, setMappings] = useState<MappingView[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [selected, setSelected] = useState("");
-  const [code, setCode] = useState("");
-  const [date, setDate] = useState(yesterday);
+  const [selected, setSelected] = useState(initialMappingId);
+  const [code, setCode] = useState(initialStoneCode);
+  const [date, setDate] = useState(initialDate);
+  const [month, setMonth] = useState(initialMonth);
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [calendarBusy, setCalendarBusy] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [calendarRefreshVersion, setCalendarRefreshVersion] = useState(0);
   const [error, setError] = useState("");
+  const [calendarError, setCalendarError] = useState("");
   const [result, setResult] = useState<DailySalesApiResult | null>(null);
+  const [calendarRecords, setCalendarRecords] = useState<DailySalesCalendarRecord[]>([]);
   const [channel, setChannel] = useState<ChannelFilter>("all");
   const [caseFilter, setCaseFilter] = useState<CaseFilter>("attention");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
@@ -80,6 +96,7 @@ export function SalesReviewPage() {
   const [showAllUncompared, setShowAllUncompared] = useState(false);
   const catalogActive = useRef<AbortController | null>(null);
   const reviewActive = useRef<AbortController | null>(null);
+  const calendarActive = useRef<AbortController | null>(null);
   const unitRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,6 +132,42 @@ export function SalesReviewPage() {
   const mapping = mappings.find(item => item.id === selected);
 
   useEffect(() => {
+    if (!isDefaultAdmin || !mapping || !code || date) {
+      calendarActive.current?.abort();
+      return;
+    }
+    const from = `${year}-01-01`;
+    if (from > publishedThrough) return;
+    const controller = new AbortController();
+    calendarActive.current?.abort();
+    calendarActive.current = controller;
+    setCalendarBusy(true);
+    setCalendarError("");
+    const query = new URLSearchParams({ resource: "calendar", kioskId: mapping.kioskId,
+      mappingId: mapping.id, stoneCode: code, from, through: publishedThrough });
+    void api<SalesReviewCalendarResponse>(`/api/financial/pdv-stone-review?${query}`, { signal: controller.signal })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        if (data.from !== from || data.through !== publishedThrough
+          || data.records.some(record => record.referenceDate < from || record.referenceDate > publishedThrough)) {
+          throw new AuthenticatedApiError("A resposta do calendário não corresponde ao período selecionado.", 409, null);
+        }
+        setCalendarRecords(data.records);
+      })
+      .catch(caught => {
+        if (!controller.signal.aborted) setCalendarError(caught instanceof AuthenticatedApiError ? caught.message : "Não foi possível carregar o calendário.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCalendarBusy(false);
+        if (calendarActive.current === controller) calendarActive.current = null;
+      });
+    return () => {
+      controller.abort();
+      if (calendarActive.current === controller) calendarActive.current = null;
+    };
+  }, [api, code, date, isDefaultAdmin, mapping, publishedThrough, year, calendarRefreshVersion]);
+
+  useEffect(() => {
     if (!isDefaultAdmin || !mapping || !code || !date) {
       setResult(null);
       setReviewBusy(false);
@@ -132,11 +185,20 @@ export function SalesReviewPage() {
     setKindFilter("all");
     setDetailKey(null);
     setShowAllUncompared(false);
-    void api<DailySalesApiResult>("/api/financial/pdv-stone-review", {
-      method: "POST",
-      signal: controller.signal,
-      json: { kioskId: mapping.kioskId, mappingId: mapping.id, stoneCode: code, referenceDate: date },
-    }).then(data => {
+    const request = { kioskId: mapping.kioskId, mappingId: mapping.id, stoneCode: code, referenceDate: date };
+    const loadReview = async () => {
+      if (refreshVersion === 0) {
+        const query = new URLSearchParams({ resource: "snapshot", ...request });
+        const stored = await api<{ result: DailySalesApiResult | null }>(`/api/financial/pdv-stone-review?${query}`, { signal: controller.signal });
+        if (stored.result) return stored.result;
+      }
+      return api<DailySalesApiResult>("/api/financial/pdv-stone-review", {
+        method: "POST",
+        signal: controller.signal,
+        json: request,
+      });
+    };
+    void loadReview().then(data => {
       if (controller.signal.aborted) return;
       if (data.mappingId !== mapping.id || data.accountId !== mapping.accountId
         || data.scope.kioskId !== mapping.kioskId || data.scope.stoneCode !== code
@@ -156,9 +218,17 @@ export function SalesReviewPage() {
       controller.abort();
       if (reviewActive.current === controller) reviewActive.current = null;
     };
-  }, [api, code, date, isDefaultAdmin, mapping?.accountId, mapping?.id, mapping?.kioskId, refreshVersion]);
+  }, [api, code, date, isDefaultAdmin, mapping, refreshVersion]);
 
   const allCases = result?.cases;
+  const calendarMonths = useMemo(() => mapping ? buildSalesReviewYear({
+    year,
+    records: calendarRecords,
+    publishedThrough,
+    calendarThrough: calendarToday,
+    validFrom: mapping.validFrom,
+    validTo: mapping.validTo,
+  }) : [], [calendarRecords, calendarToday, mapping, publishedThrough, year]);
   const view = useMemo(() => filterCases(allCases ?? [], { channel, caseFilter, kind: kindFilter }), [allCases, channel, caseFilter, kindFilter]);
   const facts = useMemo(() => new Map<string, SalesMatchFact>([...(result?.pdvFacts ?? []), ...(result?.stoneSales ?? [])].map(fact => [fact.id, fact])), [result]);
   const { rows } = view;
@@ -209,6 +279,20 @@ export function SalesReviewPage() {
   }
 
   const busy = catalogBusy || reviewBusy;
+  const selectionHref = ({ nextDate = "", nextMonth = "", mappingId = selected, stoneCode = code }: {
+    nextDate?: string;
+    nextMonth?: string;
+    mappingId?: string;
+    stoneCode?: string;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (mappingId) params.set("mapping", mappingId);
+    if (stoneCode) params.set("stoneCode", stoneCode);
+    if (nextDate) params.set("date", nextDate);
+    else if (nextMonth) params.set("month", nextMonth);
+    const query = params.toString();
+    return `/dashboard/financial/sales-reconciliation${query ? `?${query}` : ""}`;
+  };
   const clear = () => {
     setResult(null);
     setError("");
@@ -249,8 +333,14 @@ export function SalesReviewPage() {
       if (catalogActive.current === controller) catalogActive.current = null;
     }
   };
-  const changeDate = (next: string) => { setDate(next); clear(); };
-  const nextDayDisabled = busy || !date || date >= yesterday;
+  const changeDate = (next: string) => {
+    setDate(next);
+    setMonth("");
+    setRefreshVersion(0);
+    clear();
+    router.push(selectionHref({ nextDate: next }));
+  };
+  const nextDayDisabled = busy || !date || date >= publishedThrough;
   const goCoverage = (tab: CoverageTab) => {
     setCoverageTab(tab);
     window.setTimeout(() => document.getElementById("cobertura-fontes")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
@@ -289,12 +379,12 @@ export function SalesReviewPage() {
     { id: "limits", label: "Limitações", dot: false },
   ];
 
-  return <PageContainer variant="wide" surface className="space-y-4 py-6">
+  return <PageContainer variant={date ? "wide" : "fluid"} surface className="space-y-4 py-6">
     <PageHeader
       title="Conciliação de vendas"
-      description="Comparação automática das vendas do PDV com as capturas da Stone, por unidade, dia e meio de pagamento."
-      back={{ fallbackHref: "/dashboard/financial", parentLabel: "Financeiro" }}
-      actions={<span className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-700">◉ Somente leitura</span>}
+      description={date ? "Evidências detalhadas do PDV e da Stone para o dia selecionado." : "Acompanhe o fechamento automático de cada dia e priorize somente as pendências."}
+      back={{ fallbackHref: date ? selectionHref({ nextMonth: date.slice(0, 7) }) : "/dashboard/financial", parentLabel: date ? "Calendário" : "Financeiro" }}
+      actions={<span className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-700">◉ Conciliação automática</span>}
     />
 
     <div role="note" className="flex items-start gap-2.5 rounded-xl border border-[#d3ecfb] bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-[1.55] text-sky-950">
@@ -308,7 +398,7 @@ export function SalesReviewPage() {
     </div>
 
     <Panel className="p-4 sm:px-[18px]">
-      <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <div className={cn("grid items-end gap-3 md:grid-cols-2", date ? "xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" : "xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(280px,.9fr)]")}>
         <div ref={unitRef} className="relative min-w-0">
           <p className={label}>Unidade / conta</p>
           <button type="button" aria-label="Vínculo oficial" aria-haspopup="listbox" aria-expanded={unitOpen} disabled={busy}
@@ -331,7 +421,11 @@ export function SalesReviewPage() {
             </div>
             <div role="listbox" aria-label="Vínculos oficiais" className="max-h-[290px] overflow-auto p-1.5">
               {mappings.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === selected}
-                onClick={() => { setSelected(item.id); setCode(item.stoneCodes[0] ?? ""); setUnitOpen(false); clear(); }}
+                onClick={() => {
+                  const nextCode = item.stoneCodes[0] ?? "";
+                  setSelected(item.id); setCode(nextCode); setDate(""); setMonth(""); setUnitOpen(false); clear();
+                  router.push(selectionHref({ mappingId: item.id, stoneCode: nextCode }));
+                }}
                 className={cn("flex w-full items-center justify-between gap-2.5 rounded-[10px] px-2.5 py-[9px] text-left hover:bg-[#fdf2f8]", item.id === selected && "bg-[#fdf2f8]")}>
                 <span className="flex min-w-0 flex-col items-start gap-0.5">
                   <span className="text-[13px] font-bold">{item.kioskName}</span>
@@ -347,26 +441,30 @@ export function SalesReviewPage() {
         <div className="min-w-0">
           <p className={label}>StoneCode</p>
           <select aria-label="StoneCode" className={cn(field, "cursor-pointer")} disabled={busy || !mapping} value={code}
-            onChange={event => { setCode(event.target.value); clear(); }}>
+            onChange={event => {
+              const nextCode = event.target.value;
+              setCode(nextCode); setDate(""); setMonth(""); clear();
+              router.push(selectionHref({ mappingId: mapping?.id ?? "", stoneCode: nextCode }));
+            }}>
             <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
             {mapping?.stoneCodes.map(item => <option key={item} value={item}>{item}</option>)}
           </select>
         </div>
 
-        <div className="min-w-0">
+        {date ? <div className="min-w-0">
           <p className={label}>Dia das vendas</p>
           <div className="flex h-[50px] overflow-hidden rounded-xl border border-[#e3ded3] bg-[#faf9f6]">
             <button type="button" aria-label="Dia anterior" disabled={busy || !date} onClick={() => changeDate(addDays(date, -1))}
               className="flex w-[38px] items-center justify-center border-r border-[#ebe7de] text-[#5f646c] hover:bg-[#f1eee7] disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
-            <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={yesterday}
+            <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={publishedThrough}
               onChange={event => changeDate(event.target.value)}
               className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-none" />
             <button type="button" aria-label="Próximo dia" disabled={nextDayDisabled} onClick={() => changeDate(addDays(date, 1))}
               className="flex w-[38px] items-center justify-center border-l border-[#ebe7de] text-[#5f646c] hover:bg-[#f1eee7] disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
           </div>
-        </div>
+        </div> : null}
 
-        <div role="status" aria-live="polite" className={cn("flex h-[50px] min-w-[200px] items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[12.5px] font-bold",
+        {date ? <div role="status" aria-live="polite" className={cn("flex h-[50px] min-w-[200px] items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[12.5px] font-bold",
           error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-[#ebe7de] bg-[#faf9f6]", !error && result ? "text-emerald-700" : !error && "text-[#8a8f99]")}>
           {busy ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-[#db2777]" /> : null}
           <span className="flex-1">{statusLabel}</span>
@@ -374,11 +472,17 @@ export function SalesReviewPage() {
             onClick={() => setRefreshVersion(value => value + 1)} className="rounded-md p-1 text-[#5f646c] hover:bg-[#efebe3] disabled:opacity-40">
             <RefreshCw className={cn("h-3.5 w-3.5", reviewBusy && "animate-spin")} />
           </button> : null}
-        </div>
+        </div> : <div role="status" aria-live="polite" className="flex h-[50px] min-w-0 items-center justify-between gap-3 rounded-xl border border-[#ebe7de] bg-[#faf9f6] px-3.5">
+          <div className="min-w-0"><p className="truncate text-[12.5px] font-extrabold text-[#374151]">{month ? `Calendário de ${formatDateKey(`${month}-01`).replace(/^01\//, "")}` : `Janeiro a ${formatDateKey(`${calendarToday.slice(0, 7)}-01`).replace(/^01\//, "")}`}</p><p className="mt-0.5 truncate text-[10.5px] text-[#9a9ba1]">Atualização automática · sem ação manual</p></div>
+          <button type="button" aria-label="Atualizar calendário" title="Atualizar calendário" disabled={calendarBusy || !mapping || !code}
+            onClick={() => setCalendarRefreshVersion(value => value + 1)} className="rounded-lg border border-[#e3ded3] bg-white p-2 text-[#5f646c] hover:bg-[#efebe3] disabled:opacity-40">
+            <RefreshCw className={cn("h-3.5 w-3.5", calendarBusy && "animate-spin")} />
+          </button>
+        </div>}
       </div>
       <div className="mt-3 flex flex-col justify-between gap-1 text-[11.5px] leading-normal sm:flex-row sm:gap-4">
         <span className="text-[#374151]">{mapping ? `Vigência do vínculo: ${formatDateKey(mapping.validFrom)} a ${mapping.validTo ? formatDateKey(mapping.validTo) : "sem data final"}.` : ""}</span>
-        <span className="text-[#9a9ba1] sm:text-right">Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte. A conferência é executada e registrada automaticamente.</span>
+        <span className="text-[#9a9ba1] sm:text-right">{date ? "Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte." : "O calendário não presume fechamento: dias sem revisão ficam como não verificados até o backfill automático processá-los."}</span>
       </div>
     </Panel>
 
@@ -387,7 +491,22 @@ export function SalesReviewPage() {
       <button type="button" onClick={() => void load()} className="inline-flex h-[34px] items-center gap-1.5 rounded-[10px] border border-amber-300 bg-white px-3 text-xs font-bold text-amber-800"><RefreshCw className="h-3.5 w-3.5" />Atualizar vínculos</button>
     </div> : null}
 
-    {error && !busy ? <div role="alert" className="flex items-center justify-between gap-4 rounded-[14px] border border-rose-200 bg-rose-50 px-[18px] py-4">
+    {!date ? <SalesReviewCalendarView
+      months={calendarMonths}
+      selectedMonth={month || null}
+      loading={calendarBusy}
+      error={calendarError}
+      ready={!!mapping && !!code}
+      onRetry={() => setCalendarRefreshVersion(value => value + 1)}
+      yearHref={selectionHref()}
+      monthHref={nextMonth => selectionHref({ nextMonth })}
+      dayHref={nextDate => selectionHref({ nextDate })}
+    /> : <Link href={selectionHref({ nextMonth: date.slice(0, 7) })}
+      className="inline-flex items-center gap-1.5 text-xs font-extrabold text-zinc-500 hover:text-pink-700">
+      <ChevronLeft className="h-3.5 w-3.5" />Voltar ao calendário de {formatDateKey(`${date.slice(0, 7)}-01`).replace(/^01\//, "")}
+    </Link>}
+
+    {date && error && !busy ? <div role="alert" className="flex items-center justify-between gap-4 rounded-[14px] border border-rose-200 bg-rose-50 px-[18px] py-4">
       <div>
         <p className="text-[13.5px] font-extrabold text-rose-800">Não foi possível comparar</p>
         <p className="mt-[3px] text-[12.5px] text-rose-800">{error}</p>
@@ -395,12 +514,12 @@ export function SalesReviewPage() {
       {mapping && code && date ? <button type="button" onClick={() => setRefreshVersion(value => value + 1)} className="h-[34px] shrink-0 rounded-[10px] border border-rose-300 bg-white px-3 text-xs font-bold text-rose-700">Tentar novamente</button> : null}
     </div> : null}
 
-    {!result && !error && !busy && mappings.length > 0 && !(mapping && code && date) ? <div className="rounded-2xl border-[1.5px] border-dashed border-[#dcd8cf] px-6 py-14 text-center">
+    {date && !result && !error && !busy && mappings.length > 0 && !(mapping && code && date) ? <div className="rounded-2xl border-[1.5px] border-dashed border-[#dcd8cf] px-6 py-14 text-center">
       <p className="text-[14.5px] font-extrabold">{mapping ? "Selecione o StoneCode" : "Escolha o recorte da comparação"}</p>
       <p className="mt-[5px] text-[12.5px] text-[#8a8f99]">{mapping ? "A comparação carrega automaticamente assim que unidade, StoneCode e dia estiverem definidos." : "Selecione unidade / conta, StoneCode e dia das vendas. A comparação carrega automaticamente."}</p>
     </div> : null}
 
-    {reviewBusy ? <div aria-hidden="true" className="grid animate-pulse gap-3 md:grid-cols-4">
+    {date && reviewBusy ? <div aria-hidden="true" className="grid animate-pulse gap-3 md:grid-cols-4">
       {[0, 1, 2, 3].map(index => <div key={index} className="h-[132px] rounded-2xl bg-[#ebe7de]" />)}
       <div className="h-[300px] rounded-2xl bg-[#ebe7de] md:col-span-4" />
     </div> : null}

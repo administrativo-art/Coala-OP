@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **367 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **368 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **44 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **45 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -189,7 +189,7 @@ Inclui **44 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/payment-requests/[id]/proof` | GET | [src/app/api/financial/payment-requests/[id]/proof/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/proof/route.ts) | [payment-requests](flows/payment-requests.md) |
 | `/api/financial/payment-requests/[id]/refresh` | POST | [src/app/api/financial/payment-requests/[id]/refresh/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/refresh/route.ts) | [payment-requests](flows/payment-requests.md) |
 | `/api/financial/payment-requests/[id]/submit` | POST | [src/app/api/financial/payment-requests/[id]/submit/route.ts](../../src/app/api/financial/payment-requests/%5Bid%5D/submit/route.ts) | [payment-requests](flows/payment-requests.md) |
-| `/api/financial/pdv-stone-review` | POST | [src/app/api/financial/pdv-stone-review/route.ts](../../src/app/api/financial/pdv-stone-review/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
+| `/api/financial/pdv-stone-review` | GET, POST | [src/app/api/financial/pdv-stone-review/route.ts](../../src/app/api/financial/pdv-stone-review/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/stone-agenda` | GET | [src/app/api/financial/stone-agenda/route.ts](../../src/app/api/financial/stone-agenda/route.ts) | [receivables-stone](flows/receivables-stone.md) |
 | `/api/financial/stone-anticipations` | GET | [src/app/api/financial/stone-anticipations/route.ts](../../src/app/api/financial/stone-anticipations/route.ts) | [receivables-stone](flows/receivables-stone.md) |
 | `/api/financial/stone-future-receivables` | POST | [src/app/api/financial/stone-future-receivables/route.ts](../../src/app/api/financial/stone-future-receivables/route.ts) | [receivables-stone](flows/receivables-stone.md) |
@@ -330,6 +330,7 @@ Inclui **44 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/inter/reconcile` | POST | [src/app/api/jobs/inter/reconcile/route.ts](../../src/app/api/jobs/inter/reconcile/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/inter/statements/sync` | POST | [src/app/api/jobs/inter/statements/sync/route.ts](../../src/app/api/jobs/inter/statements/sync/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/stone-pix/request` | POST | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
+| `/api/jobs/stone-sales-review/reconcile` | POST | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/mercadorias` | GET | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) | [registry](flows/registry.md) |
 | `/api/mercadorias/export` | GET | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) | [registry](flows/registry.md) |
 | `/api/observability/client-errors` | POST | [src/app/api/observability/client-errors/route.ts](../../src/app/api/observability/client-errors/route.ts) | [observability](observability.md) |
@@ -441,6 +442,7 @@ Inclui **44 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `scheduledProfileCompletion` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `stonePixDailyRequest` | `onSchedule` | [functions/src/stone-pix-job.ts](../../functions/src/stone-pix-job.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `stonePortfolioDailySync` | `onSchedule` | [functions/src/stone-portfolio-job.ts](../../functions/src/stone-portfolio-job.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `stoneSalesReviewScheduler` | `onSchedule` | [functions/src/stone-sales-review-job.ts](../../functions/src/stone-sales-review-job.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `syncBizneoUsersMonthly` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `syncFromBizneo` | `onSchedule` | [functions/src/rh/sync.ts](../../functions/src/rh/sync.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `syncGoalsForRange` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |

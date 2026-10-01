@@ -92,6 +92,8 @@ env:
     value: "14276603000125"
   - variable: STONE_PIX_SYNC_START_DATE
     value: "2026-09-20"
+  - variable: STONE_SALES_REVIEW_WORKSPACE_IDS
+    value: coala
   - variable: CASH_CLOSURE_JOB_SECRET
     secret: CASH_CLOSURE_JOB_SECRET
   - variable: CASH_CLOSURE_SENIOR_DIVERGENCE_CENTS

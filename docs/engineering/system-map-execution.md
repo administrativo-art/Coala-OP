@@ -1,5 +1,7 @@
 # Acompanhamento do mapa técnico
 
+2026-10-01, incremento local da Conciliação de vendas adiciona cartões mensais desde janeiro de 2026, calendário diário, leitura anual limitada, snapshots normalizados e rotina automática em lotes para dias recentes, backfill e revisão tardia. A UI diferencia fechado, divergência, fonte pendente, não verificado, fora da vigência e reaberto por nova evidência. Permissão administrativa foi reutilizada e a entrada de máquina exige segredo; nenhum dado real, scheduler ou backfill foi executado. Testes e verificações locais não homologam as APIs externas nem promovem Vendas além de Traçado.
+
 2026-10-01, a Conciliação de vendas passou a preservar NSU/autorização de um detalhe único do pagamento PDV e, em cartões explicitamente Stone, usar o NSU como ID do provedor contra `AcquirerTransactionKey`. A tela identifica a origem dos dois lados como `NSU informado pelo PDV` e `ID da transação Stone`, com critério `NSU PDV = ID Stone`, e diferencia cancelamento/estorno, desconto de cancelamento, chargeback e estorno de chargeback. Uma leitura PDV real limitada confirmou o formato e o caso reportado; outro provedor, detalhe múltiplo e sentinelas permanecem conservadores. Testes sintéticos cobrem a regra, mas a API Stone real e a liquidação bancária não foram homologadas, então Vendas permanece Traçado.
 
 2026-10-01, a Conciliação de vendas passou a consultar automaticamente quando o recorte está definido e a persistir um estado diário versionado. Evidência idêntica reaproveita o fechamento; fonte alterada reabre somente se introduzir pendência. Cancelamento de item comprovadamente anterior ao pagamento preserva os valores original/cancelado/final e deixa de criar divergência falsa contra a captura líquida. Testes unitários e de repositório em emulador cobrem a regra; não houve navegador nem confirmação bancária, então Vendas permanece Traçado.
@@ -22,7 +24,7 @@
 | Etapa | Estado |
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
-| 2. Inventários | Atualizados com o cronograma de projetos: 156 páginas internas, 20 externas, 353 APIs e 42 exports de Functions. |
+| 2. Inventários | Atualizados com o cronograma de projetos: 159 páginas internas, 21 externas, 368 APIs e 45 exports de Functions. |
 | 3. Guias detalhados | 54/54 grupos traçados integralmente no levantamento estático; 0/54 verificados nesta base. Há 73 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |

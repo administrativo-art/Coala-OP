@@ -1339,7 +1339,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/financial/sales-reconciliation/page.tsx`](../../src/app/dashboard/financial/sales-reconciliation/page.tsx).
 
-Arquivos locais percorridos: 26.
+Arquivos locais percorridos: 28.
 
 Chamadas candidatas encontradas:
 
