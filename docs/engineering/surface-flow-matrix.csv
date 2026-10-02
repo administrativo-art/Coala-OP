@@ -158,6 +158,7 @@ api,src/app/api/financial/pdv-stone-review/route.ts,,docs/engineering/flows/ston
 api,src/app/api/financial/stone-agenda/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-anticipations/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-future-receivables/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/stone-receipts/reconcile/route.ts,,docs/engineering/flows/stone-sales-review.md,Consulta autenticada e administrativa; lê arquivos Stone publicados e créditos Inter limitados, sem escrita financeira.
 api,src/app/api/financial/stone-mappings/route.ts,,docs/engineering/flows/stone-sales-review.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-portfolio-cron/route.ts,,docs/engineering/runtime-surfaces.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/stone-portfolio/route.ts,,docs/engineering/flows/receivables-stone.md,Destino de investigacao; conferir metodo e ramo no handler.

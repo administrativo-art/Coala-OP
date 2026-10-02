@@ -1886,13 +1886,14 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 28.
+Arquivos locais percorridos: 32.
 
 Chamadas candidatas encontradas:
 
 - `/api/financial/acquirer-fees` — interface [`src/features/financial/acquirer-fees/fees-panel.tsx`](../../src/features/financial/acquirer-fees/fees-panel.tsx); rota candidata [`src/app/api/financial/acquirer-fees/route.ts`](../../src/app/api/financial/acquirer-fees/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
 - `/api/financial/stone-mappings` — interface [`src/features/financial/receipts-reconciliation/receipts-page.tsx`](../../src/features/financial/receipts-reconciliation/receipts-page.tsx); rota candidata [`src/app/api/financial/stone-mappings/route.ts`](../../src/app/api/financial/stone-mappings/route.ts)
+- `/api/financial/stone-receipts/reconcile` — interface [`src/features/financial/receipts-reconciliation/reconciliation-panel.tsx`](../../src/features/financial/receipts-reconciliation/reconciliation-panel.tsx); rota candidata [`src/app/api/financial/stone-receipts/reconcile/route.ts`](../../src/app/api/financial/stone-receipts/reconcile/route.ts)
 
 ## `tasks`
 
