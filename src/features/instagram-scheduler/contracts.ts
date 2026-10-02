@@ -200,6 +200,8 @@ export type InstagramPublishedFeedProfile = {
 
 export const instagramInsightsDays = [7, 30, 90] as const;
 export type InstagramInsightsDays = (typeof instagramInsightsDays)[number];
+export const instagramInsightsPeriods = [...instagramInsightsDays, "year"] as const;
+export type InstagramInsightsPeriod = (typeof instagramInsightsPeriods)[number];
 
 export type InstagramInsightTotals = {
   views: number | null;
@@ -250,6 +252,20 @@ export type InstagramInsightStoredDay = {
   mediaCount: number | null;
   settled: boolean;
   totals: InstagramInsightTotals;
+  businessSuite: InstagramBusinessSuiteDailyMetrics | null;
+};
+
+export type InstagramBusinessSuiteDailyMetrics = {
+  views: number | null;
+  reach: number | null;
+  contentInteractions: number | null;
+  profileVisits: number | null;
+  profileLinkClicks: number | null;
+  followers: number | null;
+};
+
+export type InstagramBusinessSuiteTotals = InstagramBusinessSuiteDailyMetrics & {
+  coveredDays: number;
 };
 
 export type InstagramInsightContentSnapshot = InstagramInsightContentItem & {
@@ -263,13 +279,14 @@ export type InstagramInsightsHistory = {
 };
 
 export type InstagramInsightsReport = {
-  range: { days: InstagramInsightsDays; since: string; until: string };
+  range: { period: InstagramInsightsPeriod; days: number; since: string; until: string };
   profile: InstagramPublishedFeedProfile & {
     followersCount: number | null;
     mediaCount: number | null;
   };
   totals: InstagramInsightTotals;
   reachSeries: Array<{ date: string; value: number }>;
+  businessSuiteTotals: InstagramBusinessSuiteTotals;
   content: InstagramInsightContentItem[];
   activeStories: InstagramInsightContentItem[];
   history: InstagramInsightsHistory;

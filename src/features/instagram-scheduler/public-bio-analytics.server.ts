@@ -6,7 +6,7 @@ import { z } from "zod";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { publicBioProjection } from "@/lib/public-bio";
 
-import type { InstagramInsightsDays, PublicBioAnalyticsReport } from "./contracts";
+import type { PublicBioAnalyticsReport } from "./contracts";
 
 const collection = dbAdmin.collection("publicBioAnalyticsDaily");
 
@@ -60,7 +60,7 @@ export async function recordPublicBioAnalyticsEvent(event: PublicBioAnalyticsEve
   await collection.doc(today).set(increments, { merge: true });
 }
 
-export async function fetchPublicBioAnalytics(days: InstagramInsightsDays): Promise<PublicBioAnalyticsReport> {
+export async function fetchPublicBioAnalytics(days: number): Promise<PublicBioAnalyticsReport> {
   const until = new Date();
   const since = new Date(until.getTime() - (days - 1) * 24 * 60 * 60 * 1_000);
   const [snapshots, settings] = await Promise.all([
