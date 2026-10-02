@@ -35,18 +35,21 @@ As coleções operacionais `uberSftpImports`, `uberTrips` e `uberReconciliations
 
 ## Infraestrutura obrigatória
 
-A Uber restringe o SFTP por endereço IP. Uma Cloud Function usa endereços dinâmicos por padrão, portanto o job precisa sair por uma VPC com Cloud NAT e um IP regional estático. O código já exige um conector VPC e configura todo o tráfego de saída do job por ele.
+A Uber restringe o SFTP por endereço IP. Uma Cloud Function usa endereços dinâmicos por padrão, portanto o job precisa sair por uma VPC com Cloud NAT e um IP regional estático. `uberSftpDailySync` usa **Direct VPC egress** para enviar todo o tráfego pela VPC sem manter máquinas de um Serverless VPC Access connector permanentemente ligadas.
 
-Na região `southamerica-east1`, criar:
+No projeto `smart-converter-752gf`, região `southamerica-east1`, o contrato de produção é:
 
-- um Serverless VPC Access connector;
-- um Cloud Router;
-- um endereço IPv4 externo regional reservado;
-- um Cloud NAT manual associado ao endereço e à sub-rede do conector.
+- rede e sub-rede com faixa `/26` ou maior, configuradas diretamente na função;
+- Cloud Router `coala-uber-egress-router` na mesma VPC da sub-rede;
+- Cloud NAT `coala-uber-egress-nat`, cobrindo a sub-rede da função;
+- endereço IPv4 regional reservado `coala-uber-egress-ip` (`34.151.241.62`) como único IP do NAT com alocação `MANUAL_ONLY`;
+- egress `VPC_EGRESS_ALL_TRAFFIC` na função.
 
-Registrar o IP reservado em **Configurações > Integrações > SFTP do colaborador > Endereços de IP** da Uber. O IP residencial usado no teste local pode permanecer para acesso manual, mas não é usado pelo Coala One.
+O IP reservado precisa permanecer em **Configurações > Integrações > SFTP do colaborador > Endereços de IP** da Uber. A migração de conector para Direct VPC não muda esse endereço. O IP residencial usado no teste local pode permanecer para acesso manual, mas não é usado pelo Coala One.
 
-Referências oficiais: [saída estática no Cloud Run/Functions](https://docs.cloud.google.com/run/docs/configuring/static-outbound-ip) e [conectores VPC](https://docs.cloud.google.com/run/docs/configuring/vpc-connectors).
+O SDK `firebase-functions` usado pelo projeto ainda não declara Direct VPC egress. Por isso, a configuração de rede é aplicada de forma restrita pela Cloud Functions v2 API com `npm run uber-sftp:network -- apply`. A opção `preserveExternalChanges: true` existe somente em `uberSftpDailySync` para impedir que um deploy Firebase apague essa configuração externa. Depois de qualquer deploy dessa função, executar `npm run uber-sftp:network -- verify`.
+
+Referências oficiais: [Direct VPC em funções de segunda geração](https://docs.cloud.google.com/functions/docs/running/direct-vpc), [saída estática com Cloud NAT](https://docs.cloud.google.com/run/docs/configuring/static-outbound-ip) e [comparação com conectores](https://docs.cloud.google.com/run/docs/configuring/connecting-vpc).
 
 ## Parâmetros e segredos
 
@@ -57,7 +60,6 @@ Parâmetros solicitados no deploy:
 | `UBER_SFTP_ENABLED` | `false` no primeiro deploy | Ativar somente depois do IP ser liberado na Uber. |
 | `UBER_SFTP_USERNAME` | identificador exibido como “Conta SFTP” | Não é o e-mail do usuário. |
 | `UBER_SFTP_HOST_FINGERPRINT_SHA256` | `SHA256:...` | Confirmar por um canal confiável antes do deploy. |
-| `UBER_SFTP_VPC_CONNECTOR` | nome/caminho do conector | Deve estar em `southamerica-east1`. |
 
 Segredos do Secret Manager:
 
@@ -69,13 +71,24 @@ Use uma chave de serviço exclusiva, sem senha, mantida apenas no Secret Manager
 
 ## Sequência segura de implantação
 
-1. Criar VPC, conector, IP e NAT; anotar o IP reservado.
+Para uma instalação nova:
+
+1. Criar a rede/sub-rede, o IP regional, o Router e o NAT; anotar o IP reservado.
 2. Adicionar o IP à conta SFTP da Uber e aguardar a ativação informada pelo portal.
-3. Criar os dois segredos sem copiar seus valores para logs ou tickets.
+3. Criar o segredo sem copiar seu valor para logs ou tickets.
 4. Implantar as três funções com `UBER_SFTP_ENABLED=false`.
-5. Confirmar nos logs que os gatilhos de despesas não geram erros.
-6. Alterar `UBER_SFTP_ENABLED=true` e reimplantar `uberSftpDailySync`.
-7. Após a primeira execução, conferir `uberSftpImports`, a quantidade de viagens e uma amostra de correspondências.
+5. Aplicar Direct VPC egress com `npm run uber-sftp:network -- apply --subnet <sub-rede>`.
+6. Confirmar a configuração com `npm run uber-sftp:network -- verify --subnet <sub-rede>`.
+7. Alterar `UBER_SFTP_ENABLED=true`, reimplantar `uberSftpDailySync` e repetir a verificação de rede.
+8. Executar o Scheduler uma vez e conferir o término nos logs, uma nova tentativa em `uberSftpImports` e fluxos NAT saindo pelo IP reservado.
+
+Para migrar uma função que usa conector:
+
+1. Executar `preflight` e confirmar sub-rede `/26` ou maior, Router na mesma VPC, NAT com único IP manual `34.151.241.62`, função `ACTIVE` e Scheduler `ENABLED` apontando por POST para a URL oficial da função com audience correspondente.
+2. Implantar a versão do código com `preserveExternalChanges` e a tolerância de conexão descrita abaixo.
+3. Executar `apply`; o script limpa o conector e configura Direct VPC numa única atualização limitada aos quatro campos de rede.
+4. Executar `verify`, disparar o Scheduler e validar a sincronização real. A verificação confirma o IP configurado no NAT, não mede o IP público usado por uma conexão. Conferir a tradução nos logs do Cloud NAT e uma nova importação concluída com viagens e linhas; uma execução que apenas pula arquivos antigos não comprova a migração.
+5. Manter `coala-uber-sftp` durante a janela de validação. Excluir o conector somente depois de uma execução concluída e da confirmação do IP efetivo no NAT. Após a exclusão, recriar o conector é pré-requisito para o rollback por script.
 
 Na correção do parser de setembro de 2026, a verificação anterior à implantação
 encontrou `uberTrips` vazio: dois arquivos foram marcados como concluídos com
@@ -94,12 +107,15 @@ Não há migração obrigatória. Despesas antigas só serão revisitadas se for
 - A busca reversa por novas viagens usa lotes de até 30 chaves e no máximo 300 candidatas por tipo; atingir o teto aborta o lote em vez de inferir unicidade com dados incompletos.
 - Uma viagem guarda no máximo 50 linhas transacionais, evitando crescimento ilimitado do documento.
 - Escritas que não são Uber ainda invocam o gatilho, mas são filtradas em memória antes de qualquer consulta ao Firestore.
+- Direct VPC pode levar mais de um minuto para estabelecer conectividade em uma nova instância. A conexão SFTP espera até 90 segundos e repete até três vezes, com esperas de 5 e 15 segundos. Erros de autenticação, chave privada e impressão digital não são repetidos. O timeout total da função continua em 540 segundos.
 
-Para `N` viagens importadas e `C` gravações candidatas Uber por mês, a base é aproximadamente `N` leituras transacionais + `N` escritas de viagem, somadas às consultas e gravações de reconciliação de `C`. Cada candidata consulta no máximo 11 viagens, mas normalmente retorna zero ou uma. Com um arquivo por dia e uma execução diária, a checagem de arquivos concluídos faz até cerca de 36 leituras por dia (1.080 por mês); execuções manuais e retries somam leituras proporcionais. O custo fixo inclui uma invocação por escrita em `expenses` e `transactions`, inclusive para registros não Uber, além do conector VPC, Cloud NAT, IP reservado, Scheduler e Secret Manager. Conferir as tabelas de preço do projeto antes da ativação em produção.
+Para `N` viagens importadas e `C` gravações candidatas Uber por mês, a base é aproximadamente `N` leituras transacionais + `N` escritas de viagem, somadas às consultas e gravações de reconciliação de `C`. Cada candidata consulta no máximo 11 viagens, mas normalmente retorna zero ou uma. Com um arquivo por dia e uma execução diária, a checagem de arquivos concluídos faz até cerca de 36 leituras por dia (1.080 por mês); execuções manuais e retries somam leituras proporcionais. O custo fixo inclui uma invocação por escrita em `expenses` e `transactions`, inclusive para registros não Uber, além de Cloud NAT, IP reservado, Scheduler e Secret Manager. Direct VPC escala a zero e remove as duas `e2-micro` e os discos mantidos pelo conector. Conferir as tabelas de preço do projeto antes da ativação em produção.
 
 ## Operação e rollback
 
 - Desativação imediata: definir `UBER_SFTP_ENABLED=false` e reimplantar o job. Os gatilhos continuam apenas reconhecendo candidatas e não acessam o SFTP.
+- Verificação de rede: `npm run uber-sftp:network -- verify` não lê segredos e falha se função, sub-rede, Router, NAT, IP configurado ou destino do Scheduler divergirem do contrato acima. `configuredNatIp` não é medição de tráfego.
+- Rollback de rede: enquanto `coala-uber-sftp` existir e estiver `READY`, executar `npm run uber-sftp:network -- rollback`. Antes do PATCH, o script exige função `ACTIVE` em estado de rede reconhecido. Ele restaura o conector com `ALL_TRAFFIC` e limpa Direct VPC numa atualização atômica. Validar a função e disparar o Scheduler antes de investigar ou excluir a sub-rede direta.
 - Falha de autenticação ou IP: o job registra um `eventId` sem imprimir chave, senha ou conteúdo pessoal do relatório.
 - Arquivo parcialmente processado: a execução falha, a importação fica `failed` e pode ser repetida com segurança; as viagens são atualizadas de forma idempotente.
 - Correspondência ambígua: o registro permanece sem vínculo automático e exibe aviso para revisão.

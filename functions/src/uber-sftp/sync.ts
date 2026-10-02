@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as logger from 'firebase-functions/logger';
 import SftpClient from 'ssh2-sftp-client';
+import { SFTP_CONNECTION_ATTEMPTS, SFTP_READY_TIMEOUT_MS, sftpConnectionRetryDelay } from './connection-policy.js';
 import { eligibleUberDailyFiles, normalizeSha256HostFingerprint, parseUberTripCsv } from './domain.js';
 import { safeUberErrorCode } from './errors.js';
 import {
@@ -72,6 +73,49 @@ function checksumSha256(buffer: Buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function connectUberSftp(
+  username: string,
+  privateKey: string,
+  expectedHostFingerprint: string,
+) {
+  for (let attempt = 1; attempt <= SFTP_CONNECTION_ATTEMPTS; attempt += 1) {
+    const client = new SftpClient('coala-one-uber-sftp');
+    try {
+      await client.connect({
+        host: UBER_SFTP_HOST,
+        port: UBER_SFTP_PORT,
+        username,
+        privateKey,
+        forceIPv4: true,
+        readyTimeout: SFTP_READY_TIMEOUT_MS,
+        keepaliveInterval: 10_000,
+        keepaliveCountMax: 3,
+        hostHash: 'sha256',
+        hostVerifier: (fingerprint: string) => fingerprint.toLocaleLowerCase('en-US') === expectedHostFingerprint,
+      });
+      return client;
+    } catch (error) {
+      await client.end().catch(() => undefined);
+      const retryDelayMs = sftpConnectionRetryDelay(attempt, error);
+      if (!retryDelayMs) throw error;
+      logger.warn('Uber SFTP connection will be retried.', {
+        source: 'uber-sftp',
+        operation: 'connect-retry',
+        attempt,
+        maxAttempts: SFTP_CONNECTION_ATTEMPTS,
+        retryDelayMs,
+        errorCode: safeUberErrorCode(error),
+      });
+      await wait(retryDelayMs);
+    }
+  }
+  throw new Error('UBER_SFTP_CONNECTION_RETRY_EXHAUSTED');
+}
+
 function fileSource(file: DailyFile, checksum: string): UberImportSource {
   return {
     id: uberImportDocumentId(file.remotePath),
@@ -89,7 +133,7 @@ export async function syncUberTripsFromSftp(configuration: UberSftpConfiguration
   const expectedHostFingerprint = normalizeSha256HostFingerprint(
     required(configuration.hostFingerprintSha256, 'UBER_SFTP_HOST_FINGERPRINT_REQUIRED'),
   );
-  const client = new SftpClient('coala-one-uber-sftp');
+  let client: SftpClient | undefined;
   const result: UberSftpSyncResult = {
     listedFiles: 0,
     eligibleFiles: 0,
@@ -100,18 +144,7 @@ export async function syncUberTripsFromSftp(configuration: UberSftpConfiguration
   };
 
   try {
-    await client.connect({
-      host: UBER_SFTP_HOST,
-      port: UBER_SFTP_PORT,
-      username,
-      privateKey,
-      forceIPv4: true,
-      readyTimeout: 30_000,
-      keepaliveInterval: 10_000,
-      keepaliveCountMax: 3,
-      hostHash: 'sha256',
-      hostVerifier: (fingerprint: string) => fingerprint.toLocaleLowerCase('en-US') === expectedHostFingerprint,
-    });
+    client = await connectUberSftp(username, privateKey, expectedHostFingerprint);
     const listed = await client.list(UBER_TRIPS_DIRECTORY);
     result.listedFiles = listed.length;
     const earliestDate = earliestEligibleDate();
@@ -167,6 +200,6 @@ export async function syncUberTripsFromSftp(configuration: UberSftpConfiguration
     const eventId = reportUnexpectedError('sync', error);
     throw new Error(`UBER_SFTP_SYNC_FAILED:${eventId}`);
   } finally {
-    await client.end().catch(() => undefined);
+    await client?.end().catch(() => undefined);
   }
 }
