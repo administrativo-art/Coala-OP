@@ -7,11 +7,11 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import type {
   InstagramInsightContentItem,
   InstagramInsightContentSnapshot,
-  InstagramInsightsDays,
   InstagramInsightsHistory,
   InstagramInsightStoredDay,
   InstagramInsightTotals,
 } from "./contracts";
+import { parseBusinessSuiteDailyMetrics } from "./business-suite-insights";
 
 const accountCollection = dbAdmin.collection("instagramAccountInsightsDaily");
 const storyCollection = dbAdmin.collection("instagramStoryInsightSnapshots");
@@ -115,7 +115,7 @@ function contentItem(id: string, data: Record<string, unknown>): InstagramInsigh
   };
 }
 
-export async function fetchInstagramInsightsHistory(days: InstagramInsightsDays): Promise<InstagramInsightsHistory> {
+export async function fetchInstagramInsightsHistory(days: number): Promise<InstagramInsightsHistory> {
   const until = new Date();
   const since = new Date(until.getTime() - (days - 1) * 24 * 60 * 60 * 1_000);
   const publishedSince = Timestamp.fromDate(since);
@@ -146,6 +146,7 @@ export async function fetchInstagramInsightsHistory(days: InstagramInsightsDays)
       mediaCount: numberOrNull(data.mediaCount),
       settled: data.settled === true,
       totals: totals(data),
+      businessSuite: parseBusinessSuiteDailyMetrics(data.businessSuite),
     };
   });
 

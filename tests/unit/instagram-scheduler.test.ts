@@ -33,9 +33,23 @@ import {
   mergeReachSeries,
   parseAccountInsightTotals,
   parseContentInsight,
+  parseFollowerDemographics,
   parseReachSeries,
+  parseViewsByFollowType,
   sumAccountInsightTotals,
+  sumViewsByFollowType,
 } from "../../src/features/instagram-scheduler/instagram-insights";
+import {
+  aggregateBusinessSuiteHistory,
+  instagramInsightsPeriodDays,
+  parseBusinessSuiteCsv,
+} from "../../src/features/instagram-scheduler/business-suite-insights";
+import {
+  buildInstagramInsightReading,
+  publicBioMetric,
+  summarizeInstagramContentFormats,
+  summarizeInstagramHistoryCoverage,
+} from "../../src/features/instagram-scheduler/insights-view-model";
 import {
   calendarMonthKeys,
   dateKeyInBelem,
@@ -266,6 +280,88 @@ test("soma janelas da Meta e preserva métricas ausentes", () => {
   ]);
 });
 
+test("interpreta quebras de visualizações e dados demográficos agregados", () => {
+  const viewTypes = parseViewsByFollowType({ data: [{
+    name: "views",
+    total_value: { breakdowns: [{
+      dimension_keys: ["follow_type"],
+      results: [
+        { dimension_values: ["FOLLOWER"], value: 84 },
+        { dimension_values: ["NON_FOLLOWER"], value: 116 },
+      ],
+    }] },
+  }] });
+  assert.deepEqual(viewTypes, { followers: 84, nonFollowers: 116 });
+  assert.deepEqual(sumViewsByFollowType([viewTypes, { followers: 5, nonFollowers: null }]), {
+    followers: 89,
+    nonFollowers: 116,
+  });
+
+  assert.deepEqual(parseFollowerDemographics({ data: [{
+    name: "follower_demographics",
+    total_value: { breakdowns: [{
+      dimension_keys: ["age", "gender"],
+      results: [
+        { dimension_values: ["18-24", "F"], value: 25 },
+        { dimension_values: ["18-24", "M"], value: 11 },
+      ],
+    }] },
+  }] }, ["age", "gender"]), [
+    { dimensions: { age: "18-24", gender: "F" }, value: 25 },
+    { dimensions: { age: "18-24", gender: "M" }, value: 11 },
+  ]);
+  assert.equal(parseFollowerDemographics({ data: [] }, ["city"]), null);
+});
+
+test("distingue ausência de coleta da bio de um zero medido", () => {
+  const empty = {
+    pageViews: 0,
+    linkClicks: 0,
+    galleryOpens: 0,
+    clickThroughRate: null,
+    daily: [],
+    topLinks: [],
+  };
+  assert.equal(publicBioMetric(empty, "pageViews"), null);
+
+  const measured = { ...empty, daily: [{ date: "2026-10-01", pageViews: 0, linkClicks: 0 }] };
+  assert.equal(publicBioMetric(measured, "pageViews"), 0);
+});
+
+test("resume a cobertura histórica sem contar datas duplicadas", () => {
+  const totals = parseAccountInsightTotals({ data: [] });
+  assert.deepEqual(summarizeInstagramHistoryCoverage([
+    { date: "2026-09-30", followersCount: null, mediaCount: null, settled: true, totals, businessSuite: null },
+    { date: "2026-10-01", followersCount: 254, mediaCount: 14, settled: false, totals, businessSuite: null },
+    { date: "2026-10-01", followersCount: 254, mediaCount: 14, settled: false, totals, businessSuite: null },
+  ], 7), {
+    capturedDays: 2,
+    firstDate: "2026-09-30",
+    lastDate: "2026-10-01",
+    complete: false,
+  });
+});
+
+test("lê o CSV oficial do Meta Business Suite e rejeita título incompatível", () => {
+  const csv = '\uFEFFsep=,\r\n"Visualizações"\r\n"Data","Primary"\r\n"2026-01-01T00:00:00","5"\r\n"2026-01-02T00:00:00","115"\r\n';
+  assert.deepEqual([...parseBusinessSuiteCsv(csv, "views")], [
+    ["2026-01-01", 5],
+    ["2026-01-02", 115],
+  ]);
+  assert.throws(() => parseBusinessSuiteCsv(csv, "reach"), /não corresponde/);
+});
+
+test("agrega o histórico do Business Suite e calcula o período anual", () => {
+  const totals = parseAccountInsightTotals({ data: [] });
+  const businessSuite = { views: 5, reach: 4, contentInteractions: 2, profileVisits: 1, profileLinkClicks: 0, followers: 1 };
+  const aggregated = aggregateBusinessSuiteHistory([
+    { date: "2026-01-01", followersCount: null, mediaCount: null, settled: true, totals, businessSuite },
+    { date: "2026-01-02", followersCount: null, mediaCount: null, settled: true, totals, businessSuite: { ...businessSuite, views: 10 } },
+  ]);
+  assert.deepEqual(aggregated, { views: 15, reach: 8, contentInteractions: 4, profileVisits: 2, profileLinkClicks: 0, followers: 2, coveredDays: 2 });
+  assert.equal(instagramInsightsPeriodDays("year", new Date("2026-10-01T20:00:00.000Z")), 274);
+});
+
 test("monta as três janelas diárias que o coletor reapura", () => {
   assert.deepEqual(instagramSnapshotWindows(new Date("2026-10-01T16:00:00.000Z")), [
     { date: "2026-10-01", since: "1790823600", until: "1790870400", current: true, settled: false },
@@ -449,4 +545,100 @@ test("descarta URLs inseguras da Meta e aplica perfil padrão", () => {
     username: "coalashakes",
     profilePictureUrl: null,
   });
+});
+
+test("transforma métricas do Instagram em uma leitura acionável sem inventar comparação", () => {
+  const reading = buildInstagramInsightReading({
+    range: { period: "year", days: 274, since: "2026-01-01T03:00:00.000Z", until: "2026-10-01T03:00:00.000Z" },
+    profile: { username: "coalashakes", profilePictureUrl: null, followersCount: 254, mediaCount: 14 },
+    totals: {
+      views: 16_549,
+      reach: null,
+      accountsEngaged: null,
+      totalInteractions: 438,
+      likes: null,
+      comments: null,
+      shares: null,
+      saves: null,
+      replies: null,
+      reposts: null,
+      follows: 129,
+      unfollows: null,
+    },
+    viewsByFollowType: { followers: null, nonFollowers: null },
+    reachSeries: [
+      { date: "2026-09-29", value: 84 },
+      { date: "2026-09-30", value: 131 },
+    ],
+    businessSuiteTotals: {
+      views: 16_549,
+      reach: 5_737,
+      contentInteractions: 438,
+      profileVisits: 1_247,
+      profileLinkClicks: 0,
+      followers: 129,
+      coveredDays: 274,
+    },
+    content: [{
+      id: "post-1",
+      format: "Reel",
+      caption: "Produto em destaque",
+      previewUrl: null,
+      permalink: null,
+      publishedAt: "2026-09-30T12:00:00.000Z",
+      views: 500,
+      reach: 300,
+      totalInteractions: 30,
+      likes: 24,
+      comments: 2,
+      shares: 3,
+      saves: 1,
+      replies: null,
+      bioLinkClicks: null,
+      storyLinkClicks: null,
+    }],
+    activeStories: [],
+    history: { daily: [], stories: [], contentSnapshots: [] },
+    bio: { pageViews: 0, linkClicks: 0, galleryOpens: 0, clickThroughRate: null, daily: [], topLinks: [] },
+    notices: [],
+  });
+
+  assert.deepEqual(reading.discovery, { value: 131, date: "2026-09-30" });
+  assert.equal(Number(reading.interactionsPerHundredViews?.toFixed(2)), 2.65);
+  assert.equal(reading.profileClickRate, 0);
+  assert.equal(reading.topContent?.id, "post-1");
+  assert.match(reading.recommendation, /nenhum clique/i);
+});
+
+test("resume resposta por formato preservando métricas indisponíveis", () => {
+  const base = {
+    caption: "",
+    previewUrl: null,
+    permalink: null,
+    publishedAt: "2026-09-30T12:00:00.000Z",
+    likes: null,
+    comments: null,
+    shares: null,
+    saves: null,
+    replies: null,
+    bioLinkClicks: null,
+    storyLinkClicks: null,
+  };
+  const summary = summarizeInstagramContentFormats([
+    { ...base, id: "feed-1", format: "Feed", views: 100, reach: 80, totalInteractions: 10 },
+    { ...base, id: "feed-2", format: "Feed", views: 50, reach: 40, totalInteractions: 4 },
+    { ...base, id: "reel-1", format: "Reel", views: 500, reach: 300, totalInteractions: null },
+  ]);
+
+  assert.equal(summary[0]?.format, "Feed");
+  assert.deepEqual(summary[0], {
+    format: "Feed",
+    contentCount: 2,
+    views: 150,
+    reach: 120,
+    interactions: 14,
+    averageInteractions: 7,
+  });
+  assert.equal(summary[1]?.interactions, null);
+  assert.equal(summary[1]?.averageInteractions, null);
 });

@@ -70,6 +70,7 @@
     "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs",
     "audit:cli": "node scripts/cli-session-audit.mjs",
     "instagram:schedule": "node --import tsx scripts/instagram-schedule.mts",
+    "instagram:import-insights-history": "node --import tsx scripts/import-instagram-insights-history.mts",
     "instagram:migrate-marketing-db": "node --import tsx scripts/migrate-instagram-marketing-db.mts"
   },
   "overrides": {
@@ -142,7 +143,7 @@
     "dotenv": "^16.5.0",
     "fast-xml-parser": "^5.7.0",
     "firebase": "^11.9.1",
-    "firebase-admin": "^13.7.0",
+    "firebase-admin": "^13.10.0",
     "genkit": "^1.0.0",
     "glob": "^13.0.6",
     "hono": "^4.12.25",

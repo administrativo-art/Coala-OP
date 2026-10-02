@@ -82,6 +82,50 @@ export function parseAccountInsightTotals(payload: unknown): InstagramInsightTot
   };
 }
 
+export function parseViewsByFollowType(payload: unknown) {
+  const totalValue = metricItem(payload, "views")?.total_value;
+  return {
+    followers: breakdownNumber(totalValue, "FOLLOWER"),
+    nonFollowers: breakdownNumber(totalValue, "NON_FOLLOWER"),
+  };
+}
+
+export function sumViewsByFollowType(values: Array<{ followers: number | null; nonFollowers: number | null }>) {
+  const sum = (key: "followers" | "nonFollowers") => {
+    const available = values.map((value) => value[key]).filter((value): value is number => value !== null);
+    return available.length ? available.reduce((total, value) => total + value, 0) : null;
+  };
+  return { followers: sum("followers"), nonFollowers: sum("nonFollowers") };
+}
+
+export function parseFollowerDemographics(payload: unknown, expectedDimensions: string[]) {
+  const totalValue = record(metricItem(payload, "follower_demographics")?.total_value);
+  if (!totalValue || !Array.isArray(totalValue.breakdowns)) return null;
+
+  const expected = new Set(expectedDimensions.map((dimension) => dimension.toLowerCase()));
+  const breakdown = totalValue.breakdowns.map(record).find((candidate) => {
+    const keys = Array.isArray(candidate?.dimension_keys)
+      ? candidate.dimension_keys.flatMap((key) => typeof key === "string" ? [key.toLowerCase()] : [])
+      : [];
+    return keys.length === expected.size && keys.every((key) => expected.has(key));
+  });
+  if (!breakdown || !Array.isArray(breakdown.dimension_keys) || !Array.isArray(breakdown.results)) return null;
+
+  const keys = breakdown.dimension_keys.flatMap((key) => typeof key === "string" ? [key.toLowerCase()] : []);
+  return breakdown.results.flatMap((candidate) => {
+    const result = record(candidate);
+    const values = Array.isArray(result?.dimension_values) ? result.dimension_values : null;
+    const value = finiteNumber(result?.value);
+    if (!values || values.length !== keys.length || value === null || value < 0) return [];
+    const dimensions: Record<string, string> = {};
+    keys.forEach((key, index) => {
+      const dimensionValue = values[index];
+      if (typeof dimensionValue === "string" && dimensionValue.trim()) dimensions[key] = dimensionValue.trim();
+    });
+    return Object.keys(dimensions).length === keys.length ? [{ dimensions, value }] : [];
+  });
+}
+
 export function sumAccountInsightTotals(values: InstagramInsightTotals[]): InstagramInsightTotals {
   const sum = (key: keyof InstagramInsightTotals) => {
     const available = values.map((value) => value[key]).filter((value): value is number => value !== null);

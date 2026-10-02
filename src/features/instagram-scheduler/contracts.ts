@@ -200,6 +200,57 @@ export type InstagramPublishedFeedProfile = {
 
 export const instagramInsightsDays = [7, 30, 90] as const;
 export type InstagramInsightsDays = (typeof instagramInsightsDays)[number];
+export const instagramInsightsPeriods = [...instagramInsightsDays, "year"] as const;
+export type InstagramInsightsPeriod = (typeof instagramInsightsPeriods)[number];
+export const instagramInsightsSections = ["overview", "results", "audience", "content", "ads"] as const;
+export type InstagramInsightsSection = (typeof instagramInsightsSections)[number];
+
+export type InstagramViewsByFollowType = {
+  followers: number | null;
+  nonFollowers: number | null;
+};
+
+export type InstagramAudienceDemographic = {
+  dimensions: Record<string, string>;
+  value: number;
+};
+
+export type InstagramAudienceReport = {
+  timeframe: "last_30_days";
+  ageGender: InstagramAudienceDemographic[] | null;
+  cities: InstagramAudienceDemographic[] | null;
+  countries: InstagramAudienceDemographic[] | null;
+};
+
+export type InstagramInsightsContentPage = {
+  period: InstagramInsightsPeriod;
+  items: InstagramInsightContentItem[];
+  nextAfter: string | null;
+  hasMore: boolean;
+};
+
+export type InstagramAdsMetrics = {
+  impressions: number | null;
+  reach: number | null;
+  spend: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  cpc: number | null;
+  cpm: number | null;
+  frequency: number | null;
+};
+
+export type InstagramAdsReport = {
+  period: InstagramInsightsPeriod;
+  since: string;
+  until: string;
+  status: "available" | "empty" | "no_account" | "multiple_accounts" | "unavailable";
+  accountName: string | null;
+  currency: string | null;
+  totals: InstagramAdsMetrics | null;
+  campaigns: Array<InstagramAdsMetrics & { name: string; objective: string | null }>;
+  hasMoreCampaigns: boolean;
+};
 
 export type InstagramInsightTotals = {
   views: number | null;
@@ -250,6 +301,20 @@ export type InstagramInsightStoredDay = {
   mediaCount: number | null;
   settled: boolean;
   totals: InstagramInsightTotals;
+  businessSuite: InstagramBusinessSuiteDailyMetrics | null;
+};
+
+export type InstagramBusinessSuiteDailyMetrics = {
+  views: number | null;
+  reach: number | null;
+  contentInteractions: number | null;
+  profileVisits: number | null;
+  profileLinkClicks: number | null;
+  followers: number | null;
+};
+
+export type InstagramBusinessSuiteTotals = InstagramBusinessSuiteDailyMetrics & {
+  coveredDays: number;
 };
 
 export type InstagramInsightContentSnapshot = InstagramInsightContentItem & {
@@ -263,13 +328,15 @@ export type InstagramInsightsHistory = {
 };
 
 export type InstagramInsightsReport = {
-  range: { days: InstagramInsightsDays; since: string; until: string };
+  range: { period: InstagramInsightsPeriod; days: number; since: string; until: string };
   profile: InstagramPublishedFeedProfile & {
     followersCount: number | null;
     mediaCount: number | null;
   };
   totals: InstagramInsightTotals;
+  viewsByFollowType: InstagramViewsByFollowType;
   reachSeries: Array<{ date: string; value: number }>;
+  businessSuiteTotals: InstagramBusinessSuiteTotals;
   content: InstagramInsightContentItem[];
   activeStories: InstagramInsightContentItem[];
   history: InstagramInsightsHistory;

@@ -10,13 +10,18 @@ import {
   CreateScheduleDialog,
   type CreateInstagramScheduleInput,
 } from "@/features/instagram-scheduler/create-schedule-dialog";
-import type {
-  InstagramMediaLibraryItem,
-  InstagramPublishedFeedItem,
-  InstagramPublishedFeedProfile,
-  InstagramInsightsDays,
-  InstagramInsightsReport,
-  InstagramScheduleListItem,
+import {
+  instagramInsightsSections,
+  type InstagramMediaLibraryItem,
+  type InstagramAdsReport,
+  type InstagramAudienceReport,
+  type InstagramPublishedFeedItem,
+  type InstagramPublishedFeedProfile,
+  type InstagramInsightsContentPage,
+  type InstagramInsightsPeriod,
+  type InstagramInsightsReport,
+  type InstagramInsightsSection,
+  type InstagramScheduleListItem,
 } from "@/features/instagram-scheduler/contracts";
 import { FeedGridView } from "@/features/instagram-scheduler/feed-grid-view";
 import { InsightsView } from "@/features/instagram-scheduler/insights-view";
@@ -38,6 +43,7 @@ type PublishedFeedResponse = {
 };
 
 const validViews = new Set<InstagramWorkspaceView>(["calendar", "feed", "media", "bio", "reports"]);
+const validInsightsSections = new Set<InstagramInsightsSection>(instagramInsightsSections);
 
 export default function InstagramProgramacaoPage() {
   const router = useRouter();
@@ -59,9 +65,19 @@ export default function InstagramProgramacaoPage() {
   const [publishedLoaded, setPublishedLoaded] = useState(false);
   const [publishedError, setPublishedError] = useState<string | null>(null);
   const [insights, setInsights] = useState<InstagramInsightsReport | null>(null);
-  const [insightsDays, setInsightsDays] = useState<InstagramInsightsDays>(30);
+  const [insightsPeriod, setInsightsPeriod] = useState<InstagramInsightsPeriod>(30);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
+  const [insightsSection, setInsightsSection] = useState<InstagramInsightsSection>("overview");
+  const [audienceReport, setAudienceReport] = useState<InstagramAudienceReport | null>(null);
+  const [audienceLoading, setAudienceLoading] = useState(false);
+  const [audienceError, setAudienceError] = useState<string | null>(null);
+  const [adsReport, setAdsReport] = useState<InstagramAdsReport | null>(null);
+  const [adsLoading, setAdsLoading] = useState(false);
+  const [adsError, setAdsError] = useState<string | null>(null);
+  const [contentPage, setContentPage] = useState<InstagramInsightsContentPage | null>(null);
+  const [contentLoading, setContentLoading] = useState(false);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,12 +139,12 @@ export default function InstagramProgramacaoPage() {
     }
   }, [firebaseUser, request]);
 
-  const loadInsights = useCallback(async (days: InstagramInsightsDays) => {
+  const loadInsights = useCallback(async (period: InstagramInsightsPeriod) => {
     if (!firebaseUser) return;
     setInsightsLoading(true);
     setInsightsError(null);
     try {
-      const response = await request<InstagramInsightsReport>(`/api/integrations/instagram/insights?days=${days}`, {
+      const response = await request<InstagramInsightsReport>(`/api/integrations/instagram/insights?period=${period}`, {
         fallbackError: "Não foi possível carregar os relatórios do Instagram.",
       });
       setInsights(response);
@@ -139,11 +155,67 @@ export default function InstagramProgramacaoPage() {
     }
   }, [firebaseUser, request]);
 
+  const loadAudience = useCallback(async () => {
+    if (!firebaseUser) return;
+    setAudienceLoading(true);
+    setAudienceError(null);
+    try {
+      const response = await request<InstagramAudienceReport>("/api/integrations/instagram/insights?section=audience", {
+        fallbackError: "Não foi possível carregar os dados agregados do público.",
+      });
+      setAudienceReport(response);
+    } catch (cause) {
+      setAudienceError(cause instanceof Error ? cause.message : "Não foi possível carregar os dados agregados do público.");
+    } finally {
+      setAudienceLoading(false);
+    }
+  }, [firebaseUser, request]);
+
+  const loadAds = useCallback(async (period: InstagramInsightsPeriod) => {
+    if (!firebaseUser) return;
+    setAdsLoading(true);
+    setAdsError(null);
+    try {
+      const response = await request<InstagramAdsReport>(`/api/integrations/instagram/insights?section=ads&period=${period}`, {
+        fallbackError: "Não foi possível carregar os dados de anúncios.",
+      });
+      setAdsReport(response);
+    } catch (cause) {
+      setAdsError(cause instanceof Error ? cause.message : "Não foi possível carregar os dados de anúncios.");
+    } finally {
+      setAdsLoading(false);
+    }
+  }, [firebaseUser, request]);
+
+  const loadContentPage = useCallback(async (period: InstagramInsightsPeriod, after: string | null = null) => {
+    if (!firebaseUser) return;
+    setContentLoading(true);
+    setContentError(null);
+    try {
+      const query = new URLSearchParams({ section: "content", period: String(period) });
+      if (after) query.set("after", after);
+      const response = await request<InstagramInsightsContentPage>(`/api/integrations/instagram/insights?${query.toString()}`, {
+        fallbackError: "Não foi possível carregar as publicações do Instagram.",
+      });
+      setContentPage((current) => (after && current?.period === period
+        ? { ...response, items: [...current.items, ...response.items] }
+        : response));
+    } catch (cause) {
+      setContentError(cause instanceof Error ? cause.message : "Não foi possível carregar as publicações do Instagram.");
+    } finally {
+      setContentLoading(false);
+    }
+  }, [firebaseUser, request]);
+
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const requested = search.get("view");
     if (requested && validViews.has(requested as InstagramWorkspaceView)) {
       setActiveView(requested as InstagramWorkspaceView);
+    }
+    const requestedSection = search.get("section");
+    if (requestedSection && validInsightsSections.has(requestedSection as InstagramInsightsSection)) {
+      setInsightsSection(requestedSection as InstagramInsightsSection);
     }
     setEditingId(search.get("post"));
   }, []);
@@ -170,9 +242,9 @@ export default function InstagramProgramacaoPage() {
 
   useEffect(() => {
     if (activeView === "reports" && firebaseUser) {
-      void loadInsights(insightsDays);
+      void loadInsights(insightsPeriod);
     }
-  }, [activeView, firebaseUser, insightsDays, loadInsights]);
+  }, [activeView, firebaseUser, insightsPeriod, loadInsights]);
 
   useEffect(() => {
     if (!authLoading && activeView === "bio" && !canManageBio) selectView("calendar");
@@ -186,12 +258,16 @@ export default function InstagramProgramacaoPage() {
     }
   }, [createDate, firebaseUser, loadPublishedFeed, publishedLoaded, publishedLoading]);
 
-  function selectView(view: InstagramWorkspaceView) {
+  function selectView(view: InstagramWorkspaceView, section?: InstagramInsightsSection) {
     setActiveView(view);
+    const nextSection = view === "reports" ? section ?? "overview" : "overview";
+    setInsightsSection(nextSection);
     setEditingId(null);
     setMobileOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.set("view", view);
+    if (view === "reports" && nextSection !== "overview") url.searchParams.set("section", nextSection);
+    else url.searchParams.delete("section");
     url.searchParams.delete("post");
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   }
@@ -334,6 +410,7 @@ export default function InstagramProgramacaoPage() {
     <main className="flex min-h-screen bg-[#FAF5EF] font-sans text-[#4A1A04]">
       <InstagramWorkspaceSidebar
         activeView={activeView}
+        activeInsightsSection={insightsSection}
         email={firebaseUser?.email}
         canManageBio={canManageBio}
         mobileOpen={mobileOpen}
@@ -415,11 +492,32 @@ export default function InstagramProgramacaoPage() {
         ) : activeView === "reports" ? (
           <InsightsView
             report={insights}
-            days={insightsDays}
+            period={insightsPeriod}
+            section={insightsSection}
             loading={insightsLoading}
             error={insightsError}
-            onDaysChange={setInsightsDays}
-            onRefresh={() => void loadInsights(insightsDays)}
+            audience={audienceReport}
+            audienceLoading={audienceLoading}
+            audienceError={audienceError}
+            ads={adsReport}
+            adsLoading={adsLoading}
+            adsError={adsError}
+            contentPage={contentPage}
+            contentLoading={contentLoading}
+            contentError={contentError}
+            onPeriodChange={setInsightsPeriod}
+            onSectionChange={(section) => {
+              setInsightsSection(section);
+              const url = new URL(window.location.href);
+              url.searchParams.set("view", "reports");
+              if (section === "overview") url.searchParams.delete("section");
+              else url.searchParams.set("section", section);
+              window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+            }}
+            onRefresh={() => void loadInsights(insightsPeriod)}
+            onLoadAudience={() => void loadAudience()}
+            onLoadAds={() => void loadAds(insightsPeriod)}
+            onLoadContent={(after) => void loadContentPage(insightsPeriod, after)}
           />
         ) : null}
       </div>
