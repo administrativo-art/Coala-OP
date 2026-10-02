@@ -20,7 +20,6 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { convertValue } from '@/lib/conversion';
 import { ToastAction } from '@/components/ui/toast';
 import { useSalesReports } from '@/contexts/sales-report-context';
-import { SalesReportProvider } from '@/components/sales-report-provider';
 
 
 const consumptionUploadSchema = z.object({
@@ -55,7 +54,7 @@ interface ConsumptionImportModalProps {
 }
 
 export function ConsumptionImportModal(props: ConsumptionImportModalProps) {
-  return <SalesReportProvider><ConsumptionImportModalInner {...props} /></SalesReportProvider>;
+  return <ConsumptionImportModalInner {...props} />;
 }
 
 function ConsumptionImportModalInner({ open, onOpenChange, kiosks, addReport }: ConsumptionImportModalProps) {

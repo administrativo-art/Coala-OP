@@ -2,6 +2,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { 
     type Competitor, 
     type CompetitorProduct, 
@@ -54,6 +55,8 @@ export interface CompetitorContextType {
 export const CompetitorContext = createContext<CompetitorContextType | undefined>(undefined);
 
 export function CompetitorProvider({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
+    const shouldLoad = pathname === '/dashboard/pricing/price-comparison' || pathname === '/dashboard/settings';
     const [competitors, setCompetitors] = useState<Competitor[]>([]);
     const [competitorGroups, setCompetitorGroups] = useState<CompetitorGroup[]>([]);
     const [competitorProducts, setCompetitorProducts] = useState<CompetitorProduct[]>([]);
@@ -61,39 +64,88 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!shouldLoad) {
+            setCompetitors([]);
+            setCompetitorGroups([]);
+            setCompetitorProducts([]);
+            setCompetitorPrices([]);
+            setLoading(false);
+            return;
+        }
+
+        let active = true;
+        let unsubscribeCollections: (() => void) | undefined;
+        let authGeneration = 0;
+
         const unsubAuth = onAuthStateChanged(auth, (user) => {
+            if (!active) return;
+            const generation = ++authGeneration;
+            // Auth callbacks can run again when the signed-in user changes.
+            // Tear down the previous user's listeners before clearing or loading data.
+            unsubscribeCollections?.();
+            unsubscribeCollections = undefined;
+            setCompetitors([]);
+            setCompetitorGroups([]);
+            setCompetitorProducts([]);
+            setCompetitorPrices([]);
+            setLoading(true);
+
             if (!user) {
-                setCompetitors([]);
-                setCompetitorGroups([]);
-                setCompetitorProducts([]);
-                setCompetitorPrices([]);
                 setLoading(false);
                 return;
             }
 
+            const pendingInitialSnapshots = new Set(['competitors', 'groups', 'products', 'prices']);
+            const markInitialSnapshot = (key: string) => {
+                if (!pendingInitialSnapshots.delete(key)) return;
+                if (pendingInitialSnapshots.size === 0) setLoading(false);
+            };
+
             const unsubCompetitors = onSnapshot(query(collection(db, "concorrentes")), (snapshot) => {
+                if (generation !== authGeneration) return;
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Competitor));
                 setCompetitors(data);
-            }, (error) => console.error("Error fetching competitors:", error));
+                markInitialSnapshot('competitors');
+            }, (error) => {
+                if (generation !== authGeneration) return;
+                console.error("Error fetching competitors:", error);
+                markInitialSnapshot('competitors');
+            });
 
             const unsubGroups = onSnapshot(query(collection(db, "competitorGroups")), (snapshot) => {
+                if (generation !== authGeneration) return;
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorGroup));
                 setCompetitorGroups(data);
-            }, (error) => console.error("Error fetching competitor groups:", error));
+                markInitialSnapshot('groups');
+            }, (error) => {
+                if (generation !== authGeneration) return;
+                console.error("Error fetching competitor groups:", error);
+                markInitialSnapshot('groups');
+            });
 
             const unsubProducts = onSnapshot(query(collection(db, "concorrente_produtos")), (snapshot) => {
+                if (generation !== authGeneration) return;
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorProduct));
                 setCompetitorProducts(data);
-            }, (error) => console.error("Error fetching competitor products:", error));
+                markInitialSnapshot('products');
+            }, (error) => {
+                if (generation !== authGeneration) return;
+                console.error("Error fetching competitor products:", error);
+                markInitialSnapshot('products');
+            });
 
             const unsubPrices = onSnapshot(query(collection(db, "concorrente_precos")), (snapshot) => {
+                if (generation !== authGeneration) return;
                 const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CompetitorPrice));
                 setCompetitorPrices(data);
-            }, (error) => console.error("Error fetching competitor prices:", error));
+                markInitialSnapshot('prices');
+            }, (error) => {
+                if (generation !== authGeneration) return;
+                console.error("Error fetching competitor prices:", error);
+                markInitialSnapshot('prices');
+            });
 
-            setLoading(false);
-
-            return () => {
+            unsubscribeCollections = () => {
                 unsubCompetitors();
                 unsubGroups();
                 unsubProducts();
@@ -101,8 +153,13 @@ export function CompetitorProvider({ children }: { children: React.ReactNode }) 
             };
         });
 
-        return () => unsubAuth();
-    }, []);
+        return () => {
+            active = false;
+            authGeneration += 1;
+            unsubscribeCollections?.();
+            unsubAuth();
+        };
+    }, [shouldLoad]);
 
     // Competitor Groups
     const addCompetitorGroup = useCallback(async (data: Omit<CompetitorGroup, 'id'>) => {
