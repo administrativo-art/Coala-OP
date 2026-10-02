@@ -278,7 +278,7 @@ api,src/app/api/integrations/bizneo/shift-templates/route.ts,,docs/engineering/f
 api,src/app/api/integrations/bizneo/sync-taxons/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/bizneo/sync-users/route.ts,,docs/engineering/flows/rh-bizneo.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/instagram/feed/route.ts,,docs/engineering/flows/instagram-publishing.md,Leitura autenticada e limitada da grade publicada; consulta a Meta no servidor sem expor o token.
-api,src/app/api/integrations/instagram/insights/route.ts,,docs/engineering/flows/instagram-publishing.md,Relatorio autenticado sob demanda; combina Insights da Meta com contadores agregados da bio e oferece 7 30 90 dias ou o ano atual com backfill oficial.
+api,src/app/api/integrations/instagram/insights/route.ts,,docs/engineering/flows/instagram-publishing.md,Relatorio autenticado sob demanda; visao geral resultados publico agregado conteudo paginado e anuncios somente leitura; periodo de 7 30 90 dias ou ano atual.
 api,src/app/api/integrations/instagram/media/route.ts,,docs/engineering/flows/instagram-publishing.md,Listagem e upload privado da biblioteca; autenticacao autorizacao formato tamanho e workspace conferidos no servidor.
 api,src/app/api/integrations/instagram/media/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa protegida da biblioteca; valida usuario workspace documento e prefixo do objeto antes de ler o Storage.
 api,src/app/api/integrations/instagram/schedule/route.ts,,docs/engineering/flows/instagram-publishing.md,Fila server-side do Instagram; Firebase Auth e autorizacao exclusiva conferidas no handler.

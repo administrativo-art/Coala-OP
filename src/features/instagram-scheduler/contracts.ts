@@ -202,6 +202,55 @@ export const instagramInsightsDays = [7, 30, 90] as const;
 export type InstagramInsightsDays = (typeof instagramInsightsDays)[number];
 export const instagramInsightsPeriods = [...instagramInsightsDays, "year"] as const;
 export type InstagramInsightsPeriod = (typeof instagramInsightsPeriods)[number];
+export const instagramInsightsSections = ["overview", "results", "audience", "content", "ads"] as const;
+export type InstagramInsightsSection = (typeof instagramInsightsSections)[number];
+
+export type InstagramViewsByFollowType = {
+  followers: number | null;
+  nonFollowers: number | null;
+};
+
+export type InstagramAudienceDemographic = {
+  dimensions: Record<string, string>;
+  value: number;
+};
+
+export type InstagramAudienceReport = {
+  timeframe: "last_30_days";
+  ageGender: InstagramAudienceDemographic[] | null;
+  cities: InstagramAudienceDemographic[] | null;
+  countries: InstagramAudienceDemographic[] | null;
+};
+
+export type InstagramInsightsContentPage = {
+  period: InstagramInsightsPeriod;
+  items: InstagramInsightContentItem[];
+  nextAfter: string | null;
+  hasMore: boolean;
+};
+
+export type InstagramAdsMetrics = {
+  impressions: number | null;
+  reach: number | null;
+  spend: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  cpc: number | null;
+  cpm: number | null;
+  frequency: number | null;
+};
+
+export type InstagramAdsReport = {
+  period: InstagramInsightsPeriod;
+  since: string;
+  until: string;
+  status: "available" | "empty" | "no_account" | "multiple_accounts" | "unavailable";
+  accountName: string | null;
+  currency: string | null;
+  totals: InstagramAdsMetrics | null;
+  campaigns: Array<InstagramAdsMetrics & { name: string; objective: string | null }>;
+  hasMoreCampaigns: boolean;
+};
 
 export type InstagramInsightTotals = {
   views: number | null;
@@ -285,6 +334,7 @@ export type InstagramInsightsReport = {
     mediaCount: number | null;
   };
   totals: InstagramInsightTotals;
+  viewsByFollowType: InstagramViewsByFollowType;
   reachSeries: Array<{ date: string; value: number }>;
   businessSuiteTotals: InstagramBusinessSuiteTotals;
   content: InstagramInsightContentItem[];
