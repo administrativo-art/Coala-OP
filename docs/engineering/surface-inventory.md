@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **370 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **371 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -196,6 +196,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/stone-mappings` | GET, POST | [src/app/api/financial/stone-mappings/route.ts](../../src/app/api/financial/stone-mappings/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/stone-portfolio` | GET, POST | [src/app/api/financial/stone-portfolio/route.ts](../../src/app/api/financial/stone-portfolio/route.ts) | [receivables-stone](flows/receivables-stone.md) |
 | `/api/financial/stone-portfolio-cron` | POST | [src/app/api/financial/stone-portfolio-cron/route.ts](../../src/app/api/financial/stone-portfolio-cron/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `/api/financial/stone-receipts/reconcile` | POST | [src/app/api/financial/stone-receipts/reconcile/route.ts](../../src/app/api/financial/stone-receipts/reconcile/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/financial/stone-wallet-position` | GET | [src/app/api/financial/stone-wallet-position/route.ts](../../src/app/api/financial/stone-wallet-position/route.ts) | [receivables-stone](flows/receivables-stone.md) |
 | `/api/forms/analytics/admin/aggregates/recompute` | POST | [src/app/api/forms/analytics/admin/aggregates/recompute/route.ts](../../src/app/api/forms/analytics/admin/aggregates/recompute/route.ts) | [forms](flows/forms.md) |
 | `/api/forms/analytics/admin/privacy/anonymize-due` | POST | [src/app/api/forms/analytics/admin/privacy/anonymize-due/route.ts](../../src/app/api/forms/analytics/admin/privacy/anonymize-due/route.ts) | [forms](flows/forms.md) |

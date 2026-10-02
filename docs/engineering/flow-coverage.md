@@ -48,7 +48,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
 | `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — visão anual/mensal desde janeiro de 2026, snapshots normalizados, rotina limitada de backfill/revisão tardia, fechamento/reabertura, eventos adversos Stone e NSU Stone do PDV cobertos localmente; amostra real confirmou somente o contrato PDV, sem homologar API Stone, scheduler/webhook, backfill real ou liquidação bancária |
-| `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — entrada independente para carteira, antecipações, taxas e confirmação bancária; integração Stone/banco real pendente |
+| `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — percurso complementado; verificação integrada pendente |
