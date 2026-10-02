@@ -391,18 +391,10 @@ async function persistPdvSnapshot(
       return 'held';
     }
 
-    if (decision.action === 'unchanged') {
-      if (decision.clearPending) {
-        transaction.set(stateRef, {
-          status: 'verified',
-          reason: null,
-          pendingDecrease: null,
-          updatedAt: now,
-          runId: options.runId ?? null,
-        }, { merge: true });
-      }
-      return 'unchanged';
-    }
+    // Mesmo com o snapshot idêntico, as metas podem ter sido criadas depois
+    // da última importação. Nesse caso, o relatório já está correto, mas
+    // goalPeriods/employeeGoals ainda precisam ser reconstruídos a partir dele.
+    const snapshotChanged = decision.action !== 'unchanged';
 
     const periodsSnap = await transaction.get(periodsQuery);
     const periods = periodsSnap.docs.filter((doc) => {
@@ -483,36 +475,46 @@ async function persistPdvSnapshot(
     }
 
     const existingCreatedAt = existingReport.data()?.createdAt;
-    transaction.set(reportRef, {
-      ...snapshot.report,
-      createdAt: existingCreatedAt ?? now.toISOString(),
-      updatedAt: now.toISOString(),
-      sourceCouponCount: snapshot.metrics.couponCount,
-      sourceItemQuantity: snapshot.metrics.itemQuantity,
-      sourceRevenueCents: snapshot.metrics.revenueCents,
-      sourceFingerprint: snapshot.metrics.fingerprint,
-      reconciliationStatus: 'verified',
-      reconciledAt: now,
-      syncMode: options.mode ?? 'live',
-      syncRunId: options.runId ?? null,
-    });
-    if (!options.revenueCorrection || existingMetrics?.itemQuantity !== snapshot.metrics.itemQuantity
-      || existingMetrics?.couponCount !== snapshot.metrics.couponCount) transaction.set(consumptionRef, {
-      ...snapshot.consumptionReport,
-      createdAt: existingCreatedAt ?? now.toISOString(),
-      updatedAt: now.toISOString(),
-    });
-    transaction.set(stateRef, {
-      kioskId,
-      date: dateStr,
-      status: 'verified',
-      reason: decision.reason,
-      appliedMetrics: snapshot.metrics,
-      pendingDecrease: null,
-      lastAppliedAt: now,
-      updatedAt: now,
-      runId: options.runId ?? null,
-    });
+    if (snapshotChanged) {
+      transaction.set(reportRef, {
+        ...snapshot.report,
+        createdAt: existingCreatedAt ?? now.toISOString(),
+        updatedAt: now.toISOString(),
+        sourceCouponCount: snapshot.metrics.couponCount,
+        sourceItemQuantity: snapshot.metrics.itemQuantity,
+        sourceRevenueCents: snapshot.metrics.revenueCents,
+        sourceFingerprint: snapshot.metrics.fingerprint,
+        reconciliationStatus: 'verified',
+        reconciledAt: now,
+        syncMode: options.mode ?? 'live',
+        syncRunId: options.runId ?? null,
+      });
+      if (!options.revenueCorrection || existingMetrics?.itemQuantity !== snapshot.metrics.itemQuantity
+        || existingMetrics?.couponCount !== snapshot.metrics.couponCount) transaction.set(consumptionRef, {
+        ...snapshot.consumptionReport,
+        createdAt: existingCreatedAt ?? now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
+      transaction.set(stateRef, {
+        kioskId,
+        date: dateStr,
+        status: 'verified',
+        reason: decision.reason,
+        appliedMetrics: snapshot.metrics,
+        pendingDecrease: null,
+        lastAppliedAt: now,
+        updatedAt: now,
+        runId: options.runId ?? null,
+      });
+    } else if (decision.clearPending) {
+      transaction.set(stateRef, {
+        status: 'verified',
+        reason: null,
+        pendingDecrease: null,
+        updatedAt: now,
+        runId: options.runId ?? null,
+      }, { merge: true });
+    }
 
     periods.forEach((periodDoc, periodIndex) => {
       const period = periodDoc.data();
@@ -555,7 +557,7 @@ async function persistPdvSnapshot(
       }
     });
 
-    return 'applied';
+    return snapshotChanged ? 'applied' : 'unchanged';
   });
 }
 
