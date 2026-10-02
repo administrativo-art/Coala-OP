@@ -10,7 +10,6 @@ import { syncUberTripsFromSftp } from './sync.js';
 const uberSftpEnabled = defineBoolean('UBER_SFTP_ENABLED', { default: false });
 const uberSftpUsername = defineString('UBER_SFTP_USERNAME', { default: '' });
 const uberSftpHostFingerprint = defineString('UBER_SFTP_HOST_FINGERPRINT_SHA256', { default: '' });
-const uberSftpVpcConnector = defineString('UBER_SFTP_VPC_CONNECTOR');
 const uberSftpPrivateKey = defineSecret('UBER_SFTP_PRIVATE_KEY');
 
 function reportCandidateError(
@@ -66,8 +65,9 @@ export const uberSftpDailySync = onSchedule({
   timeoutSeconds: 540,
   memory: '512MiB',
   maxInstances: 1,
-  vpcConnector: uberSftpVpcConnector,
-  vpcConnectorEgressSettings: 'ALL_TRAFFIC',
+  // Direct VPC egress is configured through the Cloud Functions v2 API because
+  // firebase-functions does not expose it yet. Preserve that external setting.
+  preserveExternalChanges: true,
   secrets: [uberSftpPrivateKey],
 }, async () => {
   if (!uberSftpEnabled.value()) {
