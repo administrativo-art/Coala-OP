@@ -19,11 +19,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import type { InstagramInsightsSection } from "./contracts";
+
 export type InstagramWorkspaceView = "calendar" | "feed" | "media" | "bio" | "reports";
 
 type NavItem = {
   label: string;
   view?: InstagramWorkspaceView;
+  section?: InstagramInsightsSection;
   icon: LucideIcon;
   requiresBioAccess?: boolean;
 };
@@ -58,7 +61,7 @@ const groups: Array<{ title: string; items: NavItem[] }> = [
     title: "Medir",
     items: [
       { label: "Relatórios", view: "reports", icon: BarChart3 },
-      { label: "Anúncios", icon: Megaphone },
+      { label: "Anúncios", view: "reports", section: "ads", icon: Megaphone },
     ],
   },
   {
@@ -72,11 +75,12 @@ const groups: Array<{ title: string; items: NavItem[] }> = [
 
 type InstagramWorkspaceSidebarProps = {
   activeView: InstagramWorkspaceView;
+  activeInsightsSection: InstagramInsightsSection;
   email: string | null | undefined;
   canManageBio: boolean;
   mobileOpen: boolean;
   onCloseMobile: () => void;
-  onSelect: (view: InstagramWorkspaceView) => void;
+  onSelect: (view: InstagramWorkspaceView, section?: InstagramInsightsSection) => void;
   onCreate: () => void;
   onFutureFeature: (label: string) => void;
   onLogout: () => void;
@@ -84,6 +88,7 @@ type InstagramWorkspaceSidebarProps = {
 
 export function InstagramWorkspaceSidebar({
   activeView,
+  activeInsightsSection,
   email,
   canManageBio,
   mobileOpen,
@@ -155,7 +160,10 @@ export function InstagramWorkspaceSidebar({
               </h2>
               <div className="mt-0.5 space-y-0.5">
                 {group.items.filter((item) => !item.requiresBioAccess || canManageBio).map((item) => {
-                  const active = item.view === activeView;
+                  const active = item.view === activeView && (
+                    item.view !== "reports"
+                    || (item.section ? item.section === activeInsightsSection : activeInsightsSection !== "ads")
+                  );
                   const Icon = item.icon;
                   return (
                     <button
@@ -163,7 +171,7 @@ export function InstagramWorkspaceSidebar({
                       type="button"
                       aria-current={active ? "page" : undefined}
                       aria-disabled={!item.view}
-                      onClick={() => item.view ? onSelect(item.view) : onFutureFeature(item.label)}
+                      onClick={() => item.view ? onSelect(item.view, item.section) : onFutureFeature(item.label)}
                       className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D90F6F] ${active ? "bg-white font-bold text-[#4A1A04] shadow-sm" : "text-[#5E3A28] hover:bg-white/70"}`}
                     >
                       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />

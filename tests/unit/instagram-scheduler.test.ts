@@ -33,8 +33,11 @@ import {
   mergeReachSeries,
   parseAccountInsightTotals,
   parseContentInsight,
+  parseFollowerDemographics,
   parseReachSeries,
+  parseViewsByFollowType,
   sumAccountInsightTotals,
+  sumViewsByFollowType,
 } from "../../src/features/instagram-scheduler/instagram-insights";
 import {
   aggregateBusinessSuiteHistory,
@@ -275,6 +278,39 @@ test("soma janelas da Meta e preserva métricas ausentes", () => {
     { date: "2026-09-30", value: 12 },
     { date: "2026-10-01", value: 20 },
   ]);
+});
+
+test("interpreta quebras de visualizações e dados demográficos agregados", () => {
+  const viewTypes = parseViewsByFollowType({ data: [{
+    name: "views",
+    total_value: { breakdowns: [{
+      dimension_keys: ["follow_type"],
+      results: [
+        { dimension_values: ["FOLLOWER"], value: 84 },
+        { dimension_values: ["NON_FOLLOWER"], value: 116 },
+      ],
+    }] },
+  }] });
+  assert.deepEqual(viewTypes, { followers: 84, nonFollowers: 116 });
+  assert.deepEqual(sumViewsByFollowType([viewTypes, { followers: 5, nonFollowers: null }]), {
+    followers: 89,
+    nonFollowers: 116,
+  });
+
+  assert.deepEqual(parseFollowerDemographics({ data: [{
+    name: "follower_demographics",
+    total_value: { breakdowns: [{
+      dimension_keys: ["age", "gender"],
+      results: [
+        { dimension_values: ["18-24", "F"], value: 25 },
+        { dimension_values: ["18-24", "M"], value: 11 },
+      ],
+    }] },
+  }] }, ["age", "gender"]), [
+    { dimensions: { age: "18-24", gender: "F" }, value: 25 },
+    { dimensions: { age: "18-24", gender: "M" }, value: 11 },
+  ]);
+  assert.equal(parseFollowerDemographics({ data: [] }, ["city"]), null);
 });
 
 test("distingue ausência de coleta da bio de um zero medido", () => {
@@ -529,6 +565,7 @@ test("transforma métricas do Instagram em uma leitura acionável sem inventar c
       follows: 129,
       unfollows: null,
     },
+    viewsByFollowType: { followers: null, nonFollowers: null },
     reachSeries: [
       { date: "2026-09-29", value: 84 },
       { date: "2026-09-30", value: 131 },

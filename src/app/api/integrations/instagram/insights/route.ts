@@ -7,8 +7,13 @@ import {
   instagramInsightsPeriodDays,
   instagramInsightsYearStartIso,
 } from "@/features/instagram-scheduler/business-suite-insights";
-import type { InstagramInsightsPeriod } from "@/features/instagram-scheduler/contracts";
-import { fetchInstagramInsights } from "@/features/instagram-scheduler/meta-graph.server";
+import { instagramInsightsSections, type InstagramInsightsPeriod } from "@/features/instagram-scheduler/contracts";
+import {
+  fetchInstagramAdsInsights,
+  fetchInstagramAudienceDemographics,
+  fetchInstagramInsights,
+  fetchInstagramInsightsContentPage,
+} from "@/features/instagram-scheduler/meta-graph.server";
 import { fetchInstagramInsightsHistory } from "@/features/instagram-scheduler/instagram-insights-history.server";
 import { fetchPublicBioAnalytics } from "@/features/instagram-scheduler/public-bio-analytics.server";
 import { requireUser } from "@/lib/auth-server";
@@ -20,6 +25,8 @@ export const dynamic = "force-dynamic";
 const periodSchema = z.enum(["7", "30", "90", "year"]).transform<InstagramInsightsPeriod>((value) => (
   value === "year" ? value : Number(value) as 7 | 30 | 90
 ));
+const sectionSchema = z.enum(instagramInsightsSections);
+const contentCursorSchema = z.string().trim().min(1).max(512).regex(/^[A-Za-z0-9_+\/=:-]+$/);
 
 export const GET = withApiErrorHandling(
   {
@@ -30,6 +37,15 @@ export const GET = withApiErrorHandling(
   async (request: NextRequest) => {
     const context = await requireUser(request);
     requireInstagramSchedulerAccess(context);
+    const parsedSection = sectionSchema.safeParse(request.nextUrl.searchParams.get("section") ?? "overview");
+    if (!parsedSection.success) {
+      throw new AppError({
+        code: "INSTAGRAM_INSIGHTS_INVALID_SECTION",
+        kind: "VALIDATION",
+        safeMessage: "Escolha uma área válida de Insights.",
+      });
+    }
+
     const parsedPeriod = periodSchema.safeParse(
       request.nextUrl.searchParams.get("period")
       ?? request.nextUrl.searchParams.get("days")
@@ -44,6 +60,32 @@ export const GET = withApiErrorHandling(
     }
 
     const period = parsedPeriod.data;
+    const section = parsedSection.data;
+    if (section === "audience") {
+      return NextResponse.json(await fetchInstagramAudienceDemographics(), {
+        headers: { "Cache-Control": "private, max-age=300" },
+      });
+    }
+    if (section === "ads") {
+      return NextResponse.json(await fetchInstagramAdsInsights(period), {
+        headers: { "Cache-Control": "private, max-age=120" },
+      });
+    }
+    if (section === "content") {
+      const rawAfter = request.nextUrl.searchParams.get("after");
+      const parsedAfter = rawAfter === null ? { success: true as const, data: null } : contentCursorSchema.safeParse(rawAfter);
+      if (!parsedAfter.success) {
+        throw new AppError({
+          code: "INSTAGRAM_INSIGHTS_INVALID_CURSOR",
+          kind: "VALIDATION",
+          safeMessage: "Não foi possível continuar a lista de conteúdos.",
+        });
+      }
+      return NextResponse.json(await fetchInstagramInsightsContentPage(period, parsedAfter.data), {
+        headers: { "Cache-Control": "private, max-age=120" },
+      });
+    }
+
     const requestedDays = instagramInsightsPeriodDays(period);
     const liveDays = period === "year" ? 90 : period;
 
@@ -85,6 +127,7 @@ export const GET = withApiErrorHandling(
         until: instagram.range.until,
       },
       totals,
+      viewsByFollowType: yearSelected ? { followers: null, nonFollowers: null } : instagram.viewsByFollowType,
       reachSeries,
       businessSuiteTotals,
       history: {
@@ -101,7 +144,7 @@ export const GET = withApiErrorHandling(
         ] : []),
         ...(yearSelected ? [
           "O período anual usa os CSVs oficiais exportados do Meta Business Suite para visualizações, interações, visitas, cliques e seguidores. O alcance único do ano não é calculado pela soma diária e permanece indisponível.",
-          "Conteúdos individuais continuam limitados às publicações recentes disponíveis pela API da Meta.",
+          "O destaque e o resumo por formato usam uma amostra de 18 publicações recentes; a seção Conteúdo pagina as publicações disponíveis pela API dentro do ano selecionado.",
         ] : []),
       ],
     }, {

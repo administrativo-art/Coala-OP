@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import {
   Activity,
   BarChart3,
   CalendarDays,
+  CircleDollarSign,
   ExternalLink,
   Eye,
   HeartHandshake,
@@ -11,6 +14,7 @@ import {
   Lightbulb,
   Loader2,
   MousePointerClick,
+  Megaphone,
   RefreshCw,
   Share2,
   Sparkles,
@@ -26,6 +30,10 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { cn } from "@/lib/utils";
 
 import type {
+  InstagramAdsReport,
+  InstagramAudienceReport,
+  InstagramInsightsContentPage,
+  InstagramInsightsSection,
   InstagramInsightContentSnapshot,
   InstagramInsightContentItem,
   InstagramInsightsPeriod,
@@ -41,10 +49,24 @@ import {
 type InsightsViewProps = {
   report: InstagramInsightsReport | null;
   period: InstagramInsightsPeriod;
+  section: InstagramInsightsSection;
   loading: boolean;
   error: string | null;
+  audience: InstagramAudienceReport | null;
+  audienceLoading: boolean;
+  audienceError: string | null;
+  ads: InstagramAdsReport | null;
+  adsLoading: boolean;
+  adsError: string | null;
+  contentPage: InstagramInsightsContentPage | null;
+  contentLoading: boolean;
+  contentError: string | null;
   onPeriodChange: (period: InstagramInsightsPeriod) => void;
+  onSectionChange: (section: InstagramInsightsSection) => void;
   onRefresh: () => void;
+  onLoadAudience: () => void;
+  onLoadAds: () => void;
+  onLoadContent: (after: string | null) => void;
 };
 
 const numberFormatter = new Intl.NumberFormat("pt-BR");
@@ -77,6 +99,48 @@ function periodLabel(report: InstagramInsightsReport) {
   return `${date(report.range.since, { year: true })} – ${date(report.range.until, { year: true })}`;
 }
 
+function currency(value: number | null, code: string | null) {
+  if (value === null) return "—";
+  if (!code) return amount(value);
+  try {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: code }).format(value);
+  } catch {
+    return amount(value);
+  }
+}
+
+function demographicShare(value: number, rows: Array<{ value: number }>) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  return total > 0 ? (value / total) * 100 : null;
+}
+
+function audienceAgeLabel(value: string) {
+  return value.replace(/-/g, "–");
+}
+
+function audienceGenderLabel(value: string) {
+  const normalized = value.trim().toUpperCase();
+  if (["F", "FEMALE", "WOMEN"].includes(normalized)) return "Mulheres";
+  if (["M", "MALE", "MEN"].includes(normalized)) return "Homens";
+  return "Outros / não informado";
+}
+
+function groupAudienceByAge(rows: InstagramAudienceReport["ageGender"]) {
+  const grouped = new Map<string, Record<string, number>>();
+  (rows ?? []).forEach((row) => {
+    const age = row.dimensions.age ?? "Não informado";
+    const gender = audienceGenderLabel(row.dimensions.gender ?? "");
+    const current = grouped.get(age) ?? {};
+    current[gender] = (current[gender] ?? 0) + row.value;
+    grouped.set(age, current);
+  });
+  return [...grouped.entries()].sort(([left], [right]) => {
+    const leftAge = Number(left.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+    const rightAge = Number(right.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+    return leftAge - rightAge || left.localeCompare(right);
+  });
+}
+
 function snapshotStage(item: InstagramInsightContentItem) {
   const stage = (item as Partial<InstagramInsightContentSnapshot>).stage;
   if (stage === "first48h") return "até 48h";
@@ -91,9 +155,10 @@ type MetricCardProps = {
   icon: typeof Eye;
   helper?: string;
   explanation?: string;
+  formatValue?: (value: number | null) => string;
 };
 
-function MetricCard({ label, value, icon: Icon, helper, explanation }: MetricCardProps) {
+function MetricCard({ label, value, icon: Icon, helper, explanation, formatValue }: MetricCardProps) {
   return (
     <article className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-[0_1px_2px_rgba(74,26,4,0.04)]">
       <div className="flex items-center justify-between gap-3">
@@ -109,7 +174,7 @@ function MetricCard({ label, value, icon: Icon, helper, explanation }: MetricCar
           <Icon aria-hidden="true" className="h-4 w-4" />
         </span>
       </div>
-      <strong className="mt-3 block text-[28px] font-bold leading-none tracking-tight text-[#4a1a04]">{amount(value)}</strong>
+      <strong className="mt-3 block text-[28px] font-bold leading-none tracking-tight text-[#4a1a04]">{formatValue ? formatValue(value ?? null) : amount(value)}</strong>
       {helper ? <p className="mt-2 text-xs leading-5 text-[#8a6756]">{helper}</p> : null}
     </article>
   );
@@ -183,15 +248,63 @@ function ContentList({ title, items }: { title: string; items: InstagramInsightC
   );
 }
 
-export function InsightsView({ report, period, loading, error, onPeriodChange, onRefresh }: InsightsViewProps) {
+export function InsightsView({
+  report,
+  period,
+  section,
+  loading,
+  error,
+  audience,
+  audienceLoading,
+  audienceError,
+  ads,
+  adsLoading,
+  adsError,
+  contentPage,
+  contentLoading,
+  contentError,
+  onPeriodChange,
+  onSectionChange,
+  onRefresh,
+  onLoadAudience,
+  onLoadAds,
+  onLoadContent,
+}: InsightsViewProps) {
+  const audienceRequested = useRef(false);
+  const adsRequestedPeriod = useRef<InstagramInsightsPeriod | null>(null);
+  const contentRequestedPeriod = useRef<InstagramInsightsPeriod | null>(null);
+  useEffect(() => {
+    if (section === "audience" && !audience && !audienceRequested.current) {
+      audienceRequested.current = true;
+      onLoadAudience();
+    }
+    if (section === "ads" && ads?.period !== period && adsRequestedPeriod.current !== period) {
+      adsRequestedPeriod.current = period;
+      onLoadAds();
+    }
+    if (section === "content" && contentPage?.period !== period && contentRequestedPeriod.current !== period) {
+      contentRequestedPeriod.current = period;
+      onLoadContent(null);
+    }
+  }, [ads?.period, audience, contentPage?.period, onLoadAds, onLoadAudience, onLoadContent, period, section]);
+
   const coverage = report ? summarizeInstagramHistoryCoverage(report.history.daily, report.range.days) : null;
   const reading = report ? buildInstagramInsightReading(report) : null;
   const formatSummaries = report ? summarizeInstagramContentFormats(report.content) : [];
   const bioHasCoverage = Boolean(report?.bio.daily.length);
   const yearSelected = period === "year";
+  const contentPageCurrent = contentPage?.period === period;
+  const audienceAgeRows = groupAudienceByAge(audience?.ageGender ?? null);
   const netFollowers = report?.totals.follows !== null && report?.totals.follows !== undefined
     && report.totals.unfollows !== null && report.totals.unfollows !== undefined
     ? report.totals.follows - report.totals.unfollows
+    : null;
+  const viewTypeTotal = report?.viewsByFollowType.followers !== null && report?.viewsByFollowType.followers !== undefined
+    && report.viewsByFollowType.nonFollowers !== null
+    ? report.viewsByFollowType.followers + report.viewsByFollowType.nonFollowers
+    : null;
+  const followerViewShare = viewTypeTotal !== null && viewTypeTotal > 0 && report?.viewsByFollowType.followers !== null && report?.viewsByFollowType.followers !== undefined
+    ? (report.viewsByFollowType.followers / viewTypeTotal) * 100
     : null;
 
   return (
@@ -264,6 +377,52 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
             <div className="border-t border-white/10 bg-white/5 px-5 py-2.5 text-xs text-white/70">Dados atuais da conta e métricas consolidadas pela Meta para o período selecionado.</div>
           </section>
 
+          <nav aria-label="Áreas de Insights" className="rounded-2xl border border-[#eadfd3] bg-white p-2 shadow-sm">
+            <div role="tablist" aria-label="Seções de Insights" className="flex gap-1 overflow-x-auto">
+              {([
+                ["overview", "Visão geral"],
+                ["results", "Resultados"],
+                ["audience", "Público"],
+                ["content", "Conteúdo"],
+                ["ads", "Anúncios"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  id={`instagram-insights-tab-${value}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={section === value}
+                  aria-controls="instagram-insights-panel"
+                  onClick={() => onSectionChange(value)}
+                  className={cn(
+                    "min-h-10 shrink-0 rounded-xl px-4 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d90f6f]",
+                    section === value ? "bg-[#4a1a04] text-white" : "text-[#7a5646] hover:bg-[#faf5ef]",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="px-3 pb-1 pt-2 text-xs leading-5 text-[#8a6756]">
+              {section === "overview" ? "Resumo para localizar rapidamente os principais sinais do período." : null}
+              {section === "results" ? "Volume, distribuição e ações medidas pela Meta ou pelo site da bio." : null}
+              {section === "audience" ? "Quem compõe a audiência, com dados apenas agregados e sujeitos às faixas mínimas da Meta." : null}
+              {section === "content" ? "Desempenho das publicações e lista paginada dentro do período selecionado." : null}
+              {section === "ads" ? "Entrega paga consultada na conta de anúncios vinculada; esta área não altera campanhas." : null}
+            </p>
+          </nav>
+
+          <div id="instagram-insights-panel" role="tabpanel" aria-labelledby={`instagram-insights-tab-${section}`} tabIndex={0} className="space-y-5 outline-none">
+
+          {section === "overview" ? (
+          <>
+          <section className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Resumo do período">
+            <MetricCard label="Visualizações" value={report.totals.views} icon={Eye} helper="Exposições, não pessoas únicas." explanation="Uma mesma pessoa pode gerar várias visualizações. Para contas únicas, consulte alcance." />
+            <MetricCard label="Alcance" value={report.totals.reach} icon={Users} helper="Contas distintas alcançadas." explanation="Contas que receberam algum conteúdo no período. Em 90 dias, a soma das janelas pode repetir pessoas." />
+            <MetricCard label="Interações" value={report.totals.totalInteractions} icon={Activity} helper="Respostas ao conteúdo." explanation="Total de ações como curtidas, comentários, compartilhamentos e salvamentos informadas pela Meta." />
+            <MetricCard label="Seguidores atuais" value={report.profile.followersCount} icon={Users} helper="Tamanho atual da comunidade." explanation="Contagem do perfil no momento da consulta; não é o crescimento do período." />
+          </section>
+
           <section aria-labelledby="period-reading-title" className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5">
             <div className="flex items-start gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#fff0f6] text-[#d90f6f]">
@@ -302,7 +461,10 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
               </div>
             </div>
           </section>
+          </>
+          ) : null}
 
+          {section === "results" ? <>
           <section aria-labelledby="instagram-performance-title">
             <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -334,6 +496,9 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
             </div>
           </section>
 
+          </> : null}
+
+          {section === "audience" ? <>
           <section aria-labelledby="instagram-growth-title" className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -348,6 +513,119 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
               <div className="rounded-xl bg-[#faf5ef] p-4"><dt className="flex items-center gap-1.5 text-xs font-bold text-[#7a5646]">Deixaram de seguir<InfoTooltip title="Como ler as perdas"><p>Contabiliza as pessoas que deixaram de seguir a conta. A exportação anual fornecida não contém essa série e, nesse caso, o valor fica indisponível.</p></InfoTooltip></dt><dd className="mt-2 text-2xl font-bold text-[#4a1a04]">{amount(report.totals.unfollows)}</dd></div>
               <div className="rounded-xl bg-[#faf5ef] p-4"><dt className="flex items-center gap-1.5 text-xs font-bold text-[#7a5646]">Saldo do período<InfoTooltip title="Como o saldo é calculado"><p>Novos seguidores menos pessoas que deixaram de seguir. Só é exibido quando os dois valores estão disponíveis.</p></InfoTooltip></dt><dd className="mt-2 text-2xl font-bold text-[#4a1a04]">{amount(netFollowers)}</dd></div>
             </dl>
+          </section>
+
+          <section aria-labelledby="audience-demographics-title" className="space-y-4">
+            <div className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5">
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#fff0f6] text-[#d90f6f]"><Users aria-hidden="true" className="h-4 w-4" /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 id="audience-demographics-title" className="text-lg font-bold tracking-tight text-[#4a1a04]">Quem acompanha a conta</h2>
+                    <InfoTooltip title="Origem e limites do público"><p>São distribuições agregadas que a API oficial da Meta disponibiliza para a conta. Não identificam pessoas e podem ser omitidas quando a audiência é pequena ou uma categoria não atinge o limite mínimo.</p></InfoTooltip>
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-[#7a5646]">Faixas e localidades dos seguidores informados pela Meta. A consulta usa a janela móvel de 30 dias, independente do período escolhido acima.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={onLoadAudience} disabled={audienceLoading} className="shrink-0">
+                  {audienceLoading ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}
+                  Atualizar
+                </Button>
+              </div>
+              {audienceError ? <div role="alert" className="mt-4 rounded-xl border border-[#e8b9b3] bg-[#fbe4e1] p-3 text-sm text-[#a52e24]">{audienceError}</div> : null}
+              {audienceLoading && !audience ? <div className="mt-4 flex items-center gap-2 rounded-xl bg-[#faf5ef] p-4 text-sm text-[#7a5646]"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />Consultando distribuições agregadas…</div> : null}
+              {!audienceLoading && !audience && !audienceError ? <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm text-[#7a5646]">Os dados de público serão consultados ao abrir esta seção.</p> : null}
+            </div>
+
+            {audience ? (
+              <>
+                <section className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5" aria-labelledby="audience-age-gender-title">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 id="audience-age-gender-title" className="font-bold text-[#4a1a04]">Faixa etária e gênero</h3>
+                      <p className="mt-1 text-xs text-[#8a6756]">Participação dentro das categorias que a Meta retornou.</p>
+                    </div>
+                    <InfoTooltip title="Como ler esta distribuição"><p>As barras mostram a proporção calculada a partir dos valores agregados recebidos para as categorias exibidas. A Meta pode omitir parte da audiência, então esse percentual não precisa fechar com o número atual de seguidores.</p></InfoTooltip>
+                  </div>
+                  {audience.ageGender === null ? (
+                    <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">A Meta não disponibilizou esta quebra para a conta neste momento.</p>
+                  ) : audience.ageGender.length === 0 ? (
+                    <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">A Meta não retornou categorias etárias ou de gênero para esta janela.</p>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {audienceAgeRows.map(([age, values]) => {
+                        const women = values.Mulheres ?? 0;
+                        const men = values.Homens ?? 0;
+                        const other = values["Outros / não informado"] ?? 0;
+                        const womenShare = demographicShare(women, audience.ageGender ?? []);
+                        const menShare = demographicShare(men, audience.ageGender ?? []);
+                        const otherShare = demographicShare(other, audience.ageGender ?? []);
+                        return (
+                          <div key={age} className="grid gap-2 sm:grid-cols-[72px_minmax(0,1fr)_190px] sm:items-center">
+                            <strong className="text-sm text-[#4a1a04]">{audienceAgeLabel(age)}</strong>
+                            <div className="flex h-3 overflow-hidden rounded-full bg-[#f4ece2]" role="img" aria-label={`${audienceAgeLabel(age)}: mulheres ${percentage(womenShare)}, homens ${percentage(menShare)}, outros ${percentage(otherShare)}`}>
+                              <span className="bg-[#f462a7]" style={{ width: `${womenShare ?? 0}%` }} />
+                              <span className="bg-[#4593c8]" style={{ width: `${menShare ?? 0}%` }} />
+                              <span className="bg-[#c4b5a8]" style={{ width: `${otherShare ?? 0}%` }} />
+                            </div>
+                            <p className="text-xs text-[#7a5646]">Mulheres {percentage(womenShare)} · Homens {percentage(menShare)}{otherShare ? ` · Outros ${percentage(otherShare)}` : ""}</p>
+                          </div>
+                        );
+                      })}
+                      <div className="flex flex-wrap gap-4 pt-2 text-xs text-[#7a5646]"><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#f462a7]" />Mulheres</span><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#4593c8]" />Homens</span><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#c4b5a8]" />Outros / não informado</span></div>
+                    </div>
+                  )}
+                </section>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {([
+                    ["cities", "Principais cidades", "city"],
+                    ["countries", "Principais países", "country"],
+                  ] as const).map(([key, title, dimension]) => {
+                    const rows = audience[key];
+                    const ranked = rows?.slice().sort((left, right) => right.value - left.value).slice(0, 8) ?? [];
+                    return (
+                      <section key={key} className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5" aria-labelledby={`audience-${key}-title`}>
+                        <h3 id={`audience-${key}-title`} className="font-bold text-[#4a1a04]">{title}</h3>
+                        {rows === null ? (
+                          <p className="mt-3 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">A Meta não disponibilizou esta quebra para a conta neste momento.</p>
+                        ) : rows.length === 0 ? (
+                          <p className="mt-3 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">Nenhuma localidade foi retornada para esta janela.</p>
+                        ) : (
+                          <ol className="mt-4 space-y-3">
+                            {ranked.map((row) => {
+                              const share = demographicShare(row.value, rows);
+                              const label = row.dimensions[dimension] ?? "Não informado";
+                              return <li key={label} className="grid grid-cols-[minmax(0,1fr)_54px] items-center gap-x-3 gap-y-1 text-sm"><span className="truncate font-semibold text-[#4a1a04]">{label}</span><b className="text-right text-[#7a5646]">{percentage(share)}</b><span className="col-span-2 h-2 overflow-hidden rounded-full bg-[#f4ece2]"><i className="block h-full rounded-full bg-[#078b8d]" style={{ width: `${share ?? 0}%` }} /></span></li>;
+                            })}
+                          </ol>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
+          </section>
+          </> : null}
+
+          {section === "results" ? <>
+          <section className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5" aria-labelledby="views-follow-type-title">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 id="views-follow-type-title" className="text-lg font-bold tracking-tight text-[#4a1a04]">Quem gerou as visualizações</h2>
+              <InfoTooltip title="Visualizações por tipo de público"><p>Esta quebra compara visualizações atribuídas a seguidores e a não seguidores. Não é a divisão entre orgânico e anúncios; a Meta não devolveu essa origem nesta métrica.</p></InfoTooltip>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[#8a6756]">O que ajuda a entender se o conteúdo circulou para além da comunidade atual.</p>
+            {report.viewsByFollowType.followers === null && report.viewsByFollowType.nonFollowers === null ? (
+              <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">{yearSelected ? "A série histórica importada não inclui esta divisão. Selecione um recorte recente para consultar o detalhamento da API." : "A Meta não retornou esta divisão para o período consultado."}</p>
+            ) : (
+              <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <article className="rounded-xl bg-[#faf5ef] p-4"><p className="text-xs font-bold text-[#7a5646]">Seguidores</p><strong className="mt-1 block text-2xl text-[#4a1a04]">{amount(report.viewsByFollowType.followers)}</strong></article>
+                  <article className="rounded-xl bg-[#faf5ef] p-4"><p className="text-xs font-bold text-[#7a5646]">Não seguidores</p><strong className="mt-1 block text-2xl text-[#4a1a04]">{amount(report.viewsByFollowType.nonFollowers)}</strong></article>
+                </div>
+                {followerViewShare !== null ? <div className="mt-4"><div className="flex h-3 overflow-hidden rounded-full bg-[#f4ece2]" role="img" aria-label={`Seguidores ${percentage(followerViewShare)} e não seguidores ${percentage(100 - followerViewShare)}`}><span className="bg-[#d90f6f]" style={{ width: `${followerViewShare}%` }} /><span className="bg-[#4593c8]" style={{ width: `${100 - followerViewShare}%` }} /></div><p className="mt-2 text-xs text-[#7a5646]">Seguidores {percentage(followerViewShare)} · Não seguidores {percentage(100 - followerViewShare)} das visualizações classificadas.</p></div> : null}
+              </>
+            )}
           </section>
 
           <section className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,.55fr)]">
@@ -416,16 +694,19 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
             </div>
           </section>
 
+          </> : null}
+
+          {section === "content" ? <>
           <section aria-labelledby="content-analysis-title" className="grid gap-5 xl:grid-cols-[minmax(0,.8fr)_minmax(340px,.55fr)]">
             <div className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#d90f6f]">Diagnóstico de conteúdo</p>
                   <div className="mt-1 flex items-center gap-2">
-                    <h2 id="content-analysis-title" className="text-lg font-bold tracking-tight text-[#4a1a04]">Resposta por formato</h2>
-                    <InfoTooltip title="Como comparar formatos"><p>Os totais usam apenas os conteúdos recentes retornados pela API da Meta.</p><p>Publicações mais antigas tiveram mais tempo para acumular resultados; use os marcos de 48 horas, 7 e 30 dias para comparações equivalentes.</p></InfoTooltip>
+                    <h2 id="content-analysis-title" className="text-lg font-bold tracking-tight text-[#4a1a04]">Resposta por formato — amostra recente</h2>
+                    <InfoTooltip title="Como comparar formatos"><p>Este resumo usa até 18 conteúdos recentes retornados para a visão geral, não o arquivo completo. Publicações mais antigas tiveram mais tempo para acumular resultados; use os marcos de 48 horas, 7 e 30 dias para comparações equivalentes.</p></InfoTooltip>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-[#8a6756]">Ajuda a separar frequência de publicação e resposta média observada.</p>
+                  <p className="mt-1 text-xs leading-5 text-[#8a6756]">Ajuda a separar frequência de publicação e resposta média observada na amostra carregada.</p>
                 </div>
                 <span className="rounded-full bg-[#f4ece2] px-2.5 py-1 text-xs font-bold text-[#7a5646]">{report.content.length} posts</span>
               </div>
@@ -454,12 +735,30 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
                     <div className="min-w-0"><span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">{reading.topContent.format}</span><p className="mt-2 line-clamp-3 text-sm font-semibold leading-5">{reading.topContent.caption || "Sem legenda"}</p></div>
                   </div>
                   <dl className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-white/10 p-3"><dt className="text-[10px] text-white/65">Visualizações</dt><dd className="mt-1 font-bold">{amount(reading.topContent.views)}</dd></div><div className="rounded-xl bg-white/10 p-3"><dt className="text-[10px] text-white/65">Alcance</dt><dd className="mt-1 font-bold">{amount(reading.topContent.reach)}</dd></div><div className="rounded-xl bg-white/10 p-3"><dt className="text-[10px] text-white/65">Interações</dt><dd className="mt-1 font-bold">{amount(reading.topContent.totalInteractions)}</dd></div></dl>
-                  <p className="mt-3 text-xs leading-5 text-white/65">Destaque por interações entre os conteúdos recentes disponíveis; isso não prova sozinho qual tema causou o resultado.</p>
+                  <p className="mt-3 text-xs leading-5 text-white/65">Destaque por interações entre os 18 conteúdos recentes da amostra; isso não prova sozinho qual tema causou o resultado.</p>
                 </>
               ) : <p className="mt-3 text-sm leading-6 text-white/70">A Meta ainda não retornou interações suficientes para destacar um conteúdo.</p>}
             </div>
           </section>
 
+          <section className="space-y-3" aria-labelledby="all-content-title">
+            <div>
+              <h2 id="all-content-title" className="text-lg font-bold tracking-tight text-[#4a1a04]">Todas as publicações</h2>
+              <p className="mt-1 text-sm leading-6 text-[#7a5646]">Feed, carrosséis e Reels publicados no período. A lista consulta 25 itens por vez e não depende da amostra do resumo.</p>
+            </div>
+            {contentError ? <div role="alert" className="rounded-xl border border-[#e8b9b3] bg-[#fbe4e1] p-3 text-sm text-[#a52e24]">{contentError}<button type="button" onClick={() => onLoadContent(contentPageCurrent ? null : contentPage?.nextAfter ?? null)} className="ml-2 font-bold underline">Tentar novamente</button></div> : null}
+            {contentLoading && !contentPageCurrent ? <div className="flex items-center gap-2 rounded-2xl border border-[#eadfd3] bg-white p-8 text-sm text-[#7a5646]"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />Carregando publicações…</div> : null}
+            {contentPageCurrent ? <ContentList title={`Publicações carregadas (${contentPage.items.length})`} items={contentPage.items} /> : null}
+            {contentPageCurrent && contentPage.hasMore ? <div className="flex justify-center"><Button type="button" variant="outline" onClick={() => onLoadContent(contentPage.nextAfter)} disabled={contentLoading}>{contentLoading ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : null}Carregar mais 25 publicações</Button></div> : null}
+            {contentPageCurrent && !contentPage.hasMore && !contentLoading ? <p className="text-center text-xs text-[#8a6756]">Fim das publicações disponíveis para este período.</p> : null}
+          </section>
+
+          {report.activeStories.length ? <ContentList title="Stories ativos" items={report.activeStories} /> : null}
+          {report.history.stories.length ? <ContentList title="Stories preservados" items={report.history.stories} /> : null}
+          {report.history.contentSnapshots.length ? <ContentList title="Marcos históricos de Feed e Reels" items={report.history.contentSnapshots} /> : null}
+          </> : null}
+
+          {section === "results" ? <>
           <section className="rounded-2xl border border-[#eadfd3] bg-[#faf7f3] p-4 md:p-5" aria-labelledby="coverage-title">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="max-w-2xl">
@@ -479,15 +778,50 @@ export function InsightsView({ report, period, loading, error, onPeriodChange, o
             </div>
           </section>
 
-          <ContentList title={yearSelected ? "Conteúdos recentes disponíveis" : "Conteúdos no período"} items={report.content} />
-          {report.activeStories.length ? <ContentList title="Stories ativos" items={report.activeStories} /> : null}
-          {report.history.stories.length ? <ContentList title="Stories preservados" items={report.history.stories} /> : null}
-          {report.history.contentSnapshots.length ? <ContentList title="Marcos históricos de Feed e Reels" items={report.history.contentSnapshots} /> : null}
-
           <aside className="rounded-2xl border border-[#eadfd3] bg-[#f4ece2] p-4 text-xs leading-5 text-[#6b4938]">
             <strong className="mb-1 block text-[#4a1a04]">Como interpretar</strong>
             {report.notices.map((notice) => <p key={notice}>{notice}</p>)}
           </aside>
+          </> : null}
+
+          {section === "ads" ? (
+            <section className="space-y-4" aria-labelledby="instagram-ads-title">
+              <div className="rounded-2xl border border-[#eadfd3] bg-white p-4 shadow-sm md:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#fff0f6] text-[#d90f6f]"><Megaphone aria-hidden="true" className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2"><h2 id="instagram-ads-title" className="text-lg font-bold tracking-tight text-[#4a1a04]">Anúncios</h2><InfoTooltip title="Sobre os dados de anúncios"><p>Os números vêm da conta de anúncios autorizada e usam o mesmo período selecionado. Esta tela é somente leitura; não cria nem altera campanhas.</p></InfoTooltip></div>
+                    <p className="mt-1 text-sm leading-6 text-[#7a5646]">Impressões são exibições de anúncios; alcance é a estimativa de contas únicas; cliques e gasto descrevem a entrega paga. Estes dados são separados das visualizações orgânicas do Instagram.</p>
+                    {ads?.period === period ? <p className="mt-2 text-xs text-[#8a6756]">{ads.accountName ? `Conta: ${ads.accountName} · ` : ""}{date(`${ads.since}T12:00:00.000Z`, { year: true })} – {date(`${ads.until}T12:00:00.000Z`, { year: true })}</p> : null}
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={onLoadAds} disabled={adsLoading} className="shrink-0">{adsLoading ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : <RefreshCw aria-hidden="true" className="h-4 w-4" />}Atualizar</Button>
+                </div>
+                {adsError ? <div role="alert" className="mt-4 rounded-xl border border-[#e8b9b3] bg-[#fbe4e1] p-3 text-sm text-[#a52e24]">{adsError}</div> : null}
+                {adsLoading && ads?.period !== period ? <div className="mt-4 flex items-center gap-2 rounded-xl bg-[#faf5ef] p-4 text-sm text-[#7a5646]"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />Consultando a conta de anúncios…</div> : null}
+                {!adsLoading && ads?.period !== period && !adsError ? <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm text-[#7a5646]">Os dados serão consultados ao abrir esta seção.</p> : null}
+                {ads?.period === period && ads.status === "empty" ? <p className="mt-4 rounded-xl border border-[#f1d59c] bg-[#fff8e8] p-4 text-sm leading-6 text-[#76500b]">A Meta não retornou linhas de entrega paga neste período. Mantemos os indicadores indisponíveis em vez de afirmar que o valor foi zero.</p> : null}
+                {ads?.period === period && ads.status === "no_account" ? <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">Nenhuma conta de anúncios ativa foi encontrada para esta conexão.</p> : null}
+                {ads?.period === period && ads.status === "multiple_accounts" ? <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">Há mais contas de anúncios do que esta consulta pode confirmar. Para evitar misturar resultados, nenhuma conta foi escolhida automaticamente.</p> : null}
+                {ads?.period === period && ads.status === "unavailable" ? <p className="mt-4 rounded-xl bg-[#faf5ef] p-4 text-sm leading-6 text-[#7a5646]">A Meta não disponibilizou o relatório da conta autorizada. Confira se ela está conectada e se a permissão de leitura de anúncios continua ativa.</p> : null}
+                {ads?.period === period && ads.status === "available" ? (
+                  <>
+                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                      <MetricCard label="Gasto" value={ads.totals?.spend ?? null} icon={CircleDollarSign} helper={ads.currency ?? "Moeda da conta"} formatValue={(value) => currency(value, ads.currency)} explanation="Valor reportado pela conta de anúncios no período. Não inclui vendas atribuídas fora do relatório da Meta." />
+                      <MetricCard label="Impressões" value={ads.totals?.impressions ?? null} icon={Eye} helper="Exibições pagas." explanation="Número de vezes que os anúncios foram exibidos; uma pessoa pode gerar várias impressões." />
+                      <MetricCard label="Alcance pago" value={ads.totals?.reach ?? null} icon={Users} helper="Contas únicas estimadas." explanation="Contas que receberam anúncios. É uma métrica separada do alcance orgânico do Instagram." />
+                      <MetricCard label="Cliques" value={ads.totals?.clicks ?? null} icon={MousePointerClick} helper="Cliques reportados." explanation="Cliques contabilizados pela Meta na entrega de anúncios." />
+                      <MetricCard label="CTR" value={ads.totals?.ctr ?? null} icon={TrendingUp} helper="Taxa de cliques reportada." formatValue={percentage} explanation="Percentual de cliques em relação às impressões conforme o cálculo da Meta." />
+                    </div>
+                    <div className="mt-5 overflow-x-auto">
+                      <div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-bold text-[#4a1a04]">Campanhas no período</h3>{ads.hasMoreCampaigns ? <span className="text-xs text-[#8a6756]">Lista limitada a 25 campanhas</span> : null}</div>
+                      {ads.campaigns.length ? <table className="w-full min-w-[640px] text-left text-sm"><thead className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#8a6756]"><tr><th className="pb-2">Campanha</th><th className="pb-2">Objetivo</th><th className="pb-2 text-right">Impressões</th><th className="pb-2 text-right">Cliques</th><th className="pb-2 text-right">Gasto</th></tr></thead><tbody className="divide-y divide-[#efe5db]">{ads.campaigns.map((campaign, index) => <tr key={`${campaign.name}-${index}`}><th className="max-w-[300px] truncate py-3 font-semibold text-[#4a1a04]">{campaign.name}</th><td className="py-3 text-[#7a5646]">{campaign.objective ?? "—"}</td><td className="py-3 text-right text-[#4a1a04]">{amount(campaign.impressions)}</td><td className="py-3 text-right text-[#4a1a04]">{amount(campaign.clicks)}</td><td className="py-3 text-right font-semibold text-[#4a1a04]">{currency(campaign.spend, ads.currency)}</td></tr>)}</tbody></table> : <p className="rounded-xl bg-[#faf5ef] p-4 text-sm text-[#7a5646]">Há métricas de conta, mas nenhuma linha de campanha retornada para esse período.</p>}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          </div>
         </div>
       ) : null}
     </PageContainer>
