@@ -293,6 +293,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  process.stderr.write(`[uber-sftp:network] ${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
 });
