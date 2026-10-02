@@ -9,6 +9,8 @@ const KIOSK_ID = 'integration-pdv-kiosk';
 const DATE = '2026-08-31';
 const PERIOD_ID = 'integration-pdv-period';
 const EMPLOYEE_GOAL_ID = 'integration-pdv-employee-goal';
+const LATE_PERIOD_ID = 'integration-pdv-late-period';
+const LATE_EMPLOYEE_GOAL_ID = 'integration-pdv-late-employee-goal';
 const USER_ID = 'integration-pdv-user';
 const NON_REVENUE_PERIOD_IDS = Array.from(
   { length: 5 },
@@ -54,6 +56,8 @@ async function cleanup() {
     dbAdmin.collection('pdvSyncReconciliationStates').doc(STATE_ID).delete(),
     dbAdmin.collection('goalPeriods').doc(PERIOD_ID).delete(),
     dbAdmin.collection('employeeGoals').doc(EMPLOYEE_GOAL_ID).delete(),
+    dbAdmin.collection('goalPeriods').doc(LATE_PERIOD_ID).delete(),
+    dbAdmin.collection('employeeGoals').doc(LATE_EMPLOYEE_GOAL_ID).delete(),
     dbAdmin.collection('users').doc(USER_ID).delete(),
     ...NON_REVENUE_PERIOD_IDS.map((id) => dbAdmin.collection('goalPeriods').doc(id).delete()),
   ]);
@@ -134,11 +138,42 @@ test('reconcilia cupom tardio, período encerrado e respostas regressivas atomic
   assert.equal(periodAfterGrowth.get('currentValue'), 14);
   assert.equal(employeeAfterGrowth.get(`dailyProgress.${DATE}`), 14);
 
+  // Simula uma meta criada depois que o relatório do dia já foi persistido.
+  await Promise.all([
+    dbAdmin.collection('goalPeriods').doc(LATE_PERIOD_ID).set({
+      kioskId: KIOSK_ID,
+      templateType: 'revenue',
+      status: 'active',
+      startDate: Timestamp.fromDate(new Date('2026-08-01T03:00:00Z')),
+      endDate: Timestamp.fromDate(new Date('2026-09-01T02:59:59Z')),
+      currentValue: 0,
+      dailyProgress: {},
+      targetValue: 24_000,
+      shifts: [],
+    }),
+    dbAdmin.collection('employeeGoals').doc(LATE_EMPLOYEE_GOAL_ID).set({
+      periodId: LATE_PERIOD_ID,
+      kioskId: KIOSK_ID,
+      employeeId: USER_ID,
+      currentValue: 0,
+      targetValue: 24_000,
+      dailyProgress: {},
+    }),
+  ]);
+
   const unchangedTimestamp = reportAfterGrowth.get('updatedAt');
   const unchanged = await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options);
   assert.equal(unchanged.persistence, 'unchanged');
   const reportUnchanged = await dbAdmin.collection('salesReports').doc(REPORT_ID).get();
   assert.equal(reportUnchanged.get('updatedAt'), unchangedTimestamp);
+  const [latePeriodAfterReplay, lateEmployeeAfterReplay] = await Promise.all([
+    dbAdmin.collection('goalPeriods').doc(LATE_PERIOD_ID).get(),
+    dbAdmin.collection('employeeGoals').doc(LATE_EMPLOYEE_GOAL_ID).get(),
+  ]);
+  assert.equal(latePeriodAfterReplay.get(`dailyProgress.${DATE}`), 14);
+  assert.equal(latePeriodAfterReplay.get('currentValue'), 14);
+  assert.equal(lateEmployeeAfterReplay.get(`dailyProgress.${DATE}`), 14);
+  assert.equal(lateEmployeeAfterReplay.get('currentValue'), 14);
 
   coupons = [coupon('first', '15:00')];
   const held = await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options);
