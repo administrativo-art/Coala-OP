@@ -22,6 +22,8 @@ O site público envia somente o tipo do evento, o ID público do link e uma posi
 
 O coletor de Insights grava somente métricas agregadas da conta e dos conteúdos próprios em `instagramAccountInsightsDaily`, `instagramStoryInsightSnapshots` e `instagramContentInsightSnapshots`, sempre via Admin SDK. Não persiste URL temporária da mídia, token, visitante, conta alcançada ou lista de seguidores. As regras existentes mantêm essas coleções fora do acesso direto do cliente; a rota autenticada entrega apenas a projeção limitada do relatório.
 
+As novas subseções da mesma rota revalidam Firebase Auth e `requireInstagramSchedulerAccess` antes de consultar a Meta. Público retorna apenas distribuições agregadas de idade/gênero/localidade, nunca pessoas ou listas de seguidores. Anúncios usa a permissão de leitura da conta autorizada e devolve métricas da conta/campanhas sem ID de conta ou token; não possui mutações. Conteúdo aceita cursor validado e lê no máximo 25 publicações por página, sem devolver a URL de paginação da Meta. Essas respostas são sob demanda e não são gravadas no Firestore.
+
 O retorno depois do login aceita apenas caminho interno validado por [`resolveSafeReturnPath`](../../src/lib/safe-return-path.ts). As respostas omitem URLs de entrega, caminhos de objeto, tokens, leases e identificadores internos dos contêineres. Cada prévia revalida sessão, workspace, documento e prefixo esperado antes de ler o Storage. A grade publicada expõe ao cliente somente metadados e URLs temporárias de mídia que a própria Meta retorna para exibição, nunca o token usado na consulta. Segredo, mutações e estados de publicação estão descritos no [fluxo do Instagram](flows/instagram-publishing.md).
 
 ## Arquivos de conciliação Pix da Stone
