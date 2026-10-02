@@ -35,7 +35,7 @@ As coleções operacionais `uberSftpImports`, `uberTrips` e `uberReconciliations
 
 ## Infraestrutura obrigatória
 
-A Uber restringe o SFTP por endereço IP. Uma Cloud Function usa endereços dinâmicos por padrão, portanto o job precisa sair por uma VPC com Cloud NAT e um IP regional estático. `uberSftpDailySync` usa **Direct VPC egress** para enviar todo o tráfego pela VPC sem manter máquinas de um Serverless VPC Access connector permanentemente ligadas.
+A Uber restringe o SFTP por endereço IP. Uma Cloud Function usa endereços dinâmicos por padrão, portanto o job precisa sair por uma VPC com Cloud NAT e um IP regional estático. O código de `uberSftpDailySync` usa **Direct VPC egress** como configuração-alvo, evitando manter máquinas de um Serverless VPC Access connector permanentemente ligadas. Os PRs #267 e #268 integraram e promoveram esse código, mas a verificação somente leitura de 02/10/2026 ainda encontrou a função em `ACTIVE` com `coala-uber-sftp` e `ALL_TRAFFIC`, sem interface Direct VPC. A publicação do código não comprova a migração da rede.
 
 No projeto `smart-converter-752gf`, região `southamerica-east1`, o contrato de produção é:
 
@@ -90,6 +90,8 @@ Para migrar uma função que usa conector:
 4. Executar `verify`, disparar o Scheduler e validar a sincronização real. A verificação confirma o IP configurado no NAT, não mede o IP público usado por uma conexão. Conferir a tradução nos logs do Cloud NAT e uma nova importação concluída com viagens e linhas; uma execução que apenas pula arquivos antigos não comprova a migração.
 5. Manter `coala-uber-sftp` durante a janela de validação. Excluir o conector somente depois de uma execução concluída e da confirmação do IP efetivo no NAT. Após a exclusão, recriar o conector é pré-requisito para o rollback por script.
 
+Na versão da CLI fixada no lockfile, `firebase-tools@15.15.0` usa `minimatch@3.1.5` e `brace-expansion@1.1.21` na dependência legada. O override global de `minimatch@10.2.4` entregava um objeto para `firebase-tools/lib/fsAsync.js`, que chama `minimatch(...)`, e interrompia o deploy antes do upload com `TypeError: minimatch is not a function`. O override qualificado no `package.json` preserva `glob@10` com a API moderna. O teste unitário permanente cobre os dois contratos; isso ainda não comprova o deploy.
+
 Na correção do parser de setembro de 2026, a verificação anterior à implantação
 encontrou `uberTrips` vazio: dois arquivos foram marcados como concluídos com
 zero viagens e dois falharam na leitura do CSV. Após publicar a correção, conferir
@@ -110,6 +112,18 @@ Não há migração obrigatória. Despesas antigas só serão revisitadas se for
 - Direct VPC pode levar mais de um minuto para estabelecer conectividade em uma nova instância. A conexão SFTP espera até 90 segundos e repete até três vezes, com esperas de 5 e 15 segundos. Erros de autenticação, chave privada e impressão digital não são repetidos. O timeout total da função continua em 540 segundos.
 
 Para `N` viagens importadas e `C` gravações candidatas Uber por mês, a base é aproximadamente `N` leituras transacionais + `N` escritas de viagem, somadas às consultas e gravações de reconciliação de `C`. Cada candidata consulta no máximo 11 viagens, mas normalmente retorna zero ou uma. Com um arquivo por dia e uma execução diária, a checagem de arquivos concluídos faz até cerca de 36 leituras por dia (1.080 por mês); execuções manuais e retries somam leituras proporcionais. O custo fixo inclui uma invocação por escrita em `expenses` e `transactions`, inclusive para registros não Uber, além de Cloud NAT, IP reservado, Scheduler e Secret Manager. Direct VPC escala a zero e remove as duas `e2-micro` e os discos mantidos pelo conector. Conferir as tabelas de preço do projeto antes da ativação em produção.
+
+## Custo do NAT e decisões de otimização
+
+A revisão de 02/10/2026 encontrou um único NAT no Router da Uber, com IP manual `34.151.241.62` em uso. Seus mapeamentos mostravam somente as duas instâncias gerenciadas do conector, em `10.8.0.2` e `10.8.0.3`. Entre as quatro Functions e os cinco serviços Cloud Run consultados em `southamerica-east1`, somente o job Uber e seu serviço correspondente tinham configuração VPC. As consultas enumeraram metadados de rede, sem ler segredos ou dados de viagens; repetir o inventário antes de excluir o conector.
+
+O CSV de faturamento de setembro/2026 separa os componentes do NAT: IP, R$ 15,083690; tempo de uso do gateway, R$ 8,445911; processamento, R$ 0,000222; telemetria, R$ 0,000216. Preservar o IP exigido pela Uber e os logs de validação. Medir o gateway novamente após a migração; não somar duas vezes a possível redução associada à retirada das instâncias do conector.
+
+A [cobrança oficial do NAT](https://cloud.google.com/nat/pricing) distingue IP por hora, gateway e processamento de dados. Não prometer custo zero: a função continua usando NAT, o IP externo permanece reservado e os endereços usados pelo conector podem permanecer ativos temporariamente após escala a zero. Setembro também não representa um mês completo de operação desses recursos; comparar períodos de duração equivalente após a publicação.
+
+Não foi identificada alteração adicional de NAT com ganho material comprovado. Durante a validação, preservar Router, NAT, IP, cobertura e logs. Não desligar/recriar o gateway por cron nem reduzir a cobertura de sub-redes: isso acrescenta risco operacional sem economia comprovada neste inventário. As [interações oficiais de Direct VPC com NAT](https://docs.cloud.google.com/nat/docs/nat-product-interactions) exigem `ENDPOINT_TYPE_VM` e cobertura da sub-rede, já observados. Os logs NAT de Direct VPC não identificam o serviço Cloud Run; correlacionar horário, origem da sub-rede, destino/porta SFTP e IP traduzido.
+
+Depois do deploy da função, executar `preflight`, `apply` e `verify`; disparar o Scheduler e confirmar uma importação concluída com viagens/linhas, além da saída pelo IP reservado nos logs do NAT. Manter o conector para rollback até essas evidências existirem. Excluir o conector só após validação; somente a fatura posterior comprova economia realizada.
 
 ## Operação e rollback
 

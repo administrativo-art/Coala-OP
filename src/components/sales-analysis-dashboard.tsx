@@ -3,7 +3,6 @@
 import { useMemo, useState, useEffect, Fragment } from 'react';
 import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, subMonths, isSameDay, differenceInCalendarDays, startOfWeek } from 'date-fns';
 import { useSalesReports } from '@/contexts/sales-report-context';
-import { SalesReportProvider } from '@/components/sales-report-provider';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
@@ -65,7 +64,7 @@ function getReportsByPreset(
 type FilterMode = 'overview' | 'compare';
 
 export function SalesAnalysisDashboard() {
-  return <SalesReportProvider><GoalsProvider><SalesAnalysisDashboardInner /></GoalsProvider></SalesReportProvider>;
+  return <GoalsProvider><SalesAnalysisDashboardInner /></GoalsProvider>;
 }
 
 function SalesAnalysisDashboardInner() {
