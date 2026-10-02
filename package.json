@@ -67,6 +67,7 @@
     "migrate:standard-person-links": "node scripts/migrate-standard-person-links.mjs",
     "migrate:profile-compliance": "node --import tsx scripts/migrate-profile-compliance-v1.mts",
     "sync:profile-compliance-cache": "node --import tsx scripts/sync-profile-compliance-cache.mts",
+    "uber-sftp:network": "node scripts/uber-direct-vpc.mjs",
     "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs",
     "audit:cli": "node scripts/cli-session-audit.mjs",
     "instagram:schedule": "node --import tsx scripts/instagram-schedule.mts",
