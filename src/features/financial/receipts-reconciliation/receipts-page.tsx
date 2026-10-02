@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AcquirerFeesPanel } from "../acquirer-fees/fees-panel";
+import { StoneBankReceiptReconciliation } from "./reconciliation-panel";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 
 function FlowCard({ icon: Icon, title, description, status, href, action }: {
@@ -127,7 +128,7 @@ export function StoneReceiptsPage() {
       <FlowCard icon={WalletCards} title="Carteira e previsões" description="Parcelas previstas, pagas e antecipadas no período, sem presumir saldo bancário." status="Disponível" href="/dashboard/financial/cash-flow/receivables" action="Abrir recebíveis" />
       <FlowCard icon={RefreshCw} title="Antecipações" description="Compara parcelas originais com pagamentos antecipados e custos explícitos." status="Disponível" href="/dashboard/financial/stone-anticipations" action="Conferir antecipações" />
       <FlowCard icon={Percent} title="Taxas praticadas" description="Consulta MDR, Pix e antecipação quando a Stone informa a retenção." status="Disponível por fonte" href="#taxas-praticadas" action="Ir para taxas" />
-      <FlowCard icon={Landmark} title="Crédito bancário" description="A etapa Stone paga × crédito no Inter ainda depende do comparador bancário." status="Cobertura pendente" href="/dashboard/financial/reconciliation/bank-statements" action="Abrir extratos" />
+      <FlowCard icon={Landmark} title="Crédito bancário" description="Conferir se o líquido pago pela Stone entrou na conta bancária do vínculo." status="Disponível" href="#credito-bancario" action="Conferir recebimentos" />
     </section>
 
     <Card className="rounded-2xl">
@@ -188,6 +189,8 @@ export function StoneReceiptsPage() {
     </Card>
 
     {mapping && code ? <AcquirerFeesPanel key={`${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} /> : null}
+
+    {mapping && code ? <StoneBankReceiptReconciliation key={`bank-receipts:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} /> : null}
 
     <p className="text-sm text-muted-foreground">A exportação de evidências fica prevista para a próxima etapa. Este módulo não abre contestação na Stone.</p>
   </PageContainer>;
