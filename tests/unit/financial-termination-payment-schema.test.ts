@@ -27,3 +27,17 @@ test("solicitação de pagamento aceita pedido de compra como origem", () => {
   assert.equal(result.sourceType, "purchase_order");
   assert.equal(result.expenseId, "expense-test");
 });
+
+test("solicitação de pagamento aceita salário como origem", () => {
+  const result = createPaymentRequestSchema.parse({
+    sourceType: "salary",
+    sourceId: "salary_202609_employee-test",
+    expenseId: "salary_202609_employee-test",
+    beneficiaryReference: { sourceType: "employee", sourceId: "employee-test" },
+    amount: 1768.82,
+    description: "Salário - 09/2026 | Pessoa Teste",
+    scheduledFor: "2026-10-06",
+  });
+  assert.equal(result.sourceType, "salary");
+  assert.equal(result.scheduledFor, "2026-10-06");
+});
