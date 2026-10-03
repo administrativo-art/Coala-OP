@@ -15,6 +15,7 @@ import {
   type StoneReceiptAdjustment,
   type StoneReceiptSettlement,
 } from "./reconciliation";
+import { resolveBankStatementCoverage } from "./receipt-bank-coverage";
 
 const MAX_BANK_CREDITS = 1_000;
 const ADJUSTMENT_EVENTS = [
@@ -133,6 +134,11 @@ async function readBankCredits(accountId: string, from: string, through: string)
   }).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }
 
+async function readBankStatementSyncState() {
+  const snapshot = await financialDbAdmin.collection("integrationState").doc("inter-statement").get();
+  return snapshot.exists ? snapshot.data() ?? null : null;
+}
+
 function transientStoneGap(error: unknown) {
   return error instanceof AppError && error.retryable && ["STONE_AGENDA_UNAVAILABLE", "STONE_AGENDA_UPSTREAM_REJECTED"].includes(error.code);
 }
@@ -140,6 +146,7 @@ function transientStoneGap(error: unknown) {
 export async function queryStoneReceiptReconciliation(input: unknown, context: { isDefaultAdmin: boolean; workspace_id: string }, deps: {
   readStone?: (query: { stoneCode: string; referenceDate: string }, signal?: AbortSignal) => Promise<string>;
   readBank?: typeof readBankCredits;
+  readBankStatementState?: typeof readBankStatementSyncState;
   now?: Date;
 }) {
   if (!context.isDefaultAdmin) throw new AppError({ code: "STONE_RECEIPT_FORBIDDEN", kind: "AUTHORIZATION" });
@@ -166,11 +173,16 @@ export async function queryStoneReceiptReconciliation(input: unknown, context: {
       missingDates.push(referenceDate);
     }
   }
-  const bankCredits = await (deps.readBank ?? readBankCredits)(mapping.accountId, request.from, request.through);
+  const [bankCredits, bankStatementState] = await Promise.all([
+    (deps.readBank ?? readBankCredits)(mapping.accountId, request.from, request.through),
+    (deps.readBankStatementState ?? readBankStatementSyncState)(),
+  ]);
+  const today = dateInBelem(now);
+  const bankRequiredThrough = addDays(request.through, 2) > today ? today : addDays(request.through, 2);
   const result: ReceiptReconciliationResult = reconcileStoneReceipts({
     settlements: extractSettlements(files),
     bankCredits,
-    today: dateInBelem(now),
+    today,
   });
   return {
     ...result,
@@ -178,6 +190,11 @@ export async function queryStoneReceiptReconciliation(input: unknown, context: {
     collectedAt: now.toISOString(),
     scope: { workspaceId: context.workspace_id, mappingId: mapping.id, kioskId: mapping.kioskId, accountId: mapping.accountId, stoneCode: request.stoneCode },
     stoneCoverage: missingDates.length ? "partial" as const : "complete" as const,
+    bankCoverage: resolveBankStatementCoverage({
+      accountId: mapping.accountId,
+      requiredThrough: bankRequiredThrough,
+      state: bankStatementState,
+    }),
     missingDates,
     files: files.map(file => ({ id: file.fileId, referenceDate: file.referenceDate, generatedAtProvider: file.generatedAtProvider })),
     limitations: missingDates.length
