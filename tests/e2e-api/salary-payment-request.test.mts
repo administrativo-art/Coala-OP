@@ -87,7 +87,8 @@ test("API E2E: cria salário idempotente e bloqueia divergência e falta de perm
   const employee = hr.collection("employees").doc(employeeDocumentId);
   await employee.set({ name: "Pessoa Teste", status: "active", auth_uid: employeeAuthId, synced_at: Timestamp.now() });
   await employee.collection("field_values").doc("employee.cpf").set({ value_text: "12345678901" });
-  await employee.collection("field_values").doc("employee.pix_key").set({ value_text: "12345678901", updated_at: Timestamp.now() });
+  await employee.collection("field_values").doc("employee.pix_key").set({ value_text: "91999999999", updated_at: Timestamp.now() });
+  await employee.collection("field_values").doc("employee.pix_key_type").set({ value_text: "phone", updated_at: Timestamp.now() });
   await financial.collection("expenses").doc(expenseId).set({
     workspaceId: "coala",
     status: "pending",

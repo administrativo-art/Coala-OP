@@ -9,6 +9,7 @@ import {
   maskPaymentDestination,
   normalizeBrazilianDocument,
   pixDocumentKeyMatchesHolder,
+  resolvePixKeyType,
   toIsoString,
 } from "./normalization";
 import { paymentBeneficiaryReferenceSchema } from "./schemas";
@@ -24,10 +25,11 @@ function fieldText(data: FirebaseFirestore.DocumentData | undefined) {
 
 async function resolveEmployee(sourceId: string): Promise<ResolvedPaymentBeneficiary> {
   const employeeRef = hrDbAdmin.collection("employees").doc(sourceId);
-  const [employee, cpf, pix] = await Promise.all([
+  const [employee, cpf, pix, pixType] = await Promise.all([
     employeeRef.get(),
     employeeRef.collection("field_values").doc("employee.cpf").get(),
     employeeRef.collection("field_values").doc("employee.pix_key").get(),
+    employeeRef.collection("field_values").doc("employee.pix_key_type").get(),
   ]);
   if (!employee.exists) throw new Error("Colaborador favorecido não encontrado.");
   if (employee.get("status") !== "active") throw new Error("O colaborador favorecido está inativo.");
@@ -35,10 +37,15 @@ async function resolveEmployee(sourceId: string): Promise<ResolvedPaymentBenefic
   const pixKey = fieldText(pix.data());
   if (document.length !== 11) throw new Error("O CPF do colaborador está incompleto.");
   if (!pixKey) throw new Error("O colaborador não possui chave Pix cadastrada.");
-  const pixKeyType = inferPixKeyType(pixKey);
+  const pixKeyType = resolvePixKeyType(pixKey, fieldText(pixType.data()));
   if (!pixDocumentKeyMatchesHolder({ pixKey, pixKeyType, holderDocument: document })) {
     throw new Error("A chave Pix documental não pertence ao CPF do colaborador.");
   }
+  const sourceUpdatedAt = [
+    toIsoString(pix.get("updated_at")),
+    toIsoString(pixType.get("updated_at")),
+    toIsoString(employee.get("synced_at")),
+  ].filter((value): value is string => Boolean(value)).sort().at(-1) ?? new Date(0).toISOString();
   return {
     sourceType: "employee",
     sourceId,
@@ -48,7 +55,7 @@ async function resolveEmployee(sourceId: string): Promise<ResolvedPaymentBenefic
     pixKeyType,
     pixKey,
     validated: true,
-    sourceUpdatedAt: toIsoString(pix.get("updated_at") ?? employee.get("synced_at")) ?? new Date(0).toISOString(),
+    sourceUpdatedAt,
   };
 }
 
