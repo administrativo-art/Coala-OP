@@ -115,7 +115,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/budget-comparison/page.tsx`](../../src/app/dashboard/financial/budget-comparison/page.tsx), [`src/app/dashboard/financial/cash-flow/agent/page.tsx`](../../src/app/dashboard/financial/cash-flow/agent/page.tsx), [`src/app/dashboard/financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx).
 
-Arquivos locais percorridos: 94.
+Arquivos locais percorridos: 97.
 
 Chamadas candidatas encontradas:
 
@@ -1224,7 +1224,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-flow/receivables/page.tsx`](../../src/app/dashboard/financial/cash-flow/receivables/page.tsx).
 
-Arquivos locais percorridos: 20.
+Arquivos locais percorridos: 25.
 
 Chamadas candidatas encontradas:
 
@@ -1875,7 +1875,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/stone-anticipations/page.tsx`](../../src/app/dashboard/financial/stone-anticipations/page.tsx).
 
-Arquivos locais percorridos: 13.
+Arquivos locais percorridos: 19.
 
 Chamadas candidatas encontradas:
 
@@ -1886,7 +1886,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/financial/stone-receipts/page.tsx`](../../src/app/dashboard/financial/stone-receipts/page.tsx).
 
-Arquivos locais percorridos: 32.
+Arquivos locais percorridos: 37.
 
 Chamadas candidatas encontradas:
 
