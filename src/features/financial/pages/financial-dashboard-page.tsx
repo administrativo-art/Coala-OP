@@ -271,8 +271,9 @@ function ExpenseSection({
 export function FinancialDashboardPage() {
   const { user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { indicators, loading } = useFinancialDashboardIndicators();
-  const { data: expenses } = useFinancialCollection<any>(financialCollection("expenses"));
+  const expenseCollection = useFinancialCollection<any>(financialCollection("expenses"));
+  const { indicators, loading } = useFinancialDashboardIndicators(expenseCollection);
+  const { data: expenses } = expenseCollection;
   const { data: accountPlansData } = useFinancialCollection<any>(financialCollection("accounts"));
   const [monthFilters, setMonthFilters] = useState<ExpenseFilters>(DEFAULT_FILTERS);
   const [overdueFilters, setOverdueFilters] = useState<ExpenseFilters>(DEFAULT_FILTERS);

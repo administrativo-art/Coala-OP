@@ -6,9 +6,12 @@ import { financialCollection } from "@/features/financial/lib/repositories";
 import { toDate } from "@/features/financial/lib/utils";
 import { useFinancialCollection } from "./use-financial-collection";
 
-export function useFinancialDashboardIndicators() {
-  const { data: expensesData, loading: expensesLoading } = useFinancialCollection<any>(
-    financialCollection("expenses")
+export function useFinancialDashboardIndicators(expensesSource?: {
+  data: any[] | null;
+  loading: boolean;
+}) {
+  const { data: queriedExpenses, loading: queriedExpensesLoading } = useFinancialCollection<any>(
+    expensesSource ? null : financialCollection("expenses")
   );
   const { data: transactionsData, loading: transactionsLoading } = useFinancialCollection<any>(
     financialCollection("transactions")
@@ -17,6 +20,8 @@ export function useFinancialDashboardIndicators() {
     financialCollection("payments")
   );
 
+  const expensesData = expensesSource?.data ?? queriedExpenses;
+  const expensesLoading = expensesSource?.loading ?? queriedExpensesLoading;
   const expenses = expensesData || [];
   const transactions = transactionsData || [];
   const payments = paymentsData || [];

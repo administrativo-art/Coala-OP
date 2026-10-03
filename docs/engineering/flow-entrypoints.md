@@ -1681,7 +1681,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/stock/analysis/consumption/page.tsx`](../../src/app/dashboard/stock/analysis/consumption/page.tsx), [`src/app/dashboard/stock/analysis/movement-analysis/page.tsx`](../../src/app/dashboard/stock/analysis/movement-analysis/page.tsx), [`src/app/dashboard/stock/analysis/projection/page.tsx`](../../src/app/dashboard/stock/analysis/projection/page.tsx), [`src/app/dashboard/stock/analysis/restock/page.tsx`](../../src/app/dashboard/stock/analysis/restock/page.tsx), [`src/app/dashboard/stock/analysis/sales/page.tsx`](../../src/app/dashboard/stock/analysis/sales/page.tsx), [`src/app/dashboard/stock/analysis/valuation/page.tsx`](../../src/app/dashboard/stock/analysis/valuation/page.tsx).
 
-Arquivos locais percorridos: 85.
+Arquivos locais percorridos: 84.
 
 Chamadas candidatas encontradas:
 
