@@ -12,6 +12,7 @@ import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financia
 import { paymentBarcodeHash } from "@/features/financial/inbox/document-identity";
 import { assertExpenseBoletoTarget, expenseBoletoSchema } from "./expense-boleto";
 import { inboxBarcodePaymentPreparationSchema } from "./inbox-barcode";
+import { assertSalaryPaymentTarget } from "./salary-payment";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, revalidatePaidPaymentBeneficiary, transitionPaymentRequest } from "./repository.server";
 import {
@@ -54,6 +55,34 @@ export async function createPaymentRequest(input: {
       }
     }
     return existing;
+  }
+  if (input.sourceType === "salary") {
+    const expenseId = input.expenseId ?? "";
+    const employeeId = input.beneficiaryReference.sourceType === "employee"
+      ? input.beneficiaryReference.sourceId
+      : "";
+    const [expense, employee] = await Promise.all([
+      expenseId ? financialDbAdmin.collection("expenses").doc(expenseId).get() : null,
+      employeeId ? hrDbAdmin.collection("employees").doc(employeeId).get() : null,
+    ]);
+    assertSalaryPaymentTarget(
+      input,
+      expense?.exists ? {
+        workspaceId: expense.get("workspaceId"),
+        status: expense.get("status"),
+        provisionType: expense.get("provisionType"),
+        payrollEarningType: expense.get("payrollEarningType"),
+        employeeId: expense.get("employeeId"),
+        totalValue: expense.get("totalValue"),
+        description: expense.get("description"),
+      } : null,
+      employee?.exists ? {
+        id: employee.id,
+        authUid: employee.get("auth_uid"),
+        sourceUserId: employee.get("source_user_id"),
+      } : null,
+      WORKSPACE_ID,
+    );
   }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
   if (!beneficiary.validated) throw new Error("O favorecido ainda não foi validado.");
