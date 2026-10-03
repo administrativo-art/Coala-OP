@@ -17,6 +17,13 @@ export function inferPixKeyType(value: string): PixKeyType {
   return "random";
 }
 
+const PIX_KEY_TYPES = new Set<PixKeyType>(["cpf", "cnpj", "email", "phone", "random"]);
+
+export function resolvePixKeyType(value: string, storedType: unknown): PixKeyType {
+  const normalized = String(storedType ?? "").trim().toLowerCase() as PixKeyType;
+  return PIX_KEY_TYPES.has(normalized) ? normalized : inferPixKeyType(value);
+}
+
 export function pixDocumentKeyMatchesHolder(input: {
   pixKey: string;
   pixKeyType?: PixKeyType;
