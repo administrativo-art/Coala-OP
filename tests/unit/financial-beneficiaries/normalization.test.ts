@@ -6,6 +6,7 @@ import {
   maskPaymentDestination,
   normalizeBrazilianDocument,
   pixDocumentKeyMatchesHolder,
+  resolvePixKeyType,
 } from "../../../src/features/financial/beneficiaries/normalization";
 
 test("normaliza e mascara CPF/CNPJ sem revelar o documento", () => {
@@ -19,6 +20,12 @@ test("classifica os formatos usuais de chave Pix", () => {
   assert.equal(inferPixKeyType("financeiro@example.com"), "email");
   assert.equal(inferPixKeyType("+5598999999999"), "phone");
   assert.equal(inferPixKeyType("5b32dd72-3ce0-4d2d-a0e2-faf440c081e2"), "random");
+});
+
+test("prioriza o tipo Pix cadastrado para telefone brasileiro com 11 dígitos", () => {
+  assert.equal(inferPixKeyType("91999999999"), "cpf");
+  assert.equal(resolvePixKeyType("91999999999", "phone"), "phone");
+  assert.equal(resolvePixKeyType("123.456.789-01", ""), "cpf");
 });
 
 test("mascara destino sem devolver o valor integral", () => {
