@@ -44,6 +44,7 @@ type SchedulePostEditorProps = {
     id: string,
     changes: { scheduledAt?: string; mediaOrder?: number[] },
   ) => Promise<boolean>;
+  onCancel: (id: string) => Promise<boolean>;
 };
 
 function bytesLabel(value: number) {
@@ -51,7 +52,7 @@ function bytesLabel(value: number) {
   return `${(value / (1_024 * 1_024)).toFixed(1).replace(".", ",")} MB`;
 }
 
-export function SchedulePostEditor({ item, onClose, onUpdate }: SchedulePostEditorProps) {
+export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: SchedulePostEditorProps) {
   const editable = isScheduleEditable(item);
   const theme = formatTheme[item.format];
   const originalDate = dateKeyInBelem(item.scheduledAt);
@@ -62,6 +63,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate }: SchedulePostEdit
   const [mediaOrder, setMediaOrder] = useState(() => item.media.map((_, index) => index));
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const scheduledAt = useMemo(() => scheduleAtInBelem(date, time), [date, time]);
   const scheduleChanged = date !== originalDate || time !== originalTime;
@@ -122,6 +124,19 @@ export function SchedulePostEditor({ item, onClose, onUpdate }: SchedulePostEdit
       if (saved) onClose();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function cancelSchedule() {
+    if (!editable) return;
+    setSaving(true);
+    setLocalError(null);
+    try {
+      const cancelled = await onCancel(item.id);
+      if (cancelled) onClose();
+    } finally {
+      setSaving(false);
+      setConfirmingCancel(false);
     }
   }
 
@@ -472,6 +487,35 @@ export function SchedulePostEditor({ item, onClose, onUpdate }: SchedulePostEdit
           {editable ? "Confira a prévia, a ordem e o horário antes de salvar." : instagramStatusLabels[item.status]}
         </div>
         <div className="ml-auto flex gap-2">
+          {editable && (confirmingCancel ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void cancelSchedule()}
+                disabled={saving}
+                className="rounded-lg bg-[#A52E24] px-4 py-2.5 text-[13px] font-extrabold text-white disabled:opacity-50"
+              >
+                Confirmar cancelamento
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingCancel(false)}
+                disabled={saving}
+                className="rounded-lg border border-[#EADFD3] bg-white px-4 py-2.5 text-[13px] font-bold disabled:opacity-50"
+              >
+                Manter
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingCancel(true)}
+              disabled={saving}
+              className="rounded-lg border border-[#E8B9B3] bg-white px-4 py-2.5 text-[13px] font-bold text-[#A52E24] disabled:opacity-50"
+            >
+              Cancelar agendamento
+            </button>
+          ))}
           <button
             type="button"
             onClick={onClose}
