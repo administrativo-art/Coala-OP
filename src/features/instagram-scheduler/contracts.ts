@@ -130,6 +130,9 @@ export const instagramScheduleMutationSchema = z.union([
   z.object({
     swapWithId: instagramScheduleIdSchema,
   }).strict(),
+  z.object({
+    cancel: z.literal(true),
+  }).strict(),
 ]);
 
 export type InstagramScheduleMutation = z.infer<typeof instagramScheduleMutationSchema>;
