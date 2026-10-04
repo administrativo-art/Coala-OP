@@ -285,6 +285,11 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           workspace_id: "coala",
           objectPath: "instagram/library/coala/library-1/post.jpg",
         }),
+        setDoc(doc(db, "instagramMediaFolders/folder-1"), {
+          workspace_id: "coala",
+          name: "Campanhas",
+          parentId: null,
+        }),
         setDoc(doc(db, "lots/lot-1"), {
           kioskId: "kiosk-1",
           productId: "product-1",
@@ -418,6 +423,8 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     }));
     await assertFails(getDoc(doc(basic.firestore(), "instagramMediaLibrary/library-1")));
     await assertFails(getDoc(doc(admin.firestore(), "instagramMediaLibrary/library-1")));
+    await assertFails(getDoc(doc(basic.firestore(), "instagramMediaFolders/folder-1")));
+    await assertFails(getDoc(doc(admin.firestore(), "instagramMediaFolders/folder-1")));
     await assertFails(setDoc(doc(admin.firestore(), "instagramMediaLibrary/forged"), {
       workspace_id: "coala",
     }));

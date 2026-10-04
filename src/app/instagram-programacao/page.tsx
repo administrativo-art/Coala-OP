@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Menu } from "lucide-react";
 
@@ -12,6 +12,7 @@ import {
 } from "@/features/instagram-scheduler/create-schedule-dialog";
 import {
   instagramInsightsSections,
+  type InstagramMediaFolder,
   type InstagramMediaLibraryItem,
   type InstagramAdsReport,
   type InstagramAudienceReport,
@@ -36,7 +37,8 @@ import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { dateKeyInBelem } from "@/features/instagram-scheduler/workspace-utils";
 
 type ScheduleResponse = { items?: InstagramScheduleListItem[] };
-type MediaResponse = { items?: InstagramMediaLibraryItem[] };
+type MediaResponse = { items?: InstagramMediaLibraryItem[]; nextCursor?: string | null };
+type FoldersResponse = { folders?: InstagramMediaFolder[] };
 type PublishedFeedResponse = {
   items?: InstagramPublishedFeedItem[];
   profile?: InstagramPublishedFeedProfile;
@@ -56,6 +58,10 @@ export default function InstagramProgramacaoPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [schedules, setSchedules] = useState<InstagramScheduleListItem[]>([]);
   const [libraryItems, setLibraryItems] = useState<InstagramMediaLibraryItem[]>([]);
+  const [libraryFolders, setLibraryFolders] = useState<InstagramMediaFolder[]>([]);
+  const [libraryFolderId, setLibraryFolderId] = useState<string | null>(null);
+  const [libraryCursor, setLibraryCursor] = useState<string | null>(null);
+  const libraryRequestRef = useRef(0);
   const [publishedItems, setPublishedItems] = useState<InstagramPublishedFeedItem[]>([]);
   const [instagramProfile, setInstagramProfile] = useState<InstagramPublishedFeedProfile | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
@@ -104,22 +110,45 @@ export default function InstagramProgramacaoPage() {
     }
   }, [firebaseUser, request]);
 
-  const loadLibrary = useCallback(async () => {
+  const loadFolderItems = useCallback(async (folderId: string | null, cursor?: string | null) => {
     if (!firebaseUser) return;
+    const token = ++libraryRequestRef.current;
     setLibraryLoading(true);
-    setError(null);
     try {
-      const response = await request<MediaResponse>("/api/integrations/instagram/media", {
+      const search = new URLSearchParams({ folderId: folderId ?? "root" });
+      if (cursor) search.set("cursor", cursor);
+      const response = await request<MediaResponse>(`/api/integrations/instagram/media?${search.toString()}`, {
         fallbackError: "Não foi possível carregar a biblioteca.",
       });
-      setLibraryItems(response.items ?? []);
-      setLibraryLoaded(true);
+      if (token !== libraryRequestRef.current) return;
+      setLibraryItems((current) => (cursor ? [...current, ...(response.items ?? [])] : response.items ?? []));
+      setLibraryCursor(response.nextCursor ?? null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível carregar a biblioteca.");
+      if (token === libraryRequestRef.current) {
+        setError(cause instanceof Error ? cause.message : "Não foi possível carregar a biblioteca.");
+      }
     } finally {
-      setLibraryLoading(false);
+      if (token === libraryRequestRef.current) setLibraryLoading(false);
     }
   }, [firebaseUser, request]);
+
+  const loadFolders = useCallback(async () => {
+    if (!firebaseUser) return;
+    try {
+      const response = await request<FoldersResponse>("/api/integrations/instagram/media/folders", {
+        fallbackError: "Não foi possível carregar as pastas.",
+      });
+      setLibraryFolders(response.folders ?? []);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar as pastas.");
+    }
+  }, [firebaseUser, request]);
+
+  const loadLibrary = useCallback(async () => {
+    setError(null);
+    setLibraryLoaded(true);
+    await Promise.all([loadFolders(), loadFolderItems(libraryFolderId)]);
+  }, [libraryFolderId, loadFolderItems, loadFolders]);
 
   const loadPublishedFeed = useCallback(async () => {
     if (!firebaseUser) return;
@@ -347,7 +376,84 @@ export default function InstagramProgramacaoPage() {
     }
   }
 
-  async function uploadFiles(files: File[], folder: string) {
+  async function libraryMutation(
+    run: () => Promise<unknown>,
+    options: { message: string; fallbackError: string; reloadFolders?: boolean; reloadItems?: boolean },
+  ) {
+    setError(null);
+    try {
+      await run();
+      await Promise.all([
+        options.reloadFolders === false ? Promise.resolve() : loadFolders(),
+        options.reloadItems ? loadFolderItems(libraryFolderId) : Promise.resolve(),
+      ]);
+      say(options.message);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : options.fallbackError);
+      return false;
+    }
+  }
+
+  function openLibraryFolder(folderId: string | null) {
+    setLibraryFolderId(folderId);
+    setLibraryItems([]);
+    setLibraryCursor(null);
+    void loadFolderItems(folderId);
+  }
+
+  function createLibraryFolder(name: string, parentId: string | null) {
+    return libraryMutation(
+      () => request("/api/integrations/instagram/media/folders", {
+        method: "POST",
+        json: { name, parentId },
+        fallbackError: "Não foi possível criar a pasta.",
+      }),
+      { message: "Pasta criada.", fallbackError: "Não foi possível criar a pasta." },
+    );
+  }
+
+  function updateLibraryFolder(id: string, changes: { name?: string; parentId?: string | null }, message: string) {
+    return libraryMutation(
+      () => request(`/api/integrations/instagram/media/folders/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        json: changes,
+        fallbackError: "Não foi possível alterar a pasta.",
+      }),
+      { message, fallbackError: "Não foi possível alterar a pasta." },
+    );
+  }
+
+  async function deleteLibraryFolder(id: string) {
+    const parentId = libraryFolders.find((folder) => folder.id === id)?.parentId ?? null;
+    const deleted = await libraryMutation(
+      () => request(`/api/integrations/instagram/media/folders/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        fallbackError: "Não foi possível excluir a pasta.",
+      }),
+      { message: "Pasta excluída. O conteúdo subiu para a pasta de cima.", fallbackError: "Não foi possível excluir a pasta." },
+    );
+    if (deleted && libraryFolderId === id) openLibraryFolder(parentId);
+    return deleted;
+  }
+
+  function moveLibraryMedia(ids: string[], folderId: string | null) {
+    return libraryMutation(
+      () => request("/api/integrations/instagram/media/move", {
+        method: "POST",
+        json: { ids, folderId },
+        fallbackError: "Não foi possível mover os arquivos.",
+      }),
+      {
+        message: ids.length === 1 ? "Arquivo movido." : `${ids.length} arquivos movidos.`,
+        fallbackError: "Não foi possível mover os arquivos.",
+        reloadFolders: false,
+        reloadItems: true,
+      },
+    );
+  }
+
+  async function uploadFiles(files: File[], folderId: string | null) {
     if (!files.length) return;
     setUploading(true);
     setError(null);
@@ -356,7 +462,7 @@ export default function InstagramProgramacaoPage() {
       for (const file of files) {
         const form = new FormData();
         form.set("file", file);
-        form.set("folder", folder);
+        if (folderId) form.set("folderId", folderId);
         await request("/api/integrations/instagram/media", {
           method: "POST",
           body: form,
@@ -364,10 +470,10 @@ export default function InstagramProgramacaoPage() {
         });
         completed += 1;
       }
-      await loadLibrary();
+      await loadFolderItems(libraryFolderId);
       say(completed === 1 ? "Arquivo adicionado à biblioteca." : `${completed} arquivos adicionados à biblioteca.`);
     } catch (cause) {
-      if (completed > 0) await loadLibrary();
+      if (completed > 0) await loadFolderItems(libraryFolderId);
       setError(cause instanceof Error ? cause.message : "Não foi possível concluir o upload.");
     } finally {
       setUploading(false);
@@ -485,11 +591,21 @@ export default function InstagramProgramacaoPage() {
           />
         ) : activeView === "media" ? (
           <MediaLibraryView
+            folders={libraryFolders}
+            currentFolderId={libraryFolderId}
             libraryItems={libraryItems}
+            hasMore={libraryCursor !== null}
             schedules={schedules}
             loading={libraryLoading}
             uploading={uploading}
+            onOpenFolder={openLibraryFolder}
+            onLoadMore={() => void loadFolderItems(libraryFolderId, libraryCursor)}
             onUpload={uploadFiles}
+            onCreateFolder={createLibraryFolder}
+            onRenameFolder={(id, name) => updateLibraryFolder(id, { name }, "Pasta renomeada.")}
+            onMoveFolder={(id, parentId) => updateLibraryFolder(id, { parentId }, "Pasta movida.")}
+            onDeleteFolder={deleteLibraryFolder}
+            onMoveMedia={moveLibraryMedia}
             onFutureFeature={(label) => say(`${label} será implementado em uma próxima etapa.`)}
           />
         ) : activeView === "bio" && canManageBio ? (

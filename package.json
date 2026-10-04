@@ -72,7 +72,8 @@
     "audit:cli": "node scripts/cli-session-audit.mjs",
     "instagram:schedule": "node --import tsx scripts/instagram-schedule.mts",
     "instagram:import-insights-history": "node --import tsx scripts/import-instagram-insights-history.mts",
-    "instagram:migrate-marketing-db": "node --import tsx scripts/migrate-instagram-marketing-db.mts"
+    "instagram:migrate-marketing-db": "node --import tsx scripts/migrate-instagram-marketing-db.mts",
+    "instagram:migrate-media-folders": "node --import tsx scripts/migrate-instagram-media-folders.mts"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",
