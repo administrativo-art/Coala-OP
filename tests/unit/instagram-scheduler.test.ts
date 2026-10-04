@@ -642,3 +642,17 @@ test("resume resposta por formato preservando métricas indisponíveis", () => {
   assert.equal(summary[1]?.interactions, null);
   assert.equal(summary[1]?.averageInteractions, null);
 });
+
+test("a mutação do agendamento aceita somente cancelamento estrito", () => {
+  assert.equal(instagramScheduleMutationSchema.safeParse({ cancel: true }).success, true);
+  assert.equal(instagramScheduleMutationSchema.safeParse({ cancel: false }).success, false);
+  assert.equal(instagramScheduleMutationSchema.safeParse({ cancel: true, scheduledAt: "2026-10-05T10:00:00-03:00" }).success, false);
+  assert.equal(instagramScheduleMutationSchema.safeParse({}).success, false);
+});
+
+test("somente agendamentos em scheduled podem ser cancelados", () => {
+  assert.equal(isInstagramScheduleEditableStatus("scheduled"), true);
+  for (const status of ["processing", "published", "failed", "manual_review", "cancelled"]) {
+    assert.equal(isInstagramScheduleEditableStatus(status), false, status);
+  }
+});

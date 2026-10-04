@@ -104,6 +104,26 @@ export const PATCH = withApiErrorHandling<RouteContext>(
       if (!targetSnapshot.exists || target?.workspace_id !== context.workspace_id) notFound();
       requireEditable(target);
 
+      if ("cancel" in payload.data) {
+        const now = Timestamp.now();
+        transaction.update(targetRef, {
+          status: "cancelled",
+          cancelledAt: now,
+          cancelledBy: actor,
+          wakeAt: FieldValue.delete(),
+          updatedAt: now,
+          updatedBy: actor,
+        });
+        transaction.set(targetRef.collection("events").doc(randomUUID()), {
+          type: "cancelled",
+          previousStatus: target.status,
+          scheduledAt: target.scheduledAt?.toDate?.().toISOString?.() ?? null,
+          actor,
+          createdAt: now,
+        });
+        return;
+      }
+
       if (!("swapWithId" in payload.data)) {
         const now = Timestamp.now();
         const updates: Record<string, unknown> = {

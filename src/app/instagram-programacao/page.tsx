@@ -289,7 +289,7 @@ export default function InstagramProgramacaoPage() {
 
   async function mutateSchedule(
     id: string,
-    body: { scheduledAt?: string; mediaOrder?: number[] } | { swapWithId: string },
+    body: { scheduledAt?: string; mediaOrder?: number[] } | { swapWithId: string } | { cancel: true },
   ) {
     setError(null);
     await request(`/api/integrations/instagram/schedule/${encodeURIComponent(id)}`, {
@@ -323,6 +323,17 @@ export default function InstagramProgramacaoPage() {
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível alterar o agendamento.");
+      return false;
+    }
+  }
+
+  async function cancelSchedule(id: string) {
+    try {
+      await mutateSchedule(id, { cancel: true });
+      say("Agendamento cancelado. A publicação não será enviada ao Instagram.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cancelar o agendamento.");
       return false;
     }
   }
@@ -450,6 +461,7 @@ export default function InstagramProgramacaoPage() {
             item={schedules.find((item) => item.id === editingId)!}
             onClose={closeEditor}
             onUpdate={updateSchedule}
+            onCancel={cancelSchedule}
           />
         ) : activeView === "calendar" ? (
           <CalendarView
