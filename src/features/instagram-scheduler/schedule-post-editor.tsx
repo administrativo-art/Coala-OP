@@ -25,6 +25,8 @@ import {
   type InstagramScheduleListItem,
 } from "./contracts";
 import { ProtectedMedia } from "./protected-media";
+import { MediaFormatInfo } from "./media-format-info";
+import { carouselHasDifferentRatios, mediaPreviewRatio, mediaRatio, type MediaDimensions } from "./media-presentation";
 import { ScheduleDatePicker, ScheduleTimeInput } from "./schedule-date-time-fields";
 import {
   dateKeyInBelem,
@@ -42,7 +44,7 @@ type SchedulePostEditorProps = {
   onClose: () => void;
   onUpdate: (
     id: string,
-    changes: { scheduledAt?: string; mediaOrder?: number[] },
+    changes: { scheduledAt?: string; mediaOrder?: number[]; caption?: string },
   ) => Promise<boolean>;
   onCancel: (id: string) => Promise<boolean>;
 };
@@ -60,6 +62,8 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
   const [minimumSchedule, setMinimumSchedule] = useState(() => minimumScheduleDateTimeInBelem());
   const [date, setDate] = useState(originalDate);
   const [time, setTime] = useState(originalTime);
+  const [caption, setCaption] = useState(item.caption);
+  const [dimensions, setDimensions] = useState<Record<string, MediaDimensions>>({});
   const [mediaOrder, setMediaOrder] = useState(() => item.media.map((_, index) => index));
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -68,12 +72,21 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
   const scheduledAt = useMemo(() => scheduleAtInBelem(date, time), [date, time]);
   const scheduleChanged = date !== originalDate || time !== originalTime;
   const orderChanged = mediaOrder.some((originalIndex, index) => originalIndex !== index);
-  const changed = scheduleChanged || orderChanged;
+  const captionChanged = caption !== item.caption;
+  const changed = scheduleChanged || orderChanged || captionChanged;
   const orderedMedia = useMemo(
-    () => mediaOrder.map((originalIndex) => item.media[originalIndex]).filter((media) => media !== undefined),
-    [item.media, mediaOrder],
+    () => mediaOrder.map((originalIndex) => item.media[originalIndex]).filter((media) => media !== undefined)
+      .map((media) => ({ ...media, ...dimensions[media.previewUrl ?? ""] })),
+    [item.media, mediaOrder, dimensions],
   );
   const activeMedia = orderedMedia[activeMediaIndex] ?? orderedMedia[0] ?? null;
+  const mixedCarousel = item.format === "carousel" && carouselHasDifferentRatios(orderedMedia);
+
+  function recordDimensions(url: string | null, value: MediaDimensions) {
+    if (!url) return;
+    setDimensions((current) => current[url]?.width === value.width && current[url]?.height === value.height
+      ? current : { ...current, [url]: value });
+  }
 
   useEffect(() => {
     const updateMinimum = () => setMinimumSchedule(minimumScheduleDateTimeInBelem());
@@ -118,6 +131,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
     setLocalError(null);
     try {
       const saved = await onUpdate(item.id, {
+        ...(captionChanged ? { caption } : {}),
         ...(scheduleChanged ? { scheduledAt } : {}),
         ...(orderChanged ? { mediaOrder } : {}),
       });
@@ -183,6 +197,9 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                 <span className="h-3 w-3 rounded-full" style={{ background: theme.dot }} />
                 {theme.label}
               </div>
+              {orderedMedia.length > 1 && <p className="mt-2 text-[11px]">Mídia {activeMediaIndex + 1} de {orderedMedia.length}</p>}
+              <MediaFormatInfo format={item.format} media={activeMedia} />
+              {mixedCarousel && <p className="mt-2 text-[11px] text-[#8A5A18]">Proporções diferentes: o carrossel usa o enquadramento da primeira mídia e pode cortar as demais.</p>}
             </div>
             <div className="rounded-xl border border-[#EADFD3] bg-white p-4">
               <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#7A5646]">Publicação</div>
@@ -217,13 +234,15 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     onClick={() => setActiveMediaIndex(index)}
                     className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D90F6F]"
                   >
-                    <div className={`relative ${item.format === "story" || item.format === "reel" ? "aspect-[9/16]" : "aspect-[4/5]"}`}>
+                    <div className="relative" style={{ aspectRatio: mediaRatio(media) ?? 1 }}>
                       {media.previewUrl || media.kind === "video" ? (
                         <ProtectedMedia
                           url={media.previewUrl}
                           kind={media.kind}
                           alt={`Mídia ${index + 1} de ${instagramPostTitle(item)}`}
                           eager={index === 0}
+                          className="h-full w-full object-contain"
+                          onDimensions={(value) => recordDimensions(media.previewUrl, value)}
                         />
                       ) : (
                         <div className="grid h-full place-items-center bg-[#F3E8DC] text-[#7A5646]"><ImageOff className="h-6 w-6" /></div>
@@ -235,6 +254,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     <div className="p-2.5">
                       <div className="truncate text-[11px] font-bold" title={media.fileName}>{media.fileName}</div>
                       <div className="mt-0.5 text-[10px] text-[#7A5646]">{bytesLabel(media.sizeBytes)}</div>
+                      <MediaFormatInfo format={item.format} media={media} />
                     </div>
                   </button>
                   {editable && item.format === "story" && orderedMedia.length > 1 && (
@@ -268,11 +288,12 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
             <section aria-labelledby="editor-caption-title">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 id="editor-caption-title" className="text-[14px] font-extrabold text-[#4A1A04]">Legenda</h2>
-                <span className="text-[12px] text-[#7A5646]">{item.caption.length} / 2.200</span>
+                <span className="text-[12px] text-[#7A5646]">{caption.length} / 2.200</span>
               </div>
-              <div className="whitespace-pre-wrap rounded-xl border border-[#EADFD3] bg-white p-4 text-[14px] leading-6 text-[#4A1A04]">
-                {item.caption || <span className="text-[#7A5646]">Sem legenda.</span>}
-              </div>
+              <textarea aria-labelledby="editor-caption-title" value={caption}
+                onChange={(event) => setCaption(event.target.value)} disabled={!editable || saving}
+                maxLength={2_200} rows={7} placeholder="Sem legenda."
+                className="w-full resize-y rounded-xl border border-[#EADFD3] bg-white p-4 text-[14px] leading-6 text-[#4A1A04] focus:border-[#D90F6F] focus:outline-none disabled:opacity-75" />
             </section>
           )}
 
@@ -348,6 +369,9 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     url={activeMedia?.previewUrl ?? null}
                     kind={activeMedia?.kind ?? "image"}
                     alt={`Prévia do Story de ${instagramPostTitle(item)}`}
+                    className="h-full w-full object-contain"
+                    onDimensions={(value) => recordDimensions(activeMedia?.previewUrl ?? null, value)}
+                    previewVideo
                     eager
                   />
                   <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-3 pb-12 pt-3">
@@ -395,6 +419,9 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     url={activeMedia?.previewUrl ?? null}
                     kind={activeMedia?.kind ?? "video"}
                     alt={`Prévia do Reel de ${instagramPostTitle(item)}`}
+                    className="h-full w-full object-contain"
+                    onDimensions={(value) => recordDimensions(activeMedia?.previewUrl ?? null, value)}
+                    previewVideo
                     eager
                   />
                   <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent px-4 pb-12 pt-4 text-[15px] font-extrabold">
@@ -407,7 +434,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                         <span className="h-7 w-7 rounded-full border border-white bg-[#FDE3EF]" />
                         coalashakes
                       </div>
-                      {item.caption && <p className="line-clamp-3 whitespace-pre-wrap">{item.caption}</p>}
+                      {caption && <p className="line-clamp-3 whitespace-pre-wrap">{caption}</p>}
                       {item.location && <p className="mt-1 font-semibold">⌖ {item.location.name}</p>}
                     </div>
                     <div className="flex flex-col items-center gap-4">
@@ -428,11 +455,14 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     </span>
                     <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                   </div>
-                  <div className="relative aspect-[4/5]">
+                  <div className="relative" style={{ aspectRatio: mediaPreviewRatio(item.format, activeMedia, orderedMedia[0]) }}>
                     <ProtectedMedia
                       url={activeMedia?.previewUrl ?? null}
                       kind={activeMedia?.kind ?? "image"}
                       alt={`Prévia de ${instagramPostTitle(item)}`}
+                      className={`h-full w-full ${mixedCarousel ? "object-cover" : "object-contain"}`}
+                      onDimensions={(value) => recordDimensions(activeMedia?.previewUrl ?? null, value)}
+                      previewVideo
                       eager
                     />
                     {item.format === "carousel" && item.media.length > 1 && (
@@ -469,19 +499,20 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     <Bookmark className={`${item.format === "carousel" && item.media.length > 1 ? "ml-0" : "ml-auto"} h-5 w-5`} aria-hidden="true" />
                   </div>
                   <div className="max-h-36 overflow-auto whitespace-pre-wrap px-3 pb-3 pt-1 text-[11px] leading-[1.45]">
-                    <strong>coalashakes</strong>{item.caption ? ` ${item.caption}` : " Sem legenda."}
+                    <strong>coalashakes</strong>{caption ? ` ${caption}` : " Sem legenda."}
                   </div>
                 </div>
               )}
             </div>
             <div className="text-center text-[12px] text-[#7A5646]">{longDate(date)} · {time}</div>
+            <p className="text-center text-[10px] text-[#7A5646]">Prévia aproximada. A proporção não verifica todos os requisitos de publicação.</p>
           </div>
         </aside>
       </div>
 
       <footer className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-[#EADFD3] bg-white px-4 py-3 md:px-7">
         <div className="text-[12px] text-[#7A5646]">
-          {editable ? "Confira a prévia, a ordem e o horário antes de salvar." : instagramStatusLabels[item.status]}
+          {editable ? "Confira a prévia, a legenda, a ordem e o horário antes de salvar." : instagramStatusLabels[item.status]}
         </div>
         <div className="ml-auto flex gap-2">
           {editable && (confirmingCancel ? (
