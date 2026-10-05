@@ -21,7 +21,7 @@ import {
 
 import type { InstagramInsightsSection } from "./contracts";
 
-export type InstagramWorkspaceView = "calendar" | "feed" | "media" | "bio" | "reports";
+export type InstagramWorkspaceView = "posts" | "calendar" | "feed" | "media" | "bio" | "reports";
 
 type NavItem = {
   label: string;
@@ -44,9 +44,9 @@ const groups: Array<{ title: string; items: NavItem[] }> = [
   {
     title: "Criar",
     items: [
+      { label: "Posts e aprovações", view: "posts", icon: MessageSquare },
       { label: "Biblioteca de mídia", view: "media", icon: BookImage },
       { label: "Legendas e hashtags", icon: Hash },
-      { label: "Aprovações", icon: MessageSquare },
     ],
   },
   {

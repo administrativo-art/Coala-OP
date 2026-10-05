@@ -79,24 +79,38 @@ function image(name = "post.jpg") {
   };
 }
 
-function video(name = "reel.mp4") {
+function storyImage(name = "story.jpg") {
+  return { ...image(name), width: 1080, height: 1920 };
+}
+
+function video(name = "reel.mp4", width = 1080, height = 1920) {
   return {
     localPath: `/tmp/${name}`,
     kind: "video" as const,
     contentType: "video/mp4",
     fileName: name,
     sizeBytes: 5_000,
+    width,
+    height,
+    durationSeconds: 15,
+    videoCodec: "avc1",
+    audioCodec: "mp4a",
+    frameRate: 30,
+    videoBitrateBps: 8_000_000,
+    audioSampleRateHz: 48_000,
+    fastStart: true,
+    hasEditList: false,
   };
 }
 
 test("valida as combinações de mídia dos quatro formatos", () => {
   assert.equal(instagramScheduleInputSchema.safeParse({ format: "feed_image", scheduledAt: future, media: [image()] }).success, true);
-  assert.equal(instagramScheduleInputSchema.safeParse({ format: "carousel", scheduledAt: future, media: [image("1.jpg"), video()] }).success, true);
+  assert.equal(instagramScheduleInputSchema.safeParse({ format: "carousel", scheduledAt: future, media: [image("1.jpg"), video("carousel.mp4", 1080, 1350)] }).success, true);
   assert.equal(instagramScheduleInputSchema.safeParse({ format: "reel", scheduledAt: future, media: [video()] }).success, true);
   assert.equal(instagramScheduleInputSchema.safeParse({
     format: "story",
     scheduledAt: future,
-    media: [image("story-1.jpg"), image("story-2.jpg"), video("story-3.mp4")],
+    media: [storyImage("story-1.jpg"), storyImage("story-2.jpg"), video("story-3.mp4")],
   }).success, true);
 });
 
@@ -137,7 +151,7 @@ test("aceita menção invisível em Story e normaliza o arroba", () => {
   const story = instagramScheduleInputSchema.parse({
     format: "story",
     scheduledAt: future,
-    media: [image("story.jpg")],
+    media: [storyImage("story.jpg")],
     storyMentions: ["@shoppingdoautomovel_"],
   });
   assert.deepEqual(story.storyMentions, ["shoppingdoautomovel_"]);
@@ -154,12 +168,12 @@ test("limita uma sequência de Stories a dez mídias", () => {
   assert.equal(instagramScheduleInputSchema.safeParse({
     format: "story",
     scheduledAt: future,
-    media: Array.from({ length: 10 }, (_, index) => image(`story-${index}.jpg`)),
+    media: Array.from({ length: 10 }, (_, index) => storyImage(`story-${index}.jpg`)),
   }).success, true);
   assert.equal(instagramScheduleInputSchema.safeParse({
     format: "story",
     scheduledAt: future,
-    media: Array.from({ length: 11 }, (_, index) => image(`story-${index}.jpg`)),
+    media: Array.from({ length: 11 }, (_, index) => storyImage(`story-${index}.jpg`)),
   }).success, false);
 });
 

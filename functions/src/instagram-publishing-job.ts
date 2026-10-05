@@ -13,6 +13,7 @@ import {
 
 const db = getFirestore("coala-signage");
 const COLLECTION = "instagramScheduledPosts";
+const MANUAL_REMINDERS = "instagramManualPublicationReminders";
 const WORKSPACE_ID = "coala";
 const MAX_ATTEMPTS = 4;
 const BATCH_LIMIT = 2;
@@ -21,6 +22,8 @@ const LEASE_MILLISECONDS = 8 * 60 * 1000;
 type PublicationFormat = "feed_image" | "carousel" | "reel" | "story";
 type MediaItem = { kind: "image" | "video"; deliveryUrl: string };
 type PublicationDocument = {
+  workspace_id?: string;
+  editorialPostId?: string;
   instagramAccountId?: string;
   format?: PublicationFormat;
   status?: string;
@@ -34,9 +37,26 @@ type PublicationDocument = {
   storyMentions?: string[];
   location?: { id?: string; name?: string } | null;
   media?: MediaItem[];
+  contentHash?: string;
+  publicationCertification?: {
+    status?: string;
+    rulesVersion?: string;
+    contentHash?: string;
+  };
   attempts?: number;
   progress?: InstagramPublicationProgress<Timestamp>;
 };
+
+function editorialResult(data: PublicationDocument, fields: Record<string, unknown>) {
+  if (!data.editorialPostId) return null;
+  return {
+    ref: db.collection("instagramPosts").doc(data.editorialPostId),
+    value: {
+      publicationResult: fields,
+      updatedAt: Timestamp.now(),
+    },
+  };
+}
 
 class MetaGraphError extends Error {
   readonly status: number;
@@ -130,6 +150,13 @@ function validateDocument(data: PublicationDocument) {
     throw new Error("Formato de publicação inválido.");
   }
   if (!Array.isArray(data.media) || data.media.length === 0) throw new Error("Mídia ausente no agendamento.");
+  if (data.editorialPostId && (
+    data.publicationCertification?.status !== "certified"
+    || !data.contentHash
+    || data.publicationCertification.contentHash !== data.contentHash
+  )) {
+    throw new Error("O agendamento editorial não possui certificação técnica válida para a mídia atual.");
+  }
   for (const media of data.media) {
     if (!media.deliveryUrl || !["image", "video"].includes(media.kind)) {
       throw new Error("Mídia inválida no agendamento.");
@@ -287,9 +314,10 @@ async function publishStorySequence(
     throw new Error("A sequência de Stories terminou com itens sem confirmação.");
   }
 
-  await ref.update({
+  const publishedAt = Timestamp.now();
+  const scheduleUpdate = {
     status: "published",
-    publishedAt: Timestamp.now(),
+    publishedAt,
     publishedMediaId: publishedMediaIds[publishedMediaIds.length - 1],
     publishedMediaIds,
     permalink: null,
@@ -298,8 +326,20 @@ async function publishStorySequence(
     wakeAt: null,
     safeError: null,
     errorEventId: null,
-    updatedAt: Timestamp.now(),
+    updatedAt: publishedAt,
+  };
+  const batch = db.batch();
+  batch.update(ref, scheduleUpdate);
+  const editorial = editorialResult(data, {
+    status: "published",
+    instagramMediaId: publishedMediaIds[publishedMediaIds.length - 1],
+    instagramMediaIds: publishedMediaIds,
+    permalink: null,
+    publishedAt,
+    safeError: null,
   });
+  if (editorial) batch.set(editorial.ref, { ...editorial.value, status: "published" }, { merge: true });
+  await batch.commit();
   logger.info("[instagramPublishingScheduler] story sequence completed", {
     scheduleId: ref.id,
     publishedMediaIds,
@@ -328,6 +368,11 @@ async function claim(ref: DocumentReference) {
         leaseExpiresAt: null,
         wakeAt: null,
       });
+      const editorial = editorialResult(data, {
+        status: "manual_review",
+        safeError: "A confirmação da publicação foi interrompida. Verifique o Instagram antes de tentar novamente.",
+      });
+      if (editorial) transaction.set(editorial.ref, editorial.value, { merge: true });
       return null;
     }
 
@@ -341,6 +386,11 @@ async function claim(ref: DocumentReference) {
         leaseExpiresAt: null,
         wakeAt: null,
       });
+      const editorial = editorialResult(data, {
+        status: "failed",
+        safeError: "O limite de tentativas de publicação foi atingido.",
+      });
+      if (editorial) transaction.set(editorial.ref, editorial.value, { merge: true });
       return null;
     }
 
@@ -396,6 +446,11 @@ async function recordFailure(
       errorEventId: eventId,
       updatedAt: now,
     });
+    const editorial = editorialResult(current, {
+      status: ambiguousPublish ? "manual_review" : canRetry ? "scheduled" : "failed",
+      safeError,
+    });
+    if (editorial) transaction.set(editorial.ref, editorial.value, { merge: true });
   });
 
   logger.error("[instagramPublishingScheduler] publication failed", {
@@ -453,9 +508,10 @@ async function processPublication(ref: DocumentReference, token: string) {
       });
     }
 
-    await ref.update({
+    const publishedAt = Timestamp.now();
+    const scheduleUpdate = {
       status: "published",
-      publishedAt: Timestamp.now(),
+      publishedAt,
       publishedMediaId: result.id,
       permalink,
       leaseId: null,
@@ -463,8 +519,20 @@ async function processPublication(ref: DocumentReference, token: string) {
       wakeAt: null,
       safeError: null,
       errorEventId: null,
-      updatedAt: Timestamp.now(),
+      updatedAt: publishedAt,
+    };
+    const batch = db.batch();
+    batch.update(ref, scheduleUpdate);
+    const editorial = editorialResult(data, {
+      status: "published",
+      instagramMediaId: result.id,
+      instagramMediaIds: [result.id],
+      permalink,
+      publishedAt,
+      safeError: null,
     });
+    if (editorial) batch.set(editorial.ref, { ...editorial.value, status: "published" }, { merge: true });
+    await batch.commit();
     logger.info("[instagramPublishingScheduler] publication completed", {
       scheduleId: ref.id,
       publishedMediaId: result.id,
@@ -486,6 +554,44 @@ async function dueReferences() {
   return snapshot.docs.map((doc) => doc.ref);
 }
 
+async function deliverManualReminders() {
+  const now = Timestamp.now();
+  const snapshot = await db.collection(MANUAL_REMINDERS)
+    .where("workspace_id", "==", WORKSPACE_ID)
+    .where("status", "==", "scheduled")
+    .where("wakeAt", "<=", now)
+    .orderBy("wakeAt", "asc")
+    .limit(10)
+    .get();
+
+  for (const reminder of snapshot.docs) {
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(reminder.ref);
+      const data = current.data();
+      if (!current.exists || data?.status !== "scheduled" || data?.workspace_id !== WORKSPACE_ID) return;
+      if (!data.wakeAt || data.wakeAt.toMillis() > now.toMillis()) return;
+      const editorialPostId = typeof data.editorialPostId === "string" ? data.editorialPostId : reminder.id;
+      transaction.update(reminder.ref, {
+        status: "notified",
+        notifiedAt: now,
+        wakeAt: null,
+        updatedAt: now,
+      });
+      transaction.set(db.collection("instagramPosts").doc(editorialPostId), {
+        manualReminder: {
+          status: "due",
+          notifiedAt: now,
+          instructions: typeof data.instructions === "string" ? data.instructions : "",
+        },
+        updatedAt: now,
+      }, { merge: true });
+    });
+    logger.info("[instagramPublishingScheduler] manual Story reminder delivered", {
+      reminderId: reminder.id,
+    });
+  }
+}
+
 export const instagramPublishingScheduler = onSchedule({
   schedule: "* * * * *",
   timeZone: "America/Belem",
@@ -495,6 +601,7 @@ export const instagramPublishingScheduler = onSchedule({
   maxInstances: 1,
   secrets: [metaSystemUserToken],
 }, async () => {
+  await deliverManualReminders();
   const token = metaSystemUserToken.value().trim();
   if (!token) throw new Error("META_SYSTEM_USER_TOKEN não está configurado.");
 
