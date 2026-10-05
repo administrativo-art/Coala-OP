@@ -15,6 +15,7 @@
     "test:integration": "node scripts/test-integration.mjs",
     "test:e2e": "node scripts/test-e2e.mjs",
     "test:e2e:expense-boleto": "node scripts/test-expense-boleto-e2e.mjs",
+    "test:e2e:instagram-schedule": "node scripts/test-instagram-schedule-e2e.mjs",
     "test:e2e:playwright": "playwright test",
     "test:skills": "node --import tsx --test tests/unit/agent-skills/*.test.ts",
     "test:security:rules": "node scripts/test-security-rules.mjs",
