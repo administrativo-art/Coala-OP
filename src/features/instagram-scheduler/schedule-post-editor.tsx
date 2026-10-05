@@ -264,20 +264,17 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
             </div>
           </section>
 
-          <section aria-labelledby="editor-caption-title">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h2 id="editor-caption-title" className="text-[14px] font-extrabold text-[#4A1A04]">Legenda</h2>
-              <span className="text-[12px] text-[#7A5646]">{item.caption.length} / 2.200</span>
-            </div>
-            <div className="whitespace-pre-wrap rounded-xl border border-[#EADFD3] bg-white p-4 text-[14px] leading-6 text-[#4A1A04]">
-              {item.caption || <span className="text-[#7A5646]">Sem legenda.</span>}
-            </div>
-            {item.format === "story" && item.caption && (
-              <p className="mt-2 rounded-lg bg-[#FCF1DD] px-3 py-2 text-[12px] font-semibold leading-5 text-[#8A5A18]">
-                Stories são publicados sem essa legenda. Inclua o texto diretamente na arte se ele precisar aparecer.
-              </p>
-            )}
-          </section>
+          {item.format !== "story" && (
+            <section aria-labelledby="editor-caption-title">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 id="editor-caption-title" className="text-[14px] font-extrabold text-[#4A1A04]">Legenda</h2>
+                <span className="text-[12px] text-[#7A5646]">{item.caption.length} / 2.200</span>
+              </div>
+              <div className="whitespace-pre-wrap rounded-xl border border-[#EADFD3] bg-white p-4 text-[14px] leading-6 text-[#4A1A04]">
+                {item.caption || <span className="text-[#7A5646]">Sem legenda.</span>}
+              </div>
+            </section>
+          )}
 
           {item.location && (
             <section className="flex items-start gap-3 rounded-xl border border-[#EADFD3] bg-white p-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AtSign, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, GripVertical, ImageOff, MapPin, Plus, RefreshCw } from "lucide-react";
+import { AtSign, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, GripVertical, ImageOff, MapPin, Pause, Plus, RefreshCw } from "lucide-react";
 
 import {
   instagramStatusLabels,
@@ -10,6 +10,7 @@ import {
   type InstagramScheduleListItem,
 } from "./contracts";
 import { ProtectedMedia } from "./protected-media";
+import { ScheduleCardMenu, type ScheduleCardActions } from "./schedule-card-menu";
 import {
   addDaysToKey,
   addMonthsToKey,
@@ -32,6 +33,7 @@ const weekdays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const statusDot: Record<InstagramPublicationStatus, string> = {
   uploading: "#7B4BA8",
   scheduled: "#F462A7",
+  paused: "#8F9BA6",
   processing: "#F9C430",
   published: "#A7AFB5",
   failed: "#C0392B",
@@ -45,7 +47,7 @@ type CalendarViewProps = {
   onRefresh: () => void;
   onCreate: (dateKey: string) => void;
   onOpen: (item: InstagramScheduleListItem) => void;
-  onReschedule: (id: string, scheduledAt: string) => Promise<boolean>;
+  actions: ScheduleCardActions;
 };
 
 function CalendarPostCard({
@@ -56,8 +58,10 @@ function CalendarPostCard({
   onDragEnd,
   onOpen,
   onReschedule,
+  actions,
 }: {
   item: InstagramScheduleListItem;
+  actions: ScheduleCardActions;
   compact?: boolean;
   dragging: boolean;
   onDragStart: () => void;
@@ -73,6 +77,7 @@ function CalendarPostCard({
 
   if (compact) {
     return (
+      <div className="group relative">
       <button
         type="button"
         draggable={editable}
@@ -83,12 +88,18 @@ function CalendarPostCard({
         }}
         onDragEnd={onDragEnd}
         onClick={() => !dragging && onOpen()}
-        className={`w-full truncate rounded-md px-1.5 py-1 text-left text-[11px] font-bold outline-none transition hover:ring-2 hover:ring-[#F462A7] focus-visible:ring-2 focus-visible:ring-[#D90F6F] ${editable ? "cursor-grab" : "cursor-pointer"}`}
+        className={`w-full truncate rounded-md py-1 pl-1.5 pr-7 text-left text-[11px] font-bold outline-none transition hover:ring-2 hover:ring-[#F462A7] focus-visible:ring-2 focus-visible:ring-[#D90F6F] ${editable ? "cursor-grab" : "cursor-pointer"}`}
         style={{ background: theme.background, color: theme.ink, opacity: dragging ? 0.5 : 1 }}
         title={`${timeInBelem(item.scheduledAt)} · ${instagramPostTitle(item)}`}
       >
         {timeInBelem(item.scheduledAt)} {item.format === "story" && item.media.length > 1 ? `Sequência · ${item.media.length} Stories · ` : ""}{instagramPostTitle(item)}{item.storyMentions.length > 0 ? ` · @${item.storyMentions.join(" · @")}` : ""}
       </button>
+      <ScheduleCardMenu
+        item={item}
+        actions={actions}
+        className="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100"
+      />
+      </div>
     );
   }
 
@@ -101,7 +112,7 @@ function CalendarPostCard({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className={`group rounded-[10px] border bg-white p-2 shadow-sm transition hover:border-[#F4A6D0] hover:shadow-md ${item.status === "published" ? "border-[#A9D9B8]" : "border-[#EADFD3]"} ${editable ? "cursor-grab" : "cursor-default"}`}
+      className={`group relative rounded-[10px] border bg-white p-2 shadow-sm transition hover:border-[#F4A6D0] hover:shadow-md ${item.status === "published" ? "border-[#A9D9B8]" : "border-[#EADFD3]"} ${editable ? "cursor-grab" : "cursor-default"}`}
       style={{ opacity: dragging ? 0.5 : 1 }}
     >
       <button
@@ -109,7 +120,7 @@ function CalendarPostCard({
         onClick={() => !dragging && onOpen()}
         className="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D90F6F]"
       >
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center justify-between gap-1 pr-7">
           <span className="flex items-center gap-1 text-[12px] font-extrabold text-[#4A1A04]">
             {editable && <GripVertical className="h-3 w-3 text-[#D9C8B6]" aria-hidden="true" />}
             {timeInBelem(item.scheduledAt)}
@@ -163,10 +174,12 @@ function CalendarPostCard({
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-[#7A5646]">
             <span className="h-2 w-2 rounded-full" style={{ background: statusDot[item.status] }} />
             {item.status === "scheduled" && <CalendarClock className="h-3.5 w-3.5 text-[#D90F6F]" aria-hidden="true" />}
+            {item.status === "paused" && <Pause className="h-3.5 w-3.5 text-[#6B7782]" aria-hidden="true" />}
             <span className="min-w-0 flex-1 truncate">{instagramStatusLabels[item.status]}</span>
           </div>
         )}
       </button>
+      <ScheduleCardMenu item={item} actions={actions} className="absolute right-1.5 top-1.5" />
       {editable && (
         <label
           className="mt-2 block border-t border-[#F3E8DC] pt-2 text-[10px] font-bold text-[#7A5646]"
@@ -187,7 +200,7 @@ function CalendarPostCard({
   );
 }
 
-export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, onReschedule }: CalendarViewProps) {
+export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, actions }: CalendarViewProps) {
   const today = dateKeyInBelem(new Date());
   const [mode, setMode] = useState<"week" | "month">("week");
   const [weekStart, setWeekStart] = useState(() => startOfWeekKey(today));
@@ -225,7 +238,7 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, onRe
     if (!isScheduleEditable(item) || dateKey === dateKeyInBelem(item.scheduledAt)) return;
     setPendingId(item.id);
     try {
-      await onReschedule(item.id, moveScheduleToDate(item.scheduledAt, dateKey));
+      await actions.onReschedule(item.id, moveScheduleToDate(item.scheduledAt, dateKey));
     } finally {
       setPendingId(null);
     }
@@ -368,6 +381,7 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, onRe
                         }}
                         onOpen={() => onOpen(item)}
                         onReschedule={(nextDay) => void reschedule(item, nextDay)}
+                        actions={actions}
                       />
                     ))}
                     {dayItems.length === 0 && !isPast && (
@@ -435,6 +449,7 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, onRe
                         }}
                         onOpen={() => onOpen(item)}
                         onReschedule={(nextDay) => void reschedule(item, nextDay)}
+                        actions={actions}
                       />
                     ))}
                     {dayItems.length > 3 && <span className="text-[11px] font-bold text-[#7A5646]">+{dayItems.length - 3}</span>}

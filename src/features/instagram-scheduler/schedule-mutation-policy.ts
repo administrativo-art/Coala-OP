@@ -2,10 +2,41 @@ import type { InstagramPublicationStatus } from "./contracts";
 
 export const INSTAGRAM_SCHEDULE_MIN_LEAD_MS = 120_000;
 
-export function isInstagramScheduleEditableStatus(
-  status: InstagramPublicationStatus | string | null | undefined,
-) {
+type StatusLike = InstagramPublicationStatus | string | null | undefined;
+
+/** Data e ordem dos Stories só mudam enquanto o envio ainda não começou. */
+export function isInstagramScheduleEditableStatus(status: StatusLike) {
+  return status === "scheduled" || status === "paused";
+}
+
+export function canCancelInstagramSchedule(status: StatusLike) {
+  return status === "scheduled" || status === "paused";
+}
+
+export function canPauseInstagramSchedule(status: StatusLike) {
   return status === "scheduled";
+}
+
+export function canResumeInstagramSchedule(status: StatusLike) {
+  return status === "paused";
+}
+
+/** Tirar da grade só faz sentido para o que já terminou; o que ainda vai ao ar usa Pausar, Cancelar ou Excluir. */
+export function canHideInstagramScheduleFromGrid(status: StatusLike) {
+  return status === "published"
+    || status === "failed"
+    || status === "manual_review"
+    || status === "cancelled";
+}
+
+/** Só `uploading` e `processing` ficam de fora: há envio em andamento. */
+export function canDeleteInstagramSchedule(status: StatusLike) {
+  return status === "scheduled"
+    || status === "paused"
+    || status === "published"
+    || status === "failed"
+    || status === "manual_review"
+    || status === "cancelled";
 }
 
 export function isInstagramScheduleTimeAllowed(

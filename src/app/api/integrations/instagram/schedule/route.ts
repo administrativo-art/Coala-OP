@@ -63,6 +63,7 @@ export const GET = withApiErrorHandling(
     const byId = new Map(legacyDocs.map((doc) => [doc.id, doc]));
     currentDocs.forEach((doc) => byId.set(doc.id, doc));
     const docs = [...byId.values()]
+      .filter((doc) => doc.data()?.hiddenFromGrid !== true)
       .sort((left, right) => scheduledAtMillis(right) - scheduledAtMillis(left))
       .slice(0, 100);
 
