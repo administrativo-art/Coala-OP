@@ -12,6 +12,7 @@ import {
   canHideInstagramScheduleFromGrid,
   canPauseInstagramSchedule,
   canResumeInstagramSchedule,
+  canReplaceInstagramCaption,
   hasPublishedInstagramStoryItem,
   isInstagramScheduleEditableStatus,
   isInstagramScheduleTimeAllowed,
@@ -217,6 +218,20 @@ export const PATCH = withApiErrorHandling<RouteContext>(
           updatedAt: now,
           updatedBy: actor,
         };
+
+        if (payload.data.caption !== undefined && payload.data.caption !== target.caption) {
+          if (!canReplaceInstagramCaption(target.progress)) {
+            stateConflict("A publicação já iniciou o envio à Meta; a legenda não pode mais ser alterada.");
+          }
+          updates.caption = payload.data.caption;
+          // Prepared containers embed the previous caption; only rebuild before publication starts.
+          updates.progress = FieldValue.delete();
+          transaction.set(targetRef.collection("events").doc(randomUUID()), {
+            type: "caption_updated",
+            actor,
+            createdAt: now,
+          });
+        }
 
         if (payload.data.scheduledAt !== undefined) {
           const nextDate = new Date(payload.data.scheduledAt);

@@ -52,7 +52,7 @@ export function serializeInstagramSchedule(doc: DocumentSnapshot): InstagramSche
       width: typeof item?.width === "number" ? item.width : null,
       height: typeof item?.height === "number" ? item.height : null,
       previewUrl:
-        item?.kind === "image" && typeof item?.objectPath === "string"
+        (item?.kind === "image" || item?.kind === "video") && typeof item?.objectPath === "string"
           ? `/api/integrations/instagram/schedule/${encodeURIComponent(doc.id)}/media/${index}`
           : null,
     })),
