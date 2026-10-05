@@ -1,8 +1,7 @@
 import { FieldPath, type Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
-import { requireUser } from "@/lib/auth-server";
+import { requireInstagramSchedulerUser } from "@/features/instagram-scheduler/access.server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { AppError } from "@/lib/observability/app-error";
 import { withApiErrorHandling } from "@/lib/observability/api-error";
@@ -22,8 +21,7 @@ function numberOrNull(value: unknown) {
 export const GET = withApiErrorHandling(
   { source: "api", operation: "listMarketingProducts", routeOrJob: "/api/integrations/marketing/products" },
   async (request: NextRequest) => {
-    const context = await requireUser(request);
-    requireInstagramSchedulerAccess(context);
+    const context = await requireInstagramSchedulerUser(request);
     const requested = Number(request.nextUrl.searchParams.get("limit") ?? 100);
     if (!Number.isInteger(requested) || requested < 1) {
       throw new AppError({ code: "MARKETING_PRODUCTS_INVALID_LIMIT", kind: "VALIDATION", safeMessage: "Limite inválido.", reportable: false });
