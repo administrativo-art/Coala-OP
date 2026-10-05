@@ -22,6 +22,19 @@ async function login(page: Page) {
 
 test('define o CD como unidade de abastecimento e o grupo que ele atende', async ({ page }) => {
   test.setTimeout(300_000);
+  const db = adminDb();
+  // Quiosque sem nome (legado/integração): a tela de unidades não pode quebrar por causa dele.
+  // Criado só neste teste para não afetar outras telas que ordenam quiosques por nome.
+  const nameless = db.collection('kiosks').doc('kiosk-sem-nome-e2e');
+  await nameless.set({ pdvFilialId: 'e2e-sem-nome' });
+  try {
+    await runUnitsFlow(page, db);
+  } finally {
+    await nameless.delete();
+  }
+});
+
+async function runUnitsFlow(page: Page, db: ReturnType<typeof adminDb>) {
   await login(page);
 
   await page.goto('/dashboard/settings?department=operacional&tab=units', { waitUntil: 'domcontentloaded' });
@@ -41,14 +54,13 @@ test('define o CD como unidade de abastecimento e o grupo que ele atende', async
   await page.getByRole('button', { name: /^Salvar unidade$|^Salvar$/ }).click();
   await expect(page.getByTestId('unit-stock-role')).toBeHidden({ timeout: 60_000 });
 
-  const db = adminDb();
   await expect.poll(async () => (await db.collection('dp_unitGroups').doc(E2E_STOCK_MIN.cdGroupId).get()).get('suppliedGroupIds'))
     .toEqual([E2E_STOCK_MIN.storesGroupId]);
   await expect.poll(async () => (await db.collection('dp_units').doc(E2E_STOCK_MIN.cdUnitId).get()).get('stockRole'))
     .toBe('supply');
   // a unidade comercial continua sem função gravada (padrão)
   expect((await db.collection('dp_units').doc(E2E_STOCK_MIN.storeUnitId).get()).get('stockRole')).toBeUndefined();
-});
+}
 
 test('estoque mínimo fica bloqueado enquanto a automação calcula e libera com "Manter valor manual"', async ({ page }) => {
   test.setTimeout(300_000);

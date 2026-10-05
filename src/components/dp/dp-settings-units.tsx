@@ -158,12 +158,13 @@ type PdvLegalFilial = {
 
 const NONE = "__none__";
 
-function sortByName<T extends { name: string }>(items: T[]) {
-  return [...items].sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+// Documentos legados ou de integração podem chegar sem `name`; a tela não pode quebrar por isso.
+function sortByName<T extends { name?: string }>(items: T[]) {
+  return [...items].sort((left, right) => (left.name ?? "").localeCompare(right.name ?? "", "pt-BR"));
 }
 
-function normalizeName(value: string) {
-  return value
+function normalizeName(value: string | undefined) {
+  return (value ?? "")
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/quiosque\s*/gi, "")
@@ -209,8 +210,9 @@ function editDistance(a: string, b: string) {
   return matrix[a.length][b.length];
 }
 
-function matchUnitByName(kioskName: string, units: DPUnit[]) {
+function matchUnitByName(kioskName: string | undefined, units: DPUnit[]) {
   const normalizedKioskName = normalizeName(kioskName);
+  if (!normalizedKioskName) return undefined; // sem nome não há correspondência confiável
   const exact = units.find((unit) => {
     const normalizedUnitName = normalizeName(unit.name);
     return (
@@ -436,7 +438,7 @@ export function DPSettingsUnits() {
       .filter((kiosk) => !linkedKioskIds.has(kiosk.id))
       .map((kiosk) => ({
         key: `kiosk-${kiosk.id}`,
-        name: kiosk.name,
+        name: kiosk.name || kiosk.id,
         kiosk,
         pdvFilialId: kiosk.pdvFilialId,
         bizneoTaxonId:
@@ -1606,7 +1608,7 @@ export function DPSettingsUnits() {
                     {syncCandidates.length > 0 ? (
                       syncCandidates.map((kiosk) => (
                         <SelectItem key={kiosk.id} value={kiosk.id}>
-                          {kiosk.name}
+                          {kiosk.name || kiosk.id}
                         </SelectItem>
                       ))
                     ) : (
