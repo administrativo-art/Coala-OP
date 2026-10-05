@@ -4,7 +4,7 @@ export const INSTAGRAM_SCHEDULE_MIN_LEAD_MS = 120_000;
 
 type StatusLike = InstagramPublicationStatus | string | null | undefined;
 
-/** Data e ordem dos Stories só mudam enquanto o envio ainda não começou. */
+/** Data, legenda e ordem dos Stories só mudam enquanto o envio ainda não começou. */
 export function isInstagramScheduleEditableStatus(status: StatusLike) {
   return status === "scheduled" || status === "paused";
 }
@@ -73,4 +73,16 @@ export function hasPublishedInstagramStoryItem(progress: unknown) {
   return storyItems.some(
     (item) => Boolean(item && typeof item === "object" && (item as { publishedMediaId?: unknown }).publishedMediaId),
   );
+}
+
+/** Never discard containers after a publication request, including ambiguous results. */
+export function canReplaceInstagramCaption(progress: unknown) {
+  if (!progress || typeof progress !== "object") return true;
+  const value = progress as Record<string, unknown>;
+  if (value.publishRequestStartedAt || value.publishedMediaId) return false;
+  return !Array.isArray(value.storyItems) || !value.storyItems.some((item: unknown) => {
+    if (!item || typeof item !== "object") return false;
+    const frame = item as Record<string, unknown>;
+    return Boolean(frame.publishRequestStartedAt || frame.publishedMediaId);
+  });
 }

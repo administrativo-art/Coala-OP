@@ -48,7 +48,7 @@ export const GET = withApiErrorHandling<RouteContext>(
     if (
       !snapshot.exists ||
       data?.workspace_id !== context.workspace_id ||
-      media?.kind !== "image" ||
+      (media?.kind !== "image" && media?.kind !== "video") ||
       typeof media?.objectPath !== "string" ||
       !media.objectPath.startsWith(`instagram/scheduled/${id}/`)
     ) {
@@ -67,7 +67,8 @@ export const GET = withApiErrorHandling<RouteContext>(
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": media.contentType === "image/jpeg" ? "image/jpeg" : "application/octet-stream",
+        "Content-Type": ["image/jpeg", "video/mp4", "video/quicktime"].includes(media.contentType)
+          ? media.contentType : "application/octet-stream",
         "Cache-Control": "private, no-store",
         "Content-Disposition": "inline",
         "X-Content-Type-Options": "nosniff",
