@@ -1,9 +1,12 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 import {
   applyResponsibilityPatch,
+  hasOwn,
   jsonError,
+  optionalIdList,
   readJsonObject,
   requireOperationalUnitManager,
   requiredString,
@@ -29,6 +32,10 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
     }
     setOptionalStringPatch(update, body, "organizationId");
     applyResponsibilityPatch(update, body);
+    if (hasOwn(body, "suppliedGroupIds")) {
+      const ids = (optionalIdList(body.suppliedGroupIds, "Grupos atendidos") ?? []).filter((id) => id !== groupId);
+      update.suppliedGroupIds = ids.length > 0 ? ids : FieldValue.delete();
+    }
 
     await dbAdmin.collection("dp_unitGroups").doc(groupId).update(update);
 

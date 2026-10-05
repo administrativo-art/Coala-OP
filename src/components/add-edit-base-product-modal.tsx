@@ -353,7 +353,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                   <p>Todo dia 1 do mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda (equivale a usar o desvio padrão típico de um insumo de giro estável, arredondado para uma regra única).</p>
                                   <p>Aqui você escolhe se essa média é calculada por <strong>mês</strong> (padrão, 6 pontos) ou por <strong>quinzena</strong> (12 pontos) — quinzenal reage mais rápido a mudanças recentes de consumo.</p>
                                   <p>Itens em <strong>unidades</strong> são arredondados para cima; itens em <strong>kg/L</strong> mantêm casas decimais.</p>
-                                  <p>Marque <strong>&quot;Travar automação&quot;</strong> num quiosque para editar o mínimo manualmente ali — o cálculo automático passa a ignorar esse quiosque.</p>
+                                  <p>Marque <strong>&quot;Manter valor manual&quot;</strong> num local para digitar o mínimo ali — o cálculo automático passa a ignorar esse local. Desmarcado, o campo fica bloqueado e o valor é recalculado todo dia 1.</p>
+                                  <p>Unidades de abastecimento (como o CD) usam a <strong>soma do consumo</strong> das unidades comerciais dos grupos que atendem, com a mesma média e margem.</p>
                                 </InfoTooltip>
                               </FormLabel>
                               <div className="flex h-9 items-center gap-2 rounded-md border bg-background px-3">
@@ -382,20 +383,21 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                 <TableHead className="text-center">Est. mínimo</TableHead>
                                 <TableHead className="text-center">Est. segurança</TableHead>
                                 <TableHead className="text-center">Lead time (dias)</TableHead>
-                                <TableHead className="text-center">Travar automação</TableHead>
+                                <TableHead className="text-center">Manter valor manual</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {sortedKiosks.map((kiosk) => {
                                 const autoCalc = productToEdit?.stockLevels?.[kiosk.id];
                                 const lastAutoCalculatedAt = autoCalc?.lastAutoCalculatedAt;
+                                const manualMin = form.watch(`stockLevels.${kiosk.id}.override`) === true;
                                 return (
                                 <TableRow key={kiosk.id}>
                                   <TableCell className="font-medium">{kiosk.name}</TableCell>
                                   <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.min`} render={({ field }) => (
                                       <FormItem>
-                                        <FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} /></FormControl>
+                                        <FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} disabled={!manualMin} aria-label={`Estoque mínimo — ${kiosk.name}`} title={manualMin ? undefined : 'Calculado automaticamente. Ative "Manter valor manual" para editar.'} /></FormControl>
                                         {lastAutoCalculatedAt && (
                                           <FormDescription className="text-right text-[10px]">
                                             Calc. automaticamente em {new Date(lastAutoCalculatedAt).toLocaleDateString('pt-BR')}
@@ -418,7 +420,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                   <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.override`} render={({ field }) => (
                                       <FormItem className="flex flex-col items-center space-y-0">
-                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} aria-label={`Manter valor manual — ${kiosk.name}`} /></FormControl>
                                         <FormMessage />
                                       </FormItem>
                                     )}/>
@@ -429,7 +431,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                           </Table>
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo. Com <span className="font-medium text-foreground">&quot;Travar automação&quot;</span> desligado, o estoque mínimo desse quiosque é recalculado automaticamente todo dia 1 do mês.
+                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo. Com <span className="font-medium text-foreground">&quot;Manter valor manual&quot;</span> desligado, o estoque mínimo desse local é calculado automaticamente todo dia 1 do mês e o campo fica bloqueado; ligue para digitar o valor. Unidades de abastecimento (como o CD) somam o consumo das unidades que atendem, conforme o cadastro de unidades e grupos.
                         </p>
                       </div>
                     )}
