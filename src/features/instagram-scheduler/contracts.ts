@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { isFeedImageRatio } from "./media-presentation";
+
+import { certifyInstagramPublication } from "./publication-readiness";
 
 export const instagramPublicationFormats = [
   "feed_image",
@@ -30,6 +31,14 @@ export const instagramMediaInputSchema = z.object({
   sizeBytes: z.number().int().positive(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  durationSeconds: z.number().positive().optional(),
+  videoCodec: z.string().min(1).optional(),
+  audioCodec: z.string().min(1).nullable().optional(),
+  frameRate: z.number().positive().optional(),
+  videoBitrateBps: z.number().positive().optional(),
+  audioSampleRateHz: z.number().positive().nullable().optional(),
+  fastStart: z.boolean().optional(),
+  hasEditList: z.boolean().optional(),
 });
 
 export const instagramScheduleInputSchema = z
@@ -53,54 +62,12 @@ export const instagramScheduleInputSchema = z
       .optional(),
   })
   .superRefine((input, context) => {
-    const images = input.media.filter((item) => item.kind === "image").length;
-    const videos = input.media.filter((item) => item.kind === "video").length;
-
-    if (["feed_image", "carousel"].includes(input.format)) {
-      input.media.forEach((item, index) => {
-        if (item.kind !== "image" || !item.width || !item.height) return;
-        const ratio = item.width / item.height;
-        if (!isFeedImageRatio(ratio)) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["media", index],
-            message: "A imagem do feed deve ter proporção entre 4:5 e 1,91:1.",
-          });
-        }
-      });
-    }
-
-    if (input.format === "feed_image" && (input.media.length !== 1 || images !== 1)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["media"],
-        message: "Uma publicação de feed exige exatamente uma imagem JPEG.",
-      });
-    }
-
-    if (input.format === "carousel" && (input.media.length < 2 || input.media.length > 10)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["media"],
-        message: "Um carrossel exige de 2 a 10 mídias.",
-      });
-    }
-
-    if (input.format === "reel" && (input.media.length !== 1 || videos !== 1)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["media"],
-        message: "Um reel exige exatamente um vídeo.",
-      });
-    }
-
-    if (input.format === "story" && (input.media.length < 1 || input.media.length > 10)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["media"],
-        message: "Uma sequência de Stories aceita de 1 a 10 mídias.",
-      });
-    }
+    const readiness = certifyInstagramPublication({ format: input.format, media: input.media });
+    readiness.issues.forEach((item) => context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: item.mediaIndex === null ? ["media"] : ["media", item.mediaIndex],
+      message: item.message,
+    }));
 
     if (input.format !== "story" && input.storyMentions.length > 0) {
       context.addIssue({

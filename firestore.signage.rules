@@ -13,6 +13,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /instagramPosts/{postId} {
+      allow read, write: if false;
+
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /instagramManualPublicationReminders/{reminderId} {
+      allow read, write: if false;
+    }
+
     match /instagramMediaLibrary/{mediaId} {
       allow read, write: if false;
     }
