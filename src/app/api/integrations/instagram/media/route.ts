@@ -1,52 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { DocumentSnapshot, Firestore } from "firebase-admin/firestore";
 
 import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
-import { instagramMediaLibraryFolderSchema } from "@/features/instagram-scheduler/contracts";
+import { instagramMediaFolderParentSchema } from "@/features/instagram-scheduler/contracts";
 import {
   INSTAGRAM_LIBRARY_LIST_LIMIT,
   serializeInstagramLibraryMedia,
   storeInstagramLibraryMedia,
 } from "@/features/instagram-scheduler/media-library.server";
+import { requireInstagramMediaFolder } from "@/features/instagram-scheduler/media-folders.server";
 import { requireUser } from "@/lib/auth-server";
-import {
-  legacyMarketingDbAdmin,
-  marketingDbAdmin,
-  shouldReadLegacyMarketingDatabase,
-} from "@/lib/firebase-marketing-admin";
+import { marketingDbAdmin } from "@/lib/firebase-marketing-admin";
 import { AppError } from "@/lib/observability/app-error";
 import { withApiErrorHandling } from "@/lib/observability/api-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function isMissingIndexError(cause: unknown) {
-  const code = (cause as { code?: unknown } | null)?.code;
-  return code === 9 || code === "9" || code === "failed-precondition";
+const MEDIA_ID = /^[0-9a-f-]{36}$/i;
+
+function invalid(message: string): never {
+  throw new AppError({
+    code: "INSTAGRAM_LIBRARY_INVALID_REQUEST",
+    kind: "VALIDATION",
+    safeMessage: message,
+    reportable: false,
+  });
 }
 
-function createdAtMillis(doc: DocumentSnapshot) {
-  const value = doc.data()?.createdAt;
-  return typeof value?.toMillis === "function" ? value.toMillis() : 0;
-}
-
-async function listWorkspaceMediaFrom(db: Firestore, workspaceId: string) {
-  const collection = db.collection("instagramMediaLibrary");
-  try {
-    const snapshot = await collection
-      .where("workspace_id", "==", workspaceId)
-      .orderBy("createdAt", "desc")
-      .limit(INSTAGRAM_LIBRARY_LIST_LIMIT)
-      .get();
-    return snapshot.docs;
-  } catch (cause) {
-    if (!isMissingIndexError(cause)) throw cause;
-    const snapshot = await collection
-      .where("workspace_id", "==", workspaceId)
-      .limit(INSTAGRAM_LIBRARY_LIST_LIMIT)
-      .get();
-    return snapshot.docs.sort((left, right) => createdAtMillis(right) - createdAtMillis(left));
-  }
+/** `root` (ou ausente) = raiz da biblioteca; caso contrário, o UUID da pasta. */
+function parseFolderParam(value: FormDataEntryValue | string | null) {
+  if (value === null || value === "" || value === "root") return null;
+  const parsed = instagramMediaFolderParentSchema.safeParse(value);
+  if (!parsed.success) invalid("Pasta inválida.");
+  return parsed.data;
 }
 
 export const GET = withApiErrorHandling(
@@ -59,20 +45,32 @@ export const GET = withApiErrorHandling(
     const context = await requireUser(request);
     requireInstagramSchedulerAccess(context);
 
-    const [currentDocs, legacyDocs] = await Promise.all([
-      listWorkspaceMediaFrom(marketingDbAdmin, context.workspace_id),
-      shouldReadLegacyMarketingDatabase()
-        ? listWorkspaceMediaFrom(legacyMarketingDbAdmin, context.workspace_id)
-        : Promise.resolve([]),
-    ]);
-    const byId = new Map(legacyDocs.map((doc) => [doc.id, doc]));
-    currentDocs.forEach((doc) => byId.set(doc.id, doc));
-    const docs = [...byId.values()]
-      .sort((left, right) => createdAtMillis(right) - createdAtMillis(left))
-      .slice(0, INSTAGRAM_LIBRARY_LIST_LIMIT);
+    const params = request.nextUrl.searchParams;
+    const folderId = parseFolderParam(params.get("folderId"));
+    const cursor = params.get("cursor");
+    if (cursor !== null && !MEDIA_ID.test(cursor)) invalid("Cursor inválido.");
+
+    const collection = marketingDbAdmin.collection("instagramMediaLibrary");
+    let query = collection
+      .where("workspace_id", "==", context.workspace_id)
+      .where("folderId", "==", folderId)
+      .orderBy("createdAt", "desc")
+      .limit(INSTAGRAM_LIBRARY_LIST_LIMIT + 1);
+    if (cursor) {
+      const cursorSnapshot = await collection.doc(cursor).get();
+      if (!cursorSnapshot.exists || cursorSnapshot.data()?.workspace_id !== context.workspace_id) {
+        invalid("Cursor inválido.");
+      }
+      query = query.startAfter(cursorSnapshot);
+    }
+    const snapshot = await query.get();
+    const page = snapshot.docs.slice(0, INSTAGRAM_LIBRARY_LIST_LIMIT);
 
     return NextResponse.json(
-      { items: docs.map(serializeInstagramLibraryMedia) },
+      {
+        items: page.map(serializeInstagramLibraryMedia),
+        nextCursor: snapshot.docs.length > INSTAGRAM_LIBRARY_LIST_LIMIT ? page[page.length - 1]!.id : null,
+      },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   },
@@ -90,20 +88,21 @@ export const POST = withApiErrorHandling(
 
     const form = await request.formData();
     const file = form.get("file");
-    const folderResult = instagramMediaLibraryFolderSchema.safeParse(form.get("folder") ?? "Uploads");
-    if (!(file instanceof File) || !folderResult.success) {
+    const folderId = parseFolderParam(form.get("folderId"));
+    if (!(file instanceof File)) {
       throw new AppError({
         code: "INSTAGRAM_LIBRARY_INVALID_UPLOAD",
         kind: "VALIDATION",
-        safeMessage: folderResult.success ? "Selecione um arquivo." : folderResult.error.issues[0]?.message,
+        safeMessage: "Selecione um arquivo.",
         reportable: false,
       });
     }
+    await requireInstagramMediaFolder(context.workspace_id, folderId);
 
     const item = await storeInstagramLibraryMedia({
       context,
       file,
-      folder: folderResult.data,
+      folderId,
     });
 
     return NextResponse.json(
