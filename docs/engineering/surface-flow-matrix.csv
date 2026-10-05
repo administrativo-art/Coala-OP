@@ -285,9 +285,15 @@ api,src/app/api/integrations/instagram/media/folders/route.ts,,docs/engineering/
 api,src/app/api/integrations/instagram/media/folders/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Renomear mover e excluir pasta; impede ciclo e estouro de profundidade; exclusao sobe o conteudo sem apagar arquivos.
 api,src/app/api/integrations/instagram/media/move/route.ts,,docs/engineering/flows/instagram-publishing.md,Mover ate 50 arquivos da biblioteca entre pastas em transacao; workspace e pasta de destino conferidos no servidor.
 api,src/app/api/integrations/instagram/media/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa protegida da biblioteca; valida usuario workspace documento e prefixo do objeto antes de ler o Storage.
-api,src/app/api/integrations/instagram/schedule/route.ts,,docs/engineering/flows/instagram-publishing.md,Fila server-side do Instagram; Firebase Auth e autorizacao exclusiva conferidas no handler.
+api,src/app/api/integrations/instagram/posts/route.ts,,docs/engineering/flows/instagram-publishing.md,Cadastro editorial oficial; lista limitada e criacao idempotente em Planejado com folderPath canonico.
+api,src/app/api/integrations/instagram/posts/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Leitura oficial e edicao limitada a Planejado ou Produzido; recalcula hash e invalida aprovacoes quando o conteudo muda.
+api,src/app/api/integrations/instagram/posts/[id]/actions/route.ts,,docs/engineering/flows/instagram-publishing.md,Acoes privilegiadas exigem administrador declaracao confirmacao e certificacao tecnica da midia vinculada ao hash; cria agendamento ou lembrete idempotente.
+api,src/app/api/integrations/instagram/posts/[id]/media/route.ts,,docs/engineering/flows/instagram-publishing.md,Upload editorial protegido; valida arquivo grava sob folderPath canonico recalcula hash e invalida aprovacoes.
+api,src/app/api/integrations/instagram/posts/[id]/media/[mediaId]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa editorial protegida; valida usuario workspace post midia e prefixo do objeto antes de ler o Storage.
+api,src/app/api/integrations/instagram/schedule/route.ts,,docs/engineering/flows/instagram-publishing.md,Listagem autenticada da fila operacional; POST legado recusa criacao direta e exige cadastro editorial aprovado.
 api,src/app/api/integrations/instagram/schedule/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Reagendar trocar datas reordenar Stories cancelar pausar retomar ocultar da grade e excluir; workspace e estado conferidos em transacao no servidor.
 api,src/app/api/integrations/instagram/schedule/[id]/media/[index]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa protegida da imagem agendada; valida usuario workspace documento indice e caminho antes de ler o Storage.
+api,src/app/api/integrations/marketing/products/route.ts,,docs/engineering/flows/instagram-publishing.md,Projecao paginada e somente leitura de produtos para Marketing; autenticada e limitada a campos editoriais permitidos.
 api,src/app/api/integrations/pdvlegal/filiais/route.ts,,docs/engineering/flows/pdv-sync.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/pdvlegal/inspect/route.ts,,docs/engineering/flows/pdv-sync.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/pdvlegal/sync/route.ts,,docs/engineering/flows/pdv-sync.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -429,7 +435,7 @@ page,src/app/desligamento/documentos/[token]/page.tsx,,docs/engineering/flows/te
 page,src/app/document-preview/[id]/page.tsx,,docs/engineering/flows/document-generation.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/ferias/contabilidade/[token]/page.tsx,,docs/engineering/flows/vacation-accountant-dispatch.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/forgot-password/page.tsx,,docs/engineering/access-and-privacy.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
-page,src/app/instagram-programacao/page.tsx,,docs/engineering/flows/instagram-publishing.md,Workspace autenticado com calendario grade biblioteca editor autorizado da bio e relatorios Meta mais funil agregado da bio.
+page,src/app/instagram-programacao/page.tsx,,docs/engineering/flows/instagram-publishing.md,Workspace autenticado com posts editoriais aprovacoes certificacao calendario grade biblioteca editor autorizado da bio e relatorios.
 page,src/app/login/page.tsx,,docs/engineering/access-and-privacy.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/patrimonio/[code]/page.tsx,,docs/engineering/flows/assets.md,Entrada externa classificada no external-page-map; publicidade nao presumida.

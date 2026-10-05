@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { AppError } from "@/lib/observability/app-error";
 
 import type { InstagramMediaLibraryKind } from "./contracts";
+import { inspectInstagramIsoVideo } from "./video-inspection";
 
 export const INSTAGRAM_LIBRARY_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const INSTAGRAM_LIBRARY_VIDEO_MAX_BYTES = 24 * 1024 * 1024;
@@ -13,6 +14,14 @@ type DetectedMedia = {
   extension: string;
   width: number | null;
   height: number | null;
+  durationSeconds: number | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  frameRate: number | null;
+  videoBitrateBps: number | null;
+  audioSampleRateHz: number | null;
+  fastStart: boolean | null;
+  hasEditList: boolean | null;
 };
 
 function orientedDimensions(
@@ -56,6 +65,14 @@ export async function detectInstagramLibraryMedia(buffer: Buffer): Promise<Detec
         contentType: metadata.format === "jpeg" ? "image/jpeg" : `image/${metadata.format}`,
         extension: metadata.format === "jpeg" ? "jpg" : metadata.format,
         ...dimensions,
+        durationSeconds: null,
+        videoCodec: null,
+        audioCodec: null,
+        frameRate: null,
+        videoBitrateBps: null,
+        audioSampleRateHz: null,
+        fastStart: null,
+        hasEditList: null,
       };
     } catch (cause) {
       throw new AppError({
@@ -71,12 +88,12 @@ export async function detectInstagramLibraryMedia(buffer: Buffer): Promise<Detec
   if (isIsoBaseMedia(buffer)) {
     const brand = buffer.subarray(8, 12).toString("ascii").toLowerCase();
     const isQuickTime = brand === "qt  ";
+    const inspection = inspectInstagramIsoVideo(buffer);
     return {
       kind: "video",
       contentType: isQuickTime ? "video/quicktime" : "video/mp4",
       extension: isQuickTime ? "mov" : "mp4",
-      width: null,
-      height: null,
+      ...inspection,
     };
   }
 

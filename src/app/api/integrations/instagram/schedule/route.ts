@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Firestore } from "firebase-admin/firestore";
 
 import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
-import { createInstagramScheduleFromForm } from "@/features/instagram-scheduler/schedule-create.server";
 import { serializeInstagramSchedule } from "@/features/instagram-scheduler/serialize.server";
 import { requireUser } from "@/lib/auth-server";
 import {
@@ -10,6 +9,7 @@ import {
   marketingDbAdmin,
   shouldReadLegacyMarketingDatabase,
 } from "@/lib/firebase-marketing-admin";
+import { AppError } from "@/lib/observability/app-error";
 import { withApiErrorHandling } from "@/lib/observability/api-error";
 
 export const runtime = "nodejs";
@@ -83,13 +83,11 @@ export const POST = withApiErrorHandling(
   async (request: NextRequest) => {
     const context = await requireUser(request);
     requireInstagramSchedulerAccess(context);
-    const item = await createInstagramScheduleFromForm({
-      context,
-      form: await request.formData(),
+    throw new AppError({
+      code: "INSTAGRAM_EDITORIAL_POST_REQUIRED",
+      kind: "CONFLICT",
+      safeMessage: "Crie o post em Planejado e conclua as aprovações antes de agendar.",
+      reportable: false,
     });
-    return NextResponse.json(
-      { item },
-      { status: 201, headers: { "Cache-Control": "private, no-store" } },
-    );
   },
 );
