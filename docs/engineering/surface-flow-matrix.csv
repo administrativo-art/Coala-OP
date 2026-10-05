@@ -286,7 +286,7 @@ api,src/app/api/integrations/instagram/media/folders/[id]/route.ts,,docs/enginee
 api,src/app/api/integrations/instagram/media/move/route.ts,,docs/engineering/flows/instagram-publishing.md,Mover ate 50 arquivos da biblioteca entre pastas em transacao; workspace e pasta de destino conferidos no servidor.
 api,src/app/api/integrations/instagram/media/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa protegida da biblioteca; valida usuario workspace documento e prefixo do objeto antes de ler o Storage.
 api,src/app/api/integrations/instagram/schedule/route.ts,,docs/engineering/flows/instagram-publishing.md,Fila server-side do Instagram; Firebase Auth e autorizacao exclusiva conferidas no handler.
-api,src/app/api/integrations/instagram/schedule/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Reagendamento ou troca atomica de datas somente para posts programados do mesmo workspace com evento de auditoria.
+api,src/app/api/integrations/instagram/schedule/[id]/route.ts,,docs/engineering/flows/instagram-publishing.md,Reagendar trocar datas reordenar Stories cancelar pausar retomar ocultar da grade e excluir; workspace e estado conferidos em transacao no servidor.
 api,src/app/api/integrations/instagram/schedule/[id]/media/[index]/route.ts,,docs/engineering/flows/instagram-publishing.md,Previa protegida da imagem agendada; valida usuario workspace documento indice e caminho antes de ler o Storage.
 api,src/app/api/integrations/pdvlegal/filiais/route.ts,,docs/engineering/flows/pdv-sync.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/integrations/pdvlegal/inspect/route.ts,,docs/engineering/flows/pdv-sync.md,Destino de investigacao; conferir metodo e ramo no handler.

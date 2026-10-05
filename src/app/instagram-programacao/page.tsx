@@ -318,7 +318,13 @@ export default function InstagramProgramacaoPage() {
 
   async function mutateSchedule(
     id: string,
-    body: { scheduledAt?: string; mediaOrder?: number[] } | { swapWithId: string } | { cancel: true },
+    body:
+      | { scheduledAt?: string; mediaOrder?: number[] }
+      | { swapWithId: string }
+      | { cancel: true }
+      | { pause: true }
+      | { hide: true }
+      | { resume: true; scheduledAt?: string },
   ) {
     setError(null);
     await request(`/api/integrations/instagram/schedule/${encodeURIComponent(id)}`, {
@@ -363,6 +369,57 @@ export default function InstagramProgramacaoPage() {
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível cancelar o agendamento.");
+      return false;
+    }
+  }
+
+  async function pauseSchedule(id: string) {
+    try {
+      await mutateSchedule(id, { pause: true });
+      say("Publicação pausada. Ela não será enviada até você programar de novo.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível pausar a publicação.");
+      return false;
+    }
+  }
+
+  async function resumeSchedule(id: string, scheduledAt?: string) {
+    try {
+      await mutateSchedule(id, scheduledAt ? { resume: true, scheduledAt } : { resume: true });
+      say("Publicação programada novamente.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível programar a publicação.");
+      return false;
+    }
+  }
+
+  async function hideSchedule(id: string) {
+    try {
+      await mutateSchedule(id, { hide: true });
+      if (editingId === id) closeEditor();
+      say("Removida da grade. O registro foi mantido.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível remover da grade.");
+      return false;
+    }
+  }
+
+  async function deleteSchedule(id: string) {
+    setError(null);
+    try {
+      await request(`/api/integrations/instagram/schedule/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        fallbackError: "Não foi possível excluir a publicação.",
+      });
+      if (editingId === id) closeEditor();
+      await loadSchedule();
+      say("Publicação excluída.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível excluir a publicação.");
       return false;
     }
   }
@@ -576,7 +633,14 @@ export default function InstagramProgramacaoPage() {
             onRefresh={() => void loadSchedule()}
             onCreate={setCreateDate}
             onOpen={openEditor}
-            onReschedule={reschedule}
+            actions={{
+              onReschedule: reschedule,
+              onPause: pauseSchedule,
+              onResume: resumeSchedule,
+              onCancel: cancelSchedule,
+              onHide: hideSchedule,
+              onDelete: deleteSchedule,
+            }}
           />
         ) : activeView === "feed" ? (
           <FeedGridView

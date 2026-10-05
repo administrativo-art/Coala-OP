@@ -1,17 +1,25 @@
 import { randomUUID } from "node:crypto";
 
 import { FieldValue, Timestamp, type DocumentData } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
 import { instagramScheduleMutationSchema } from "@/features/instagram-scheduler/contracts";
 import {
+  canCancelInstagramSchedule,
+  canDeleteInstagramSchedule,
+  canHideInstagramScheduleFromGrid,
+  canPauseInstagramSchedule,
+  canResumeInstagramSchedule,
   hasPublishedInstagramStoryItem,
   isInstagramScheduleEditableStatus,
   isInstagramScheduleTimeAllowed,
   reorderInstagramStoryMedia,
 } from "@/features/instagram-scheduler/schedule-mutation-policy";
 import { requireUser } from "@/lib/auth-server";
+import { adminApp } from "@/lib/firebase-admin";
+import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import {
   legacyMarketingDbAdmin,
   marketingDbAdmin,
@@ -51,6 +59,15 @@ function requireEditable(data: DocumentData | undefined) {
       reportable: false,
     });
   }
+}
+
+function stateConflict(message: string): never {
+  throw new AppError({
+    code: "INSTAGRAM_SCHEDULE_STATE_CONFLICT",
+    kind: "CONFLICT",
+    safeMessage: message,
+    reportable: false,
+  });
 }
 
 function requireFuture(value: Date) {
@@ -102,9 +119,79 @@ export const PATCH = withApiErrorHandling<RouteContext>(
       const targetSnapshot = await transaction.get(targetRef);
       const target = targetSnapshot.data();
       if (!targetSnapshot.exists || target?.workspace_id !== context.workspace_id) notFound();
+      if ("hide" in payload.data) {
+        if (!canHideInstagramScheduleFromGrid(target.status)) {
+          stateConflict("Somente uma publicação já concluída, cancelada ou com falha pode ser removida da grade.");
+        }
+        const now = Timestamp.now();
+        transaction.update(targetRef, {
+          hiddenFromGrid: true,
+          hiddenAt: now,
+          hiddenBy: actor,
+          updatedAt: now,
+          updatedBy: actor,
+        });
+        transaction.set(targetRef.collection("events").doc(randomUUID()), {
+          type: "hidden_from_grid",
+          status: target.status,
+          actor,
+          createdAt: now,
+        });
+        return;
+      }
+
       requireEditable(target);
 
+      if ("pause" in payload.data) {
+        if (!canPauseInstagramSchedule(target.status)) stateConflict("Somente uma publicação programada pode ser pausada.");
+        const now = Timestamp.now();
+        transaction.update(targetRef, {
+          status: "paused",
+          pausedAt: now,
+          pausedBy: actor,
+          wakeAt: FieldValue.delete(),
+          updatedAt: now,
+          updatedBy: actor,
+        });
+        transaction.set(targetRef.collection("events").doc(randomUUID()), {
+          type: "paused",
+          scheduledAt: target.scheduledAt?.toDate?.().toISOString?.() ?? null,
+          actor,
+          createdAt: now,
+        });
+        return;
+      }
+
+      if ("resume" in payload.data) {
+        if (!canResumeInstagramSchedule(target.status)) stateConflict("Somente uma publicação pausada pode ser retomada.");
+        const nextDate = payload.data.scheduledAt !== undefined
+          ? new Date(payload.data.scheduledAt)
+          : target.scheduledAt?.toDate?.();
+        if (!(nextDate instanceof Date)) notFound();
+        requireFuture(nextDate);
+        const nextTimestamp = Timestamp.fromDate(nextDate);
+        const now = Timestamp.now();
+        transaction.update(targetRef, {
+          status: "scheduled",
+          scheduledAt: nextTimestamp,
+          nextAttemptAt: nextTimestamp,
+          wakeAt: nextTimestamp,
+          pausedAt: FieldValue.delete(),
+          pausedBy: FieldValue.delete(),
+          updatedAt: now,
+          updatedBy: actor,
+        });
+        transaction.set(targetRef.collection("events").doc(randomUUID()), {
+          type: "resumed",
+          scheduledAt: nextDate.toISOString(),
+          actor,
+          createdAt: now,
+        });
+        return;
+      }
+
       if ("cancel" in payload.data) {
+        if (!canCancelInstagramSchedule(target.status)) stateConflict("Somente uma publicação programada ou pausada pode ser cancelada.");
         const now = Timestamp.now();
         transaction.update(targetRef, {
           status: "cancelled",
@@ -233,6 +320,55 @@ export const PATCH = withApiErrorHandling<RouteContext>(
 
     return NextResponse.json(
       { ok: true },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
+  },
+);
+
+export const DELETE = withApiErrorHandling<RouteContext>(
+  {
+    source: "api",
+    operation: "deleteInstagramPost",
+    routeOrJob: "/api/integrations/instagram/schedule/[id]",
+  },
+  async (request: NextRequest, { params }) => {
+    const context = await requireUser(request);
+    requireInstagramSchedulerAccess(context);
+
+    const { id } = await params;
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) notFound();
+
+    let scheduleDb = marketingDbAdmin;
+    let targetRef = scheduleDb.collection("instagramScheduledPosts").doc(id);
+    if (!(await targetRef.get()).exists && shouldReadLegacyMarketingDatabase()) {
+      scheduleDb = legacyMarketingDbAdmin;
+      targetRef = scheduleDb.collection("instagramScheduledPosts").doc(id);
+    }
+
+    // A transação confere estado e workspace e remove o documento; a partir daí o publicador
+    // não encontra mais o item. Eventos e arquivos são limpos em seguida.
+    await scheduleDb.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(targetRef);
+      const target = snapshot.data();
+      if (!snapshot.exists || target?.workspace_id !== context.workspace_id) notFound();
+      if (!canDeleteInstagramSchedule(target.status)) {
+        stateConflict("Esta publicação está sendo enviada agora e não pode ser excluída. Tente novamente em instantes.");
+      }
+      transaction.delete(targetRef);
+    });
+
+    let cleanup: "complete" | "partial" = "complete";
+    try {
+      await scheduleDb.recursiveDelete(targetRef);
+      await getStorage(adminApp)
+        .bucket(firebaseClientConfig.storageBucket)
+        .deleteFiles({ prefix: `instagram/scheduled/${id}/`, force: true });
+    } catch {
+      cleanup = "partial";
+    }
+
+    return NextResponse.json(
+      { ok: true, cleanup },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   },
