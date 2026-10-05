@@ -5,6 +5,7 @@ import test from "node:test";
 const page = readFileSync("src/app/instagram-programacao/page.tsx", "utf8");
 const scheduleRoute = readFileSync("src/app/api/integrations/instagram/schedule/route.ts", "utf8");
 const postsRoute = readFileSync("src/app/api/integrations/instagram/posts/route.ts", "utf8");
+const schedulerAccess = readFileSync("src/features/instagram-scheduler/access.server.ts", "utf8");
 const publisher = readFileSync("functions/src/instagram-publishing-job.ts", "utf8");
 const indexes = JSON.parse(readFileSync("firestore.signage.indexes.json", "utf8")) as {
   indexes: Array<{ collectionGroup?: string; fields?: Array<{ fieldPath?: string }> }>;
@@ -23,6 +24,14 @@ test("a sincronização editorial é incremental e paginada", () => {
   assert.match(postsRoute, /startAfter/);
   assert.match(postsRoute, /nextCursor/);
   assert.match(postsRoute, /\.limit\(limit\)/);
+});
+
+test("as APIs de Marketing classificam ausência de login como autenticação esperada", () => {
+  assert.match(postsRoute, /requireInstagramSchedulerUser/);
+  assert.doesNotMatch(postsRoute, /requireUser/);
+  assert.match(schedulerAccess, /INSTAGRAM_SCHEDULER_AUTHENTICATION_REQUIRED/);
+  assert.match(schedulerAccess, /kind: "AUTHENTICATION"/);
+  assert.match(schedulerAccess, /reportable: false/);
 });
 
 test("o mesmo job entrega lembretes manuais sem chamar a Meta", () => {
