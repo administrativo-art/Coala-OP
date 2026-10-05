@@ -319,7 +319,7 @@ export default function InstagramProgramacaoPage() {
   async function mutateSchedule(
     id: string,
     body:
-      | { scheduledAt?: string; mediaOrder?: number[] }
+      | { scheduledAt?: string; mediaOrder?: number[]; caption?: string }
       | { swapWithId: string }
       | { cancel: true }
       | { pause: true }
@@ -348,13 +348,11 @@ export default function InstagramProgramacaoPage() {
 
   async function updateSchedule(
     id: string,
-    changes: { scheduledAt?: string; mediaOrder?: number[] },
+    changes: { scheduledAt?: string; mediaOrder?: number[]; caption?: string },
   ) {
     try {
       await mutateSchedule(id, changes);
-      say(changes.mediaOrder
-        ? "Ordem dos Stories e agendamento atualizados."
-        : "Data e horário atualizados com segurança.");
+      say("Alterações do agendamento salvas com segurança.");
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível alterar o agendamento.");

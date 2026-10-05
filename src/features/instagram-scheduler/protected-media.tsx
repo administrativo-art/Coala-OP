@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Film, ImageIcon, Loader2 } from "lucide-react";
 
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
+import type { MediaDimensions } from "./media-presentation";
 
 type ProtectedMediaProps = {
   url: string | null;
@@ -11,6 +12,8 @@ type ProtectedMediaProps = {
   kind?: "image" | "video";
   className?: string;
   eager?: boolean;
+  previewVideo?: boolean;
+  onDimensions?: (dimensions: MediaDimensions) => void;
 };
 
 export function ProtectedMedia({
@@ -19,6 +22,8 @@ export function ProtectedMedia({
   kind = "image",
   className = "h-full w-full object-cover",
   eager = false,
+  previewVideo = false,
+  onDimensions,
 }: ProtectedMediaProps) {
   const request = useAuthenticatedApi();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -44,7 +49,7 @@ export function ProtectedMedia({
   useEffect(() => {
     setSource(null);
     setFailed(false);
-    if (!visible || !url || kind === "video") return;
+    if (!visible || !url || (kind === "video" && !previewVideo)) return;
     let active = true;
     let objectUrl: string | null = null;
     void request<Blob>(url, {
@@ -63,19 +68,23 @@ export function ProtectedMedia({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [kind, request, url, visible]);
+  }, [kind, previewVideo, request, url, visible]);
 
   return (
     <div ref={hostRef} className="relative h-full w-full overflow-hidden bg-[#F3E8DC]">
-      {source ? (
+      {source && kind === "video" ? (
+        <video key={source} src={source} muted playsInline controls preload="metadata" className={className} aria-label={alt}
+          onLoadedMetadata={(event) => onDimensions?.({ width: event.currentTarget.videoWidth, height: event.currentTarget.videoHeight })}
+          onError={() => { setSource(null); setFailed(true); }} />
+      ) : source ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={source} alt={alt} className={className} />
+        <img key={source} src={source} alt={alt} className={className}
+          onLoad={(event) => onDimensions?.({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+          onError={() => { setSource(null); setFailed(true); }} />
       ) : (
         <div className="flex h-full min-h-16 w-full items-center justify-center bg-[repeating-linear-gradient(135deg,#F3E8DC_0_7px,#fff_7px_14px)] text-[#7A5646]">
-          {kind === "video" ? (
+          {failed ? <span className="px-3 text-center text-[11px]">Prévia indisponível</span> : kind === "video" ? (
             <Film className="h-6 w-6" aria-hidden="true" />
-          ) : failed ? (
-            <ImageIcon className="h-6 w-6" aria-hidden="true" />
           ) : visible && url ? (
             <Loader2 className="h-5 w-5 animate-spin" aria-label="Carregando prévia" />
           ) : (

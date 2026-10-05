@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-05: [Instagram](flows/instagram-publishing.md) passa a usar dimensões reais nas prévias e avaliação de proporção por formato; detalhes permitem editar a legenda de agendamentos ainda editáveis, com auditoria e invalidação segura do contêiner preparado. Regressões cobertas em `tests/unit/instagram-media-presentation.test.ts`; não equivale a homologação visual ou publicação real na Meta. A superfície externa permanece fora da contagem de grupos das páginas internas.
+
 Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1. Os nomes são grupos de investigação, sujeitos a divisão ou fusão quando a sequência ponta a ponta for confirmada. **Localizado** significa que as páginas proprietárias foram identificadas; não significa fluxo traçado ou regra aprovada.
 
 A [verificação por grupo](flow-verification.md) registra referências e lacunas na base principal para cada grupo; `Traçado` não significa teste integrado aprovado.

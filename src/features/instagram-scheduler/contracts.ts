@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isFeedImageRatio } from "./media-presentation";
 
 export const instagramPublicationFormats = [
   "feed_image",
@@ -59,7 +60,7 @@ export const instagramScheduleInputSchema = z
       input.media.forEach((item, index) => {
         if (item.kind !== "image" || !item.width || !item.height) return;
         const ratio = item.width / item.height;
-        if (ratio < 0.8 || ratio > 1.91) {
+        if (!isFeedImageRatio(ratio)) {
           context.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["media", index],
@@ -119,10 +120,11 @@ const instagramScheduleIdSchema = z
   .regex(/^[A-Za-z0-9_-]+$/, "Agendamento inválido.");
 
 const instagramScheduleUpdateSchema = z.object({
+  caption: z.string().max(2_200).optional(),
   scheduledAt: z.string().datetime({ offset: true }).optional(),
   mediaOrder: z.array(z.number().int().nonnegative()).min(1).max(10).optional(),
 }).strict().refine(
-  (value) => value.scheduledAt !== undefined || value.mediaOrder !== undefined,
+  (value) => value.scheduledAt !== undefined || value.mediaOrder !== undefined || value.caption !== undefined,
   "Informe ao menos uma alteração.",
 );
 
