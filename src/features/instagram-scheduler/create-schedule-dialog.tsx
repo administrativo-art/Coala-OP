@@ -28,6 +28,9 @@ import {
   type InstagramScheduleListItem,
 } from "./contracts";
 import { ProtectedMedia } from "./protected-media";
+import { MediaFormatInfo } from "./media-format-info";
+import { carouselHasDifferentRatios, mediaPreviewRatio, type MediaDimensions } from "./media-presentation";
+import { useDraftMediaDimensions } from "./use-draft-media-dimensions";
 import { ScheduleDatePicker, ScheduleTimeInput } from "./schedule-date-time-fields";
 import {
   addDaysToKey,
@@ -262,10 +265,10 @@ function DraftStorySequencePreview({ files, urls }: { files: File[]; urls: strin
             {files.map((file, index) => (
               <div key={`${file.name}-${file.lastModified}-${index}`} className="relative h-full min-w-full snap-center">
                 {file.type.startsWith("video/") ? (
-                  <video src={urls[index]} muted playsInline controls className="h-full w-full object-cover" aria-label={`Story ${index + 1} de ${files.length}`} />
+                  <video src={urls[index]} muted playsInline controls className="h-full w-full object-contain" aria-label={`Story ${index + 1} de ${files.length}`} />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={urls[index]} alt={`Story ${index + 1} de ${files.length}`} className="h-full w-full object-cover" />
+                  <img src={urls[index]} alt={`Story ${index + 1} de ${files.length}`} className="h-full w-full object-contain" />
                 )}
               </div>
             ))}
@@ -316,16 +319,19 @@ function DraftFeedPreview({
   urls,
   caption,
   locationEnabled,
+  dimensions,
 }: {
   format: Exclude<InstagramPublicationFormat, "story">;
   files: File[];
   urls: string[];
   caption: string;
   locationEnabled: boolean;
+  dimensions: MediaDimensions[];
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const vertical = format === "reel";
+  const mixedCarousel = format === "carousel" && carouselHasDifferentRatios(dimensions);
 
   useEffect(() => {
     setActiveIndex((current) => Math.min(current, Math.max(0, files.length - 1)));
@@ -363,7 +369,8 @@ function DraftFeedPreview({
         <div className="relative">
           <div
             ref={viewportRef}
-            className={`flex snap-x snap-mandatory overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${vertical ? "aspect-[9/16]" : "aspect-[4/5] bg-black"}`}
+            className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            style={{ aspectRatio: mediaPreviewRatio(format, dimensions[activeIndex], dimensions[0]) }}
             onScroll={(event) => {
               const viewport = event.currentTarget;
               if (viewport.clientWidth > 0) setActiveIndex(Math.round(viewport.scrollLeft / viewport.clientWidth));
@@ -373,10 +380,10 @@ function DraftFeedPreview({
               <div key={`${file.name}-preview-${index}`} className="relative h-full min-w-full snap-center">
                 {urls[index] ? (
                   file.type.startsWith("video/") ? (
-                    <video src={urls[index]} muted playsInline controls className="h-full w-full object-cover" aria-label={`${instagramFormatLabels[format]} ${index + 1} de ${files.length}`} />
+                    <video src={urls[index]} muted playsInline controls className={`h-full w-full ${mixedCarousel ? "object-cover" : "object-contain"}`} aria-label={`${instagramFormatLabels[format]} ${index + 1} de ${files.length}`} />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={urls[index]} alt={`${instagramFormatLabels[format]} ${index + 1} de ${files.length}`} className="h-full w-full object-cover" />
+                    <img src={urls[index]} alt={`${instagramFormatLabels[format]} ${index + 1} de ${files.length}`} className={`h-full w-full ${mixedCarousel ? "object-cover" : "object-contain"}`} />
                   )
                 ) : <div className="h-full w-full bg-[#F3E8DC]" />}
               </div>
@@ -462,6 +469,7 @@ export function CreateScheduleDialog({
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [draftMediaUrls, setDraftMediaUrls] = useState<string[]>([]);
+  const draftDimensions = useDraftMediaDimensions(files, draftMediaUrls);
 
   const accept = format === "reel"
     ? "video/mp4,video/quicktime"
@@ -633,7 +641,10 @@ export function CreateScheduleDialog({
                       {files.map((file, index) => (
                         <div key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center gap-2 rounded-lg border border-[#EADFD3] bg-white px-3 py-2 text-[12px]">
                           <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#FDE3EF] font-extrabold text-[#D90F6F]">{index + 1}</span>
-                          <span className="min-w-0 flex-1 truncate font-bold">{file.name}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-bold">{file.name}</p>
+                            <MediaFormatInfo format={format} media={{ ...draftDimensions[index], kind: file.type.startsWith("video/") ? "video" : "image" }} />
+                          </div>
                           {multiple && <>
                             <button type="button" onClick={() => moveFile(index, -1)} disabled={index === 0} aria-label={`Mover ${file.name} para antes`} className="disabled:opacity-25"><ArrowUp className="h-4 w-4" /></button>
                             <button type="button" onClick={() => moveFile(index, 1)} disabled={index === files.length - 1} aria-label={`Mover ${file.name} para depois`} className="disabled:opacity-25"><ArrowDown className="h-4 w-4" /></button>
@@ -644,10 +655,11 @@ export function CreateScheduleDialog({
                     </div>
                     {format === "story" && files.length > 1 && <p className="mt-2 flex items-center gap-2 rounded-lg bg-[#FDEAF3] px-3 py-2 text-[11px] font-semibold text-[#7D184A]"><Images className="h-4 w-4" /> A ordem ao lado será a ordem da sequência de Stories.</p>}
                     {format === "carousel" && files.length > 1 && <p className="mt-2 flex items-center gap-2 rounded-lg bg-[#FDEAF3] px-3 py-2 text-[11px] font-semibold text-[#7D184A]"><Images className="h-4 w-4" /> A ordem ao lado será a ordem do Carrossel.</p>}
+                    {format === "carousel" && carouselHasDifferentRatios(draftDimensions) && <p className="mt-2 text-[11px] text-[#8A5A18]">Proporções diferentes: a prévia usa a primeira mídia como referência e mostra o possível corte das demais.</p>}
                   </div>
                   {format === "story"
                     ? <DraftStorySequencePreview files={files} urls={draftMediaUrls} />
-                    : <DraftFeedPreview format={format} files={files} urls={draftMediaUrls} caption={caption} locationEnabled={locationEnabled} />}
+                    : <DraftFeedPreview format={format} files={files} urls={draftMediaUrls} caption={caption} locationEnabled={locationEnabled} dimensions={draftDimensions} />}
                 </div>
               )}
             </section>
