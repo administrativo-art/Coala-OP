@@ -21,7 +21,7 @@ import {
   safeInstagramLibraryFileName,
 } from "./media-validation";
 
-export const INSTAGRAM_LIBRARY_LIST_LIMIT = 100;
+export const INSTAGRAM_LIBRARY_LIST_LIMIT = 60;
 
 function iso(value: unknown): string {
   if (value && typeof (value as Timestamp).toDate === "function") {
@@ -35,7 +35,7 @@ export function serializeInstagramLibraryMedia(doc: DocumentSnapshot): Instagram
   return {
     id: doc.id,
     fileName: typeof data.fileName === "string" ? data.fileName : "mídia",
-    folder: typeof data.folder === "string" ? data.folder : "Uploads",
+    folderId: typeof data.folderId === "string" ? data.folderId : null,
     kind: data.kind === "video" ? "video" : "image",
     contentType: typeof data.contentType === "string" ? data.contentType : "application/octet-stream",
     sizeBytes: typeof data.sizeBytes === "number" ? data.sizeBytes : 0,
@@ -49,9 +49,9 @@ export function serializeInstagramLibraryMedia(doc: DocumentSnapshot): Instagram
 export async function storeInstagramLibraryMedia(input: {
   context: ServerUserContext;
   file: File;
-  folder: string;
+  folderId: string | null;
 }) {
-  const { context, file, folder } = input;
+  const { context, file, folderId } = input;
   if (file.size <= 0) {
     throw new AppError({
       code: "INSTAGRAM_LIBRARY_EMPTY_FILE",
@@ -111,7 +111,7 @@ export async function storeInstagramLibraryMedia(input: {
       workspace_id: context.workspace_id,
       fileName,
       originalFileName: file.name.slice(0, 255),
-      folder,
+      folderId,
       kind: detected.kind,
       contentType: detected.contentType,
       sizeBytes: buffer.byteLength,

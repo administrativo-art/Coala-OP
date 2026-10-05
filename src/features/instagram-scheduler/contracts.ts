@@ -147,10 +147,40 @@ export const instagramMediaLibraryFolderSchema = z
   .max(80, "A pasta deve ter até 80 caracteres.")
   .regex(/^[^/\\\u0000-\u001f]+$/, "Nome de pasta inválido.");
 
+export const instagramMediaFolderIdSchema = z.string().uuid("Pasta inválida.");
+export const instagramMediaFolderParentSchema = instagramMediaFolderIdSchema.nullable();
+
+export const instagramMediaFolderCreateSchema = z.object({
+  name: instagramMediaLibraryFolderSchema,
+  parentId: instagramMediaFolderParentSchema,
+}).strict();
+
+export const instagramMediaFolderUpdateSchema = z.object({
+  name: instagramMediaLibraryFolderSchema.optional(),
+  parentId: instagramMediaFolderParentSchema.optional(),
+}).strict().refine(
+  (value) => value.name !== undefined || value.parentId !== undefined,
+  "Informe ao menos uma alteração.",
+);
+
+export const instagramMediaMoveSchema = z.object({
+  ids: z.array(z.string().uuid("Mídia inválida.")).min(1).max(50),
+  folderId: instagramMediaFolderParentSchema,
+}).strict().refine(
+  (value) => new Set(value.ids).size === value.ids.length,
+  "Mídias repetidas.",
+);
+
+export type InstagramMediaFolder = {
+  id: string;
+  name: string;
+  parentId: string | null;
+};
+
 export type InstagramMediaLibraryItem = {
   id: string;
   fileName: string;
-  folder: string;
+  folderId: string | null;
   kind: InstagramMediaLibraryKind;
   contentType: string;
   sizeBytes: number;

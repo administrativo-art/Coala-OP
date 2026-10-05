@@ -27,6 +27,16 @@
         { "fieldPath": "createdAt", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "instagramMediaLibrary",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspace_id", "order": "ASCENDING" },
+        { "fieldPath": "folderId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
