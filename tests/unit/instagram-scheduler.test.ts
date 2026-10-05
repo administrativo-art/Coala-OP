@@ -19,6 +19,11 @@ import {
 } from "../../src/features/instagram-scheduler/contracts";
 import {
   INSTAGRAM_SCHEDULE_MIN_LEAD_MS,
+  canCancelInstagramSchedule,
+  canDeleteInstagramSchedule,
+  canHideInstagramScheduleFromGrid,
+  canPauseInstagramSchedule,
+  canResumeInstagramSchedule,
   hasPublishedInstagramStoryItem,
   isInstagramScheduleEditableStatus,
   isInstagramScheduleTimeAllowed,
@@ -650,9 +655,31 @@ test("a mutação do agendamento aceita somente cancelamento estrito", () => {
   assert.equal(instagramScheduleMutationSchema.safeParse({}).success, false);
 });
 
-test("somente agendamentos em scheduled podem ser cancelados", () => {
-  assert.equal(isInstagramScheduleEditableStatus("scheduled"), true);
-  for (const status of ["processing", "published", "failed", "manual_review", "cancelled"]) {
-    assert.equal(isInstagramScheduleEditableStatus(status), false, status);
-  }
+test("matriz de ações do menu do card por status", () => {
+  const statuses = ["uploading", "scheduled", "paused", "processing", "published", "failed", "manual_review", "cancelled"];
+  const allowed = (check: (status: string) => boolean) => statuses.filter(check);
+  assert.deepEqual(allowed(isInstagramScheduleEditableStatus), ["scheduled", "paused"]);
+  assert.deepEqual(allowed(canCancelInstagramSchedule), ["scheduled", "paused"]);
+  assert.deepEqual(allowed(canPauseInstagramSchedule), ["scheduled"]);
+  assert.deepEqual(allowed(canResumeInstagramSchedule), ["paused"]);
+  assert.deepEqual(allowed(canHideInstagramScheduleFromGrid), ["published", "failed", "manual_review", "cancelled"]);
+  // só envio em andamento bloqueia a exclusão
+  assert.deepEqual(
+    allowed(canDeleteInstagramSchedule),
+    ["scheduled", "paused", "published", "failed", "manual_review", "cancelled"],
+  );
+});
+
+test("a mutação aceita pausar e retomar de forma estrita", () => {
+  const parse = (value: unknown) => instagramScheduleMutationSchema.safeParse(value).success;
+  assert.equal(parse({ pause: true }), true);
+  assert.equal(parse({ pause: false }), false);
+  assert.equal(parse({ pause: true, cancel: true }), false);
+  assert.equal(parse({ resume: true }), true);
+  assert.equal(parse({ resume: true, scheduledAt: "2030-05-12T12:00:00-03:00" }), true);
+  assert.equal(parse({ resume: true, scheduledAt: "amanhã" }), false);
+  assert.equal(parse({ resume: false }), false);
+  assert.equal(parse({ hide: true }), true);
+  assert.equal(parse({ hide: false }), false);
+  assert.equal(parse({ hide: true, pause: true }), false);
 });

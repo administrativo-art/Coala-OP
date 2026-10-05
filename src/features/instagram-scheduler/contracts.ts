@@ -10,6 +10,7 @@ export const instagramPublicationFormats = [
 export const instagramPublicationStatuses = [
   "uploading",
   "scheduled",
+  "paused",
   "processing",
   "published",
   "failed",
@@ -132,6 +133,16 @@ export const instagramScheduleMutationSchema = z.union([
   }).strict(),
   z.object({
     cancel: z.literal(true),
+  }).strict(),
+  z.object({
+    pause: z.literal(true),
+  }).strict(),
+  z.object({
+    hide: z.literal(true),
+  }).strict(),
+  z.object({
+    resume: z.literal(true),
+    scheduledAt: z.string().datetime({ offset: true }).optional(),
   }).strict(),
 ]);
 
@@ -387,6 +398,7 @@ export const instagramFormatLabels: Record<InstagramPublicationFormat, string> =
 export const instagramStatusLabels: Record<InstagramPublicationStatus, string> = {
   uploading: "Enviando mídia",
   scheduled: "Programada",
+  paused: "Pausada",
   processing: "Publicando",
   published: "Publicada",
   failed: "Falhou",
