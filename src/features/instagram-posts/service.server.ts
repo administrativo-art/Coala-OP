@@ -305,6 +305,7 @@ export async function actOnInstagramPost(
       transaction.update(ref, {
         status: "produced",
         schedule: FieldValue.delete(),
+        manualReminder: FieldValue.delete(),
         updatedAt: now,
         updatedBy: actor,
       });
@@ -351,6 +352,7 @@ export async function actOnInstagramPost(
       transaction.update(ref, {
         status: "scheduled",
         schedule: { at: scheduledAt, timezone, scheduleId: id, mode: "manual" },
+        manualReminder: FieldValue.delete(),
         publicationCertification,
         updatedAt: now,
         updatedBy: actor,
@@ -409,6 +411,7 @@ export async function actOnInstagramPost(
     transaction.update(ref, {
       status: "scheduled",
       schedule: { at: scheduledAt, timezone, scheduleId: scheduleRef.id, mode: "automatic" },
+      manualReminder: FieldValue.delete(),
       publicationCertification,
       updatedAt: now,
       updatedBy: actor,

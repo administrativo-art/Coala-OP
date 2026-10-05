@@ -83,6 +83,53 @@ export type InstagramPostCreateInput = z.infer<typeof instagramPostCreateSchema>
 export type InstagramPostUpdateInput = z.infer<typeof instagramPostUpdateSchema>;
 export type InstagramPostActionInput = z.infer<typeof instagramPostActionSchema>;
 
+export type InstagramEditorialPost = {
+  id: string;
+  title: string;
+  format: InstagramPostCreateInput["format"];
+  status: InstagramEditorialStatus;
+  approvalStatus: InstagramApprovalStatus;
+  placement: InstagramPostCreateInput["placement"] | null;
+  folderPath: string;
+  direction: string;
+  caption: string;
+  shareToFeed: boolean;
+  storyMentions: string[];
+  publicationMode: "automatic" | "manual";
+  manualInstructions: string;
+  media: Array<{
+    id: string;
+    kind: "image" | "video";
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    width: number | null;
+    height: number | null;
+    previewUrl: string | null;
+  }>;
+  publicationReadiness: {
+    status: "certified" | "blocked";
+    rulesVersion: string;
+    issues: Array<{ code: string; mediaIndex: number | null; message: string }>;
+  };
+  contentHash: string;
+  contentApproval: { status: InstagramApprovalStatus; artifactSha256: string | null; approvedAt: string | null } | null;
+  publicationApproval: { status: InstagramApprovalStatus; artifactSha256: string | null; approvedAt: string | null } | null;
+  schedule: { at: string | null; timezone: string; scheduleId: string | null; mode: "automatic" | "manual" } | null;
+  manualReminder: { status: "due"; notifiedAt: string | null; instructions: string } | null;
+  publicationResult: {
+    instagramMediaId: string | null;
+    instagramMediaIds: string[];
+    permalink: string | null;
+    publishedAt: string | null;
+    status: string | null;
+    safeError: string | null;
+  } | null;
+  version: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 function folderLabel(title: string) {
   return title
     .normalize("NFC")

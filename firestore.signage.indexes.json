@@ -29,6 +29,16 @@
       ]
     },
     {
+      "collectionGroup": "instagramManualPublicationReminders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspace_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "wakeAt", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "instagramScheduledPosts",
       "queryScope": "COLLECTION",
       "fields": [

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { FieldPath, Timestamp } from "firebase-admin/firestore";
 
 import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
 import { instagramPostCreateSchema } from "@/features/instagram-posts/contracts";
@@ -12,6 +13,19 @@ import { withApiErrorHandling } from "@/lib/observability/api-error";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function decodeCursor(value: string | null) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as { updatedAt?: string; id?: string };
+    const date = parsed.updatedAt ? new Date(parsed.updatedAt) : null;
+    return date && !Number.isNaN(date.getTime()) && parsed.id
+      ? { updatedAt: Timestamp.fromDate(date), id: parsed.id }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export const GET = withApiErrorHandling(
   { source: "api", operation: "listInstagramPosts", routeOrJob: "/api/integrations/instagram/posts" },
   async (request: NextRequest) => {
@@ -23,14 +37,34 @@ export const GET = withApiErrorHandling(
     if (status && !["planned", "produced", "scheduled", "published"].includes(status)) {
       throw new AppError({ code: "INSTAGRAM_POST_INVALID_STATUS", kind: "VALIDATION", safeMessage: "Status editorial inválido.", reportable: false });
     }
+    const updatedAfterInput = request.nextUrl.searchParams.get("updatedAfter");
+    const updatedAfterDate = updatedAfterInput ? new Date(updatedAfterInput) : null;
+    if (updatedAfterInput && (!updatedAfterDate || Number.isNaN(updatedAfterDate.getTime()))) {
+      throw new AppError({ code: "INSTAGRAM_POST_INVALID_UPDATED_AFTER", kind: "VALIDATION", safeMessage: "Data de sincronização inválida.", reportable: false });
+    }
+    const cursorInput = request.nextUrl.searchParams.get("cursor");
+    const cursor = decodeCursor(cursorInput);
+    if (cursorInput && !cursor) {
+      throw new AppError({ code: "INSTAGRAM_POST_INVALID_CURSOR", kind: "VALIDATION", safeMessage: "Cursor de sincronização inválido.", reportable: false });
+    }
     let query = marketingDbAdmin.collection("instagramPosts")
       .where("workspace_id", "==", context.workspace_id)
       .orderBy("updatedAt", "desc")
+      .orderBy(FieldPath.documentId(), "desc")
       .limit(limit);
     if (status) query = query.where("status", "==", status);
+    if (updatedAfterDate) query = query.where("updatedAt", ">", Timestamp.fromDate(updatedAfterDate));
+    if (cursor) query = query.startAfter(cursor.updatedAt, cursor.id);
     const snapshot = await query.get();
+    const last = snapshot.docs.at(-1);
+    const nextCursor = snapshot.docs.length === limit && last
+      ? Buffer.from(JSON.stringify({
+          updatedAt: last.data().updatedAt?.toDate?.().toISOString?.() ?? null,
+          id: last.id,
+        }), "utf8").toString("base64url")
+      : null;
     return NextResponse.json(
-      { items: snapshot.docs.map(serializeInstagramPost) },
+      { items: snapshot.docs.map(serializeInstagramPost), nextCursor },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   },

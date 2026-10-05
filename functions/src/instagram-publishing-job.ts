@@ -13,6 +13,7 @@ import {
 
 const db = getFirestore("coala-signage");
 const COLLECTION = "instagramScheduledPosts";
+const MANUAL_REMINDERS = "instagramManualPublicationReminders";
 const WORKSPACE_ID = "coala";
 const MAX_ATTEMPTS = 4;
 const BATCH_LIMIT = 2;
@@ -553,6 +554,44 @@ async function dueReferences() {
   return snapshot.docs.map((doc) => doc.ref);
 }
 
+async function deliverManualReminders() {
+  const now = Timestamp.now();
+  const snapshot = await db.collection(MANUAL_REMINDERS)
+    .where("workspace_id", "==", WORKSPACE_ID)
+    .where("status", "==", "scheduled")
+    .where("wakeAt", "<=", now)
+    .orderBy("wakeAt", "asc")
+    .limit(10)
+    .get();
+
+  for (const reminder of snapshot.docs) {
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(reminder.ref);
+      const data = current.data();
+      if (!current.exists || data?.status !== "scheduled" || data?.workspace_id !== WORKSPACE_ID) return;
+      if (!data.wakeAt || data.wakeAt.toMillis() > now.toMillis()) return;
+      const editorialPostId = typeof data.editorialPostId === "string" ? data.editorialPostId : reminder.id;
+      transaction.update(reminder.ref, {
+        status: "notified",
+        notifiedAt: now,
+        wakeAt: null,
+        updatedAt: now,
+      });
+      transaction.set(db.collection("instagramPosts").doc(editorialPostId), {
+        manualReminder: {
+          status: "due",
+          notifiedAt: now,
+          instructions: typeof data.instructions === "string" ? data.instructions : "",
+        },
+        updatedAt: now,
+      }, { merge: true });
+    });
+    logger.info("[instagramPublishingScheduler] manual Story reminder delivered", {
+      reminderId: reminder.id,
+    });
+  }
+}
+
 export const instagramPublishingScheduler = onSchedule({
   schedule: "* * * * *",
   timeZone: "America/Belem",
@@ -562,6 +601,7 @@ export const instagramPublishingScheduler = onSchedule({
   maxInstances: 1,
   secrets: [metaSystemUserToken],
 }, async () => {
+  await deliverManualReminders();
   const token = metaSystemUserToken.value().trim();
   if (!token) throw new Error("META_SYSTEM_USER_TOKEN não está configurado.");
 

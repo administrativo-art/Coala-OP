@@ -7,10 +7,6 @@ import { Loader2, Menu } from "lucide-react";
 import { PublicBioSettings } from "@/components/settings/public-bio-settings";
 import { CalendarView } from "@/features/instagram-scheduler/calendar-view";
 import {
-  CreateScheduleDialog,
-  type CreateInstagramScheduleInput,
-} from "@/features/instagram-scheduler/create-schedule-dialog";
-import {
   instagramInsightsSections,
   type InstagramMediaFolder,
   type InstagramMediaLibraryItem,
@@ -34,9 +30,17 @@ import {
 } from "@/features/instagram-scheduler/workspace-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
-import { dateKeyInBelem } from "@/features/instagram-scheduler/workspace-utils";
+import { EditorialPostsView } from "@/features/instagram-posts/editorial-posts-view";
+import type {
+  InstagramEditorialPost,
+  InstagramPostActionInput,
+  InstagramPostCreateInput,
+  InstagramPostUpdateInput,
+} from "@/features/instagram-posts/contracts";
 
 type ScheduleResponse = { items?: InstagramScheduleListItem[] };
+type EditorialPostsResponse = { items?: InstagramEditorialPost[] };
+type EditorialPostResponse = { item: InstagramEditorialPost };
 type MediaResponse = { items?: InstagramMediaLibraryItem[]; nextCursor?: string | null };
 type FoldersResponse = { folders?: InstagramMediaFolder[] };
 type PublishedFeedResponse = {
@@ -44,7 +48,7 @@ type PublishedFeedResponse = {
   profile?: InstagramPublishedFeedProfile;
 };
 
-const validViews = new Set<InstagramWorkspaceView>(["calendar", "feed", "media", "bio", "reports"]);
+const validViews = new Set<InstagramWorkspaceView>(["posts", "calendar", "feed", "media", "bio", "reports"]);
 const validInsightsSections = new Set<InstagramInsightsSection>(instagramInsightsSections);
 
 export default function InstagramProgramacaoPage() {
@@ -52,11 +56,12 @@ export default function InstagramProgramacaoPage() {
   const request = useAuthenticatedApi();
   const { firebaseUser, isAuthenticated, isDefaultAdmin, loading: authLoading, logout, permissions } = useAuth();
   const canManageBio = isDefaultAdmin || (permissions.settings.view && permissions.settings.managePublicBio);
-  const [activeView, setActiveView] = useState<InstagramWorkspaceView>("calendar");
+  const [activeView, setActiveView] = useState<InstagramWorkspaceView>("posts");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [createDate, setCreateDate] = useState<string | null>(null);
+  const [createRequested, setCreateRequested] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [schedules, setSchedules] = useState<InstagramScheduleListItem[]>([]);
+  const [editorialPosts, setEditorialPosts] = useState<InstagramEditorialPost[]>([]);
   const [libraryItems, setLibraryItems] = useState<InstagramMediaLibraryItem[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<InstagramMediaFolder[]>([]);
   const [libraryFolderId, setLibraryFolderId] = useState<string | null>(null);
@@ -65,6 +70,7 @@ export default function InstagramProgramacaoPage() {
   const [publishedItems, setPublishedItems] = useState<InstagramPublishedFeedItem[]>([]);
   const [instagramProfile, setInstagramProfile] = useState<InstagramPublishedFeedProfile | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [editorialLoading, setEditorialLoading] = useState(true);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [publishedLoading, setPublishedLoading] = useState(false);
@@ -85,7 +91,6 @@ export default function InstagramProgramacaoPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -107,6 +112,22 @@ export default function InstagramProgramacaoPage() {
       setError(cause instanceof Error ? cause.message : "Não foi possível carregar a programação.");
     } finally {
       setScheduleLoading(false);
+    }
+  }, [firebaseUser, request]);
+
+  const loadEditorialPosts = useCallback(async () => {
+    if (!firebaseUser) return;
+    setEditorialLoading(true);
+    setError(null);
+    try {
+      const response = await request<EditorialPostsResponse>("/api/integrations/instagram/posts?limit=100", {
+        fallbackError: "Não foi possível carregar os posts editoriais.",
+      });
+      setEditorialPosts(response.items ?? []);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar os posts editoriais.");
+    } finally {
+      setEditorialLoading(false);
     }
   }, [firebaseUser, request]);
 
@@ -254,8 +275,8 @@ export default function InstagramProgramacaoPage() {
       router.replace("/login?next=%2Finstagram-programacao");
       return;
     }
-    if (!authLoading && firebaseUser) void loadSchedule();
-  }, [authLoading, firebaseUser, isAuthenticated, loadSchedule, router]);
+    if (!authLoading && firebaseUser) void Promise.all([loadSchedule(), loadEditorialPosts()]);
+  }, [authLoading, firebaseUser, isAuthenticated, loadEditorialPosts, loadSchedule, router]);
 
   useEffect(() => {
     if (activeView === "media" && firebaseUser && !libraryLoaded && !libraryLoading) {
@@ -280,12 +301,6 @@ export default function InstagramProgramacaoPage() {
     // selectView atualiza apenas estado e URL; esperar o bootstrap de permissões evita piscar conteúdo restrito.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, authLoading, canManageBio]);
-
-  useEffect(() => {
-    if (createDate && firebaseUser && !publishedLoaded && !publishedLoading) {
-      void loadPublishedFeed();
-    }
-  }, [createDate, firebaseUser, loadPublishedFeed, publishedLoaded, publishedLoading]);
 
   function selectView(view: InstagramWorkspaceView, section?: InstagramInsightsSection) {
     setActiveView(view);
@@ -314,6 +329,82 @@ export default function InstagramProgramacaoPage() {
     const url = new URL(window.location.href);
     url.searchParams.delete("post");
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }
+
+  async function createEditorialPost(input: Omit<InstagramPostCreateInput, "clientMutationId">) {
+    setError(null);
+    try {
+      const response = await request<EditorialPostResponse>("/api/integrations/instagram/posts", {
+        method: "POST",
+        json: { ...input, clientMutationId: crypto.randomUUID() },
+        fallbackError: "Não foi possível criar o post no sistema.",
+      });
+      setEditorialPosts((current) => [response.item, ...current.filter((item) => item.id !== response.item.id)]);
+      say("Post criado em Planejado. Agora envie a arte e conclua a produção.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível criar o post no sistema.");
+      return false;
+    }
+  }
+
+  async function updateEditorialPost(id: string, changes: InstagramPostUpdateInput) {
+    setError(null);
+    try {
+      const response = await request<EditorialPostResponse>(`/api/integrations/instagram/posts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        json: changes,
+        fallbackError: "Não foi possível salvar o post.",
+      });
+      setEditorialPosts((current) => current.map((item) => item.id === id ? response.item : item));
+      say(changes.status === "produced" ? "Post Produzido e aguardando aprovação." : "Post atualizado no sistema.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível salvar o post.");
+      return false;
+    }
+  }
+
+  async function uploadEditorialMedia(id: string, files: File[]) {
+    setError(null);
+    try {
+      let latest: InstagramEditorialPost | null = null;
+      for (const file of files) {
+        const form = new FormData();
+        form.set("media", file);
+        const response = await request<EditorialPostResponse>(`/api/integrations/instagram/posts/${encodeURIComponent(id)}/media`, {
+          method: "POST",
+          body: form,
+          fallbackError: `Não foi possível enviar ${file.name}.`,
+        });
+        latest = response.item;
+      }
+      if (latest) setEditorialPosts((current) => current.map((item) => item.id === id ? latest! : item));
+      say(files.length === 1 ? "Arte enviada e certificada pelo sistema." : `${files.length} artes enviadas e certificadas pelo sistema.`);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível enviar a arte.");
+      await loadEditorialPosts();
+      return false;
+    }
+  }
+
+  async function actOnEditorialPost(id: string, input: InstagramPostActionInput) {
+    setError(null);
+    try {
+      const response = await request<EditorialPostResponse>(`/api/integrations/instagram/posts/${encodeURIComponent(id)}/actions`, {
+        method: "POST",
+        json: input,
+        fallbackError: "Não foi possível executar a ação autorizada.",
+      });
+      setEditorialPosts((current) => current.map((item) => item.id === id ? response.item : item));
+      if (["schedule", "cancel", "publish"].includes(input.action)) await loadSchedule();
+      say(input.action === "schedule" ? "Post agendado no sistema." : input.action === "cancel" ? "Agendamento cancelado." : "Ação registrada com auditoria.");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível executar a ação autorizada.");
+      return false;
+    }
   }
 
   async function mutateSchedule(
@@ -535,40 +626,6 @@ export default function InstagramProgramacaoPage() {
     }
   }
 
-  async function createSchedule(input: CreateInstagramScheduleInput) {
-    setCreating(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.set("format", input.format);
-      form.set("scheduledAt", input.scheduledAt);
-      form.set("caption", input.caption);
-      form.set("shareToFeed", String(input.shareToFeed));
-      form.set("storyMentions", JSON.stringify(input.storyMentions));
-      if (input.location) {
-        form.set("locationId", input.location.id);
-        form.set("locationName", input.location.name);
-      }
-      input.files.forEach((file) => form.append("media", file));
-      await request("/api/integrations/instagram/schedule", {
-        method: "POST",
-        body: form,
-        fallbackError: "Não foi possível criar o agendamento.",
-      });
-      await loadSchedule();
-      setCreateDate(null);
-      say(input.format === "story" && input.files.length > 1
-        ? `Sequência com ${input.files.length} Stories agendada.`
-        : "Publicação agendada.");
-      return true;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível criar o agendamento.");
-      return false;
-    } finally {
-      setCreating(false);
-    }
-  }
-
   if (authLoading || (!isAuthenticated && scheduleLoading)) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#FAF5EF] text-[#7A5646]">
@@ -588,7 +645,10 @@ export default function InstagramProgramacaoPage() {
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
         onSelect={selectView}
-        onCreate={() => setCreateDate(dateKeyInBelem(new Date()))}
+        onCreate={() => {
+          selectView("posts");
+          setCreateRequested((value) => value + 1);
+        }}
         onFutureFeature={(label) => say(`${label} será implementado em uma próxima etapa.`)}
         onLogout={() => void logout()}
       />
@@ -624,12 +684,26 @@ export default function InstagramProgramacaoPage() {
             onUpdate={updateSchedule}
             onCancel={cancelSchedule}
           />
+        ) : activeView === "posts" ? (
+          <EditorialPostsView
+            posts={editorialPosts}
+            loading={editorialLoading}
+            createRequested={createRequested}
+            onRefresh={() => void loadEditorialPosts()}
+            onCreate={createEditorialPost}
+            onUpdate={updateEditorialPost}
+            onUpload={uploadEditorialMedia}
+            onAction={actOnEditorialPost}
+          />
         ) : activeView === "calendar" ? (
           <CalendarView
             items={schedules}
             loading={scheduleLoading}
             onRefresh={() => void loadSchedule()}
-            onCreate={setCreateDate}
+            onCreate={() => {
+              selectView("posts");
+              setCreateRequested((value) => value + 1);
+            }}
             onOpen={openEditor}
             actions={{
               onReschedule: reschedule,
@@ -718,18 +792,6 @@ export default function InstagramProgramacaoPage() {
         </div>
       )}
 
-      {createDate && (
-        <CreateScheduleDialog
-          initialDate={createDate}
-          busy={creating}
-          schedules={schedules}
-          publishedItems={publishedItems}
-          publishedLoading={publishedLoading}
-          publishedError={publishedError}
-          onClose={() => !creating && setCreateDate(null)}
-          onCreate={createSchedule}
-        />
-      )}
     </main>
   );
 }
