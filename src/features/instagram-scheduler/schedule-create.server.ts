@@ -16,6 +16,7 @@ import {
   instagramScheduleInputSchema,
   type InstagramPublicationFormat,
 } from "./contracts";
+import { certifyInstagramPublication } from "./publication-readiness";
 import {
   detectInstagramLibraryMedia,
   INSTAGRAM_LIBRARY_IMAGE_MAX_BYTES,
@@ -35,6 +36,14 @@ type PreparedMedia = {
   sizeBytes: number;
   width: number | null;
   height: number | null;
+  durationSeconds: number | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  frameRate: number | null;
+  videoBitrateBps: number | null;
+  audioSampleRateHz: number | null;
+  fastStart: boolean | null;
+  hasEditList: boolean | null;
 };
 
 function invalid(code: string, safeMessage: string, cause?: unknown): never {
@@ -101,6 +110,14 @@ async function prepareMedia(file: File): Promise<PreparedMedia> {
     sizeBytes: buffer.byteLength,
     width: detected.width,
     height: detected.height,
+    durationSeconds: detected.durationSeconds,
+    videoCodec: detected.videoCodec,
+    audioCodec: detected.audioCodec,
+    frameRate: detected.frameRate,
+    videoBitrateBps: detected.videoBitrateBps,
+    audioSampleRateHz: detected.audioSampleRateHz,
+    fastStart: detected.fastStart,
+    hasEditList: detected.hasEditList,
   };
 }
 
@@ -146,6 +163,14 @@ export async function createInstagramScheduleFromForm(input: {
       sizeBytes: media.sizeBytes,
       width: media.width ?? undefined,
       height: media.height ?? undefined,
+      durationSeconds: media.durationSeconds ?? undefined,
+      videoCodec: media.videoCodec ?? undefined,
+      audioCodec: media.audioCodec,
+      frameRate: media.frameRate ?? undefined,
+      videoBitrateBps: media.videoBitrateBps ?? undefined,
+      audioSampleRateHz: media.audioSampleRateHz,
+      fastStart: media.fastStart ?? undefined,
+      hasEditList: media.hasEditList ?? undefined,
     })),
     shareToFeed: formText(form, "shareToFeed") !== "false",
     storyMentions: parseMentions(formText(form, "storyMentions")),
@@ -158,6 +183,10 @@ export async function createInstagramScheduleFromForm(input: {
       parsed.error,
     );
   }
+  const publicationCertification = {
+    ...certifyInstagramPublication({ format: parsed.data.format, media: parsed.data.media }),
+    checkedAt: Timestamp.now(),
+  };
 
   const ref = marketingDbAdmin.collection("instagramScheduledPosts").doc();
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
@@ -212,6 +241,14 @@ export async function createInstagramScheduleFromForm(input: {
         sizeBytes: media.sizeBytes,
         width: media.width,
         height: media.height,
+        durationSeconds: media.durationSeconds,
+        videoCodec: media.videoCodec,
+        audioCodec: media.audioCodec,
+        frameRate: media.frameRate,
+        videoBitrateBps: media.videoBitrateBps,
+        audioSampleRateHz: media.audioSampleRateHz,
+        fastStart: media.fastStart,
+        hasEditList: media.hasEditList,
         objectPath,
         deliveryUrl: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(firebaseClientConfig.storageBucket)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${downloadToken}`,
       });
@@ -222,6 +259,7 @@ export async function createInstagramScheduleFromForm(input: {
       nextAttemptAt: Timestamp.fromDate(scheduledAt),
       wakeAt: Timestamp.fromDate(scheduledAt),
       media: uploadedMedia,
+      publicationCertification,
       updatedAt: Timestamp.now(),
     });
   } catch (cause) {
