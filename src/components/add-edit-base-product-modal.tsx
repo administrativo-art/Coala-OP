@@ -350,10 +350,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               <FormLabel className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                 Base do estoque mínimo automático
                                 <InfoTooltip title="Como o estoque mínimo é calculado">
-                                  <p>Todo dia 1 do mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda (equivale a usar o desvio padrão típico de um insumo de giro estável, arredondado para uma regra única).</p>
+                                  <p>Nos dias 1 e 16 de cada mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses (12 quinzenas fechadas)</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda (equivale a usar o desvio padrão típico de um insumo de giro estável, arredondado para uma regra única).</p>
                                   <p>Aqui você escolhe se essa média é calculada por <strong>mês</strong> (padrão, 6 pontos) ou por <strong>quinzena</strong> (12 pontos) — quinzenal reage mais rápido a mudanças recentes de consumo.</p>
                                   <p>Itens em <strong>unidades</strong> são arredondados para cima; itens em <strong>kg/L</strong> mantêm casas decimais.</p>
-                                  <p>Marque <strong>&quot;Manter valor manual&quot;</strong> num local para digitar o mínimo ali — o cálculo automático passa a ignorar esse local. Desmarcado, o campo fica bloqueado e o valor é recalculado todo dia 1.</p>
+                                  <p>Marque <strong>&quot;Manter valor manual&quot;</strong> num local para digitar o mínimo ali — o cálculo automático passa a ignorar esse local. Desmarcado, o campo fica bloqueado e o valor é recalculado nos dias 1 e 16.</p>
                                   <p>Unidades de abastecimento (como o CD) usam a <strong>soma do consumo</strong> das unidades comerciais dos grupos que atendem, com a mesma média e margem.</p>
                                 </InfoTooltip>
                               </FormLabel>
@@ -431,7 +431,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                           </Table>
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo. Com <span className="font-medium text-foreground">&quot;Manter valor manual&quot;</span> desligado, o estoque mínimo desse local é calculado automaticamente todo dia 1 do mês e o campo fica bloqueado; ligue para digitar o valor. Unidades de abastecimento (como o CD) somam o consumo das unidades que atendem, conforme o cadastro de unidades e grupos.
+                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo. Com <span className="font-medium text-foreground">&quot;Manter valor manual&quot;</span> desligado, o estoque mínimo desse local é calculado automaticamente nos dias 1 e 16 e o campo fica bloqueado; ligue para digitar o valor. Unidades de abastecimento (como o CD) somam o consumo das unidades que atendem, conforme o cadastro de unidades e grupos.
                         </p>
                       </div>
                     )}
