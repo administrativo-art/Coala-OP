@@ -19,6 +19,11 @@ import { queueMatchedBankPayment } from "@/features/financial/obligations/servic
 import { findExpectedBankDebitMatch, type ExpectedBankDebitCandidate } from "@/features/financial/payment-requests/expected-bank-debits";
 import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
 import type { BankPaymentRequest } from "@/features/financial/payment-requests/types";
+import {
+  observeBarcodeStatementSettlement,
+  planLateChargeBreakdown,
+} from "@/features/financial/payment-requests/barcode-amounts";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 
 const TIME_ZONE = "America/Belem";
 const SYSTEM_ACTOR = "system:inter-statement";
@@ -565,16 +570,18 @@ async function loadExpectedBankDebits() {
     const data = document.data();
     const expectedDate = asDate(data.expectedDate);
     const amount = Number(data.amountCents) / 100;
+    const principalAmount = Number(data.principalAmountCents ?? data.amountCents) / 100;
     const paymentRequestId = String(data.paymentRequestId || "");
     const financialInboxMessageId = String(data.financialInboxMessageId || "");
     const expenseId = String(data.expenseId || "");
-    if (!expectedDate || amount <= 0 || !paymentRequestId || (!financialInboxMessageId && data.sourceType !== "expense_boleto") || !expenseId) return [];
+    if (!expectedDate || amount <= 0 || principalAmount <= 0 || !paymentRequestId || (!financialInboxMessageId && data.sourceType !== "expense_boleto") || !expenseId) return [];
     return [{
       id: document.id,
       paymentRequestId,
       financialInboxMessageId,
       expenseId,
       amount,
+      principalAmount,
       expectedDate,
       references: [data.bankTransactionCode, data.paymentRequestId]
         .filter((value): value is string => typeof value === "string" && Boolean(value.trim())),
@@ -584,6 +591,33 @@ async function loadExpectedBankDebits() {
 }
 
 class ExpectedBankDebitReviewError extends Error {}
+class ExpectedBankDebitPendingError extends Error {}
+
+async function loadLateChargesAccount() {
+  const snapshot = await financialDbAdmin.collection("accounts")
+    .where("name", "==", "Juros e multas")
+    .limit(3)
+    .get();
+  const candidates = snapshot.docs.filter((document) => {
+    const data = document.data();
+    return data.active !== false && data.isGroup !== true && data.is_dre_account !== false;
+  });
+  if (candidates.length !== 1) {
+    throw new ExpectedBankDebitReviewError(
+      "A conta analítica Juros e multas não foi localizada de forma única; a baixa automática foi bloqueada.",
+    );
+  }
+  const children = await financialDbAdmin.collection("accounts")
+    .where("parentId", "==", candidates[0].id)
+    .limit(1)
+    .get();
+  if (!children.empty) {
+    throw new ExpectedBankDebitReviewError(
+      "A conta Juros e multas não é uma folha do plano de contas; a baixa automática foi bloqueada.",
+    );
+  }
+  return { id: candidates[0].id, name: String(candidates[0].get("name") || "Juros e multas") };
+}
 
 async function releaseExpectedBankDebitLease(expectedDebitId: string, leaseId: string) {
   const ref = financialDbAdmin.collection("expectedBankDebits").doc(expectedDebitId);
@@ -659,23 +693,64 @@ async function reconcileExpectedBankDebit(params: {
       || (paymentRequest.sourceType === "financial_inbox"
         ? paymentRequest.sourceId !== params.expected.financialInboxMessageId
         : paymentRequest.sourceId !== params.expected.expenseId || Boolean(params.expected.financialInboxMessageId))
-      || Math.abs((Number(paymentRequest.amount) || 0) - params.expected.amount) > 0.01
+      || Math.abs((Number(paymentRequest.amount) || 0) - params.expected.principalAmount) > 0.01
       || !paymentRequestStatusAllowed
     ) {
       throw new ExpectedBankDebitReviewError(
         "A solicitação bancária diverge do débito esperado; a baixa automática foi bloqueada.",
       );
     }
-    const principal = Number(expense.totalValue) || params.expected.amount;
+    const expensePrincipal = Number(expense.totalValue) || 0;
+    const principal = params.expected.principalAmount;
+    if (expensePrincipal > 0 && Math.abs(expensePrincipal - principal) > 0.01) {
+      throw new ExpectedBankDebitReviewError(
+        "O principal da despesa diverge da solicitação bancária; a baixa automática foi bloqueada.",
+      );
+    }
     const cash = Math.abs(params.entry.amount);
-    const difference = Number((cash - principal).toFixed(2));
+    const settlementObservation = observeBarcodeStatementSettlement({
+      principalAmount: principal,
+      cashAmount: cash,
+      expectedAmount: params.expected.amount,
+      bankSettlementAmount: paymentRequest.bankSettlementAmount,
+      dueDate: paymentRequest.barcodeSnapshot.dueDate,
+      paidOn: params.entry.date,
+    });
+    if (settlementObservation.divergence === "expected_amount") {
+      throw new ExpectedBankDebitPendingError(
+        "O valor atualizado do débito esperado ainda não foi persistido.",
+      );
+    }
+    if (
+      settlementObservation.divergence === "bank_settlement"
+      && paymentRequest.bankSettlementAmount == null
+    ) {
+      throw new ExpectedBankDebitPendingError(
+        "O Banco Inter ainda não confirmou o valor liquidado do boleto.",
+      );
+    }
+    if (settlementObservation.divergence) {
+      throw new ExpectedBankDebitReviewError(
+        "O débito do extrato diverge do valor e do vencimento confirmados pelo banco; a baixa automática foi bloqueada.",
+      );
+    }
+    const difference = settlementObservation.differenceCents / 100;
     const bankCharges = extractBankCharges(params.entry.raw);
-    const classifiedCharges = difference > 0 && Math.abs(bankCharges.interest + bankCharges.fine - difference) <= 0.05
-      ? bankCharges
-      : { interest: 0, fine: 0 };
+    const classifiedCharges = planLateChargeBreakdown({
+      difference,
+      bankInterest: bankCharges.interest,
+      bankFine: bankCharges.fine,
+    });
+    const lateChargesAccount = difference > 0 ? await loadLateChargesAccount() : null;
     const paidAt = Timestamp.fromDate(statementDate(params.entry.date));
     const now = Timestamp.now();
     const batch = financialDbAdmin.batch();
+    const existingChargeExpenseId = String(
+      expense.manualChargesExpenseId || expense.bankChargesExpenseId || "",
+    ).trim();
+    const chargeExpenseId = difference > 0
+      ? existingChargeExpenseId || `expected_charge_${params.transactionId}`
+      : null;
     const match = await queueMatchedBankPayment({
       batch,
       expenseId: params.expected.expenseId,
@@ -685,10 +760,65 @@ async function reconcileExpectedBankDebit(params: {
       cashAmount: cash,
       interest: classifiedCharges.interest,
       fine: classifiedCharges.fine,
+      otherCharge: classifiedCharges.otherCharge,
       paidAt,
       actor: { uid: SYSTEM_ACTOR, name: "Conciliação Banco Inter" },
+      chargesAccountPlanId: lateChargesAccount?.id ?? null,
+      chargesAccountPlanName: lateChargesAccount?.name ?? null,
+      chargeExpenseId,
       settlePaymentRequest: false,
     });
+    if (chargeExpenseId && lateChargesAccount) {
+      batch.set(financialDbAdmin.collection("expenses").doc(chargeExpenseId), {
+        ...financialExpenseAccountingFields({ competenceDate: paidAt }),
+        accountPlan: lateChargesAccount.id,
+        accountId: lateChargesAccount.id,
+        accountPlanId: lateChargesAccount.id,
+        accountPlanName: lateChargesAccount.name,
+        description: `Juros e multa | ${String(expense.description || "Despesa")}`,
+        supplier: expense.supplier || null,
+        notes: `Encargos calculados pelo banco na liquidação de boleto vencido. Principal: ${principal.toFixed(2)}.`,
+        totalValue: difference,
+        competenceDate: paidAt,
+        dueDate: paidAt,
+        paymentMethod: "single",
+        type: "encargo",
+        originExpenseId: params.expected.expenseId,
+        interest: classifiedCharges.interest,
+        fine: classifiedCharges.fine,
+        otherCharge: classifiedCharges.otherCharge,
+        hasAccountAllocations: false,
+        accountAllocations: null,
+        hasPersonAllocations: false,
+        personAllocations: null,
+        isApportioned: expense.isApportioned === true,
+        referenceResultCenterId: expense.referenceResultCenterId || expense.resultCenterId || null,
+        referenceResultCenterName: expense.referenceResultCenterName || expense.resultCenterName || expense.resultCenter || null,
+        resultCenter: expense.isApportioned === true ? null : expense.resultCenter || expense.resultCenterName || null,
+        resultCenterId: expense.isApportioned === true ? null : expense.resultCenterId || null,
+        resultCenterName: expense.isApportioned === true ? null : expense.resultCenterName || expense.resultCenter || null,
+        apportionments: expense.isApportioned === true ? expense.apportionments || null : null,
+        installments: [{
+          number: 1,
+          dueDate: paidAt,
+          value: difference,
+          status: "paid",
+          paidAt,
+          linkedBankTransactionId: params.transactionId,
+        }],
+        status: "paid",
+        paymentState: "paid",
+        paidAt,
+        paidByImport: true,
+        isPaymentAdjustment: true,
+        evidenceSource: "BANK_STATEMENT",
+        obligationId: match.obligationId,
+        paymentId: match.paymentId,
+        linkedBankTransactionId: params.transactionId,
+        ...(existingChargeExpenseId ? {} : { createdBy: SYSTEM_ACTOR, createdAt: now }),
+        updatedAt: now,
+      }, { merge: true });
+    }
     const isDivergent = match.summary.reconciliationStatus === "DIVERGENT";
     const statementSettlement = isDivergent ? null : planPaymentRequestStatementSettlement({
       request: paymentRequest,
@@ -715,6 +845,7 @@ async function reconcileExpectedBankDebit(params: {
       linkedBankTransactionId: params.transactionId,
       paymentRequestId: params.expected.paymentRequestId,
       paidAt: match.summary.obligationStatus === "PAID" ? paidAt : expense.paidAt || null,
+      ...(chargeExpenseId ? { bankChargesExpenseId: chargeExpenseId } : {}),
     }, { merge: true });
     batch.set(financialDbAdmin.collection("transactions").doc(params.transactionId), {
       expenseId: params.expected.expenseId,
@@ -777,6 +908,10 @@ async function reconcileExpectedBankDebit(params: {
     await batch.commit();
     return { isDivergent, skipped: false };
   } catch (error) {
+    if (error instanceof ExpectedBankDebitPendingError) {
+      await releaseExpectedBankDebitLease(params.expected.id, leaseId).catch(() => undefined);
+      return { isDivergent: false, skipped: true };
+    }
     if (error instanceof ExpectedBankDebitReviewError) {
       const reviewAt = Timestamp.now();
       await financialDbAdmin.runTransaction(async (transaction) => {

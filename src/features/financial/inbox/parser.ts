@@ -112,6 +112,49 @@ export function normalizePaymentBarcode(value: string) {
   return [44, 46, 47, 48].includes(digits.length) ? digits : null;
 }
 
+function bankSlipMod10(value: string) {
+  let sum = 0;
+  for (let i = value.length - 1, weight = 2; i >= 0; i--, weight = weight === 2 ? 1 : 2) {
+    const product = Number(value[i]) * weight;
+    sum += Math.floor(product / 10) + product % 10;
+  }
+  return (10 - sum % 10) % 10;
+}
+
+function bankSlipOverallDigitIsValid(barcode: string) {
+  if (barcode.length !== 44 || barcode.startsWith("8") || barcode[3] !== "9") return false;
+  const withoutDigit = barcode.slice(0, 4) + barcode.slice(5);
+  let sum = 0;
+  let weight = 2;
+  for (let i = withoutDigit.length - 1; i >= 0; i--, weight = weight === 9 ? 2 : weight + 1) {
+    sum += Number(withoutDigit[i]) * weight;
+  }
+  const raw = 11 - sum % 11;
+  const expected = raw === 0 || raw === 10 || raw === 11 ? 1 : raw;
+  return expected === Number(barcode[4]);
+}
+
+function validatedBankSlipBarcode(digits: string) {
+  if (digits.length === 44) return bankSlipOverallDigitIsValid(digits) ? digits : null;
+  if (digits.length !== 47) return null;
+  for (const [start, length] of [[0, 9], [10, 10], [21, 10]]) {
+    if (bankSlipMod10(digits.slice(start, start + length)) !== Number(digits[start + length])) return null;
+  }
+  const barcode = digits.slice(0, 4) + digits[32] + digits.slice(33) + digits.slice(4, 9)
+    + digits.slice(10, 20) + digits.slice(21, 31);
+  return bankSlipOverallDigitIsValid(barcode) ? barcode : null;
+}
+
+export function bankSlipAmountCents(value: string | null) {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  const barcode = validatedBankSlipBarcode(digits);
+  const amountDigits = barcode?.slice(9, 19) ?? "";
+  if (!/^\d{10}$/.test(amountDigits)) return null;
+  const amount = Number(amountDigits);
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+}
+
 export function extractPaymentBarcode(value: string) {
   const labeled = value.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\s-]{44,70})/i);
   const formattedBankSlip = value.match(/(?<!\d)(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})(?!\d)/);
@@ -493,6 +536,7 @@ export function classifyFinancialEmail(input: {
   const documentCompetence = agreedDocumentHint(hints, (hint) => hint.competence);
   const documentDueDate = agreedDocumentHint(hints, (hint) => hint.dueDate);
   const documentAmountCents = agreedDocumentHint(hints, (hint) => hint.amountCents);
+  const barcodeAmountCents = bankSlipAmountCents(barcode);
   const fiscalIdentity = mergeFiscalIdentities(extractFiscalIdentity(documentEvidence || combined), hints);
   const extractedBillingIdentity = mergeBillingIdentities(
     extractBillingIdentity(fiscalIdentity ? documentEvidence || combined : combined),
@@ -528,7 +572,7 @@ export function classifyFinancialEmail(input: {
         || (fiscalIdentity ? null : supplierName(input.senderDomain ?? null, combined)),
       competence: documentCompetence || extractCompetence(combined),
       dueDate: documentDueDate || extractDueDate(combined),
-      amountCents: documentAmountCents ?? extractAmount(combined),
+      amountCents: barcodeAmountCents ?? documentAmountCents ?? extractAmount(combined),
       barcode,
       barcodeMasked: maskPaymentBarcode(barcode),
       documentReferences: [...new Set([

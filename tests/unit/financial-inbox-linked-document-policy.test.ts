@@ -79,3 +79,12 @@ test("reconhece os links de cobrança da Bizneo/Superlógica e da Maximus sem co
   assert.equal(trustedFinancialDocumentProvider(maximusDocumentUrl)?.key, "maximus");
   assert.equal(trustedFinancialDocumentProvider("https://documentos.grupomse.com/login"), null);
 });
+
+test("permite somente a rota pública de boleto da TotalBank", () => {
+  const boleto = "https://portal.totalbank.com.br/boleto/download?token=segredo-sintetico";
+  assert.equal(isAllowedFinancialDocumentUrl(boleto, "remetente.example", []), true);
+  assert.equal(trustedFinancialDocumentProvider(boleto)?.key, "totalbank");
+  assert.equal(trustedFinancialDocumentProvider("https://portal.totalbank.com.br/login"), null);
+  assert.equal(trustedFinancialDocumentProvider("https://evil.portal.totalbank.com.br/boleto/download"), null);
+  assert.equal(trustedFinancialDocumentProvider("http://portal.totalbank.com.br/boleto/download"), null);
+});

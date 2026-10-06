@@ -15,8 +15,8 @@ export type InterBarcodePayment = {
   dataVencimentoTitulo?: string;
   dataInclusao?: string;
   dataPagamento?: string;
-  valorPago?: number;
-  valorNominal?: number;
+  valorPago?: number | null;
+  valorNominal?: number | null;
   statusPagamento?: string;
   aprovacoesNecessarias?: number;
   aprovacoesRealizadas?: number;

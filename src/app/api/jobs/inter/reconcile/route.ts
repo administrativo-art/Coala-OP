@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   // da origem. Agendamentos futuros ficam fora da consulta até a data devida.
   const [statusSnapshot, postPaymentSnapshot, staleSubmissionSnapshot] = await Promise.all([
     financialDbAdmin.collection("bankPaymentRequests")
-      .where("status", "in", ["awaiting_bank_approval", "scheduled", "processing"])
+      .where("status", "in", ["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"])
       .where("nextBankStatusCheckAt", "<=", nowIso)
       .orderBy("nextBankStatusCheckAt", "asc")
       .limit(MAX_PAYMENTS_PER_RUN).get(),
