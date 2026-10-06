@@ -120,6 +120,45 @@ function copyExpenseClassification(provision: Record<string, unknown>) {
   return Object.fromEntries(fields.filter((field) => field in provision).map((field) => [field, provision[field]]));
 }
 
+type InboxAccountAllocationInput = {
+  accountPlanId: string;
+  amountCents: number;
+};
+
+async function validateInboxAccountAllocations(input: InboxAccountAllocationInput[] | undefined) {
+  if (!input) return null;
+  if (input.length < 2) throw new Error("Informe ao menos duas apropriações contábeis.");
+  const ids = input.map((allocation) => allocation.accountPlanId.trim());
+  if (new Set(ids).size !== ids.length) {
+    throw new Error("Cada conta pode aparecer apenas uma vez nas apropriações.");
+  }
+  const references = ids.map((id) => financialDbAdmin.collection("accounts").doc(id));
+  const [documents, childSnapshots] = await Promise.all([
+    financialDbAdmin.getAll(...references),
+    Promise.all(ids.map((id) => financialDbAdmin.collection("accounts")
+      .where("parentId", "==", id)
+      .limit(1)
+      .get())),
+  ]);
+  return documents.map((document, index) => {
+    const account = document.data();
+    if (!document.exists
+      || !account
+      || account.active === false
+      || account.is_dre_account === false
+      || account.isGroup === true
+      || !childSnapshots[index]?.empty) {
+      throw new Error("A apropriação exige contas analíticas ativas da DRE.");
+    }
+    return {
+      accountPlanId: document.id,
+      accountPlanName: String(account.name || document.id),
+      amount: money(input[index]!.amountCents / 100),
+      amountCents: input[index]!.amountCents,
+    };
+  });
+}
+
 export async function analyzeFinancialInboxMessage(id: string, expectedWorkspaceId?: string) {
   const message = await getFinancialInboxMessage(id);
   if (expectedWorkspaceId && message.workspaceId !== expectedWorkspaceId) {
@@ -444,11 +483,19 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   } as FinancialInboxMessage;
 }
 
-export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, expectedWorkspaceId: string) {
+export async function linkSuggestedInboxCharge(
+  id: string,
+  actor: PaymentActor,
+  expectedWorkspaceId: string,
+  accountAllocations?: InboxAccountAllocationInput[],
+) {
   const analyzedMessage = await getFinancialInboxMessage(id);
   if (analyzedMessage.workspaceId !== expectedWorkspaceId) throw new Error("Cobrança recebida não encontrada.");
   if (analyzedMessage.existingExpenseSuggestion?.status === "suggested"
     && analyzedMessage.existingExpenseSuggestion.expenseId) {
+    if (accountAllocations) {
+      throw new Error("A apropriação informada só pode ser aplicada ao conciliar uma previsão.");
+    }
     return linkInboxChargeToExistingExpense(
       id,
       analyzedMessage.existingExpenseSuggestion.expenseId,
@@ -461,19 +508,30 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
   const actualRef = financialDbAdmin.collection("expenses").doc(`inbox_${id}`);
   const now = Timestamp.now();
   const nowIso = now.toDate().toISOString();
+  const validatedAccountAllocations = await validateInboxAccountAllocations(accountAllocations);
 
   return financialDbAdmin.runTransaction(async (transaction) => {
     const messageSnapshot = await transaction.get(messageRef);
     if (!messageSnapshot.exists) throw new Error("Cobrança recebida não encontrada.");
     const message = { id: messageSnapshot.id, ...messageSnapshot.data() } as FinancialInboxMessage;
     if (message.workspaceId !== expectedWorkspaceId) throw new Error("Cobrança recebida não encontrada.");
-    if (message.linkedExpenseId) return { message, expenseId: message.linkedExpenseId, duplicate: true };
+    if (message.linkedExpenseId) {
+      if (validatedAccountAllocations) {
+        throw new Error("A cobrança já foi conciliada; confira a despesa antes de alterar sua apropriação.");
+      }
+      return { message, expenseId: message.linkedExpenseId, duplicate: true };
+    }
     const provisionId = message.provisionSuggestion?.status === "suggested"
       ? message.provisionSuggestion.provisionExpenseId
       : null;
     if (!provisionId) throw new Error("A cobrança não possui uma sugestão única de provisionamento.");
     if (message.classification.amountCents == null || message.classification.amountCents <= 0) {
       throw new Error("Confirme o valor da cobrança antes de vinculá-la.");
+    }
+    if (validatedAccountAllocations
+      && validatedAccountAllocations.reduce((total, allocation) => total + allocation.amountCents, 0)
+        !== message.classification.amountCents) {
+      throw new Error("A soma das apropriações deve ser igual ao valor da cobrança.");
     }
     const provisionRef = financialDbAdmin.collection("expenses").doc(provisionId);
     const provisionSnapshot = await transaction.get(provisionRef);
@@ -528,6 +586,19 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
     });
     const actual = {
       ...copyExpenseClassification(provision),
+      ...(validatedAccountAllocations ? {
+        accountPlan: validatedAccountAllocations[0]!.accountPlanId,
+        accountId: validatedAccountAllocations[0]!.accountPlanId,
+        accountPlanName: validatedAccountAllocations[0]!.accountPlanName,
+        hasAccountAllocations: true,
+        accountAllocations: validatedAccountAllocations.map((allocation) => ({
+          accountPlanId: allocation.accountPlanId,
+          accountPlanName: allocation.accountPlanName,
+          amount: allocation.amount,
+        })),
+        hasPersonAllocations: false,
+        personAllocations: null,
+      } : {}),
       ...inheritExpenseReferenceCenter({}, provision),
       ...financialExpenseAccountingFields({
         competenceMonth: message.classification.competence,
@@ -623,6 +694,11 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       actualValue,
       provisionedValue,
       variance,
+      accountAllocations: validatedAccountAllocations?.map((allocation) => ({
+        accountPlanId: allocation.accountPlanId,
+        accountPlanName: allocation.accountPlanName,
+        amount: allocation.amount,
+      })) ?? null,
     });
     return { message: { ...message, linkedExpenseId: actualRef.id }, expenseId: actualRef.id, duplicate: false };
   });
