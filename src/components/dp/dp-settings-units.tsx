@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
+  CalendarClock,
+  Check,
   ChevronDown,
   Clock3,
+  Copy,
   FolderTree,
   Link2,
+  MapPin,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -21,6 +25,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useKiosks } from "@/hooks/use-kiosks";
+import { useToast } from "@/hooks/use-toast";
+import { extractBrazilianPostalCode } from "@/lib/brazilian-postal-code";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
@@ -76,6 +82,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -272,6 +283,182 @@ function userMatchesResponsibility(user: User, sourceType: ResponsibilityForm["r
   if (!sourceType || !sourceId) return false;
   if (sourceType === "job_role") return user.jobRoleId === sourceId;
   return user.jobFunctionIds?.includes(sourceId) === true;
+}
+
+async function writeClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(field);
+  if (!copied) throw new Error("Clipboard indisponível");
+}
+
+function useHoverPopover() {
+  const [open, setOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+  const show = useCallback(() => {
+    cancelClose();
+    setOpen(true);
+  }, [cancelClose]);
+  const scheduleClose = useCallback(() => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 140);
+  }, [cancelClose]);
+
+  useEffect(() => cancelClose, [cancelClose]);
+  return { open, setOpen, show, scheduleClose, cancelClose };
+}
+
+function UnitAddressQuickFact({ address, unitName }: { address: string; unitName: string }) {
+  const { toast } = useToast();
+  const disclosure = useHoverPopover();
+  const [copiedTarget, setCopiedTarget] = useState<"address" | "postalCode" | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postalCode = extractBrazilianPostalCode(address);
+
+  useEffect(() => () => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+  }, []);
+
+  const copy = useCallback(async (value: string, target: "address" | "postalCode") => {
+    try {
+      await writeClipboard(value);
+      setCopiedTarget(target);
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = setTimeout(() => setCopiedTarget(null), 1600);
+      toast({
+        title: target === "address" ? "Endereço copiado" : "CEP copiado",
+        description: target === "address" ? unitName : value,
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível copiar",
+        description: "Copie o dado manualmente no cartão da unidade.",
+      });
+    }
+  }, [toast, unitName]);
+
+  const copyPostalCode = useCallback(async () => {
+    if (!postalCode) {
+      disclosure.show();
+      toast({ title: "CEP não identificado", description: "O endereço completo continua disponível para cópia." });
+      return;
+    }
+    await copy(postalCode, "postalCode");
+  }, [copy, disclosure, postalCode, toast]);
+
+  return (
+    <Popover open={disclosure.open} onOpenChange={disclosure.setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Ver e copiar endereço de ${unitName}`}
+          onMouseEnter={disclosure.show}
+          onMouseLeave={disclosure.scheduleClose}
+          onFocus={disclosure.show}
+          onClick={() => void copy(address, "address")}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            void copyPostalCode();
+          }}
+        >
+          {copiedTarget ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> : <MapPin className="h-3.5 w-3.5" aria-hidden="true" />}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[min(22rem,calc(100vw-2rem))] space-y-3 p-3"
+        onMouseEnter={disclosure.cancelClose}
+        onMouseLeave={disclosure.scheduleClose}
+      >
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Endereço</p>
+          <p className="mt-1 text-sm leading-5">{address}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void copy(address, "address")}>
+            {copiedTarget === "address" ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+            Copiar endereço
+          </Button>
+          {postalCode ? (
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void copyPostalCode()}>
+              {copiedTarget === "postalCode" ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+              Copiar CEP
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-[11px] leading-4 text-muted-foreground">
+          Clique no ícone para copiar o endereço. No computador, use o botão direito para copiar somente o CEP.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function UnitShiftsQuickFact({ shifts, unitName }: { shifts: DPShiftDefinition[]; unitName: string }) {
+  const disclosure = useHoverPopover();
+  const shiftLabel = `${shifts.length} ${shifts.length === 1 ? "turno" : "turnos"}`;
+
+  if (shifts.length === 0) {
+    return (
+      <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-dashed border-border/70 px-2 text-[11px] text-muted-foreground">
+        <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+        Sem turnos
+      </span>
+    );
+  }
+
+  return (
+    <Popover open={disclosure.open} onOpenChange={disclosure.setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Ver ${shiftLabel} de ${unitName}`}
+          onMouseEnter={disclosure.show}
+          onMouseLeave={disclosure.scheduleClose}
+          onFocus={disclosure.show}
+        >
+          <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+          {shiftLabel}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[min(23rem,calc(100vw-2rem))] p-3"
+        onMouseEnter={disclosure.cancelClose}
+        onMouseLeave={disclosure.scheduleClose}
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Turnos vinculados</p>
+        <ul className="mt-2 max-h-72 space-y-1.5 overflow-y-auto">
+          {shifts.map((shift) => (
+            <li key={shift.id} className="flex items-start justify-between gap-4 rounded-md bg-muted/60 px-2.5 py-2 text-xs">
+              <span className="font-medium leading-4">{shift.name}</span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">{shift.startTime}–{shift.endTime}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[11px] text-muted-foreground">Consulta somente: nenhuma informação é copiada ou alterada.</p>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function UnitCreateMenu({
@@ -1199,34 +1386,18 @@ export function DPSettingsUnits() {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>{metaParts.join(" · ")}</span>
-            {shifts.length > 0 ? (
-              <span className="flex flex-wrap items-center gap-1.5">
-                <span className="text-border">·</span>
-                {shifts.map((shift) => (
-                  <span
-                    key={shift.id}
-                    className="inline-flex items-center gap-1 rounded bg-muted/70 px-1.5 py-0.5 tabular-nums"
-                  >
-                    <Clock3 className="h-3 w-3" />
-                    {shift.name} {shift.startTime}–{shift.endTime}
-                  </span>
-                ))}
-              </span>
-            ) : (
-              <span className="italic">Sem turno vinculado</span>
-            )}
           </div>
-          {unit.dpUnit?.address ? (
-            <p className="mt-1 truncate text-xs text-muted-foreground" title={unit.dpUnit.address}>
-              {unit.dpUnit.address}
-            </p>
-          ) : null}
-          <p className={cn(
-            "mt-1 truncate text-xs",
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {unit.dpUnit?.address ? <UnitAddressQuickFact address={unit.dpUnit.address} unitName={unit.name} /> : null}
+            <UnitShiftsQuickFact shifts={shifts} unitName={unit.name} />
+          </div>
+          <div className={cn(
+            "mt-1.5 flex items-start gap-1.5 text-xs leading-5",
             coverageNeedsConfiguration ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground",
-          )} title={coverageSummary}>
-            {coverageSummary}
-          </p>
+          )}>
+            <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <p className="min-w-0">{coverageSummary}</p>
+          </div>
         </div>
         <div className="opacity-60 transition-opacity group-hover/unit:opacity-100">
           {renderActionsForMergedUnit(unit)}
