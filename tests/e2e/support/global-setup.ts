@@ -28,6 +28,16 @@ export const E2E_VACATION = {
   calendarId: "calendar-vacation-e2e",
 };
 
+export const E2E_STOCK_MIN = {
+  cdGroupId: "group-cd-e2e",
+  storesGroupId: "group-lojas-e2e",
+  cdUnitId: "unit-cd-e2e",
+  storeUnitId: "unit-loja-e2e",
+  cdKioskId: "cd-e2e",
+  storeKioskId: "loja-e2e",
+  baseProductId: "base-estoque-min-e2e",
+};
+
 function isoDate(offsetDays = 0) {
   const date = new Date();
   date.setHours(12, 0, 0, 0);
@@ -98,6 +108,37 @@ export default async function seedE2E() {
       completedAt: now,
       lastConfirmedAt: now,
       nextReviewAt: isoDate(180),
+    },
+  });
+  batch.set(mainDb.collection("kiosks").doc(E2E_STOCK_MIN.cdKioskId), { name: "CD E2E" });
+  batch.set(mainDb.collection("kiosks").doc(E2E_STOCK_MIN.storeKioskId), { name: "Loja E2E" });
+  batch.set(mainDb.collection("dp_unitGroups").doc(E2E_STOCK_MIN.cdGroupId), { name: "Grupo CD E2E", unitCount: 1, createdAt: now });
+  batch.set(mainDb.collection("dp_unitGroups").doc(E2E_STOCK_MIN.storesGroupId), { name: "Grupo Lojas E2E", unitCount: 1, createdAt: now });
+  batch.set(mainDb.collection("dp_units").doc(E2E_STOCK_MIN.cdUnitId), {
+    name: "CD E2E",
+    groupId: E2E_STOCK_MIN.cdGroupId,
+    externalSource: "kiosk",
+    externalId: E2E_STOCK_MIN.cdKioskId,
+    coverageMode: "on_demand",
+    createdAt: now,
+  });
+  batch.set(mainDb.collection("dp_units").doc(E2E_STOCK_MIN.storeUnitId), {
+    name: "Loja E2E",
+    groupId: E2E_STOCK_MIN.storesGroupId,
+    externalSource: "kiosk",
+    externalId: E2E_STOCK_MIN.storeKioskId,
+    coverageMode: "on_demand",
+    createdAt: now,
+  });
+  batch.set(mainDb.collection("baseProducts").doc(E2E_STOCK_MIN.baseProductId), {
+    name: "INSUMO E2E ESTOQUE",
+    category: "Massa",
+    unit: "kg",
+    initialCostPerUnit: 1,
+    consumptionMonths: 0,
+    stockLevels: {
+      [E2E_STOCK_MIN.cdKioskId]: { min: 100, safetyStock: 0, leadTime: 0, override: false, lastAutoCalculatedAt: now },
+      [E2E_STOCK_MIN.storeKioskId]: { min: 20, safetyStock: 0, leadTime: 0, override: true },
     },
   });
   const vacationStart = dateOnly(45);

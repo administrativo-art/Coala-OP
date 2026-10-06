@@ -11,6 +11,7 @@ import {
   setOptionalBooleanPatch,
   setOptionalNumberPatch,
   setOptionalStringPatch,
+  setStockRolePatch,
   hasOwn,
   optionalOperatingHours,
   optionalCoverageMode,
@@ -71,6 +72,7 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       update.coverageMode = optionalCoverageMode(body.coverageMode) ?? FieldValue.delete();
     }
     setOptionalNumberPatch(update, body, "auditChecklistThreshold");
+    setStockRolePatch(update, body);
 
     if (Object.prototype.hasOwnProperty.call(body, "externalSource")) {
       const externalSource = normalizeExternalSource(body.externalSource);

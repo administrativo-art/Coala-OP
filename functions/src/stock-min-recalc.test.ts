@@ -170,6 +170,107 @@ test("insumo arquivado é ignorado", async () => {
   assert.equal(after.data()!.stockLevels[kioskA].min, 1, "insumo arquivado não deveria ser recalculado");
 });
 
+async function seedUnit(id: string, data: Record<string, unknown>) {
+  await db.collection("dp_units").doc(id).set({ name: id, ...data });
+}
+
+test("unidade de abastecimento soma o consumo das unidades comerciais dos grupos atendidos (+30%)", async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const baseProductId = `test-supply-${suffix}`;
+  const groupCd = `group-cd-${suffix}`;
+  const groupStores = `group-stores-${suffix}`;
+  const cd = `cd-${suffix}`;
+  const storeA = `store-a-${suffix}`;
+  const storeB = `store-b-${suffix}`;
+  const storeArchived = `store-archived-${suffix}`;
+  const storeOtherGroup = `store-other-${suffix}`;
+
+  await db.collection("dp_unitGroups").doc(groupCd).set({ name: "CD teste", suppliedGroupIds: [groupStores] });
+  await db.collection("dp_unitGroups").doc(groupStores).set({ name: "Quiosques teste" });
+  await seedUnit(`u-${cd}`, { externalSource: "kiosk", externalId: cd, groupId: groupCd, stockRole: "supply" });
+  await seedUnit(`u-${storeA}`, { externalSource: "kiosk", externalId: storeA, groupId: groupStores });
+  await seedUnit(`u-${storeB}`, { externalSource: "kiosk", externalId: storeB, groupId: groupStores, stockRole: "commercial" });
+  await seedUnit(`u-${storeArchived}`, { externalSource: "kiosk", externalId: storeArchived, groupId: groupStores, isArchived: true });
+  await seedUnit(`u-${storeOtherGroup}`, { externalSource: "kiosk", externalId: storeOtherGroup, groupId: `outro-${suffix}` });
+
+  // A: 10/mês, B: 20/mês, arquivada e outro grupo não contam => CD: 30/mês => 30*1.3 = 39
+  for (const month of [3, 4, 5, 6, 7, 8]) {
+    await seedConsumptionReport(storeA, 2026, month, 10, [{ baseProductId, productName: "TESTE SUPPLY", consumedQuantity: 10 }]);
+    await seedConsumptionReport(storeB, 2026, month, 10, [{ baseProductId, productName: "TESTE SUPPLY", consumedQuantity: 20 }]);
+    await seedConsumptionReport(storeArchived, 2026, month, 10, [{ baseProductId, productName: "TESTE SUPPLY", consumedQuantity: 500 }]);
+    await seedConsumptionReport(storeOtherGroup, 2026, month, 10, [{ baseProductId, productName: "TESTE SUPPLY", consumedQuantity: 700 }]);
+  }
+
+  // o CD nem tem linha no insumo: deve ser criada; storeB não tem linha também
+  await db.collection("baseProducts").doc(baseProductId).set({
+    name: "TESTE SUPPLY",
+    unit: "L",
+    category: "Volume",
+    stockLevels: { [storeA]: { override: false } },
+  });
+
+  await runMinimumStockRecalculation(db, NOW);
+
+  const levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
+  assert.equal(levels[storeA].min, 13, "unidade comercial usa o próprio consumo: 10*1.3");
+  assert.equal(levels[storeB].min, 26, "quiosque sem linha no cadastro é criado: 20*1.3");
+  assert.equal(levels[cd].min, 39, "CD soma A+B (30) e aplica 30%");
+  assert.equal(levels[cd].lastAutoCalculatedMean, 30);
+  assert.equal(levels[cd].override, false);
+});
+
+test("unidade de abastecimento com override mantém o valor manual", async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const baseProductId = `test-supply-override-${suffix}`;
+  const groupCd = `group-cd-${suffix}`;
+  const groupStores = `group-stores-${suffix}`;
+  const cd = `cd-${suffix}`;
+  const store = `store-${suffix}`;
+
+  await db.collection("dp_unitGroups").doc(groupCd).set({ name: "CD teste", suppliedGroupIds: [groupStores] });
+  await db.collection("dp_unitGroups").doc(groupStores).set({ name: "Quiosques teste" });
+  await seedUnit(`u-${cd}`, { externalSource: "kiosk", externalId: cd, groupId: groupCd, stockRole: "supply" });
+  await seedUnit(`u-${store}`, { externalSource: "kiosk", externalId: store, groupId: groupStores });
+  await seedConsumptionReport(store, 2026, 6, 10, [{ baseProductId, productName: "TESTE", consumedQuantity: 60 }]);
+
+  await db.collection("baseProducts").doc(baseProductId).set({
+    name: "TESTE",
+    unit: "kg",
+    category: "Massa",
+    stockLevels: { [cd]: { override: true, min: 77 } },
+  });
+
+  await runMinimumStockRecalculation(db, NOW);
+
+  const levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
+  assert.equal(levels[cd].min, 77, "valor manual do CD não pode ser sobrescrito");
+  assert.equal(levels[store].min, 13, "60 em 6 meses => média 10 => 10*1.3");
+});
+
+test("unidade mista soma o consumo do próprio grupo (incluindo ela mesma)", async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const baseProductId = `test-mixed-${suffix}`;
+  const group = `group-mixed-${suffix}`;
+  const mixed = `mixed-${suffix}`;
+  const store = `store-${suffix}`;
+
+  await db.collection("dp_unitGroups").doc(group).set({ name: "Grupo misto" });
+  await seedUnit(`u-${mixed}`, { externalSource: "kiosk", externalId: mixed, groupId: group, stockRole: "mixed" });
+  await seedUnit(`u-${store}`, { externalSource: "kiosk", externalId: store, groupId: group });
+
+  for (const month of [3, 4, 5, 6, 7, 8]) {
+    await seedConsumptionReport(mixed, 2026, month, 10, [{ baseProductId, productName: "TESTE", consumedQuantity: 10 }]);
+    await seedConsumptionReport(store, 2026, month, 10, [{ baseProductId, productName: "TESTE", consumedQuantity: 20 }]);
+  }
+  await db.collection("baseProducts").doc(baseProductId).set({ name: "TESTE", unit: "kg", category: "Massa", stockLevels: {} });
+
+  await runMinimumStockRecalculation(db, NOW);
+
+  const levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
+  assert.equal(levels[mixed].min, 39, "mista: (10+20)*1.3, sem contar a própria unidade em dobro");
+  assert.equal(levels[store].min, 26, "comercial: só o próprio consumo");
+});
+
 after(async () => {
   // Fecha a conexão do SDK admin para o node --test encerrar sozinho, sem handles pendurados.
   await Promise.all(getApps().map((app) => deleteApp(app)));

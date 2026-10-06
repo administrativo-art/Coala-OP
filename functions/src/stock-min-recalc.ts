@@ -131,6 +131,54 @@ async function loadMovementHistoryEntries(
   return entries;
 }
 
+type StockRole = "commercial" | "mixed" | "supply";
+
+/**
+ * Mapeia, para cada quiosque de estoque que seja unidade de abastecimento (ou mista), os quiosques
+ * cujo consumo ele deve somar. Vem do cadastro do módulo de Pessoal:
+ * - `dp_units.externalId` (com `externalSource: "kiosk"`) liga a unidade ao quiosque do estoque;
+ * - `dp_units.stockRole`: "commercial" (padrão), "mixed" ou "supply";
+ * - `dp_unitGroups.suppliedGroupIds`: grupos que o grupo da unidade de abastecimento atende.
+ * Uma unidade mista atende também o próprio grupo.
+ */
+export async function loadSupplyMap(db: Firestore): Promise<Map<string, Set<string>>> {
+  const [unitsSnap, groupsSnap] = await Promise.all([
+    db.collection("dp_units").get(),
+    db.collection("dp_unitGroups").get(),
+  ]);
+
+  const suppliedByGroup = new Map<string, string[]>();
+  for (const doc of groupsSnap.docs) {
+    const ids = doc.get("suppliedGroupIds");
+    if (Array.isArray(ids)) suppliedByGroup.set(doc.id, ids.filter((id): id is string => typeof id === "string"));
+  }
+
+  type UnitInfo = { kioskId: string; groupId?: string; role: StockRole };
+  const units: UnitInfo[] = [];
+  for (const doc of unitsSnap.docs) {
+    const data = doc.data();
+    if (data.isArchived === true) continue;
+    if (data.externalSource !== "kiosk" || typeof data.externalId !== "string" || !data.externalId) continue;
+    const role: StockRole = data.stockRole === "supply" || data.stockRole === "mixed" ? data.stockRole : "commercial";
+    units.push({ kioskId: data.externalId, groupId: typeof data.groupId === "string" ? data.groupId : undefined, role });
+  }
+
+  const supplyMap = new Map<string, Set<string>>();
+  for (const supplier of units) {
+    if (supplier.role === "commercial" || !supplier.groupId) continue;
+    const servedGroups = new Set<string>(suppliedByGroup.get(supplier.groupId) ?? []);
+    if (supplier.role === "mixed") servedGroups.add(supplier.groupId);
+    if (servedGroups.size === 0) continue;
+    const served = new Set<string>();
+    for (const unit of units) {
+      if (unit.role === "supply" || !unit.groupId || !servedGroups.has(unit.groupId)) continue;
+      served.add(unit.kioskId);
+    }
+    if (served.size > 0) supplyMap.set(supplier.kioskId, served);
+  }
+  return supplyMap;
+}
+
 function roundForUnit(value: number, unit: string | undefined): number {
   if (unit === "un") return Math.ceil(value);
   return Math.round(value * 100) / 100;
@@ -168,17 +216,21 @@ export type RecalculationSummary = {
  * (padrão) usa a média mensal dos 6 meses; 'biweekly' usa a média quinzenal (12 quinzenas).
  * Itens em "un" são arredondados para cima; os demais mantêm 2 casas decimais.
  *
- * `stockLevels.<kioskId>.override === true` trava o item nesse quiosque — pula e não
- * sobrescreve um valor ajustado manualmente.
+ * `stockLevels.<kioskId>.override === true` ("Manter valor manual") trava o item nesse quiosque —
+ * pula e não sobrescreve um valor ajustado manualmente.
+ *
+ * Unidades de abastecimento/mistas (ver `loadSupplyMap`) usam a soma do consumo das unidades
+ * atendidas, na mesma base mensal/quinzenal, com a mesma margem de 30%.
  */
 export async function runMinimumStockRecalculation(db: Firestore, now: Date): Promise<RecalculationSummary> {
   const months = lastCompleteMonths(now);
   const years = Array.from(new Set(months.map((m) => m.year)));
   const cutoff = new Date(Date.UTC(months[0].year, months[0].month - 1, 1));
 
-  const [productToBaseProduct, baseProductsSnap] = await Promise.all([
+  const [productToBaseProduct, baseProductsSnap, supplyMap] = await Promise.all([
     loadProductToBaseProductMap(db),
     db.collection("baseProducts").get(),
+    loadSupplyMap(db),
   ]);
 
   const [reportEntries, movementEntries] = await Promise.all([
@@ -213,13 +265,21 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
     const byKiosk = groupBy(sourceEntries, (e) => e.kioskId);
 
     const stockLevels: Record<string, { min?: number; override?: boolean }> = product.stockLevels ?? {};
-    for (const [kioskId, level] of Object.entries(stockLevels)) {
+    // Quiosques sem linha no cadastro do insumo também entram assim que tiverem consumo
+    // (ou, no caso de unidade de abastecimento, consumo das unidades atendidas).
+    const kioskIds = new Set<string>([...Object.keys(stockLevels), ...byKiosk.keys(), ...supplyMap.keys()]);
+
+    for (const kioskId of kioskIds) {
+      const level = stockLevels[kioskId];
       if (level?.override) {
         summary.skippedOverride++;
         continue;
       }
 
-      const kioskEntries = byKiosk.get(kioskId) ?? [];
+      const served = supplyMap.get(kioskId);
+      const kioskEntries = served
+        ? Array.from(served).flatMap((servedKioskId) => byKiosk.get(servedKioskId) ?? [])
+        : byKiosk.get(kioskId) ?? [];
       if (kioskEntries.length === 0) {
         summary.skippedNoData++;
         continue;
@@ -243,6 +303,7 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
 
       batch.update(doc.ref, {
         [`stockLevels.${kioskId}.min`]: newMin,
+        [`stockLevels.${kioskId}.override`]: false,
         [`stockLevels.${kioskId}.lastAutoCalculatedAt`]: now.toISOString(),
         [`stockLevels.${kioskId}.lastAutoCalculatedMean`]: Math.round(mean * 100) / 100,
       });
