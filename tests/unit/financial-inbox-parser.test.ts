@@ -73,6 +73,51 @@ test("dados estruturados concordantes do boleto prevalecem sobre encargos citado
   assert.equal(parsed.classification.barcode, "48190000030000515057880058150147115800000028560");
 });
 
+test("usa o principal codificado na linha digitável quando o documento mostra valor atualizado", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Boleto de condomínio e energia",
+    documentText: "Valor do documento: R$ 1.467,98. Valor atualizado: R$ 1.512,00.",
+    documentHints: [{
+      documentText: null,
+      supplierName: "Oceanos Investimentos Imobiliários Ltda",
+      supplierTaxId: "05695860000100",
+      competence: "2026-09",
+      dueDate: "2026-10-05",
+      amountCents: 151200,
+      barcode: "10491158171700010004400014406375415900000146798",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+      confidence: "high",
+    }],
+  });
+
+  assert.equal(parsed.classification.amountCents, 146798);
+});
+
+test("não substitui o valor documental quando a linha digitável falha nos verificadores", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Boleto de condomínio e energia",
+    documentHints: [{
+      documentText: null,
+      supplierName: "Oceanos Investimentos Imobiliários Ltda",
+      supplierTaxId: "05695860000100",
+      competence: "2026-09",
+      dueDate: "2026-10-05",
+      amountCents: 151200,
+      barcode: "10492158171700010004400014406375415900000146798",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+      confidence: "high",
+    }],
+  });
+
+  assert.equal(parsed.classification.amountCents, 151200);
+});
+
 test("classifica INSS-DARF e extrai valor brasileiro somente como sugestão", () => {
   const parsed = classifyFinancialEmail({
     subject: "INSS-DARF - VENCIMENTO: 20/08/2026",
