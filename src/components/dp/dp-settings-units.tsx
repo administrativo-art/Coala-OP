@@ -41,6 +41,7 @@ import type {
   DPUnitGroup,
   DPUnitOrganization,
   DPUnitResponsibility,
+  DPUnitStockRole,
   JobFunction,
   JobRole,
   Kiosk,
@@ -84,6 +85,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 type OrganizationDialogState =
@@ -118,6 +120,7 @@ type OrganizationForm = {
 type GroupForm = {
   name: string;
   organizationId: string;
+  suppliedGroupIds: string[];
 } & ResponsibilityForm;
 
 type UnitForm = {
@@ -132,6 +135,7 @@ type UnitForm = {
   bizneoTaxonId: string;
   coverageMode: DPCoverageMode;
   operatingHours: DPOperatingHours;
+  stockRole: DPUnitStockRole;
 };
 
 type MergedOperationalUnit = {
@@ -154,12 +158,13 @@ type PdvLegalFilial = {
 
 const NONE = "__none__";
 
-function sortByName<T extends { name: string }>(items: T[]) {
-  return [...items].sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+// Documentos legados ou de integração podem chegar sem `name`; a tela não pode quebrar por isso.
+function sortByName<T extends { name?: string }>(items: T[]) {
+  return [...items].sort((left, right) => (left.name ?? "").localeCompare(right.name ?? "", "pt-BR"));
 }
 
-function normalizeName(value: string) {
-  return value
+function normalizeName(value: string | undefined) {
+  return (value ?? "")
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/quiosque\s*/gi, "")
@@ -205,8 +210,9 @@ function editDistance(a: string, b: string) {
   return matrix[a.length][b.length];
 }
 
-function matchUnitByName(kioskName: string, units: DPUnit[]) {
+function matchUnitByName(kioskName: string | undefined, units: DPUnit[]) {
   const normalizedKioskName = normalizeName(kioskName);
+  if (!normalizedKioskName) return undefined; // sem nome não há correspondência confiável
   const exact = units.find((unit) => {
     const normalizedUnitName = normalizeName(unit.name);
     return (
@@ -349,6 +355,7 @@ export function DPSettingsUnits() {
   const [groupForm, setGroupForm] = useState<GroupForm>({
     name: "",
     organizationId: "",
+    suppliedGroupIds: [],
     ...emptyResponsibilityForm(),
   });
   const [unitForm, setUnitForm] = useState<UnitForm>({
@@ -363,6 +370,7 @@ export function DPSettingsUnits() {
     bizneoTaxonId: "",
     coverageMode: "fixed_hours",
     operatingHours: emptyOperatingHours(),
+    stockRole: "commercial",
   });
   const unitCnpjValidation = unitForm.cnpj.trim()
     ? CnpjValidator.validate(unitForm.cnpj)
@@ -430,7 +438,7 @@ export function DPSettingsUnits() {
       .filter((kiosk) => !linkedKioskIds.has(kiosk.id))
       .map((kiosk) => ({
         key: `kiosk-${kiosk.id}`,
-        name: kiosk.name,
+        name: kiosk.name || kiosk.id,
         kiosk,
         pdvFilialId: kiosk.pdvFilialId,
         bizneoTaxonId:
@@ -479,6 +487,7 @@ export function DPSettingsUnits() {
       setGroupForm({
         name: groupDialog.group.name,
         organizationId: groupDialog.group.organizationId ?? "",
+        suppliedGroupIds: groupDialog.group.suppliedGroupIds ?? [],
         ...responsibilityFormFromEntity(groupDialog.group),
       });
       return;
@@ -486,6 +495,7 @@ export function DPSettingsUnits() {
     setGroupForm({
       name: "",
       organizationId: groupDialog.organizationId ?? "",
+      suppliedGroupIds: [],
       ...emptyResponsibilityForm(),
     });
   }, [groupDialog]);
@@ -510,6 +520,7 @@ export function DPSettingsUnits() {
             : "",
         coverageMode: resolveDPCoverageMode(unitDialog.unit),
         operatingHours: normalizeOperatingHours(unitDialog.unit.operatingHours),
+        stockRole: unitDialog.unit.stockRole ?? "commercial",
       });
       return;
     }
@@ -534,6 +545,7 @@ export function DPSettingsUnits() {
           : "",
       coverageMode: "fixed_hours",
       operatingHours: emptyOperatingHours(),
+      stockRole: "commercial",
     });
   }, [groupById, kiosks, syncCandidates, unitDialog]);
 
@@ -696,12 +708,14 @@ export function DPSettingsUnits() {
           ...groupDialog.group,
           name,
           organizationId: groupForm.organizationId || undefined,
+          suppliedGroupIds: groupForm.suppliedGroupIds,
           ...buildResponsibilityPayload(groupForm),
         });
       } else {
         await addUnitGroup({
           name,
           organizationId: groupForm.organizationId || undefined,
+          suppliedGroupIds: groupForm.suppliedGroupIds,
           ...buildResponsibilityPayload(groupForm),
         });
       }
@@ -741,6 +755,7 @@ export function DPSettingsUnits() {
           bizneoTaxonId,
           coverageMode: unitForm.coverageMode,
           operatingHours: unitForm.operatingHours,
+          stockRole: unitForm.stockRole,
         });
       } else {
         await addUnit({
@@ -756,6 +771,7 @@ export function DPSettingsUnits() {
           bizneoTaxonId,
           coverageMode: unitForm.coverageMode,
           operatingHours: unitForm.operatingHours,
+          stockRole: unitForm.stockRole,
         });
       }
       setUnitDialog(null);
@@ -1045,7 +1061,7 @@ export function DPSettingsUnits() {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações do grupo ${group.name}`}>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -1072,7 +1088,7 @@ export function DPSettingsUnits() {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações da unidade ${unit.name}`}>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -1511,6 +1527,44 @@ export function DPSettingsUnits() {
               </Select>
             </div>
             {renderResponsibilityFields(groupForm, updateGroupResponsibility)}
+            {(() => {
+              const editingGroupId = groupDialog?.mode === "edit" ? groupDialog.group.id : null;
+              const candidates = groups.filter((group) => group.id !== editingGroupId);
+              if (candidates.length === 0) return null;
+              return (
+                <div className="space-y-3 rounded-xl border p-4" data-testid="group-supplied-groups">
+                  <div>
+                    <Label>Grupos que este grupo abastece</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Usado no estoque: o mínimo das unidades de abastecimento deste grupo (como o CD) soma o consumo
+                      das unidades comerciais dos grupos marcados. Deixe vazio se este grupo não abastece outros.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {candidates.map((group) => {
+                      const checked = groupForm.suppliedGroupIds.includes(group.id);
+                      return (
+                        <label key={group.id} className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={checked}
+                            aria-label={`Abastece ${group.name}`}
+                            onCheckedChange={(value) =>
+                              setGroupForm((current) => ({
+                                ...current,
+                                suppliedGroupIds: value === true
+                                  ? [...current.suppliedGroupIds.filter((id) => id !== group.id), group.id]
+                                  : current.suppliedGroupIds.filter((id) => id !== group.id),
+                              }))
+                            }
+                          />
+                          {group.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <DialogFooter>
@@ -1554,7 +1608,7 @@ export function DPSettingsUnits() {
                     {syncCandidates.length > 0 ? (
                       syncCandidates.map((kiosk) => (
                         <SelectItem key={kiosk.id} value={kiosk.id}>
-                          {kiosk.name}
+                          {kiosk.name || kiosk.id}
                         </SelectItem>
                       ))
                     ) : (
@@ -1621,6 +1675,29 @@ export function DPSettingsUnits() {
                 placeholder="Rua, número, complemento, bairro, cidade e UF"
                 rows={2}
               />
+            </div>
+
+            <div className="space-y-3 rounded-xl border p-4" data-testid="unit-stock-role">
+              <div>
+                <Label>Função no estoque</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Define como o estoque mínimo da unidade é calculado. Comercial usa o consumo da própria unidade;
+                  abastecimento e mista usam a soma do consumo das unidades atendidas (veja &quot;Grupos que este grupo abastece&quot;).
+                </p>
+              </div>
+              <Select
+                value={unitForm.stockRole}
+                onValueChange={(stockRole: DPUnitStockRole) => setUnitForm((current) => ({ ...current, stockRole }))}
+              >
+                <SelectTrigger aria-label="Função no estoque">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="commercial">Unidade comercial</SelectItem>
+                  <SelectItem value="mixed">Unidade mista (comercial e abastecimento)</SelectItem>
+                  <SelectItem value="supply">Unidade de abastecimento</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-3 rounded-xl border p-4">

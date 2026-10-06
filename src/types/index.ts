@@ -3436,6 +3436,15 @@ export interface EmployeeGoal {
 // ─── Departamento Pessoal ─────────────────────────────────────────────────────
 // Colaboradores = usuários do sistema (users/). Não há coleção separada.
 
+/**
+ * Função da unidade no estoque. Define como o estoque mínimo da unidade é calculado:
+ * - commercial (padrão): vende e consome — mínimo pela média do próprio consumo;
+ * - mixed: vende e também abastece — mínimo pela soma do consumo das unidades atendidas
+ *   (inclui o próprio grupo);
+ * - supply: só abastece (ex.: CD) — mínimo pela soma do consumo das unidades dos grupos atendidos.
+ */
+export type DPUnitStockRole = 'commercial' | 'mixed' | 'supply';
+
 export type DPUnit = {
   id: string;
   name: string;
@@ -3455,6 +3464,7 @@ export type DPUnit = {
   coverageMode?: DPCoverageMode;
   operatingHours?: DPOperatingHours;
   auditChecklistThreshold?: number;
+  stockRole?: DPUnitStockRole; // ausente = 'commercial'
   createdAt: Timestamp;
 };
 
@@ -3502,6 +3512,7 @@ export type DPUnitGroup = {
   name: string;
   organizationId?: string;
   unitCount?: number;
+  suppliedGroupIds?: string[]; // grupos cujas unidades este grupo abastece (usado pelo estoque mínimo do CD)
   createdAt: Timestamp;
 } & DPUnitResponsibility;
 

@@ -97,6 +97,26 @@ export function optionalCoverageMode(value: unknown) {
   return parsed.data;
 }
 
+export function optionalStockRole(value: unknown) {
+  if (value === null || value === undefined || value === "" || value === "commercial") return undefined;
+  if (value === "mixed" || value === "supply") return value;
+  throw new Error("Função da unidade no estoque inválida.");
+}
+
+export function setStockRolePatch(update: JsonObject, body: JsonObject) {
+  if (!hasOwn(body, "stockRole")) return;
+  update.stockRole = optionalStockRole(body.stockRole) ?? FieldValue.delete();
+}
+
+export function optionalIdList(value: unknown, label: string) {
+  if (value === null || value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${label} inválido.`);
+  }
+  const ids = Array.from(new Set((value as string[]).map((item) => item.trim()).filter(Boolean)));
+  return ids.length > 0 ? ids : undefined;
+}
+
 export function cleanDocument<T extends JsonObject>(payload: T) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined)
