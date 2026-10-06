@@ -4,11 +4,11 @@ import * as logger from "firebase-functions/logger";
 
 const TIME_ZONE = "America/Belem";
 const HISTORY_MONTHS = 6;
+const HISTORY_QUINZENAS = HISTORY_MONTHS * 2;
 const SAFETY_MARGIN = 1.3; // +30% sobre a média de consumo
 const MOVEMENT_HISTORY_READ_LIMIT = 20000; // salvaguarda: sem índice composto (type, timestamp) hoje, lemos tudo e filtramos em memória
 
 type Period = "monthly" | "biweekly";
-type BucketKey = string; // "2026-04" (monthly) ou "2026-04-1" / "2026-04-2" (biweekly)
 
 type ConsumptionEntry = {
   baseProductId: string;
@@ -23,30 +23,40 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-/** Os HISTORY_MONTHS meses completos anteriores ao mês corrente (assume execução no dia 1). */
-function lastCompleteMonths(now: Date): Array<{ year: number; month: number }> {
-  const months: Array<{ year: number; month: number }> = [];
+type Quinzena = { year: number; month: number; half: 1 | 2 };
+
+function quinzenaKey({ year, month, half }: Quinzena): string {
+  return `${year}-${pad2(month)}-${half}`;
+}
+
+function halfOfDay(day: number): 1 | 2 {
+  return day <= 15 ? 1 : 2;
+}
+
+/**
+ * As HISTORY_QUINZENAS quinzenas completas anteriores à quinzena corrente (1ª: dias 1–15; 2ª: dia 16 ao fim).
+ * Executando no dia 1, equivale aos 6 meses completos anteriores; no dia 16, a janela avança uma quinzena e
+ * passa a incluir a 1ª metade do mês corrente — por isso o recálculo de dois em dois (dias 1 e 16) traz números novos.
+ */
+function lastCompleteQuinzenas(now: Date): Quinzena[] {
+  const list: Quinzena[] = [];
   let year = now.getUTCFullYear();
   let month = now.getUTCMonth() + 1; // 1-12
-  for (let i = 0; i < HISTORY_MONTHS; i++) {
-    month -= 1;
-    if (month === 0) {
-      month = 12;
-      year -= 1;
+  let half: 1 | 2 = halfOfDay(now.getUTCDate());
+  for (let i = 0; i < HISTORY_QUINZENAS; i++) {
+    if (half === 2) {
+      half = 1;
+    } else {
+      half = 2;
+      month -= 1;
+      if (month === 0) {
+        month = 12;
+        year -= 1;
+      }
     }
-    months.push({ year, month });
+    list.push({ year, month, half });
   }
-  return months.reverse();
-}
-
-function allBucketKeys(period: Period, months: Array<{ year: number; month: number }>): BucketKey[] {
-  if (period === "monthly") return months.map(({ year, month }) => `${year}-${pad2(month)}`);
-  return months.flatMap(({ year, month }) => [`${year}-${pad2(month)}-1`, `${year}-${pad2(month)}-2`]);
-}
-
-function bucketKeyFor(period: Period, year: number, month: number, day: number): BucketKey {
-  if (period === "monthly") return `${year}-${pad2(month)}`;
-  return `${year}-${pad2(month)}-${day <= 15 ? 1 : 2}`;
+  return list.reverse();
 }
 
 /** consumptionReports gerados via `pdv-sync.ts` nem sempre têm o campo `day` (alguns docs antigos só têm no id: cons_sync_<kiosk>_YYYY_MM_DD). */
@@ -223,9 +233,10 @@ export type RecalculationSummary = {
  * atendidas, na mesma base mensal/quinzenal, com a mesma margem de 30%.
  */
 export async function runMinimumStockRecalculation(db: Firestore, now: Date): Promise<RecalculationSummary> {
-  const months = lastCompleteMonths(now);
-  const years = Array.from(new Set(months.map((m) => m.year)));
-  const cutoff = new Date(Date.UTC(months[0].year, months[0].month - 1, 1));
+  const quinzenas = lastCompleteQuinzenas(now);
+  const windowKeys = new Set(quinzenas.map(quinzenaKey));
+  const years = Array.from(new Set(quinzenas.map((q) => q.year)));
+  const cutoff = new Date(Date.UTC(quinzenas[0].year, quinzenas[0].month - 1, quinzenas[0].half === 1 ? 1 : 16));
 
   const [productToBaseProduct, baseProductsSnap, supplyMap] = await Promise.all([
     loadProductToBaseProductMap(db),
@@ -253,7 +264,8 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
     }
 
     const period: Period = product.minStockRecalcPeriod === "biweekly" ? "biweekly" : "monthly";
-    const bucketKeys = allBucketKeys(period, months);
+    // média por mês: total dos 6 meses / 6; média quinzenal: total das 12 quinzenas / 12
+    const divisor = period === "monthly" ? HISTORY_MONTHS : HISTORY_QUINZENAS;
 
     // fonte primária: consumptionReports; só cai para movementHistory se o insumo nunca aparecer lá
     const sourceEntries = reportByProduct.get(doc.id) ?? movementByProduct.get(doc.id) ?? [];
@@ -285,15 +297,12 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
         continue;
       }
 
-      const totals = new Map<BucketKey, number>(bucketKeys.map((k) => [k, 0]));
+      let total = 0;
       for (const entry of kioskEntries) {
-        const key = bucketKeyFor(period, entry.year, entry.month, entry.day);
-        if (!totals.has(key)) continue; // fora da janela de 6 meses
-        totals.set(key, (totals.get(key) ?? 0) + entry.quantity);
+        if (!windowKeys.has(quinzenaKey({ year: entry.year, month: entry.month, half: halfOfDay(entry.day) }))) continue; // fora da janela
+        total += entry.quantity;
       }
-
-      const values = Array.from(totals.values());
-      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const mean = total / divisor;
       if (mean <= 0) {
         summary.skippedNoData++;
         continue;
@@ -323,7 +332,7 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
 
 export const recalculateMinimumStock = onSchedule(
   {
-    schedule: "0 3 1 * *",
+    schedule: "0 3 1,16 * *",
     timeZone: TIME_ZONE,
     retryCount: 2,
     timeoutSeconds: 300,
