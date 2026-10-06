@@ -11,8 +11,14 @@ const schema = z.object({
   expenseId: z.string().trim().min(1).max(180).optional(),
   installmentNumber: z.number().int().positive().nullable().optional(),
   resolutionOnly: z.boolean().optional(),
+  accountAllocations: z.array(z.object({
+    accountPlanId: z.string().trim().min(1).max(180),
+    amountCents: z.number().int().positive(),
+  })).min(2).max(20).optional(),
 }).refine((input) => input.resolutionOnly !== true || Boolean(input.expenseId), {
   message: "A identificação sem vínculo exige uma despesa existente.",
+}).refine((input) => !input.expenseId || !input.accountAllocations, {
+  message: "A apropriação informada só pode ser aplicada ao conciliar uma previsão.",
 });
 
 export const POST = withApiErrorHandling<{ params: Promise<{ id: string }> }>({
@@ -82,7 +88,12 @@ export const POST = withApiErrorHandling<{ params: Promise<{ id: string }> }>({
           input.installmentNumber ?? null,
           input.resolutionOnly === true,
         )
-      : await linkSuggestedInboxCharge(id, paymentActor, actor.workspace_id);
+      : await linkSuggestedInboxCharge(
+          id,
+          paymentActor,
+          actor.workspace_id,
+          input.accountAllocations,
+        );
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (cause) {
     throw new AppError({
