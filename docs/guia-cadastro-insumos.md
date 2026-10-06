@@ -395,6 +395,8 @@ Esta tabela permite configurar parâmetros de controle de estoque individualment
 
 **Estoque Mínimo** — a quantidade, na unidade padrão do Base, abaixo da qual o sistema gera um alerta de reposição.
 - Exemplo: `Leite Integral` no kiosk `Cozinha` com mínimo `20` (litros) → alerta quando o estoque cair abaixo de 20 l.
+- **Manter valor manual:** com a chave desligada, o mínimo é calculado automaticamente todo dia 1º (média de consumo + 30%) e o campo fica bloqueado. Ligue a chave para digitar o valor; o cálculo automático passa a ignorar aquele local.
+- **Centro de distribuição:** quando a unidade é cadastrada como "abastecimento", o mínimo é a soma do consumo das unidades dos grupos que ela atende (Pessoal > Unidades).
 
 **Estoque de Segurança** — uma reserva extra acima do mínimo, para absorver atrasos de entrega ou picos inesperados de consumo. Na prática, é uma margem de segurança: o pedido de reposição é disparado quando o estoque atinge `Mínimo + Segurança`.
 - Exemplo: `5` → o sistema age como se o mínimo real fosse 25 l (20 mínimo + 5 segurança).

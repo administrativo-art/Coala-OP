@@ -9,6 +9,7 @@ import {
   optionalCoverageMode,
   optionalNumber,
   optionalOperatingHours,
+  optionalStockRole,
   optionalString,
   readJsonObject,
   requireOperationalUnitManager,
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
       coverageMode: optionalCoverageMode(body.coverageMode) ?? "fixed_hours",
       operatingHours: optionalOperatingHours(body.operatingHours),
       auditChecklistThreshold: optionalNumber(body.auditChecklistThreshold),
+      stockRole: optionalStockRole(body.stockRole),
       createdAt: now,
       updatedAt: now,
     });
