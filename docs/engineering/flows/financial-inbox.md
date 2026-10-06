@@ -8,6 +8,8 @@
 
 O [webhook Resend](../../../src/app/api/webhooks/resend/route.ts) encaminha e-mails destinados à caixa financeira para [`ingestFinancialEmail`](../../../src/features/financial/inbox/ingest.server.ts). A função evita duplicidade pelo ID do e-mail, busca conteúdo e anexos no provedor, arquiva `.eml` e anexos permitidos em Storage, classifica a mensagem e grava `financialInboxMessages/{id}` com evento `EMAIL_RECEIVED` no mesmo batch. Mensagem de marketing pode ser ignorada automaticamente; mensagem com link e sem documento arquivado fica `document_pending`. A análise automática posterior roda separadamente e registra falha em evento.
 
+Links públicos de documentos passam por allowlist de host e rota, resolução DNS pública, limite de redirects e tamanho. A rota HTTPS exata `portal.totalbank.com.br/boleto/download` é aceita como provedora de boleto; outras rotas e subdomínios continuam bloqueados, e a URL persistida perde query e fragmento. Em linha digitável bancária de 44 ou 47 dígitos com valor, o principal codificado prevalece sobre um valor atualizado mostrado no documento, preservando encargos de atraso para a etapa de liquidação.
+
 A [tela da caixa](../../../src/features/financial/inbox/financial-inbox-page.tsx) consulta [`GET /api/financial/inbox`](../../../src/app/api/financial/inbox/route.ts) com filtros, busca e cursor. A [consulta](../../../src/features/financial/inbox/repository.server.ts) limita a página a 50, usa índice de busca quando disponível e informa quando a busca limitada foi truncada. A rota exige autenticação e `financial.view` + `financial.inbox.view` (ou administrador padrão), restringindo pelo `workspace_id`.
 
 | Ação | Guarda e efeito observados |

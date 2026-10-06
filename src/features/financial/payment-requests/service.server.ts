@@ -19,6 +19,12 @@ import {
   paymentSubmissionRequiresManualReconciliation,
   planBankStatusObservation,
 } from "./bank-status-observation";
+import {
+  expectedBarcodeDebitAmountCents,
+  interBarcodePaymentDate,
+  interBarcodePaymentMatchesRequest,
+  observeInterBarcodeAmounts,
+} from "./barcode-amounts";
 import { paymentReceiverMatchesSnapshot } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
 
@@ -350,14 +356,19 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
   try {
     if (pending.paymentRail === "barcode") {
       if (!pending.barcodeSnapshot) throw new Error("Os dados da linha digitável não estão disponíveis.");
-      const previous = (await findInterBarcodePaymentsByCode(pending.barcodeSnapshot.code))
-        .filter((candidate) => !["REJEITADO", "RECUSADO", "CANCELADO"].includes(String(candidate.statusPagamento || "").toUpperCase()))
-        .filter((candidate) => {
-          const bankAmount = candidate.valorPago ?? candidate.valorNominal;
-          return bankAmount == null || Math.abs(Number(bankAmount) - pending.amount) <= 0.01;
-        });
-      if (previous.length > 1) {
+      const bankCandidates = (await findInterBarcodePaymentsByCode(pending.barcodeSnapshot.code))
+        .filter((candidate) => !["REJEITADO", "RECUSADO", "CANCELADO"].includes(String(candidate.statusPagamento || "").toUpperCase()));
+      if (bankCandidates.length > 1) {
         throw new Error("O Banco Inter retornou mais de um pagamento para esta linha digitável. Confira no Internet Banking antes de continuar.");
+      }
+      const previous = bankCandidates.filter((candidate) => interBarcodePaymentMatchesRequest({
+        payment: candidate,
+        requestedAmount: pending.amount,
+        dueDate: pending.barcodeSnapshot.dueDate,
+        scheduledFor: pending.barcodeSnapshot.scheduledFor,
+      }));
+      if (bankCandidates.length > 0 && previous.length === 0) {
+        throw new Error("O Banco Inter já possui pagamento para esta linha digitável com valores incompatíveis. Confira no Internet Banking antes de continuar.");
       }
       const recovered = previous[0] ?? null;
       const result = recovered ? {
@@ -382,6 +393,13 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         : mapInterBarcodeStatus(result.statusPagamento, pending.barcodeSnapshot.scheduledFor);
       const next = mapped === "paid" ? "awaiting_statement" as const : mapped;
       const submittedAt = new Date().toISOString();
+      const recoveredAmounts = recovered ? observeInterBarcodeAmounts({
+        requestedAmount: pending.amount,
+        dueDate: pending.barcodeSnapshot.dueDate,
+        paymentDate: interBarcodePaymentDate(recovered, pending.barcodeSnapshot.scheduledFor),
+        nominalAmount: recovered.valorNominal,
+        paidAmount: recovered.valorPago,
+      }) : null;
       const observation = planBankStatusObservation({
         current: pending,
         nextStatus: next,
@@ -395,8 +413,20 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         interRequestId,
         submittedAt,
         bankScheduledFor: result.dataAgendamento?.slice(0, 10) ?? null,
+        ...(recoveredAmounts?.nominalAmountCents != null
+          ? { bankNominalAmount: recoveredAmounts.nominalAmountCents / 100 }
+          : {}),
+        ...(recoveredAmounts?.settlementAmountCents != null
+          ? { bankSettlementAmount: recoveredAmounts.settlementAmountCents / 100 }
+          : {}),
+        ...(recoveredAmounts && recoveredAmounts.lateChargeAmountCents > 0
+          ? { bankLateChargeAmount: recoveredAmounts.lateChargeAmountCents / 100 }
+          : {}),
         ...observation.patch,
         statementReconciliationStatus: "expected" as const,
+        ...(next === "awaiting_statement" && recoveredAmounts?.settlementAmountCents == null
+          ? { nextBankStatusCheckAt: new Date(new Date(submittedAt).getTime() + 5 * 60_000).toISOString() }
+          : {}),
       };
       const requestRef = paymentRequestRef(id);
       const expectedDebitRef = financialDbAdmin.collection("expectedBankDebits").doc(`request_${id}`);
@@ -417,7 +447,11 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           financialInboxMessageId: pending.sourceType === "financial_inbox" ? pending.sourceId : null,
           sourceType: pending.sourceType,
           expenseId: pending.expenseId,
-          amountCents: Math.round(pending.amount * 100),
+          amountCents: expectedBarcodeDebitAmountCents({
+            requestedAmount: pending.amount,
+            observedSettlementAmountCents: recoveredAmounts?.settlementAmountCents,
+          }),
+          principalAmountCents: Math.round(pending.amount * 100),
           expectedDate: pending.barcodeSnapshot.scheduledFor,
           dueDate: pending.barcodeSnapshot.dueDate,
           bankTransactionCode: interRequestId,
@@ -804,7 +838,7 @@ export async function deferBankStatusRefreshAfterFailure(id: string, now = new D
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return;
     const status = snapshot.get("status") as BankPaymentRequestStatus;
-    if (!["awaiting_bank_approval", "scheduled", "processing"].includes(status)) return;
+    if (!["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"].includes(status)) return;
     const failureCount = (Number(snapshot.get("bankStatusPollFailureCount")) || 0) + 1;
     const delayMinutes = Math.min(60, 5 * (2 ** Math.min(failureCount, 3)));
     transaction.set(ref, {
@@ -854,6 +888,9 @@ async function persistBarcodeBankObservation(params: {
   scheduledFor: string;
   bankAuthentication?: string | null;
   bankNsu?: string | null;
+  bankNominalAmountCents?: number | null;
+  bankSettlementAmountCents?: number | null;
+  bankLateChargeAmountCents?: number;
   actor: PaymentActor | "system";
   observedAt: string;
 }) {
@@ -865,7 +902,7 @@ async function persistBarcodeBankObservation(params: {
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
     if (
       current.paymentRail !== "barcode"
-      || !["awaiting_bank_approval", "scheduled", "processing", "failed"].includes(current.status)
+      || !["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement", "failed"].includes(current.status)
     ) return current;
     const observation = planBankStatusObservation({
       current,
@@ -874,16 +911,39 @@ async function persistBarcodeBankObservation(params: {
       observedAt: params.observedAt,
       scheduledFor: params.scheduledFor,
     });
-    if (!observation.changed) return current;
+    const amountChanged = (
+      params.bankNominalAmountCents != null
+      && Math.round(Number(current.bankNominalAmount ?? -1) * 100) !== params.bankNominalAmountCents
+    ) || (
+      params.bankSettlementAmountCents != null
+      && Math.round(Number(current.bankSettlementAmount ?? -1) * 100) !== params.bankSettlementAmountCents
+    ) || (
+      params.bankSettlementAmountCents != null
+      && Math.round(Number(current.bankLateChargeAmount ?? 0) * 100) !== (params.bankLateChargeAmountCents ?? 0)
+    );
+    if (!observation.changed && !amountChanged) return current;
+    const settlementKnown = params.bankSettlementAmountCents != null || current.bankSettlementAmount != null;
     const patch = {
       status: params.nextStatus,
       updatedAt: params.observedAt,
       bankStatusPollFailureCount: 0,
       ...observation.patch,
+      ...(params.bankNominalAmountCents != null
+        ? { bankNominalAmount: params.bankNominalAmountCents / 100 }
+        : {}),
+      ...(params.bankSettlementAmountCents != null
+        ? { bankSettlementAmount: params.bankSettlementAmountCents / 100 }
+        : {}),
+      ...(params.bankSettlementAmountCents != null
+        ? { bankLateChargeAmount: (params.bankLateChargeAmountCents ?? 0) / 100 }
+        : {}),
       ...(params.nextStatus === "awaiting_statement" ? { statementReconciliationStatus: "expected" as const } : {}),
+      ...(params.nextStatus === "awaiting_statement" && !settlementKnown
+        ? { nextBankStatusCheckAt: new Date(new Date(params.observedAt).getTime() + 5 * 60_000).toISOString() }
+        : {}),
     };
     transaction.set(requestRef, patch, { merge: true });
-    if (observation.statusChanged || observation.bankStatusChanged) {
+    if (observation.statusChanged || observation.bankStatusChanged || amountChanged) {
       transaction.set(financialDbAdmin.collection("expectedBankDebits").doc(`request_${params.id}`), {
         status: params.nextStatus === "awaiting_statement"
           ? "awaiting_statement"
@@ -893,6 +953,12 @@ async function persistBarcodeBankObservation(params: {
         bankStatus: params.rawBankStatus ?? null,
         bankAuthentication: params.bankAuthentication ?? null,
         bankNsu: params.bankNsu ?? null,
+        amountCents: expectedBarcodeDebitAmountCents({
+          requestedAmount: current.amount,
+          currentSettlementAmount: current.bankSettlementAmount,
+          observedSettlementAmountCents: params.bankSettlementAmountCents,
+        }),
+        principalAmountCents: Math.round(current.amount * 100),
         updatedAt: params.observedAt,
       }, { merge: true });
       if (current.sourceType === "financial_inbox") transaction.set(financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId), {
@@ -909,15 +975,25 @@ async function persistBarcodeBankObservation(params: {
         updatedAt: params.observedAt,
       }, { merge: true });
     }
-    if (observation.shouldWriteAuditEvent) {
+    if (observation.shouldWriteAuditEvent || amountChanged) {
       transaction.set(requestRef.collection("events").doc(eventId), {
-        type: observation.approvalObserved ? "BANK_APPROVAL_OBSERVED" : "BANK_STATUS_RECONCILED",
+        type: observation.approvalObserved
+          ? "BANK_APPROVAL_OBSERVED"
+          : amountChanged
+            ? "BANK_SETTLEMENT_AMOUNT_OBSERVED"
+            : "BANK_STATUS_RECONCILED",
         at: params.observedAt,
         actorId: params.actor === "system" ? "system" : params.actor.uid,
         actorEmail: params.actor === "system" ? null : params.actor.email ?? null,
         bankStatus: params.rawBankStatus ?? null,
         status: params.nextStatus,
         observedAt: params.observedAt,
+        ...(params.bankSettlementAmountCents != null
+          ? { settlementAmountCents: params.bankSettlementAmountCents }
+          : {}),
+        ...(params.bankSettlementAmountCents != null
+          ? { lateChargeAmountCents: params.bankLateChargeAmountCents ?? 0 }
+          : {}),
         ...(observation.schedulingObserved ? { scheduledFor: params.scheduledFor } : {}),
       });
     }
@@ -1051,13 +1127,21 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
   let current = await getPaymentRequest(id);
   if (current.paymentRail === "barcode") {
     if (current.status === "paid") return finishPaidPaymentRequest(current);
-    if (current.status === "awaiting_statement") return current;
     if (!current.interRequestId || !current.barcodeSnapshot) throw new Error("A solicitação ainda não foi enviada ao Banco Inter.");
     const bank = await getInterBarcodePayment(current.interRequestId);
     if (!bank) throw new Error("O Banco Inter ainda não retornou este pagamento.");
     const nextBank = mapInterBarcodeStatus(bank.statusPagamento, current.barcodeSnapshot.scheduledFor);
-    if (bank.valorPago != null && Math.abs(Number(bank.valorPago) - current.amount) > 0.01) {
-      const safeMessage = "O valor retornado pelo banco diverge da cobrança. A baixa foi bloqueada.";
+    const amounts = observeInterBarcodeAmounts({
+      requestedAmount: current.amount,
+      dueDate: current.barcodeSnapshot.dueDate,
+      paymentDate: interBarcodePaymentDate(bank, current.barcodeSnapshot.scheduledFor),
+      nominalAmount: bank.valorNominal,
+      paidAmount: bank.valorPago,
+    });
+    if (amounts.divergence) {
+      const safeMessage = amounts.divergence === "nominal"
+        ? "O principal retornado pelo banco diverge da cobrança. A baixa foi bloqueada."
+        : "O valor liquidado retornado pelo banco não é compatível com o principal e o vencimento. A baixa foi bloqueada.";
       await blockBankReconciliationDivergence({
         id,
         actor,
@@ -1067,7 +1151,9 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
       });
       throw new Error(safeMessage);
     }
-    const next = nextBank === "paid" ? "awaiting_statement" as const : nextBank;
+    const next = current.status === "awaiting_statement"
+      ? "awaiting_statement" as const
+      : nextBank === "paid" ? "awaiting_statement" as const : nextBank;
     const observedAt = new Date().toISOString();
     return persistBarcodeBankObservation({
       id,
@@ -1076,6 +1162,9 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
       scheduledFor: current.barcodeSnapshot.scheduledFor,
       bankAuthentication: bank.autenticacao ? String(bank.autenticacao) : null,
       bankNsu: bank.nsu ?? null,
+      bankNominalAmountCents: amounts.nominalAmountCents,
+      bankSettlementAmountCents: amounts.settlementAmountCents,
+      bankLateChargeAmountCents: amounts.lateChargeAmountCents,
       actor,
       observedAt,
     });

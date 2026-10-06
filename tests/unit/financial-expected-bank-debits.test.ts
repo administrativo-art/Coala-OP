@@ -9,6 +9,7 @@ const candidate = (id: string, overrides: Partial<ExpectedBankDebitCandidate> = 
   financialInboxMessageId: `inbox-${id}`,
   expenseId: `expense-${id}`,
   amount: 1200,
+  principalAmount: 1200,
   expectedDate: new Date("2026-08-25T12:00:00-03:00"),
   references: [`bank-${id}`],
   ...overrides,

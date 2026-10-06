@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { planPaymentRequestStatementSettlement } from "../../src/features/financial/payment-requests/statement-settlement";
-import type { PixBankPaymentRequest } from "../../src/features/financial/payment-requests/types";
+import type { BarcodeBankPaymentRequest, PixBankPaymentRequest } from "../../src/features/financial/payment-requests/types";
 
 const request: PixBankPaymentRequest = {
   id: "payment-request-1",
@@ -92,4 +92,39 @@ test("não baixa solicitação com valor ou movimentação incompatível", () =>
     paidAt: "2026-09-08T15:00:00.000Z",
     observedAt: "2026-09-10T00:38:56.000Z",
   }), /outra movimentação/);
+});
+
+test("baixa boleto pelo valor liquidado confirmado sem substituir o principal", () => {
+  const barcodeRequest: BarcodeBankPaymentRequest = {
+    id: "payment-request-boleto",
+    sourceType: "financial_inbox",
+    sourceId: "inbox-1",
+    expenseId: "expense-1",
+    paymentRail: "barcode",
+    barcodeSnapshot: {
+      type: "barcode",
+      code: "10491158171700010004400014406375415900000146798",
+      maskedCode: "10491•••••46798",
+      dueDate: "2026-10-05",
+      scheduledFor: "2026-10-06",
+    },
+    amount: 1467.98,
+    bankSettlementAmount: 1512,
+    description: "Condomínio e energia - Shopping do Automóvel",
+    status: "awaiting_statement",
+    idempotencyKey: "key-boleto",
+    createdAt: "2026-10-06T12:00:00.000Z",
+    createdBy: "user-1",
+    updatedAt: "2026-10-06T12:00:00.000Z",
+  };
+  const plan = planPaymentRequestStatementSettlement({
+    request: barcodeRequest,
+    expenseId: "expense-1",
+    bankTransactionId: "statement-boleto",
+    cashAmount: 1512,
+    paidAt: "2026-10-06T15:00:00.000Z",
+    observedAt: "2026-10-06T15:05:00.000Z",
+  });
+  assert.equal(plan?.patch.status, "paid");
+  assert.equal(barcodeRequest.amount, 1467.98);
 });

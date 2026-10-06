@@ -23,7 +23,10 @@ export function planPaymentRequestStatementSettlement(input: {
   if (request.expenseId !== input.expenseId) {
     throw new Error("A solicitação bancária pertence a outra despesa.");
   }
-  if (Math.abs(Number(request.amount) - input.cashAmount) > 0.01) {
+  const expectedSettlementAmount = request.paymentRail === "barcode"
+    ? Number(request.bankSettlementAmount ?? request.amount)
+    : Number(request.amount);
+  if (Math.abs(expectedSettlementAmount - input.cashAmount) > 0.01) {
     throw new Error("O valor da solicitação bancária diverge do débito conciliado no extrato.");
   }
   if (request.statementTransactionId && request.statementTransactionId !== input.bankTransactionId) {

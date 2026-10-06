@@ -121,4 +121,26 @@ test("divergência bancária exige revisão e nunca oferece reenvio automático"
   assert.match(paymentService, /code: "BANK_RECONCILIATION_DIVERGENCE"/);
   assert.match(paymentService, /nextBankStatusCheckAt: null/);
   assert.match(paymentService, /paymentSubmissionRequiresManualReconciliation\(current\)/);
+  assert.match(paymentService, /bankCandidates\.length > 0 && previous\.length === 0/);
+  assert.match(paymentService, /if \(bankCandidates\.length > 1\)/);
+});
+
+test("encargo confirmado do boleto vencido entra na DRE em Juros e multas", () => {
+  assert.match(statementSync, /where\("name", "==", "Juros e multas"\)/);
+  assert.match(statementSync, /data\.active !== false && data\.isGroup !== true && data\.is_dre_account !== false/);
+  assert.match(statementSync, /where\("parentId", "==", candidates\[0\]\.id\)/);
+  assert.match(statementSync, /observeBarcodeStatementSettlement/);
+  assert.match(statementSync, /paymentRequest\.bankSettlementAmount/);
+  assert.match(statementSync, /financialExpenseAccountingFields\(\{ competenceDate: paidAt \}\)/);
+  assert.match(statementSync, /accountPlanName: lateChargesAccount\.name/);
+  assert.match(statementSync, /isPaymentAdjustment: true/);
+  assert.match(statementSync, /chargeExpenseId,/);
+});
+
+test("boleto liquidado continua sendo consultado até o Inter informar o valor pago", () => {
+  assert.match(reconciliationJob, /"processing", "awaiting_statement"/);
+  assert.match(paymentService, /"processing", "awaiting_statement", "failed"/);
+  assert.doesNotMatch(paymentService, /current\.status === "awaiting_statement"\) return current/);
+  assert.match(paymentService, /expectedBarcodeDebitAmountCents/);
+  assert.match(paymentService, /"processing", "awaiting_statement"\]\.includes\(status\)/);
 });
