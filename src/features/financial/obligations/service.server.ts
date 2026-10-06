@@ -109,6 +109,7 @@ export async function queueMatchedBankPayment(params: {
   cashAmount: number;
   interest?: number;
   fine?: number;
+  otherCharge?: number;
   discount?: number;
   abatement?: number;
   paidAt: Timestamp;
@@ -167,6 +168,7 @@ export async function queueMatchedBankPayment(params: {
   const cashAmountCents = moneyToCents(params.cashAmount);
   const interestAmountCents = moneyToCents(params.interest);
   const fineAmountCents = moneyToCents(params.fine);
+  const otherChargeAmountCents = moneyToCents(params.otherCharge);
   const discountAmountCents = moneyToCents(params.discount);
   const abatementAmountCents = moneyToCents(params.abatement);
   const explicitReportedLink = params.reportedLinkId
@@ -181,7 +183,9 @@ export async function queueMatchedBankPayment(params: {
     Math.abs(link.principalAmountCents - principalAmountCents) <= 1 &&
     (
       Math.abs(link.cashAmountCents - cashAmountCents) <= 1 ||
-      Math.abs(link.cashAmountCents + interestAmountCents + fineAmountCents - cashAmountCents) <= 1
+      Math.abs(
+        link.cashAmountCents + interestAmountCents + fineAmountCents + otherChargeAmountCents - cashAmountCents,
+      ) <= 1
     )
   );
   if (
@@ -243,6 +247,15 @@ export async function queueMatchedBankPayment(params: {
       type: "FINE" as const,
       effect: "CASH_CHARGE" as const,
       amountCents: fineAmountCents,
+      status: "CLASSIFIED" as const,
+    }] : []),
+    ...(otherChargeAmountCents > 0 ? [{
+      id: `adj_${safeKey(`${linkId}:${params.bankTransactionId}:other-charge`)}`,
+      linkId,
+      bankTransactionId: params.bankTransactionId,
+      type: "OTHER" as const,
+      effect: "CASH_CHARGE" as const,
+      amountCents: otherChargeAmountCents,
       status: "CLASSIFIED" as const,
     }] : []),
     ...(discountAmountCents > 0 ? [{
@@ -320,10 +333,11 @@ export async function queueMatchedBankPayment(params: {
     principalAmountCents,
     interest: interestAmountCents / 100,
     fine: fineAmountCents / 100,
+    otherCharge: otherChargeAmountCents / 100,
     discount: discountAmountCents / 100,
     abatement: abatementAmountCents / 100,
-    charges: (interestAmountCents + fineAmountCents) / 100,
-    chargesAmountCents: interestAmountCents + fineAmountCents,
+    charges: (interestAmountCents + fineAmountCents + otherChargeAmountCents) / 100,
+    chargesAmountCents: interestAmountCents + fineAmountCents + otherChargeAmountCents,
     totalPaid: cashAmountCents / 100,
     cashAmountCents,
     bankTransactionId: params.bankTransactionId,

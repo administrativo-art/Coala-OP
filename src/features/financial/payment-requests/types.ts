@@ -39,6 +39,9 @@ type BankPaymentRequestBase = {
   interRequestId?: string;
   bankStatus?: string;
   bankScheduledFor?: string | null;
+  bankNominalAmount?: number | null;
+  bankSettlementAmount?: number | null;
+  bankLateChargeAmount?: number | null;
   endToEndId?: string;
   statementReconciliationStatus?: "not_expected" | "expected" | "matched" | "divergent";
   statementTransactionId?: string;

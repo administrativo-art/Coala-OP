@@ -4,6 +4,7 @@ export type ExpectedBankDebitCandidate = {
   financialInboxMessageId: string;
   expenseId: string;
   amount: number;
+  principalAmount: number;
   expectedDate: Date;
   references: string[];
 };

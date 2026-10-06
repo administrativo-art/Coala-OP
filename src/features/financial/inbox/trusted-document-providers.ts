@@ -1,5 +1,5 @@
 export type TrustedFinancialDocumentProvider = {
-  key: "superlogica" | "maximus" | "acessorias";
+  key: "superlogica" | "maximus" | "acessorias" | "totalbank";
   name: string;
 };
 
@@ -52,6 +52,10 @@ export function trustedFinancialDocumentProvider(
   if (hostname === "acessorias.s3.us-east-2.amazonaws.com"
     && /^\/econtinuo\/.+\.(?:pdf|xml|png|jpe?g)$/i.test(pathname)) {
     return { key: "acessorias", name: "Acessórias — armazenamento documental" };
+  }
+
+  if (hostname === "portal.totalbank.com.br" && /^\/boleto\/download\/?$/i.test(pathname)) {
+    return { key: "totalbank", name: "TotalBank — plataforma de cobrança" };
   }
 
   return null;
