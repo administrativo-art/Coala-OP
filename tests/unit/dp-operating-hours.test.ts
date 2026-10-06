@@ -3,8 +3,10 @@ import test from 'node:test';
 
 import {
   buildDailyUnitCoverage,
+  DP_WEEKDAYS,
   dpOperatingHoursSchema,
   emptyOperatingHours,
+  formatOperatingHoursSummary,
 } from '../../src/lib/dp-operating-hours';
 import type { DPOperatingHours, DPShift } from '../../src/types';
 
@@ -87,4 +89,29 @@ test('ignora configuração persistida inválida sem quebrar a escala', () => {
     operatingHours: { '4': { isOpen: true } } as unknown as DPOperatingHours,
     shifts: [],
   }).gaps, []);
+});
+
+test('agrupa dias consecutivos com o mesmo funcionamento sem esconder dias fechados', () => {
+  const hours: DPOperatingHours = {
+    '0': { isOpen: true, startTime: '08:00', endTime: '14:15' },
+    '1': { isOpen: true, startTime: '10:00', endTime: '22:00' },
+    '2': { isOpen: true, startTime: '10:00', endTime: '22:00' },
+    '3': { isOpen: true, startTime: '10:00', endTime: '22:00' },
+    '4': { isOpen: true, startTime: '10:00', endTime: '22:00' },
+    '5': { isOpen: true, startTime: '10:00', endTime: '22:00' },
+    '6': { isOpen: false },
+  };
+
+  assert.equal(
+    formatOperatingHoursSummary(hours),
+    'Dom 08:00–14:15 · Seg–Sex 10:00–22:00 · Sáb fechado',
+  );
+});
+
+test('resume funcionamento idêntico nos sete dias', () => {
+  const hours = Object.fromEntries(
+    DP_WEEKDAYS.map(({ key }) => [key, { isOpen: true, startTime: '09:00', endTime: '21:00' }]),
+  ) as DPOperatingHours;
+
+  assert.equal(formatOperatingHoursSummary(hours), 'Todos os dias · 09:00–21:00');
 });
