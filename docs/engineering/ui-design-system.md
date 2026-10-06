@@ -133,6 +133,14 @@ Use sempre o componente `Button` dentro de `PageHeader.actions`.
 - Não crie um filtro separado para um estado interno que é agrupado visualmente em outro.
 - Resumos laterais podem ser movidos para o topo quando isso aproxima contexto e ação e libera largura para a listagem.
 
+## Fatos rápidos em listas densas
+
+- Informações secundárias longas podem usar um controle compacto com ícone e popover quando permanecerem acessíveis por hover, foco e toque.
+- Ícone sem texto visível deve ter nome acessível; o detalhe não pode depender de `title` nativo nem somente de hover.
+- Ações de cópia precisam de feedback de sucesso ou falha. Atalhos por botão direito são complementares e devem ter alternativa explícita no popover para teclado e dispositivos móveis.
+- Controles somente de consulta não devem sugerir cópia ou edição. Quantidade e natureza do conteúdo, como `5 turnos`, devem continuar visíveis antes da abertura.
+- Resumos operacionais que afetam a leitura diária, como funcionamento, permanecem visíveis e podem agrupar intervalos consecutivos; não devem ser truncados a ponto de omitir dias ou exceções.
+
 ## Tipografia
 
 A família global é `Inter Tight Variable`, com fallback para `Inter` e fontes do sistema. Uma página não deve declarar outra família localmente sem uma necessidade de produto documentada.

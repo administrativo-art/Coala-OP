@@ -56,18 +56,30 @@ export function hasConfiguredOperatingHours(value: DPOperatingHours | undefined)
 export function formatOperatingHoursSummary(value: DPOperatingHours | undefined) {
   if (!hasConfiguredOperatingHours(value)) return null;
   const normalized = normalizeOperatingHours(value);
-  const openDays = DP_WEEKDAYS.filter(({ key }) => normalized[key].isOpen);
-  const uniqueRanges = new Set(openDays.map(({ key }) => {
+  const dailyRanges = DP_WEEKDAYS.map(({ key, shortLabel }) => {
     const day = normalized[key];
-    return day.isOpen ? `${day.startTime}–${day.endTime}` : '';
-  }));
-  if (openDays.length === 7 && uniqueRanges.size === 1) {
-    return `Todos os dias · ${[...uniqueRanges][0]}`;
+    return {
+      shortLabel,
+      range: day.isOpen ? `${day.startTime}–${day.endTime}` : 'fechado',
+    };
+  });
+  if (new Set(dailyRanges.map(({ range }) => range)).size === 1) {
+    return `Todos os dias · ${dailyRanges[0].range}`;
   }
-  return openDays.map(({ key, shortLabel }) => {
-    const day = normalized[key];
-    return day.isOpen ? `${shortLabel} ${day.startTime}–${day.endTime}` : '';
-  }).filter(Boolean).join(' · ');
+
+  const groups = dailyRanges.reduce<Array<{ first: string; last: string; range: string }>>((result, day) => {
+    const previous = result[result.length - 1];
+    if (previous?.range === day.range) {
+      previous.last = day.shortLabel;
+      return result;
+    }
+    result.push({ first: day.shortLabel, last: day.shortLabel, range: day.range });
+    return result;
+  }, []);
+
+  return groups.map(({ first, last, range }) => (
+    `${first === last ? first : `${first}–${last}`} ${range}`
+  )).join(' · ');
 }
 
 export function buildDailyUnitCoverage(params: {
