@@ -21,8 +21,8 @@ if (getApps().length === 0) {
 
 const db: Firestore = getFirestore("coala");
 
-// 01/09/2026 03:00 — a mesma data usada pelo cron (dia 1 do mês). Os 6 meses completos
-// anteriores são: mar, abr, mai, jun, jul, ago/2026.
+// 01/09/2026 03:00 — uma das datas do cron (dias 1 e 16). As 12 quinzenas completas
+// anteriores cobrem: mar, abr, mai, jun, jul, ago/2026.
 const NOW = new Date(Date.UTC(2026, 8, 1, 3, 0, 0));
 
 function consumptionReportId(kioskId: string, year: number, month: number, day: number): string {
@@ -269,6 +269,57 @@ test("unidade mista soma o consumo do próprio grupo (incluindo ela mesma)", asy
   const levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
   assert.equal(levels[mixed].min, 39, "mista: (10+20)*1.3, sem contar a própria unidade em dobro");
   assert.equal(levels[store].min, 26, "comercial: só o próprio consumo");
+});
+
+test("execução no dia 16 avança a janela em uma quinzena (12 quinzenas anteriores)", async () => {
+  const baseProductId = `test-day16-${randomUUID()}`;
+  const kioskA = "kiosk-day16-a";
+  const NOW_DAY_16 = new Date(Date.UTC(2026, 8, 16, 3, 0, 0)); // janela: 2026-03-2 .. 2026-09-1
+
+  // mar/2026 dia 10 (1ª quinzena de março) fica FORA da janela; abr..set dia 10 ficam DENTRO
+  await seedConsumptionReport(kioskA, 2026, 3, 10, [{ baseProductId, productName: "TESTE D16", consumedQuantity: 1000 }]);
+  for (const month of [4, 5, 6, 7, 8, 9]) {
+    await seedConsumptionReport(kioskA, 2026, month, 10, [{ baseProductId, productName: "TESTE D16", consumedQuantity: 10 }]);
+  }
+  // 2ª quinzena de setembro ainda não aconteceu para a janela do dia 16: fica FORA
+  await seedConsumptionReport(kioskA, 2026, 9, 20, [{ baseProductId, productName: "TESTE D16", consumedQuantity: 5000 }]);
+
+  await db.collection("baseProducts").doc(baseProductId).set({
+    name: "TESTE D16",
+    unit: "kg",
+    category: "Massa",
+    stockLevels: { [kioskA]: { override: false } },
+  });
+
+  await runMinimumStockRecalculation(db, NOW_DAY_16);
+
+  const data = (await db.collection("baseProducts").doc(baseProductId).get()).data()!;
+  assert.equal(data.stockLevels[kioskA].lastAutoCalculatedMean, 10, "6 meses (abr–set) de 10 => média mensal 10");
+  assert.equal(data.stockLevels[kioskA].min, 13, "10*1.3");
+});
+
+test("base quinzenal divide o total da janela por 12 quinzenas", async () => {
+  const baseProductId = `test-biweekly-${randomUUID()}`;
+  const kioskA = "kiosk-biweekly-a";
+
+  // 12 quinzenas anteriores a 01/09/2026: 2026-03-1 .. 2026-08-2. 24 em cada quinzena => média quinzenal 24
+  for (const month of [3, 4, 5, 6, 7, 8]) {
+    await seedConsumptionReport(kioskA, 2026, month, 5, [{ baseProductId, productName: "TESTE BI", consumedQuantity: 24 }]);
+    await seedConsumptionReport(kioskA, 2026, month, 20, [{ baseProductId, productName: "TESTE BI", consumedQuantity: 24 }]);
+  }
+  await db.collection("baseProducts").doc(baseProductId).set({
+    name: "TESTE BI",
+    unit: "kg",
+    category: "Massa",
+    minStockRecalcPeriod: "biweekly",
+    stockLevels: { [kioskA]: { override: false } },
+  });
+
+  await runMinimumStockRecalculation(db, NOW);
+
+  const data = (await db.collection("baseProducts").doc(baseProductId).get()).data()!;
+  assert.equal(data.stockLevels[kioskA].lastAutoCalculatedMean, 24);
+  assert.equal(data.stockLevels[kioskA].min, 31.2, "24*1.3");
 });
 
 after(async () => {
