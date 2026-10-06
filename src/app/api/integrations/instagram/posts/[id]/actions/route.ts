@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { instagramPostActionSchema } from "@/features/instagram-posts/contracts";
 import { actOnInstagramPost } from "@/features/instagram-posts/service.server";
-import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
-import { requireUser } from "@/lib/auth-server";
+import { requireInstagramSchedulerUser } from "@/features/instagram-scheduler/access.server";
 import { AppError } from "@/lib/observability/app-error";
 import { withApiErrorHandling } from "@/lib/observability/api-error";
 
@@ -15,8 +14,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 export const POST = withApiErrorHandling<RouteContext>(
   { source: "api", operation: "actOnInstagramPost", routeOrJob: "/api/integrations/instagram/posts/[id]/actions" },
   async (request: NextRequest, { params }) => {
-    const context = await requireUser(request);
-    requireInstagramSchedulerAccess(context);
+    const context = await requireInstagramSchedulerUser(request);
     const { id } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
       throw new AppError({ code: "INSTAGRAM_POST_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Post não encontrado.", reportable: false });

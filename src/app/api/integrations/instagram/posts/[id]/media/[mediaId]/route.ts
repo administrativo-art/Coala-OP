@@ -1,8 +1,7 @@
 import { getStorage } from "firebase-admin/storage";
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireInstagramSchedulerAccess } from "@/features/instagram-scheduler/access.server";
-import { requireUser } from "@/lib/auth-server";
+import { requireInstagramSchedulerUser } from "@/features/instagram-scheduler/access.server";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { marketingDbAdmin } from "@/lib/firebase-marketing-admin";
@@ -17,8 +16,7 @@ type RouteContext = { params: Promise<{ id: string; mediaId: string }> };
 export const GET = withApiErrorHandling<RouteContext>(
   { source: "api", operation: "previewInstagramPostMedia", routeOrJob: "/api/integrations/instagram/posts/[id]/media/[mediaId]" },
   async (request: NextRequest, { params }) => {
-    const context = await requireUser(request);
-    requireInstagramSchedulerAccess(context);
+    const context = await requireInstagramSchedulerUser(request);
     const { id, mediaId } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(id) || !/^[0-9a-f-]{36}$/i.test(mediaId)) {
       throw new AppError({ code: "INSTAGRAM_POST_MEDIA_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Mídia não encontrada.", reportable: false });
