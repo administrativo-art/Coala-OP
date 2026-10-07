@@ -7,7 +7,7 @@ const ficha = readFileSync('src/components/product-ficha-modal.tsx', 'utf8');
 const list = readFileSync('src/components/item-management.tsx', 'utf8');
 
 test('editor follows the derived-product handoff with a live dark panel and responsive two-column shell', () => {
-  assert.match(editor, /DialogContent ref=\{dialogContentRef\} hideClose className="[^"]*sm:max-w-\[1080px\][^"]*"/);
+  assert.match(editor, /DialogContent ref=\{dialogContentRef\} hideClose flush className="[^"]*sm:max-w-\[1080px\][^"]*"/);
   assert.match(editor, /form\s+className="grid min-h-0 grid-cols-1 lg:h-\[800px\] lg:grid-cols-\[360px_minmax\(0,1fr\)\]/);
   assert.match(editor, /Painel do insumo ao vivo/);
   assert.match(editor, /bg-\[#15151c\]/);

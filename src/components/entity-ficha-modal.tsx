@@ -259,7 +259,7 @@ export function EntityFichaModal({ open, onOpenChange, entity, asoClinic, onEdit
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+      <DialogContent hideClose flush className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
         <DialogTitle className="sr-only">Ficha cadastral de {name}</DialogTitle>
         <DialogDescription className="sr-only">Informações completas do cadastro de {isPJ ? 'empresa' : 'pessoa física'}.</DialogDescription>
         <div className="grid min-h-0 grid-cols-1 lg:h-[780px] lg:grid-cols-[340px_minmax(0,1fr)]">
