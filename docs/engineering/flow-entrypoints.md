@@ -1310,7 +1310,6 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 - `baseProducts` — [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `classifications` — [`src/components/classifications-provider.tsx`](../../src/components/classifications-provider.tsx)
 - `entities` — [`src/components/entities-provider.tsx`](../../src/components/entities-provider.tsx)
-- `kiosks` — [`src/components/kiosks-provider.tsx`](../../src/components/kiosks-provider.tsx)
 - `lots` — [`src/hooks/use-expiry-products.tsx`](../../src/hooks/use-expiry-products.tsx)
 - `movementHistory` — [`src/hooks/use-expiry-products.tsx`](../../src/hooks/use-expiry-products.tsx)
 - `predefinedLists` — [`src/components/predefined-lists-provider.tsx`](../../src/components/predefined-lists-provider.tsx)
@@ -1353,7 +1352,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 220.
+Arquivos locais percorridos: 223.
 
 Chamadas candidatas encontradas:
 

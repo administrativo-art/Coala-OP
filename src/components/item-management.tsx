@@ -3,7 +3,6 @@
 
 import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 
 import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
@@ -14,21 +13,29 @@ import { type OperationalItemCategory, type OperationalItemDestination, type Pro
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Skeleton } from "@/components/ui/skeleton";
+
 import { Checkbox } from './ui/checkbox';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { Plus, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox, Save, X, Layers, Tags } from 'lucide-react';
+import { Edit, Save, X } from 'lucide-react';
 import { AddEditProductModal } from './add-edit-product-modal';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+
 import { Badge } from './ui/badge';
-import { BaseProductManagement } from './base-product-management';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { BulkBar, CardFooterLabel, CardGrid, CadastrosHero, Chevron, DetailDrawer, EmptyResults, GridCard, ListHead, ListRow, ListShell, ListSkeleton, ResultsBar, SelectBox, type CadastrosTabProps, type DrawerNotice } from '@/components/cadastros/cadastros-ui';
+import {
+  buildChips,
+  countByKey,
+  derivedItemDeleteBlock,
+  toggleAllInSet,
+  toggleInSet,
+  type CadastrosStatus,
+} from '@/components/cadastros/cadastros-utils';
 
 const CONTROL_LABELS: Record<OperationalItemDestination, string> = {
   stock: 'Estoque',
@@ -454,8 +461,15 @@ function BulkEditProductsDialog({
   );
 }
 
+const LIST_TEMPLATE = '28px minmax(0,2.1fr) minmax(0,1.2fr) minmax(0,1.1fr) 100px minmax(0,1.3fr) 20px';
 
-export function ItemManagement() {
+const COUNTING_MODE_TEXT: Record<CountingUnitOption, string> = {
+  package: 'Unidade do lote',
+  base: 'Unidade do insumo base',
+  content: 'Unidade do conteúdo',
+};
+
+export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) {
   const { products, loading: productsLoading, getProductFullName, updateProduct, updateMultipleProducts, deleteMultipleProducts } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { activeCategories, loading: categoriesLoading } = useOperationalItemCategories();
@@ -465,122 +479,141 @@ export function ItemManagement() {
 
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBaseProductModalOpen, setIsBaseProductModalOpen] = useState(false);
+  const [, setIsBaseProductModalOpen] = useState(false);
   const [isOperationalCategoriesOpen, setIsOperationalCategoriesOpen] = useState(false);
   const [productsToDelete, setProductsToDelete] = useState<Product[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-const [searchTerm, setSearchTerm] = useState('');
-const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
-  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [status, setStatus] = useState<CadastrosStatus>('active');
+  const [chip, setChip] = useState('all');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<DrawerNotice | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+
   const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading || categoriesLoading;
 
-  const baseProductMap = useMemo(() => {
-    return new Map(baseProducts.map(bp => [bp.id, bp]));
-  }, [baseProducts]);
+  const baseProductMap = useMemo(() => new Map(baseProducts.map(bp => [bp.id, bp])), [baseProducts]);
+  const categoryMap = useMemo(() => new Map(activeCategories.map(c => [c.id, c])), [activeCategories]);
 
-  const { activeFiltered, archivedFiltered } = useMemo(() => {
-    const searchLower = searchTerm.toLowerCase();
-    const matches = (p: Product) => {
-      if (!searchLower) return true;
-      const baseProductName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() : '';
-      return getProductFullName(p).toLowerCase().includes(searchLower) ||
-             (p.barcode && p.barcode.includes(searchLower)) ||
-             (baseProductName && baseProductName.includes(searchLower));
-    };
-    const matchesCategory = (p: Product) =>
-      categoryFilter === 'Todos' ||
-      p.operationalCategoryId === categoryFilter ||
-      (categoryFilter === '_sem_categoria' && !p.operationalCategoryId);
-    return {
-      activeFiltered: products.filter(p => !p.isArchived && matches(p) && matchesCategory(p)),
-      archivedFiltered: products.filter(p => p.isArchived && matches(p) && matchesCategory(p)),
-    };
-  }, [products, searchTerm, categoryFilter, getProductFullName, baseProductMap]);
+  const countingOf = (product: Product) => {
+    const option: CountingUnitOption = product.defaultCountingUnit || 'package';
+    const unit =
+      option === 'package' ? (product.packageType || product.unit)
+      : option === 'base' ? ((product.baseProductId ? baseProductMap.get(product.baseProductId)?.unit : null) || '—')
+      : (product.unit || '—');
+    return { mode: COUNTING_MODE_TEXT[option], unit };
+  };
+  const controlOf = (product: Product) => {
+    const destination = product.operationalDestination
+      ?? (product.operationalCategoryId ? categoryMap.get(product.operationalCategoryId)?.destination : undefined);
+    return destination ? CONTROL_LABELS[destination] : '—';
+  };
+  const packOf = (product: Product) => `${product.packageSize} ${product.unit}${product.packageType ? ` · ${product.packageType}` : ''}`;
+  const subOf = (product: Product) => [product.brand, product.barcode].filter(Boolean).join(' · ') || 'Sem marca';
+  const chipKeyOf = (product: Product) => product.operationalCategoryId || '_sem_categoria';
 
-  const categoryFilters = useMemo(() => {
-    const counts = new Map<string, number>();
-    products
-      .filter((p) => !p.isArchived)
-      .forEach((p) => {
-        const key = p.operationalCategoryId || '_sem_categoria';
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      });
-    return [
-      { id: 'Todos', label: 'Todos', count: products.filter((p) => !p.isArchived).length },
-      ...activeCategories.map((category) => ({
-        id: category.id,
-        label: category.name,
-        count: counts.get(category.id) ?? 0,
-      })),
-      ...(counts.has('_sem_categoria') ? [{ id: '_sem_categoria', label: 'Sem categoria', count: counts.get('_sem_categoria') ?? 0 }] : []),
-    ];
-  }, [activeCategories, products]);
+  const inStatus = useMemo(() => products.filter(p => (status === 'inactive' ? !!p.isArchived : !p.isArchived)), [products, status]);
+  const searchLower = searchTerm.trim().toLowerCase();
+  const searched = useMemo(() => {
+    if (!searchLower) return inStatus;
+    return inStatus.filter(p => {
+      const baseName = p.baseProductId ? baseProductMap.get(p.baseProductId)?.name.toLowerCase() ?? '' : '';
+      return getProductFullName(p).toLowerCase().includes(searchLower)
+        || (p.brand ?? '').toLowerCase().includes(searchLower)
+        || (p.barcode ?? '').includes(searchLower)
+        || baseName.includes(searchLower);
+    });
+  }, [inStatus, searchLower, baseProductMap, getProductFullName]);
+  const shown = useMemo(() => searched.filter(p => chip === 'all' || chipKeyOf(p) === chip), [searched, chip]);
 
+  const chips = useMemo(() => {
+    const counts = countByKey(searched, chipKeyOf);
+    const entries = activeCategories
+      .map(c => ({ id: c.id, label: c.name, count: counts.get(c.id) ?? 0 }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+    entries.push({ id: '_sem_categoria', label: 'Sem categoria', count: counts.get('_sem_categoria') ?? 0 });
+    return buildChips(searched.length, entries, chip);
+  }, [searched, activeCategories, chip]);
 
-  const handleEdit = (product: Product) => {
-    setProductToEdit(product);
-    setIsModalOpen(true);
+  const activeCount = products.filter(p => !p.isArchived).length;
+  const inactiveCount = products.length - activeCount;
+  const visibleSelected = useMemo(() => shown.filter(p => selectedProducts.has(p.id)), [shown, selectedProducts]);
+  const allShownSelected = shown.length > 0 && visibleSelected.length === shown.length;
+  const opened = openId ? products.find(p => p.id === openId) ?? null : null;
+
+  const closeDrawer = () => { setOpenId(null); setNotice(null); };
+  const changeStatus = (next: CadastrosStatus) => { setStatus(next); setChip('all'); setSelectedProducts(new Set()); closeDrawer(); };
+
+  const handleAddNewClick = () => { setProductToEdit(null); setIsModalOpen(true); };
+  const handleEdit = (product: Product) => { closeDrawer(); setProductToEdit(product); setIsModalOpen(true); };
+
+  const deleteBlockOf = (product: Product) => derivedItemDeleteBlock(
+    lots.filter(lot => lot.productId === product.id).length,
+    lists.filter(list => list.items.some(item => item.productId === product.id)).map(list => list.name),
+  );
+
+  const handleArchiveToggle = async (product: Product) => {
+    const willArchive = !product.isArchived;
+    setIsBusy(true);
+    try {
+      await updateProduct({ ...product, isArchived: willArchive });
+      toast({ title: `${product.baseName} ${willArchive ? 'arquivado' : 'desarquivado'}.` });
+    } catch (error) {
+      toast({ title: 'Não foi possível atualizar o insumo.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setIsBusy(false);
+    }
   };
 
-  const handleDeleteClick = (product: Product) => {
-      const usedInLotsCount = lots.filter(lot => lot.productId === product.id).length;
-      const usedInLists = lists.filter(list => list.items.some(item => item.productId === product.id));
-
-      let messages = [];
-      if (usedInLotsCount > 0) messages.push(`está sendo usado em ${usedInLotsCount} lote(s)`);
-      if (usedInLists.length > 0) messages.push(`está nas listas predefinidas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
-
-      if (messages.length > 0) {
-          alert(`Não é possível excluir o insumo: este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
-          return;
-      }
-      setProductsToDelete([product]);
-  };
-  
-  const handleArchiveClick = (product: Product) => {
-      updateProduct({ ...product, isArchived: true });
-  };
-  
-  const handleAddNewClick = () => {
-    setProductToEdit(null);
-    setIsModalOpen(true);
-  };
-
-  const handleProductSelectionChange = (id: string, isSelected: boolean) => {
-    setSelectedProducts(prev => {
-        const newSet = new Set(prev);
-        if (isSelected) newSet.add(id);
-        else newSet.delete(id);
-        return newSet;
+  const handleDeleteOne = (product: Product) => {
+    const block = deleteBlockOf(product);
+    if (block) { setNotice({ kind: 'block', text: block }); return; }
+    setNotice({
+      kind: 'confirm',
+      text: `Excluir “${getProductFullName(product)}”? Essa ação não pode ser desfeita.`,
+      onConfirm: async () => {
+        setIsBusy(true);
+        try {
+          await deleteMultipleProducts([product.id]);
+          closeDrawer();
+          toast({ title: `${product.baseName} excluído.` });
+        } catch (error) {
+          toast({ title: 'Não foi possível excluir.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
+        } finally {
+          setIsBusy(false);
+        }
+      },
     });
   };
 
-  const handleSelectAllChange = (isSelected: boolean) => {
-      setSelectedProducts(isSelected ? new Set(activeFiltered.map(p => p.id)) : new Set());
-  };
-
-  const handleDeleteSelectedClick = () => {
-      const toDelete = products.filter(p => selectedProducts.has(p.id));
-      setProductsToDelete(toDelete);
+  const handleBulkDeleteClick = () => {
+    const targets = products.filter(p => selectedProducts.has(p.id));
+    const deletable = targets.filter(p => !deleteBlockOf(p));
+    const skipped = targets.length - deletable.length;
+    if (deletable.length === 0) {
+      toast({ title: 'Exclusão bloqueada', description: 'Os itens selecionados têm lotes ou listas vinculados. Arquive para tirar de uso.', variant: 'destructive' });
+      return;
+    }
+    if (skipped > 0) {
+      toast({ title: `${skipped} item(ns) ficam de fora`, description: 'Itens com lotes ou listas vinculados não são excluídos.' });
+    }
+    setProductsToDelete(deletable);
   };
 
   const handleDeleteMultipleConfirm = async () => {
-      if (productsToDelete.length > 0) {
-          setIsDeleting(true);
-          try {
-              const idsToDelete = productsToDelete.map(p => p.id);
-              await deleteMultipleProducts(idsToDelete);
-              setSelectedProducts(new Set());
-              setProductsToDelete([]);
-          } finally { setIsDeleting(false); }
-      }
+    if (productsToDelete.length === 0) return;
+    setIsDeleting(true);
+    try {
+      await deleteMultipleProducts(productsToDelete.map(p => p.id));
+      setSelectedProducts(new Set());
+      setProductsToDelete([]);
+      toast({ title: `${productsToDelete.length} insumo(s) excluído(s).` });
+    } finally { setIsDeleting(false); }
   };
 
-  const selectedProductList = useMemo(() => {
-    return products.filter((product) => selectedProducts.has(product.id));
-  }, [products, selectedProducts]);
+  const selectedProductList = useMemo(() => products.filter(product => selectedProducts.has(product.id)), [products, selectedProducts]);
 
   const handleBulkApply = async (updates: Partial<Product>) => {
     const productsToUpdate = selectedProductList.map((product) => ({ ...product, ...updates }));
@@ -592,314 +625,195 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
     });
   };
 
-  const allActiveSelected = activeFiltered.length > 0 && activeFiltered.every(p => selectedProducts.has(p.id));
+  const openedBase = opened?.baseProductId ? baseProductMap.get(opened.baseProductId) : undefined;
+  const openedCounting = opened ? countingOf(opened) : null;
 
   return (
     <>
-      <Card className="border-0 bg-transparent shadow-none">
-        <CardHeader className="px-0 pb-6 pt-0">
-          <CardTitle className="text-3xl font-black tracking-[-0.035em] text-[#281f1a] sm:text-4xl">
-            Insumos derivados cadastrados
-          </CardTitle>
-          <CardDescription className="text-base text-[#756a62] sm:text-lg">
-            Adicione e edite os itens operacionais usados em estoque, vestimenta e compras patrimoniais.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5 px-0">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsOperationalCategoriesOpen(true)}
-                  className="h-12 rounded-2xl border-[#dccbb8] bg-[#fffdf9] px-6 text-[#281f1a] hover:bg-white"
+      <div className="flex flex-col gap-4">
+        <CadastrosHero
+          kicker="Cadastros operacionais"
+          tabs={tabs}
+          search={{ value: searchTerm, onChange: setSearchTerm, placeholder: 'Buscar por insumo, marca, insumo base ou cód. de barras' }}
+          status={{ value: status, onChange: changeStatus, activeCount, inactiveCount, inactiveLabel: 'Arquivados' }}
+          manage={{ label: 'Categorias de item', onClick: () => setIsOperationalCategoriesOpen(true) }}
+          primary={{ label: 'Adicionar insumo', onClick: handleAddNewClick }}
+          chips={chips}
+          activeChip={chip}
+          onChip={(id) => { setChip(id); setSelectedProducts(new Set()); }}
+        />
+
+        <ResultsBar
+          shown={shown.length}
+          total={inStatus.length}
+          noun="insumos"
+          selectAll={shown.length > 0 ? {
+            label: allShownSelected ? 'Desmarcar todos' : 'Selecionar todos',
+            onClick: () => setSelectedProducts(toggleAllInSet(selectedProducts, shown.map(p => p.id), !allShownSelected)),
+          } : undefined}
+          view={view}
+          onView={onViewChange}
+        />
+
+        {loading ? (
+          <ListShell><ListSkeleton /></ListShell>
+        ) : shown.length === 0 ? (
+          <EmptyResults
+            title={searchTerm ? `Nada encontrado para “${searchTerm}”.` : 'Nenhum item neste filtro.'}
+            onClear={() => { setSearchTerm(''); setChip('all'); }}
+          />
+        ) : view === 'grid' ? (
+          <CardGrid>
+            {shown.map(product => {
+              const counting = countingOf(product);
+              return (
+                <GridCard
+                  key={product.id}
+                  label={`Abrir ${product.baseName}`}
+                  isOpen={openId === product.id}
+                  isSelected={selectedProducts.has(product.id)}
+                  isMuted={!!product.isArchived}
+                  onOpen={() => { setOpenId(product.id); setNotice(null); }}
                 >
-                  <Tags className="mr-2 h-4 w-4" /> Categorias de item
-                </Button>
-                <Button onClick={handleAddNewClick} className="h-12 rounded-2xl bg-[#a6325b] px-6 text-white hover:bg-[#8e294d]">
-                  <Plus className="mr-2 h-5 w-5" /> Adicionar insumo
-                </Button>
-              </div>
-              <p className="text-sm text-[#756a62]">
-                <strong className="text-[#281f1a]">{activeFiltered.length}</strong> de {products.filter((product) => !product.isArchived).length}
-              </p>
-            </div>
-            <div className="relative">
-                    <Search className="absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9e938b]" />
-                    <Input
-                        placeholder="Buscar por insumo, marca, cód. de barras..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="h-16 w-full rounded-2xl border-[#dccbb8] bg-[#fffdf9] pl-14 text-base shadow-none placeholder:text-[#8f847b]"
-                    />
-            </div>
-            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                {categoryFilters.map((filter) => (
-                    <Button
-                        key={filter.id}
-                        type="button"
-                        variant="outline"
-                        className={categoryFilter === filter.id
-                          ? 'h-11 max-w-[260px] shrink-0 rounded-full border-[#281f1a] bg-[#281f1a] px-5 text-white hover:bg-[#281f1a]/90'
-                          : 'h-11 max-w-[260px] shrink-0 rounded-full border-[#dccbb8] bg-[#fffdf9] px-5 text-[#756a62] hover:bg-white'}
-                        onClick={() => setCategoryFilter(filter.id)}
-                        title={filter.label}
-                    >
-                        <span className="truncate">{filter.label}</span>
-                        <span className="ml-2 text-xs opacity-70">
-                            {filter.count}
-                        </span>
-                    </Button>
-                ))}
-            </div>
-            {selectedProducts.size > 0 && (
-                <div className="flex flex-col gap-2 rounded-md border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="text-sm font-medium">
-                        {selectedProducts.size} insumo(s) selecionado(s)
+                  <div className="relative -mx-[18px] -mt-[18px] flex h-[110px] items-end justify-between overflow-hidden rounded-t-[20px] bg-[repeating-linear-gradient(135deg,#f1efe9_0_10px,#e9e6df_10px_20px)] px-3.5 py-3">
+                    {product.imageUrl ? (
+                      <Image src={product.imageUrl} alt="" fill sizes="270px" className="object-cover" />
+                    ) : null}
+                    <span className="relative rounded-lg bg-[#15151c] px-2 py-1 text-[11px] font-extrabold tracking-[0.06em] text-white">{packOf(product)}</span>
+                    <span className="relative">
+                      <SelectBox
+                        checked={selectedProducts.has(product.id)}
+                        onToggle={() => setSelectedProducts(toggleInSet(selectedProducts, product.id))}
+                        label={`Selecionar ${product.baseName}`}
+                      />
                     </span>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button variant="outline" onClick={() => setIsBulkEditOpen(true)}>
-                            <Layers className="mr-2 h-4 w-4" /> Alterar em lote
-                        </Button>
-                        <Button variant="destructive" onClick={handleDeleteSelectedClick}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados
-                        </Button>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <span className="break-words text-[17px] font-extrabold leading-[1.2] tracking-[-0.02em]">{product.baseName}</span>
+                    <span className="truncate text-xs text-[#8a8f99]">{subOf(product)}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-[#f4f2ed] px-2.5 py-[3px] text-[11.5px] font-bold text-[#4a4f57]">{product.operationalCategoryName || 'Sem categoria'}</span>
+                    <span className="rounded-full bg-[#fbe7ef] px-2.5 py-[3px] text-[11.5px] font-bold text-[#a6325b]">{controlOf(product)}</span>
+                  </div>
+                  <div className="mt-auto flex justify-between gap-2.5 border-t border-[#f0ede7] pt-3 text-xs">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <CardFooterLabel>Base</CardFooterLabel>
+                      <span className="truncate font-mono text-[11.5px]">{product.baseProductId ? baseProductMap.get(product.baseProductId)?.name ?? '—' : '—'}</span>
                     </div>
-                </div>
-            )}
-            <div className="overflow-x-auto rounded-[26px] border border-[#dccbb8] bg-[#fffdf9]">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="border-[#e6ddd3] hover:bg-transparent">
-                            <TableHead className="w-10">
-                                <Checkbox
-                                    checked={allActiveSelected}
-                                    onCheckedChange={(checked) => handleSelectAllChange(!!checked)}
-                                    aria-label="Selecionar todos"
-                                />
-                            </TableHead>
-                            <TableHead className="w-[25%] font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Insumo</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Marca</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Produto base</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Categoria</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Embalagem</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Forma da contagem</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Unid. contagem</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Cód. barras</TableHead>
-                            <TableHead className="w-16 text-right">Ações</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading ? (
-                            [...Array(5)].map((_, i) => (
-                                <TableRow key={i}>
-                                    <TableCell colSpan={10}><Skeleton className="h-10 w-full" /></TableCell>
-                                </TableRow>
-                            ))
-                        ) : activeFiltered.length > 0 ? (
-                            activeFiltered.map(product => {
-                                const countingUnitOption = product.defaultCountingUnit || 'package';
-                                let countingUnitText = 'Unidade do Lote';
-                                if (countingUnitOption === 'base') countingUnitText = 'Unidade do Produto Base';
-                                else if (countingUnitOption === 'content') countingUnitText = 'Unidade do Conteúdo';
-
-                                let displayedCountingUnit = '';
-                                if (countingUnitOption === 'package') displayedCountingUnit = product.packageType || product.unit;
-                                else if (countingUnitOption === 'base') displayedCountingUnit = (product.baseProductId ? baseProductMap.get(product.baseProductId)?.unit : null) || '-';
-                                else if (countingUnitOption === 'content') displayedCountingUnit = product.unit || '-';
-
-                                return (
-                                    <TableRow key={product.id} className="h-24 border-[#e6ddd3] hover:bg-[#faf6f0]">
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={selectedProducts.has(product.id)}
-                                                onCheckedChange={(checked) => handleProductSelectionChange(product.id, !!checked)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                {product.imageUrl ? (
-                                                    <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
-                                                ) : (
-                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#ffd4bd] bg-[#fff7ef] text-lg font-black text-[#f97316] shadow-[inset_0_-4px_0_#f97316]">
-                                                        {product.baseName.slice(0, 1).toUpperCase()}
-                                                    </div>
-                                                )}
-                                                <div className="min-w-0">
-                                                  <p className="max-w-64 truncate font-bold text-[#281f1a]">{product.baseName}</p>
-                                                  <p className="font-mono text-xs uppercase text-[#756a62]">{product.id.slice(0, 8)}</p>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {product.brand ? (
-                                                product.brand
-                                            ) : (
-                                                <span className="text-muted-foreground">-</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {product.baseProductId ? (
-                                                <Badge className="border-0 bg-[#efede9] font-mono text-xs uppercase text-[#756a62] hover:bg-[#efede9]">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
-                                            ) : (
-                                                <span className="text-muted-foreground">-</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {product.operationalCategoryName ? (
-                                                <Badge variant="outline" className="rounded-full border-[#ffd1b3] bg-[#fff8f1] px-3 py-1 text-[#f97316]">{product.operationalCategoryName}</Badge>
-                                            ) : (
-                                                <span className="text-muted-foreground">-</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>{product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</TableCell>
-                                        <TableCell><Badge variant="outline" className="border-[#dccbb8] bg-transparent text-[#756a62]">{countingUnitText}</Badge></TableCell>
-                                        <TableCell><Badge className="border border-[#dccbb8] bg-[#fff0f4] text-[#a6325b] hover:bg-[#fff0f4]">{displayedCountingUnit}</Badge></TableCell>
-                                        <TableCell className="font-mono text-xs text-[#756a62]">{product.barcode || '-'}</TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onSelect={() => handleEdit(product)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
-                                                    <DropdownMenuItem onSelect={() => handleArchiveClick(product)}><Archive className="mr-2 h-4 w-4" /> Arquivar</DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
-                                                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <Inbox className="h-8 w-8" />
-                                        <span>Nenhum insumo ativo encontrado.</span>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-
-            {archivedFiltered.length > 0 && (
-                <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">Inativos ({archivedFiltered.length})</p>
-                    <div className="rounded-md border border-dashed opacity-70">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-10" />
-                                    <TableHead className="w-[25%]">Insumo</TableHead>
-                                    <TableHead>Marca</TableHead>
-                                    <TableHead>Produto Base</TableHead>
-                                    <TableHead>Categoria do item</TableHead>
-                                    <TableHead>Embalagem</TableHead>
-                                    <TableHead>Forma da contagem de estoque</TableHead>
-                                    <TableHead>Unidade da contagem de estoque</TableHead>
-                                    <TableHead>Cód. Barras</TableHead>
-                                    <TableHead className="w-16 text-right">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {archivedFiltered.map(product => {
-                                    const countingUnitOption = product.defaultCountingUnit || 'package';
-                                    let countingUnitText = 'Unidade do Lote';
-                                    if (countingUnitOption === 'base') countingUnitText = 'Unidade do Produto Base';
-                                    else if (countingUnitOption === 'content') countingUnitText = 'Unidade do Conteúdo';
-
-                                    let displayedCountingUnit = '';
-                                    if (countingUnitOption === 'package') displayedCountingUnit = product.packageType || product.unit;
-                                    else if (countingUnitOption === 'base') displayedCountingUnit = (product.baseProductId ? baseProductMap.get(product.baseProductId)?.unit : null) || '-';
-                                    else if (countingUnitOption === 'content') displayedCountingUnit = product.unit || '-';
-
-                                    return (
-                                        <TableRow key={product.id}>
-                                            <TableCell />
-                                            <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    {product.imageUrl ? (
-                                                        <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
-                                                    ) : (
-                                                        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
-                                                            <Box className="h-5 w-5 text-muted-foreground" />
-                                                        </div>
-                                                    )}
-                                                    <span className="font-semibold">{product.baseName}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {product.brand ? (
-                                                    product.brand
-                                                ) : (
-                                                    <span className="text-muted-foreground">-</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {product.baseProductId ? (
-                                                    <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
-                                                ) : (
-                                                    <span className="text-muted-foreground">-</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {product.operationalCategoryName ? (
-                                                    <Badge variant="outline">{product.operationalCategoryName}</Badge>
-                                                ) : (
-                                                    <span className="text-muted-foreground">-</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>{product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</TableCell>
-                                            <TableCell><Badge variant="outline">{countingUnitText}</Badge></TableCell>
-                                            <TableCell><Badge variant="default">{displayedCountingUnit}</Badge></TableCell>
-                                            <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
-                                            <TableCell className="text-right">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onSelect={() => updateProduct({ ...product, isArchived: false })}>
-                                                            <Archive className="mr-2 h-4 w-4" /> Restaurar
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem onSelect={() => handleDeleteClick(product)} className="text-destructive focus:text-destructive">
-                                                            <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
+                    <div className="flex min-w-0 flex-col items-end gap-0.5">
+                      <CardFooterLabel>Contagem</CardFooterLabel>
+                      <span className="whitespace-nowrap font-bold">{counting.unit}</span>
                     </div>
-                </div>
-            )}
-            {selectedProducts.size > 0 && (
-                 <div className="pt-2 flex flex-col sm:flex-row gap-2">
-                    <Button variant="outline" onClick={() => setIsBulkEditOpen(true)}>
-                        <Layers className="mr-2 h-4 w-4" /> Alterar em lote ({selectedProducts.size})
-                    </Button>
-                    <Button variant="destructive" onClick={handleDeleteSelectedClick}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Excluir selecionados ({selectedProducts.size})
-                    </Button>
-                </div>
-            )}
-        </CardContent>
-      </Card>
-      
+                  </div>
+                </GridCard>
+              );
+            })}
+          </CardGrid>
+        ) : (
+          <ListShell>
+            <ListHead template={LIST_TEMPLATE}>
+              <SelectBox
+                checked={allShownSelected}
+                onToggle={() => setSelectedProducts(toggleAllInSet(selectedProducts, shown.map(p => p.id), !allShownSelected))}
+                label="Selecionar todos os itens visíveis"
+              />
+              <span>Insumo</span><span>Insumo base</span><span>Categoria</span><span>Embalagem</span><span>Contagem</span><span />
+            </ListHead>
+            {shown.map((product, index) => {
+              const counting = countingOf(product);
+              return (
+                <ListRow
+                  key={product.id}
+                  template={LIST_TEMPLATE}
+                  isFirst={index === 0}
+                  isOpen={openId === product.id}
+                  isSelected={selectedProducts.has(product.id)}
+                  isMuted={!!product.isArchived}
+                  label={`Abrir ${product.baseName}`}
+                  onOpen={() => { setOpenId(product.id); setNotice(null); }}
+                >
+                  <SelectBox
+                    checked={selectedProducts.has(product.id)}
+                    onToggle={() => setSelectedProducts(toggleInSet(selectedProducts, product.id))}
+                    label={`Selecionar ${product.baseName}`}
+                  />
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    {product.imageUrl ? (
+                      <Image src={product.imageUrl} alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[9px] border border-[#e3dfd6] object-cover" />
+                    ) : (
+                      <div className="h-9 w-9 shrink-0 rounded-[9px] border border-[#e3dfd6] bg-[repeating-linear-gradient(135deg,#f4f2ed_0_6px,#ece9e2_6px_12px)]" />
+                    )}
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate text-[13.5px] font-bold">{product.baseName}</span>
+                      <span className="truncate text-[11.5px] text-[#8a8f99]">{subOf(product)}</span>
+                    </div>
+                  </div>
+                  <span className="truncate font-mono text-[11.5px] text-[#4a4f57]">
+                    {product.baseProductId ? baseProductMap.get(product.baseProductId)?.name ?? '—' : '—'}
+                  </span>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-[12.5px] font-semibold">{product.operationalCategoryName || 'Sem categoria'}</span>
+                    <span className="text-[11px] text-[#8a8f99]">{controlOf(product)}</span>
+                  </div>
+                  <span className="whitespace-nowrap text-[12.5px] text-[#4a4f57]">{packOf(product)}</span>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[12.5px] font-semibold">{counting.unit}</span>
+                    <span className="truncate text-[11px] text-[#8a8f99]">{counting.mode}</span>
+                  </div>
+                  <Chevron />
+                </ListRow>
+              );
+            })}
+          </ListShell>
+        )}
+      </div>
+
+      <DetailDrawer
+        open={!!opened}
+        onClose={closeDrawer}
+        kicker="Insumo derivado"
+        title={opened?.baseName ?? ''}
+        chips={opened ? [
+          { label: opened.operationalCategoryName || 'Sem categoria' },
+          { label: controlOf(opened), tone: 'pink' },
+          ...(opened.isArchived ? [{ label: 'Arquivado', tone: 'off' as const }] : []),
+        ] : []}
+        fields={opened && openedCounting ? [
+          ['Marca', opened.brand || '—'],
+          ['Insumo base', openedBase?.name ?? 'Sem vínculo'],
+          ['Embalagem', packOf(opened)],
+          ['Forma da contagem', openedCounting.mode],
+          ['Agrupamento logístico', opened.multiplo_caixa ? `${opened.rotulo_caixa || 'Caixa'} c/ ${opened.multiplo_caixa}` : '—'],
+          ['Código de barras', opened.barcode || '—'],
+          ['Instrução de contagem', opened.countingInstruction || '—'],
+        ] : []}
+        list={opened ? {
+          title: 'Uso no sistema',
+          rows: [
+            ['Lotes', String(lots.filter(lot => lot.productId === opened.id).length)],
+            ['Listas predefinidas', String(lists.filter(list => list.items.some(item => item.productId === opened.id)).length)],
+          ],
+        } : undefined}
+        notice={notice}
+        onCancelNotice={() => setNotice(null)}
+        isBusy={isBusy}
+        onEdit={opened ? () => handleEdit(opened) : undefined}
+        actions={opened ? [
+          { label: opened.isArchived ? 'Desarquivar' : 'Arquivar', onClick: () => void handleArchiveToggle(opened) },
+          { label: 'Excluir', isDanger: true, onClick: () => handleDeleteOne(opened) },
+        ] : []}
+      />
+
+      <BulkBar
+        count={visibleSelected.length}
+        onClear={() => setSelectedProducts(new Set())}
+        actions={[
+          { label: 'Alterar em lote', onClick: () => setIsBulkEditOpen(true) },
+          { label: 'Excluir', isDanger: true, onClick: handleBulkDeleteClick },
+        ]}
+      />
+
       <AddEditProductModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
@@ -918,18 +832,16 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
         baseProducts={baseProducts}
         onApply={handleBulkApply}
       />
-      
-{productsToDelete.length > 0 && 
-        <DeleteConfirmationDialog 
-            open={productsToDelete.length > 0} 
-            isDeleting={isDeleting} 
-            onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }} 
-            onConfirm={handleDeleteMultipleConfirm} 
+
+      {productsToDelete.length > 0 && (
+        <DeleteConfirmationDialog
+            open={productsToDelete.length > 0}
+            isDeleting={isDeleting}
+            onOpenChange={(isOpen) => { if (!isOpen) setProductsToDelete([]); }}
+            onConfirm={handleDeleteMultipleConfirm}
             itemName={productsToDelete.length > 1 ? `os ${productsToDelete.length} insumos selecionados` : `o insumo "${getProductFullName(productsToDelete[0])}"`}
         />
-      }
+      )}
     </>
   );
 }
-
-    
