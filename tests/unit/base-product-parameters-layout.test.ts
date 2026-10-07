@@ -25,6 +25,14 @@ test('dense stock table receives the full modal width on intermediate screens', 
   assert.match(modal, /DialogFooter className="flex shrink-0/);
 });
 
+test('the first wizard step cannot submit or save the base product', () => {
+  assert.match(modal, /handleNextClick = \(event: React\.MouseEvent<HTMLButtonElement>\) => \{\s*event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*void handleNext\(\);/);
+  assert.match(modal, /handleWizardSubmit = \(event: React\.FormEvent<HTMLFormElement>\) => \{\s*if \(currentStep < WIZARD_STEPS\.length\) \{\s*event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*void handleNext\(\);\s*return;/);
+  assert.match(modal, /form className="flex min-h-0 flex-1 flex-col" onSubmit=\{handleWizardSubmit\}/);
+  assert.match(modal, /Button type="button"[^>]*onClick=\{handleNextClick\}>Avançar/);
+  assert.match(modal, /Button type="submit"[^>]*>\{saving \? 'Salvando…'/);
+});
+
 test('direct purchase uses an accessible per-unit switch without changing the stored routing contract', () => {
   assert.match(modal, /checked=\{field\.value === 'direct'\}/);
   assert.match(modal, /onCheckedChange=\{\(checked\) => field\.onChange\(checked \? 'direct' : 'cd'\)\}/);
