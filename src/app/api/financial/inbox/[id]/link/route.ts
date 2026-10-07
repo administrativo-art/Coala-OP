@@ -9,8 +9,17 @@ export const runtime = "nodejs";
 
 const schema = z.object({
   expenseId: z.string().trim().min(1).max(180).optional(),
+  provisionExpenseId: z.string().trim().min(1).max(180).optional(),
   installmentNumber: z.number().int().positive().nullable().optional(),
   resolutionOnly: z.boolean().optional(),
+  documentConfirmation: z.object({
+    amountCents: z.number().int().positive(),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    competence: z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),
+    barcode: z.string().regex(/^\d{47}$/),
+    supplierName: z.string().trim().min(1).max(200),
+    supplierTaxId: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().length(14)),
+  }).optional(),
   accountAllocations: z.array(z.object({
     accountPlanId: z.string().trim().min(1).max(180),
     amountCents: z.number().int().positive(),
@@ -19,6 +28,12 @@ const schema = z.object({
   message: "A identificação sem vínculo exige uma despesa existente.",
 }).refine((input) => !input.expenseId || !input.accountAllocations, {
   message: "A apropriação informada só pode ser aplicada ao conciliar uma previsão.",
+}).refine((input) => !input.expenseId || (!input.provisionExpenseId && !input.documentConfirmation), {
+  message: "A confirmação documental só pode ser aplicada ao conciliar uma previsão.",
+}).refine((input) => Boolean(input.provisionExpenseId) === Boolean(input.documentConfirmation), {
+  message: "A previsão e a confirmação documental devem ser informadas juntas.",
+}).refine((input) => input.resolutionOnly !== true || (!input.provisionExpenseId && !input.documentConfirmation), {
+  message: "A identificação sem vínculo não aceita confirmação documental.",
 });
 
 export const POST = withApiErrorHandling<{ params: Promise<{ id: string }> }>({
@@ -93,6 +108,8 @@ export const POST = withApiErrorHandling<{ params: Promise<{ id: string }> }>({
           paymentActor,
           actor.workspace_id,
           input.accountAllocations,
+          input.provisionExpenseId,
+          input.documentConfirmation,
         );
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (cause) {
