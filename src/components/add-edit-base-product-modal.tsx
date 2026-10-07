@@ -207,13 +207,27 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
     }
   };
 
+  const onInvalid = () => {
+    setCurrentStep(1);
+  };
   const handleNext = async () => {
     const valid = await form.trigger(['name', 'category', 'unit']);
     if (valid) setCurrentStep((s) => Math.min(WIZARD_STEPS.length, s + 1));
   };
+  const handleNextClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleNext();
+  };
   const handleBack = () => setCurrentStep((s) => Math.max(1, s - 1));
-  const onInvalid = () => {
-    setCurrentStep(1);
+  const handleWizardSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (currentStep < WIZARD_STEPS.length) {
+      event.preventDefault();
+      event.stopPropagation();
+      void handleNext();
+      return;
+    }
+    void form.handleSubmit(onSubmit, onInvalid)(event);
   };
 
   return (
@@ -244,7 +258,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           </DialogHeader>
 
           <Form {...form}>
-            <form className="flex min-h-0 flex-1 flex-col" onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleWizardSubmit}>
               <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden xl:grid-cols-[240px_minmax(0,1fr)] xl:grid-rows-1">
                 {/* Stepper */}
                 <aside className="hidden border-r bg-muted/40 px-5 py-6 xl:block">
@@ -512,7 +526,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                 <div className="flex items-center gap-2">
                   {currentStep > 1 && (<Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>)}
                   {currentStep < WIZARD_STEPS.length ? (
-                    <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
+                    <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNextClick}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
                   ) : (
                     <Button type="submit" disabled={policyEnabled === null || policyLoading || saving} className="bg-indigo-500 hover:bg-indigo-600">{saving ? 'Salvando…' : productToEdit ? 'Salvar alterações' : 'Adicionar produto'}</Button>
                   )}
