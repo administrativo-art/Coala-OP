@@ -95,6 +95,15 @@ test("reautoriza valor documental vencido sem alterar o principal", () => {
   assert.equal(request.amount, 1467.98);
 });
 
+test("atualiza a data solicitada quando o mesmo link entrega a versão do dia seguinte", () => {
+  const patch = plan({
+    input: { ...input, scheduledFor: "2026-10-07" },
+    today: "2026-10-07",
+  });
+  assert.equal(patch.barcodeSnapshot.scheduledFor, "2026-10-07");
+  assert.equal(request.barcodeSnapshot.scheduledFor, "2026-10-06");
+});
+
 test("bloqueia revisão sem segunda rejeição definitiva, documento ou soma exata", () => {
   assert.throws(() => plan({ request: { ...request, submissionAttemptCount: 1 } }));
   assert.throws(() => plan({ request: { ...request, interRequestId: "inter_1" } }));
