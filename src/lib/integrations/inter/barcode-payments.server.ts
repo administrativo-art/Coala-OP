@@ -26,6 +26,24 @@ export type InterBarcodePayment = {
   nsu?: string;
 };
 
+export function interBarcodePaymentPayload(input: {
+  code: string;
+  amount: number;
+  dueDate: string;
+  scheduledFor: string;
+  beneficiaryDocument?: string | null;
+}, today = todayInBelem()) {
+  return {
+    codBarraLinhaDigitavel: input.code,
+    // The unit-payment contract requires a decimal string. Sending a JSON
+    // number is rejected with HTTP 400 even though batch payments accept one.
+    valorPagar: input.amount.toFixed(2),
+    ...(input.scheduledFor > today ? { dataPagamento: input.scheduledFor } : {}),
+    dataVencimento: input.dueDate,
+    ...(input.beneficiaryDocument ? { cpfCnpjBeneficiario: input.beneficiaryDocument.replace(/\D/g, "") } : {}),
+  };
+}
+
 export function mapInterBarcodeStatus(rawStatus: string | undefined, scheduledFor?: string | null) {
   const status = String(rawStatus ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
   if (["PAGO", "EFETIVADO", "PROCESSADO", "CONCLUIDO", "LIQUIDADO"].includes(status)) return "paid" as const;
@@ -44,14 +62,7 @@ export async function submitInterBarcodePayment(input: {
   beneficiaryDocument?: string | null;
 }) {
   const client = await createInterClient("pagamento-boleto.write");
-  const today = todayInBelem();
-  const response = await client.post("/banking/v2/pagamento", {
-    codBarraLinhaDigitavel: input.code,
-    valorPagar: Number(input.amount.toFixed(2)),
-    ...(input.scheduledFor > today ? { dataPagamento: input.scheduledFor } : {}),
-    dataVencimento: input.dueDate,
-    ...(input.beneficiaryDocument ? { cpfCnpjBeneficiario: input.beneficiaryDocument.replace(/\D/g, "") } : {}),
-  });
+  const response = await client.post("/banking/v2/pagamento", interBarcodePaymentPayload(input));
   return response.data as {
     quantidadeAprovadores?: number;
     dataAgendamento?: string;

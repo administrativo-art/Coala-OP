@@ -20,7 +20,7 @@ test("não prepara despesa paga, outro workspace, parcela, vencimento ou compet�
 test("fluxo direto persiste documento privado, verifica fonte antes do envio e não inventa e-mail", () => {
   const service = readFileSync("src/features/financial/payment-requests/service.server.ts", "utf8");
   const attachment = readFileSync("src/features/financial/payment-requests/expense-boleto.server.ts", "utf8");
-  assert.match(service, /current\.interRequestId \|\| current\.submissionStartedAt/);
+  assert.match(service, /current\.interRequestId \|\| \(current\.submissionStartedAt && !retryingDefinitiveRejection\)/);
   assert.match(service, /if \(pending\.sourceType === "financial_inbox"\) transaction\.set\(messageRef/);
   assert.match(service, /assertExpenseBoletoTarget\(data, input, WORKSPACE_ID\)/);
   assert.match(attachment, /tx\.create\(attachmentRef, attachment\)/);
