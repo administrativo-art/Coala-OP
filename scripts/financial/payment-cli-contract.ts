@@ -143,7 +143,9 @@ export function validateOverdueSettlementCliRevision(input: {
     || Math.round(Number(request.amount) * 100) !== input.principalAmountCents
     || request.expenseId !== input.expenseId
     || barcode?.code !== input.barcode
-    || barcode.scheduledFor !== input.scheduledFor
+    || typeof barcode.scheduledFor !== "string"
+    || !validIsoDate(barcode.scheduledFor)
+    || barcode.scheduledFor > input.scheduledFor
     || barcode.beneficiaryDocument !== input.beneficiaryDocument
     || String(barcode.dueDate ?? "") >= input.scheduledFor) {
     throw new PaymentCliError("A solicitação não aceita revisão documental do valor vencido. Nenhuma ação foi feita.");

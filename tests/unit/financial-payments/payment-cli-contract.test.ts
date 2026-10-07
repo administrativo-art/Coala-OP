@@ -29,6 +29,7 @@ test("impede divergência e repetição de ordem bancária", () => {
   assert.throws(() => validatePaymentCliAction({ request: order, action: "authorize", ...expected, barcode: "12345678" }));
   assert.throws(() => validatePaymentCliAction({ request: order, action: "authorize", ...expected, barcode: `999${expected.barcode.slice(3)}` }));
   assert.throws(() => validatePaymentCliAction({ request: { ...order, barcodeSnapshot: { ...order.barcodeSnapshot, beneficiaryDocument: null } }, action: "authorize", ...expected }));
+  assert.throws(() => validatePaymentCliAction({ request: order, action: "authorize", ...expected, scheduledFor: "2026-10-01" }));
   assert.throws(() => validatePaymentCliAction({ request: { ...order, interRequestId: "bank_1" }, action: "authorize", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...order, status: "ready_to_submit", submissionStartedAt: "2026-09-24T00:00:00Z" }, action: "send", ...expected }));
 });
@@ -68,6 +69,10 @@ test("revisa e envia valor documental vencido somente após duas rejeições", (
     sourceAttachmentSha256: "a".repeat(64),
   };
   assert.doesNotThrow(() => validateOverdueSettlementCliRevision(revision));
+  assert.doesNotThrow(() => validateOverdueSettlementCliRevision({
+    ...revision,
+    scheduledFor: "2026-10-07",
+  }));
   assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, settlementAmountCents: 109881 }));
   assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, request: { ...failed, submissionAttemptCount: 1 } }));
 

@@ -13,6 +13,7 @@ import {
   isPrivateNetworkAddress,
   safeFinancialDocumentSourceUrl,
 } from "./linked-document-policy";
+import { linkedDocumentVersionId, shouldArchiveLinkedDocumentVersion } from "./linked-document-versioning";
 import type { FinancialInboxAttachment, FinancialInboxLinkResolution, FinancialInboxMessage } from "./types";
 
 const MAX_LINKS_TO_CHECK = 2;
@@ -211,13 +212,12 @@ export async function archiveFinancialInboxLinkedDocuments(message: FinancialInb
   ).length;
   for (const link of links) {
     const fingerprint = createHash("sha256").update(link).digest("hex");
-    if (attachments.some((attachment) => attachment.sourceFingerprint === fingerprint)) continue;
     const resolved = await resolveUrl(link, message.senderDomain);
     last = resolved;
     if (resolved.kind !== "document") continue;
     const hash = createHash("sha256").update(resolved.buffer).digest("hex");
-    if (attachments.some((attachment) => attachment.sha256 === hash)) continue;
-    const id = `link_${fingerprint.slice(0, 24)}`;
+    if (!shouldArchiveLinkedDocumentVersion(attachments, hash)) continue;
+    const id = linkedDocumentVersionId(fingerprint, hash);
     const storagePath = `financial-inbox/${safeId(message.workspaceId)}/${safeId(message.id)}/linked/${id}-${resolved.filename}`;
     await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(resolved.buffer, {
       resumable: false,
