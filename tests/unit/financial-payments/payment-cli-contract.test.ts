@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validatePaymentCliAction, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliPreparation } from "../../../scripts/financial/payment-cli-contract";
 
 const order = {
   sourceType: "financial_inbox", paymentRail: "barcode", sourceId: "inbox_1", expenseId: "expense_1",
@@ -44,6 +44,46 @@ test("retoma uma única vez somente rejeição HTTP 400 confirmada", () => {
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, submissionAttemptCount: 2 }, action: "retry-send", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, lastError: { code: "INTER_REQUEST_FAILED" } }, action: "retry-send", ...expected }));
   assert.throws(() => validatePaymentCliAction({ request: { ...failed, interRequestId: "bank_1" }, action: "retry-send", ...expected }));
+});
+
+test("revisa e envia valor documental vencido somente após duas rejeições", () => {
+  const failed = {
+    ...order,
+    status: "failed",
+    submissionStartedAt: "2026-10-07T01:55:01.890Z",
+    submissionAttemptCount: 2,
+    lastError: { code: "INTER_HTTP_400" },
+    barcodeSnapshot: { ...order.barcodeSnapshot, dueDate: "2026-09-29" },
+  };
+  const revision = {
+    request: failed,
+    principalAmountCents: 106680,
+    settlementAmountCents: 109880,
+    lateChargeAmountCents: 3200,
+    scheduledFor: expected.scheduledFor,
+    beneficiaryDocument: expected.beneficiaryDocument,
+    expenseId: expected.expenseId,
+    barcode: expected.barcode,
+    sourceAttachmentId: "attachment_1",
+    sourceAttachmentSha256: "a".repeat(64),
+  };
+  assert.doesNotThrow(() => validateOverdueSettlementCliRevision(revision));
+  assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, settlementAmountCents: 109881 }));
+  assert.throws(() => validateOverdueSettlementCliRevision({ ...revision, request: { ...failed, submissionAttemptCount: 1 } }));
+
+  const adjusted = {
+    ...failed,
+    status: "ready_to_submit",
+    requestedSettlementAmount: 1098.8,
+    requestedLateChargeAmount: 32,
+    settlementRevision: { source: "confirmed_document", evidenceSource: "manual_document_review",
+      sourceAttachmentId: "attachment_1", sourceAttachmentSha256: "a".repeat(64),
+      barcode: expected.barcode, beneficiaryDocument: expected.beneficiaryDocument },
+  };
+  assert.doesNotThrow(() => validatePaymentCliAction({ request: adjusted, action: "send-adjusted", ...expected,
+    settlementAmountCents: 109880, lateChargeAmountCents: 3200, sourceAttachmentId: "attachment_1",
+    sourceAttachmentSha256: "a".repeat(64) }));
+  assert.throws(() => validatePaymentCliAction({ request: adjusted, action: "send", ...expected }));
 });
 
 test("recusa datas impossíveis, ações desconhecidas e estados posteriores", () => {
