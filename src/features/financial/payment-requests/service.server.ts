@@ -28,6 +28,7 @@ import {
 import { paymentReceiverMatchesSnapshot } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
 import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
+import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
 
 export async function createPaymentRequest(input: {
   sourceType: LegacyBankPaymentSourceType;
@@ -313,6 +314,63 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
   return request.sourceType === "termination" || request.sourceType === "aso" ? submitPaymentRequest(id, actor) : request;
 }
 
+export async function reviseAndAuthorizeOverdueBarcodePaymentRequest(
+  id: string,
+  rawInput: OverdueBarcodeSettlementRevisionInput,
+  actor: PaymentActor,
+) {
+  const input = overdueBarcodeSettlementRevisionSchema.parse(rawInput);
+  const initial = await getPaymentRequest(id);
+  if (initial.sourceType !== "financial_inbox" || initial.paymentRail !== "barcode") {
+    throw new Error("Somente boleto vencido originado na caixa financeira pode ser revisado por este fluxo.");
+  }
+  const activeBankPayments = (await findInterBarcodePaymentsByCode(initial.barcodeSnapshot.code))
+    .filter((candidate) => !["REJEITADO", "RECUSADO", "CANCELADO"].includes(String(candidate.statusPagamento || "").toUpperCase()));
+  if (activeBankPayments.length > 0) {
+    throw new Error("O Banco Inter já possui pagamento para esta linha digitável. Confira o Internet Banking antes de continuar.");
+  }
+  const now = new Date().toISOString();
+  const ref = paymentRequestRef(id);
+  const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(initial.sourceId);
+  if (!initial.expenseId) throw new Error("A solicitação não possui despesa vinculada.");
+  const expenseRef = financialDbAdmin.collection("expenses").doc(initial.expenseId);
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const [requestSnapshot, messageSnapshot, expenseSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(messageRef),
+      transaction.get(expenseRef),
+    ]);
+    if (!requestSnapshot.exists || !messageSnapshot.exists || !expenseSnapshot.exists) throw new Error("Solicitação, cobrança ou despesa vinculada não encontrada.");
+    const current = { id: requestSnapshot.id, ...requestSnapshot.data() } as BankPaymentRequest;
+    const message = { id: messageSnapshot.id, ...messageSnapshot.data() };
+    const expense = { id: expenseSnapshot.id, ...expenseSnapshot.data() };
+    const patch = planOverdueBarcodeSettlementRevision({
+      request: current,
+      message: message as Parameters<typeof planOverdueBarcodeSettlementRevision>[0]["message"],
+      expense,
+      input,
+      actor,
+      now,
+      today: todayInBelem(),
+    });
+    transaction.set(ref, patch, { merge: true });
+    transaction.set(expenseRef, { paymentRequestId: id, updatedAt: now }, { merge: true });
+    transaction.create(ref.collection("events").doc(), {
+      type: "OVERDUE_BARCODE_SETTLEMENT_REAUTHORIZED",
+      at: now,
+      actorId: actor.uid,
+      actorEmail: actor.email ?? null,
+      sourceAttachmentId: input.sourceAttachmentId,
+      principalAmountCents: input.principalAmountCents,
+      settlementAmountCents: input.settlementAmountCents,
+      lateChargeAmountCents: input.lateChargeAmountCents,
+      scheduledFor: input.scheduledFor,
+      previousSubmissionAttemptCount: paymentSubmissionAttemptCount(current),
+    });
+    return { ...current, ...patch } as BankPaymentRequest;
+  });
+}
+
 export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
   const requestRef = paymentRequestRef(id);
   const submissionStartedAt = new Date().toISOString();
@@ -330,6 +388,23 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     }
     if (paymentSubmissionRequiresManualReconciliation(current)) {
       throw new Error("A solicitação possui divergência bancária e exige revisão manual; o reenvio foi bloqueado.");
+    }
+    if (current.sourceType === "financial_inbox") {
+      if (!current.expenseId) throw new Error("A solicitação não possui despesa vinculada.");
+      const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId);
+      const expenseRef = financialDbAdmin.collection("expenses").doc(current.expenseId);
+      const [messageSnapshot, expenseSnapshot] = await Promise.all([
+        transaction.get(messageRef),
+        transaction.get(expenseRef),
+      ]);
+      if (!messageSnapshot.exists || !expenseSnapshot.exists) throw new Error("A cobrança ou a despesa vinculada não foi encontrada.");
+      assertFinancialInboxPaymentTarget({
+        request: current,
+        message: { id: messageSnapshot.id, ...messageSnapshot.data() },
+        expense: { id: expenseSnapshot.id, ...expenseSnapshot.data() },
+        today: todayInBelem(),
+      });
+      transaction.set(expenseRef, { paymentRequestId: id, updatedAt: submissionStartedAt }, { merge: true });
     }
     if (current.sourceType === "expense_boleto") {
       if (current.interRequestId || (current.submissionStartedAt && !retryingDefinitiveRejection)) throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
@@ -384,7 +459,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         codigoTransacao: recovered.codigoTransacao,
       } : await submitInterBarcodePayment({
           code: pending.barcodeSnapshot.code,
-          amount: pending.amount,
+          amount: pending.requestedSettlementAmount ?? pending.amount,
           dueDate: pending.barcodeSnapshot.dueDate,
           scheduledFor: pending.barcodeSnapshot.scheduledFor,
           beneficiaryDocument: pending.barcodeSnapshot.beneficiaryDocument,
@@ -455,6 +530,7 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
           expenseId: pending.expenseId,
           amountCents: expectedBarcodeDebitAmountCents({
             requestedAmount: pending.amount,
+            requestedSettlementAmount: pending.requestedSettlementAmount,
             observedSettlementAmountCents: recoveredAmounts?.settlementAmountCents,
           }),
           principalAmountCents: Math.round(pending.amount * 100),
@@ -961,6 +1037,7 @@ async function persistBarcodeBankObservation(params: {
         bankNsu: params.bankNsu ?? null,
         amountCents: expectedBarcodeDebitAmountCents({
           requestedAmount: current.amount,
+          requestedSettlementAmount: current.requestedSettlementAmount,
           currentSettlementAmount: current.bankSettlementAmount,
           observedSettlementAmountCents: params.bankSettlementAmountCents,
         }),
