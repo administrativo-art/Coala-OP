@@ -97,6 +97,9 @@ test("listagem usa o contrato seguro de erros sem expor a falha interna do Fires
 test("identificação valida entrada e autorização no servidor sem expor erro interno", () => {
   assert.match(linkRoute, /resolutionOnly: z\.boolean\(\)\.optional\(\)/);
   assert.match(linkRoute, /accountAllocations: z\.array/);
+  assert.match(linkRoute, /provisionExpenseId: z\.string/);
+  assert.match(linkRoute, /documentConfirmation: z\.object/);
+  assert.match(linkRoute, /barcode: z\.string\(\)\.regex\(\/\^\\d\{47\}\$\//);
   assert.match(linkRoute, /amountCents: z\.number\(\)\.int\(\)\.positive\(\)/);
   assert.match(linkRoute, /!input\.expenseId \|\| !input\.accountAllocations/);
   assert.match(linkRoute, /input\.resolutionOnly !== true \|\| Boolean\(input\.expenseId\)/);
@@ -114,4 +117,7 @@ test("conciliação da previsão pode substituir a apropriação contábil sem d
   assert.match(workflow, /A soma das apropriações deve ser igual ao valor da cobrança/);
   assert.match(workflow, /hasAccountAllocations: true/);
   assert.match(workflow, /accountAllocations: validatedAccountAllocations/);
+  assert.match(workflow, /confirmFinancialInboxDocument/);
+  assert.match(workflow, /supplierNamesAreCompatible/);
+  assert.match(workflow, /barcodeHash: paymentBarcodeHash/);
 });

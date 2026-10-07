@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
@@ -11,6 +12,11 @@ import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCand
 import { chooseProvisionSuggestion, scoreProvisionCandidate, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
 import { shouldAutomaticallyIdentifyInboxCharge } from "./automation-policy";
+import {
+  confirmFinancialInboxDocument,
+  supplierNamesAreCompatible,
+  type ConfirmedInboxDocumentInput,
+} from "./confirmed-document";
 import {
   defaultFinancialInboxAutomationSettings,
   getFinancialInboxAutomationSettings,
@@ -488,10 +494,16 @@ export async function linkSuggestedInboxCharge(
   actor: PaymentActor,
   expectedWorkspaceId: string,
   accountAllocations?: InboxAccountAllocationInput[],
+  provisionExpenseId?: string,
+  documentConfirmation?: ConfirmedInboxDocumentInput,
 ) {
   const analyzedMessage = await getFinancialInboxMessage(id);
   if (analyzedMessage.workspaceId !== expectedWorkspaceId) throw new Error("Cobrança recebida não encontrada.");
-  if (analyzedMessage.existingExpenseSuggestion?.status === "suggested"
+  if (Boolean(provisionExpenseId) !== Boolean(documentConfirmation)) {
+    throw new Error("A previsão e a confirmação documental devem ser informadas juntas.");
+  }
+  if (!provisionExpenseId
+    && analyzedMessage.existingExpenseSuggestion?.status === "suggested"
     && analyzedMessage.existingExpenseSuggestion.expenseId) {
     if (accountAllocations) {
       throw new Error("A apropriação informada só pode ser aplicada ao conciliar uma previsão.");
@@ -521,33 +533,52 @@ export async function linkSuggestedInboxCharge(
       }
       return { message, expenseId: message.linkedExpenseId, duplicate: true };
     }
-    const provisionId = message.provisionSuggestion?.status === "suggested"
+    const classification = documentConfirmation
+      ? confirmFinancialInboxDocument(message.classification, documentConfirmation)
+      : message.classification;
+    const provisionId = provisionExpenseId || (message.provisionSuggestion?.status === "suggested"
       ? message.provisionSuggestion.provisionExpenseId
-      : null;
+      : null);
     if (!provisionId) throw new Error("A cobrança não possui uma sugestão única de provisionamento.");
-    if (message.classification.amountCents == null || message.classification.amountCents <= 0) {
+    if (classification.amountCents == null || classification.amountCents <= 0) {
       throw new Error("Confirme o valor da cobrança antes de vinculá-la.");
     }
     if (validatedAccountAllocations
       && validatedAccountAllocations.reduce((total, allocation) => total + allocation.amountCents, 0)
-        !== message.classification.amountCents) {
+        !== classification.amountCents) {
       throw new Error("A soma das apropriações deve ser igual ao valor da cobrança.");
     }
     const provisionRef = financialDbAdmin.collection("expenses").doc(provisionId);
     const provisionSnapshot = await transaction.get(provisionRef);
     if (!provisionSnapshot.exists) throw new Error("O provisionamento sugerido não existe mais.");
     const provision = provisionSnapshot.data() as Record<string, unknown>;
+    if (documentConfirmation && provision.workspaceId !== expectedWorkspaceId) {
+      throw new Error("O provisionamento informado não pertence ao espaço de trabalho da cobrança.");
+    }
     if (provision.provisionType !== "forecast" || provision.status !== "provisioned") {
       throw new Error("O provisionamento sugerido já foi tratado. Analise novamente a cobrança.");
     }
-    if (provision.provisionCompetence !== message.classification.competence) {
+    if (provision.provisionCompetence !== classification.competence) {
       throw new Error("A competência da cobrança diverge do provisionamento.");
     }
-    if (["tax", "fgts", "inss_darf"].includes(message.classification.documentType)
-      && !message.classification.fiscalIdentity) {
+    if (["tax", "fgts", "inss_darf"].includes(classification.documentType)
+      && !classification.fiscalIdentity) {
       throw new Error("Reanalise o documento fiscal antes de vincular a cobrança à previsão.");
     }
-    const provisionMatch = scoreProvisionCandidate(message.classification, {
+    if (documentConfirmation && !supplierNamesAreCompatible(classification.supplierName, provision.supplier)) {
+      throw new Error("O fornecedor confirmado não corresponde ao provisionamento informado.");
+    }
+    const provisionDueDate = isoDateKey(provision.dueDate);
+    if (documentConfirmation && provisionDueDate && provisionDueDate !== classification.dueDate) {
+      throw new Error("O vencimento confirmado não corresponde ao provisionamento informado.");
+    }
+    const confirmedSupplierTaxId = classification.billingIdentity?.supplierTaxId;
+    const provisionSupplierTaxId = (provision.billingIdentity as { supplierTaxId?: unknown } | null | undefined)?.supplierTaxId;
+    if (documentConfirmation && provisionSupplierTaxId
+      && CnpjValidator.clean(String(provisionSupplierTaxId)) !== CnpjValidator.clean(confirmedSupplierTaxId ?? "")) {
+      throw new Error("O CNPJ confirmado não corresponde ao provisionamento informado.");
+    }
+    const provisionMatch = scoreProvisionCandidate(classification, {
       id: provisionId,
       ...provision,
     });
@@ -555,27 +586,31 @@ export async function linkSuggestedInboxCharge(
       throw new Error("A natureza fiscal do documento não corresponde à previsão sugerida. Reanalise a cobrança.");
     }
 
-    const actualValue = money(message.classification.amountCents / 100);
+    const actualValue = money(classification.amountCents / 100);
     const provisionedValue = money(provision.totalValue);
     const variance = money(actualValue - provisionedValue);
     const obligationId = String(provision.obligationId || `obl_${provisionId}`);
-    const dueDate = dateTimestamp(message.classification.dueDate, now.toDate());
+    const dueDate = dateTimestamp(classification.dueDate, now.toDate());
     const competenceDate = dateTimestamp(
-      message.classification.competence ? `${message.classification.competence}-01` : null,
+      classification.competence ? `${classification.competence}-01` : null,
       dueDate.toDate(),
     );
-    const supplier = message.classification.supplierName || String(provision.supplier || "");
+    const supplier = classification.supplierName || String(provision.supplier || "");
     const description = String(provision.description || message.subject).trim();
     const aliases = mergeExpenseAliases(provision.aliases, message.subject);
-    const documentIdentity = financialDocumentIdentityFromClassification(message.classification, id);
+    const documentIdentity = financialDocumentIdentityFromClassification(classification, id);
+    const matchConfidence = provisionMatch.score >= 80 ? "high" : "medium";
+    const matchReasons = documentConfirmation
+      ? [...new Set([...provisionMatch.reasons, "documento confirmado manualmente"])]
+      : message.provisionSuggestion?.reasons ?? provisionMatch.reasons;
     const initialResolution = identifiedFinancialInboxResolution({
       kind: "new_charge",
       targetType: "expense",
       targetId: actualRef.id,
       financialState: "open",
       mode: "manual",
-      confidence: message.provisionSuggestion?.confidence ?? null,
-      reasons: message.provisionSuggestion?.reasons ?? [],
+      confidence: documentConfirmation ? matchConfidence : message.provisionSuggestion?.confidence ?? null,
+      reasons: matchReasons,
       at: nowIso,
       by: actor.uid,
     });
@@ -601,7 +636,7 @@ export async function linkSuggestedInboxCharge(
       } : {}),
       ...inheritExpenseReferenceCenter({}, provision),
       ...financialExpenseAccountingFields({
-        competenceMonth: message.classification.competence,
+        competenceMonth: classification.competence,
         competenceDate,
       }),
       workspaceId: WORKSPACE_ID,
@@ -615,7 +650,7 @@ export async function linkSuggestedInboxCharge(
       paymentMethod: "single",
       installments: [{ number: 1, dueDate, value: actualValue, status: "pending" }],
       provisionType: "actual",
-      provisionCompetence: message.classification.competence,
+      provisionCompetence: classification.competence,
       obligationId,
       reconciledProvisionId: provisionId,
       provisionReconciliationStatus: "reconciled",
@@ -625,9 +660,9 @@ export async function linkSuggestedInboxCharge(
       provisionReconciledBy: actor.uid,
       originModule: "financial_inbox",
       financialInboxMessageId: id,
-      billingIdentity: message.classification.billingIdentity ?? null,
+      billingIdentity: classification.billingIdentity ?? null,
       documentIdentity,
-      fiscalIdentity: message.classification.fiscalIdentity ?? null,
+      fiscalIdentity: classification.fiscalIdentity ?? null,
       status: "pending",
       createdAt: now,
       createdBy: actor.uid,
@@ -635,8 +670,8 @@ export async function linkSuggestedInboxCharge(
     };
     const summary = calculateFinancialObligationSummary({
       forecastAmountCents: Math.round(provisionedValue * 100),
-      actualAmountCents: message.classification.amountCents,
-      settlementAmountCents: message.classification.amountCents,
+      actualAmountCents: classification.amountCents,
+      settlementAmountCents: classification.amountCents,
     });
     transaction.create(actualRef, actual);
     transaction.set(provisionRef, {
@@ -652,13 +687,13 @@ export async function linkSuggestedInboxCharge(
     }, { merge: true });
     transaction.set(financialDbAdmin.collection("financialObligations").doc(obligationId), {
       seriesKey: provision.provisionSeriesKey || null,
-      competenceKey: message.classification.competence,
+      competenceKey: classification.competence,
       sourceType: "financial_inbox",
       sourceId: id,
       supplierName: supplier || null,
-      billingIdentity: message.classification.billingIdentity ?? null,
+      billingIdentity: classification.billingIdentity ?? null,
       documentIdentity,
-      fiscalIdentity: message.classification.fiscalIdentity ?? null,
+      fiscalIdentity: classification.fiscalIdentity ?? null,
       primaryInboxMessageId: id,
       inboxMessageIds: FieldValue.arrayUnion(id),
       inboxMessageSummaries: [initialThreadMessage],
@@ -678,7 +713,24 @@ export async function linkSuggestedInboxCharge(
       resolution: initialResolution,
       thread: { primaryMessageId: id, messageCount: 1, messages: [initialThreadMessage] },
       resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
-      "provisionSuggestion.status": "linked",
+      classification,
+      searchTerms: buildFinancialInboxSearchTerms({ ...message, classification }),
+      searchIndexVersion: FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+      searchIndexedAt: nowIso,
+      provisionSuggestion: {
+        status: "linked",
+        provisionExpenseId: provisionId,
+        confidence: matchConfidence,
+        score: provisionMatch.score,
+        reasons: matchReasons,
+        description,
+        supplier: String(provision.supplier || supplier),
+        competence: classification.competence,
+        dueDate: provisionDueDate,
+        provisionedAmountCents: Math.round(provisionedValue * 100),
+        billingIdentity: provision.billingIdentity ?? null,
+        checkedAt: nowIso,
+      },
       reviewedAt: nowIso,
       reviewedBy: actor.uid,
       updatedAt: nowIso,
@@ -694,13 +746,25 @@ export async function linkSuggestedInboxCharge(
       actualValue,
       provisionedValue,
       variance,
+      documentConfirmation: documentConfirmation ? {
+        amountCents: classification.amountCents,
+        dueDate: classification.dueDate,
+        competence: classification.competence,
+        supplierName: supplier,
+        supplierTaxId: classification.billingIdentity?.supplierTaxId ?? null,
+        barcodeHash: paymentBarcodeHash(classification.barcode),
+      } : null,
       accountAllocations: validatedAccountAllocations?.map((allocation) => ({
         accountPlanId: allocation.accountPlanId,
         accountPlanName: allocation.accountPlanName,
         amount: allocation.amount,
       })) ?? null,
     });
-    return { message: { ...message, linkedExpenseId: actualRef.id }, expenseId: actualRef.id, duplicate: false };
+    return {
+      message: { ...message, classification, linkedExpenseId: actualRef.id, linkedProvisionId: provisionId },
+      expenseId: actualRef.id,
+      duplicate: false,
+    };
   });
 }
 
