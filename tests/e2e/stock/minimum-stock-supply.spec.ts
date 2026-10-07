@@ -95,7 +95,8 @@ test('flag desligada mantém mínimo legado e mostra prévia separada', async ({
 
   const explanation = page.getByRole('button', { name: 'Como o estoque mínimo é calculado' });
   await explanation.focus();
-  const tooltip = page.getByRole('tooltip');
+  // Radix puts role="tooltip" on an accessibility-only span; measure its visible parent.
+  const tooltip = page.getByRole('tooltip').locator('..');
   await expect(tooltip).toBeVisible();
   const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const tooltipBox = await tooltip.boundingBox();
