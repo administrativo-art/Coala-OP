@@ -58,7 +58,10 @@ function InventoryControlContent() {
                     <p className="text-sm text-muted-foreground">Monitore validades, adicione lotes e faça movimentações.</p>
                 </div>
                 
-                <ExpiryControl />
+                <ExpiryControl
+                    onOpenHistory={() => setIsHistoryModalOpen(true)}
+                    onOpenConsumption={() => setIsConsumptionModalOpen(true)}
+                />
             </div>
 
             <RadialMenu items={menuItems} />
