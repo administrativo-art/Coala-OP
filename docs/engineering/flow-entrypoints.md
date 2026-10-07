@@ -1737,7 +1737,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx), [`src/app/dashboard/inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx), [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx), [`src/app/dashboard/stock/transfer/page.tsx`](../../src/app/dashboard/stock/transfer/page.tsx), [`src/app/dashboard/stock/write-down/page.tsx`](../../src/app/dashboard/stock/write-down/page.tsx).
 
-Arquivos locais percorridos: 67.
+Arquivos locais percorridos: 65.
 
 Chamadas candidatas encontradas:
 
@@ -1766,14 +1766,10 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `registration.items.add` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
-- `registration.items.delete` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
-- `registration.items.edit` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
 - `settings.manageLabels` — [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx)
+- `stock.inventoryControl` — [`src/components/stock/lot-detail-panel.tsx`](../../src/components/stock/lot-detail-panel.tsx)
 - `stock.inventoryControl.addLot` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
-- `stock.inventoryControl.editLot` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
-- `stock.inventoryControl.transfer` — [`src/components/lot-card.tsx`](../../src/components/lot-card.tsx)
-- `stock.inventoryControl.writeDown` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
+- `stock.inventoryControl.transfer` — [`src/components/stock-transfer.tsx`](../../src/components/stock-transfer.tsx)
 
 ## `stock-count`
 
