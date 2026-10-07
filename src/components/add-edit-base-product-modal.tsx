@@ -83,6 +83,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   const [saving, setSaving] = useState(false);
   const [derivedExpanded, setDerivedExpanded] = useState(false);
   const [showHow, setShowHow] = useState(false);
+  const [collapsedKioskGroups, setCollapsedKioskGroups] = useState<Record<string, boolean>>({});
 
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
@@ -102,6 +103,16 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
         return a.name.localeCompare(b.name);
     });
   }, [kiosks, user, isDefaultAdmin]);
+
+  // Unidades agrupadas por papel no estoque; cada grupo pode ser recolhido na etapa 2.
+  const kioskGroups = useMemo(() => {
+    const isSupplyKiosk = (kioskId: string) =>
+      operationalUnits.find(unit => unit.externalSource === 'kiosk' && unit.externalId === kioskId)?.stockRole === 'supply';
+    return [
+      { id: 'supply', label: 'Abastecimento', kiosks: sortedKiosks.filter(k => isSupplyKiosk(k.id)) },
+      { id: 'commercial', label: 'Unidades comerciais', kiosks: sortedKiosks.filter(k => !isSupplyKiosk(k.id)) },
+    ].filter(group => group.kiosks.length > 0);
+  }, [sortedKiosks, operationalUnits]);
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
@@ -256,7 +267,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:p-0 sm:max-w-[1080px] sm:rounded-[26px]">
+        <DialogContent hideClose flush className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
           <Form {...form}>
             <form className="grid min-h-0 grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)]" onSubmit={handleWizardSubmit}>
               {/* Painel escuro: o insumo ao vivo */}
@@ -520,8 +531,23 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="text-xs font-bold text-[#4a4f57]">{sortedKiosks.length} loca{sortedKiosks.length === 1 ? 'l' : 'is'} com acesso</span>
                     </div>
-                    <div className="flex flex-col gap-2.5">
-                      {sortedKiosks.map((kiosk) => {
+                    <div className="flex flex-col gap-4">
+                      {kioskGroups.map((group) => {
+                        const collapsed = collapsedKioskGroups[group.id] === true;
+                        return (
+                      <div key={group.id} className="flex flex-col gap-2.5">
+                        <button
+                          type="button"
+                          aria-expanded={!collapsed}
+                          onClick={() => setCollapsedKioskGroups(current => ({ ...current, [group.id]: !collapsed }))}
+                          className="flex h-10 items-center gap-2.5 rounded-xl border border-[#e6e2da] bg-[#f4f3ef] px-3.5 text-left hover:bg-[#efede7]"
+                        >
+                          <span className={cn('text-[11px] text-[#70757d] transition-transform', collapsed ? '-rotate-90' : '')}>▾</span>
+                          <span className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-[#4a4f57]">{group.label}</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#70757d]">{group.kiosks.length}</span>
+                          <span className="ml-auto text-[11.5px] font-semibold text-[#5b5bd6]">{collapsed ? 'Expandir' : 'Recolher'}</span>
+                        </button>
+                        {!collapsed && group.kiosks.map((kiosk) => {
                         const autoCalc = productToEdit?.stockLevels?.[kiosk.id];
                         const lastAutoCalculatedAt = autoCalc?.lastAutoCalculatedAt;
                         const manualMin = form.watch(`stockLevels.${kiosk.id}.override`) === true;
@@ -642,6 +668,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                             </div>
                             {leadError && <span role="alert" className="-mt-1.5 text-right text-[11.5px] font-semibold text-[#e11d48]">{leadError}</span>}
                           </div>
+                        );
+                      })}
+                      </div>
                         );
                       })}
                     </div>

@@ -25,7 +25,7 @@ test('editor and ficha share the unit display helpers instead of duplicating the
 });
 
 test('ficha follows the handoff with a dark insumo panel flush with the rounded corners', () => {
-  assert.match(ficha, /DialogContent hideClose className="[^"]*\bp-0\b[^"]*sm:max-w-\[1080px\][^"]*\bsm:p-0\b[^"]*"/);
+  assert.match(ficha, /DialogContent hideClose flush className="[^"]*sm:max-w-\[1080px\][^"]*"/);
   assert.match(ficha, /lg:h-\[780px\] lg:grid-cols-\[380px_minmax\(0,1fr\)\]/);
   assert.match(ficha, /aside className="[^"]*bg-\[#15151c\][^"]*"/);
   assert.match(ficha, /Ficha cadastral · insumo base/);
