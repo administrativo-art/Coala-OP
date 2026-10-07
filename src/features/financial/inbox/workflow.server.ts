@@ -40,6 +40,7 @@ import {
   buildFinancialInboxSearchTerms,
   FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
 } from "./search-index";
+import { classificationForFinancialInboxReanalysis } from "./reanalysis-classification";
 import type { FinancialInboxMessage } from "./types";
 
 const MAX_PROVISION_CANDIDATES = 100;
@@ -180,10 +181,11 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     documentHints: documents.hints,
     documentReferences: message.attachments.map((attachment) => attachment.filename),
   }).classification;
-  const classification = {
-    ...reparsed,
-    links: message.classification.links?.length ? message.classification.links : reparsed.links,
-  };
+  const classification = classificationForFinancialInboxReanalysis({
+    status: message.status,
+    current: message.classification,
+    reparsed,
+  });
 
   let expenseCandidates: InboxExpenseCandidate[] = [];
   let expenseScanTruncated = false;

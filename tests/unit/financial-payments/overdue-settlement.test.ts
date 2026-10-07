@@ -104,6 +104,17 @@ test("atualiza a data solicitada quando o mesmo link entrega a versão do dia se
   assert.equal(request.barcodeSnapshot.scheduledFor, "2026-10-06");
 });
 
+test("usa o snapshot confirmado quando a reanálise por imagem não recupera a linha digitável", () => {
+  const patch = plan({
+    message: {
+      ...message,
+      classification: { ...message.classification, barcode: null },
+    },
+  });
+  assert.equal(patch.status, "ready_to_submit");
+  assert.equal(patch.settlementRevision.barcode, barcode);
+});
+
 test("bloqueia revisão sem segunda rejeição definitiva, documento ou soma exata", () => {
   assert.throws(() => plan({ request: { ...request, submissionAttemptCount: 1 } }));
   assert.throws(() => plan({ request: { ...request, interRequestId: "inter_1" } }));
@@ -113,4 +124,5 @@ test("bloqueia revisão sem segunda rejeição definitiva, documento ou soma exa
   assert.throws(() => plan({ input: { ...input, settlementAmountCents: 151201 } }));
   assert.throws(() => plan({ today: "2026-10-07" }));
   assert.throws(() => plan({ input: { ...input, scheduledFor: "2026-10-05" } }));
+  assert.throws(() => plan({ message: { ...message, classification: { ...message.classification, barcode: "1".repeat(47) } } }));
 });
