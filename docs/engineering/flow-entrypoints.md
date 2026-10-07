@@ -726,7 +726,7 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 Páginas: [`src/app/dashboard/operations/page.tsx`](../../src/app/dashboard/operations/page.tsx).
 
-Arquivos locais percorridos: 53.
+Arquivos locais percorridos: 54.
 
 Chamadas candidatas encontradas:
 
@@ -737,6 +737,7 @@ Chamadas candidatas encontradas:
 - `/api/registry/stock-audit` — interface [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 - `/api/registry/stock-audit/` — interface [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 - `/api/stock/count-sessions` — interface [`src/components/audit-dashboard.tsx`](../../src/components/audit-dashboard.tsx); rota candidata [`src/app/api/stock/count-sessions/route.ts`](../../src/app/api/stock/count-sessions/route.ts)
+- `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 - `/api/stock/reposition-activities` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/route.ts`](../../src/app/api/stock/reposition-activities/route.ts)
 - `/api/stock/reposition-activities/` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/[activityId]/route.ts`](../../src/app/api/stock/reposition-activities/%5BactivityId%5D/route.ts)
 - `/api/stock/return-requests` — interface [`src/features/return-requests/lib/client.ts`](../../src/features/return-requests/lib/client.ts); rota candidata [`src/app/api/stock/return-requests/route.ts`](../../src/app/api/stock/return-requests/route.ts)
@@ -1069,7 +1070,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx).
 
-Arquivos locais percorridos: 36.
+Arquivos locais percorridos: 38.
 
 Chamadas candidatas encontradas:
 
@@ -1081,6 +1082,7 @@ Chamadas candidatas encontradas:
 - `/api/registry/products/` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/registry/stock-audit` — interface [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 - `/api/registry/stock-audit/` — interface [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
+- `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 - `/api/stock/reposition-activities` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/route.ts`](../../src/app/api/stock/reposition-activities/route.ts)
 - `/api/stock/reposition-activities/` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/[activityId]/route.ts`](../../src/app/api/stock/reposition-activities/%5BactivityId%5D/route.ts)
 - `/api/stock/return-requests` — interface [`src/features/return-requests/lib/client.ts`](../../src/features/return-requests/lib/client.ts); rota candidata [`src/app/api/stock/return-requests/route.ts`](../../src/app/api/stock/return-requests/route.ts)
@@ -1280,7 +1282,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/registration/base-products/page.tsx`](../../src/app/dashboard/registration/base-products/page.tsx), [`src/app/dashboard/registration/entities/page.tsx`](../../src/app/dashboard/registration/entities/page.tsx), [`src/app/dashboard/registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx).
 
-Arquivos locais percorridos: 59.
+Arquivos locais percorridos: 62.
 
 Chamadas candidatas encontradas:
 
@@ -1294,13 +1296,14 @@ Chamadas candidatas encontradas:
 - `/api/products/` — interface [`src/components/add-edit-product-modal.tsx`](../../src/components/add-edit-product-modal.tsx); rota candidata [`src/app/api/products/[id]/route.ts`](../../src/app/api/products/%5Bid%5D/route.ts)
 - `/api/products/barcode/` — interface [`src/components/add-edit-product-modal.tsx`](../../src/components/add-edit-product-modal.tsx); rota candidata [`src/app/api/products/barcode/[codigo]/route.ts`](../../src/app/api/products/barcode/%5Bcodigo%5D/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
-- `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
+- `/api/registry/base-products/` — interface [`src/components/add-edit-base-product-modal.tsx`](../../src/components/add-edit-base-product-modal.tsx)
 - `/api/registry/entities` — interface [`src/components/entities-provider.tsx`](../../src/components/entities-provider.tsx)
 - `/api/registry/entities/` — interface [`src/components/entities-provider.tsx`](../../src/components/entities-provider.tsx)
 - `/api/registry/operational-categories` — interface [`src/components/operational-item-categories-provider.tsx`](../../src/components/operational-item-categories-provider.tsx)
 - `/api/registry/operational-categories/` — interface [`src/components/operational-item-categories-provider.tsx`](../../src/components/operational-item-categories-provider.tsx)
 - `/api/registry/products` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/registry/products/` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
+- `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -1350,7 +1353,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 219.
+Arquivos locais percorridos: 220.
 
 Chamadas candidatas encontradas:
 
@@ -1415,7 +1418,7 @@ Chamadas candidatas encontradas:
 - `/api/profile-compliance/overview` — interface [`src/components/dp/profile-compliance-overview.tsx`](../../src/components/dp/profile-compliance-overview.tsx); rota candidata [`src/app/api/profile-compliance/overview/route.ts`](../../src/app/api/profile-compliance/overview/route.ts)
 - `/api/purchasing/classification-options` — interface [`src/hooks/use-purchasing-financial-options.ts`](../../src/hooks/use-purchasing-financial-options.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
-- `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
+- `/api/registry/base-products/` — interface [`src/components/add-edit-base-product-modal.tsx`](../../src/components/add-edit-base-product-modal.tsx)
 - `/api/registry/entities` — interface [`src/components/entities-provider.tsx`](../../src/components/entities-provider.tsx)
 - `/api/registry/entities/` — interface [`src/components/entities-provider.tsx`](../../src/components/entities-provider.tsx)
 - `/api/registry/operational-categories` — interface [`src/components/operational-item-categories-provider.tsx`](../../src/components/operational-item-categories-provider.tsx)
@@ -1427,6 +1430,7 @@ Chamadas candidatas encontradas:
 - `/api/settings/public-bio` — interface [`src/components/settings/public-bio-settings.tsx`](../../src/components/settings/public-bio-settings.tsx); rota candidata [`src/app/api/settings/public-bio/route.ts`](../../src/app/api/settings/public-bio/route.ts)
 - `/api/settings/public-bio/media` — interface [`src/components/settings/public-bio-settings.tsx`](../../src/components/settings/public-bio-settings.tsx); rota candidata [`src/app/api/settings/public-bio/media/route.ts`](../../src/app/api/settings/public-bio/media/route.ts)
 - `/api/settings/public-bio/media/` — interface [`src/components/settings/public-bio-settings.tsx`](../../src/components/settings/public-bio-settings.tsx); rota candidata [`src/app/api/settings/public-bio/media/[id]/route.ts`](../../src/app/api/settings/public-bio/media/%5Bid%5D/route.ts)
+- `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
@@ -1681,17 +1685,20 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/stock/analysis/consumption/page.tsx`](../../src/app/dashboard/stock/analysis/consumption/page.tsx), [`src/app/dashboard/stock/analysis/movement-analysis/page.tsx`](../../src/app/dashboard/stock/analysis/movement-analysis/page.tsx), [`src/app/dashboard/stock/analysis/projection/page.tsx`](../../src/app/dashboard/stock/analysis/projection/page.tsx), [`src/app/dashboard/stock/analysis/restock/page.tsx`](../../src/app/dashboard/stock/analysis/restock/page.tsx), [`src/app/dashboard/stock/analysis/sales/page.tsx`](../../src/app/dashboard/stock/analysis/sales/page.tsx), [`src/app/dashboard/stock/analysis/valuation/page.tsx`](../../src/app/dashboard/stock/analysis/valuation/page.tsx).
 
-Arquivos locais percorridos: 84.
+Arquivos locais percorridos: 87.
 
 Chamadas candidatas encontradas:
 
 - `/api/ai/analyze-consumption` — interface [`src/components/consumption-analysis-dashboard.tsx`](../../src/components/consumption-analysis-dashboard.tsx); rota candidata [`src/app/api/ai/analyze-consumption/route.ts`](../../src/app/api/ai/analyze-consumption/route.ts)
 - `/api/catalogo` — interface [`src/components/product-simulation-category-provider.tsx`](../../src/components/product-simulation-category-provider.tsx); rota candidata [`src/app/api/catalogo/route.ts`](../../src/app/api/catalogo/route.ts)
+- `/api/purchasing/pending-by-destination` — interface [`src/components/purchasing/pending-purchase-notices.tsx`](../../src/components/purchasing/pending-purchase-notices.tsx); rota candidata [`src/app/api/purchasing/pending-by-destination/route.ts`](../../src/app/api/purchasing/pending-by-destination/route.ts)
+- `/api/purchasing/pending-by-destination/ignore` — interface [`src/components/purchasing/pending-purchase-notices.tsx`](../../src/components/purchasing/pending-purchase-notices.tsx); rota candidata [`src/app/api/purchasing/pending-by-destination/ignore/route.ts`](../../src/app/api/purchasing/pending-by-destination/ignore/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/products` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/registry/products/` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/stock/movement-history` — interface [`src/components/movement-history-modal.tsx`](../../src/components/movement-history-modal.tsx); rota candidata [`src/app/api/stock/movement-history/route.ts`](../../src/app/api/stock/movement-history/route.ts)
+- `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 - `/api/stock/reposition-activities` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/route.ts`](../../src/app/api/stock/reposition-activities/route.ts)
 - `/api/stock/reposition-activities/` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/[activityId]/route.ts`](../../src/app/api/stock/reposition-activities/%5BactivityId%5D/route.ts)
 - `/api/stock/reposition-requests` — interface [`src/features/reposition-requests/lib/client.ts`](../../src/features/reposition-requests/lib/client.ts); rota candidata [`src/app/api/stock/reposition-requests/route.ts`](../../src/app/api/stock/reposition-requests/route.ts)
@@ -1731,7 +1738,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx), [`src/app/dashboard/inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx), [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx), [`src/app/dashboard/stock/transfer/page.tsx`](../../src/app/dashboard/stock/transfer/page.tsx), [`src/app/dashboard/stock/write-down/page.tsx`](../../src/app/dashboard/stock/write-down/page.tsx).
 
-Arquivos locais percorridos: 65.
+Arquivos locais percorridos: 67.
 
 Chamadas candidatas encontradas:
 
@@ -1742,6 +1749,7 @@ Chamadas candidatas encontradas:
 - `/api/registry/products` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/registry/products/` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
 - `/api/stock/movement-history` — interface [`src/components/movement-history-modal.tsx`](../../src/components/movement-history-modal.tsx); rota candidata [`src/app/api/stock/movement-history/route.ts`](../../src/app/api/stock/movement-history/route.ts)
+- `/api/stock/replenishment-policy` — interface [`src/hooks/use-replenishment-policy.ts`](../../src/hooks/use-replenishment-policy.ts); rota candidata [`src/app/api/stock/replenishment-policy/route.ts`](../../src/app/api/stock/replenishment-policy/route.ts)
 - `/api/stock/reposition-activities` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/route.ts`](../../src/app/api/stock/reposition-activities/route.ts)
 - `/api/stock/reposition-activities/` — interface [`src/features/reposition/lib/client.ts`](../../src/features/reposition/lib/client.ts); rota candidata [`src/app/api/stock/reposition-activities/[activityId]/route.ts`](../../src/app/api/stock/reposition-activities/%5BactivityId%5D/route.ts)
 

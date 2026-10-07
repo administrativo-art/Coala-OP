@@ -121,6 +121,9 @@ test('reconcilia cupom tardio, período encerrado e respostas regressivas atomic
   const first = await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options);
   assert.equal(first.persistence, 'applied');
   assert.equal(first.dailyRevenue, 7);
+  // A missing recipe must be observable, without changing revenue or financial flow.
+  assert.deepEqual((await dbAdmin.collection('consumptionReports').doc(CONSUMPTION_ID).get()).get('consumptionQuality'),
+    { version: 1, issues: 1 });
 
   coupons = [coupon('first', '15:00'), coupon('late', '19:00')];
   const reconciled = await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options);

@@ -5,6 +5,8 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { operationalMinimum } from '@/lib/replenishment-display';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue } from '@/lib/conversion';
@@ -77,7 +79,7 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
         <Card className="border-amber-500/50 bg-amber-500/10 mb-6">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-amber-700">
-                    <AlertTriangle /> Alertas de Reposição e Compra
+                    <AlertTriangle /> Alertas da projeção histórica (simulação)
                 </CardTitle>
                 <CardDescription>
                     {isMatriz
@@ -115,6 +117,7 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
 }
 
 export function ConsumptionProjection() {
+    const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
     const { kiosks, loading: kiosksLoading } = useKiosks();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -318,7 +321,7 @@ export function ConsumptionProjection() {
 
 
             let suggestedOrderQty = null;
-            if (baseProduct.consumptionMonths && baseProduct.consumptionMonths > 0) {
+            if (policyEnabled === false && baseProduct.consumptionMonths && baseProduct.consumptionMonths > 0) {
                 const monthlyAvgForSuggestion = monthlyAverages.get(baseProductId) || 0;
                 suggestedOrderQty = monthlyAvgForSuggestion * baseProduct.consumptionMonths;
             }
@@ -330,7 +333,7 @@ export function ConsumptionProjection() {
 
         return allResults;
 
-    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage, selectedKioskId, kiosks]);
+    }, [loading, consumptionHistory, baseProducts, lots, products, getProductFullName, selectedBaseProductIds, productsById, toBaseUnits, simulationPercentage, selectedKioskId, kiosks, policyEnabled]);
     
     const finalFilteredAndSortedResults = useMemo(() => {
         let results = [...projectionResults];
@@ -440,6 +443,7 @@ export function ConsumptionProjection() {
 
     return (
         <div className="space-y-6">
+            {policyEnabled === null && <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">{policyError ? 'Política de reposição indisponível. Metas não verificadas; esta tela mostra somente simulação histórica.' : 'Consultando a política de reposição; esta tela mostra somente simulação histórica.'}</p>}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight">Projeção de Consumo</h1>
@@ -567,10 +571,11 @@ export function ConsumptionProjection() {
                         <div className="space-y-8">
                             {finalFilteredAndSortedResults.map(group => (
                                 <div key={group.baseProductId} className="space-y-4">
+                                    <p className="text-xs text-muted-foreground">Meta de reposição: {operationalMinimum(baseProducts.find(base => base.id === group.baseProductId)?.stockLevels?.[selectedKioskId], policyEnabled).label}. As datas e perdas abaixo são projeção por lote.</p>
                                     <div className="flex items-center justify-between border-b pb-2">
                                         <div className="flex items-center gap-3">
                                             <h3 className="text-lg font-bold">{group.baseProductName}</h3>
-                                            {getOrderStatusBadge(group.orderStatus)}
+                                            {operationalMinimum(baseProducts.find(base => base.id === group.baseProductId)?.stockLevels?.[selectedKioskId], policyEnabled).minimum === null ? <Badge variant="outline">Meta pendente</Badge> : getOrderStatusBadge(group.orderStatus)}
                                         </div>
                                         <div className="flex items-center gap-4 text-sm">
                                             <div className="flex items-center gap-1">

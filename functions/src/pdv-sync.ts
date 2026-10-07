@@ -648,6 +648,7 @@ export async function syncDayAdmin(
   const comboCounts: Record<string, number> = {};
   // Consumo teórico de insumos base (Vendas API), derivado das fichas técnicas
   const consumptionByBaseProduct: Record<string, { name: string; quantity: number }> = {};
+  const consumptionQuality = { version: 1, issues: 0 };
 
   // Revenue tracking for goals
   let dailyRevenueCents = 0;
@@ -746,11 +747,13 @@ export async function syncDayAdmin(
 
       // Consumo teórico de insumos base: expande a ficha técnica da simulação
       if (!sim) continue;
-      for (const simItem of catalog.simulationItemsBySimulation.get(sim.id) ?? []) {
+      const recipeItems = catalog.simulationItemsBySimulation.get(sim.id) ?? [];
+      if (recipeItems.length === 0) consumptionQuality.issues++;
+      for (const simItem of recipeItems) {
         const bp = simItem.baseProductId
           ? catalog.baseProductById.get(simItem.baseProductId)
           : undefined;
-        if (!bp?.unit || !bp.category) continue;
+        if (!bp?.unit || !bp.category) { consumptionQuality.issues++; continue; }
         try {
           const valuePerUnit = convertValue(
             simItem.quantity,
@@ -759,12 +762,17 @@ export async function syncDayAdmin(
             bp.category,
           );
           const consumed = qty * valuePerUnit;
+          if (!Number.isFinite(consumed) || consumed < 0) {
+            consumptionQuality.issues++;
+            continue;
+          }
           if (!consumptionByBaseProduct[bp.id]) {
             consumptionByBaseProduct[bp.id] = { name: bp.name || 'Insumo sem nome', quantity: 0 };
           }
           consumptionByBaseProduct[bp.id].quantity += consumed;
         } catch {
-          /* unidade incompatível — ignora este insumo */
+          // Keep revenue processing unchanged, but do not certify partial consumption.
+          consumptionQuality.issues++;
         }
       }
     }
@@ -829,6 +837,7 @@ export async function syncDayAdmin(
     productQtyByOperator,
     revenueByOperator,
     diagnostics: diag,
+    consumptionQuality,
   })).digest('hex');
   const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
   if (options.expectedMetrics && (options.expectedMetrics.revenueCents !== dailyRevenueCents
@@ -850,6 +859,7 @@ export async function syncDayAdmin(
       combos,
       productQtyByOperator,
       syncDiagnostics: diag,
+      consumptionQuality,
       revenueAccountingVersion: PDV_REVENUE_VERSION,
       sourceCouponRevenueCents,
       sourceGrossRevenueCents,
@@ -863,6 +873,7 @@ export async function syncDayAdmin(
       day: date.getDate(),
       kioskId,
       status: 'completed',
+      consumptionQuality,
       results: Object.entries(consumptionByBaseProduct).map(([id, data]) => ({
         productId: id,
         productName: data.name,

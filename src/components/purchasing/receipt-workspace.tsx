@@ -259,7 +259,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
   const [receiptItems, setReceiptItems] = useState<PurchaseReceiptItem[]>([]);
   const [drafts, setDrafts] = useState<ItemDraft[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
-  const [destinationKioskId, setDestinationKioskId] = useState('');
+  const [destinationKioskId, setDestinationKioskId] = useState(receipt.destinationKioskId ?? '');
   const [notes, setNotes] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofDescription, setProofDescription] = useState('');

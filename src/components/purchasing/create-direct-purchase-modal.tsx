@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -40,6 +40,9 @@ import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useProducts } from '@/hooks/use-products';
+import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
+import { canAccessUnit } from '@/lib/unit-access';
 import { usePurchasingFinancialOptions } from '@/hooks/use-purchasing-financial-options';
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
 import {
@@ -66,6 +69,7 @@ const schema = z.object({
   freightSupplierName: z.string().optional(),
   trackingInfo: z.string().optional(),
   notes: z.string().optional(),
+  destinationKioskId: z.string().optional(),
 }).superRefine((values, context) => {
   if (
     Number(values.deliveryFee || 0) > 0 &&
@@ -98,6 +102,7 @@ type DraftItem = {
 interface Props {
   open: boolean;
   onOpenChange: (value: boolean) => void;
+  defaultDestinationKioskId?: string;
 }
 
 type PurchasableProductOption = {
@@ -232,12 +237,15 @@ function DirectPurchaseProductCombobox({
   );
 }
 
-export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
+export function CreateDirectPurchaseModal({ open, onOpenChange, defaultDestinationKioskId }: Props) {
   const router = useRouter();
   const { entities } = useEntities();
   const { purchasingDefaults } = useCompanySettings();
   const { activeCategories } = useOperationalItemCategories();
   const { products, getProductFullName } = useProducts();
+  const { user, isDefaultAdmin } = useAuth();
+  const { kiosks } = useKiosks();
+  const accessibleKiosks = useMemo(() => kiosks.filter(kiosk => user && canAccessUnit(user, kiosk.id, { isDefaultAdmin })), [kiosks, user, isDefaultAdmin]);
   const { createPurchase } = usePurchaseOrders();
   const { paymentCards, flattenedAccountPlans } = usePurchasingFinancialOptions();
   const [items, setItems] = useState<DraftItem[]>([newDraftItem()]);
@@ -260,8 +268,15 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
       freightSupplierName: '',
       trackingInfo: '',
       notes: '',
+      destinationKioskId: accessibleKiosks.some(kiosk => kiosk.id === defaultDestinationKioskId) ? defaultDestinationKioskId : '',
     },
   });
+
+  useEffect(() => {
+    if (open && defaultDestinationKioskId && accessibleKiosks.some(kiosk => kiosk.id === defaultDestinationKioskId) && !form.getValues('destinationKioskId')) {
+      form.setValue('destinationKioskId', defaultDestinationKioskId);
+    }
+  }, [open, defaultDestinationKioskId, accessibleKiosks, form]);
 
   const receiptMode = form.watch('receiptMode');
   const paymentMethod = form.watch('paymentMethod');
@@ -352,6 +367,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
     try {
       const orderId = await createPurchase({
         supplierId: values.supplierId,
+        destinationKioskId: values.destinationKioskId || undefined,
         supplierName: supplier?.fantasyName || supplier?.name || '',
         origin: 'direct',
         receiptMode: values.receiptMode as PurchaseReceiptMode,
@@ -428,6 +444,12 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
             <div className="rounded-[14px] border border-zinc-200 bg-white p-5">
               <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Informações gerais</h3>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField control={form.control} name="destinationKioskId" render={({ field }) => (
+                <FormItem className="sm:col-span-2"><FormLabel>Destino operacional da compra (opcional)</FormLabel>
+                  <Select value={field.value || 'none'} onValueChange={value => field.onChange(value === 'none' ? '' : value)}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Não definido</SelectItem>{accessibleKiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent></Select>
+                  <p className="text-xs text-muted-foreground">A compra a caminho aparece como aviso. Só a entrada dos lotes altera o saldo.</p><FormMessage />
+                </FormItem>
+              )}/>
               <FormField
                 control={form.control}
                 name="supplierId"

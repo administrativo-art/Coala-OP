@@ -65,8 +65,17 @@ export type BaseProductStockLevel = {
     safetyStock?: number;
     leadTime?: number;
     override: boolean;
+    supplyMode?: 'cd' | 'direct';
+    effectiveLeadTime?: number | null;
+    calculationStatus?: 'calculated' | 'pending' | 'partial' | 'no_dependents';
+    source?: 'pdv_internal' | 'transfer_proxy' | 'none';
+    sourceLimitation?: string;
+    validDays?: number;
+    windowStart?: string;
+    windowEnd?: string;
+    avgDaily?: number | null;
     lastAutoCalculatedAt?: string; // ISO string, set by recalculateMinimumStock job
-    lastAutoCalculatedMean?: number; // mean consumption used for the last automatic calculation
+    lastAutoCalculatedMean?: number | null; // mean consumption for the selected monthly/biweekly cycle
 };
 
 export type MinStockRecalcPeriod = 'monthly' | 'biweekly';
@@ -450,6 +459,7 @@ export type ConsumptionReport = {
   kioskName?: string;
   createdAt: string; // ISO String
   status?: 'completed' | 'processing' | 'error';
+  consumptionQuality?: { version: 1; issues: number };
   results: ConsumptionAnalysisItem[];
 };
 
@@ -2125,6 +2135,8 @@ export type BaseProduct = {
   unit: string;
   initialCostPerUnit?: number;
   stockLevels: { [kioskId: string]: BaseProductStockLevel };
+  replenishmentPreview?: { [kioskId: string]: BaseProductStockLevel };
+  replenishmentPolicyVersion?: number;
   consumptionMonths?: number;
   minStockRecalcPeriod?: MinStockRecalcPeriod; // basis used to compute automatic "min": average biweekly or average monthly consumption. Defaults to 'monthly'.
   lastEffectivePrice?: PriceHistoryEntry;
@@ -2409,6 +2421,7 @@ export type PurchaseOrder = {
   quotationId?: string;
   supplierId: string; // ref → entities collection
   supplierName?: string;
+  destinationKioskId?: string; // operational destination; absent on legacy orders
   receiptMode: PurchaseReceiptMode;
   status: PurchaseOrderStatus;
   estimatedReceiptDate: string; // ISO date; equals createdAt for immediate_pickup
@@ -2533,6 +2546,7 @@ export type PurchaseReceipt = {
   id: string;
   workspaceId: string;
   purchaseOrderId: string;
+  destinationKioskId?: string; // present only when explicitly selected for this purchase
   supplierId: string; // ref → entities collection
   supplierName?: string;
   receiptMode: PurchaseReceiptMode;

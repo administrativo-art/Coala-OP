@@ -5,6 +5,7 @@ import { addMonths } from 'date-fns';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { financialDbAdmin } from '@/lib/firebase-financial-admin';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { canAccessUnit } from '@/lib/unit-access';
 import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
 import {
   canCancelPurchase,
@@ -888,6 +889,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   }
 
   if (resource === 'orders' && !id) {
+    const destinationKioskId = typeof body.destinationKioskId === 'string'
+      ? body.destinationKioskId.trim() : '';
+    if (body.destinationKioskId !== undefined) {
+      if (!destinationKioskId || destinationKioskId.includes('/') ||
+        !canAccessUnit(userContext.userDoc, destinationKioskId, { isDefaultAdmin: userContext.isDefaultAdmin })) {
+        return jsonError('Destino da compra inválido ou sem acesso.', 403);
+      }
+      const destination = await dbAdmin.collection('kiosks').doc(destinationKioskId).get();
+      if (!destination.exists) return jsonError('Destino da compra não encontrado.', 400);
+    }
     for (const accountField of [body.accountPlanId, body.freightAccountPlanId]) {
       const accountError = await validateAccountPlanForPosting(accountField);
       if (accountError) return jsonError(accountError);
@@ -919,6 +930,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
     const orderData = {
       workspaceId: WORKSPACE_ID,
+      ...(destinationKioskId ? { destinationKioskId } : {}),
       supplierId: body.supplierId || '',
       supplierName: supplierName || '',
       status: 'created',
@@ -1087,6 +1099,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     batch.set(receiptRef, {
       workspaceId: WORKSPACE_ID,
       purchaseOrderId: id,
+      ...(order.destinationKioskId ? { destinationKioskId: order.destinationKioskId } : {}),
       supplierId: order.supplierId,
       supplierName: order.supplierName,
       status: initialReceiptStatus,

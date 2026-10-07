@@ -13,6 +13,14 @@ import {
 import { type StockAuditSession } from '@/types';
 import { normalizeMeasurementUnit } from '@/lib/conversion';
 import { canAccessUnit } from '@/lib/unit-access';
+import { parseBaseProductStockLevels, BaseProductPolicyValidationError, writableBaseProductPayload } from '@/lib/base-product-stock-levels';
+import { ZodError } from 'zod';
+import type { Transaction } from 'firebase-admin/firestore';
+import { toErrorResponse } from '@/lib/observability/api-error';
+import { resolveRequestId, resolveCorrelationId } from '@/lib/observability/ids';
+import { reportSystemError } from '@/lib/observability/reporter';
+import { replenishmentPolicyEnabled } from '@/lib/replenishment-feature';
+import { runMinimumStockRecalculation } from '@/lib/replenishment-recalculate';
 import { companyEmailPurposeIndex } from '@/lib/company/company-process-contact';
 
 export const runtime = 'nodejs';
@@ -143,6 +151,24 @@ function normalizeRegistryMeasurementUnit(resource: string | undefined, body: Re
   return { ...body, unit: normalizeMeasurementUnit(body.unit) };
 }
 
+async function directUnitsExist(stockLevels: Record<string, { supplyMode?: string }>, transaction?: Transaction) {
+  for (const [kioskId, level] of Object.entries(stockLevels)) {
+    if (level.supplyMode !== 'direct') continue;
+    const kioskRef = dbAdmin.collection('kiosks').doc(kioskId);
+    const unitsQuery = dbAdmin.collection('dp_units').where('externalId', '==', kioskId).limit(3);
+    const [kiosk, units] = await Promise.all([
+      transaction ? transaction.get(kioskRef) : kioskRef.get(),
+      transaction ? transaction.get(unitsQuery) : unitsQuery.get(),
+    ]);
+    if (!kiosk.exists || kiosk.get('isArchived') === true || !units.docs.some(doc => {
+      const unit = doc.data();
+      return unit.externalSource === 'kiosk' && unit.isArchived !== true &&
+        ['commercial', 'mixed'].includes(unit.stockRole ?? 'commercial');
+    })) return false;
+  }
+  return true;
+}
+
 async function assertUniqueEntityDocument(value: unknown, currentId?: string) {
   const normalized = normalizeEntityDocument(value);
   if (!normalized) return normalized;
@@ -207,7 +233,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   if (!userContext) return jsonError('Não autorizado.', 401);
   if (!canUseRegistryResource(userContext, resource, 'create')) return permissionError();
   const rawBody = await request.json().catch(() => ({})) as Record<string, any>;
-  const normalizedBody = normalizeRegistryMeasurementUnit(resource, rawBody);
+  const normalizedBody = normalizeRegistryMeasurementUnit(resource,
+    resource === 'base-products' ? writableBaseProductPayload(rawBody) : rawBody);
   const body = resource === 'entities'
     ? { ...normalizedBody, departmentEmailPurposes: companyEmailPurposeIndex(normalizedBody) }
     : normalizedBody;
@@ -223,6 +250,25 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
   const collectionName = collectionMap[resource];
   if (!collectionName) return jsonError('Recurso não encontrado.', 404);
+  if (resource === 'base-products' && body.minStockRecalcPeriod !== undefined &&
+    !['monthly', 'biweekly'].includes(body.minStockRecalcPeriod)) {
+    return jsonError('Ciclo de reposição inválido.');
+  }
+  let baseProductLevels: ReturnType<typeof parseBaseProductStockLevels> | undefined;
+  if (resource === 'base-products') {
+    try {
+      baseProductLevels = parseBaseProductStockLevels(body.stockLevels ?? {}, {}, kioskId =>
+        canAccessUnit(userContext.userDoc, kioskId, { isDefaultAdmin: userContext.isDefaultAdmin }),
+        replenishmentPolicyEnabled());
+      if (!await directUnitsExist(baseProductLevels)) return jsonError('Compra direta exige unidade comercial ativa.');
+    } catch (error) {
+      if (error instanceof BaseProductPolicyValidationError || error instanceof ZodError) {
+        return jsonError('Rota, prazo ou unidade do estoque inválidos.', 400);
+      }
+      return toErrorResponse(error, resolveRequestId(request), resolveCorrelationId(request),
+        { source: 'api-registry', operation: 'validate-base-product-policy', routeOrJob: '/api/registry/base-products' });
+    }
+  }
 
   let normalizedEntityDocument = '';
   if (resource === 'entities') {
@@ -259,6 +305,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
   const ref = await dbAdmin.collection(collectionName).add({
     ...stockAuditPayload,
+    ...(resource === 'base-products' ? {
+      stockLevels: replenishmentPolicyEnabled()
+        ? Object.fromEntries(Object.entries(baseProductLevels ?? {}).map(([key, level]) =>
+            [key, { ...level, min: 0, override: false, calculationStatus: 'pending' }]))
+        : baseProductLevels,
+      replenishmentPolicyVersion: replenishmentPolicyEnabled() ? 1 : 0,
+    } : {}),
     ...(resource === 'entities' && normalizedEntityDocument
       ? { documentNormalized: normalizedEntityDocument }
       : {}),
@@ -276,6 +329,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     });
   }
 
+  if (resource === 'base-products') {
+    try {
+      await runMinimumStockRecalculation(dbAdmin, new Date(), ref.id, replenishmentPolicyEnabled());
+    } catch (error) {
+      const reference = reportSystemError({ error, source: 'api-registry', operation: 'recalculate-created-base-product',
+        routeOrJob: '/api/registry/base-products', requestId: resolveRequestId(request) });
+      return NextResponse.json({ id: ref.id, recalculation: { status: 'pending', eventId: reference.eventId } }, { status: 201 });
+    }
+  }
+
   return NextResponse.json({ id: ref.id }, { status: 201 });
 }
 
@@ -286,7 +349,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   if (!userContext) return jsonError('Não autorizado.', 401);
   if (!canUseRegistryResource(userContext, resource, 'update')) return permissionError();
   const rawBody = await request.json().catch(() => ({})) as Record<string, any>;
-  const body = normalizeRegistryMeasurementUnit(resource, rawBody);
+  const body = normalizeRegistryMeasurementUnit(resource,
+    resource === 'base-products' ? writableBaseProductPayload(rawBody) : rawBody);
 
   const collectionMap: Record<string, string> = {
     'products': 'products',
@@ -299,6 +363,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
 
   const collectionName = collectionMap[resource];
   if (!collectionName || !id) return jsonError('Recurso ou ID inválido.', 404);
+  if (resource === 'base-products' && body.minStockRecalcPeriod !== undefined &&
+    !['monthly', 'biweekly'].includes(body.minStockRecalcPeriod)) {
+    return jsonError('Ciclo de reposição inválido.');
+  }
 
   if (resource === 'stock-audit') {
     const existingSnap = await dbAdmin.collection(collectionName).doc(id).get();
@@ -390,6 +458,53 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         departmentEmailPurposes: companyEmailPurposeIndex(body, current.data()),
       });
     });
+  } else if (resource === 'base-products') {
+    const enabled = replenishmentPolicyEnabled();
+    const shouldRecalculate = body.stockLevels !== undefined || body.minStockRecalcPeriod !== undefined
+      || body.unit !== undefined || body.category !== undefined;
+    try {
+      await dbAdmin.runTransaction(async transaction => {
+        const ref = dbAdmin.collection(collectionName).doc(id);
+        const current = await transaction.get(ref);
+        if (!current.exists) throw new Error('Produto base não encontrado.');
+        let stockLevels = body.stockLevels === undefined
+          ? current.get('stockLevels') ?? {}
+          : parseBaseProductStockLevels(body.stockLevels, current.get('stockLevels') ?? {}, kioskId =>
+              canAccessUnit(userContext.userDoc, kioskId, { isDefaultAdmin: userContext.isDefaultAdmin }),
+              replenishmentPolicyEnabled());
+        const editedLevels = Object.fromEntries(Object.keys(body.stockLevels ?? {}).map(key => [key, stockLevels[key]]));
+        if (!await directUnitsExist(editedLevels, transaction)) {
+          throw new BaseProductPolicyValidationError('Compra direta exige unidade comercial ativa.');
+        }
+        const pendingLevels = Object.fromEntries(
+          Object.entries(stockLevels).map(([key, value]) => [key, {
+            ...(value as Record<string, unknown>),
+            min: 0, override: false, calculationStatus: 'pending', source: 'none',
+            sourceLimitation: 'Aguardando recálculo após alteração da política.',
+          }]));
+        if (shouldRecalculate && enabled) stockLevels = pendingLevels;
+        transaction.update(ref, { ...updatePayload, stockLevels,
+          ...(shouldRecalculate && !enabled ? { replenishmentPreview: pendingLevels } : {}),
+          ...(shouldRecalculate
+            ? { replenishmentPolicyVersion: Number(current.get('replenishmentPolicyVersion') ?? 0) + 1 }
+            : {}) });
+      });
+    } catch (error) {
+      if (error instanceof BaseProductPolicyValidationError || error instanceof ZodError) {
+        return jsonError('Rota, prazo ou unidade do estoque inválidos.', 400);
+      }
+      return toErrorResponse(error, resolveRequestId(request), resolveCorrelationId(request),
+        { source: 'api-registry', operation: 'save-base-product-policy', routeOrJob: '/api/registry/base-products' });
+    }
+    if (shouldRecalculate) {
+      try {
+        await runMinimumStockRecalculation(dbAdmin, new Date(), id, enabled);
+      } catch (error) {
+        const reference = reportSystemError({ error, source: 'api-registry', operation: 'recalculate-updated-base-product',
+          routeOrJob: '/api/registry/base-products', requestId: resolveRequestId(request) });
+        return NextResponse.json({ ok: true, recalculation: { status: 'pending', eventId: reference.eventId } });
+      }
+    }
   } else {
     await dbAdmin.collection(collectionName).doc(id).update(updatePayload);
   }

@@ -39,6 +39,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useAuth } from '@/hooks/use-auth';
+import { useKiosks } from '@/hooks/use-kiosks';
+import { canAccessUnit } from '@/lib/unit-access';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { type PaymentMethod, type PurchaseStockEntryType, type Quotation, type QuotationItem } from '@/types';
 import { cn } from '@/lib/utils';
@@ -51,6 +54,7 @@ const schema = z.object({
   deliveryFee: z.coerce.number().min(0).optional(),
   trackingInfo: z.string().optional(),
   notes: z.string().optional(),
+  destinationKioskId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -78,6 +82,9 @@ interface Props {
 export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Props) {
   const router = useRouter();
   const { baseProducts } = useBaseProducts();
+  const { user, isDefaultAdmin } = useAuth();
+  const { kiosks } = useKiosks();
+  const accessibleKiosks = useMemo(() => kiosks.filter(kiosk => user && canAccessUnit(user, kiosk.id, { isDefaultAdmin })), [kiosks, user, isDefaultAdmin]);
   const { createPurchase } = usePurchaseOrders();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
     const eligible = items.filter(
@@ -114,6 +121,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
       deliveryFee: 0,
       trackingInfo: '',
       notes: '',
+      destinationKioskId: '',
     },
   });
 
@@ -175,6 +183,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
 
       const orderId = await createPurchase({
         supplierId: quotation.supplierId,
+        destinationKioskId: values.destinationKioskId || undefined,
         origin: 'quotation',
         quotationId: quotation.id,
         receiptMode: values.receiptMode,
@@ -301,6 +310,14 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
           <Form {...form}>
             <form id="create-purchase-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="destinationKioskId" render={({ field }) => (
+                  <FormItem className="col-span-2"><FormLabel>Destino operacional da compra (opcional)</FormLabel>
+                    <Select value={field.value || 'none'} onValueChange={value => field.onChange(value === 'none' ? '' : value)}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
+                      <SelectContent><SelectItem value="none">Não definido</SelectItem>{accessibleKiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent>
+                    </Select><p className="text-xs text-muted-foreground">Define onde a compra é esperada. A conferência não altera o saldo até a entrada dos lotes.</p><FormMessage />
+                  </FormItem>
+                )}/>
                 <FormField
                   control={form.control}
                   name="receiptMode"

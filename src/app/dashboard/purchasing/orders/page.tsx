@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
@@ -105,6 +105,7 @@ export default function PurchaseOrdersPage() {
   const { financials } = usePurchaseFinancials();
   const { entities } = useEntities();
   const [directOpen, setDirectOpen] = useState(false);
+  const [requestedDestination, setRequestedDestination] = useState('');
   const [filter, setFilter] = useState<'all' | OrderStage>('all');
   const period: PurchasingPeriodFilter = useMemo(() => {
     const now = new Date();
@@ -113,6 +114,13 @@ export default function PurchaseOrdersPage() {
   const canView = canViewPurchasing(permissions);
   const canOpenDirectPurchase = canCreatePurchase(permissions);
   const canOpenQuotation = canCreateQuotation(permissions);
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('new') === 'direct' && canOpenDirectPurchase) {
+      setRequestedDestination(query.get('destinationKioskId') ?? '');
+      setDirectOpen(true);
+    }
+  }, [canOpenDirectPurchase]);
 
   const receiptsByOrder = useMemo(
     () => new Map(receipts.map((receipt) => [receipt.purchaseOrderId, receipt])),
@@ -243,7 +251,7 @@ export default function PurchaseOrdersPage() {
           </div>
         )}
 
-        <CreateDirectPurchaseModal open={directOpen} onOpenChange={setDirectOpen} />
+        <CreateDirectPurchaseModal open={directOpen} onOpenChange={setDirectOpen} defaultDestinationKioskId={requestedDestination} />
       </PurchasingPageFrame>
     </PermissionGuard>
   );
