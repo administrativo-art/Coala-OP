@@ -219,9 +219,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[96rem] flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[96rem]">
           {/* Header */}
-          <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
+          <DialogHeader className="shrink-0 space-y-2 border-b px-6 py-4 text-left">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -244,10 +244,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
           </DialogHeader>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
-              <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
+              <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden xl:grid-cols-[240px_minmax(0,1fr)] xl:grid-rows-1">
                 {/* Stepper */}
-                <aside className="border-r bg-muted/40 px-5 py-6">
+                <aside className="hidden border-r bg-muted/40 px-5 py-6 xl:block">
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</p>
                   <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }} />
@@ -278,8 +278,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                 </aside>
 
                 {/* Content */}
-                <ScrollArea className="h-[62vh]">
-                  <div className="px-6 py-6">
+                <ScrollArea className="h-full min-h-0 min-w-0">
+                  <div className="px-4 py-4 sm:px-6 sm:py-6">
                     <div className="mb-5 flex items-start gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
                         {React.createElement(WIZARD_STEPS[currentStep - 1].icon, { className: 'h-4 w-4' })}
@@ -502,7 +502,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
               </div>
 
               {/* Footer */}
-              <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
+              <DialogFooter className="flex shrink-0 flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
                 {saveError && <p role="alert" className="text-xs text-amber-700">{saveError}</p>}
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
                 <div className="hidden flex-col items-center text-center sm:flex">
