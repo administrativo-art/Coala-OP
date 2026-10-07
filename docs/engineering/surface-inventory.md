@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **380 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **383 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -360,6 +360,8 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/public/bio/analytics` | POST | [src/app/api/public/bio/analytics/route.ts](../../src/app/api/public/bio/analytics/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/public/bio/media/[id]` | GET | [src/app/api/public/bio/media/[id]/route.ts](../../src/app/api/public/bio/media/%5Bid%5D/route.ts) | [settings](flows/settings.md) |
 | `/api/purchasing/[...path]` | GET, POST, PATCH, DELETE | [src/app/api/purchasing/[...path]/route.ts](../../src/app/api/purchasing/%5B...path%5D/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/pending-by-destination` | GET | [src/app/api/purchasing/pending-by-destination/route.ts](../../src/app/api/purchasing/pending-by-destination/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/pending-by-destination/ignore` | POST | [src/app/api/purchasing/pending-by-destination/ignore/route.ts](../../src/app/api/purchasing/pending-by-destination/ignore/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/registry/[...path]` | GET, POST, PATCH, DELETE | [src/app/api/registry/[...path]/route.ts](../../src/app/api/registry/%5B...path%5D/route.ts) | [registry](flows/registry.md) |
 | `/api/registry/cnpj/[cnpj]` | GET | [src/app/api/registry/cnpj/[cnpj]/route.ts](../../src/app/api/registry/cnpj/%5Bcnpj%5D/route.ts) | [registry](flows/registry.md) |
 | `/api/rh/employee-profile/[employeeId]` | GET | [src/app/api/rh/employee-profile/[employeeId]/route.ts](../../src/app/api/rh/employee-profile/%5BemployeeId%5D/route.ts) | [rh-bizneo](flows/rh-bizneo.md) |
@@ -380,6 +382,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/stock/item-requests` | GET, POST | [src/app/api/stock/item-requests/route.ts](../../src/app/api/stock/item-requests/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/item-requests/[requestId]` | PATCH, DELETE | [src/app/api/stock/item-requests/[requestId]/route.ts](../../src/app/api/stock/item-requests/%5BrequestId%5D/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/movement-history` | GET | [src/app/api/stock/movement-history/route.ts](../../src/app/api/stock/movement-history/route.ts) | [stock-control](flows/stock-control.md) |
+| `/api/stock/replenishment-policy` | GET | [src/app/api/stock/replenishment-policy/route.ts](../../src/app/api/stock/replenishment-policy/route.ts) | [stock-analysis](flows/stock-analysis.md) |
 | `/api/stock/reposition-activities` | GET, POST | [src/app/api/stock/reposition-activities/route.ts](../../src/app/api/stock/reposition-activities/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/reposition-activities/[activityId]` | PATCH, DELETE | [src/app/api/stock/reposition-activities/[activityId]/route.ts](../../src/app/api/stock/reposition-activities/%5BactivityId%5D/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/reposition-activities/[activityId]/finalize` | POST | [src/app/api/stock/reposition-activities/[activityId]/finalize/route.ts](../../src/app/api/stock/reposition-activities/%5BactivityId%5D/finalize/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
@@ -448,7 +451,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `onTermination` | `onDocumentWritten` | [functions/src/rh/termination.ts](../../functions/src/rh/termination.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `onUserProfileChange` | `onDocumentWritten` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reactivateUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
-| `recalculateMinimumStock` | `onSchedule` | [functions/src/stock-min-recalc.ts](../../functions/src/stock-min-recalc.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `recalculateMinimumStock` | `onSchedule` | [functions/src/stock-min-recalc-schedule.ts](../../functions/src/stock-min-recalc-schedule.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcileGeneratedDocumentRetention` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcilePdvSalesHistory` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `scheduledDateAlerts` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |

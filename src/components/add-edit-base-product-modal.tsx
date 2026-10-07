@@ -19,17 +19,24 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useProducts } from '@/hooks/use-products';
 import { units, unitCategories, type UnitCategory } from '@/lib/conversion';
-import { type BaseProduct } from '@/types';
+import { type BaseProduct, type BaseProductStockLevel } from '@/types';
 import { DollarSign, Calendar, Settings, FileText, Package, Check, ChevronLeft, ChevronRight, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ClassificationManagementModal } from './classification-management-modal';
 import { useClassifications } from '@/hooks/use-classifications';
+import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
+import { operationalMinimum, previewMinimum } from '@/lib/replenishment-display';
+import { useDP } from '@/components/dp-context';
 
 const stockLevelSchema = z.object({
     min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
     safetyStock: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
     leadTime: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
     override: z.boolean(),
+    supplyMode: z.enum(['cd', 'direct']).optional(),
 });
 
 function normalizeBaseProductName(value: string) {
@@ -57,17 +64,23 @@ interface AddEditBaseProductModalProps {
 }
 
 const WIZARD_STEPS = [
-    { id: 1, label: 'Identificação & medida', icon: FileText, description: 'Nome canônico, classificação e a unidade de referência de todo o insumo.' },
+    { id: 1, label: 'Identificação e medida', icon: FileText, description: 'Nome canônico, classificação e a unidade de referência de todo o insumo.' },
     { id: 2, label: 'Parâmetros por quiosque', icon: Package, description: 'Controle de estoque por local. Cada quiosque pode ter limites próprios.' },
 ] as const;
 
 export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }: AddEditBaseProductModalProps) {
-  const { baseProducts, updateBaseProduct, addBaseProduct } = useBaseProducts();
+  const { baseProducts, addBaseProduct } = useBaseProducts();
+  const api = useAuthenticatedApi();
   const { classifications, loading: loadingClassifications } = useClassifications();
   const { kiosks } = useKiosks();
   const { products } = useProducts();
+  const { user, isDefaultAdmin } = useAuth();
+  const { enabled: policyEnabled, loading: policyLoading, error: policyError } = useReplenishmentPolicy();
+  const { units: operationalUnits } = useDP();
   const [isClassificationModalOpen, setIsClassificationModalOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const productToEdit = useMemo(() => {
     if (!productToEditId) return null;
@@ -80,12 +93,12 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   );
 
   const sortedKiosks = useMemo(() => {
-    return [...kiosks].sort((a,b) => {
+    return kiosks.filter(kiosk => user && canAccessUnit(user, kiosk.id, { isDefaultAdmin })).sort((a,b) => {
         if (a.id === 'matriz') return -1;
         if (b.id === 'matriz') return 1;
         return a.name.localeCompare(b.name);
     });
-  }, [kiosks]);
+  }, [kiosks, user, isDefaultAdmin]);
 
   const form = useForm<BaseProductFormValues>({
     resolver: zodResolver(baseProductSchema),
@@ -93,8 +106,11 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   });
 
   useEffect(() => {
+    if (open) { setCurrentStep(1); setSaveError(''); }
+  }, [open, productToEditId]);
+
+  useEffect(() => {
     if (open) {
-      setCurrentStep(1);
       const stockLevelsObject: Record<string, any> = {};
       sortedKiosks.forEach(kiosk => {
         const level = productToEdit?.stockLevels?.[kiosk.id];
@@ -103,6 +119,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
             safetyStock: level?.safetyStock ?? 0,
             leadTime: level?.leadTime ?? 0,
             override: level?.override ?? false,
+            supplyMode: level?.supplyMode ?? 'cd',
         };
       });
 
@@ -135,26 +152,59 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
       form.setValue('unit', availableUnits[0] || '');
   };
 
-  const onSubmit = (values: BaseProductFormValues) => {
+  const onSubmit = async (values: BaseProductFormValues) => {
+    if (policyEnabled === null) return;
     const finalClassification = values.classification === 'none' ? '' : values.classification;
+
+    const stockLevels: Record<string, BaseProductStockLevel> = {};
+    for (const [kioskId, level] of Object.entries(values.stockLevels ?? {})) {
+      const previous = productToEdit?.stockLevels?.[kioskId];
+      const role = operationalUnits.find(unit => unit.externalSource === 'kiosk' && unit.externalId === kioskId)?.stockRole;
+      const mode = role === 'supply' ? 'cd' : level.supplyMode ?? previous?.supplyMode ?? 'cd';
+      if (mode === 'direct' && (!level.leadTime || level.leadTime <= 0)) {
+        form.setError(`stockLevels.${kioskId}.leadTime`, { message: 'Compra direta exige prazo local maior que zero.' });
+        return;
+      }
+      stockLevels[kioskId] = {
+        ...previous,
+        ...(policyEnabled ? {} : { min: level.min, safetyStock: level.safetyStock, override: level.override }),
+        supplyMode: mode,
+        leadTime: policyEnabled && mode === 'cd' && role !== 'supply' ? 2 : level.leadTime,
+        override: policyEnabled ? false : level.override,
+      };
+    }
 
     const dataPayload: Partial<BaseProduct> = {
       name: normalizeBaseProductName(values.name),
       classification: finalClassification,
       category: values.category,
       unit: values.unit,
-      stockLevels: values.stockLevels,
-      consumptionMonths: values.consumptionMonths,
+      stockLevels,
+      ...(policyEnabled ? {} : { consumptionMonths: values.consumptionMonths }),
       minStockRecalcPeriod: values.minStockRecalcPeriod,
       initialCostPerUnit: values.initialCostPerUnit,
     };
 
-    if (productToEdit) {
-      updateBaseProduct({ ...productToEdit, ...dataPayload });
-    } else {
-      addBaseProduct(dataPayload as Omit<BaseProduct, 'id'>);
+    setSaving(true);
+    setSaveError('');
+    try {
+      if (productToEdit) {
+        const result = await api<{ ok: boolean; recalculation?: { status: 'pending' } }>(`/api/registry/base-products/${productToEdit.id}`, {
+          method: 'PATCH', json: dataPayload, fallbackError: 'Não foi possível atualizar o insumo.',
+        });
+        if (result.recalculation?.status === 'pending') {
+          setSaveError('Configuração salva. O recálculo ainda está pendente; confira o estado antes de usar a sugestão.');
+          return;
+        }
+      } else {
+        await addBaseProduct(dataPayload as Omit<BaseProduct, 'id'>);
+      }
+      onOpenChange(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Não foi possível salvar o insumo.');
+    } finally {
+      setSaving(false);
     }
-    onOpenChange(false);
   };
 
   const handleNext = async () => {
@@ -273,7 +323,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               <FormMessage />
                             </FormItem>
                           )}/>
-                          <FormField control={form.control} name="consumptionMonths" render={({ field }) => (
+                          {policyEnabled === false && <FormField control={form.control} name="consumptionMonths" render={({ field }) => (
                             <FormItem>
                               <div className="flex items-center justify-between">
                                 <FormLabel className="flex items-center gap-1.5"><Calendar className="h-4 w-4 text-muted-foreground"/> Sugerir pedido para</FormLabel>
@@ -282,7 +332,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               <FormControl><Input type="number" placeholder="Ex: 2" {...field} value={field.value ?? ''} /></FormControl>
                               <FormMessage />
                             </FormItem>
-                          )}/>
+                          )}/>}
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -341,6 +391,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                     {/* STEP 2 */}
                     {currentStep === 2 && (
                       <div className="space-y-4">
+                        {policyEnabled === null && <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{policyError ? 'Política de reposição indisponível. Confira a conexão antes de alterar parâmetros.' : 'Consultando a política de reposição…'}</p>}
+                        {policyEnabled === false && <p className="rounded-md border bg-muted/40 p-3 text-sm">O mínimo operacional ainda usa a regra legada. A prévia da nova política aparece por unidade para comparação e não determina pedidos.</p>}
+                        {policyEnabled === true && <p className="rounded-md border bg-muted/40 p-3 text-sm">Meta automática: média diária × {form.watch('minStockRecalcPeriod') === 'monthly' ? '30' : '15'} dias × 1,3. A margem de 30% entra uma vez. Prazo de entrega e validade são informações separadas.</p>}
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                             {sortedKiosks.length} loca{sortedKiosks.length === 1 ? 'l' : 'is'}
@@ -350,11 +403,9 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               <FormLabel className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                 Base do estoque mínimo automático
                                 <InfoTooltip title="Como o estoque mínimo é calculado">
-                                  <p>Nos dias 1 e 16 de cada mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses (12 quinzenas fechadas)</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda (equivale a usar o desvio padrão típico de um insumo de giro estável, arredondado para uma regra única).</p>
-                                  <p>Aqui você escolhe se essa média é calculada por <strong>mês</strong> (padrão, 6 pontos) ou por <strong>quinzena</strong> (12 pontos) — quinzenal reage mais rápido a mudanças recentes de consumo.</p>
-                                  <p>Itens em <strong>unidades</strong> são arredondados para cima; itens em <strong>kg/L</strong> mantêm casas decimais.</p>
-                                  <p>Marque <strong>&quot;Manter valor manual&quot;</strong> num local para digitar o mínimo ali — o cálculo automático passa a ignorar esse local. Desmarcado, o campo fica bloqueado e o valor é recalculado nos dias 1 e 16.</p>
-                                  <p>Unidades de abastecimento (como o CD) usam a <strong>soma do consumo</strong> das unidades comerciais dos grupos que atendem, com a mesma média e margem.</p>
+                                  <p>Com a política ativa, a meta usa média diária dos 180 dias completos anteriores × 30 dias (mensal) ou 15 dias (quinzenal) × 1,3. O mínimo é sempre automático.</p>
+                                  <p>Consumo interno do PDV é a fonte principal; transferências podem aparecer como aproximação de abastecimento. Dados incompletos deixam o cálculo pendente.</p>
+                                  <p>O CD considera somente unidades que recebem dele. Compra direta usa prazo próprio da unidade; rota via CD usa prazo operacional de dois dias na unidade comercial.</p>
                                 </InfoTooltip>
                               </FormLabel>
                               <div className="flex h-9 items-center gap-2 rounded-md border bg-background px-3">
@@ -376,14 +427,15 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                           )}/>
                         </div>
                         <div className="rounded-md border">
-                          <Table>
+                          <Table className="min-w-[760px] table-fixed">
                             <TableHeader>
                               <TableRow>
-                                <TableHead>Quiosque</TableHead>
-                                <TableHead className="text-center">Est. mínimo</TableHead>
-                                <TableHead className="text-center">Est. segurança</TableHead>
+                                <TableHead className="w-[23%]">Quiosque</TableHead>
+                                <TableHead className="text-center">Mínimo operacional</TableHead>
+                                {policyEnabled === false && <TableHead className="text-center">Segurança legada</TableHead>}
+                                <TableHead className="text-center">Compra direta</TableHead>
                                 <TableHead className="text-center">Lead time (dias)</TableHead>
-                                <TableHead className="text-center">Manter valor manual</TableHead>
+                                {policyEnabled === false && <TableHead className="text-center">Manter valor manual</TableHead>}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -391,15 +443,20 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                 const autoCalc = productToEdit?.stockLevels?.[kiosk.id];
                                 const lastAutoCalculatedAt = autoCalc?.lastAutoCalculatedAt;
                                 const manualMin = form.watch(`stockLevels.${kiosk.id}.override`) === true;
+                                const minimum = operationalMinimum(autoCalc, policyEnabled === true);
+                                const preview = productToEdit ? previewMinimum(productToEdit, kiosk.id, policyEnabled === true) : null;
+                                const mode = form.watch(`stockLevels.${kiosk.id}.supplyMode`) ?? 'cd';
+                                const role = operationalUnits.find(unit => unit.externalSource === 'kiosk' && unit.externalId === kiosk.id)?.stockRole;
                                 return (
-                                <TableRow key={kiosk.id}>
-                                  <TableCell className="font-medium">{kiosk.name}</TableCell>
+                                <TableRow key={kiosk.id} className="[&>td]:align-top [&>td]:py-4">
+                                  <TableCell className="font-medium"><div className="flex min-h-10 items-center">{kiosk.name}</div></TableCell>
                                   <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.min`} render={({ field }) => (
-                                      <FormItem>
-                                        <FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} disabled={!manualMin} aria-label={`Estoque mínimo — ${kiosk.name}`} title={manualMin ? undefined : 'Calculado automaticamente. Ative "Manter valor manual" para editar.'} /></FormControl>
+                                      <FormItem className="space-y-0">
+                                        {policyEnabled === true ? <div className="text-right text-sm"><div className="flex min-h-10 items-center justify-end"><strong>{minimum.minimum === null ? minimum.label : `${minimum.minimum} ${unitWatch}`}</strong></div><p className="pt-2 text-xs text-muted-foreground">{minimum.sourceLabel}{minimum.limitation ? ` · ${minimum.limitation}` : ''}</p></div> : <FormControl><Input type="number" className="h-10 w-full text-right" {...field} value={field.value ?? ''} disabled={policyEnabled === null || !manualMin} aria-label={`Estoque mínimo — ${kiosk.name}`} title={manualMin ? undefined : 'Calculado automaticamente no motor legado.'} /></FormControl>}
+                                        {preview && <FormDescription className="pt-2 text-right text-[10px]">Prévia nova política: {preview.minimum === null ? preview.label : `${preview.minimum} ${unitWatch}`} · {preview.sourceLabel}{preview.limitation ? ` · ${preview.limitation}` : ''}</FormDescription>}
                                         {lastAutoCalculatedAt && (
-                                          <FormDescription className="text-right text-[10px]">
+                                          <FormDescription className="pt-2 text-right text-[10px]">
                                             Calc. automaticamente em {new Date(lastAutoCalculatedAt).toLocaleDateString('pt-BR')}
                                           </FormDescription>
                                         )}
@@ -407,31 +464,36 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                       </FormItem>
                                     )}/>
                                   </TableCell>
-                                  <TableCell>
+                                  {policyEnabled === false && <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.safetyStock`} render={({ field }) => (
-                                      <FormItem><FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                      <FormItem className="space-y-0"><FormControl><Input type="number" className="h-10 w-full text-right" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
+                                  </TableCell>}
+                                  <TableCell>
+                                    {role === 'supply' ? <div className="flex min-h-10 items-center justify-center text-center text-xs text-muted-foreground">Não se aplica</div> : <FormField control={form.control} name={`stockLevels.${kiosk.id}.supplyMode`} render={({ field }) => (
+                                      <FormItem className="space-y-0"><div className="flex h-10 items-center justify-center"><FormControl><Switch checked={field.value === 'direct'} onCheckedChange={(checked) => field.onChange(checked ? 'direct' : 'cd')} disabled={policyEnabled === null} aria-label={`Compra direta — ${kiosk.name}`} /></FormControl></div><FormDescription className="pt-2 text-center text-[10px]">{field.value === 'direct' ? 'Compra na unidade' : 'Recebe do CD'}</FormDescription><FormMessage /></FormItem>
+                                    )}/>}
                                   </TableCell>
                                   <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.leadTime`} render={({ field }) => (
-                                      <FormItem><FormControl><Input type="number" className="w-full text-right" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                      <FormItem className="space-y-0"><FormControl><Input type="number" min={mode === 'direct' ? 1 : 0} className="h-10 w-full text-right" {...field} value={policyEnabled === true && role !== 'supply' && mode === 'cd' ? 2 : field.value ?? ''} readOnly={policyEnabled === true && role !== 'supply' && mode === 'cd'} disabled={policyEnabled === null} aria-label={`Prazo de abastecimento — ${kiosk.name}`} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                   </TableCell>
-                                  <TableCell>
+                                  {policyEnabled === false && <TableCell>
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.override`} render={({ field }) => (
-                                      <FormItem className="flex flex-col items-center space-y-0">
-                                        <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} aria-label={`Manter valor manual — ${kiosk.name}`} /></FormControl>
+                                      <FormItem className="space-y-0">
+                                        <div className="flex h-10 items-center justify-center"><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} aria-label={`Manter valor manual — ${kiosk.name}`} /></FormControl></div>
                                         <FormMessage />
                                       </FormItem>
                                     )}/>
-                                  </TableCell>
+                                  </TableCell>}
                                 </TableRow>
                               );})}
                             </TableBody>
                           </Table>
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          O alerta de reposição dispara quando o estoque atinge <span className="font-medium text-foreground">mínimo + segurança</span> (em {unitWatch}). O <span className="font-medium text-foreground">lead time</span> antecipa o pedido conforme o prazo de entrega. Deixe <span className="font-medium text-foreground">0</span> nos quiosques que não controlam este insumo. Com <span className="font-medium text-foreground">&quot;Manter valor manual&quot;</span> desligado, o estoque mínimo desse local é calculado automaticamente nos dias 1 e 16 e o campo fica bloqueado; ligue para digitar o valor. Unidades de abastecimento (como o CD) somam o consumo das unidades que atendem, conforme o cadastro de unidades e grupos.
+                          {policyEnabled === true ? 'Compra a caminho aparece como aviso e não reduz a falta física. O prazo de compra direta deve ser positivo no local; via CD, a unidade comercial usa dois dias. A validade continua por lote.' : 'Enquanto a política nova está desativada, mínimo manual, estoque de segurança e meses para sugerir pedido pertencem ao motor legado. A prévia não altera o mínimo operacional.'}
                         </p>
                       </div>
                     )}
@@ -441,6 +503,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
               {/* Footer */}
               <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
+                {saveError && <p role="alert" className="text-xs text-amber-700">{saveError}</p>}
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
                 <div className="hidden flex-col items-center text-center sm:flex">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</span>
@@ -451,7 +514,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                   {currentStep < WIZARD_STEPS.length ? (
                     <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
                   ) : (
-                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600">{productToEdit ? 'Salvar alterações' : 'Adicionar produto'}</Button>
+                    <Button type="submit" disabled={policyEnabled === null || policyLoading || saving} className="bg-indigo-500 hover:bg-indigo-600">{saving ? 'Salvando…' : productToEdit ? 'Salvar alterações' : 'Adicionar produto'}</Button>
                   )}
                 </div>
               </DialogFooter>

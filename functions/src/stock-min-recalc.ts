@@ -1,348 +1,295 @@
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { onSchedule } from "firebase-functions/v2/scheduler";
-import * as logger from "firebase-functions/logger";
+import { type Firestore, type Query, type DocumentData } from 'firebase-admin/firestore';
+import { belemDate, calculateReplenishment, effectiveLeadTime, historyStart, historyEnd, type DemandDay, type DemandSource, type SupplyMode } from './replenishment-policy.js';
 
-const TIME_ZONE = "America/Belem";
-const HISTORY_MONTHS = 6;
-const HISTORY_QUINZENAS = HISTORY_MONTHS * 2;
-const SAFETY_MARGIN = 1.3; // +30% sobre a média de consumo
-const MOVEMENT_HISTORY_READ_LIMIT = 20000; // salvaguarda: sem índice composto (type, timestamp) hoje, lemos tudo e filtramos em memória
+const PAGE_SIZE = 400;
+const READ_CAP = 20_000;
+type ProductInfo = { baseProductId: string; factor: number | null };
+type Report = { kioskId: string; date: string; quantities: Map<string, number>; baseIds: Set<string>; usable: boolean };
+type Transfer = { kioskId: string; date: string; baseProductId: string; quantity: number };
 
-type Period = "monthly" | "biweekly";
-
-type ConsumptionEntry = {
-  baseProductId: string;
-  kioskId: string;
-  year: number;
-  month: number;
-  day: number;
-  quantity: number;
-};
-
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
+async function boundedDocs(query: Query<DocumentData>, label: string) {
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const page = await (cursor ? query.startAfter(cursor) : query).limit(PAGE_SIZE).get();
+    docs.push(...page.docs);
+    if (docs.length > READ_CAP) throw new Error(`${label}: read cap exceeded; no partial recalculation committed`);
+    if (page.size < PAGE_SIZE) return docs;
+    cursor = page.docs[page.docs.length - 1];
+  }
 }
 
-type Quinzena = { year: number; month: number; half: 1 | 2 };
-
-function quinzenaKey({ year, month, half }: Quinzena): string {
-  return `${year}-${pad2(month)}-${half}`;
+function conversionFactor(product: DocumentData, base: DocumentData): number | null {
+  const size = Number(product.packageSize);
+  if (!Number.isFinite(size) || size <= 0) return null;
+  const category = String(base.category ?? '');
+  const factors: Record<string, Record<string, number>> = {
+    Volume: { l: 1, ml: 0.001, bag: 1 },
+    Massa: { kg: 1, g: 0.001, mg: 0.000001 },
+    Unidade: { un: 1, pacote: 1, bag: 1, caixa: 1 },
+    Embalagem: { un: 1, pacote: 1, bag: 1, caixa: 1 },
+    Vestimenta: { 'peça': 1, un: 1 },
+  };
+  const normalize = (value: unknown) => {
+    const unit = String(value ?? '').trim().toLowerCase();
+    return unit === 'unidade' ? 'un' : unit;
+  };
+  const from = normalize(product.unit), to = normalize(base.unit);
+  const table = factors[category];
+  if (!table || table[from] === undefined || table[to] === undefined) return null;
+  return size * table[from] / table[to];
 }
 
-function halfOfDay(day: number): 1 | 2 {
-  return day <= 15 ? 1 : 2;
+/** Unit relationship independent of the supply mode of each ingredient. */
+export async function loadSupplyMap(db: Firestore): Promise<Map<string, Set<string>>> {
+  const [unitDocs, groupDocs] = await Promise.all([
+    boundedDocs(db.collection('dp_units'), 'dp_units'),
+    boundedDocs(db.collection('dp_unitGroups'), 'dp_unitGroups'),
+  ]);
+  const groups = new Map(groupDocs.map(doc => [doc.id, doc.get('suppliedGroupIds') as string[] | undefined]));
+  const units: Array<{ kioskId: string; groupId: string; role: string }> = [];
+  for (const doc of unitDocs) {
+    const data = doc.data();
+    if (data.isArchived || data.externalSource !== 'kiosk' || typeof data.externalId !== 'string') continue;
+    units.push({ kioskId: data.externalId, groupId: String(data.groupId ?? ''), role: data.stockRole ?? 'commercial' });
+  }
+  const map = new Map<string, Set<string>>();
+  for (const supplier of units) {
+    if (supplier.role !== 'supply' && supplier.role !== 'mixed') continue;
+    const servedGroups = new Set(groups.get(supplier.groupId) ?? []);
+    if (supplier.role === 'mixed') servedGroups.add(supplier.groupId);
+    map.set(supplier.kioskId, new Set(units
+      .filter(unit => unit.role !== 'supply' && servedGroups.has(unit.groupId))
+      .map(unit => unit.kioskId)));
+  }
+  return map;
 }
 
-/**
- * As HISTORY_QUINZENAS quinzenas completas anteriores à quinzena corrente (1ª: dias 1–15; 2ª: dia 16 ao fim).
- * Executando no dia 1, equivale aos 6 meses completos anteriores; no dia 16, a janela avança uma quinzena e
- * passa a incluir a 1ª metade do mês corrente — por isso o recálculo de dois em dois (dias 1 e 16) traz números novos.
- */
-function lastCompleteQuinzenas(now: Date): Quinzena[] {
-  const list: Quinzena[] = [];
-  let year = now.getUTCFullYear();
-  let month = now.getUTCMonth() + 1; // 1-12
-  let half: 1 | 2 = halfOfDay(now.getUTCDate());
-  for (let i = 0; i < HISTORY_QUINZENAS; i++) {
-    if (half === 2) {
-      half = 1;
-    } else {
-      half = 2;
-      month -= 1;
-      if (month === 0) {
-        month = 12;
-        year -= 1;
+async function loadReports(db: Firestore, start: string, end: string, kioskIds?: Set<string>): Promise<Report[]> {
+  const years = [...new Set([Number(start.slice(0, 4)), Number(end.slice(0, 4))])];
+  const reports: Report[] = [];
+  for (const year of years) {
+    const firstMonth = year === Number(start.slice(0, 4)) ? Number(start.slice(5, 7)) : 1;
+    const lastMonth = year === Number(end.slice(0, 4)) ? Number(end.slice(5, 7)) : 12;
+    const queries = kioskIds
+      ? [...kioskIds].map(id => db.collection('consumptionReports').where('kioskId', '==', id).where('year', '==', year))
+      : [db.collection('consumptionReports').where('year', '==', year)];
+    for (const query of queries) {
+    const docs = (await boundedDocs(query.where('month', '>=', firstMonth)
+      .where('month', '<=', lastMonth).orderBy('month'), `consumptionReports ${year}`)).filter(doc => {
+      const data = doc.data();
+      const day = Number(data.day ?? doc.id.match(/_\d{4}_\d{2}_(\d{1,2})$/)?.[1]);
+      const date = `${data.year}-${String(data.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return date >= start && date <= end;
+    });
+    for (let offset = 0; offset < docs.length; offset += 100) {
+      const chunk = docs.slice(offset, offset + 100);
+      const sales = await db.getAll(...chunk.map(doc => db.collection('salesReports').doc(doc.id.replace(/^cons_/, 'sales_'))));
+      const states = await db.getAll(...chunk.map(doc => {
+        const data = doc.data();
+        const day = Number(data.day ?? doc.id.match(/_\d{4}_\d{2}_(\d{1,2})$/)?.[1]);
+        const date = `${data.year}-${String(data.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return db.collection('pdvSyncReconciliationStates').doc(`${data.kioskId}_${date}`);
+      }));
+      for (let i = 0; i < chunk.length; i++) {
+        const doc = chunk[i], data = doc.data();
+        const day = Number(data.day ?? doc.id.match(/_\d{4}_\d{2}_(\d{1,2})$/)?.[1]);
+        const date = `${data.year}-${String(data.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (!data.kioskId || !Number.isInteger(day) || day < 1 || day > 31 || date < start || date > end) continue;
+        const sale = sales[i].data();
+        const diag = sale?.syncDiagnostics;
+        const quality = data.consumptionQuality;
+        let usable = Boolean(sale?.reconciliationStatus === 'verified' &&
+          states[i].get('status') === 'verified' &&
+          data.status === 'completed' && Array.isArray(data.results) &&
+          diag && Number.isFinite(diag.couponsReceived) &&
+          diag.couponsWithoutItems === 0 &&
+          diag.couponsReceived - diag.couponsCancelled - diag.couponsWithoutItems === sale.sourceCouponCount &&
+          states[i].get('appliedMetrics')?.couponCount === sale.sourceCouponCount &&
+          states[i].get('appliedMetrics')?.revenueCents === sale.sourceRevenueCents &&
+          diag.itemsUnmapped === 0 && Array.isArray(diag.unmappedSkus) &&
+          diag.unmappedSkus.length === 0 && quality?.version === 1 && quality.issues === 0);
+        const baseIds = new Set<string>((Array.isArray(data.results) ? data.results : [])
+          .filter((item: DocumentData) => typeof item?.baseProductId === 'string')
+          .map((item: DocumentData) => item.baseProductId));
+        const quantities = new Map<string, number>();
+        if (usable) for (const item of data.results) {
+          if (typeof item?.baseProductId !== 'string' || !Number.isFinite(item.consumedQuantity) || item.consumedQuantity < 0) {
+            usable = false;
+            break;
+          }
+          quantities.set(item.baseProductId, (quantities.get(item.baseProductId) ?? 0) + item.consumedQuantity);
+        }
+        reports.push({ kioskId: data.kioskId, date, quantities, baseIds, usable });
       }
     }
-    list.push({ year, month, half });
-  }
-  return list.reverse();
-}
-
-/** consumptionReports gerados via `pdv-sync.ts` nem sempre têm o campo `day` (alguns docs antigos só têm no id: cons_sync_<kiosk>_YYYY_MM_DD). */
-function dayFromDocId(id: string): number | null {
-  const match = id.match(/_(\d{1,2})$/);
-  return match ? Number(match[1]) : null;
-}
-
-async function loadConsumptionReportEntries(db: Firestore, years: number[]): Promise<ConsumptionEntry[]> {
-  const snap = await db.collection("consumptionReports").where("year", "in", years).get();
-  const entries: ConsumptionEntry[] = [];
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const day = typeof data.day === "number" ? data.day : dayFromDocId(doc.id);
-    if (!data.kioskId || !data.year || !data.month || !day || !Array.isArray(data.results)) continue;
-    for (const item of data.results) {
-      if (!item?.baseProductId || typeof item.consumedQuantity !== "number") continue;
-      entries.push({
-        baseProductId: item.baseProductId,
-        kioskId: data.kioskId,
-        year: data.year,
-        month: data.month,
-        day,
-        quantity: item.consumedQuantity,
-      });
     }
   }
-  return entries;
+  return reports;
 }
 
-/** movementHistory.productId referencia a coleção `products` (SKU específico), não `baseProducts` diretamente. */
-async function loadProductToBaseProductMap(db: Firestore): Promise<Map<string, string>> {
-  const snap = await db.collection("products").select("baseProductId").get();
-  const map = new Map<string, string>();
-  for (const doc of snap.docs) {
-    const baseProductId = doc.get("baseProductId");
-    if (typeof baseProductId === "string") map.set(doc.id, baseProductId);
+async function loadFirstReportDates(db: Firestore, kioskIds: Set<string>, fallback: string) {
+  const dates = new Map<string, string>();
+  for (const kioskId of kioskIds) {
+    const first = await db.collection('consumptionReports').where('kioskId', '==', kioskId)
+      .orderBy('year').orderBy('month').orderBy('day').limit(1).get();
+    const value = first.docs[0]?.data();
+    const date = value && Number.isInteger(value.day) && value.day > 0
+      ? `${value.year}-${String(value.month).padStart(2, '0')}-${String(value.day).padStart(2, '0')}`
+      : fallback;
+    dates.set(kioskId, date);
   }
-  return map;
+  return dates;
 }
 
-/**
- * Fonte de fallback para insumos que não passam pela sincronização de vendas do PDV
- * (ex.: limpeza, EPI) — consumo lançado manualmente como "Ajuste de contagem".
- */
-async function loadMovementHistoryEntries(
-  db: Firestore,
-  cutoff: Date,
-  productToBaseProduct: Map<string, string>,
-): Promise<ConsumptionEntry[]> {
-  const snap = await db
-    .collection("movementHistory")
-    .where("type", "==", "SAIDA_CONSUMO")
-    .limit(MOVEMENT_HISTORY_READ_LIMIT)
-    .get();
-  if (snap.size === MOVEMENT_HISTORY_READ_LIMIT) {
-    logger.warn("movementHistory atingiu o limite de leitura; crie o índice composto e pagine por data.", {
-      source: "recalculateMinimumStock",
-      readLimit: MOVEMENT_HISTORY_READ_LIMIT,
-    });
-  }
-  const entries: ConsumptionEntry[] = [];
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    const timestampValue = data.timestamp;
-    if (!timestampValue || typeof timestampValue.toDate !== "function") continue;
-    const date: Date = timestampValue.toDate();
-    if (date < cutoff) continue;
-    const baseProductId = productToBaseProduct.get(data.productId);
-    const kioskId = data.fromKioskId;
-    const quantity = data.quantityChange;
-    if (!baseProductId || !kioskId || typeof quantity !== "number") continue;
-    entries.push({
-      baseProductId,
-      kioskId,
-      year: date.getUTCFullYear(),
-      month: date.getUTCMonth() + 1,
-      day: date.getUTCDate(),
-      quantity,
-    });
-  }
-  return entries;
-}
-
-type StockRole = "commercial" | "mixed" | "supply";
-
-/**
- * Mapeia, para cada quiosque de estoque que seja unidade de abastecimento (ou mista), os quiosques
- * cujo consumo ele deve somar. Vem do cadastro do módulo de Pessoal:
- * - `dp_units.externalId` (com `externalSource: "kiosk"`) liga a unidade ao quiosque do estoque;
- * - `dp_units.stockRole`: "commercial" (padrão), "mixed" ou "supply";
- * - `dp_unitGroups.suppliedGroupIds`: grupos que o grupo da unidade de abastecimento atende.
- * Uma unidade mista atende também o próprio grupo.
- */
-export async function loadSupplyMap(db: Firestore): Promise<Map<string, Set<string>>> {
-  const [unitsSnap, groupsSnap] = await Promise.all([
-    db.collection("dp_units").get(),
-    db.collection("dp_unitGroups").get(),
+async function loadTransfers(db: Firestore, start: string, end: string, products: Map<string, ProductInfo>) {
+  const lower = `${start}T03:00:00.000Z`;
+  const upper = new Date(Date.parse(`${end}T03:00:00.000Z`) + 86_400_000).toISOString();
+  const [strings, timestamps] = await Promise.all([
+    boundedDocs(db.collection('movementHistory')
+      .where('type', '==', 'TRANSFERENCIA_ENTRADA')
+      .where('timestamp', '>=', lower)
+      .where('timestamp', '<', upper), 'movementHistory ISO 180d'),
+    boundedDocs(db.collection('movementHistory')
+      .where('type', '==', 'TRANSFERENCIA_ENTRADA')
+      .where('timestamp', '>=', new Date(lower))
+      .where('timestamp', '<', new Date(upper)), 'movementHistory Timestamp 180d'),
   ]);
-
-  const suppliedByGroup = new Map<string, string[]>();
-  for (const doc of groupsSnap.docs) {
-    const ids = doc.get("suppliedGroupIds");
-    if (Array.isArray(ids)) suppliedByGroup.set(doc.id, ids.filter((id): id is string => typeof id === "string"));
-  }
-
-  type UnitInfo = { kioskId: string; groupId?: string; role: StockRole };
-  const units: UnitInfo[] = [];
-  for (const doc of unitsSnap.docs) {
-    const data = doc.data();
-    if (data.isArchived === true) continue;
-    if (data.externalSource !== "kiosk" || typeof data.externalId !== "string" || !data.externalId) continue;
-    const role: StockRole = data.stockRole === "supply" || data.stockRole === "mixed" ? data.stockRole : "commercial";
-    units.push({ kioskId: data.externalId, groupId: typeof data.groupId === "string" ? data.groupId : undefined, role });
-  }
-
-  const supplyMap = new Map<string, Set<string>>();
-  for (const supplier of units) {
-    if (supplier.role === "commercial" || !supplier.groupId) continue;
-    const servedGroups = new Set<string>(suppliedByGroup.get(supplier.groupId) ?? []);
-    if (supplier.role === "mixed") servedGroups.add(supplier.groupId);
-    if (servedGroups.size === 0) continue;
-    const served = new Set<string>();
-    for (const unit of units) {
-      if (unit.role === "supply" || !unit.groupId || !servedGroups.has(unit.groupId)) continue;
-      served.add(unit.kioskId);
+  const docs = new Map([...strings, ...timestamps].map(doc => [doc.id, doc])).values();
+  const transfers: Transfer[] = [];
+  const invalid = new Set<string>();
+  for (const doc of docs) {
+    const movement = doc.data();
+    if (movement.type !== 'TRANSFERENCIA_ENTRADA' || movement.reverted === true || !movement.toKioskId) continue;
+    const product = products.get(movement.productId);
+    if (!product) continue; // It belongs to a different ingredient in a scoped recalculation.
+    if (!movement.activityId || product.factor === null || !Number.isFinite(movement.quantityChange) || movement.quantityChange <= 0) {
+      invalid.add(`${product.baseProductId}:${movement.toKioskId}`);
+      continue;
     }
-    if (served.size > 0) supplyMap.set(supplier.kioskId, served);
+    const timestamp = typeof movement.timestamp?.toDate === 'function'
+      ? movement.timestamp.toDate() : new Date(movement.timestamp);
+    if (!Number.isFinite(timestamp.getTime())) continue;
+    transfers.push({ kioskId: movement.toKioskId, date: belemDate(timestamp),
+      baseProductId: product.baseProductId, quantity: movement.quantityChange * product.factor });
   }
-  return supplyMap;
+  return { entries: transfers, invalid };
 }
 
-function roundForUnit(value: number, unit: string | undefined): number {
-  if (unit === "un") return Math.ceil(value);
-  return Math.round(value * 100) / 100;
-}
-
-function groupBy<T, K>(entries: T[], keyOf: (entry: T) => K): Map<K, T[]> {
-  const map = new Map<K, T[]>();
-  for (const entry of entries) {
-    const key = keyOf(entry);
-    const list = map.get(key) ?? [];
-    list.push(entry);
-    map.set(key, list);
-  }
-  return map;
-}
-
-export type RecalculationSummary = {
-  updated: number;
-  skippedArchived: number;
-  skippedOverride: number;
-  skippedNoData: number;
-};
-
-/**
- * Recalcula `stockLevels.<kioskId>.min` de cada insumo (baseProduct), usando a média de
- * consumo dos últimos 6 meses + 30% de margem de segurança. Extraída do trigger `onSchedule`
- * abaixo para poder ser exercitada por teste de integração contra o emulador do Firestore.
- *
- * Fonte de consumo: primeiro tenta `consumptionReports` (consumo ligado a vendas via PDV);
- * se o insumo nunca aparece lá, usa `movementHistory` (tipo SAIDA_CONSUMO — baixa manual,
- * ex. limpeza/EPI) como alternativa. As duas fontes nunca são somadas para o mesmo insumo,
- * pra não contar em dobro consumo de venda + ajuste manual de contagem.
- *
- * `minStockRecalcPeriod` em cada baseProduct escolhe a granularidade da média: 'monthly'
- * (padrão) usa a média mensal dos 6 meses; 'biweekly' usa a média quinzenal (12 quinzenas).
- * Itens em "un" são arredondados para cima; os demais mantêm 2 casas decimais.
- *
- * `stockLevels.<kioskId>.override === true` ("Manter valor manual") trava o item nesse quiosque —
- * pula e não sobrescreve um valor ajustado manualmente.
- *
- * Unidades de abastecimento/mistas (ver `loadSupplyMap`) usam a soma do consumo das unidades
- * atendidas, na mesma base mensal/quinzenal, com a mesma margem de 30%.
- */
-export async function runMinimumStockRecalculation(db: Firestore, now: Date): Promise<RecalculationSummary> {
-  const quinzenas = lastCompleteQuinzenas(now);
-  const windowKeys = new Set(quinzenas.map(quinzenaKey));
-  const years = Array.from(new Set(quinzenas.map((q) => q.year)));
-  const cutoff = new Date(Date.UTC(quinzenas[0].year, quinzenas[0].month - 1, quinzenas[0].half === 1 ? 1 : 16));
-
-  const [productToBaseProduct, baseProductsSnap, supplyMap] = await Promise.all([
-    loadProductToBaseProductMap(db),
-    db.collection("baseProducts").get(),
+export type RecalculationSummary = { updated: number; pending: number; zeroedCd: number; skippedArchived: number };
+export async function runMinimumStockRecalculation(
+  db: Firestore, now: Date, baseProductId?: string, enabled = true,
+): Promise<RecalculationSummary> {
+  const start = historyStart(now), end = historyEnd(now);
+  const [bases, supplyMap] = await Promise.all([
+    baseProductId
+      ? db.collection('baseProducts').doc(baseProductId).get().then(doc => doc.exists ? [doc] : [])
+      : boundedDocs(db.collection('baseProducts'), 'baseProducts'),
     loadSupplyMap(db),
   ]);
-
-  const [reportEntries, movementEntries] = await Promise.all([
-    loadConsumptionReportEntries(db, years),
-    loadMovementHistoryEntries(db, cutoff, productToBaseProduct),
-  ]);
-
-  const reportByProduct = groupBy(reportEntries, (e) => e.baseProductId);
-  const movementByProduct = groupBy(movementEntries, (e) => e.baseProductId);
-
-  let batch = db.batch();
-  let batchCount = 0;
-  const summary: RecalculationSummary = { updated: 0, skippedArchived: 0, skippedOverride: 0, skippedNoData: 0 };
-
-  for (const doc of baseProductsSnap.docs) {
-    const product = doc.data();
-    if (product.isArchived === true) {
-      summary.skippedArchived++;
-      continue;
-    }
-
-    const period: Period = product.minStockRecalcPeriod === "biweekly" ? "biweekly" : "monthly";
-    // média por mês: total dos 6 meses / 6; média quinzenal: total das 12 quinzenas / 12
-    const divisor = period === "monthly" ? HISTORY_MONTHS : HISTORY_QUINZENAS;
-
-    // fonte primária: consumptionReports; só cai para movementHistory se o insumo nunca aparecer lá
-    const sourceEntries = reportByProduct.get(doc.id) ?? movementByProduct.get(doc.id) ?? [];
-    if (sourceEntries.length === 0) {
-      summary.skippedNoData++;
-      continue;
-    }
-
-    const byKiosk = groupBy(sourceEntries, (e) => e.kioskId);
-
-    const stockLevels: Record<string, { min?: number; override?: boolean }> = product.stockLevels ?? {};
-    // Quiosques sem linha no cadastro do insumo também entram assim que tiverem consumo
-    // (ou, no caso de unidade de abastecimento, consumo das unidades atendidas).
-    const kioskIds = new Set<string>([...Object.keys(stockLevels), ...byKiosk.keys(), ...supplyMap.keys()]);
-
-    for (const kioskId of kioskIds) {
-      const level = stockLevels[kioskId];
-      if (level?.override) {
-        summary.skippedOverride++;
-        continue;
-      }
-
-      const served = supplyMap.get(kioskId);
-      const kioskEntries = served
-        ? Array.from(served).flatMap((servedKioskId) => byKiosk.get(servedKioskId) ?? [])
-        : byKiosk.get(kioskId) ?? [];
-      if (kioskEntries.length === 0) {
-        summary.skippedNoData++;
-        continue;
-      }
-
-      let total = 0;
-      for (const entry of kioskEntries) {
-        if (!windowKeys.has(quinzenaKey({ year: entry.year, month: entry.month, half: halfOfDay(entry.day) }))) continue; // fora da janela
-        total += entry.quantity;
-      }
-      const mean = total / divisor;
-      if (mean <= 0) {
-        summary.skippedNoData++;
-        continue;
-      }
-
-      const newMin = roundForUnit(mean * SAFETY_MARGIN, product.unit);
-
-      batch.update(doc.ref, {
-        [`stockLevels.${kioskId}.min`]: newMin,
-        [`stockLevels.${kioskId}.override`]: false,
-        [`stockLevels.${kioskId}.lastAutoCalculatedAt`]: now.toISOString(),
-        [`stockLevels.${kioskId}.lastAutoCalculatedMean`]: Math.round(mean * 100) / 100,
-      });
-      summary.updated++;
-      batchCount++;
-      if (batchCount >= 400) {
-        await batch.commit();
-        batch = db.batch();
-        batchCount = 0;
-      }
+  const kioskFilter = baseProductId ? new Set<string>() : undefined;
+  if (kioskFilter) for (const doc of bases) {
+    for (const id of Object.keys(doc.data()?.stockLevels ?? {})) {
+      kioskFilter.add(id);
+      for (const served of supplyMap.get(id) ?? []) kioskFilter.add(served);
     }
   }
-
-  if (batchCount > 0) await batch.commit();
+  const [productDocs, reports] = await Promise.all([
+    boundedDocs(baseProductId
+      ? db.collection('products').where('baseProductId', '==', baseProductId)
+      : db.collection('products'), 'products'),
+    loadReports(db, start, end, kioskFilter),
+  ]);
+  const basesById = new Map(bases.map(doc => [doc.id, doc.data()]));
+  const products = new Map<string, ProductInfo>();
+  for (const doc of productDocs) {
+    const data = doc.data(), base = basesById.get(data.baseProductId);
+    if (base) products.set(doc.id, { baseProductId: data.baseProductId, factor: conversionFactor(data, base) });
+  }
+  const transferData = await loadTransfers(db, start, end, products);
+  const transfers = transferData.entries;
+  const reportByKiosk = new Map<string, Report[]>(), transferByKiosk = new Map<string, Transfer[]>();
+  for (const report of reports) reportByKiosk.set(report.kioskId, [...(reportByKiosk.get(report.kioskId) ?? []), report]);
+  for (const transfer of transfers) transferByKiosk.set(transfer.kioskId, [...(transferByKiosk.get(transfer.kioskId) ?? []), transfer]);
+  const servedIds = new Set([...supplyMap.values()].flatMap(ids => [...ids]));
+  const firstReportDates = await loadFirstReportDates(db, servedIds, start);
+  let batch = db.batch(), writes = 0;
+  const summary: RecalculationSummary = { updated: 0, pending: 0, zeroedCd: 0, skippedArchived: 0 };
+  for (const doc of bases) {
+    const base = doc.data();
+    if (!base) continue;
+    if (base.isArchived === true) { summary.skippedArchived++; continue; }
+    const levels = base.stockLevels ?? {};
+    const kioskIds = new Set<string>([...Object.keys(levels), ...reportByKiosk.keys(), ...transferByKiosk.keys(), ...supplyMap.keys()]);
+    const updatePayload: Record<string, unknown> = {};
+    for (const kioskId of kioskIds) {
+      const level = levels[kioskId] ?? {}, isSupply = supplyMap.has(kioskId);
+      const served = isSupply ? [...supplyMap.get(kioskId)!].filter(id => levels[id]?.supplyMode !== 'direct') : [kioskId];
+      const days: DemandDay[] = [];
+      let source: DemandSource = 'none';
+      let sourceWindowStart = start;
+      const pdv = served.flatMap(id => reportByKiosk.get(id) ?? []);
+      if (pdv.some(report => report.baseIds.has(doc.id))) {
+        source = 'pdv_internal';
+        const byUnitAndDate = new Map<string, Report[]>();
+        for (const report of pdv) {
+          const key = `${report.kioskId}:${report.date}`;
+          byUnitAndDate.set(key, [...(byUnitAndDate.get(key) ?? []), report]);
+        }
+        const dates = new Set(pdv.map(report => report.date));
+        for (const date of dates) {
+          const activeUnits = served.filter(id => (firstReportDates.get(id) ?? start) <= date);
+          const lines = activeUnits.map(id => byUnitAndDate.get(`${id}:${date}`) ?? []);
+          days.push({ date,
+            quantity: lines.flat().reduce((sum, report) => sum + (report.quantities.get(doc.id) ?? 0), 0),
+            usable: lines.length > 0 && lines.every(reports => reports.length === 1 && reports[0].usable) });
+        }
+      } else {
+        const proxy = served.flatMap(id => transferByKiosk.get(id) ?? []).filter(entry => entry.baseProductId === doc.id);
+        if (proxy.length) source = 'transfer_proxy';
+        // Coverage begins with the first observed transfer; earlier days are unknown, not zero.
+        const observedStart = proxy.map(entry => entry.date).sort()[0] ?? end;
+        sourceWindowStart = observedStart;
+        for (let day = Date.parse(`${observedStart}T12:00:00Z`); day <= Date.parse(`${end}T12:00:00Z`); day += 86_400_000) {
+          days.push({ date: new Date(day).toISOString().slice(0, 10), quantity: 0, usable: source === 'transfer_proxy' });
+        }
+        for (const entry of proxy) days.push({ date: entry.date, quantity: entry.quantity, usable: true });
+      }
+      const result = calculateReplenishment({ days, source, unit: base.unit,
+        cycleDays: base.minStockRecalcPeriod === 'biweekly' ? 15 : 30,
+        isSupplyUnit: isSupply, servedUnitCount: served.length,
+        minimumValidDays: source === 'transfer_proxy' ? 14 : undefined });
+      if (source === 'transfer_proxy' && served.some(id => transferData.invalid.has(`${doc.id}:${id}`))) {
+        result.target = null;
+        result.calculationStatus = 'pending';
+        result.sourceLimitation = 'Histórico de transferências contém quantidade, vínculo ou conversão inválida; conferir os derivados.';
+      }
+      if (source === 'pdv_internal' && result.target === null) {
+        result.sourceLimitation += ' Diagnósticos de ficha/conversão e reconciliação completos são obrigatórios; históricos sem evidência não são certificados.';
+      }
+      const mode: SupplyMode = level.supplyMode === 'direct' ? 'direct' : 'cd';
+      const calculation = {
+        supplyMode: mode, effectiveLeadTime: effectiveLeadTime(mode, level.leadTime, isSupply),
+        min: result.target ?? 0, override: false,
+        calculationStatus: result.calculationStatus, source: result.source,
+        sourceLimitation: result.sourceLimitation, validDays: result.validDays,
+        windowStart: sourceWindowStart, windowEnd: end, avgDaily: result.meanDaily,
+        lastAutoCalculatedMean: result.meanDaily === null ? null :
+          Math.round(result.meanDaily * (base.minStockRecalcPeriod === 'biweekly' ? 15 : 30) * 100) / 100,
+        lastAutoCalculatedAt: now.toISOString(),
+      };
+      updatePayload[enabled ? `stockLevels.${kioskId}` : `replenishmentPreview.${kioskId}`] =
+        enabled ? { ...level, ...calculation } : calculation;
+      summary.updated++;
+      if (result.target === null) summary.pending++;
+      if (result.calculationStatus === 'no_dependents') summary.zeroedCd++;
+    }
+    if (Object.keys(updatePayload).length) {
+      batch.update(doc.ref, updatePayload, { lastUpdateTime: doc.updateTime });
+      writes++;
+      if (writes === 400) { await batch.commit(); batch = db.batch(); writes = 0; }
+    }
+  }
+  if (writes) await batch.commit();
   return summary;
 }
-
-export const recalculateMinimumStock = onSchedule(
-  {
-    schedule: "0 3 1,16 * *",
-    timeZone: TIME_ZONE,
-    retryCount: 2,
-    timeoutSeconds: 300,
-    memory: "512MiB",
-  },
-  async () => {
-    const db = getFirestore("coala");
-    const summary = await runMinimumStockRecalculation(db, new Date());
-    console.log(
-      `[recalculateMinimumStock] ${summary.updated} estoques mínimos atualizados; ${summary.skippedArchived} insumos arquivados ignorados; ${summary.skippedOverride} pulados por override; ${summary.skippedNoData} pulados por falta de dado de consumo.`,
-    );
-  },
-);

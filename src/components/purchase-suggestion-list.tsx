@@ -17,6 +17,8 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, ShoppingCart, Inbox, Loader2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { availablePackages, operationalMinimum, operationalDailyAverage, shortage } from '@/lib/replenishment-display';
 import { Skeleton } from './ui/skeleton';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
@@ -31,6 +33,8 @@ interface Suggestion {
     leadTime: number;
     status: 'ok' | 'urgent' | 'attention' | 'no_lead_time';
     suggestedQty: number;
+    minimumLabel: string;
+    actionable: boolean;
 }
 
 export function PurchaseSuggestionList() {
@@ -42,6 +46,7 @@ export function PurchaseSuggestionList() {
     const { addSession, loading: loadingPurchase } = usePurchase();
     const { toast } = useToast();
     const router = useRouter();
+    const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
 
     const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
     
@@ -73,11 +78,11 @@ export function PurchaseSuggestionList() {
                             if (!secondaryUnitCategory) return sum;
                             
                             const valueInBase = convertValue(product.secondaryUnitValue, product.secondaryUnit, bp.unit, secondaryUnitCategory);
-                            return sum + (lot.quantity * valueInBase);
+                            return sum + (availablePackages(lot.quantity, lot.reservedQuantity) * valueInBase);
                         }
             
                         const valueInBase = convertValue(product.packageSize, product.unit, bp.unit, product.category);
-                        return sum + (lot.quantity * valueInBase);
+                        return sum + (availablePackages(lot.quantity, lot.reservedQuantity) * valueInBase);
                     } catch {
                         return sum;
                     }
@@ -97,11 +102,11 @@ export function PurchaseSuggestionList() {
 
             const months = Object.values(monthlyConsumption);
             const monthlyAvg = months.length > 0 ? months.reduce((sum, val) => sum + val, 0) / months.length : 0;
-            const networkDailyAvg = monthlyAvg / 30;
-
+            const level = bp.stockLevels?.['matriz'];
+            const networkDailyAvg = operationalDailyAverage(level, policyEnabled, monthlyAvg / 30) ?? 0;
             const coverageDays = networkDailyAvg > 0 ? matrizStock / networkDailyAvg : Infinity;
             
-            const leadTime = bp.stockLevels?.['matriz']?.leadTime || 0;
+            const leadTime = (policyEnabled ? level?.effectiveLeadTime : level?.leadTime) || 0;
 
             let status: Suggestion['status'] = 'ok';
             if (leadTime === 0) {
@@ -112,7 +117,11 @@ export function PurchaseSuggestionList() {
                 status = 'attention';
             }
             
-            const suggestedQty = monthlyAvg * (bp.consumptionMonths || 1);
+            const minimum = operationalMinimum(bp.stockLevels?.['matriz'], policyEnabled);
+            const suggestedQty = policyEnabled === true
+                ? shortage(minimum.minimum, matrizStock) ?? 0
+                : policyEnabled === false ? monthlyAvg * (bp.consumptionMonths || 1) : 0;
+            const actionable = minimum.minimum !== null && suggestedQty > 0;
 
             return {
                 baseProductId: bp.id,
@@ -122,8 +131,10 @@ export function PurchaseSuggestionList() {
                 networkDailyAvg,
                 coverageDays,
                 leadTime,
-                status,
+                status: actionable ? status : 'no_lead_time',
                 suggestedQty,
+                minimumLabel: minimum.label,
+                actionable,
             };
         }).sort((a,b) => {
             const statusOrder = { 'urgent': 1, 'attention': 2, 'no_lead_time': 3, 'ok': 4 };
@@ -133,7 +144,7 @@ export function PurchaseSuggestionList() {
             return a.baseProductName.localeCompare(b.baseProductName);
         });
 
-    }, [loading, baseProducts, products, lots, reports]);
+    }, [loading, baseProducts, products, lots, reports, policyEnabled]);
 
     const handleSelectProduct = (productId: string) => {
         setSelectedProducts(prev => {
@@ -148,7 +159,7 @@ export function PurchaseSuggestionList() {
     };
     
     const handleCreatePurchaseSession = async () => {
-        if (selectedProducts.size === 0) return;
+        if (selectedProducts.size === 0 || policyEnabled === null) return;
         const description = `Cotação sugerida pelo assistente - ${format(new Date(), 'dd/MM/yyyy')}`;
         await addSession({ description, baseProductIds: Array.from(selectedProducts), type: 'automatic' });
         toast({
@@ -167,10 +178,10 @@ export function PurchaseSuggestionList() {
             return;
         }
 
-        const dataForCsv = suggestions.map(s => ({
+        const dataForCsv = suggestions.filter(s => s.actionable).map(s => ({
             'Produto Base': s.baseProductName,
             'Estoque Matriz': `${s.matrizStock.toFixed(1)} ${s.baseProductUnit}`,
-            'Consumo/dia (Rede)': `${s.networkDailyAvg.toFixed(2)} ${s.baseProductUnit}`,
+            [policyEnabled ? 'Demanda/dia (CD)' : 'Consumo/dia (Rede)']: `${s.networkDailyAvg.toFixed(2)} ${s.baseProductUnit}`,
             'Cobertura': isFinite(s.coverageDays) ? `${s.coverageDays.toFixed(0)} dias` : '∞',
             'Lead Time': s.leadTime > 0 ? `${s.leadTime} dias` : '-',
             'Status': s.status === 'urgent' ? 'Urgente' : s.status === 'attention' ? 'Atenção' : s.status === 'ok' ? 'OK' : 'Sem Lead Time',
@@ -202,6 +213,7 @@ export function PurchaseSuggestionList() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
+                {policyEnabled === null && <p role="alert" className="mb-3 text-sm text-amber-700">{policyError ? 'Política indisponível. Sugestões suspensas.' : 'Consultando a política de reposição…'}</p>}
                 {suggestions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 text-muted-foreground border-2 border-dashed rounded-lg">
                         <Inbox className="h-12 w-12 mb-4" />
@@ -212,20 +224,20 @@ export function PurchaseSuggestionList() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-10"><Checkbox onCheckedChange={(checked) => setSelectedProducts(checked ? new Set(suggestions.map(s => s.baseProductId)) : new Set())} /></TableHead>
+                                    <TableHead className="w-10"><Checkbox disabled={policyEnabled === null} onCheckedChange={(checked) => setSelectedProducts(checked ? new Set(suggestions.filter(s => s.actionable).map(s => s.baseProductId)) : new Set())} /></TableHead>
                                     <TableHead>Produto Base</TableHead>
                                     <TableHead className="text-right">Estoque Matriz</TableHead>
-                                    <TableHead className="text-right">Consumo/dia (Rede)</TableHead>
+                                    <TableHead className="text-right">{policyEnabled ? 'Demanda/dia (CD)' : 'Consumo/dia (Rede)'}</TableHead>
                                     <TableHead className="text-right">Cobertura</TableHead>
                                     <TableHead className="text-right">Lead Time</TableHead>
                                     <TableHead className="text-center">Status</TableHead>
-                                    <TableHead className="text-right">Sugestão (30d)</TableHead>
+                                    <TableHead className="text-right">{policyEnabled ? 'Falta física' : 'Sugestão legada'}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {suggestions.map(s => (
                                     <TableRow key={s.baseProductId} className={s.status === 'urgent' ? 'bg-destructive/10' : s.status === 'attention' ? 'bg-amber-500/10' : ''}>
-                                        <TableCell><Checkbox checked={selectedProducts.has(s.baseProductId)} onCheckedChange={() => handleSelectProduct(s.baseProductId)} /></TableCell>
+                                        <TableCell><Checkbox disabled={!s.actionable || policyEnabled === null} checked={selectedProducts.has(s.baseProductId)} onCheckedChange={() => handleSelectProduct(s.baseProductId)} /></TableCell>
                                         <TableCell className="font-medium">{s.baseProductName}</TableCell>
                                         <TableCell className="text-right">{s.matrizStock.toFixed(1)} {s.baseProductUnit}</TableCell>
                                         <TableCell className="text-right">{s.networkDailyAvg.toFixed(2)} {s.baseProductUnit}</TableCell>
@@ -235,9 +247,9 @@ export function PurchaseSuggestionList() {
                                             {s.status === 'urgent' && <Badge variant="destructive">Urgente</Badge>}
                                             {s.status === 'attention' && <Badge className="bg-amber-500 text-white">Atenção</Badge>}
                                             {s.status === 'ok' && <Badge variant="secondary">OK</Badge>}
-                                            {s.status === 'no_lead_time' && <Badge variant="outline">Sem Lead Time</Badge>}
+                                            {s.status === 'no_lead_time' && <Badge variant="outline">{s.actionable ? 'Sem prazo' : s.minimumLabel}</Badge>}
                                         </TableCell>
-                                        <TableCell className="text-right font-bold">{s.suggestedQty.toFixed(1)} {s.baseProductUnit}</TableCell>
+                                        <TableCell className="text-right font-bold">{s.actionable ? `${s.suggestedQty.toFixed(1)} ${s.baseProductUnit}` : s.minimumLabel}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -246,11 +258,11 @@ export function PurchaseSuggestionList() {
                 )}
             </CardContent>
             <CardFooter className="justify-between border-t pt-4">
-                 <Button onClick={handleExport} variant="outline" disabled={suggestions.length === 0}>
+                 <Button onClick={handleExport} variant="outline" disabled={!suggestions.some(s => s.actionable) || policyEnabled === null}>
                     <Download className="mr-2 h-4 w-4"/>
                     Exportar Lista
                 </Button>
-                <Button onClick={handleCreatePurchaseSession} disabled={selectedProducts.size === 0 || loadingPurchase}>
+                <Button onClick={handleCreatePurchaseSession} disabled={selectedProducts.size === 0 || loadingPurchase || policyEnabled === null}>
                     {loadingPurchase ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShoppingCart className="mr-2 h-4 w-4"/>}
                     Criar Cotação com Itens ({selectedProducts.size})
                 </Button>
