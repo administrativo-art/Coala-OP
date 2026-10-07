@@ -24,6 +24,12 @@ Metas individuais recebem receita por identificador de operador/empregado e turn
 
 ## Evidências da etapa 2
 
+### Diagnóstico de composição para reposição — 2026-10-06
+
+`syncDayAdmin` acrescenta `consumptionQuality: {version: 1, issues}` aos relatórios de vendas/consumo e ao fingerprint. Conta falhas de ficha técnica, identificação/unidade/categoria do insumo e conversão de quantidade; estas falhas não podem certificar um falso consumo zero no motor de reposição. O diagnóstico não altera o rateio monetário, a receita ou a transição financeira. A reposição exige zero problemas e reconciliação interna íntegra; isto não prova que o provedor externo enviou todas as vendas do dia. Relatórios anteriores sem o campo não são retroativamente certificados. Nenhum reprocessamento histórico real foi executado nesta tarefa.
+
+O teste de integração `pdv-sales-reconciliation.test.mjs` verifica que uma venda com composição de consumo incompleta registra o diagnóstico e preserva a receita líquida esperada. Não é homologação do provedor, de todas as fichas técnicas ou da interface.
+
 ## Receita líquida e manutenção mensal — 2026-10-01
 
 A auditoria de setembro nas três unidades integradas demonstrou que `item.valortotal` pode ser bruto: um item de R$ 15 com `item.valordesconto=3` pertence a um cupom com `valortotal=12`. Os descontos também podem aparecer no cabeçalho. A interpretação é centralizada em [`pdv-revenue.ts`](../../../functions/src/pdv-revenue.ts): o total oficial do cupom é a referência, e sua composição precisa ser explicada pelos itens, descontos/acréscimos e entrega informados. Envelopes já líquidos não são descontados novamente. Ajustes do cupom são distribuídos pelos itens por peso e maior resto, em centavos, preservando exatamente a soma; item cancelado não participa. Valor inválido ou diferença sem composição bloqueia a importação antes da transação. Fallback sem total oficial é explicitamente contabilizado e não é aceito pela manutenção mensal.

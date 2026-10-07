@@ -44,7 +44,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
-| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — contrato financeiro do cartão coberto localmente; verificação integrada pendente |
+| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; sem mudança financeira; HTTP autenticado e homologação global pendentes |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
@@ -53,7 +53,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
 | `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
-| `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — percurso complementado; verificação integrada pendente |
+| `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — política automática com 30%, compra direta por unidade e comparação local; motor/legado testados em emulador; E2E, piloto e ativação pendentes |
 | `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |
 | `stock-count` | 3 | Traçado | [Sessões e ajustes de lote](flows/stock-count.md) — percurso complementado; verificação integrada pendente |
 | `stock-reposition` | 2 | Traçado | [Reserva e transição](flows/stock-requests-reposition-returns.md) — percurso complementado; verificação integrada pendente |

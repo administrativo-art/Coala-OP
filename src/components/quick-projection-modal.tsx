@@ -17,6 +17,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CheckCircle, BellRing, CalendarDays, ShoppingCart, Info, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { availablePackages, operationalMinimum, shortage } from '@/lib/replenishment-display';
 import { Label } from './ui/label';
 
 interface QuickProjectionModalProps {
@@ -34,6 +36,8 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
   const { reports: consumptionHistory } = useValidatedConsumptionData();
   const { toast } = useToast();
   const router = useRouter();
+  const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
+  const minimumState = operationalMinimum(baseProduct.stockLevels?.['matriz'], policyEnabled);
 
   const [coverageMonths, setCoverageMonths] = useState(baseProduct.consumptionMonths || 1);
 
@@ -105,6 +109,12 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
     }
 
     const suggestedOrderQty = monthlyAvg * coverageMonths;
+    const physicalAvailable = matrizLots.reduce((sum, lot) => {
+      const product = productMap.get(lot.productId);
+      if (!product || product.baseProductId !== baseProduct.id) return sum;
+      try { return sum + availablePackages(lot.quantity, lot.reservedQuantity) * convertValue(product.packageSize, product.unit, baseProduct.unit, product.category); }
+      catch { return sum; }
+    }, 0);
 
     let finalConsumptionDate = null;
     if (ruptureDate && dailyAvg > 0 && suggestedOrderQty > 0) {
@@ -139,6 +149,7 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
       orderStatus,
       leadTime,
       suggestedOrderQty,
+      physicalAvailable,
       finalConsumptionDate,
       logisticInfo,
     };
@@ -146,11 +157,12 @@ export function QuickProjectionModal({ baseProduct, onOpenChange }: QuickProject
 
   const handleCopySummary = () => {
     const summary = `
-Projeção para ${baseProduct.name}:
+Simulação de cobertura para ${baseProduct.name}:
 - Status do Pedido: ${projection.orderStatus.toUpperCase()}
 - Data Ideal do Pedido: ${projection.orderDate ? format(projection.orderDate, 'dd/MM/yyyy') : 'N/A'}
 - Data de Ruptura: ${projection.ruptureDate ? format(projection.ruptureDate, 'dd/MM/yyyy') : 'N/A'}
-- Sugestão de Compra: ${formatNumber(projection.suggestedOrderQty)} ${baseProduct.unit} (para ${coverageMonths} meses)
+- Quantidade simulada: ${formatNumber(projection.suggestedOrderQty)} ${baseProduct.unit} (para ${coverageMonths} meses)
+- Falta física pela meta: ${policyEnabled === null || minimumState.minimum === null ? minimumState.label : `${formatNumber(shortage(minimumState.minimum, projection.physicalAvailable) ?? 0)} ${baseProduct.unit}`}
     `;
     navigator.clipboard.writeText(summary.trim());
     toast({ title: 'Resumo copiado!' });
@@ -176,11 +188,12 @@ Projeção para ${baseProduct.name}:
         <DialogHeader className="pr-8 text-center sm:text-center">
           <DialogTitle className="text-center">Projeção Rápida: {baseProduct.name}</DialogTitle>
           <DialogDescription className="text-center">
-            Análise de compra baseada na média de consumo da Matriz.
+            Simulação de cobertura baseada na média histórica da rede. A meta operacional aparece separadamente.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+            <p className="rounded-md border p-2 text-sm" role={policyEnabled === null ? 'alert' : undefined}>{policyEnabled === null && policyError ? 'Política indisponível. ' : ''}Meta operacional: {minimumState.minimum === null ? minimumState.label : `${formatNumber(minimumState.minimum)} ${baseProduct.unit}`}{minimumState.minimum !== null ? ` · falta física ${formatNumber(shortage(minimumState.minimum, projection.physicalAvailable) ?? 0)} ${baseProduct.unit}` : ''}</p>
             <Card className="bg-muted/50">
                 <CardContent className="grid grid-cols-2 place-items-center gap-3 p-3 text-center text-sm">
                     <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Estoque atual: <strong>{formatNumber(projection.totalStock)} {baseProduct.unit}</strong></span></div>
@@ -193,7 +206,7 @@ Projeção para ${baseProduct.name}:
             <div className="grid grid-cols-2 gap-4">
                 <Card>
                     <CardHeader className="p-4">
-                        <CardTitle className="text-base flex items-center justify-between">Quando Pedir? {getOrderStatusBadge()}</CardTitle>
+                        <CardTitle className="text-base flex items-center justify-between">Prazo simulado {getOrderStatusBadge()}</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0 space-y-2">
                         <div className="flex items-center gap-2"><BellRing className="h-5 w-5 text-destructive" /><span className="font-semibold">Pedir até: {projection.orderDate ? format(projection.orderDate, 'dd/MM/yyyy') : 'N/A'}</span></div>
@@ -202,7 +215,7 @@ Projeção para ${baseProduct.name}:
                 </Card>
                 <Card>
                     <CardHeader className="p-4">
-                        <CardTitle className="text-base flex items-center justify-between">Quanto Pedir?</CardTitle>
+                        <CardTitle className="text-base flex items-center justify-between">Quantidade simulada</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0 space-y-2">
                         <div className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-primary" /><span className="font-semibold text-xl">{formatNumber(projection.suggestedOrderQty)} {baseProduct.unit}</span></div>

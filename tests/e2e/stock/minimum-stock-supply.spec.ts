@@ -62,8 +62,9 @@ async function runUnitsFlow(page: Page, db: ReturnType<typeof adminDb>) {
   expect((await db.collection('dp_units').doc(E2E_STOCK_MIN.storeUnitId).get()).get('stockRole')).toBeUndefined();
 }
 
-test('estoque mínimo fica bloqueado enquanto a automação calcula e libera com "Manter valor manual"', async ({ page }) => {
+test('flag desligada mantém mínimo legado e mostra prévia separada', async ({ page }) => {
   test.setTimeout(300_000);
+  await page.route('**/api/stock/replenishment-policy', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: false }) }));
   await login(page);
 
   await page.goto('/dashboard/settings?department=operacional&tab=cadastros', { waitUntil: 'domcontentloaded' });
@@ -84,9 +85,54 @@ test('estoque mínimo fica bloqueado enquanto a automação calcula e libera com
   await expect(storeMin).toBeEnabled();
   await expect(storeMin).toHaveValue('20');
 
+  const cdLead = page.getByRole('spinbutton', { name: 'Prazo de abastecimento — CD E2E' });
+  const [minBox, leadBox, manualBox] = await Promise.all([cdMin.boundingBox(), cdLead.boundingBox(), cdManual.boundingBox()]);
+  expect(minBox).not.toBeNull();
+  expect(leadBox).not.toBeNull();
+  expect(manualBox).not.toBeNull();
+  expect(Math.abs(minBox!.y - leadBox!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs((minBox!.y + minBox!.height / 2) - (manualBox!.y + manualBox!.height / 2))).toBeLessThanOrEqual(1);
+
+  const explanation = page.getByRole('button', { name: 'Como o estoque mínimo é calculado' });
+  await explanation.focus();
+  // Radix puts role="tooltip" on an accessibility-only span; measure its visible parent.
+  const tooltip = page.getByRole('tooltip').locator('..');
+  await expect(tooltip).toBeVisible();
+  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const tooltipBox = await tooltip.boundingBox();
+  expect(tooltipBox).not.toBeNull();
+  expect(tooltipBox!.x).toBeGreaterThanOrEqual(0);
+  expect(tooltipBox!.y).toBeGreaterThanOrEqual(0);
+  expect(tooltipBox!.x + tooltipBox!.width).toBeLessThanOrEqual(viewport.width);
+  expect(tooltipBox!.y + tooltipBox!.height).toBeLessThanOrEqual(viewport.height);
+
   await cdManual.click();
   await expect(cdMin).toBeEnabled();
   await cdMin.fill('150');
   await cdManual.click();
   await expect(cdMin).toBeDisabled();
+});
+
+test('flag ativa mostra meta automática pendente e rota de compra por unidade', async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.route('**/api/stock/replenishment-policy', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true }) }));
+  await login(page);
+  await page.goto('/dashboard/settings?department=operacional&tab=cadastros', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: /Insumo base/ }).click();
+  await page.getByText('INSUMO E2E ESTOQUE', { exact: true }).first().waitFor({ timeout: 60_000 });
+  await page.getByText('INSUMO E2E ESTOQUE', { exact: true }).first().locator('xpath=ancestor::tr').getByRole('button').last().click();
+  await page.getByRole('menuitem', { name: 'Editar' }).click();
+  await page.getByRole('button', { name: /Parâmetros por quiosque|Próximo|Avançar/ }).first().click();
+
+  await expect(page.getByText('Manter valor manual', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'Estoque mínimo — Loja E2E' })).toHaveCount(0);
+  const directPurchase = page.getByRole('switch', { name: 'Compra direta — Loja E2E' });
+  await expect(directPurchase).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Compra direta — CD E2E' })).toHaveCount(0);
+  await directPurchase.check();
+  await expect(directPurchase).toBeChecked();
+  await expect(page.getByText('Compra na unidade', { exact: true })).toBeVisible();
+  await directPurchase.uncheck();
+  await expect(page.getByText('Recebe do CD', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Cálculo pendente|Política indisponível/).first()).toBeVisible();
 });

@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from './ui/skeleton';
 import { ShoppingCart, AlertTriangle, CheckCircle, Inbox } from 'lucide-react';
 import { type LotEntry, type BaseProduct } from '@/types';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { availablePackages, operationalMinimum, operationalDailyAverage } from '@/lib/replenishment-display';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -31,6 +33,7 @@ interface GroupedProjectionResult {
 }
 
 export function PurchaseAlertCard() {
+    const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, loading: productsLoading } = useProducts();
@@ -96,18 +99,19 @@ export function PurchaseAlertCard() {
         };
 
         return validatedBaseProducts.map(baseProduct => {
-            const dailyAvg = getDailyAverage(baseProduct.id, selectedKioskId);
+            const dailyAvg = operationalDailyAverage(baseProduct.stockLevels?.[selectedKioskId],
+                policyEnabled, getDailyAverage(baseProduct.id, selectedKioskId)) ?? 0;
             
             const totalStockInBase = lots
                 .filter(lot => productsById.get(lot.productId)?.baseProductId === baseProduct.id && lot.kioskId === selectedKioskId)
                 .reduce((sum, lot) => {
                     const product = productsById.get(lot.productId)!;
-                    return sum + toBaseUnits(product, lot.quantity, baseProduct);
+                    return sum + toBaseUnits(product, availablePackages(lot.quantity, lot.reservedQuantity), baseProduct);
                 }, 0);
             
             const kioskParams = baseProduct.stockLevels?.[selectedKioskId];
-            const minimumStock = kioskParams?.min || 0;
-            const safetyStock = kioskParams?.safetyStock || 0;
+            const minimumStock = operationalMinimum(kioskParams, policyEnabled).minimum;
+            const safetyStock = policyEnabled === false ? kioskParams?.safetyStock || 0 : 0;
 
             const effectiveStock = Math.max(0, totalStockInBase - safetyStock);
             const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
@@ -116,7 +120,7 @@ export function PurchaseAlertCard() {
             let orderDate: Date | null = null;
             const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
             
-            const leadTime = kioskParams?.leadTime;
+            const leadTime = policyEnabled ? kioskParams?.effectiveLeadTime : kioskParams?.leadTime;
             if (leadTime && leadTime > 0) {
                 if (ruptureDate) {
                     orderDate = addDays(ruptureDate, -leadTime);
@@ -133,7 +137,7 @@ export function PurchaseAlertCard() {
                 baseProductName: baseProduct.name,
                 baseProductUnit: baseProduct.unit,
                 currentStock: totalStockInBase,
-                minimumStock: minimumStock,
+                minimumStock: minimumStock ?? 0,
                 dailyAvg,
                 daysOfCoverage,
                 ruptureDate,
@@ -141,12 +145,15 @@ export function PurchaseAlertCard() {
                 orderStatus
             };
         }).filter(p => {
-            const leadTime = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId]?.leadTime || 0;
+            const minimum = operationalMinimum(baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId], policyEnabled);
+            if (minimum.minimum === null || minimum.status === 'no_dependents') return false;
+            const level = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId];
+            const leadTime = (policyEnabled ? level?.effectiveLeadTime : level?.leadTime) || 0;
             return leadTime > 0 && (p.orderStatus === 'urgent' || p.orderStatus === 'soon');
         })
           .sort((a, b) => (a.orderDate?.getTime() || a.ruptureDate?.getTime() || Infinity) - (b.orderDate?.getTime() || b.ruptureDate?.getTime() || Infinity));
 
-    }, [loading, selectedKioskId, validatedBaseProducts, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
+    }, [loading, selectedKioskId, validatedBaseProducts, baseProducts, lots, productsById, toBaseUnits, consumptionHistory, policyEnabled]);
 
     const getStatusBadge = (item: GroupedProjectionResult) => {
         switch (item.orderStatus) {
@@ -161,7 +168,10 @@ export function PurchaseAlertCard() {
         return <Skeleton className="h-48 w-full col-span-full" />;
     }
 
+    if (policyEnabled === null) return <Card className="p-4 text-sm text-amber-700" role="alert">{policyError ? 'Política de reposição indisponível; alerta de compra suspenso.' : 'Consultando a política de reposição…'}</Card>;
+
     const hasAlerts = projectionResults.length > 0;
+    const pendingCount = baseProducts.filter(bp => operationalMinimum(bp.stockLevels?.[selectedKioskId], policyEnabled).minimum === null).length;
     const notificationCount = projectionResults.length;
 
     return (
@@ -170,9 +180,9 @@ export function PurchaseAlertCard() {
                 <Link href="/dashboard/stock/purchasing">
                 {!hasAlerts ? (
                     <div className="flex flex-col items-center justify-center text-center text-muted-foreground h-full py-8">
-                        <CheckCircle className="h-8 w-8 text-green-500 mb-2"/>
-                        <p className="font-semibold">Nenhum alerta de compra</p>
-                        <p className="text-xs">O estoque central está dentro dos prazos de cobertura.</p>
+                        {pendingCount === 0 && <CheckCircle className="h-8 w-8 text-green-500 mb-2"/>}
+                        <p className="font-semibold">{pendingCount ? `${pendingCount} mínimo(s) pendente(s)` : 'Nenhum alerta de compra'}</p>
+                        <p className="text-xs">{pendingCount ? 'A ausência de alerta não confirma estoque suficiente.' : 'O estoque central está dentro dos prazos de cobertura.'}</p>
                     </div>
                 ) : (
                     <ScrollArea className="h-[250px] w-full border-none">
@@ -222,6 +232,7 @@ export function PurchaseAlertCard() {
 }
 
 export function PurchaseAlertSummary() {
+    const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
     const { lots, loading: lotsLoading } = useExpiryProducts();
     const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
     const { products, loading: productsLoading } = useProducts();
@@ -287,18 +298,19 @@ export function PurchaseAlertSummary() {
         };
 
         return validatedBaseProducts.map(baseProduct => {
-            const dailyAvg = getDailyAverage(baseProduct.id, selectedKioskId);
+            const dailyAvg = operationalDailyAverage(baseProduct.stockLevels?.[selectedKioskId],
+                policyEnabled, getDailyAverage(baseProduct.id, selectedKioskId)) ?? 0;
             
             const totalStockInBase = lots
                 .filter(lot => productsById.get(lot.productId)?.baseProductId === baseProduct.id && lot.kioskId === selectedKioskId)
                 .reduce((sum, lot) => {
                     const product = productsById.get(lot.productId)!;
-                    return sum + toBaseUnits(product, lot.quantity, baseProduct);
+                    return sum + toBaseUnits(product, availablePackages(lot.quantity, lot.reservedQuantity), baseProduct);
                 }, 0);
             
             const kioskParams = baseProduct.stockLevels?.[selectedKioskId];
-            const minimumStock = kioskParams?.min || 0;
-            const safetyStock = kioskParams?.safetyStock || 0;
+            const minimumStock = operationalMinimum(kioskParams, policyEnabled).minimum;
+            const safetyStock = policyEnabled === false ? kioskParams?.safetyStock || 0 : 0;
 
             const effectiveStock = Math.max(0, totalStockInBase - safetyStock);
             const daysOfCoverage = dailyAvg > 0 ? Math.floor(effectiveStock / dailyAvg) : Infinity;
@@ -307,7 +319,7 @@ export function PurchaseAlertSummary() {
             let orderDate: Date | null = null;
             const ruptureDate = daysOfCoverage !== Infinity ? addDays(today, daysOfCoverage) : null;
             
-            const leadTime = kioskParams?.leadTime;
+            const leadTime = policyEnabled ? kioskParams?.effectiveLeadTime : kioskParams?.leadTime;
             if (leadTime && leadTime > 0) {
                 if (ruptureDate) {
                     orderDate = addDays(ruptureDate, -leadTime);
@@ -324,7 +336,7 @@ export function PurchaseAlertSummary() {
                 baseProductName: baseProduct.name,
                 baseProductUnit: baseProduct.unit,
                 currentStock: totalStockInBase,
-                minimumStock: minimumStock,
+                minimumStock: minimumStock ?? 0,
                 dailyAvg,
                 daysOfCoverage,
                 ruptureDate,
@@ -332,18 +344,24 @@ export function PurchaseAlertSummary() {
                 orderStatus
             };
         }).filter(p => {
-            const leadTime = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId]?.leadTime || 0;
+            const minimum = operationalMinimum(baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId], policyEnabled);
+            if (minimum.minimum === null || minimum.status === 'no_dependents') return false;
+            const level = baseProducts.find(bp => bp.id === p.baseProductId)?.stockLevels?.[selectedKioskId];
+            const leadTime = (policyEnabled ? level?.effectiveLeadTime : level?.leadTime) || 0;
             return leadTime > 0 && (p.orderStatus === 'urgent' || p.orderStatus === 'soon');
         })
           .sort((a, b) => (a.orderDate?.getTime() || a.ruptureDate?.getTime() || Infinity) - (b.orderDate?.getTime() || b.ruptureDate?.getTime() || Infinity));
 
-    }, [loading, selectedKioskId, validatedBaseProducts, baseProducts, lots, productsById, toBaseUnits, consumptionHistory]);
+    }, [loading, selectedKioskId, validatedBaseProducts, baseProducts, lots, productsById, toBaseUnits, consumptionHistory, policyEnabled]);
 
     if (loading) {
         return <Skeleton className="h-24 w-full" />;
     }
 
+    if (policyEnabled === null) return <Card className="p-4 text-sm text-amber-700" role="alert">{policyError ? 'Política de reposição indisponível; alertas suspensos.' : 'Consultando a política de reposição…'}</Card>;
+
     const notificationCount = projectionResults.length;
+    const pendingCount = baseProducts.filter(bp => operationalMinimum(bp.stockLevels?.[selectedKioskId], policyEnabled).minimum === null).length;
 
     return (
         <Link href="/dashboard/stock/purchasing" className="group">
@@ -351,14 +369,16 @@ export function PurchaseAlertSummary() {
                 <CardHeader className="flex flex-row items-start justify-between space-y-0 p-5">
                     <div>
                         <CardTitle className="text-sm font-bold text-rose-500">Alerta de Compras (Matriz)</CardTitle>
-                        <p className="text-muted-foreground mt-2 text-sm">{notificationCount} itens abaixo do ponto de pedido</p>
+                        <p className="text-muted-foreground mt-2 text-sm">{notificationCount} alertas da projeção · {pendingCount} meta(s) pendente(s)</p>
                     </div>
                     {notificationCount > 0 ? (
                         <div className="shrink-0 flex items-center justify-center h-6 px-2.5 rounded-full bg-rose-500/10 border border-rose-500/50">
                             <span className="text-[10px] font-bold text-rose-500">{notificationCount} pendentes</span>
                         </div>
-                    ) : (
+                    ) : pendingCount === 0 ? (
                         <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : (
+                        <AlertTriangle className="h-5 w-5 text-amber-500" />
                     )}
                 </CardHeader>
             </Card>

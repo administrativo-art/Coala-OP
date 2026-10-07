@@ -301,13 +301,22 @@ service cloud.firestore {
         isAdmin() ||
         getPerms().registration.baseProducts.add == true ||
         purchasingPerm('manageBaseItems')
-      ) && isValidBaseProduct(request.resource.data);
+      ) && isValidBaseProduct(request.resource.data)
+        // Client-side normalization can create an empty ingredient, never a policy/result.
+        && request.resource.data.get('stockLevels', {}) is map
+        && request.resource.data.get('stockLevels', {}).size() == 0
+        && !request.resource.data.keys().hasAny(['replenishmentPreview', 'replenishmentPolicyVersion']);
       allow update: if isAuth() && (
         isAdmin() ||
         getPerms().registration.baseProducts.edit == true ||
         purchasingPerm('manageBaseItems') ||
         purchasingPerm('receivePurchase')
-      ) && request.resource.data.name is string;
+      ) && request.resource.data.name is string
+        // Policy changes must pass the authenticated API and its scoped recalculation.
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'stockLevels', 'replenishmentPreview', 'replenishmentPolicyVersion',
+          'minStockRecalcPeriod', 'unit', 'category'
+        ]);
       allow delete: if isAuth() && (isAdmin() || getPerms().registration.baseProducts.delete == true);
     }
 

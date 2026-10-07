@@ -1,5 +1,11 @@
 # Acesso, privacidade e entradas compartilhadas
 
+Avisos de compra por destino usam `requireUser`, permissão `stock.view` ou leitura de compras e `canAccessUnit`; a consulta filtra `workspaceId`, `destinationKioskId` e status ativo antes de paginar. Ignorar um aviso exige permissão de recebimento de compras, mesmo escopo de unidade e motivo persistido no item. O estado da política de reposição em `GET /api/stock/replenishment-policy` exige sessão autenticada e não revela configuração adicional. Cadastro de rota direta exige permissão existente de insumos, acesso à unidade e vínculo ativo `dp_units` com quiosque comercial/misto.
+
+As três rotas novas de reposição usam o envelope central de erros. O adaptador `server-authentication-failure.ts` classifica somente falhas de autenticação conhecidas do `requireUser` legado como 401 e conformidade cadastral como 403; falha desconhecida de infraestrutura segue para o erro sanitizado com `eventId`, sem ser escondida como problema de login. O adaptador não amplia acesso nem substitui verificação de token/perfil. Não foram criadas permissões novas ou alterados padrões de perfis.
+
+Em `firestore.rules`, clientes não podem criar política/metadados de cálculo ou alterar `stockLevels`, prévia, versão, ciclo, unidade/categoria do insumo base diretamente, inclusive com claim administrativo. Esses campos passam pela API autenticada, escopo de unidade e recálculo no servidor. Normalização de item livre pode continuar criando insumo com `stockLevels: {}`; atualizações de código de barras e custo existentes continuam permitidas conforme o perfil. Admin SDK dos serviços não é restringido pelas regras de cliente. A restrição fecha o bypass da nova validação de política, sem ampliar permissões ou alterar financeiro.
+
 Complemento transversal da etapa 8, em 2026-09-26. Estes percursos não dependem de uma página ativa do dashboard; não acrescentam automaticamente grupos à matriz de 53 grupos. Estado: leitura estática das fronteiras abaixo, sem homologação dos provedores.
 
 ## Autenticação e primeiro acesso

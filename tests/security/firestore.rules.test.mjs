@@ -13,6 +13,42 @@ import { assertFirestoreEmulatorSafety } from "../helpers/firestore-emulator-saf
 const projectId = "demo-coala-rules";
 const rules = await readFile(new URL("../../firestore.rules", import.meta.url), "utf8");
 
+test("política de reposição só muda pelo servidor; normalização, custo e código de barras continuam permitidos", async () => {
+  assertFirestoreEmulatorSafety({ projectId });
+  const environment = await initializeTestEnvironment({ projectId, firestore: { rules } });
+  try {
+    await environment.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'profiles/replenishment-editor'), {
+        permissions: { registration: { baseProducts: { add: true, edit: true, delete: true } } },
+      });
+      await setDoc(doc(db, 'users/replenishment-editor'), { profileId: 'replenishment-editor',
+        profileCompliance: { status: 'complete', policyVersion: 1 } });
+      await setDoc(doc(db, 'baseProducts/replenishment-protected'), { name: 'Limão', category: 'Massa', unit: 'kg',
+        stockLevels: { local: { min: 10, supplyMode: 'cd' } }, replenishmentPreview: {}, replenishmentPolicyVersion: 1 });
+    });
+    for (const claims of [{}, { isDefaultAdmin: true }]) {
+      const db = environment.authenticatedContext('replenishment-editor', claims).firestore();
+      const target = doc(db, 'baseProducts/replenishment-protected');
+      await assertSucceeds(getDoc(target));
+      await assertSucceeds(updateDoc(target, { barcode: '123', barcodes: ['123'], lastEffectivePrice: { value: 7 } }));
+      for (const patch of [
+        { 'stockLevels.local.min': 999 }, { 'stockLevels.other.supplyMode': 'direct' },
+        { replenishmentPreview: { local: { min: 999 } } }, { replenishmentPolicyVersion: 999 },
+        { minStockRecalcPeriod: 'biweekly' }, { unit: 'g' }, { category: 'Volume' },
+      ]) await assertFails(updateDoc(target, patch));
+      await assertFails(setDoc(doc(db, 'baseProducts/replenishment-forged'), { name: 'Forjado', category: 'Massa', unit: 'kg',
+        stockLevels: { other: { supplyMode: 'direct', min: 999 } } }));
+      await assertFails(setDoc(doc(db, 'baseProducts/replenishment-forged'), { name: 'Forjado', category: 'Massa', unit: 'kg',
+        stockLevels: {}, replenishmentPolicyVersion: 999 }));
+      await assertSucceeds(setDoc(doc(db, 'baseProducts/replenishment-normalized'), {
+        name: 'Normalizado', category: 'Massa', unit: 'kg', stockLevels: {},
+      }));
+      await assertSucceeds(deleteDoc(doc(db, 'baseProducts/replenishment-normalized')));
+    }
+  } finally { await environment.cleanup(); }
+});
+
 test("regras principais preservam leitura autenticada e bloqueiam acesso não autenticado e escrita direta", async () => {
   assertFirestoreEmulatorSafety({ projectId });
 

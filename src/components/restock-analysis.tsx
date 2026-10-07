@@ -8,6 +8,9 @@ import Papa from 'papaparse';
 import type { BlobProviderParams } from '@react-pdf/renderer';
 
 import { useKiosks } from '@/hooks/use-kiosks';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { operationalMinimum, previewMinimum, supplyMode, shortage, getUnitsPerPackageForProduct } from '@/lib/replenishment-display';
+import { PendingPurchaseNotices } from '@/components/purchasing/pending-purchase-notices';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProducts } from '@/hooks/use-products';
@@ -16,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Skeleton } from './ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle, LayoutGrid, List, ImageIcon, Zap, ChevronDown, X, Search } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Wand2, Truck, Trash2, Download, Info, Loader2, Inbox, ArrowRight, PlusCircle, LayoutGrid, List, ImageIcon, Zap, ChevronDown, X, Search, ShoppingCart } from 'lucide-react';
 import { type BaseProduct, type LotEntry, type Kiosk, type RepositionItem, type Product, type RepositionRequest, type RepositionSuggestedLot, type RepositionRequestedProduct } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
@@ -88,6 +91,10 @@ export interface AnalysisResult {
   stockPercentage: number | null;
   hasConversionError: boolean;
   suggestion?: SuggestedLot[];
+  minimumLabel: string;
+  minimumDetail?: string;
+  previewLabel?: string;
+  directPurchase: boolean;
 }
 
 
@@ -95,31 +102,11 @@ const formatNumberDisplay = (value: number, unit: string) => {
     return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} ${unit}`;
 }
 
-const getUnitsPerPackageForProduct = (product: Product, baseProduct: BaseProduct): number => {
-  try {
-    const packageSize = Number(product.packageSize);
-    if (packageSize > 0) {
-      return convertValue(packageSize, product.unit, baseProduct.unit, product.category);
-    }
-
-    if (product.unit?.toLowerCase() === baseProduct.unit?.toLowerCase()) {
-      return 1;
-    }
-
-    if (["Unidade", "Embalagem", "Vestimenta"].includes(product.category)) {
-      return 1;
-    }
-
-    return 0;
-  } catch {
-    return 0;
-  }
-};
-
 export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (request: RepositionRequest | null) => void } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
   
   const kioskId = searchParams.get('kioskId');
   const isMatriz = kioskId === 'matriz';
@@ -232,6 +219,17 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
       .sort((a, b) => getProductFullName(a).localeCompare(getProductFullName(b)));
 
   const handleSendRequest = async () => {
+    if (policyEnabled === null) {
+      toast({ variant: 'destructive', title: 'Política indisponível', description: 'Confirme a política de reposição antes de enviar.' });
+      return;
+    }
+    if (policyEnabled && cartItems.some(item => {
+      const baseId = products.find(product => product.id === item.productId)?.baseProductId;
+      return baseId && supplyMode(baseProducts.find(base => base.id === baseId)?.stockLevels?.[kioskId ?? '']) === 'direct';
+    })) {
+      toast({ variant: 'destructive', title: 'Compra direta', description: 'Insumos de compra direta devem ser adquiridos para esta unidade; transferência excepcional é um fluxo manual separado.' });
+      return;
+    }
     if (!kioskId || isMatriz) return;
     const destinationKiosk = kiosks.find(k => k.id === kioskId);
     if (!destinationKiosk) return;
@@ -801,7 +799,11 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
     const lotsInMatriz = lots.filter(lot => lot.kioskId === 'matriz');
 
     return baseProducts.filter(bp => !bp.isArchived).map(baseProduct => {
-      const minimumStock = baseProduct.stockLevels?.[kioskId]?.min;
+      const level = baseProduct.stockLevels?.[kioskId];
+      const minimumState = operationalMinimum(level, policyEnabled);
+      const minimumStock = minimumState.minimum;
+      const preview = previewMinimum(baseProduct, kioskId, policyEnabled === true);
+      const directPurchase = policyEnabled === true && supplyMode(level) === 'direct';
       
       let currentStock = 0;
       let hasConversionError = false;
@@ -845,7 +847,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
       } else if (hasConversionError) {
         // Cannot determine status if there's a conversion error
       } else {
-        restockNeeded = Math.max(0, (minimumStock || 0) - currentStock);
+        restockNeeded = shortage(minimumStock, currentStock) ?? 0;
         if (currentStock < minimumStock) {
           status = 'repor';
         }
@@ -855,7 +857,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
             stockPercentage = 100;
         }
 
-        if (status === 'repor' && restockNeeded > 0 && !isMatriz) {
+        if (status === 'repor' && restockNeeded > 0 && !isMatriz && !directPurchase) {
             const availableMatrizLots = lotsInMatriz
                 .filter(lot => {
                     const p = productMap.get(lot.productId);
@@ -904,6 +906,10 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
         stockPercentage,
         hasConversionError,
         suggestion,
+        minimumLabel: minimumState.label,
+        minimumDetail: [minimumState.sourceLabel, minimumState.limitation].filter(Boolean).join(' · '),
+        previewLabel: preview ? `Prévia: ${preview.minimum === null ? preview.label : `${preview.minimum} ${baseProduct.unit}`} · ${preview.sourceLabel ?? ''}${preview.limitation ? ` · ${preview.limitation}` : ''}` : undefined,
+        directPurchase,
       };
     }).sort((a, b) => {
         const getRank = (item: AnalysisResult) => {
@@ -931,7 +937,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
 
         return a.baseProduct.name.localeCompare(b.baseProduct.name);
     });
-  }, [kioskId, baseProducts, products, lots, loading, isMatriz]);
+  }, [kioskId, baseProducts, products, lots, loading, isMatriz, policyEnabled]);
   
   const kiosk = kiosks.find(k => k.id === kioskId);
 
@@ -960,7 +966,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
          return {
             card: 'bg-muted/30 border-transparent',
             progress: 'bg-muted-foreground',
-            badge: <Badge variant="outline">Sem Meta</Badge>,
+            badge: <Badge variant="outline">{result.minimumLabel}</Badge>,
             rowDot: 'bg-muted-foreground'
         };
     } else if (result.currentStock >= result.minimumStock) {
@@ -1067,7 +1073,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                     </div>
                     <div className="text-right flex flex-col items-end">
                         <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tight">Ideal</span>
-                        <span className="text-sm font-semibold text-muted-foreground">{formatNumberDisplay(displayMinimumStock, result.baseProduct.unit)}</span>
+                        <span className="text-sm font-semibold text-muted-foreground">{!reviewLine && result.status === 'sem_meta' ? result.minimumLabel : formatNumberDisplay(displayMinimumStock, result.baseProduct.unit)}</span>
                     </div>
                   </div>
 
@@ -1086,6 +1092,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                      )}
                      <Progress value={Math.min(100, displayPercentage ?? 0)} indicatorClassName={statusStyle.progress} />
                   </div>
+                  {(result.minimumDetail || result.previewLabel || result.directPurchase) && <p className="text-xs text-muted-foreground">{result.directPurchase ? 'Compra direta nesta unidade. ' : ''}{result.minimumDetail}{result.previewLabel ? ` · ${result.previewLabel}` : ''}</p>}
                    {displayRestockNeeded > 0 && (
                       <p className="text-sm font-bold text-destructive pt-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />
@@ -1335,10 +1342,10 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                                     {formatNumberDisplay(result.currentStock, '')}
                                 </TableCell>
                                 <TableCell className="text-right text-muted-foreground">
-                                    {formatNumberDisplay(result.minimumStock, '')}
+                                    {result.status === 'sem_meta' ? result.minimumLabel : formatNumberDisplay(result.minimumStock, '')}
                                 </TableCell>
                                 <TableCell className={cn("text-right font-bold", result.restockNeeded > 0 ? "text-destructive" : "text-muted-foreground/30")}>
-                                    {result.restockNeeded > 0 ? formatNumberDisplay(result.restockNeeded, '') : '-'}
+                                    {result.status === 'sem_meta' ? 'Pendente' : result.restockNeeded > 0 ? formatNumberDisplay(result.restockNeeded, '') : '-'}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {result.stockPercentage !== null ? (
@@ -2196,11 +2203,11 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
             </div>
           </div>
           <p className="mt-2 line-clamp-2 text-sm font-semibold leading-tight">{result.baseProduct.name}</p>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", barColor)} style={{ width: `${Math.min(100, pct)}%` }} /></div>
-          <p className="mt-1 text-[11px] text-muted-foreground">{pct.toFixed(0)}% do ideal na unidade</p>
+          {result.status !== 'sem_meta' && <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", barColor)} style={{ width: `${Math.min(100, pct)}%` }} /></div>}
+          <p className="mt-1 text-[11px] text-muted-foreground">{result.status === 'sem_meta' ? result.minimumLabel : `${pct.toFixed(0)}% do ideal na unidade`}</p>
           <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
             <span>Atual: <strong className="text-foreground">{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</strong></span>
-            <span>Ideal: <strong className="text-foreground">{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</strong></span>
+            <span>Ideal: <strong className="text-foreground">{result.status === 'sem_meta' ? result.minimumLabel : formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</strong></span>
           </div>
           {renderUnitLotesAccordion(baseId)}
           <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-primary/5 px-2 py-1 text-[11px]">
@@ -2224,16 +2231,17 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
             <div className="shrink-0">{style.badge}</div>
           </div>
           <p className="mt-2 line-clamp-2 text-sm font-semibold leading-tight">{result.baseProduct.name}</p>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", barColor)} style={{ width: `${Math.min(100, pct)}%` }} /></div>
-          <p className="mt-1 text-[11px] text-muted-foreground">{pct.toFixed(0)}% do ideal na unidade</p>
+          {result.status !== 'sem_meta' && <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", barColor)} style={{ width: `${Math.min(100, pct)}%` }} /></div>}
+          <p className="mt-1 text-[11px] text-muted-foreground">{result.status === 'sem_meta' ? result.minimumLabel : `${pct.toFixed(0)}% do ideal na unidade`}</p>
           <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
             <span>Atual: <strong className="text-foreground">{formatNumberDisplay(result.currentStock, result.baseProduct.unit)}</strong></span>
-            <span>Ideal: <strong className="text-foreground">{formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</strong></span>
+            <span>Ideal: <strong className="text-foreground">{result.status === 'sem_meta' ? result.minimumLabel : formatNumberDisplay(result.minimumStock, result.baseProduct.unit)}</strong></span>
           </div>
           {renderUnitLotesAccordion(result.baseProduct.id)}
-          <Button variant={isSelected ? "secondary" : "outline"} size="sm" className="mt-2 w-full" onClick={() => openRequestBase(result.baseProduct.id)}>
+          {(result.minimumDetail || result.previewLabel) && <p className="mt-1 text-[11px] text-muted-foreground">{result.minimumDetail}{result.previewLabel ? ` · ${result.previewLabel}` : ''}</p>}
+          {result.directPurchase ? <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => router.push(`/dashboard/purchasing/orders?new=direct&destinationKioskId=${encodeURIComponent(kioskId ?? '')}`)}><ShoppingCart className="mr-1.5 h-4 w-4" /> Comprar para esta unidade</Button> : <Button variant={isSelected ? "secondary" : "outline"} size="sm" className="mt-2 w-full" disabled={policyEnabled === null} onClick={() => openRequestBase(result.baseProduct.id)}>
             <PlusCircle className="mr-1.5 h-4 w-4" /> Adicionar insumo
-          </Button>
+          </Button>}
         </div>
       );
     };
@@ -2306,6 +2314,9 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
     };
 
     return (
+      <div className="space-y-4">
+      {kioskId && <PendingPurchaseNotices destinationKioskId={kioskId} />}
+      {policyEnabled === null && <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">{policyError ? 'Política de reposição indisponível. Mínimos e sugestões ficam suspensos.' : 'Consultando a política de reposição…'}</p>}
       <div className="flex h-[calc(100vh-13rem)] gap-4">
         <div className="flex-1 overflow-y-auto pr-1">
           {naSolicitacao.length > 0 && (
@@ -2384,13 +2395,14 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => { setCartItems([]); setRequestOpenedBases([]); setRequestSelectedBaseId(null); }}>Limpar</Button>
-              <Button className="flex-1" disabled={cartItems.length === 0 || isSending} onClick={handleSendRequest}>
+              <Button className="flex-1" disabled={cartItems.length === 0 || isSending || policyEnabled === null} onClick={handleSendRequest}>
                 {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Enviar solicitação
               </Button>
             </div>
           </div>
         </div>
+      </div>
       </div>
     );
   };
@@ -2405,6 +2417,8 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
 
   return (
     <>
+      {kioskId && <div className="mb-4"><PendingPurchaseNotices destinationKioskId={kioskId} /></div>}
+      {policyEnabled === null && <p role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">{policyError ? 'Política de reposição indisponível. Mínimos e sugestões ficam suspensos.' : 'Consultando a política de reposição…'}</p>}
       {renderPendingRequests()}
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -2421,7 +2435,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
           </div>
           
           <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={analysisResults.length === 0}>
+              <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={analysisResults.length === 0 || analysisResults.some(result => result.status === 'sem_meta')}>
                   <Download className="mr-2 h-4 w-4" />
                   Exportar CSV
               </Button>
@@ -2430,7 +2444,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                   fileName={`analise_reposicao_${kiosk?.name.replace(/\s+/g, '_') || 'unidade'}.pdf`}
               >
                   {((props: any) => (
-                      <Button variant="outline" size="sm" disabled={props.loading || analysisResults.length === 0}>
+                      <Button variant="outline" size="sm" disabled={props.loading || analysisResults.length === 0 || analysisResults.some(result => result.status === 'sem_meta')}>
                           <Download className="mr-2 h-4 w-4" />
                           {props.loading ? 'Gerando...' : 'Exportar PDF'}
                       </Button>
