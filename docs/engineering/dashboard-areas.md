@@ -44,7 +44,7 @@ Navegação financeira: Despesas é entrada direta; **Conciliação e fechamento
 
 ### `registration` — catálogo de cadastros
 
-[`registration/page.tsx`](../../src/app/dashboard/registration/page.tsx) monta [`registration-catalog.tsx`](../../src/components/registration/registration-catalog.tsx) com a aba base. As telas de produtos base, itens e entidades têm subrotas em [`registration`](../../src/app/dashboard/registration). Para escrita, siga [`api/registry/[...path]`](../../src/app/api/registry/[...path]/route.ts) ou [`api/products`](../../src/app/api/products/route.ts). Compras depende desses cadastros; confira a coleção escolhida pelo caminho e a permissão da operação.
+[`registration/page.tsx`](../../src/app/dashboard/registration/page.tsx) monta [`registration-catalog.tsx`](../../src/components/registration/registration-catalog.tsx) com a aba base; o conteúdo vem de [`cadastros-workspace.tsx`](../../src/components/cadastros/cadastros-workspace.tsx), também usado em Configurações → Operacional → Cadastros. As telas de produtos base, itens e entidades têm subrotas em [`registration`](../../src/app/dashboard/registration). Para escrita, siga [`api/registry/[...path]`](../../src/app/api/registry/[...path]/route.ts) ou [`api/products`](../../src/app/api/products/route.ts). Compras depende desses cadastros; confira a coleção escolhida pelo caminho e a permissão da operação.
 
 ### `items` — página desativada
 

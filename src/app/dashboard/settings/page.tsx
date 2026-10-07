@@ -1,38 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Box, BrainCircuit, ChevronRight, Group, Loader2, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Check, ChevronDown, ChevronRight, Group, Loader2, Menu, Settings2, SlidersHorizontal, Users2 } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
 import { DPRuntimeGuard } from "@/components/dp-runtime-guard";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { ChartLineUp, Storefront, Users, Wallet } from "@phosphor-icons/react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useBaseProducts } from "@/hooks/use-base-products";
-import { useEntities } from "@/hooks/use-entities";
-import { useProducts } from "@/hooks/use-products";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   getSettingsTabStructureKey,
   preserveSettingsTabSelection,
   resolveRequestedSettingsTab,
 } from "@/lib/settings-tab-selection";
 
-const ItemManagement = dynamic(
-  () => import("@/components/item-management").then((m) => m.ItemManagement),
-  { ssr: false }
-);
-const BaseProductManagement = dynamic(
-  () => import("@/components/base-product-management").then((m) => m.BaseProductManagement),
-  { ssr: false }
-);
-const EntityManagement = dynamic(
-  () => import("@/components/entity-management").then((m) => m.EntityManagement),
+const CadastrosWorkspace = dynamic(
+  () => import("@/components/cadastros/cadastros-workspace").then((m) => m.CadastrosWorkspace),
   { ssr: false }
 );
 const DPSettingsShifts = dynamic(
@@ -228,65 +216,7 @@ function RecruitmentFormsSettingsPanel() {
 }
 
 function OperationalCadastrosPanel() {
-  const { baseProducts } = useBaseProducts();
-  const { products } = useProducts();
-  const { entities } = useEntities();
-
-  const catalogTabs = [
-    {
-      value: "base-products",
-      label: "Insumo base",
-      count: baseProducts.filter((product) => !product.isArchived).length,
-      icon: Box,
-    },
-    {
-      value: "items",
-      label: "Insumo derivado",
-      count: products.filter((product) => !product.isArchived).length,
-      icon: Package,
-    },
-    {
-      value: "entities",
-      label: "Pessoas e empresas",
-      count: entities.length,
-      icon: UsersRound,
-    },
-  ];
-
-  return (
-    <Tabs defaultValue="items" className="w-full space-y-8">
-      <TabsList className="grid h-auto w-full grid-cols-3 rounded-none border-0 border-b border-[#ded3c5] bg-transparent p-0 shadow-none">
-        {catalogTabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className="group relative min-h-20 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
-            >
-              <span className="flex items-center justify-center gap-3">
-                <Icon className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
-                <span className="text-sm font-bold sm:text-base">{tab.label}</span>
-                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
-                  {tab.count}
-                </span>
-              </span>
-              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
-            </TabsTrigger>
-          );
-        })}
-      </TabsList>
-      <TabsContent value="base-products">
-        <BaseProductManagement />
-      </TabsContent>
-      <TabsContent value="items">
-        <ItemManagement />
-      </TabsContent>
-      <TabsContent value="entities">
-        <EntityManagement />
-      </TabsContent>
-    </Tabs>
-  );
+  return <CadastrosWorkspace defaultTab="derived" />;
 }
 
 function CommercialCompetitorsPanel() {
@@ -415,39 +345,83 @@ type DepartmentTab = {
   emptyLabel: string;
 };
 
-function SegmentedTabs<T extends { value: string; label: string; icon?: React.ReactNode }>({
+function DepartmentMenu<T extends { value: string; label: string }>({
   tabs,
   value,
   onChange,
-  withIcons = false,
 }: {
   tabs: T[];
   value: string;
   onChange: (value: string) => void;
-  withIcons?: boolean;
+}) {
+  const current = tabs.find((tab) => tab.value === value) ?? tabs[0];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[11px] border border-[#f3c7d5] bg-[#fbe7ef] px-3 text-[13px] font-bold text-[#a6325b] outline-none transition-colors hover:bg-[#f8dce8] data-[state=open]:bg-[#f8dce8]"
+        >
+          <span className="text-[10.5px] font-semibold text-[#c06a8c]">Departamento</span>
+          {current?.label}
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64 rounded-[14px] border-[#e3dfd6] p-1.5">
+        <DropdownMenuLabel className="px-2.5 pb-1.5 pt-2 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-[#9a9ba1]">
+          Departamentos
+        </DropdownMenuLabel>
+        {tabs.map((tab) => {
+          const isActive = tab.value === current?.value;
+          return (
+            <DropdownMenuItem
+              key={tab.value}
+              onSelect={() => onChange(tab.value)}
+              className={cn(
+                "h-[38px] cursor-pointer justify-between rounded-[9px] px-2.5 text-[13.5px] font-semibold",
+                isActive && "bg-[#fbe7ef] font-extrabold text-[#a6325b] focus:bg-[#fbe7ef] focus:text-[#a6325b]"
+              )}
+            >
+              <span>{tab.label}</span>
+              {isActive ? <Check className="h-3 w-3 text-[#a6325b]" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SectionNav<T extends { value: string; label: string }>({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: T[];
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
-    <div className="max-w-full overflow-x-auto">
-      <div className="inline-flex min-w-max rounded-2xl border border-border bg-background p-1 shadow-sm">
-        {tabs.map((tab) => (
+    <nav className="flex flex-wrap gap-0.5">
+      {tabs.map((tab) => {
+        const isActive = tab.value === value;
+        return (
           <button
             key={tab.value}
             type="button"
             onClick={() => onChange(tab.value)}
             className={cn(
-              "flex items-center gap-2 whitespace-nowrap rounded-xl transition-all",
-              withIcons ? "px-4 py-2.5 text-sm font-semibold" : "px-4 py-2 text-sm font-medium",
-              value === tab.value
-                ? "bg-[#FBEAF0] text-[#993556] shadow-sm"
-                : "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+              "inline-flex h-9 items-center whitespace-nowrap rounded-[10px] px-[11px] text-[13px] transition-colors",
+              isActive
+                ? "bg-white font-extrabold text-[#1a1b1f] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                : "font-semibold text-[#70757d] hover:bg-white/60 hover:text-[#1a1b1f]"
             )}
           >
-            {withIcons ? tab.icon : null}
             {tab.label}
           </button>
-        ))}
-      </div>
-    </div>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -455,10 +429,13 @@ function DepartmentSubtabs({
   tabs,
   emptyLabel,
   requestedValue,
+  leading,
 }: {
   tabs: NestedTab[];
   emptyLabel: string;
   requestedValue?: string | null;
+  /** Início da primeira linha: voltar, título e menu de departamento. */
+  leading?: React.ReactNode;
 }) {
   const tabStructureKey = getSettingsTabStructureKey(tabs);
   const tabsRef = useRef(tabs);
@@ -491,7 +468,12 @@ function DepartmentSubtabs({
   }, [activeLeafTab, activeSubTab, tabStructureKey]);
 
   if (!tabs.length) {
-    return <EmptySection label={emptyLabel} />;
+    return (
+      <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden">
+        <div className="flex flex-wrap items-center gap-3.5">{leading}</div>
+        <EmptySection label={emptyLabel} />
+      </div>
+    );
   }
 
   const activeGroup = tabs.find((tab) => tab.value === activeSubTab) ?? tabs[0];
@@ -505,10 +487,13 @@ function DepartmentSubtabs({
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
-      <SegmentedTabs tabs={tabs} value={activeGroup.value} onChange={handleGroupChange} />
+    <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden">
+      <div className="flex flex-wrap items-center gap-3.5">
+        {leading}
+        <SectionNav tabs={tabs} value={activeGroup.value} onChange={handleGroupChange} />
+      </div>
       {childTabs.length > 1 ? (
-        <SegmentedTabs tabs={childTabs} value={activeTab.value} onChange={setActiveLeafTab} />
+        <SectionNav tabs={childTabs} value={activeTab.value} onChange={setActiveLeafTab} />
       ) : null}
       <div className="min-w-0 space-y-4">
         {activeTab.title ? <SectionHeader title={activeTab.title} description={activeTab.description} /> : null}
@@ -534,8 +519,6 @@ export default function SettingsPage() {
     {
       value: "cadastros",
       label: "Cadastros",
-      title: "Cadastros operacionais",
-      description: "Gerencie insumos, produtos base e entidades do sistema.",
       content: <OperationalCadastrosPanel />,
     },
     {
@@ -964,38 +947,33 @@ export default function SettingsPage() {
 
   return (
     <PermissionGuard allowed={permissions.settings.view}>
-      <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
-        <div className="flex items-center gap-2 sm:gap-4 mb-2">
-          <Button
-            onClick={() => router.back()}
-            variant="ghost"
-            className="p-2 rounded-full h-auto w-auto shrink-0 text-muted-foreground transition-colors hover:bg-muted"
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-          </Button>
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold">Configurações</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground">Gerencie as configurações de cada departamento.</p>
-          </div>
-        </div>
-
-        <div className="min-w-0 space-y-6">
-          <SegmentedTabs
-            tabs={departmentTabs}
-            value={activeDepartmentTab?.value ?? "operacional"}
-            onChange={setActiveDepartment}
-            withIcons
+      <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+        {activeDepartmentTab ? (
+          <DepartmentSubtabs
+            tabs={activeDepartmentTab.tabs}
+            emptyLabel={activeDepartmentTab.emptyLabel}
+            requestedValue={requestedTab}
+            leading={
+              <>
+                <Button
+                  onClick={() => router.back()}
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0 rounded-[11px] border border-[#e3dfd6] bg-white p-0 text-[#70757d] transition-colors hover:bg-muted"
+                  aria-label="Voltar"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h1 className="text-2xl font-extrabold tracking-[-0.025em]">Configurações</h1>
+                <span className="mx-1 hidden h-6 w-px bg-[#d6d2c8] sm:block" />
+                <DepartmentMenu
+                  tabs={departmentTabs}
+                  value={activeDepartmentTab.value}
+                  onChange={setActiveDepartment}
+                />
+              </>
+            }
           />
-
-          {activeDepartmentTab ? (
-            <DepartmentSubtabs
-              tabs={activeDepartmentTab.tabs}
-              emptyLabel={activeDepartmentTab.emptyLabel}
-              requestedValue={requestedTab}
-            />
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </PermissionGuard>
   );

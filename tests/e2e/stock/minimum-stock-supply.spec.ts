@@ -69,9 +69,10 @@ test('flag desligada mantém mínimo legado e mostra prévia separada', async ({
 
   await page.goto('/dashboard/settings?department=operacional&tab=cadastros', { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: /Insumo base/ }).click();
-  await page.getByText('INSUMO E2E ESTOQUE', { exact: true }).first().waitFor({ timeout: 60_000 });
-  await page.getByText('INSUMO E2E ESTOQUE', { exact: true }).first().locator('xpath=ancestor::tr').getByRole('button').last().click();
-  await page.getByRole('menuitem', { name: 'Editar' }).click();
+  const baseProductRow = page.getByRole('button', { name: 'Abrir INSUMO E2E ESTOQUE' });
+  await baseProductRow.waitFor({ timeout: 60_000 });
+  await baseProductRow.click();
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
 
   await page.getByRole('button', { name: /Parâmetros por quiosque|Próximo|Avançar/ }).first().click();
 
@@ -112,9 +113,10 @@ test('flag ativa mostra meta automática pendente e rota de compra por unidade',
   await login(page);
   await page.goto('/dashboard/settings?department=operacional&tab=cadastros', { waitUntil: 'domcontentloaded' });
   await page.getByRole('tab', { name: /Insumo base/ }).click();
-  await page.getByText('INSUMO E2E ESTOQUE', { exact: true }).first().waitFor({ timeout: 60_000 });
-  await page.getByText('INSUMO E2E ESTOQUE', { exact: true }).first().locator('xpath=ancestor::tr').getByRole('button').last().click();
-  await page.getByRole('menuitem', { name: 'Editar' }).click();
+  const baseProductRow = page.getByRole('button', { name: 'Abrir INSUMO E2E ESTOQUE' });
+  await baseProductRow.waitFor({ timeout: 60_000 });
+  await baseProductRow.click();
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
   await page.getByRole('button', { name: /Parâmetros por quiosque|Próximo|Avançar/ }).first().click();
 
   await expect(page.getByRole('button', { name: /Manter valor manual/ })).toHaveCount(0);
