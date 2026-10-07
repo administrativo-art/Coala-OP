@@ -9,27 +9,27 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEntities } from '@/hooks/use-entities';
 import { useToast } from '@/hooks/use-toast';
-import { CadastrosHero, CardGrid, Chevron, DetailDrawer, EmptyResults, GridCard, ListHead, ListRow, ListShell, ListSkeleton, ResultsBar, TagChip, type CadastrosTabProps, type DrawerChip, type DrawerNotice, type Tone } from '@/components/cadastros/cadastros-ui';
+import { CadastrosHero, CardGrid, Chevron, EmptyResults, GridCard, ListHead, ListRow, ListShell, ListSkeleton, ResultsBar, TagChip, type CadastrosTabProps, type Tone } from '@/components/cadastros/cadastros-ui';
+import { EntityFichaModal, type EntityFichaEditTarget } from '@/components/entity-ficha-modal';
+import { ENTITY_EMAIL_PURPOSES, ENTITY_ICMS_OPTIONS, ENTITY_IE_STATUS_OPTIONS, ENTITY_SIGNATORY_SCOPES, formatEntityDate, isAttentionCadastralStatus, type EntityEmailPurpose } from '@/components/cadastros/entity-form-options';
 import { buildChips, countByKey, initialsOf, type CadastrosStatus } from '@/components/cadastros/cadastros-utils';
 import { useAuth } from '@/hooks/use-auth';
-import { Button } from "@/components/ui/button";
 
-import { Plus, Trash2, Building, User, Search, Upload, Check, ChevronLeft, ChevronRight, MapPinned, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Building, User, Search, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Loader2, AlertTriangle, X } from 'lucide-react';
 import { type Entity } from '@/types';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import type { CompanyLookupResponse, NormalizedCompanyData } from '@/lib/company/company-lookup-types';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ScrollArea } from './ui/scroll-area';
-import { Separator } from './ui/separator';
 
 import { cn } from '@/lib/utils';
 
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { AsoClinicEntityDialog } from '@/features/hr/aso/aso-clinics-management';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 
@@ -343,23 +343,67 @@ function compressDataUrl(dataUrl: string, maxSide = 400, quality = 0.82): Promis
 }
 
 const ENTITY_WIZARD_STEPS = [
-    { id: 1, label: 'Identificação', icon: User, description: 'Tipo de cadastro, foto e documento. O tipo define os campos.' },
-    { id: 2, label: 'Contato e endereço', icon: MapPinned, description: 'Como falar com este cadastro e onde ele está localizado.' },
+    { id: 1, label: 'Identificação', description: 'Tipo de cadastro, foto e documento. O tipo define os campos.' },
+    { id: 2, label: 'Contato e endereço', description: 'Como falar com este cadastro e onde ele está localizado.' },
 ] as const;
 
-function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolean, onOpenChange: (open: boolean) => void, entityToEdit: Entity | null }) {
+const FIELD_INPUT = 'h-11 min-w-0 rounded-xl border-[#dcd9d1] bg-white px-3.5 text-sm shadow-none focus-visible:ring-[#5b5bd6]';
+const FIELD_LABEL = 'text-xs font-bold text-[#4a4f57]';
+const FIELD_ERROR = 'text-[11.5px] font-semibold text-[#b4232f]';
+
+function OptionalHint({ children = 'opcional' }: { children?: React.ReactNode }) {
+    return <span className="text-[11.5px] font-medium text-[#8a8f99]">{children}</span>;
+}
+
+function Segmented<T extends string>({ label, value, options, onChange, className }: {
+    label: string;
+    value: T;
+    options: ReadonlyArray<{ value: T; label: string }>;
+    onChange: (value: T) => void;
+    className?: string;
+}) {
+    return (
+        <div role="radiogroup" aria-label={label} className={cn('flex gap-[3px] rounded-[10px] bg-[#efede7] p-[3px]', className)}>
+            {options.map((option) => {
+                const selected = option.value === value;
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => onChange(option.value)}
+                        className={cn('flex-1 whitespace-nowrap rounded-lg px-1.5 text-xs font-bold', selected ? 'bg-white text-[#15151c] shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-[#70757d]')}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1, initialFiscalOpen = false }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    entityToEdit: Entity | null;
+    initialStep?: 1 | 2;
+    initialFiscalOpen?: boolean;
+}) {
     const { addEntity, updateEntity } = useEntities();
     const { firebaseUser, permissions } = useAuth();
 
-    const [currentStep, setCurrentStep] = useState(1);
+    const [currentStep, setCurrentStep] = useState<number>(1);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const [cnpjLookupLoading, setCnpjLookupLoading] = useState(false);
-    const [cnpjLookupMessage, setCnpjLookupMessage] = useState<string | null>(null);
+    const [lookupFeedback, setLookupFeedback] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+    const [formError, setFormError] = useState<string | null>(null);
     const [cnpjLookupResult, setCnpjLookupResult] = useState<CompanyLookupResponse | null>(null);
     const [loadedCompanyEntityId, setLoadedCompanyEntityId] = useState<string | null>(null);
     const [documentSignatoryOptions, setDocumentSignatoryOptions] = useState<DocumentSignatoryOption[]>([]);
     const [documentSignatoryLoading, setDocumentSignatoryLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [fiscalOpen, setFiscalOpen] = useState(false);
     const [pixKey, setPixKey] = useState('');
     const [initialPixKey, setInitialPixKey] = useState('');
     const [pixLoading, setPixLoading] = useState(false);
@@ -372,15 +416,17 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
 
     useEffect(() => {
         if (!open) return;
-        setCurrentStep(1);
+        setCurrentStep(entityToEdit ? initialStep : 1);
+        setFiscalOpen(entityToEdit ? initialFiscalOpen : false);
         form.reset(getEntityFormValues(entityToEdit));
-        setCnpjLookupMessage(null);
+        setLookupFeedback(null);
+        setFormError(null);
         setCnpjLookupResult(null);
         setLoadedCompanyEntityId(entityToEdit?.id ?? null);
         setPixKey('');
         setInitialPixKey('');
         lastAutoLookupCnpjRef.current = CnpjValidator.clean(entityToEdit?.document ?? '');
-    }, [entityToEdit, form, open]);
+    }, [entityToEdit, form, initialFiscalOpen, initialStep, open]);
 
     const paymentProfileEntityId = entityToEdit?.id ?? loadedCompanyEntityId;
     const canManagePix = Boolean(
@@ -406,7 +452,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                     setInitialPixKey(currentPixKey);
                 }
             } catch (error) {
-                if (!cancelled) setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao carregar a chave Pix.');
+                if (!cancelled) setFormError(error instanceof Error ? error.message : 'Falha ao carregar a chave Pix.');
             } finally {
                 if (!cancelled) setPixLoading(false);
             }
@@ -429,7 +475,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                 if (!cancelled) setDocumentSignatoryOptions(payload.options ?? []);
             } catch (error) {
                 if (!cancelled) {
-                    setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao listar responsáveis.');
+                    setFormError(error instanceof Error ? error.message : 'Falha ao listar responsáveis.');
                     setDocumentSignatoryOptions([]);
                 }
             } finally {
@@ -444,23 +490,44 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const entityType = form.watch('type');
     const statusWatch = form.watch('status') ?? 'active';
     const nameWatch = form.watch('name');
+    const fantasyWatch = form.watch('fantasyName');
     const documentWatch = form.watch('document');
     const cleanCnpjWatch = entityType === 'pessoa_juridica' ? CnpjValidator.clean(documentWatch ?? '') : '';
     const imageUrlWatch = form.watch('imageUrl');
     const departmentEmails = form.watch('contact.emails') ?? [];
+    const cadastralStatusWatch = form.watch('cadastralStatus') ?? '';
+    const cnaeWatch = form.watch('primaryCnaeCode') ?? '';
+    const stateRegistrationWatch = form.watch('stateRegistration') ?? '';
+    const dataSourceWatch = form.watch('dataSource');
+    const signatoryNameWatch = form.watch('documentSignatoryName') ?? '';
+    const signatoryEmailWatch = form.watch('documentSignatoryEmail') ?? '';
+    const phoneWatch = form.watch('contact.phone') ?? '';
+    const birthDateWatch = form.watch('birthDate') ?? '';
+    const cityWatch = form.watch('address.city') ?? '';
+    const stateWatch = form.watch('address.state') ?? '';
     const isPF = entityType === 'pessoa_fisica';
-    const initials = (nameWatch || '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((w) => w[0])
-        .join('')
-        .toUpperCase() || '—';
+    const isEdit = Boolean(entityToEdit);
+    const active = statusWatch !== 'inactive';
+    const attentionStatus = isAttentionCadastralStatus(cadastralStatusWatch);
+    const fiscalFromLookup = Boolean(cnpjLookupResult) || ['brasilapi', 'cache', 'sintegra'].includes(dataSourceWatch ?? '');
+    const initials = initialsOf(nameWatch || '') || '—';
+    const heroName = (nameWatch || '').trim() || (isPF ? 'Nova pessoa' : 'Nova empresa');
+    const cityState = cityWatch ? `${cityWatch}${stateWatch ? `/${stateWatch}` : ''}` : '';
+    const hasPix = pixKey.trim().length > 0;
+
+    const avatarClass = cn(
+        'relative flex shrink-0 items-center justify-center overflow-hidden font-extrabold tracking-[-.02em]',
+        isPF ? 'rounded-full bg-[#dcfce7] text-[#166534]' : 'rounded-[18px] bg-[#dbeafe] text-[#1e40af]',
+    );
 
     const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
+        event.target.value = '';
         if (!file) return;
-        if (file.size > 5 * 1024 * 1024) return;
+        if (file.size > 5 * 1024 * 1024) {
+            setFormError('A foto precisa ter até 5MB.');
+            return;
+        }
         const reader = new FileReader();
         reader.onloadend = async () => {
             const compressed = await compressDataUrl(reader.result as string);
@@ -476,6 +543,11 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     };
     const handleBack = () => setCurrentStep((s) => Math.max(1, s - 1));
     const onInvalid = () => setCurrentStep(1);
+    // Na edição as etapas são livres; no cadastro novo avançar valida nome e documento.
+    const goToStep = (step: number) => {
+        if (step > currentStep && !isEdit) void handleNext();
+        else setCurrentStep(step);
+    };
 
     const addDepartmentEmail = () => {
         form.setValue('contact.emails', [
@@ -488,12 +560,12 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         form.setValue('contact.emails', departmentEmails.filter((entry) => entry.id !== id), { shouldDirty: true });
     };
 
-    const toggleDepartmentEmailPurpose = (index: number, purpose: 'onboarding' | 'termination' | 'aso' | 'vacation', checked: boolean) => {
+    const toggleDepartmentEmailPurpose = (index: number, purpose: EntityEmailPurpose) => {
         const current = departmentEmails[index];
         if (!current) return;
         const purposes = new Set(current.purposes ?? []);
-        if (checked) purposes.add(purpose);
-        else purposes.delete(purpose);
+        if (purposes.has(purpose)) purposes.delete(purpose);
+        else purposes.add(purpose);
         form.setValue(`contact.emails.${index}.purposes`, [...purposes], { shouldDirty: true });
     };
 
@@ -555,21 +627,21 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const handleCnpjLookup = useCallback(async (options: { forceRefresh?: boolean; silentInvalid?: boolean } = {}) => {
         const document = form.getValues('document')?.trim();
         const validation = CnpjValidator.validate(document ?? '');
-        setCnpjLookupMessage(null);
+        setLookupFeedback(null);
         if (!document) {
-            if (!options.silentInvalid) setCnpjLookupMessage('Informe o CNPJ antes de buscar.');
+            if (!options.silentInvalid) setLookupFeedback({ text: 'Informe o CNPJ antes de buscar.', tone: 'error' });
             return;
         }
 
         if (!validation.valid) {
             if (!options.silentInvalid || validation.clean.length === 14) {
-                setCnpjLookupMessage(validation.message ?? 'CNPJ inválido. Verifique os números informados.');
+                setLookupFeedback({ text: validation.message ?? 'CNPJ inválido. Verifique os números informados.', tone: 'error' });
             }
             return;
         }
 
         if (!firebaseUser) {
-            setCnpjLookupMessage('Usuário não autenticado.');
+            setLookupFeedback({ text: 'Usuário não autenticado.', tone: 'error' });
             return;
         }
 
@@ -590,9 +662,9 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
             setCnpjLookupResult(lookup);
             applyCompanyLookup(lookup);
             lastAutoLookupCnpjRef.current = validation.clean;
-            setCnpjLookupMessage(lookup.message);
+            setLookupFeedback({ text: lookup.message, tone: 'ok' });
         } catch (error) {
-            setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao consultar CNPJ.');
+            setLookupFeedback({ text: error instanceof Error ? error.message : 'Falha ao consultar CNPJ.', tone: 'error' });
         } finally {
             setCnpjLookupLoading(false);
         }
@@ -613,13 +685,13 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const onSubmit = async (values: EntityFormValues) => {
         const payload = entityPayloadFromForm(values);
         setSaving(true);
-        setCnpjLookupMessage(null);
+        setFormError(null);
 
         try {
             let savedEntityId = entityToEdit?.id ?? loadedCompanyEntityId ?? null;
             if (values.type === 'pessoa_juridica') {
                 if (!firebaseUser) throw new Error('Usuário não autenticado.');
-                if (/baixad|inapt|suspens/i.test(values.cadastralStatus ?? '')) {
+                if (isAttentionCadastralStatus(values.cadastralStatus)) {
                     const confirmed = window.confirm('A situação cadastral desta empresa exige atenção antes do cadastro. Deseja salvar mesmo assim?');
                     if (!confirmed) return;
                 }
@@ -663,460 +735,503 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
             }
             onOpenChange(false);
         } catch (error) {
-            setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao salvar cadastro.');
+            setFormError(error instanceof Error ? error.message : 'Falha ao salvar cadastro.');
         } finally {
             setSaving(false);
         }
     };
 
+    // Avançar nunca envia o formulário: Enter nas etapas anteriores à última só avança.
+    const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+        if (currentStep < ENTITY_WIZARD_STEPS.length) {
+            event.preventDefault();
+            void handleNext();
+            return;
+        }
+        void form.handleSubmit(onSubmit, onInvalid)(event);
+    };
+
+    const heroFacts: Array<{ label: string; value: string; tone?: string }> = [
+        ...(isPF
+            ? [
+                { label: 'Nascimento', value: formatEntityDate(birthDateWatch) || '—' },
+                { label: 'Telefone', value: phoneWatch || '—' },
+            ]
+            : [
+                { label: 'Receita', value: cadastralStatusWatch || '—', tone: !cadastralStatusWatch ? 'text-[#8e8d99]' : attentionStatus ? 'text-[#fbbf24]' : 'text-[#6ee7b7]' },
+                { label: 'Assinatura', value: signatoryNameWatch || '—' },
+                { label: 'E-mails por setor', value: String(departmentEmails.length) },
+            ]),
+        ...(canManagePix ? [{ label: 'Pix', value: hasPix ? 'cadastrado' : '—', tone: hasPix ? 'text-[#6ee7b7]' : 'text-[#8e8d99]' }] : []),
+    ];
+
+    const stepSummary = (id: number) => {
+        if (id === 1) return `${isPF ? 'Pessoa física' : 'Pessoa jurídica'} · ${documentWatch || 'sem documento'}`;
+        const emailsPart = !isPF ? `${departmentEmails.length} e-mails por setor` : '';
+        return [emailsPart, cityState].filter(Boolean).join(' · ') || 'Contato e endereço';
+    };
+
+    const fieldError = (message?: string) => (message ? <span className={FIELD_ERROR}>{message}</span> : null);
+    const errors = form.formState.errors;
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
-                {/* Header */}
-                <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-emerald-700">
-                            <User className="h-3 w-3" /> {isPF ? 'Pessoa física' : 'Pessoa jurídica'}
-                        </span>
-                        {documentWatch && (
-                            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-0.5 font-mono text-xs text-muted-foreground">{documentWatch}</span>
-                        )}
-                        <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium', statusWatch === 'active' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground')}>
-                            <span className={cn('h-1.5 w-1.5 rounded-full', statusWatch === 'active' ? 'bg-green-500' : 'bg-muted-foreground')} />
-                            {statusWatch === 'active' ? 'Ativo' : 'Inativo'}
-                        </span>
-                    </div>
-                    <DialogTitle className="text-2xl font-bold">{entityToEdit ? 'Editar pessoa' : 'Novo cadastro'}</DialogTitle>
-                    <DialogDescription className="text-sm">{nameWatch || 'Diretório de pessoas e empresas. Apenas dados de identidade e contato.'}</DialogDescription>
-                </DialogHeader>
-
+            <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+                <DialogDescription className="sr-only">Diretório de pessoas e empresas. Apenas dados de identidade e contato.</DialogDescription>
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
-                        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
-                            {/* Stepper */}
-                            <aside className="border-r bg-muted/40 px-5 py-6">
-                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {ENTITY_WIZARD_STEPS.length}</p>
-                                <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${(currentStep / ENTITY_WIZARD_STEPS.length) * 100}%` }} />
-                                </div>
-                                <nav className="space-y-1">
-                                    {ENTITY_WIZARD_STEPS.map((step) => {
-                                        const isActive = step.id === currentStep;
-                                        const isDone = step.id < currentStep;
-                                        return (
-                                            <button key={step.id} type="button" onClick={() => setCurrentStep(step.id)}
-                                                className={cn('flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm transition-colors', isActive ? 'font-semibold text-foreground' : 'text-muted-foreground hover:bg-muted')}>
-                                                <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold', isActive ? 'bg-indigo-500 text-white' : isDone ? 'bg-indigo-100 text-indigo-600' : 'bg-muted text-muted-foreground')}>
-                                                    {isDone ? <Check className="h-4 w-4" /> : step.id}
-                                                </span>
-                                                <span className="truncate">{step.label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </nav>
-                                <div className="mt-8 rounded-lg border bg-background/60 p-3">
-                                    <p className="flex items-center gap-1.5 text-xs font-semibold"><User className="h-3.5 w-3.5" /> {isPF ? 'Pessoa física' : 'Pessoa jurídica'}</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">Diretório de pessoas e empresas. Apenas dados de identidade e contato — sem relação com usuários do sistema.</p>
-                                </div>
-                            </aside>
-
-                            {/* Content */}
-                            <ScrollArea className="h-[62vh]">
-                                <div className="px-6 py-6">
-                                    <div className="mb-5 flex items-start justify-between gap-4">
-                                        <div className="flex items-start gap-3">
-                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
-                                                {React.createElement(ENTITY_WIZARD_STEPS[currentStep - 1].icon, { className: 'h-4 w-4' })}
-                                            </div>
-                                            <div>
-                                                <h3 className="font-semibold leading-tight">{ENTITY_WIZARD_STEPS[currentStep - 1].label}</h3>
-                                                <p className="text-sm text-muted-foreground">{ENTITY_WIZARD_STEPS[currentStep - 1].description}</p>
-                                            </div>
-                                        </div>
-                                        {currentStep === 1 && (
-                                            <FormField control={form.control} name="status" render={({ field }) => (
-                                                <div className="flex shrink-0 overflow-hidden rounded-full border text-xs font-medium">
-                                                    <button type="button" onClick={() => field.onChange('active')} className={cn('flex items-center gap-1 px-3 py-1', field.value !== 'inactive' ? 'bg-green-100 text-green-700' : 'text-muted-foreground')}>
-                                                        <span className={cn('h-1.5 w-1.5 rounded-full', field.value !== 'inactive' ? 'bg-green-500' : 'bg-muted-foreground')} /> Ativo
-                                                    </button>
-                                                    <button type="button" onClick={() => field.onChange('inactive')} className={cn('px-3 py-1', field.value === 'inactive' ? 'bg-muted text-foreground' : 'text-muted-foreground')}>Inativo</button>
-                                                </div>
-                                            )}/>
-                                        )}
+                    <form onSubmit={handleFormSubmit} className="grid min-h-0 grid-cols-1 lg:h-[800px] lg:grid-cols-[340px_minmax(0,1fr)]">
+                        {/* Painel lateral com o resumo ao vivo */}
+                        <aside className="flex min-h-0 flex-col gap-[22px] overflow-hidden bg-[#15151c] px-6 py-7 text-[#f3f2ee] sm:px-[26px] sm:py-[30px]">
+                            <div className="flex flex-col gap-3.5">
+                                <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">
+                                    {isEdit ? (isPF ? 'Editar pessoa' : 'Editar empresa') : 'Novo cadastro'}
+                                </span>
+                                <div className="flex items-center gap-3.5">
+                                    <div className={cn(avatarClass, 'h-16 w-16 text-[22px]')}>
+                                        {imageUrlWatch ? <Image src={imageUrlWatch} alt="" fill sizes="64px" className="object-cover" unoptimized /> : initials}
                                     </div>
+                                    <div className="flex min-w-0 flex-col gap-1.5">
+                                        <span className={cn('inline-flex items-center gap-1.5 self-start rounded-full px-[9px] py-[3px] text-[11px] font-extrabold', active ? 'bg-[rgba(52,211,153,.14)] text-[#6ee7b7]' : 'bg-white/10 text-[#a3a2ad]')}>
+                                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                            {active ? 'Ativo' : 'Inativo'}
+                                        </span>
+                                        <span className="truncate font-mono text-xs text-[#c8c7d0]">{documentWatch || (isPF ? 'CPF não informado' : 'CNPJ não informado')}</span>
+                                    </div>
+                                </div>
+                                <h2 className="break-words text-[26px] font-extrabold leading-[1.08] tracking-[-.03em]">{heroName}</h2>
+                                {!isPF && fantasyWatch ? <span className="-mt-1.5 break-words text-[12.5px] text-[#a3a2ad]">{fantasyWatch}</span> : null}
+                            </div>
 
-                                    {/* STEP 1 — Identificação */}
+                            <div className="flex flex-col rounded-2xl border border-white/10 bg-white/5">
+                                {heroFacts.map((fact) => (
+                                    <div key={fact.label} className="flex items-center justify-between gap-2.5 border-t border-white/5 px-3.5 py-[11px] text-[12.5px] first:border-t-0">
+                                        <span className="whitespace-nowrap text-[#8e8d99]">{fact.label}</span>
+                                        <span className={cn('min-w-0 truncate text-right font-bold', fact.tone ?? 'text-white')}>{fact.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-col gap-0.5">
+                                <span className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">Etapa {currentStep} de {ENTITY_WIZARD_STEPS.length}</span>
+                                {ENTITY_WIZARD_STEPS.map((step) => {
+                                    const isActive = step.id === currentStep;
+                                    const isDone = step.id < currentStep;
+                                    return (
+                                        <button
+                                            key={step.id}
+                                            type="button"
+                                            aria-current={isActive ? 'step' : undefined}
+                                            onClick={() => goToStep(step.id)}
+                                            className={cn('flex items-center gap-3 rounded-xl px-2.5 py-[9px] text-left', isActive ? 'bg-white/[.08] text-white' : 'text-[#c8c7d0] hover:bg-white/5')}
+                                        >
+                                            <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-xs font-extrabold', isActive ? 'bg-[#b9b9ff] text-[#15151c]' : 'bg-white/[.08] text-[#c8c7d0]')}>
+                                                {isDone ? <Check className="h-3.5 w-3.5" /> : step.id}
+                                            </span>
+                                            <span className="flex min-w-0 flex-col gap-px">
+                                                <span className="text-[13.5px] font-bold">{step.label}</span>
+                                                <span className="truncate text-[11.5px] text-[#8e8d99]">{stepSummary(step.id)}</span>
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <span className="mt-auto text-[11.5px] leading-normal text-[#77768a]">Diretório de pessoas e empresas. Apenas dados de identidade e contato — sem relação com usuários do sistema.</span>
+                        </aside>
+
+                        <div className="flex min-h-0 flex-col">
+                            <header className="flex items-start justify-between gap-4 border-b border-[#e6e2da] px-5 pb-4 pt-[22px] sm:px-7">
+                                <div className="flex min-w-0 flex-col gap-1">
+                                    <DialogTitle className="text-[21px] font-extrabold leading-tight tracking-[-.02em]">{ENTITY_WIZARD_STEPS[currentStep - 1].label}</DialogTitle>
+                                    <span className="text-[13px] leading-normal text-[#70757d]">{ENTITY_WIZARD_STEPS[currentStep - 1].description}</span>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2.5">
+                                    {currentStep === 1 ? (
+                                        <FormField control={form.control} name="status" render={({ field }) => (
+                                            <div role="radiogroup" aria-label="Status do cadastro" className="flex gap-0.5 rounded-full bg-[#efede7] p-[3px]">
+                                                <button type="button" role="radio" aria-checked={field.value !== 'inactive'} onClick={() => field.onChange('active')} className={cn('h-[30px] rounded-full px-3 text-xs font-bold', field.value !== 'inactive' ? 'bg-[#dcfce7] text-[#15803d]' : 'text-[#70757d]')}>● Ativo</button>
+                                                <button type="button" role="radio" aria-checked={field.value === 'inactive'} onClick={() => field.onChange('inactive')} className={cn('h-[30px] rounded-full px-3 text-xs font-bold', field.value === 'inactive' ? 'bg-white text-[#1a1b1f]' : 'text-[#70757d]')}>Inativo</button>
+                                            </div>
+                                        )}/>
+                                    ) : null}
+                                    <button type="button" aria-label="Fechar" onClick={() => onOpenChange(false)} className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#efede7] text-[#4a4f57]"><X className="h-4 w-4" /></button>
+                                </div>
+                            </header>
+
+                            <ScrollArea className="min-h-0 flex-1">
+                                <div className="px-5 py-5 sm:px-7">
+                                    {/* ETAPA 1 — Identificação */}
                                     {currentStep === 1 && (
-                                        <div className="space-y-5">
-                                            <FormField control={form.control} name="type" render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Tipo de cadastro <span className="text-rose-500">*</span></FormLabel>
-                                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div className="flex flex-col gap-[18px]">
+                                            <div className="grid grid-cols-1 items-stretch gap-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                                <FormField control={form.control} name="type" render={({ field }) => (
+                                                    <>
                                                         {([
                                                             { value: 'pessoa_fisica', icon: User, title: 'Pessoa física', sub: 'Indivíduo · CPF' },
                                                             { value: 'pessoa_juridica', icon: Building, title: 'Pessoa jurídica', sub: 'Empresa · CNPJ' },
                                                         ] as const).map((opt) => {
                                                             const selected = field.value === opt.value;
                                                             return (
-                                                                <button key={opt.value} type="button" onClick={() => field.onChange(opt.value)}
-                                                                    className={cn('flex items-center gap-3 rounded-xl border p-3 text-left transition-colors', selected ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'hover:border-muted-foreground/40')}>
-                                                                    <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', selected ? 'bg-indigo-500 text-white' : 'bg-muted text-muted-foreground')}>
-                                                                        {React.createElement(opt.icon, { className: 'h-4 w-4' })}
+                                                                <button key={opt.value} type="button" role="radio" aria-checked={selected} onClick={() => field.onChange(opt.value)}
+                                                                    className={cn('flex items-center gap-3 rounded-[14px] bg-white px-3.5 py-3 text-left text-[#15151c]', selected ? 'border-2 border-[#15151c]' : 'border border-[#dcd9d1]')}>
+                                                                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', selected ? 'bg-[#15151c] text-white' : 'bg-[#efede7] text-[#70757d]')}>
+                                                                        <opt.icon className="h-4 w-4" />
                                                                     </span>
-                                                                    <span>
-                                                                        <span className="block text-sm font-semibold">{opt.title}</span>
-                                                                        <span className="block text-xs text-muted-foreground">{opt.sub}</span>
+                                                                    <span className="flex flex-col gap-px">
+                                                                        <span className="text-sm font-extrabold">{opt.title}</span>
+                                                                        <span className="text-[11.5px] text-[#8a8f99]">{opt.sub}</span>
                                                                     </span>
                                                                 </button>
                                                             );
                                                         })}
+                                                    </>
+                                                )}/>
+                                                <div className="flex items-center gap-2.5 rounded-[14px] border border-dashed border-[#d6d2c8] bg-[#faf9f6] px-3 py-2">
+                                                    <div className={cn(avatarClass, 'h-10 w-10 text-sm', isPF ? '' : 'rounded-[11px]')}>
+                                                        {imageUrlWatch ? <Image src={imageUrlWatch} alt="" fill sizes="40px" className="object-cover" unoptimized /> : initials}
                                                     </div>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}/>
-
-                                            {/* Avatar */}
-                                            <div className="space-y-2">
-                                                <FormLabel>Foto / avatar</FormLabel>
-                                                <div className="flex items-center gap-4">
-                                                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-emerald-100 text-lg font-bold text-emerald-700">
-                                                        {imageUrlWatch ? <Image src={imageUrlWatch} alt="avatar" width={64} height={64} className="h-full w-full object-cover" /> : initials}
-                                                    </div>
-                                                    <div className="flex flex-col gap-1">
-                                                        <Button type="button" variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Enviar foto</Button>
-                                                        <span className="text-xs text-muted-foreground">JPG ou PNG · até 5MB</span>
-                                                        {imageUrlWatch && <button type="button" className="text-left text-xs text-destructive" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}>Remover foto</button>}
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <button type="button" onClick={() => imageUrlWatch ? form.setValue('imageUrl', '', { shouldDirty: true }) : avatarInputRef.current?.click()} className="whitespace-nowrap text-left text-[12.5px] font-bold text-[#1a1b1f]">
+                                                            {imageUrlWatch ? 'Remover foto' : 'Enviar foto'}
+                                                        </button>
+                                                        <span className="whitespace-nowrap text-[10.5px] text-[#8a8f99]">JPG ou PNG · até 5MB</span>
                                                     </div>
                                                 </div>
                                                 <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={handleAvatarUpload} />
                                             </div>
 
-                                            <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>{isPF ? 'Nome completo' : 'Razão social'} <span className="text-rose-500">*</span></FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-
                                             {isPF ? (
-                                                <>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                        <FormField control={form.control} name="document" render={({ field }) => (<FormItem><FormLabel>CPF <span className="text-rose-500">*</span></FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="rg" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>RG</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                <div className="flex flex-col gap-3.5">
+                                                    <FormField control={form.control} name="name" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className={FIELD_LABEL}>Nome completo <span className="text-[#e11d48]">*</span></FormLabel><FormControl><Input {...field} className={cn(FIELD_INPUT, 'font-bold')} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                        <FormField control={form.control} name="document" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className={FIELD_LABEL}>CPF <span className="text-[#e11d48]">*</span></FormLabel><FormControl><Input {...field} placeholder="000.000.000-00" className={cn(FIELD_INPUT, 'font-mono font-bold')} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                        <FormField control={form.control} name="rg" render={({ field }) => (<FormItem className="space-y-1.5"><div className="flex items-center justify-between"><FormLabel className={FIELD_LABEL}>RG</FormLabel><OptionalHint /></div><FormControl><Input {...field} value={field.value ?? ''} className={cn(FIELD_INPUT, 'font-mono')} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                        <FormField control={form.control} name="birthDate" render={({ field }) => (<FormItem className="space-y-1.5"><div className="flex items-center justify-between"><FormLabel className={FIELD_LABEL}>Data de nascimento</FormLabel><OptionalHint /></div><FormControl><Input type="date" {...field} value={field.value ?? ''} className={FIELD_INPUT} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                        <FormField control={form.control} name="nickname" render={({ field }) => (<FormItem className="space-y-1.5"><div className="flex items-center justify-between"><FormLabel className={FIELD_LABEL}>Apelido</FormLabel><OptionalHint>busca interna</OptionalHint></div><FormControl><Input {...field} value={field.value ?? ''} className={FIELD_INPUT} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
                                                     </div>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                        <FormField control={form.control} name="birthDate" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Data de nascimento</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input type="date" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="nickname" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Apelido</FormLabel><span className="text-xs text-muted-foreground">busca interna</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                    </div>
-                                                </>
+                                                </div>
                                             ) : (
-                                                <>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                        <FormField control={form.control} name="document" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>CNPJ <span className="text-rose-500">*</span></FormLabel>
-                                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
-                                                                    <FormControl>
-                                                                        <Input
-                                                                            {...field}
-                                                                            inputMode="numeric"
-                                                                            placeholder="00.000.000/0000-00"
-                                                                            value={field.value ?? ''}
-                                                                            onChange={(event) => field.onChange(maskCnpjInput(event.target.value))}
-                                                                            onBlur={(event) => {
-                                                                                field.onBlur();
-                                                                                if (CnpjValidator.clean(event.target.value).length === 14) {
-                                                                                    void handleCnpjLookup({ silentInvalid: true });
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    </FormControl>
-                                                                    <Button
-                                                                        type="button"
-                                                                        variant="outline"
-                                                                        className="shrink-0"
-                                                                        onClick={() => void handleCnpjLookup()}
-                                                                        disabled={cnpjLookupLoading}
-                                                                    >
-                                                                        {cnpjLookupLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
-                                                                        Consultar
-                                                                    </Button>
-                                                                    <Button
-                                                                        type="button"
-                                                                        variant="outline"
-                                                                        className="shrink-0"
-                                                                        onClick={() => void handleCnpjLookup({ forceRefresh: true })}
-                                                                        disabled={cnpjLookupLoading || cleanCnpjWatch.length !== 14}
-                                                                    >
-                                                                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                                                                        Atualizar
-                                                                    </Button>
-                                                                </div>
-                                                                {cnpjLookupLoading ? <p className="text-xs text-muted-foreground">Buscando dados da empresa...</p> : null}
-                                                                {cnpjLookupMessage ? <p className="text-xs text-muted-foreground">{cnpjLookupMessage}</p> : null}
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem><FormLabel>Nome fantasia <span className="text-rose-500">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                    </div>
+                                                <div className="flex flex-col gap-4">
+                                                    {/* CNPJ primeiro: a consulta preenche o restante do cadastro */}
+                                                    <FormField control={form.control} name="document" render={({ field }) => (
+                                                        <FormItem className="flex flex-col gap-2.5 space-y-0 rounded-[18px] bg-[#15151c] p-4 text-[#f3f2ee]">
+                                                            <div className="flex items-baseline justify-between gap-2.5">
+                                                                <FormLabel className="text-xs font-bold text-[#c8c7d0]">CNPJ <span className="text-[#f08bb1]">*</span></FormLabel>
+                                                                <span className="text-[11px] text-[#8e8d99]">consulta automática ao completar 14 dígitos</span>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                                                                <FormControl>
+                                                                    <Input
+                                                                        {...field}
+                                                                        inputMode="numeric"
+                                                                        placeholder="00.000.000/0000-00"
+                                                                        value={field.value ?? ''}
+                                                                        onChange={(event) => field.onChange(maskCnpjInput(event.target.value))}
+                                                                        onBlur={(event) => {
+                                                                            field.onBlur();
+                                                                            if (CnpjValidator.clean(event.target.value).length === 14) {
+                                                                                void handleCnpjLookup({ silentInvalid: true });
+                                                                            }
+                                                                        }}
+                                                                        className="h-12 min-w-0 flex-1 rounded-xl border-white/10 bg-white/[.07] px-4 font-mono text-[17px] font-bold tracking-[.02em] text-white shadow-none placeholder:text-white/30 focus-visible:ring-[#b9b9ff]"
+                                                                    />
+                                                                </FormControl>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => void handleCnpjLookup()}
+                                                                    disabled={cnpjLookupLoading}
+                                                                    className="flex h-12 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#f3f2ee] px-4 text-[13px] font-extrabold text-[#15151c] disabled:opacity-60"
+                                                                >
+                                                                    {cnpjLookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                                                                    Consultar
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => void handleCnpjLookup({ forceRefresh: true })}
+                                                                    disabled={cnpjLookupLoading || cleanCnpjWatch.length !== 14}
+                                                                    className="flex h-12 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/15 px-3.5 text-[13px] font-bold text-[#f3f2ee] disabled:opacity-40"
+                                                                >
+                                                                    <RefreshCw className="h-3.5 w-3.5" />
+                                                                    Atualizar
+                                                                </button>
+                                                            </div>
+                                                            {cnpjLookupLoading ? <p className="text-xs text-[#c8c7d0]">Buscando dados da empresa...</p> : null}
+                                                            {lookupFeedback ? (
+                                                                <p className={cn('flex items-center gap-2 text-xs', lookupFeedback.tone === 'ok' ? 'text-[#6ee7b7]' : 'text-[#fda4af]')}>
+                                                                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', lookupFeedback.tone === 'ok' ? 'bg-[#34d399]' : 'bg-[#fb7185]')} />
+                                                                    {lookupFeedback.text}
+                                                                </p>
+                                                            ) : null}
+                                                            <FormMessage className="text-xs font-semibold text-[#fda4af]" />
+                                                        </FormItem>
+                                                    )}/>
+
                                                     {cnpjLookupResult?.alerts?.length ? (
-                                                        <div className="space-y-2">
+                                                        <div className="flex flex-col gap-2">
                                                             {cnpjLookupResult.alerts.map((alert, index) => (
-                                                                <Alert key={`${alert.message}-${index}`} variant={alert.type === 'error' ? 'destructive' : 'default'} className={cn(alert.type === 'warning' && 'border-amber-200 bg-amber-50 text-amber-900')}>
-                                                                    <AlertTriangle className="h-4 w-4" />
-                                                                    <AlertTitle>{alert.type === 'warning' ? 'Atenção' : alert.type === 'error' ? 'Erro' : 'Informação'}</AlertTitle>
-                                                                    <AlertDescription>{alert.message}</AlertDescription>
-                                                                </Alert>
+                                                                <div
+                                                                    key={`${alert.message}-${index}`}
+                                                                    role="alert"
+                                                                    className={cn(
+                                                                        'flex gap-2.5 rounded-[14px] border px-3.5 py-3',
+                                                                        alert.type === 'error' ? 'border-[#f3c2c8] bg-[#fdecee] text-[#8f1d28]' : alert.type === 'warning' ? 'border-[#f5d9a3] bg-[#fff7e6] text-[#6b4500]' : 'border-[#e6e2da] bg-white text-[#4a4f57]',
+                                                                    )}
+                                                                >
+                                                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                                                    <div className="flex flex-col gap-0.5">
+                                                                        <b className="text-[13px]">{alert.type === 'warning' ? 'Atenção' : alert.type === 'error' ? 'Erro' : 'Informação'}</b>
+                                                                        <span className="text-[12.5px] leading-snug">{alert.message}</span>
+                                                                    </div>
+                                                                </div>
                                                             ))}
                                                         </div>
                                                     ) : null}
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Responsável cadastral</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="nickname" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Apelido</FormLabel><span className="text-xs text-muted-foreground">busca interna</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+
+                                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                                                        <FormField control={form.control} name="name" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className={FIELD_LABEL}>Razão social <span className="text-[#e11d48]">*</span></FormLabel><FormControl><Input {...field} className={cn(FIELD_INPUT, 'font-bold')} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                        <FormField control={form.control} name="fantasyName" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className={FIELD_LABEL}>Nome fantasia <span className="text-[#e11d48]">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} className={FIELD_INPUT} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
                                                     </div>
-                                                    <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-4">
-                                                        <div className="mb-3">
-                                                            <p className="text-sm font-bold text-slate-900">Responsável pela assinatura documental</p>
-                                                            <p className="text-xs text-slate-500">
-                                                                Esta pessoa assina pela empresa nos documentos enviados à Autentique.
-                                                            </p>
+                                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem className="space-y-1.5"><div className="flex items-center justify-between"><FormLabel className={FIELD_LABEL}>Responsável cadastral</FormLabel><OptionalHint /></div><FormControl><Input {...field} value={field.value ?? ''} className={FIELD_INPUT} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                        <FormField control={form.control} name="nickname" render={({ field }) => (<FormItem className="space-y-1.5"><div className="flex items-center justify-between"><FormLabel className={FIELD_LABEL}>Apelido</FormLabel><OptionalHint>busca interna</OptionalHint></div><FormControl><Input {...field} value={field.value ?? ''} className={FIELD_INPUT} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    </div>
+
+                                                    <div className="flex flex-col gap-3 rounded-[18px] border border-[#e3dcf7] bg-[#f8f6ff] p-4">
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <span className="text-sm font-extrabold">Responsável pela assinatura documental</span>
+                                                            <span className="text-xs text-[#70757d]">Esta pessoa assina pela empresa nos documentos enviados à Autentique.</span>
                                                         </div>
-                                                        <div className="grid gap-4 md:grid-cols-2">
-                                                            <FormField
-                                                                control={form.control}
-                                                                name="documentSignatoryUserId"
-                                                                render={({ field }) => (
-                                                                    <FormItem>
-                                                                        <FormLabel>Pessoa responsável</FormLabel>
-                                                                        <Select
-                                                                            value={field.value || NO_DOCUMENT_SIGNATORY}
-                                                                            disabled={documentSignatoryLoading}
-                                                                            onValueChange={(value) => {
-                                                                                if (value === NO_DOCUMENT_SIGNATORY) {
-                                                                                    field.onChange('');
-                                                                                    form.setValue('documentSignatoryName', '');
-                                                                                    form.setValue('documentSignatoryEmail', '');
-                                                                                    return;
-                                                                                }
-                                                                                const option = documentSignatoryOptions.find((item) => item.id === value);
-                                                                                field.onChange(value);
-                                                                                form.setValue('documentSignatoryName', option?.name ?? '');
-                                                                                form.setValue('documentSignatoryEmail', option?.email ?? '');
-                                                                            }}
-                                                                        >
-                                                                            <FormControl>
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Selecione..." />
-                                                                                </SelectTrigger>
-                                                                            </FormControl>
-                                                                            <SelectContent>
-                                                                                <SelectItem value={NO_DOCUMENT_SIGNATORY}>Sem responsável definido</SelectItem>
-                                                                                {documentSignatoryOptions.map((option) => (
-                                                                                    <SelectItem key={option.id} value={option.id}>
-                                                                                        {option.name} · {option.email}
-                                                                                    </SelectItem>
-                                                                                ))}
-                                                                            </SelectContent>
-                                                                        </Select>
-                                                                        <FormMessage />
-                                                                    </FormItem>
-                                                                )}
-                                                            />
-                                                            <FormField
-                                                                control={form.control}
-                                                                name="documentSignatoryScope"
-                                                                render={({ field }) => (
-                                                                    <FormItem>
-                                                                        <FormLabel>Abrangência</FormLabel>
-                                                                        <Select value={field.value ?? 'entity'} onValueChange={field.onChange}>
-                                                                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                                            <SelectContent>
-                                                                                <SelectItem value="entity">Somente este CNPJ</SelectItem>
-                                                                                <SelectItem value="cnpj_root">Matriz e filiais do mesmo CNPJ-base</SelectItem>
-                                                                            </SelectContent>
-                                                                        </Select>
-                                                                        <FormMessage />
-                                                                    </FormItem>
-                                                                )}
-                                                            />
+                                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                                                            <FormField control={form.control} name="documentSignatoryUserId" render={({ field }) => (
+                                                                <FormItem className="space-y-1.5">
+                                                                    <FormLabel className={FIELD_LABEL}>Pessoa responsável</FormLabel>
+                                                                    <Select
+                                                                        value={field.value || NO_DOCUMENT_SIGNATORY}
+                                                                        disabled={documentSignatoryLoading}
+                                                                        onValueChange={(value) => {
+                                                                            if (value === NO_DOCUMENT_SIGNATORY) {
+                                                                                field.onChange('');
+                                                                                form.setValue('documentSignatoryName', '');
+                                                                                form.setValue('documentSignatoryEmail', '');
+                                                                                return;
+                                                                            }
+                                                                            const option = documentSignatoryOptions.find((item) => item.id === value);
+                                                                            field.onChange(value);
+                                                                            form.setValue('documentSignatoryName', option?.name ?? '');
+                                                                            form.setValue('documentSignatoryEmail', option?.email ?? '');
+                                                                        }}
+                                                                    >
+                                                                        <FormControl>
+                                                                            <SelectTrigger className={cn(FIELD_INPUT, 'shadow-none')}>
+                                                                                <SelectValue placeholder="Selecione..." />
+                                                                            </SelectTrigger>
+                                                                        </FormControl>
+                                                                        <SelectContent>
+                                                                            <SelectItem value={NO_DOCUMENT_SIGNATORY}>Sem responsável definido</SelectItem>
+                                                                            {documentSignatoryOptions.map((option) => (
+                                                                                <SelectItem key={option.id} value={option.id}>
+                                                                                    {option.name} · {option.email}
+                                                                                </SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormMessage className={FIELD_ERROR} />
+                                                                </FormItem>
+                                                            )}/>
+                                                            <FormField control={form.control} name="documentSignatoryScope" render={({ field }) => (
+                                                                <FormItem className="space-y-1.5">
+                                                                    <FormLabel className={FIELD_LABEL}>Abrangência</FormLabel>
+                                                                    <Segmented
+                                                                        label="Abrangência da assinatura"
+                                                                        value={(field.value ?? 'entity') as 'entity' | 'cnpj_root'}
+                                                                        options={ENTITY_SIGNATORY_SCOPES}
+                                                                        onChange={field.onChange}
+                                                                        className="h-11 rounded-xl bg-[#ece8f8] p-1"
+                                                                    />
+                                                                    <FormMessage className={FIELD_ERROR} />
+                                                                </FormItem>
+                                                            )}/>
                                                         </div>
-                                                        {form.watch('documentSignatoryEmail') ? (
-                                                            <p className="mt-3 text-xs font-medium text-violet-800">
-                                                                Convites de assinatura: {form.watch('documentSignatoryName')} · {form.watch('documentSignatoryEmail')}
-                                                            </p>
+                                                        {signatoryEmailWatch ? (
+                                                            <span className="text-xs font-semibold text-[#5b21b6]">Convites de assinatura: {signatoryNameWatch} · {signatoryEmailWatch}</span>
                                                         ) : null}
                                                     </div>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                                        <FormField control={form.control} name="cadastralStatus" render={({ field }) => (<FormItem><FormLabel>Situação cadastral</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="openingDate" render={({ field }) => (<FormItem><FormLabel>Data de abertura</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="businessType" render={({ field }) => (<FormItem><FormLabel>Tipo de fornecedor</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Fornecedor, cliente, serviço..." /></FormControl><FormMessage /></FormItem>)}/>
+
+                                                    {/* Dados fiscais recolhidos: a consulta já os preenche */}
+                                                    <div className="overflow-hidden rounded-[18px] border border-[#e6e2da] bg-white">
+                                                        <button type="button" aria-expanded={fiscalOpen} onClick={() => setFiscalOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left">
+                                                            <span className="flex min-w-0 flex-col gap-0.5">
+                                                                <span className="text-sm font-extrabold">Dados fiscais e da Receita</span>
+                                                                <span className="truncate text-xs text-[#8a8f99]">{cadastralStatusWatch || '—'} · CNAE {cnaeWatch || '—'} · IE {stateRegistrationWatch || '—'}</span>
+                                                            </span>
+                                                            <span className="flex shrink-0 items-center gap-2">
+                                                                {fiscalFromLookup ? <span className="whitespace-nowrap rounded-full bg-[#dcf5e8] px-[9px] py-[3px] text-[11px] font-bold text-[#0f6b46]">preenchido pela consulta</span> : null}
+                                                                {fiscalOpen ? <ChevronUp className="h-3.5 w-3.5 text-[#8a8f99]" /> : <ChevronDown className="h-3.5 w-3.5 text-[#8a8f99]" />}
+                                                            </span>
+                                                        </button>
+                                                        {fiscalOpen ? (
+                                                            <div className="grid grid-cols-1 gap-3 border-t border-[#f0ede7] px-4 pb-4 pt-3.5 md:grid-cols-3">
+                                                                <FormField control={form.control} name="cadastralStatus" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Situação cadastral</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="openingDate" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Data de abertura</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="businessType" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Tipo de fornecedor</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Fornecedor, cliente, serviço..." className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="primaryCnaeCode" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">CNAE principal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 font-mono text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="primaryCnaeDescription" render={({ field }) => (<FormItem className="space-y-1.5 md:col-span-2"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Descrição do CNAE</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="legalNature" render={({ field }) => (<FormItem className="space-y-1.5 md:col-span-2"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Natureza jurídica</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="stateRegistration" render={({ field }) => (<FormItem className="space-y-1.5"><div className="flex items-center justify-between"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Inscrição estadual</FormLabel><OptionalHint /></div><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 font-mono text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                                <FormField control={form.control} name="icmsTaxpayer" render={({ field }) => (
+                                                                    <FormItem className="space-y-1.5">
+                                                                        <FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Contribuinte ICMS</FormLabel>
+                                                                        <Segmented label="Contribuinte ICMS" value={field.value ?? 'nao_informado'} options={ENTITY_ICMS_OPTIONS} onChange={field.onChange} className="h-10" />
+                                                                        <FormMessage className={FIELD_ERROR} />
+                                                                    </FormItem>
+                                                                )}/>
+                                                                <FormField control={form.control} name="stateRegistrationStatus" render={({ field }) => (
+                                                                    <FormItem className="space-y-1.5 md:col-span-2">
+                                                                        <FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Situação IE</FormLabel>
+                                                                        <Segmented label="Situação da inscrição estadual" value={field.value ?? 'nao_consultada'} options={ENTITY_IE_STATUS_OPTIONS} onChange={field.onChange} className="h-10 overflow-x-auto" />
+                                                                        <FormMessage className={FIELD_ERROR} />
+                                                                    </FormItem>
+                                                                )}/>
+                                                            </div>
+                                                        ) : null}
                                                     </div>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_2fr]">
-                                                        <FormField control={form.control} name="primaryCnaeCode" render={({ field }) => (<FormItem><FormLabel>CNAE principal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="primaryCnaeDescription" render={({ field }) => (<FormItem><FormLabel>Descrição do CNAE</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                    </div>
-                                                    <FormField control={form.control} name="legalNature" render={({ field }) => (<FormItem><FormLabel>Natureza jurídica</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                                        <FormField control={form.control} name="stateRegistration" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Inscrição estadual</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                        <FormField control={form.control} name="icmsTaxpayer" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Contribuinte ICMS</FormLabel>
-                                                                <Select onValueChange={field.onChange} value={field.value ?? 'nao_informado'}>
-                                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                                    <SelectContent>
-                                                                        <SelectItem value="nao_informado">Não informado</SelectItem>
-                                                                        <SelectItem value="sim">Sim</SelectItem>
-                                                                        <SelectItem value="nao">Não</SelectItem>
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                        <FormField control={form.control} name="stateRegistrationStatus" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Situação IE</FormLabel>
-                                                                <Select onValueChange={field.onChange} value={field.value ?? 'nao_consultada'}>
-                                                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                                    <SelectContent>
-                                                                        <SelectItem value="nao_consultada">Não consultada</SelectItem>
-                                                                        <SelectItem value="nao_informado">Não informado</SelectItem>
-                                                                        <SelectItem value="ativa">Ativa</SelectItem>
-                                                                        <SelectItem value="inativa">Inativa</SelectItem>
-                                                                        <SelectItem value="suspensa">Suspensa</SelectItem>
-                                                                        <SelectItem value="baixada">Baixada</SelectItem>
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                    </div>
-                                                </>
+                                                </div>
                                             )}
                                         </div>
                                     )}
 
-                                    {/* STEP 2 — Contato e endereço */}
+                                    {/* ETAPA 2 — Contato e endereço */}
                                     {currentStep === 2 && (
-                                        <div className="space-y-5">
-                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem><FormLabel>E-mail principal</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="contact.phone" render={({ field }) => (<FormItem><FormLabel>Telefone / WhatsApp</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
+                                        <div className="flex flex-col gap-4">
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className={FIELD_LABEL}>E-mail principal</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className={FIELD_INPUT} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                <FormField control={form.control} name="contact.phone" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className={FIELD_LABEL}>Telefone / WhatsApp</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className={cn(FIELD_INPUT, 'font-mono')} /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
                                             </div>
 
-                                            {entityType === 'pessoa_juridica' ? (
-                                                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                                        <div>
-                                                            <p className="text-sm font-bold text-slate-900">E-mails por setor</p>
-                                                            <p className="mt-1 text-xs text-slate-500">Cadastre os contatos por setor — por exemplo, Pessoal da contabilidade — e indique em quais processos cada um será sugerido.</p>
+                                            {!isPF ? (
+                                                <div className="flex flex-col gap-3 rounded-[18px] border border-[#e6e2da] bg-white p-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <span className="text-sm font-extrabold">E-mails por setor</span>
+                                                            <span className="text-xs text-[#70757d]">Usados nos envios automáticos de Integração, Desligamento, ASO e Férias.</span>
                                                         </div>
-                                                        <Button type="button" size="sm" variant="outline" onClick={addDepartmentEmail}>
-                                                            <Plus className="mr-1.5 h-3.5 w-3.5" />Adicionar e-mail
-                                                        </Button>
+                                                        <button type="button" onClick={addDepartmentEmail} className="flex h-[34px] items-center gap-1 whitespace-nowrap rounded-[10px] border border-[#dcd9d1] bg-white px-3 text-[12.5px] font-bold">
+                                                            <Plus className="h-3.5 w-3.5" /> Adicionar e-mail
+                                                        </button>
                                                     </div>
-                                                    <div className="mt-4 space-y-3">
-                                                        {departmentEmails.map((entry, index) => (
-                                                            <div key={entry.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                                                                <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_36px]">
-                                                                    <label className="space-y-2 text-sm font-medium">
-                                                                        <span>Setor</span>
-                                                                        <Input {...form.register(`contact.emails.${index}.department` as const)} placeholder="Ex.: Pessoal" />
-                                                                        {form.formState.errors.contact?.emails?.[index]?.department?.message ? <span className="block text-sm font-medium text-destructive">{form.formState.errors.contact.emails[index]?.department?.message}</span> : null}
-                                                                    </label>
-                                                                    <label className="space-y-2 text-sm font-medium">
-                                                                        <span>E-mail</span>
-                                                                        <Input type="email" {...form.register(`contact.emails.${index}.email` as const)} placeholder="setor@empresa.com.br" />
-                                                                        {form.formState.errors.contact?.emails?.[index]?.email?.message ? <span className="block text-sm font-medium text-destructive">{form.formState.errors.contact.emails[index]?.email?.message}</span> : null}
-                                                                    </label>
-                                                                    <button type="button" onClick={() => removeDepartmentEmail(entry.id)} className="mt-7 grid h-9 w-9 place-items-center rounded-lg text-rose-500 hover:bg-rose-50" aria-label="Remover e-mail setorial">
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </button>
+                                                    {departmentEmails.map((entry, index) => (
+                                                        <div key={entry.id} className="flex flex-col gap-2 rounded-xl border border-[#efece5] bg-[#faf9f6] p-2.5">
+                                                            <div className="grid grid-cols-1 items-start gap-2.5 sm:grid-cols-[150px_minmax(0,1fr)_28px]">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <Input {...form.register(`contact.emails.${index}.department` as const)} aria-label="Setor" placeholder="Ex.: Pessoal" className="h-[38px] rounded-[9px] border-[#dcd9d1] bg-white px-2.5 text-[13px] font-bold shadow-none" />
+                                                                    {fieldError(errors.contact?.emails?.[index]?.department?.message)}
                                                                 </div>
-                                                                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-600">
-                                                                    <span className="text-slate-400">Usar em:</span>
-                                                                    {([
-                                                                        ['onboarding', 'Integração'],
-                                                                        ['termination', 'Desligamento'],
-                                                                        ['aso', 'ASO'],
-                                                                        ['vacation', 'Férias'],
-                                                                    ] as const).map(([purpose, label]) => (
-                                                                        <label key={purpose} className="flex items-center gap-1.5">
-                                                                            <input type="checkbox" checked={(entry.purposes ?? []).includes(purpose)} onChange={(event) => toggleDepartmentEmailPurpose(index, purpose, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-pink-600" />
-                                                                            {label}
-                                                                        </label>
-                                                                    ))}
+                                                                <div className="flex flex-col gap-1">
+                                                                    <Input type="email" {...form.register(`contact.emails.${index}.email` as const)} aria-label="E-mail do setor" placeholder="setor@empresa.com.br" className="h-[38px] rounded-[9px] border-[#dcd9d1] bg-white px-2.5 text-[13px] shadow-none" />
+                                                                    {fieldError(errors.contact?.emails?.[index]?.email?.message)}
                                                                 </div>
+                                                                <button type="button" onClick={() => removeDepartmentEmail(entry.id)} className="flex h-7 w-7 items-center justify-center rounded-lg text-[#b4232f] hover:bg-[#fdecee]" aria-label="Remover e-mail setorial">
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </button>
                                                             </div>
-                                                        ))}
-                                                        {departmentEmails.length === 0 ? <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">Nenhum e-mail setorial cadastrado.</p> : null}
-                                                    </div>
+                                                            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Usar em">
+                                                                <span className="mr-1 text-[11px] font-semibold text-[#8a8f99]">Usar em:</span>
+                                                                {ENTITY_EMAIL_PURPOSES.map(([purpose, label]) => {
+                                                                    const on = (entry.purposes ?? []).includes(purpose);
+                                                                    return (
+                                                                        <button key={purpose} type="button" aria-pressed={on} onClick={() => toggleDepartmentEmailPurpose(index, purpose)} className={cn('h-7 whitespace-nowrap rounded-full border px-[9px] text-[11px] font-bold', on ? 'border-[#15151c] bg-[#15151c] text-white' : 'border-[#dcd9d1] bg-white text-[#70757d]')}>
+                                                                            {label}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {departmentEmails.length === 0 ? <p className="rounded-xl border border-dashed border-[#d6d2c8] px-3 py-4 text-center text-xs text-[#70757d]">Nenhum e-mail setorial cadastrado.</p> : null}
                                                 </div>
                                             ) : null}
 
                                             {canManagePix ? (
-                                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
-                                                    <div className="mb-3">
-                                                        <p className="text-sm font-bold text-slate-900">Dados para pagamento</p>
-                                                        <p className="mt-1 text-xs text-slate-500">Cadastros ativos com chave Pix preenchida ficam disponíveis para pagamento.</p>
+                                                <div className="flex flex-col gap-2.5 rounded-[18px] border border-[#c9e9d9] bg-[#f0faf5] p-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <span className="text-sm font-extrabold">Dados para pagamento</span>
+                                                            <span className="text-xs text-[#3f7d63]">Cadastros ativos com chave Pix preenchida ficam disponíveis para pagamento.</span>
+                                                        </div>
+                                                        {hasPix && active ? <span className="whitespace-nowrap rounded-full border border-[#b7e4cd] bg-[#dcf5e8] px-[9px] py-0.5 text-[11px] font-bold text-[#0f6b46]">disponível p/ pagamento</span> : null}
                                                     </div>
-                                                    <label className="space-y-2 text-sm font-medium">
-                                                        <span>Chave Pix <span className="text-xs font-normal text-muted-foreground">(opcional)</span></span>
+                                                    <label className="flex flex-col gap-1.5">
+                                                        <span className="text-xs font-bold text-[#0f4a33]">Chave Pix <span className="font-medium text-[#3f7d63]">(opcional)</span></span>
                                                         <Input
                                                             value={pixKey}
                                                             onChange={(event) => setPixKey(event.target.value)}
                                                             disabled={pixLoading}
                                                             placeholder={pixLoading ? 'Carregando chave Pix...' : 'CPF, CNPJ, e-mail, telefone ou chave aleatória'}
                                                             autoComplete="off"
+                                                            className="h-11 min-w-0 rounded-xl border-[#b7e4cd] bg-white px-3.5 font-mono text-[13.5px] shadow-none"
                                                         />
-                                                        <span className="block text-xs font-normal text-muted-foreground">A chave é exibida sem máscara somente nesta edição e permanece criptografada no armazenamento.</span>
+                                                        <span className="text-xs text-[#3f7d63]">A chave é exibida sem máscara somente nesta edição e permanece criptografada no armazenamento.</span>
                                                     </label>
                                                 </div>
                                             ) : null}
 
-                                            <Separator />
-
-                                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_2fr_100px]">
-                                                <FormField control={form.control} name="address.zipCode" render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><Input {...field} value={field.value ?? ''} onBlur={e => handleZipCodeBlur(e.target.value)} /></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="address.street" render={({ field }) => (<FormItem><FormLabel>Logradouro</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="address.number" render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_1fr_100px]">
-                                                <FormField control={form.control} name="address.complement" render={({ field }) => (<FormItem><FormLabel>Complemento</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="address.neighborhood" render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="address.city" render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
-                                                <FormField control={form.control} name="address.state" render={({ field }) => (<FormItem><FormLabel>UF</FormLabel><FormControl><Input maxLength={2} {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            <div className="flex flex-col gap-3 rounded-[18px] border border-[#e6e2da] bg-white p-4">
+                                                <div className="flex items-baseline justify-between gap-2.5">
+                                                    <span className="text-sm font-extrabold">Endereço</span>
+                                                    <span className="text-[11.5px] text-[#8a8f99]">CEP preenche o restante (ViaCEP)</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[150px_minmax(0,1fr)_110px]">
+                                                    <FormField control={form.control} name="address.zipCode" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">CEP</FormLabel><FormControl><Input {...field} value={field.value ?? ''} onBlur={(e) => { field.onBlur(); void handleZipCodeBlur(e.target.value); }} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 font-mono text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    <FormField control={form.control} name="address.street" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Logradouro</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    <FormField control={form.control} name="address.number" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Número</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))_70px]">
+                                                    <FormField control={form.control} name="address.complement" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Complemento</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    <FormField control={form.control} name="address.neighborhood" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Bairro</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    <FormField control={form.control} name="address.city" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">Cidade</FormLabel><FormControl><Input {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                    <FormField control={form.control} name="address.state" render={({ field }) => (<FormItem className="space-y-1.5"><FormLabel className="text-[11.5px] font-bold text-[#4a4f57]">UF</FormLabel><FormControl><Input maxLength={2} {...field} value={field.value ?? ''} className="h-10 rounded-[10px] border-[#dcd9d1] bg-[#faf9f6] px-3 text-[13px] uppercase shadow-none" /></FormControl><FormMessage className={FIELD_ERROR} /></FormItem>)}/>
+                                                </div>
                                             </div>
 
                                             <FormField control={form.control} name="notes" render={({ field }) => (
-                                                <FormItem>
-                                                    <div className="flex items-center justify-between">
-                                                        <FormLabel>Observações</FormLabel>
-                                                        <span className="text-xs text-muted-foreground">opcional</span>
-                                                    </div>
-                                                    <FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Anotações sobre este cadastro..." /></FormControl>
-                                                    <FormMessage />
+                                                <FormItem className="space-y-1.5">
+                                                    <FormLabel className={FIELD_LABEL}>Observações</FormLabel>
+                                                    <FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Anotações sobre este cadastro..." className="min-h-[72px] resize-y rounded-xl border-[#dcd9d1] bg-white px-3 py-2.5 text-[13px] shadow-none" /></FormControl>
+                                                    <FormMessage className={FIELD_ERROR} />
                                                 </FormItem>
                                             )}/>
                                         </div>
                                     )}
                                 </div>
                             </ScrollArea>
-                        </div>
 
-                        {/* Footer */}
-                        <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
-                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                            <div className="hidden flex-col items-center text-center sm:flex">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {ENTITY_WIZARD_STEPS.length}</span>
-                                <span className="text-sm font-medium">{ENTITY_WIZARD_STEPS[currentStep - 1].label}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {currentStep > 1 && (<Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>)}
-                                {currentStep < ENTITY_WIZARD_STEPS.length ? (
-                                    <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
-                                ) : (
-                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={saving}>
-                                        {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                                        {entityToEdit || loadedCompanyEntityId ? 'Salvar alterações' : 'Adicionar'}
-                                    </Button>
-                                )}
-                            </div>
-                        </DialogFooter>
+                            {formError ? (
+                                <div role="alert" className="flex items-start gap-2 border-t border-[#f3c2c8] bg-[#fdecee] px-5 py-2.5 text-[12.5px] font-semibold text-[#8f1d28] sm:px-7">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span className="min-w-0 break-words">{formError}</span>
+                                </div>
+                            ) : null}
+                            <footer className="flex items-center justify-between gap-3 border-t border-[#e6e2da] bg-[#faf9f6] px-5 py-4 sm:px-7">
+                                <button type="button" onClick={() => onOpenChange(false)} className="h-11 whitespace-nowrap rounded-xl px-3.5 text-[13.5px] font-bold text-[#70757d] hover:bg-[#efede7]">Cancelar</button>
+                                <div className="flex items-center gap-2.5">
+                                    {currentStep > 1 ? (
+                                        <button type="button" onClick={handleBack} className="flex h-11 items-center gap-1 whitespace-nowrap rounded-xl border border-[#dcd9d1] bg-white px-4 text-[13.5px] font-bold">
+                                            <ChevronLeft className="h-4 w-4" /> Voltar
+                                        </button>
+                                    ) : null}
+                                    {currentStep < ENTITY_WIZARD_STEPS.length ? (
+                                        <button type="button" onClick={() => void handleNext()} className="flex h-11 items-center gap-1 whitespace-nowrap rounded-xl bg-[#15151c] px-[22px] text-sm font-extrabold text-white">
+                                            Avançar <ChevronRight className="h-4 w-4" />
+                                        </button>
+                                    ) : (
+                                        <button type="submit" disabled={saving} className="flex h-11 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#15151c] px-[22px] text-sm font-extrabold text-white disabled:opacity-60">
+                                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                            {isEdit || loadedCompanyEntityId ? 'Salvar alterações' : 'Adicionar'}
+                                        </button>
+                                    )}
+                                </div>
+                            </footer>
+                        </div>
                     </form>
                 </Form>
             </DialogContent>
@@ -1165,7 +1280,8 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
   const [status, setStatus] = useState<CadastrosStatus>('active');
   const [chip, setChip] = useState('all');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<DrawerNotice | null>(null);
+  const [editTarget, setEditTarget] = useState<EntityFichaEditTarget>({ step: 1 });
+  const [pendingInactivate, setPendingInactivate] = useState<Entity | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const canViewAsoClinics = hasFormalizationPermission(permissions, 'aso.view');
   const canManageAsoClinics = hasFormalizationPermission(permissions, 'aso.manage');
@@ -1224,51 +1340,36 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
   const opened = openId ? entities.find((entity) => entity.id === openId) ?? null : null;
   const displayName = (entity: Entity) => entity.fantasyName || entity.name;
 
-  const closeDrawer = () => { setOpenId(null); setNotice(null); };
-  const changeStatus = (next: CadastrosStatus) => { setStatus(next); setChip('all'); closeDrawer(); };
-  const handleAddNew = () => { setEntityToEdit(null); setIsModalOpen(true); };
-  const handleEdit = (entity: Entity) => { closeDrawer(); setEntityToEdit(entity); setIsModalOpen(true); };
+  const closeFicha = () => { setOpenId(null); setPendingInactivate(null); };
+  const changeStatus = (next: CadastrosStatus) => { setStatus(next); setChip('all'); closeFicha(); };
+  const handleAddNew = () => { setEntityToEdit(null); setEditTarget({ step: 1 }); setIsModalOpen(true); };
+  const handleEdit = (entity: Entity, target: EntityFichaEditTarget = { step: 1 }) => {
+    closeFicha();
+    setEntityToEdit(entity);
+    setEditTarget(target);
+    setIsModalOpen(true);
+  };
 
-  const handleInactivate = (entity: Entity) => {
-    setNotice({
-      kind: 'confirm',
-      text: `Inativar “${displayName(entity)}”? O cadastro continua no histórico e pode ser consultado no filtro Inativos.`,
-      onConfirm: async () => {
-        setIsBusy(true);
-        try {
-          await deleteEntity(entity.id);
-          closeDrawer();
-          toast({ title: `${displayName(entity)} inativado.` });
-        } catch (error) {
-          toast({ title: 'Não foi possível inativar.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
-        } finally {
-          setIsBusy(false);
-        }
-      },
-    });
+  const confirmInactivate = async () => {
+    const entity = pendingInactivate;
+    if (!entity) return;
+    setIsBusy(true);
+    try {
+      await deleteEntity(entity.id);
+      closeFicha();
+      toast({ title: `${displayName(entity)} inativado.` });
+    } catch (error) {
+      toast({ title: 'Não foi possível inativar.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
+    } finally {
+      setIsBusy(false);
+      setPendingInactivate(null);
+    }
   };
 
   const typeLabel = (entity: Entity) => (entity.type === 'pessoa_juridica' ? 'Empresa' : 'Pessoa física');
   const typeTone = (entity: Entity) => (entity.type === 'pessoa_juridica' ? 'text-[#a6325b]' : 'text-[#4646b8]');
   const avatarTone = (entity: Entity) =>
     entity.type === 'pessoa_juridica' ? 'bg-[#fbe7ef] text-[#a6325b]' : 'bg-[#e8e8fb] text-[#4646b8]';
-
-  const openedFields: Array<[string, string]> = opened ? ([
-    ['Tipo', opened.type === 'pessoa_juridica' ? 'Pessoa jurídica · CNPJ' : 'Pessoa física · CPF'],
-    ['Documento', opened.document],
-    opened.fantasyName ? ['Razão social', opened.name] : null,
-    opened.nickname ? ['Apelido', opened.nickname] : null,
-    opened.contact?.email ? ['E-mail', opened.contact.email] : null,
-    ...(opened.contact?.emails ?? []).map((entry): [string, string] => [`E-mail · ${entry.department}`, entry.email]),
-    opened.contact?.phone ? ['Telefone', opened.contact.phone] : null,
-    ['Cidade/UF', entityCity(opened)],
-    opened.documentSignatoryName
-      ? ['Assina pela empresa', `${opened.documentSignatoryName}${opened.documentSignatoryScope === 'cnpj_root' ? ' · matriz e filiais' : ''}`]
-      : null,
-  ].filter(Boolean) as Array<[string, string]>) : [];
-  const openedChips: DrawerChip[] = opened
-    ? entityTags(opened, asoClinicStatuses[opened.id]).map((tag) => ({ label: tag.label, tone: tag.tone }))
-    : [];
 
   return (
     <>
@@ -1306,7 +1407,7 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
                   isOpen={openId === entity.id}
                   isSelected={false}
                   isMuted={isInactive(entity)}
-                  onOpen={() => { setOpenId(entity.id); setNotice(null); }}
+                  onOpen={() => { setOpenId(entity.id); setPendingInactivate(null); }}
                 >
                   <div className="flex items-start justify-between gap-2.5">
                     <div className={cn('flex h-[52px] w-[52px] items-center justify-center rounded-2xl text-[17px] font-extrabold', avatarTone(entity))}>
@@ -1352,7 +1453,7 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
                   isSelected={false}
                   isMuted={isInactive(entity)}
                   label={`Abrir ${displayName(entity)}`}
-                  onOpen={() => { setOpenId(entity.id); setNotice(null); }}
+                  onOpen={() => { setOpenId(entity.id); setPendingInactivate(null); }}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-xs font-extrabold', avatarTone(entity))}>
@@ -1386,27 +1487,39 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
         )}
       </div>
 
-      <DetailDrawer
+      <EntityFichaModal
         open={!!opened}
-        onClose={closeDrawer}
-        kicker={opened ? typeLabel(opened) : ''}
-        title={opened ? displayName(opened) : ''}
-        chips={openedChips}
-        fields={openedFields}
-        notice={notice}
-        onCancelNotice={() => setNotice(null)}
-        isBusy={isBusy}
-        onEdit={opened ? () => handleEdit(opened) : undefined}
+        onOpenChange={(nextOpen) => { if (!nextOpen) closeFicha(); }}
+        entity={opened}
+        asoClinic={opened ? asoClinicStatuses[opened.id] : undefined}
+        onEdit={(target) => { if (opened) handleEdit(opened, target); }}
         actions={opened ? [
-          ...(canManageAsoClinics ? [{ label: 'Serviços de saúde ocupacional', onClick: () => { const entity = opened; closeDrawer(); setAsoEntity(entity); } }] : []),
-          ...(!isInactive(opened) ? [{ label: 'Inativar', isDanger: true, onClick: () => handleInactivate(opened) }] : []),
+          ...(canManageAsoClinics ? [{ label: 'Serviços de saúde ocupacional', onClick: () => { const entity = opened; closeFicha(); setAsoEntity(entity); } }] : []),
+          ...(!isInactive(opened) ? [{ label: 'Inativar', tone: 'danger' as const, onClick: () => setPendingInactivate(opened) }] : []),
         ] : []}
       />
+
+      <AlertDialog open={Boolean(pendingInactivate)} onOpenChange={(nextOpen) => { if (!nextOpen && !isBusy) setPendingInactivate(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inativar “{pendingInactivate ? displayName(pendingInactivate) : ''}”?</AlertDialogTitle>
+            <AlertDialogDescription>O cadastro continua no histórico e pode ser consultado no filtro Inativos.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBusy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={isBusy} onClick={(event) => { event.preventDefault(); void confirmInactivate(); }}>
+              {isBusy ? 'Inativando…' : 'Inativar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AddEditEntityModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         entityToEdit={entityToEdit}
+        initialStep={editTarget.step}
+        initialFiscalOpen={editTarget.fiscal}
       />
 
       <AsoClinicEntityDialog

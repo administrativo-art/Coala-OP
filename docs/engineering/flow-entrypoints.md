@@ -1282,7 +1282,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/registration/base-products/page.tsx`](../../src/app/dashboard/registration/base-products/page.tsx), [`src/app/dashboard/registration/entities/page.tsx`](../../src/app/dashboard/registration/entities/page.tsx), [`src/app/dashboard/registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx).
 
-Arquivos locais percorridos: 61.
+Arquivos locais percorridos: 63.
 
 Chamadas candidatas encontradas:
 
@@ -1290,7 +1290,7 @@ Chamadas candidatas encontradas:
 - `/api/companies/` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/companies/[id]/route.ts`](../../src/app/api/companies/%5Bid%5D/route.ts)
 - `/api/companies/cnpj/` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/companies/cnpj/[cnpj]/route.ts`](../../src/app/api/companies/cnpj/%5Bcnpj%5D/route.ts)
 - `/api/companies/document-signatories` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/companies/document-signatories/route.ts`](../../src/app/api/companies/document-signatories/route.ts)
-- `/api/financial/beneficiaries/entities/` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/financial/beneficiaries/entities/[entityId]/route.ts`](../../src/app/api/financial/beneficiaries/entities/%5BentityId%5D/route.ts)
+- `/api/financial/beneficiaries/entities/` — interface [`src/components/entity-ficha-modal.tsx`](../../src/components/entity-ficha-modal.tsx); rota candidata [`src/app/api/financial/beneficiaries/entities/[entityId]/route.ts`](../../src/app/api/financial/beneficiaries/entities/%5BentityId%5D/route.ts)
 - `/api/hr/aso-clinics` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/hr/aso-clinics/route.ts`](../../src/app/api/hr/aso-clinics/route.ts)
 - `/api/products` — interface [`src/components/add-edit-product-modal.tsx`](../../src/components/add-edit-product-modal.tsx); rota candidata [`src/app/api/products/route.ts`](../../src/app/api/products/route.ts)
 - `/api/products/` — interface [`src/components/add-edit-product-modal.tsx`](../../src/components/add-edit-product-modal.tsx); rota candidata [`src/app/api/products/[id]/route.ts`](../../src/app/api/products/%5Bid%5D/route.ts)
@@ -1321,7 +1321,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
 - `registration.entities.add` — [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx)
-- `registration.entities.edit` — [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx)
+- `registration.entities.edit` — [`src/components/entity-ficha-modal.tsx`](../../src/components/entity-ficha-modal.tsx)
 - `registration.view` — [`src/components/registration/registration-catalog.tsx`](../../src/components/registration/registration-catalog.tsx)
 
 ## `rh-bizneo`
@@ -1352,7 +1352,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 223.
+Arquivos locais percorridos: 225.
 
 Chamadas candidatas encontradas:
 
@@ -1371,7 +1371,7 @@ Chamadas candidatas encontradas:
 - `/api/documents/generate` — interface [`src/components/hr/recruitment/recruitment-onboarding-view.tsx`](../../src/components/hr/recruitment/recruitment-onboarding-view.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
 - `/api/dp/schedules/` — interface [`src/hooks/use-dp-shifts.ts`](../../src/hooks/use-dp-shifts.ts)
 - `/api/financial/accounts` — interface [`src/features/financial/components/settings/account-plans-management.tsx`](../../src/features/financial/components/settings/account-plans-management.tsx); rota candidata [`src/app/api/financial/accounts/route.ts`](../../src/app/api/financial/accounts/route.ts)
-- `/api/financial/beneficiaries/entities/` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/financial/beneficiaries/entities/[entityId]/route.ts`](../../src/app/api/financial/beneficiaries/entities/%5BentityId%5D/route.ts)
+- `/api/financial/beneficiaries/entities/` — interface [`src/components/entity-ficha-modal.tsx`](../../src/components/entity-ficha-modal.tsx); rota candidata [`src/app/api/financial/beneficiaries/entities/[entityId]/route.ts`](../../src/app/api/financial/beneficiaries/entities/%5BentityId%5D/route.ts)
 - `/api/financial/budget-inputs` — interface [`src/features/financial/components/settings/budgets-management.tsx`](../../src/features/financial/components/settings/budgets-management.tsx); rota candidata [`src/app/api/financial/budget-inputs/route.ts`](../../src/app/api/financial/budget-inputs/route.ts)
 - `/api/financial/budget-projects` — interface [`src/features/financial/components/settings/budget-projects-management.tsx`](../../src/features/financial/components/settings/budget-projects-management.tsx); rota candidata [`src/app/api/financial/budget-projects/route.ts`](../../src/app/api/financial/budget-projects/route.ts)
 - `/api/financial/budget-projects/` — interface [`src/features/financial/components/settings/budget-projects-management.tsx`](../../src/features/financial/components/settings/budget-projects-management.tsx); rota candidata [`src/app/api/financial/budget-projects/[id]/route.ts`](../../src/app/api/financial/budget-projects/%5Bid%5D/route.ts)
@@ -1603,7 +1603,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `registration.baseProducts.edit` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `registration.entities.add` — [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx)
 - `registration.entities.delete` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
-- `registration.entities.edit` — [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx)
+- `registration.entities.edit` — [`src/components/entity-ficha-modal.tsx`](../../src/components/entity-ficha-modal.tsx)
 - `registration.items.add` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `registration.items.delete` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `registration.items.edit` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
