@@ -42,6 +42,23 @@ type BankPaymentRequestBase = {
   bankNominalAmount?: number | null;
   bankSettlementAmount?: number | null;
   bankLateChargeAmount?: number | null;
+  requestedSettlementAmount?: number | null;
+  requestedLateChargeAmount?: number | null;
+  settlementRevision?: {
+    source: "confirmed_document";
+    evidenceSource: "manual_document_review";
+    sourceAttachmentId: string;
+    sourceAttachmentSha256: string;
+    barcode: string;
+    beneficiaryDocument: string;
+    principalAmountCents: number;
+    settlementAmountCents: number;
+    lateChargeAmountCents: number;
+    documentedFor: string;
+    authorizedAt: string;
+    authorizedBy: string;
+    authorizedByEmail?: string | null;
+  };
   endToEndId?: string;
   statementReconciliationStatus?: "not_expected" | "expected" | "matched" | "divergent";
   statementTransactionId?: string;
