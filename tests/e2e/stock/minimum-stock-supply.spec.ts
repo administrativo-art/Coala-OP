@@ -96,7 +96,7 @@ test('flag desligada mantém mínimo legado e mostra prévia separada', async ({
   await explanation.click();
   const details = page.getByText(/média diária dos 180 dias completos anteriores × 30 dias \(mensal\)/);
   await expect(details).toBeVisible();
-  await expect(explanation).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: 'Ocultar detalhes' })).toHaveAttribute('aria-expanded', 'true');
 
   await cdManual.click();
   await expect(cdManual).toHaveAttribute('aria-pressed', 'true');
