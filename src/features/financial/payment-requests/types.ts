@@ -56,6 +56,7 @@ type BankPaymentRequestBase = {
   authorizedBy?: string;
   authorizedAt?: string;
   submissionStartedAt?: string;
+  submissionAttemptCount?: number;
   submittedAt?: string;
   bankApprovalObservedAt?: string;
   bankSchedulingObservedAt?: string;

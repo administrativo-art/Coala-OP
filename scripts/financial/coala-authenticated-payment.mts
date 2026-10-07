@@ -37,6 +37,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts prepare --email EMAIL --id INBOX_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+  npx tsx scripts/financial/coala-authenticated-payment.mts retry-send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
 
 O login pede a senha diretamente no terminal e guarda somente o refresh token no Chaves do macOS.
 Autorizar no Coala e enviar ao Inter são comandos separados. A aprovação final no Inter continua separada.
@@ -228,7 +229,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "prepare", "authorize", "send"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "prepare", "authorize", "send", "retry-send"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -303,11 +304,11 @@ async function main() {
   const beneficiaryDocument = requireOption("beneficiary-document").replace(/\D/g, "");
   const expenseId = requireOption("expense-id");
   const barcode = requireOption("barcode").replace(/[.\s-]/g, "");
-  validatePaymentCliAction({ request, action: command as "authorize" | "send", amountCents,
+  validatePaymentCliAction({ request, action: command as "authorize" | "send" | "retry-send", amountCents,
     scheduledFor, beneficiaryDocument, expenseId, barcode });
   const current = await coalaPost(token, id, command === "authorize" ? "authorize" : "submit");
   printStatus(current);
-  if (command === "send" && !current.interRequestId) throw new PaymentCliError("A resposta não confirmou identificador do Inter. Consulte o status antes de qualquer nova tentativa.");
+  if ((command === "send" || command === "retry-send") && !current.interRequestId) throw new PaymentCliError("A resposta não confirmou identificador do Inter. Consulte o status antes de qualquer nova tentativa.");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error: unknown) => {
