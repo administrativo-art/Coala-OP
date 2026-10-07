@@ -76,41 +76,34 @@ test('flag desligada mantém mínimo legado e mostra prévia separada', async ({
   await page.getByRole('button', { name: /Parâmetros por quiosque|Próximo|Avançar/ }).first().click();
 
   const cdMin = page.getByRole('spinbutton', { name: 'Estoque mínimo — CD E2E' });
-  const cdManual = page.getByRole('switch', { name: 'Manter valor manual — CD E2E' });
+  const cdManual = page.getByRole('button', { name: 'Manter valor manual — CD E2E' });
   const storeMin = page.getByRole('spinbutton', { name: 'Estoque mínimo — Loja E2E' });
 
-  await expect(page.getByText('Manter valor manual', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
-  await expect(cdMin).toBeDisabled();
+  await expect(cdManual).toBeVisible({ timeout: 60_000 });
+  await expect(cdManual).toHaveAttribute('aria-pressed', 'false');
+  await expect(cdMin).not.toBeEditable();
   await expect(cdMin).toHaveValue('100');
-  await expect(storeMin).toBeEnabled();
+  await expect(storeMin).toBeEditable();
   await expect(storeMin).toHaveValue('20');
 
   const cdLead = page.getByRole('spinbutton', { name: 'Prazo de abastecimento — CD E2E' });
-  const [minBox, leadBox, manualBox] = await Promise.all([cdMin.boundingBox(), cdLead.boundingBox(), cdManual.boundingBox()]);
+  const [minBox, leadBox] = await Promise.all([cdMin.boundingBox(), cdLead.boundingBox()]);
   expect(minBox).not.toBeNull();
   expect(leadBox).not.toBeNull();
-  expect(manualBox).not.toBeNull();
   expect(Math.abs(minBox!.y - leadBox!.y)).toBeLessThanOrEqual(1);
-  expect(Math.abs((minBox!.y + minBox!.height / 2) - (manualBox!.y + manualBox!.height / 2))).toBeLessThanOrEqual(1);
 
-  const explanation = page.getByRole('button', { name: 'Como o estoque mínimo é calculado' });
-  await explanation.focus();
-  // Radix puts role="tooltip" on an accessibility-only span; measure its visible parent.
-  const tooltip = page.getByRole('tooltip').locator('..');
-  await expect(tooltip).toBeVisible();
-  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
-  const tooltipBox = await tooltip.boundingBox();
-  expect(tooltipBox).not.toBeNull();
-  expect(tooltipBox!.x).toBeGreaterThanOrEqual(0);
-  expect(tooltipBox!.y).toBeGreaterThanOrEqual(0);
-  expect(tooltipBox!.x + tooltipBox!.width).toBeLessThanOrEqual(viewport.width);
-  expect(tooltipBox!.y + tooltipBox!.height).toBeLessThanOrEqual(viewport.height);
+  const explanation = page.getByRole('button', { name: 'Como é calculado?' });
+  await explanation.click();
+  const details = page.getByText(/média diária dos 180 dias completos anteriores × 30 dias \(mensal\)/);
+  await expect(details).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ocultar detalhes' })).toHaveAttribute('aria-expanded', 'true');
 
   await cdManual.click();
-  await expect(cdMin).toBeEnabled();
+  await expect(cdManual).toHaveAttribute('aria-pressed', 'true');
+  await expect(cdMin).toBeEditable();
   await cdMin.fill('150');
   await cdManual.click();
-  await expect(cdMin).toBeDisabled();
+  await expect(cdMin).not.toBeEditable();
 });
 
 test('flag ativa mostra meta automática pendente e rota de compra por unidade', async ({ page }) => {
@@ -124,15 +117,20 @@ test('flag ativa mostra meta automática pendente e rota de compra por unidade',
   await page.getByRole('menuitem', { name: 'Editar' }).click();
   await page.getByRole('button', { name: /Parâmetros por quiosque|Próximo|Avançar/ }).first().click();
 
-  await expect(page.getByText('Manter valor manual', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Manter valor manual/ })).toHaveCount(0);
   await expect(page.getByRole('spinbutton', { name: 'Estoque mínimo — Loja E2E' })).toHaveCount(0);
-  const directPurchase = page.getByRole('switch', { name: 'Compra direta — Loja E2E' });
+  const storeSupply = page.getByRole('radiogroup', { name: 'Abastecimento — Loja E2E' });
+  const directPurchase = storeSupply.getByRole('radio', { name: 'Compra direta' });
   await expect(directPurchase).toBeVisible();
-  await expect(page.getByRole('switch', { name: 'Compra direta — CD E2E' })).toHaveCount(0);
-  await directPurchase.check();
+  await expect(page.getByRole('radiogroup', { name: 'Abastecimento — CD E2E' })).toHaveCount(0);
+  await expect(page.getByText('Não se aplica', { exact: true })).toBeVisible();
+  // via CD o prazo da unidade comercial é fixo em dois dias
+  await expect(page.getByText('fixo', { exact: true }).first()).toBeVisible();
+  await directPurchase.click();
   await expect(directPurchase).toBeChecked();
-  await expect(page.getByText('Compra na unidade', { exact: true })).toBeVisible();
-  await directPurchase.uncheck();
-  await expect(page.getByText('Recebe do CD', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Prazo de abastecimento — Loja E2E' })).toBeEditable();
+  await storeSupply.getByRole('radio', { name: 'Via CD' }).click();
+  await expect(directPurchase).not.toBeChecked();
+  await expect(page.getByRole('spinbutton', { name: 'Prazo de abastecimento — Loja E2E' })).toHaveCount(0);
   await expect(page.getByText(/Cálculo pendente|Política indisponível/).first()).toBeVisible();
 });
