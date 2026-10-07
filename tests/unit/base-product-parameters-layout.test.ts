@@ -20,6 +20,10 @@ test('stock card labels never wrap, so every control in a card stays on one base
   assert.match(modal, /min-h-\[19px\] items-center gap-1\.5 whitespace-nowrap[^"]*">\s*Estoque mínimo/);
 });
 
+test('the dialog removes the base padding at every breakpoint so the dark panel is flush with the rounded corners', () => {
+  assert.match(modal, /DialogContent hideClose className="[^"]*\bp-0\b[^"]*\bsm:p-0\b[^"]*"/);
+});
+
 test('modal exposes an accessible title and a labelled close action', () => {
   assert.match(modal, /<DialogTitle /);
   assert.match(modal, /<DialogDescription /);
@@ -30,7 +34,7 @@ test('category and unit pickers are radio groups bound to the form', () => {
   assert.match(modal, /role="radiogroup" aria-label="Categoria da unidade"/);
   assert.match(modal, /onClick=\{\(\) => handleCategoryChange\(cat\)\}/);
   assert.match(modal, /role="radiogroup" aria-label="Unidade de medida padrão"/);
-  assert.match(modal, /unitCategories\.map\(\(cat\)/);
+  assert.match(modal, /CATEGORY_ORDER\.map\(\(cat\)/);
 });
 
 test('direct purchase is an accessible per-unit choice without changing the stored routing contract', () => {

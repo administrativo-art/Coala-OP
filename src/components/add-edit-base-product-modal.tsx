@@ -61,6 +61,8 @@ const WIZARD_STEPS = [
     { id: 2, label: 'Parâmetros por quiosque', description: 'Controle de estoque por local. Cada quiosque pode ter limites próprios.' },
 ] as const;
 
+// Massa antes de Volume, como no design; o conjunto continua vindo de unitCategories.
+const CATEGORY_ORDER: readonly UnitCategory[] = [...unitCategories].sort((a, b) => (a === 'Massa' ? -1 : b === 'Massa' ? 1 : 0));
 const CATEGORY_SYMBOLS: Record<UnitCategory, string> = { Massa: 'kg', Volume: 'l', Unidade: 'un', Embalagem: 'cx', Vestimenta: 'pç' };
 const UNIT_NAMES: Record<string, string> = { un: 'unidade', kg: 'quilograma', g: 'grama', mg: 'miligrama', l: 'litro', ml: 'mililitro', bag: 'bag', pacote: 'pacote', caixa: 'caixa', peça: 'peça' };
 const UNIT_SYMBOLS: Record<string, string> = { pacote: 'pct', caixa: 'cx', peça: 'pç' };
@@ -256,7 +258,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+        <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:p-0 sm:max-w-[1080px] sm:rounded-[26px]">
           <Form {...form}>
             <form className="grid min-h-0 grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)]" onSubmit={handleWizardSubmit}>
               {/* Painel escuro: o insumo ao vivo */}
@@ -474,7 +476,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       <FormItem className="flex flex-col gap-2.5 space-y-0">
                         <Eyebrow light>Categoria da unidade <span className="text-[#e11d48]">*</span> <span className="font-medium normal-case tracking-normal">· controla as unidades</span></Eyebrow>
                         <div role="radiogroup" aria-label="Categoria da unidade" className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                          {unitCategories.map((cat) => {
+                          {CATEGORY_ORDER.map((cat) => {
                             const active = field.value === cat;
                             return (
                               <button key={cat} type="button" role="radio" aria-checked={active} onClick={() => handleCategoryChange(cat)}
