@@ -210,6 +210,7 @@ O módulo de Pessoal ainda possui uma compactação legada aplicada pelo layout.
 - Conteúdo extenso rola dentro do diálogo; a página ao fundo permanece estável.
 - Passos de orientação usam grade responsiva em telas largas e rolagem horizontal controlada em telas estreitas.
 - Título de diálogo usa `18px` e peso `bold`; descrição usa `14px` e altura de linha de `20px`.
+- O `InfoTooltip` explicativo usa portal para não ser recortado por áreas roláveis de um diálogo. Mantém margem da viewport, quebra de texto e altura limitada ao espaço disponível, com rolagem para textos longos; abertura por hover e foco permanece.
 
 ## Acessibilidade
 

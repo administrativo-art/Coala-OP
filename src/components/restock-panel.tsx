@@ -2,12 +2,12 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { useRouter } from 'next/navigation';
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useProducts } from "@/hooks/use-products";
-import { convertValue } from "@/lib/conversion";
 import { type BaseProduct, type LotEntry, type Product } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,6 +19,8 @@ import { AlertTriangle, CheckCircle, PackageOpen, TrendingDown, Inbox, Search } 
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { canAccessUnit } from "@/lib/unit-access";
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { operationalMinimum, availablePackages, shortage, supplyMode, getUnitsPerPackageForProduct } from '@/lib/replenishment-display';
 
 interface RestockResult {
   baseProduct: BaseProduct;
@@ -27,22 +29,27 @@ interface RestockResult {
   restockNeeded: number;
   status: "ok" | "repor" | "excesso" | "sem_meta";
   stockPercentage: number | null;
+  minimumLabel: string;
+  directPurchase: boolean;
 }
 
 function calcRestockResults(
   kioskId: string,
   lots: LotEntry[],
   baseProducts: BaseProduct[],
-  products: Product[]
+  products: Product[],
+  policyEnabled: boolean | null,
 ): RestockResult[] {
   return baseProducts.filter((bp) => !bp.isArchived).map((baseProduct) => {
-    const minimumStock = baseProduct.stockLevels?.[kioskId]?.min;
+    const level = baseProduct.stockLevels?.[kioskId];
+    const minimum = operationalMinimum(level, policyEnabled);
+    const minimumStock = minimum.minimum;
 
     let currentStock = 0;
     let hasConversionError = false;
 
     const kioskLots = lots.filter(
-      (lot) => lot.kioskId === kioskId && lot.quantity > 0
+      (lot) => lot.kioskId === kioskId && availablePackages(lot.quantity, lot.reservedQuantity) > 0
     );
 
     kioskLots.forEach((lot) => {
@@ -50,17 +57,9 @@ function calcRestockResults(
       if (!product || product.baseProductId !== baseProduct.id) return;
 
       try {
-        if (baseProduct.category === "Unidade") {
-          currentStock += lot.quantity * product.packageSize;
-        } else if (product.category === baseProduct.category) {
-          const valueInBaseUnit = convertValue(
-            lot.quantity * product.packageSize,
-            product.unit,
-            baseProduct.unit,
-            product.category
-          );
-          currentStock += valueInBaseUnit;
-        }
+        const unitsPerPackage = getUnitsPerPackageForProduct(product, baseProduct);
+        if (unitsPerPackage <= 0) hasConversionError = true;
+        else currentStock += availablePackages(lot.quantity, lot.reservedQuantity) * unitsPerPackage;
       } catch {
         hasConversionError = true;
       }
@@ -72,8 +71,10 @@ function calcRestockResults(
 
     if (minimumStock === undefined || minimumStock === null) {
       status = "sem_meta";
-    } else if (!hasConversionError) {
-      restockNeeded = Math.max(0, minimumStock - currentStock);
+    } else if (hasConversionError) {
+      status = 'sem_meta';
+    } else {
+      restockNeeded = shortage(minimumStock, currentStock) ?? 0;
       stockPercentage = minimumStock > 0 ? (currentStock / minimumStock) * 100 : null;
 
       if (currentStock < minimumStock) {
@@ -92,6 +93,8 @@ function calcRestockResults(
       restockNeeded,
       status,
       stockPercentage,
+      minimumLabel: hasConversionError ? 'Conversão de embalagem pendente' : minimum.label,
+      directPurchase: policyEnabled === true && supplyMode(level) === 'direct',
     };
   });
 }
@@ -123,11 +126,13 @@ function StatusBadge({ status }: { status: RestockResult["status"] }) {
 }
 
 export function RestockPanel() {
+  const router = useRouter();
   const { user, isDefaultAdmin } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { products, loading: productsLoading } = useProducts();
+  const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy();
 
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
 
@@ -161,18 +166,18 @@ export function RestockPanel() {
     if (loading) return [];
     return kioskIdsToAnalyze.map((kioskId) => {
       const kiosk = kiosks.find((k) => k.id === kioskId);
-      const results = calcRestockResults(kioskId, lots, baseProducts, products)
-        .filter((r) => r.status === "repor") // Só mostra quem precisa repor
+      const results = calcRestockResults(kioskId, lots, baseProducts, products, policyEnabled)
+        .filter((r) => r.status === "repor" || r.status === 'sem_meta')
         .filter((r) => r.baseProduct.name.toLowerCase().includes(search.toLowerCase())) // Busca por nome
         .sort((a, b) => (a.stockPercentage ?? 0) - (b.stockPercentage ?? 0)); // Menor percentual primeiro
       return { kiosk, results };
     });
-  }, [kioskIdsToAnalyze, lots, baseProducts, products, kiosks, loading, search]);
+  }, [kioskIdsToAnalyze, lots, baseProducts, products, kiosks, loading, search, policyEnabled]);
 
   const totalRepor = useMemo(
     () =>
       resultsByKiosk.reduce(
-        (sum, { results }) => sum + results.length,
+        (sum, { results }) => sum + results.filter(result => result.status === 'repor').length,
         0
       ),
     [resultsByKiosk]
@@ -241,6 +246,7 @@ export function RestockPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {policyEnabled === null && <p role="alert" className="text-sm text-amber-700">{policyError ? 'Política de reposição indisponível. Mínimos não verificados.' : 'Consultando a política de reposição…'}</p>}
         {resultsByKiosk.length === 0 || resultsByKiosk.every(k => k.results.length === 0) ? (
           <div className="flex flex-col items-center justify-center text-muted-foreground py-10">
             <CheckCircle className="h-10 w-10 mb-3 text-green-500" />
@@ -259,10 +265,10 @@ export function RestockPanel() {
                   </h3>
                 )}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {results.map(({ baseProduct, currentStock, minimumStock, restockNeeded, stockPercentage }) => {
+                  {results.map(({ baseProduct, currentStock, minimumStock, restockNeeded, stockPercentage, status, minimumLabel, directPurchase }) => {
                     const pctAtual = stockPercentage ?? 0;
                     const atual = `${currentStock.toFixed(1)} ${baseProduct.unit}`;
-                    const minimo = `${minimumStock.toFixed(1)} ${baseProduct.unit}`;
+                    const minimo = status === 'sem_meta' ? minimumLabel : `${minimumStock.toFixed(1)} ${baseProduct.unit}`;
                     const faltam = `${restockNeeded.toFixed(1)} ${baseProduct.unit}`;
 
                     return (
@@ -276,12 +282,12 @@ export function RestockPanel() {
                         </p>
 
                         {/* Linha 2: barra de progresso */}
-                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                        {status !== 'sem_meta' && <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div
                             className="h-full bg-red-500 rounded-full"
                             style={{ width: `${Math.min(pctAtual, 100)}%` }}
                           />
-                        </div>
+                        </div>}
 
                         {/* Linha 3: atual vs mínimo */}
                         <div className="flex justify-between text-[10px] text-muted-foreground">
@@ -291,13 +297,17 @@ export function RestockPanel() {
 
                         {/* Linha 4: faltam + botão repor */}
                         <div className="flex items-center justify-between gap-1 pt-1 border-t border-red-200 dark:border-red-900">
-                          <span className="text-[10px] text-red-600 font-medium">Faltam {faltam}</span>
+                          <span className="text-[10px] text-red-600 font-medium">{status === 'sem_meta' ? minimumLabel : `Faltam ${faltam}`}</span>
                           <Button
                             size="sm"
                             variant="destructive"
                             className="h-6 px-2 text-[10px]"
+                            disabled={status === 'sem_meta'}
+                            onClick={() => router.push(directPurchase
+                              ? `/dashboard/purchasing/orders?new=direct&destinationKioskId=${encodeURIComponent(kiosk?.id ?? '')}`
+                              : `/dashboard/stock/analysis/restock?kioskId=${encodeURIComponent(kiosk?.id ?? '')}`)}
                           >
-                            Repor
+                            {directPurchase ? 'Comprar' : 'Repor'}
                           </Button>
                         </div>
                       </div>

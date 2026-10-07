@@ -17,6 +17,8 @@ import { useProducts } from '@/hooks/use-products';
 import { useClassifications } from '@/hooks/use-classifications';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
+import { operationalMinimum } from '@/lib/replenishment-display';
 
 const formatCurrency = (value?: number) => {
   if (!value || isNaN(value)) return '—';
@@ -150,6 +152,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
   const { products } = useProducts();
   const { classifications } = useClassifications();
   const { kiosks } = useKiosks();
+  const { enabled: policyEnabled } = useReplenishmentPolicy();
 
   const linkedProducts = useMemo(() => {
     if (!baseProduct) return [];
@@ -168,7 +171,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
     return kiosks
       .filter(k => {
         const level = baseProduct.stockLevels?.[k.id];
-        return level && (level.min || level.safetyStock || level.leadTime);
+        return Boolean(level);
       })
       .map(k => ({ kiosk: k, level: baseProduct.stockLevels[k.id] }));
   }, [baseProduct, kiosks]);
@@ -243,8 +246,8 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                     <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 flex items-center gap-3">
                       <Clock className="h-5 w-5 text-gray-400 flex-shrink-0" />
                       <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Sugerir Pedido (meses)</p>
-                        <p className="text-sm font-black text-gray-900">{baseProduct.consumptionMonths ?? '—'}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">{policyEnabled === false ? 'Sugerir Pedido (meses)' : 'Ciclo de cobertura'}</p>
+                        <p className="text-sm font-black text-gray-900">{policyEnabled === false ? baseProduct.consumptionMonths ?? '—' : policyEnabled ? baseProduct.minStockRecalcPeriod === 'biweekly' ? 'Quinzenal · 15 dias' : 'Mensal · 30 dias' : 'Política não verificada'}</p>
                       </div>
                     </div>
                   </div>
@@ -257,9 +260,9 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                       <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-gray-400">
                         Estoque por Quiosque
                         <InfoTooltip title="Como o estoque mínimo é calculado">
-                          <p>Todo dia 1 do mês, o sistema recalcula o <strong>estoque mínimo</strong> de cada insumo por quiosque com base na <strong>média de consumo dos últimos 6 meses</strong>, somando uma margem de segurança de <strong>30%</strong> para cobrir picos de demanda.</p>
+                          <p>Nos dias 1 e 16, o sistema recalcula o <strong>estoque mínimo</strong>, com margem de <strong>30%</strong>. A recomendação considera o estoque físico líquido de reservas, sem abater compras a caminho.</p>
                           <p>A base do cálculo (mensal ou quinzenal) é definida na edição do insumo. Itens em <strong>unidades</strong> são arredondados para cima; itens em <strong>kg/L</strong> mantêm casas decimais.</p>
-                          <p>Quiosques com <strong>&quot;Travado&quot;</strong> têm o valor definido manualmente e não são recalculados automaticamente.</p>
+                          {policyEnabled === false ? <p>No modelo legado, unidades com <strong>&quot;Travado&quot;</strong> mantêm o valor manual. A política nova permanece em comparação até sua ativação.</p> : <p>O modelo automático exige dados utilizáveis. Cálculo pendente não equivale a mínimo zero. O CD considera apenas unidades abastecidas por ele.</p>}
                         </InfoTooltip>
                       </h3>
                       <div className="rounded-xl border border-gray-100 overflow-hidden">
@@ -268,26 +271,30 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                             <tr className="bg-gray-50 border-b border-gray-100">
                               <th className="text-left px-4 py-2 font-semibold text-gray-500">Quiosque</th>
                               <th className="text-center px-3 py-2 font-semibold text-gray-500">Mín.</th>
-                              <th className="text-center px-3 py-2 font-semibold text-gray-500">Segurança</th>
+                              {policyEnabled === false && <th className="text-center px-3 py-2 font-semibold text-gray-500">Segurança legada</th>}
                               <th className="text-center px-3 py-2 font-semibold text-gray-500">Lead Time</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-50">
-                            {kiosksWithStockParams.map(({ kiosk, level }) => (
+                            {kiosksWithStockParams.map(({ kiosk, level }) => {
+                              const minimum = operationalMinimum(level, policyEnabled);
+                              return (
                               <tr key={kiosk.id}>
                                 <td className="px-4 py-2 font-medium text-gray-800">{kiosk.name}</td>
                                 <td className="px-3 py-2 text-center text-gray-600">
-                                  {level.min ?? '—'}
-                                  {level.override ? (
+                                  {minimum.minimum ?? minimum.label}
+                                  {policyEnabled === false && level.override ? (
                                     <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Travado</span>
-                                  ) : level.lastAutoCalculatedAt ? (
+                                  ) : minimum.minimum !== null && level.lastAutoCalculatedAt ? (
                                     <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">Auto</span>
                                   ) : null}
+                                  {policyEnabled === true && <p className="text-[10px] text-muted-foreground">{level.supplyMode === 'direct' ? 'Compra direta' : 'Via CD'} · {minimum.label}</p>}
+                                  {minimum.limitation && <p className="text-[10px] text-muted-foreground">{minimum.limitation}</p>}
                                 </td>
-                                <td className="px-3 py-2 text-center text-gray-600">{level.safetyStock ?? '—'}</td>
-                                <td className="px-3 py-2 text-center text-gray-600">{level.leadTime ? `${level.leadTime}d` : '—'}</td>
+                                {policyEnabled === false && <td className="px-3 py-2 text-center text-gray-600">{level.safetyStock ?? '—'}</td>}
+                                <td className="px-3 py-2 text-center text-gray-600">{(policyEnabled ? level.effectiveLeadTime : level.leadTime) ? `${policyEnabled ? level.effectiveLeadTime : level.leadTime}d` : '—'}</td>
                               </tr>
-                            ))}
+                            ); })}
                           </tbody>
                         </table>
                       </div>

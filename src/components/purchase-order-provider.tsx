@@ -32,6 +32,7 @@ import { syncPurchaseReceiptTask } from '@/features/tasks/lib/client';
 
 export interface CreatePurchasePayload {
   supplierId: string;
+  destinationKioskId?: string;
   supplierName?: string;
   origin: PurchaseOrder['origin'];
   quotationId?: string;

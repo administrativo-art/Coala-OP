@@ -32,6 +32,8 @@ import { useConsumptionAnalysis } from "@/hooks/use-consumption-analysis"
 import { useDPShifts } from "@/hooks/use-dp-shifts"
 import { useExpiryProducts } from "@/hooks/use-expiry-products"
 import { useKiosks } from "@/hooks/use-kiosks"
+import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy'
+import { operationalMinimum, shortage } from '@/lib/replenishment-display'
 import { useProducts } from "@/hooks/use-products"
 import { useAllTasks } from "@/hooks/use-all-tasks"
 import { financialCollection } from "@/features/financial/lib/repositories"
@@ -228,6 +230,7 @@ function ManagementDashboard() {
   const { lots } = useExpiryProducts()
   const { products } = useProducts()
   const { baseProducts } = useBaseProducts()
+  const { enabled: policyEnabled, error: policyError } = useReplenishmentPolicy()
   const { allTasks, taskNotifications, pendingReceipts, pendingTaskCount, loading: tasksLoading } = useAllTasks()
   const { units, schedules, vacations, schedulesLoading, vacationsLoading } = useDP()
   const { data: expenses, loading: expensesLoading } = useFinancialCollection<any>(
@@ -390,20 +393,21 @@ function ManagementDashboard() {
       .map((base) => {
         const stockLevel = base.stockLevels?.[cdKiosk.id]
         const current = lotsByBase.get(base.id) ?? 0
-        const minimum = Number(stockLevel?.min ?? stockLevel?.safetyStock ?? 0)
-        const leadTime = Number(stockLevel?.leadTime ?? 0)
+        const minimumState = operationalMinimum(stockLevel, policyEnabled)
+        const minimum = minimumState.minimum
+        const leadTime = Number(policyEnabled ? stockLevel?.effectiveLeadTime ?? stockLevel?.leadTime ?? 0 : stockLevel?.leadTime ?? 0)
         const averageDailyConsumption = averageDailyConsumptionByBaseId.get(base.id) ?? 0
         const daysUntilRupture = averageDailyConsumption > 0 ? Math.floor(current / averageDailyConsumption) : null
         const ruptureDate = daysUntilRupture !== null ? addDays(today, daysUntilRupture) : null
         const orderLimitDate = ruptureDate ? addDays(ruptureDate, -leadTime) : null
-        return { base, current, minimum, leadTime, shortage: Math.max(0, minimum - current), ruptureDate, orderLimitDate }
+        return { base, current, minimum, minimumLabel: minimumState.label, leadTime, shortage: shortage(minimum, current) ?? 0, ruptureDate, orderLimitDate }
       })
-      .filter((item) => item.minimum > 0 && item.current <= item.minimum && (item.leadTime > 0 || item.shortage > 0))
+      .filter((item) => item.minimum === null || (item.minimum > 0 && item.current <= item.minimum && (item.leadTime > 0 || item.shortage > 0)))
       .sort((a, b) => {
         const leadTimePriority = Number(b.leadTime > 0) - Number(a.leadTime > 0)
         return leadTimePriority || b.leadTime - a.leadTime || b.shortage - a.shortage
       })
-  }, [averageDailyConsumptionByBaseId, baseProducts, cdKiosk, lots, products, today])
+  }, [averageDailyConsumptionByBaseId, baseProducts, cdKiosk, lots, products, today, policyEnabled])
 
   const allBestSellers = useMemo(() => {
     const sumItems = (reports: SalesReport[]) =>
@@ -675,15 +679,17 @@ function ManagementDashboard() {
           >
             {!cdKiosk ? (
               <EmptyState>Centro de distribuição não identificado nos quiosques.</EmptyState>
+            ) : policyEnabled === null && policyError ? (
+              <EmptyState>Política de reposição indisponível. Mínimos não verificados.</EmptyState>
             ) : criticalRestockItems.length === 0 ? (
               <EmptyState>Nenhum item crítico encontrado para {cdKiosk.name}.</EmptyState>
             ) : (
               <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
-                {criticalRestockItems.map(({ base, current, minimum, leadTime, ruptureDate, orderLimitDate }) => (
+                {criticalRestockItems.map(({ base, current, minimum, minimumLabel, leadTime, ruptureDate, orderLimitDate }) => (
                   <div key={base.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3 text-xs">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-zinc-800">{base.name}</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-400">Atual {numberFormatter.format(current)} · mín. {numberFormatter.format(minimum)}</p>
+                      <p className="mt-1 text-xs font-semibold text-zinc-400">Atual {numberFormatter.format(current)} · mín. {minimum === null ? minimumLabel : numberFormatter.format(minimum)}</p>
                       <p className="mt-1 text-xs font-semibold text-zinc-400">
                         Ruptura: <span className={cn(!ruptureDate && "text-zinc-400", ruptureDate && isSameOrBefore(ruptureDate, today) && "text-pink-500")}>
                           {ruptureDate ? format(ruptureDate, "dd/MM/yyyy") : "sem consumo médio"}

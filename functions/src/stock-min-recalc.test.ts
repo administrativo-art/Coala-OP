@@ -7,13 +7,16 @@ import { after, test } from "node:test";
 import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
-import { runMinimumStockRecalculation } from "./stock-min-recalc.js";
+// Protects the legacy calculation while the new policy is shadowed by default.
+import { runMinimumStockRecalculation } from "./legacy-stock-min-recalc.js";
+import { assertFirestoreEmulatorSafety } from '../../tests/helpers/firestore-emulator-safety.mjs';
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error(
     "Este teste só roda contra o emulador do Firestore. Defina FIRESTORE_EMULATOR_HOST (ex.: localhost:8080) antes de executar.",
   );
 }
+assertFirestoreEmulatorSafety({ projectId: 'demo-coala-min-stock-test' });
 
 if (getApps().length === 0) {
   initializeApp({ projectId: "demo-coala-min-stock-test" });
