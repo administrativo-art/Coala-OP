@@ -776,7 +776,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+            <DialogContent hideClose flush className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
                 <DialogDescription className="sr-only">Diretório de pessoas e empresas. Apenas dados de identidade e contato.</DialogDescription>
                 <Form {...form}>
                     <form onSubmit={handleFormSubmit} className="grid min-h-0 grid-cols-1 lg:h-[800px] lg:grid-cols-[340px_minmax(0,1fr)]">
