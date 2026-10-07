@@ -544,10 +544,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                               </div>
                               {sourceLine && <span className="text-[11.5px] text-[#70757d]">{sourceLine}</span>}
                             </div>
-                            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_minmax(0,1.3fr)_minmax(0,.8fr)]">
+                            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,.85fr)_minmax(0,1.3fr)_minmax(0,.75fr)]">
                               {/* Estoque mínimo */}
                               <div className="flex flex-col gap-1.5">
-                                <span className="flex min-h-[19px] items-center gap-1.5 text-[11.5px] font-bold text-[#4a4f57]">
+                                <span className="flex min-h-[19px] items-center gap-1.5 whitespace-nowrap text-[11.5px] font-bold text-[#4a4f57]">
                                   Estoque mínimo
                                   {policyEnabled === false && (
                                     <FormField control={form.control} name={`stockLevels.${kiosk.id}.override`} render={({ field }) => (
@@ -595,7 +595,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                     </FormItem>
                                   )}/>
                                 ) : (
-                                  <div title="A margem de 30% entra uma vez na meta automática" className="flex h-[38px] items-center whitespace-nowrap rounded-[10px] bg-[#f4f3ef] px-3 text-xs text-[#70757d]">{policyEnabled === null ? '—' : 'Na margem de 30%'}</div>
+                                  <div title="A margem de 30% entra uma vez na meta automática" className="flex h-[38px] items-center rounded-[10px] bg-[#f4f3ef] px-2.5 text-[11.5px] text-[#70757d]"><span className="truncate">{policyEnabled === null ? '—' : 'Na margem de 30%'}</span></div>
                                 )}
                               </div>
 

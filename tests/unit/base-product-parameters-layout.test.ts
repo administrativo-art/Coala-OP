@@ -13,7 +13,11 @@ test('modal keeps the insumo panel beside the step content and stacks on narrow 
   assert.match(modal, /DialogContent hideClose className="[^"]*max-h-\[calc\(100dvh-1rem\)\][^"]*sm:max-w-\[1080px\][^"]*"/);
   assert.match(modal, /form className="grid min-h-0 grid-cols-1 lg:grid-cols-\[380px_minmax\(0,1fr\)\]"/);
   assert.match(modal, /aside className="[^"]*bg-\[#15151c\][^"]*"/);
-  assert.match(modal, /grid grid-cols-2 gap-2\.5 md:grid-cols-\[minmax\(0,1\.15fr\)_minmax\(0,\.9fr\)_minmax\(0,1\.3fr\)_minmax\(0,\.8fr\)\]/);
+  assert.match(modal, /grid grid-cols-2 gap-2\.5 md:grid-cols-\[minmax\(0,1\.3fr\)_minmax\(0,\.85fr\)_minmax\(0,1\.3fr\)_minmax\(0,\.75fr\)\]/);
+});
+
+test('stock card labels never wrap, so every control in a card stays on one baseline', () => {
+  assert.match(modal, /min-h-\[19px\] items-center gap-1\.5 whitespace-nowrap[^"]*">\s*Estoque mínimo/);
 });
 
 test('modal exposes an accessible title and a labelled close action', () => {
