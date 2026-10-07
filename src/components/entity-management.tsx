@@ -8,16 +8,17 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useEntities } from '@/hooks/use-entities';
+import { useToast } from '@/hooks/use-toast';
+import { CadastrosHero, CardGrid, Chevron, DetailDrawer, EmptyResults, GridCard, ListHead, ListRow, ListShell, ListSkeleton, ResultsBar, TagChip, type CadastrosTabProps, type DrawerChip, type DrawerNotice, type Tone } from '@/components/cadastros/cadastros-ui';
+import { buildChips, countByKey, initialsOf, type CadastrosStatus } from '@/components/cadastros/cadastros-utils';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Plus, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned, MoreHorizontal, Tags, RefreshCw, Loader2, AlertTriangle, Stethoscope } from 'lucide-react';
+
+import { Plus, Trash2, Building, User, Search, Upload, Check, ChevronLeft, ChevronRight, MapPinned, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { type Entity } from '@/types';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import type { CompanyLookupResponse, NormalizedCompanyData } from '@/lib/company/company-lookup-types';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { Skeleton } from './ui/skeleton';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -25,9 +26,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+
 import { cn } from '@/lib/utils';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { AsoClinicEntityDialog } from '@/features/hr/aso/aso-clinics-management';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
@@ -1123,17 +1124,49 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     );
 }
 
+const LIST_TEMPLATE = 'minmax(0,2.2fr) 110px 170px minmax(0,1.6fr) 130px 20px';
 
-export function EntityManagement() {
+type EntityTag = { label: string; tone: Tone };
+
+function entityTags(entity: Entity, aso: { active: boolean } | undefined): EntityTag[] {
+  const tags: EntityTag[] = [];
+  if (entity.nickname) tags.push({ label: entity.nickname, tone: 'neutral' });
+  if (entity.documentSignatoryName) {
+    tags.push({
+      label: `Assina: ${entity.documentSignatoryName}${entity.documentSignatoryScope === 'cnpj_root' ? ' · matriz e filiais' : ''}`,
+      tone: 'violet',
+    });
+  }
+  if (aso) tags.push({ label: aso.active ? 'Clínica ASO' : 'Clínica ASO inativa', tone: aso.active ? 'ok' : 'neutral' });
+  if (entity.status === 'inactive') tags.push({ label: 'Inativo', tone: 'warn' });
+  return tags;
+}
+
+function entityContacts(entity: Entity): string[] {
+  return [
+    entity.contact?.email,
+    ...(entity.contact?.emails ?? []).map((entry) => `${entry.department}: ${entry.email}`),
+    entity.contact?.phone,
+  ].filter((value): value is string => Boolean(value));
+}
+
+const entityCity = (entity: Entity) =>
+  entity.address?.city ? `${entity.address.city}${entity.address.state ? `/${entity.address.state}` : ''}` : '—';
+
+export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps) {
   const { entities, loading, deleteEntity } = useEntities();
   const { firebaseUser, permissions } = useAuth();
-  const [entityToDelete, setEntityToDelete] = useState<Entity | null>(null);
+  const { toast } = useToast();
   const [entityToEdit, setEntityToEdit] = useState<Entity | null>(null);
   const [asoEntity, setAsoEntity] = useState<Entity | null>(null);
   const [asoClinicStatuses, setAsoClinicStatuses] = useState<Record<string, { active: boolean }>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
+  const [status, setStatus] = useState<CadastrosStatus>('active');
+  const [chip, setChip] = useState('all');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<DrawerNotice | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
   const canViewAsoClinics = hasFormalizationPermission(permissions, 'aso.view');
   const canManageAsoClinics = hasFormalizationPermission(permissions, 'aso.manage');
 
@@ -1159,232 +1192,216 @@ export function EntityManagement() {
 
   useEffect(() => { void loadAsoClinicStatuses(); }, [loadAsoClinicStatuses]);
 
-  const filteredEntities = useMemo(() => {
-    return entities.filter(entity => {
-      const search = searchTerm.toLowerCase();
-      const typeMatch = typeFilter === 'all' || entity.type === typeFilter;
-      const searchMatch = entity.name.toLowerCase().includes(search) ||
-                          (entity.fantasyName && entity.fantasyName.toLowerCase().includes(search)) ||
-                          (entity.nickname && entity.nickname.toLowerCase().includes(search)) ||
-                          (entity.document ?? '').includes(search) ||
-                          (entity.contact?.email ?? '').toLowerCase().includes(search) ||
-                          (entity.contact?.phone ?? '').includes(search);
-      
-      return typeMatch && searchMatch;
+  const isInactive = (entity: Entity) => entity.status === 'inactive';
+  const inStatus = useMemo(
+    () => entities.filter((entity) => (status === 'inactive' ? isInactive(entity) : !isInactive(entity))),
+    [entities, status],
+  );
+  const searchLower = searchTerm.trim().toLowerCase();
+  const searched = useMemo(() => {
+    if (!searchLower) return inStatus;
+    return inStatus.filter((entity) =>
+      entity.name.toLowerCase().includes(searchLower) ||
+      (entity.fantasyName ?? '').toLowerCase().includes(searchLower) ||
+      (entity.nickname ?? '').toLowerCase().includes(searchLower) ||
+      (entity.document ?? '').includes(searchLower) ||
+      (entity.contact?.email ?? '').toLowerCase().includes(searchLower) ||
+      (entity.contact?.phone ?? '').includes(searchLower),
+    );
+  }, [inStatus, searchLower]);
+  const shown = useMemo(() => searched.filter((entity) => chip === 'all' || entity.type === chip), [searched, chip]);
+
+  const chips = useMemo(() => {
+    const counts = countByKey(searched, (entity) => entity.type);
+    return buildChips(searched.length, [
+      { id: 'pessoa_juridica', label: 'Empresa', count: counts.get('pessoa_juridica') ?? 0 },
+      { id: 'pessoa_fisica', label: 'Pessoa física', count: counts.get('pessoa_fisica') ?? 0 },
+    ], chip);
+  }, [searched, chip]);
+
+  const activeCount = entities.filter((entity) => !isInactive(entity)).length;
+  const inactiveCount = entities.length - activeCount;
+  const opened = openId ? entities.find((entity) => entity.id === openId) ?? null : null;
+  const displayName = (entity: Entity) => entity.fantasyName || entity.name;
+
+  const closeDrawer = () => { setOpenId(null); setNotice(null); };
+  const changeStatus = (next: CadastrosStatus) => { setStatus(next); setChip('all'); closeDrawer(); };
+  const handleAddNew = () => { setEntityToEdit(null); setIsModalOpen(true); };
+  const handleEdit = (entity: Entity) => { closeDrawer(); setEntityToEdit(entity); setIsModalOpen(true); };
+
+  const handleInactivate = (entity: Entity) => {
+    setNotice({
+      kind: 'confirm',
+      text: `Inativar “${displayName(entity)}”? O cadastro continua no histórico e pode ser consultado no filtro Inativos.`,
+      onConfirm: async () => {
+        setIsBusy(true);
+        try {
+          await deleteEntity(entity.id);
+          closeDrawer();
+          toast({ title: `${displayName(entity)} inativado.` });
+        } catch (error) {
+          toast({ title: 'Não foi possível inativar.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
+        } finally {
+          setIsBusy(false);
+        }
+      },
     });
-  }, [entities, searchTerm, typeFilter]);
-
-  const handleDeleteClick = (entity: Entity) => {
-    setEntityToDelete(entity);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (entityToDelete) {
-      await deleteEntity(entityToDelete.id);
-      setEntityToDelete(null);
-    }
-  };
+  const typeLabel = (entity: Entity) => (entity.type === 'pessoa_juridica' ? 'Empresa' : 'Pessoa física');
+  const typeTone = (entity: Entity) => (entity.type === 'pessoa_juridica' ? 'text-[#a6325b]' : 'text-[#4646b8]');
+  const avatarTone = (entity: Entity) =>
+    entity.type === 'pessoa_juridica' ? 'bg-[#fbe7ef] text-[#a6325b]' : 'bg-[#e8e8fb] text-[#4646b8]';
 
-  const handleAddNew = () => {
-    setEntityToEdit(null);
-    setIsModalOpen(true);
-  };
-
-  const handleEdit = (entity: Entity) => {
-    setEntityToEdit(entity);
-    setIsModalOpen(true);
-  };
+  const openedFields: Array<[string, string]> = opened ? ([
+    ['Tipo', opened.type === 'pessoa_juridica' ? 'Pessoa jurídica · CNPJ' : 'Pessoa física · CPF'],
+    ['Documento', opened.document],
+    opened.fantasyName ? ['Razão social', opened.name] : null,
+    opened.nickname ? ['Apelido', opened.nickname] : null,
+    opened.contact?.email ? ['E-mail', opened.contact.email] : null,
+    ...(opened.contact?.emails ?? []).map((entry): [string, string] => [`E-mail · ${entry.department}`, entry.email]),
+    opened.contact?.phone ? ['Telefone', opened.contact.phone] : null,
+    ['Cidade/UF', entityCity(opened)],
+    opened.documentSignatoryName
+      ? ['Assina pela empresa', `${opened.documentSignatoryName}${opened.documentSignatoryScope === 'cnpj_root' ? ' · matriz e filiais' : ''}`]
+      : null,
+  ].filter(Boolean) as Array<[string, string]>) : [];
+  const openedChips: DrawerChip[] = opened
+    ? entityTags(opened, asoClinicStatuses[opened.id]).map((tag) => ({ label: tag.label, tone: tag.tone }))
+    : [];
 
   return (
     <>
-      <Card className="border-0 bg-transparent shadow-none">
-        <CardHeader className="px-0 pb-3 pt-0">
-          <CardTitle className="text-lg font-black tracking-[-0.02em] text-[#181820]">
-            Pessoas e empresas
-          </CardTitle>
-          <CardDescription className="text-[11px] font-medium text-[#777784]">
-            Colaboradores, fornecedores, sócios e clientes do sistema.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 px-0">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 rounded-lg border-[#e2e0da] bg-white px-3 text-[11px] font-extrabold text-[#494952]"
-                >
-                  <Tags className="mr-1.5 h-3.5 w-3.5" /> Categorias de cadastro
-                </Button>
-                <Button onClick={handleAddNew} className="h-8 rounded-lg bg-[#df2f78] px-3 text-[11px] font-extrabold text-white hover:bg-[#cc2069]">
-                  <Plus className="mr-1.5 h-4 w-4" /> Adicionar cadastro
-                </Button>
-              </div>
-              <p className="text-[11px] font-bold text-[#777784]">
-                <strong className="text-[#494952]">{filteredEntities.length}</strong> de {entities.length}
-              </p>
-            </div>
+      <div className="flex flex-col gap-4">
+        <CadastrosHero
+          kicker="Cadastros operacionais"
+          tabs={tabs}
+          search={{ value: searchTerm, onChange: setSearchTerm, placeholder: 'Buscar por nome, CPF/CNPJ, e-mail ou telefone' }}
+          status={{ value: status, onChange: changeStatus, activeCount, inactiveCount, inactiveLabel: 'Inativos' }}
+          primary={{ label: 'Adicionar cadastro', onClick: handleAddNew }}
+          chips={chips}
+          activeChip={chip}
+          onChip={setChip}
+        />
 
-            <div className="relative w-full">
-                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9d9da9]" />
-                    <Input
-                        placeholder="Buscar por nome, CPF/CNPJ, e-mail..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-8 w-full rounded-md border-0 bg-[#f6f5f2] pl-9 text-xs font-medium shadow-none placeholder:text-[#9d9da9]"
-                    />
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-                <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952] sm:w-[180px]">
-                        <SelectValue placeholder="Filtrar por tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos os tipos</SelectItem>
-                        <SelectItem value="pessoa_fisica">Pessoa física</SelectItem>
-                        <SelectItem value="pessoa_juridica">Pessoa jurídica</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Button className="h-8 rounded-md px-2.5 text-[11px] font-bold text-[#777784]" variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>
-                    <Eraser className="mr-1.5 h-3.5 w-3.5" />
-                    Limpar
-                </Button>
-            </div>
-           
-            <div className="overflow-x-auto rounded-xl border border-[#e2e0da] bg-white shadow-[0_2px_8px_rgba(15,23,42,.04)]">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="h-10 border-[#ececf0] bg-[#fbfbfc] hover:bg-[#fbfbfc]">
-                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Nome / Razão social</TableHead>
-                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Tipo</TableHead>
-                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Documento</TableHead>
-                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Contato</TableHead>
-                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Cidade/UF</TableHead>
-                            <TableHead className="w-20 text-right text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Ações</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading ? (
-                            [...Array(5)].map((_, index) => (
-                                <TableRow key={index}>
-                                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
-                                </TableRow>
-                            ))
-                        ) : filteredEntities.length > 0 ? (
-                            filteredEntities.map(entity => (
-                                <TableRow key={entity.id} className="h-16 border-[#f2f2f5] hover:bg-[#fbfbfc]">
-                                    <TableCell>
-                                        <div className="flex items-center gap-2.5">
-                                            <div className={cn(
-                                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black text-white',
-                                              entity.type === 'pessoa_juridica'
-                                                ? 'bg-gradient-to-br from-orange-500 to-amber-500'
-                                                : 'bg-gradient-to-br from-violet-500 to-blue-500',
-                                            )}>
-                                                {(entity.fantasyName || entity.name)
-                                                  .split(/\s+/)
-                                                  .slice(0, 2)
-                                                  .map((part) => part.slice(0, 1))
-                                                  .join('')
-                                                  .toUpperCase()}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="max-w-64 truncate text-sm font-extrabold text-[#1d1d26]">{entity.fantasyName || entity.name}</p>
-                                                {entity.fantasyName ? <p className="max-w-64 truncate text-[11px] font-medium text-[#a6a6b0]">{entity.name}</p> : null}
-                                                {entity.nickname ? (
-                                                    <Badge variant="secondary" className="mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium">
-                                                        {entity.nickname}
-                                                    </Badge>
-                                                ) : null}
-                                                {entity.documentSignatoryName ? (
-                                                    <p className="mt-1 max-w-72 truncate text-[10px] font-semibold text-violet-700">
-                                                        Assina pela empresa: {entity.documentSignatoryName}
-                                                        {entity.documentSignatoryScope === 'cnpj_root' ? ' · matriz e filiais' : ''}
-                                                    </p>
-                                                ) : null}
-                                                {entity.status === 'inactive' ? (
-                                                  <Badge variant="outline" className="mt-1 rounded-md border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium text-amber-800">
-                                                    Inativo
-                                                  </Badge>
-                                                ) : null}
-                                                {asoClinicStatuses[entity.id] ? (
-                                                  <Badge variant="outline" className={cn(
-                                                    'ml-1 mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium',
-                                                    asoClinicStatuses[entity.id].active
-                                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                                      : 'border-slate-200 bg-slate-50 text-slate-600',
-                                                  )}>
-                                                    Clínica ASO{asoClinicStatuses[entity.id].active ? '' : ' inativa'}
-                                                  </Badge>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-xs">
-                                        <span className={cn(
-                                          'inline-flex items-center gap-2 font-medium',
-                                          entity.type === 'pessoa_juridica' ? 'text-orange-500' : 'text-indigo-500',
-                                        )}>
-                                          <span className="h-2 w-2 rounded-full bg-current" />
-                                          {entity.type === 'pessoa_juridica' ? 'Empresa' : 'Pessoa física'}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs text-[#6f6f7c]">{entity.document}</TableCell>
-                                    <TableCell>
-                                        <div className="space-y-0.5 text-[11px] text-[#777784]">
-                                            {entity.contact?.email ? <p className="flex items-center gap-1"><Mail className="h-3 w-3" />{entity.contact.email}</p> : null}
-                                            {(entity.contact?.emails ?? []).slice(0, 2).map((entry) => <p key={entry.id} className="flex items-center gap-1"><Mail className="h-3 w-3" /><span className="font-semibold">{entry.department}:</span> {entry.email}</p>)}
-                                            {entity.contact?.phone ? <p className="flex items-center gap-1"><Phone className="h-3 w-3" />{entity.contact.phone}</p> : null}
-                                            {!entity.contact?.email && !entity.contact?.phone && !(entity.contact?.emails?.length) ? '-' : null}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {entity.address?.city ? (
-                                            <span className="flex items-center gap-1 text-xs text-[#6f6f7c]">
-                                                <MapPin className="h-3 w-3 text-muted-foreground" />
-                                                {entity.address.city}{entity.address.state ? `/${entity.address.state}` : ''}
-                                            </span>
-                                        ) : '-'}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="text-[#9e938b]">
-                                              <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onSelect={() => handleEdit(entity)}>
-                                              <Edit className="mr-2 h-4 w-4" /> Editar
-                                            </DropdownMenuItem>
-                                            {canManageAsoClinics ? (
-                                              <DropdownMenuItem onSelect={() => setAsoEntity(entity)}>
-                                                <Stethoscope className="mr-2 h-4 w-4" /> Serviços de saúde ocupacional
-                                              </DropdownMenuItem>
-                                            ) : null}
-                                            <DropdownMenuSeparator />
-                                            {entity.status !== 'inactive' ? (
-                                              <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => handleDeleteClick(entity)}>
-                                                <Trash2 className="mr-2 h-4 w-4" /> Inativar
-                                              </DropdownMenuItem>
-                                            ) : null}
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                    Nenhum cadastro encontrado.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-        </CardContent>
-      </Card>
+        <ResultsBar shown={shown.length} total={inStatus.length} noun="cadastros" view={view} onView={onViewChange} />
+
+        {loading ? (
+          <ListShell><ListSkeleton /></ListShell>
+        ) : shown.length === 0 ? (
+          <EmptyResults
+            title={searchTerm ? `Nada encontrado para “${searchTerm}”.` : 'Nenhum item neste filtro.'}
+            onClear={() => { setSearchTerm(''); setChip('all'); }}
+          />
+        ) : view === 'grid' ? (
+          <CardGrid>
+            {shown.map((entity) => {
+              const tags = entityTags(entity, asoClinicStatuses[entity.id]);
+              const contacts = entityContacts(entity);
+              return (
+                <GridCard
+                  key={entity.id}
+                  label={`Abrir ${displayName(entity)}`}
+                  minHeight={220}
+                  isOpen={openId === entity.id}
+                  isSelected={false}
+                  isMuted={isInactive(entity)}
+                  onOpen={() => { setOpenId(entity.id); setNotice(null); }}
+                >
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className={cn('flex h-[52px] w-[52px] items-center justify-center rounded-2xl text-[17px] font-extrabold', avatarTone(entity))}>
+                      {initialsOf(displayName(entity))}
+                    </div>
+                    <span className={cn('inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-semibold', typeTone(entity))}>
+                      <span className="h-[7px] w-[7px] rounded-full bg-current" />
+                      {typeLabel(entity)}
+                    </span>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-[3px]">
+                    <span className="break-words text-[18px] font-extrabold leading-[1.15] tracking-[-0.02em]">{displayName(entity)}</span>
+                    {entity.fantasyName ? <span className="truncate text-[11.5px] text-[#8a8f99]">{entity.name}</span> : null}
+                  </div>
+                  {tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {tags.map((tag) => <TagChip key={tag.label} tone={tag.tone}>{tag.label}</TagChip>)}
+                    </div>
+                  ) : null}
+                  <div className="mt-auto flex min-w-0 flex-col gap-1 border-t border-[#f0ede7] pt-3 text-xs text-[#4a4f57]">
+                    <span className="font-mono text-[11.5px]">{entity.document}</span>
+                    <span className="truncate">{contacts[0] ?? '—'}</span>
+                    <span className="text-[#8a8f99]">{entityCity(entity)}</span>
+                  </div>
+                </GridCard>
+              );
+            })}
+          </CardGrid>
+        ) : (
+          <ListShell>
+            <ListHead template={LIST_TEMPLATE}>
+              <span>Nome / Razão social</span><span>Tipo</span><span>Documento</span><span>Contato</span><span>Cidade/UF</span><span />
+            </ListHead>
+            {shown.map((entity, index) => {
+              const tags = entityTags(entity, asoClinicStatuses[entity.id]);
+              const contacts = entityContacts(entity);
+              return (
+                <ListRow
+                  key={entity.id}
+                  template={LIST_TEMPLATE}
+                  isFirst={index === 0}
+                  isOpen={openId === entity.id}
+                  isSelected={false}
+                  isMuted={isInactive(entity)}
+                  label={`Abrir ${displayName(entity)}`}
+                  onOpen={() => { setOpenId(entity.id); setNotice(null); }}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-xs font-extrabold', avatarTone(entity))}>
+                      {initialsOf(displayName(entity))}
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-[3px]">
+                      <span className="truncate text-[13.5px] font-bold">{displayName(entity)}</span>
+                      {entity.fantasyName ? <span className="truncate text-[11.5px] text-[#8a8f99]">{entity.name}</span> : null}
+                      {tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {tags.map((tag) => <TagChip key={tag.label} tone={tag.tone}>{tag.label}</TagChip>)}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className={cn('inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-semibold', typeTone(entity))}>
+                    <span className="h-[7px] w-[7px] rounded-full bg-current" />
+                    {typeLabel(entity)}
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-[11.5px] text-[#4a4f57]">{entity.document}</span>
+                  <div className="flex min-w-0 flex-col gap-0.5 text-xs text-[#4a4f57]">
+                    <span className="truncate">{contacts[0] ?? '—'}</span>
+                    {contacts[1] ? <span className="truncate text-[#8a8f99]">{contacts[1]}</span> : null}
+                  </div>
+                  <span className="text-[12.5px] text-[#4a4f57]">{entityCity(entity)}</span>
+                  <Chevron />
+                </ListRow>
+              );
+            })}
+          </ListShell>
+        )}
+      </div>
+
+      <DetailDrawer
+        open={!!opened}
+        onClose={closeDrawer}
+        kicker={opened ? typeLabel(opened) : ''}
+        title={opened ? displayName(opened) : ''}
+        chips={openedChips}
+        fields={openedFields}
+        notice={notice}
+        onCancelNotice={() => setNotice(null)}
+        isBusy={isBusy}
+        onEdit={opened ? () => handleEdit(opened) : undefined}
+        actions={opened ? [
+          ...(canManageAsoClinics ? [{ label: 'Serviços de saúde ocupacional', onClick: () => { const entity = opened; closeDrawer(); setAsoEntity(entity); } }] : []),
+          ...(!isInactive(opened) ? [{ label: 'Inativar', isDanger: true, onClick: () => handleInactivate(opened) }] : []),
+        ] : []}
+      />
 
       <AddEditEntityModal
         open={isModalOpen}
@@ -1400,15 +1417,6 @@ export function EntityManagement() {
           setAsoClinicStatuses((current) => ({ ...current, [clinic.entityId]: { active: clinic.active } }));
         }}
       />
-
-      {entityToDelete && (
-        <DeleteConfirmationDialog
-          open={!!entityToDelete}
-          onOpenChange={() => setEntityToDelete(null)}
-          onConfirm={handleDeleteConfirm}
-          itemName={`o cadastro de "${entityToDelete.name}" (ele será inativado e o histórico será preservado)`}
-        />
-      )}
     </>
   );
 }
