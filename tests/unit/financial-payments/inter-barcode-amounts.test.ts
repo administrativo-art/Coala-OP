@@ -140,7 +140,7 @@ test("só aceita encargos do extrato após o vencimento e confirmados pelo Inter
   }).divergence, null);
 });
 
-test("atualiza o débito esperado somente quando o Inter informa a liquidação", () => {
+test("prioriza a liquidação do Inter e usa o valor documental confirmado antes do principal", () => {
   assert.equal(expectedBarcodeDebitAmountCents({
     requestedAmount: 1467.98,
     currentSettlementAmount: null,
@@ -148,6 +148,13 @@ test("atualiza o débito esperado somente quando o Inter informa a liquidação"
   }), 146798);
   assert.equal(expectedBarcodeDebitAmountCents({
     requestedAmount: 1467.98,
+    requestedSettlementAmount: 1512,
+    currentSettlementAmount: null,
+    observedSettlementAmountCents: null,
+  }), 151200);
+  assert.equal(expectedBarcodeDebitAmountCents({
+    requestedAmount: 1467.98,
+    requestedSettlementAmount: 1512,
     currentSettlementAmount: null,
     observedSettlementAmountCents: 151200,
   }), 151200);

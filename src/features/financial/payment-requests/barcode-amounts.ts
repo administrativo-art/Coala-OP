@@ -130,11 +130,13 @@ export function observeBarcodeStatementSettlement(input: {
 
 export function expectedBarcodeDebitAmountCents(input: {
   requestedAmount: number;
+  requestedSettlementAmount?: number | null;
   currentSettlementAmount?: number | null;
   observedSettlementAmountCents?: number | null;
 }) {
   return input.observedSettlementAmountCents
     ?? cents(input.currentSettlementAmount)
+    ?? cents(input.requestedSettlementAmount)
     ?? cents(input.requestedAmount)
     ?? 0;
 }

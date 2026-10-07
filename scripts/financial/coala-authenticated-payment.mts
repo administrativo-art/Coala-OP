@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { firebaseClientConfig } from "../../src/lib/firebase-client-config";
-import { validatePaymentCliAction, validatePaymentCliPreparation } from "./payment-cli-contract";
+import { validateOverdueSettlementCliRevision, validatePaymentCliAction, validatePaymentCliPreparation } from "./payment-cli-contract";
 import { paymentReadPath, summarizePaymentRead } from "./payment-cli-read-contract";
 import { paymentLookupQuery, decodeFirestoreValue } from "./payment-cli-query-contract";
 import { PaymentCliError, paymentCliErrorMessage, paymentCliFetch, paymentCliJson } from "./payment-cli-transport";
@@ -38,6 +38,8 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts authorize --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
   npx tsx scripts/financial/coala-authenticated-payment.mts retry-send --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CPF_OU_CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO
+  npx tsx scripts/financial/coala-authenticated-payment.mts adjust-overdue --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --settlement-amount-cents CENTAVOS --late-charge-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --source-attachment-id ANEXO_ID --source-attachment-sha256 SHA256
+  npx tsx scripts/financial/coala-authenticated-payment.mts send-adjusted --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --settlement-amount-cents CENTAVOS --late-charge-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --source-attachment-id ANEXO_ID --source-attachment-sha256 SHA256
 
 O login pede a senha diretamente no terminal e guarda somente o refresh token no Chaves do macOS.
 Autorizar no Coala e enviar ao Inter são comandos separados. A aprovação final no Inter continua separada.
@@ -151,6 +153,19 @@ async function coalaPost(token: string, id: string, action: "authorize" | "submi
   return body.request;
 }
 
+async function coalaAuthorizeOverdueRevision(token: string, id: string, input: Record<string, unknown>) {
+  const response = await paymentCliFetch(`${COALA_URL}/api/financial/payment-requests/${encodeURIComponent(id)}/authorize`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new PaymentCliError(`O Coala não confirmou a revisão do boleto vencido (HTTP ${response.status}). Consulte o status antes de tentar novamente.`);
+  const body = await paymentCliJson<{ request?: Record<string, unknown> }>(response);
+  if (body?.request?.id !== id) throw new PaymentCliError("O Coala não confirmou a solicitação revisada esperada. Consulte o status; não repita o comando automaticamente.");
+  return body.request;
+}
+
 async function coalaPrepareInbox(token: string, id: string, input: {
   scheduledFor: string;
   beneficiaryDocument: string;
@@ -218,6 +233,9 @@ function printStatus(request: Record<string, unknown>) {
   const barcode = request.barcodeSnapshot as Record<string, unknown> | undefined;
   stdout.write(`${JSON.stringify({
     id: request.id, status: request.status, amount: request.amount,
+    requestedSettlementAmount: request.requestedSettlementAmount ?? null,
+    requestedLateChargeAmount: request.requestedLateChargeAmount ?? null,
+    submissionAttemptCount: request.submissionAttemptCount ?? null,
     sourceId: request.sourceId ?? null, expenseId: request.expenseId ?? null,
     scheduledFor: barcode?.scheduledFor ?? null,
     barcodeLast8: typeof barcode?.code === "string" ? barcode.code.slice(-8) : null,
@@ -229,7 +247,7 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "prepare", "authorize", "send", "retry-send"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
@@ -304,11 +322,33 @@ async function main() {
   const beneficiaryDocument = requireOption("beneficiary-document").replace(/\D/g, "");
   const expenseId = requireOption("expense-id");
   const barcode = requireOption("barcode").replace(/[.\s-]/g, "");
-  validatePaymentCliAction({ request, action: command as "authorize" | "send" | "retry-send", amountCents,
-    scheduledFor, beneficiaryDocument, expenseId, barcode });
+  if (command === "adjust-overdue") {
+    const settlementAmountCents = Number(requireOption("settlement-amount-cents"));
+    const lateChargeAmountCents = Number(requireOption("late-charge-cents"));
+    const sourceAttachmentId = requireOption("source-attachment-id");
+    const sourceAttachmentSha256 = requireOption("source-attachment-sha256").toLowerCase();
+    const revision = validateOverdueSettlementCliRevision({ request, principalAmountCents: amountCents,
+      settlementAmountCents, lateChargeAmountCents, scheduledFor, beneficiaryDocument, expenseId,
+      barcode, sourceAttachmentId, sourceAttachmentSha256 });
+    const current = await coalaAuthorizeOverdueRevision(token, id, revision);
+    try {
+      validatePaymentCliAction({ request: current, action: "send-adjusted", amountCents,
+        scheduledFor, beneficiaryDocument, expenseId, barcode, settlementAmountCents,
+        lateChargeAmountCents, sourceAttachmentId, sourceAttachmentSha256 });
+    } catch {
+      throw new PaymentCliError("O Coala não confirmou a revisão esperada do boleto vencido. Consulte o status; não repita o comando automaticamente.");
+    }
+    return printStatus(current);
+  }
+  const settlementAmountCents = command === "send-adjusted" ? Number(requireOption("settlement-amount-cents")) : undefined;
+  const lateChargeAmountCents = command === "send-adjusted" ? Number(requireOption("late-charge-cents")) : undefined;
+  const sourceAttachmentId = command === "send-adjusted" ? requireOption("source-attachment-id") : undefined;
+  const sourceAttachmentSha256 = command === "send-adjusted" ? requireOption("source-attachment-sha256").toLowerCase() : undefined;
+  validatePaymentCliAction({ request, action: command as "authorize" | "send" | "retry-send" | "send-adjusted", amountCents,
+    scheduledFor, beneficiaryDocument, expenseId, barcode, settlementAmountCents, lateChargeAmountCents, sourceAttachmentId, sourceAttachmentSha256 });
   const current = await coalaPost(token, id, command === "authorize" ? "authorize" : "submit");
   printStatus(current);
-  if ((command === "send" || command === "retry-send") && !current.interRequestId) throw new PaymentCliError("A resposta não confirmou identificador do Inter. Consulte o status antes de qualquer nova tentativa.");
+  if ((command === "send" || command === "retry-send" || command === "send-adjusted") && !current.interRequestId) throw new PaymentCliError("A resposta não confirmou identificador do Inter. Consulte o status antes de qualquer nova tentativa.");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error: unknown) => {

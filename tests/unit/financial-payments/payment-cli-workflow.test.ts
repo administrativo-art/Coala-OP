@@ -7,7 +7,7 @@ const cli = fileURLToPath(new URL("../../../scripts/financial/coala-authenticate
 const order = {
   id: "request_demo_123", sourceType: "expense_boleto", sourceId: "expense_demo_123",
   expenseId: "expense_demo_123", paymentRail: "barcode", amount: 50,
-  barcodeSnapshot: { code: "1".repeat(47), scheduledFor: "2026-10-10", beneficiaryDocument: "12345678000195" },
+  barcodeSnapshot: { code: "1".repeat(47), dueDate: "2026-10-09", scheduledFor: "2026-10-10", beneficiaryDocument: "12345678000195" },
 };
 const inboxMessage = {
   id: "inbox_demo_123", status: "linked", linkedExpenseId: "expense_demo_123", paymentRequestId: null,
@@ -24,11 +24,16 @@ const preparedOrder = {
 
 // Run the real command dispatcher in a child with all network and Keychain calls replaced.
 // No Swift process, credentials, emulator, browser or real API can be reached.
-function runFixture(input: { action: "authorize" | "send" | "retry-send"; state: string; outcome?: string; amount?: string; started?: boolean; errorCode?: string; attemptCount?: number; posts: number }) {
+function runFixture(input: { action: "authorize" | "send" | "retry-send" | "adjust-overdue" | "send-adjusted"; state: string; outcome?: string; amount?: string; started?: boolean; errorCode?: string; attemptCount?: number; posts: number }) {
   const args = [input.action, "--email", "demo@example.invalid", "--id", order.id,
     "--amount-cents", input.amount ?? "5000", "--scheduled-for", order.barcodeSnapshot.scheduledFor,
     "--beneficiary-document", order.barcodeSnapshot.beneficiaryDocument,
     "--expense-id", order.expenseId, "--barcode", order.barcodeSnapshot.code];
+  if (input.action === "adjust-overdue" || input.action === "send-adjusted") args.push(
+    "--settlement-amount-cents", "5200", "--late-charge-cents", "200",
+    "--source-attachment-id", "attachment_demo_1",
+    "--source-attachment-sha256", "a".repeat(64),
+  );
   const source = `
     import assert from 'node:assert/strict';
     import childProcess from 'node:child_process';
@@ -59,20 +64,31 @@ function runFixture(input: { action: "authorize" | "send" | "retry-send"; state:
       assert.equal(init.headers.Authorization, 'Bearer ID_TOKEN_FICTICIO');
       if (target.pathname === '/api/financial/payment-requests' && !init.method) {
         return Response.json({requests:[{...order, status:scenario.state,
+          ...((scenario.action === 'adjust-overdue' || scenario.action === 'send-adjusted') ? {sourceType:'financial_inbox',sourceId:'inbox_demo_123'} : {}),
           ...(scenario.started ? {submissionStartedAt:'2026-09-27T00:00:00Z'} : {}),
           ...(scenario.errorCode ? {lastError:{code:scenario.errorCode}} : {}),
-          ...(scenario.attemptCount == null ? {} : {submissionAttemptCount:scenario.attemptCount})}]});
+          ...(scenario.attemptCount == null ? {} : {submissionAttemptCount:scenario.attemptCount}),
+          ...(scenario.action === 'send-adjusted' ? {requestedSettlementAmount:52, requestedLateChargeAmount:2,
+            settlementRevision:{source:'confirmed_document',evidenceSource:'manual_document_review',
+              sourceAttachmentId:'attachment_demo_1',sourceAttachmentSha256:'${"a".repeat(64)}',
+              barcode:order.barcodeSnapshot.code,beneficiaryDocument:order.barcodeSnapshot.beneficiaryDocument}} : {})}]});
       }
       assert.equal(init.method, 'POST');
-      assert.equal(target.pathname, '/api/financial/payment-requests/' + order.id + '/' + (scenario.action === 'authorize' ? 'authorize' : 'submit'));
+      assert.equal(target.pathname, '/api/financial/payment-requests/' + order.id + '/' + ((scenario.action === 'authorize' || scenario.action === 'adjust-overdue') ? 'authorize' : 'submit'));
       posts++;
       if (scenario.outcome === 'timeout') throw new Error('SEGREDO_FICTICIO: falha após envio');
       if (scenario.outcome === 'http500') return new Response('SEGREDO_FICTICIO', {status:500});
       if (scenario.outcome === 'invalid-json') return new Response('SEGREDO_FICTICIO');
       return Response.json({request:{...order,
+        ...(scenario.action === 'adjust-overdue' ? {sourceType:'financial_inbox',sourceId:'inbox_demo_123'} : {}),
         id:scenario.outcome === 'wrong-id' ? 'wrong_order' : order.id,
-        status:scenario.action === 'authorize' ? 'ready_to_submit' : 'awaiting_bank_approval',
-        ...(scenario.action !== 'authorize' ? {interRequestId:'inter_demo', bankStatus:'AGUARDANDO_APROVACAO'} : {})}});
+        status:(scenario.action === 'authorize' || scenario.action === 'adjust-overdue') ? 'ready_to_submit' : 'awaiting_bank_approval',
+        ...(scenario.action === 'adjust-overdue' ? {submissionStartedAt:'2026-09-27T00:00:00Z',submissionAttemptCount:2,
+          requestedSettlementAmount:52,requestedLateChargeAmount:2,
+          settlementRevision:{source:'confirmed_document',evidenceSource:'manual_document_review',
+            sourceAttachmentId:'attachment_demo_1',sourceAttachmentSha256:'${"a".repeat(64)}',
+            barcode:order.barcodeSnapshot.code,beneficiaryDocument:order.barcodeSnapshot.beneficiaryDocument}} : {}),
+        ...((scenario.action !== 'authorize' && scenario.action !== 'adjust-overdue') ? {interRequestId:'inter_demo', bankStatus:'AGUARDANDO_APROVACAO'} : {})}});
     };
     process.on('exit', () => {
       assert.equal(posts, scenario.posts, 'quantidade exata de escritas');
@@ -197,6 +213,19 @@ test("dispatcher retoma somente a primeira rejeição HTTP 400 confirmada", () =
   });
   assert.equal(blocked.status, 1);
   assert.match(blocked.stderr, /Nenhuma ação foi feita/);
+});
+
+test("dispatcher revisa valor vencido e envia em comandos separados", () => {
+  const adjustment = runFixture({
+    action: "adjust-overdue", state: "failed", started: true, errorCode: "INTER_HTTP_400", attemptCount: 2, posts: 1,
+  });
+  assert.equal(adjustment.status, 0, adjustment.stderr);
+  assert.equal(JSON.parse(adjustment.stdout).requestedSettlementAmount, 52);
+  const submission = runFixture({
+    action: "send-adjusted", state: "ready_to_submit", started: true, attemptCount: 2, posts: 1,
+  });
+  assert.equal(submission.status, 0, submission.stderr);
+  assert.equal(JSON.parse(submission.stdout).status, "awaiting_bank_approval");
 });
 
 test("dispatcher nunca repete envio incerto nem expõe a resposta bruta", () => {
