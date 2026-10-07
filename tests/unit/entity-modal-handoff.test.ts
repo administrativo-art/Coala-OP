@@ -43,7 +43,7 @@ test('dates are shown as dd/mm/yyyy and unknown text is kept as is', () => {
 });
 
 test('editor follows the handoff: dark live panel, CNPJ first, collapsible fiscal block and two-column shell', () => {
-  assert.match(editor, /DialogContent hideClose className="[^"]*sm:max-w-\[1080px\][^"]*"/);
+  assert.match(editor, /DialogContent hideClose flush className="[^"]*sm:max-w-\[1080px\][^"]*"/);
   assert.match(editor, /grid min-h-0 grid-cols-1 lg:h-\[800px\] lg:grid-cols-\[340px_minmax\(0,1fr\)\]/);
   assert.match(editor, /bg-\[#15151c\]/);
   assert.match(editor, /consulta automática ao completar 14 dígitos/);

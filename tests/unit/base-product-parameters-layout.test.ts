@@ -10,7 +10,7 @@ test('wizard labels use the Portuguese conjunction instead of an ampersand', () 
 });
 
 test('modal keeps the insumo panel beside the step content and stacks on narrow screens', () => {
-  assert.match(modal, /DialogContent hideClose className="[^"]*max-h-\[calc\(100dvh-1rem\)\][^"]*sm:max-w-\[1080px\][^"]*"/);
+  assert.match(modal, /DialogContent hideClose flush className="[^"]*max-h-\[calc\(100dvh-1rem\)\][^"]*sm:max-w-\[1080px\][^"]*"/);
   assert.match(modal, /form className="grid min-h-0 grid-cols-1 lg:grid-cols-\[380px_minmax\(0,1fr\)\]"/);
   assert.match(modal, /aside className="[^"]*bg-\[#15151c\][^"]*"/);
   assert.match(modal, /grid grid-cols-2 gap-2\.5 md:grid-cols-\[minmax\(0,1\.3fr\)_minmax\(0,\.85fr\)_minmax\(0,1\.3fr\)_minmax\(0,\.75fr\)\]/);
@@ -21,7 +21,7 @@ test('stock card labels never wrap, so every control in a card stays on one base
 });
 
 test('the dialog removes the base padding at every breakpoint so the dark panel is flush with the rounded corners', () => {
-  assert.match(modal, /DialogContent hideClose className="[^"]*\bp-0\b[^"]*\bsm:p-0\b[^"]*"/);
+  assert.match(modal, /DialogContent hideClose flush className="[^"]*"/);
 });
 
 test('modal exposes an accessible title and a labelled close action', () => {
