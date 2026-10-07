@@ -1,7 +1,8 @@
 import { PaymentCliError } from "./payment-cli-transport";
 import { CnpjValidator } from "../../src/lib/company/cnpj-validator";
+import { canRetryDefinitivelyRejectedPayment } from "../../src/features/financial/payment-requests/submission-retry";
 
-export type PaymentCliAction = "authorize" | "send";
+export type PaymentCliAction = "authorize" | "send" | "retry-send";
 
 function validIsoDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -57,9 +58,11 @@ export function validatePaymentCliAction(input: {
 }) {
   const { request } = input;
   const barcode = request.barcodeSnapshot as Record<string, unknown> | undefined;
-  const expectedStatus = input.action === "authorize" ? "awaiting_financial_authorization" : "ready_to_submit";
+  const expectedStatus = input.action === "authorize"
+    ? "awaiting_financial_authorization"
+    : input.action === "retry-send" ? "failed" : "ready_to_submit";
   const storedAmount = Number(request.amount);
-  if (!["authorize", "send"].includes(input.action)
+  if (!["authorize", "send", "retry-send"].includes(input.action)
     || !Number.isSafeInteger(input.amountCents) || input.amountCents <= 0
     || !Number.isFinite(storedAmount) || Math.round(storedAmount * 100) !== input.amountCents
     || !validIsoDate(input.scheduledFor)
@@ -74,7 +77,10 @@ export function validatePaymentCliAction(input: {
     || barcode.beneficiaryDocument !== input.beneficiaryDocument) {
     throw new PaymentCliError("Os dados da solicitação divergem da ordem específica. Nenhuma ação foi feita.");
   }
-  if (request.interRequestId || request.submissionStartedAt || request.status !== expectedStatus) {
+  const validRetry = input.action === "retry-send" && canRetryDefinitivelyRejectedPayment(request);
+  const validFirstAction = input.action !== "retry-send"
+    && !request.interRequestId && !request.submissionStartedAt && request.status === expectedStatus;
+  if (!validRetry && !validFirstAction) {
     throw new PaymentCliError("A solicitação não está em estado de primeira autorização ou primeiro envio. Nenhuma ação foi feita.");
   }
 }
