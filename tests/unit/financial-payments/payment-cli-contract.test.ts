@@ -33,6 +33,19 @@ test("impede divergência e repetição de ordem bancária", () => {
   assert.throws(() => validatePaymentCliAction({ request: { ...order, status: "ready_to_submit", submissionStartedAt: "2026-09-24T00:00:00Z" }, action: "send", ...expected }));
 });
 
+test("retoma uma única vez somente rejeição HTTP 400 confirmada", () => {
+  const failed = {
+    ...order,
+    status: "failed",
+    submissionStartedAt: "2026-10-07T01:07:54.261Z",
+    lastError: { code: "INTER_HTTP_400" },
+  };
+  assert.doesNotThrow(() => validatePaymentCliAction({ request: failed, action: "retry-send", ...expected }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...failed, submissionAttemptCount: 2 }, action: "retry-send", ...expected }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...failed, lastError: { code: "INTER_REQUEST_FAILED" } }, action: "retry-send", ...expected }));
+  assert.throws(() => validatePaymentCliAction({ request: { ...failed, interRequestId: "bank_1" }, action: "retry-send", ...expected }));
+});
+
 test("recusa datas impossíveis, ações desconhecidas e estados posteriores", () => {
   for (const date of ["2026-02-30", "2026-13-01", "2026-09-31"]) {
     assert.throws(() => validatePaymentCliAction({ request: { ...order, barcodeSnapshot: { ...order.barcodeSnapshot, scheduledFor: date } }, action: "authorize", ...expected, scheduledFor: date }));

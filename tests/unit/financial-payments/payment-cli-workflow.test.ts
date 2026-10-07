@@ -24,7 +24,7 @@ const preparedOrder = {
 
 // Run the real command dispatcher in a child with all network and Keychain calls replaced.
 // No Swift process, credentials, emulator, browser or real API can be reached.
-function runFixture(input: { action: "authorize" | "send"; state: string; outcome?: string; amount?: string; started?: boolean; posts: number }) {
+function runFixture(input: { action: "authorize" | "send" | "retry-send"; state: string; outcome?: string; amount?: string; started?: boolean; errorCode?: string; attemptCount?: number; posts: number }) {
   const args = [input.action, "--email", "demo@example.invalid", "--id", order.id,
     "--amount-cents", input.amount ?? "5000", "--scheduled-for", order.barcodeSnapshot.scheduledFor,
     "--beneficiary-document", order.barcodeSnapshot.beneficiaryDocument,
@@ -59,7 +59,9 @@ function runFixture(input: { action: "authorize" | "send"; state: string; outcom
       assert.equal(init.headers.Authorization, 'Bearer ID_TOKEN_FICTICIO');
       if (target.pathname === '/api/financial/payment-requests' && !init.method) {
         return Response.json({requests:[{...order, status:scenario.state,
-          ...(scenario.started ? {submissionStartedAt:'2026-09-27T00:00:00Z'} : {})}]});
+          ...(scenario.started ? {submissionStartedAt:'2026-09-27T00:00:00Z'} : {}),
+          ...(scenario.errorCode ? {lastError:{code:scenario.errorCode}} : {}),
+          ...(scenario.attemptCount == null ? {} : {submissionAttemptCount:scenario.attemptCount})}]});
       }
       assert.equal(init.method, 'POST');
       assert.equal(target.pathname, '/api/financial/payment-requests/' + order.id + '/' + (scenario.action === 'authorize' ? 'authorize' : 'submit'));
@@ -70,7 +72,7 @@ function runFixture(input: { action: "authorize" | "send"; state: string; outcom
       return Response.json({request:{...order,
         id:scenario.outcome === 'wrong-id' ? 'wrong_order' : order.id,
         status:scenario.action === 'authorize' ? 'ready_to_submit' : 'awaiting_bank_approval',
-        ...(scenario.action === 'send' ? {interRequestId:'inter_demo', bankStatus:'AGUARDANDO_APROVACAO'} : {})}});
+        ...(scenario.action !== 'authorize' ? {interRequestId:'inter_demo', bankStatus:'AGUARDANDO_APROVACAO'} : {})}});
     };
     process.on('exit', () => {
       assert.equal(posts, scenario.posts, 'quantidade exata de escritas');
@@ -181,6 +183,20 @@ test("dispatcher impede escrita para ordem divergente ou tentativa anterior", ()
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Nenhuma ação foi feita/);
   }
+});
+
+test("dispatcher retoma somente a primeira rejeição HTTP 400 confirmada", () => {
+  const retry = runFixture({
+    action: "retry-send", state: "failed", started: true, errorCode: "INTER_HTTP_400", posts: 1,
+  });
+  assert.equal(retry.status, 0, retry.stderr);
+  assert.equal(JSON.parse(retry.stdout).status, "awaiting_bank_approval");
+
+  const blocked = runFixture({
+    action: "retry-send", state: "failed", started: true, errorCode: "INTER_HTTP_400", attemptCount: 2, posts: 0,
+  });
+  assert.equal(blocked.status, 1);
+  assert.match(blocked.stderr, /Nenhuma ação foi feita/);
 });
 
 test("dispatcher nunca repete envio incerto nem expõe a resposta bruta", () => {

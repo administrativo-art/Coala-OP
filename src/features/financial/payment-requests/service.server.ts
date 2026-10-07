@@ -27,6 +27,7 @@ import {
 } from "./barcode-amounts";
 import { paymentReceiverMatchesSnapshot } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
+import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
 
 export async function createPaymentRequest(input: {
   sourceType: LegacyBankPaymentSourceType;
@@ -323,11 +324,15 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     if (!["ready_to_submit", "failed"].includes(current.status)) {
       throw new Error(`A solicitação está em ${current.status} e não pode ser enviada ao banco.`);
     }
+    const retryingDefinitiveRejection = canRetryDefinitivelyRejectedPayment(current);
+    if (current.status === "failed" && !retryingDefinitiveRejection) {
+      throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
+    }
     if (paymentSubmissionRequiresManualReconciliation(current)) {
       throw new Error("A solicitação possui divergência bancária e exige revisão manual; o reenvio foi bloqueado.");
     }
     if (current.sourceType === "expense_boleto") {
-      if (current.interRequestId || current.submissionStartedAt) throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
+      if (current.interRequestId || (current.submissionStartedAt && !retryingDefinitiveRejection)) throw new Error("Envio anterior exige conferência manual antes de outra tentativa.");
       const expense = await transaction.get(financialDbAdmin.collection("expenses").doc(current.sourceId));
       const data = expense.data();
       if (!data || data.paymentRequestId !== id) throw new Error("A despesa mudou após a preparação.");
@@ -342,11 +347,12 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       status: "submitting" as const,
       lastError: null,
       submissionStartedAt,
+      submissionAttemptCount: paymentSubmissionAttemptCount(current) + 1,
       updatedAt: submissionStartedAt,
     };
     transaction.set(requestRef, patch, { merge: true });
     transaction.set(requestRef.collection("events").doc(submissionEventId), {
-      type: "INTER_SUBMISSION_STARTED",
+      type: retryingDefinitiveRejection ? "INTER_SUBMISSION_RETRY_STARTED" : "INTER_SUBMISSION_STARTED",
       at: submissionStartedAt,
       actorId: actor === "system" ? "system" : actor.uid,
       actorEmail: actor === "system" ? null : actor.email ?? null,
