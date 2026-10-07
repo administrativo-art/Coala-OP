@@ -64,7 +64,7 @@ test("análise usa documentos arquivados e persiste identidade antes do cruzamen
   const documentPreparation = workflow.indexOf("prepareFinancialInboxDocuments(message)");
   const matchingQuery = workflow.indexOf('where("status", "in", ["pending", "partially_paid"])');
   assert.ok(documentPreparation >= 0 && documentPreparation < matchingQuery);
-  assert.match(workflow, /billingIdentity: message\.classification\.billingIdentity/);
+  assert.match(workflow, /billingIdentity: classification\.billingIdentity/);
 });
 
 test("campanha comercial é ignorada com auditoria e não dispara análise financeira", () => {

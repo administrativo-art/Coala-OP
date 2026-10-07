@@ -65,5 +65,98 @@ test("API E2E: prepara cobrança da caixa com CNPJ confirmado e bloqueia diverg�
   assert.equal((await financial.collection("financialInboxMessages").doc(inboxId).get()).get("status"), "awaiting_authorization");
   assert.equal((await send(token, { scheduledFor: dueDate, barcode, beneficiaryDocument: "64433090000197" })).status, 400);
   assert.equal((await financial.collection("bankPaymentRequests").where("sourceId", "==", inboxId).get()).size, 1);
+
+  const confirmedInboxId = "inbox-confirmed-document-e2e";
+  const forecastId = "forecast-confirmed-document-e2e";
+  const confirmedBarcode = "10491158171700010004400014406375415900000146798";
+  const accounts = [
+    ["account-condominio-e2e", "Condomínio", 50_000],
+    ["account-energia-e2e", "Energia elétrica", 91_798],
+    ["account-publicidade-e2e", "Publicidade geral | offline", 5_000],
+  ] as const;
+  await Promise.all(accounts.map(([id, name]) => financial.collection("accounts").doc(id).set({
+    name,
+    active: true,
+    is_dre_account: true,
+    isGroup: false,
+  })));
+  await financial.collection("expenses").doc(forecastId).set({
+    workspaceId: "coala",
+    description: "Condomínio e energia - Shopping do Automóvel",
+    supplier: "OCEANOS INVESTIMENTOS IMOBILIARIOS LTDA",
+    status: "provisioned",
+    provisionType: "forecast",
+    provisionCompetence: "2026-09",
+    totalValue: 1_467.98,
+    dueDate: Timestamp.fromDate(new Date("2026-10-05T15:00:00Z")),
+    accountPlan: accounts[0][0],
+    accountId: accounts[0][0],
+    accountPlanName: accounts[0][1],
+    createdAt: Timestamp.now(),
+  });
+  await financial.collection("financialInboxMessages").doc(confirmedInboxId).set({
+    workspaceId: "coala",
+    status: "document_pending",
+    subject: "Boleto do Shopping do Automóvel",
+    receivedAt: "2026-10-06T12:00:00.000Z",
+    linkedExpenseId: null,
+    classification: {
+      documentType: "charge",
+      financeLikely: true,
+      confidence: "medium",
+      supplierName: "Supplymidia",
+      competence: null,
+      dueDate: "2026-10-05",
+      amountCents: 146_798,
+      barcode: null,
+      barcodeMasked: null,
+      links: [],
+      billingIdentity: null,
+      fiscalIdentity: null,
+    },
+    createdAt: "2026-10-06T12:00:00.000Z",
+    updatedAt: "2026-10-06T12:00:00.000Z",
+  });
+  const confirmedPath = `/api/financial/inbox/${confirmedInboxId}/link`;
+  const confirmedBody = {
+    provisionExpenseId: forecastId,
+    documentConfirmation: {
+      amountCents: 146_798,
+      dueDate: "2026-10-05",
+      competence: "2026-09",
+      barcode: confirmedBarcode,
+      supplierName: "OCEANOS INVESTIMENTOS IMOBILIARIOS LTDA",
+      supplierTaxId: "05695860000100",
+    },
+    accountAllocations: accounts.map(([accountPlanId, , amountCents]) => ({ accountPlanId, amountCents })),
+  };
+  const link = (body: Record<string, unknown>) => fetch(origin + confirmedPath, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const divergent = await link({
+    ...confirmedBody,
+    documentConfirmation: { ...confirmedBody.documentConfirmation, dueDate: "2026-10-04" },
+  });
+  assert.equal(divergent.status, 409, `${await divergent.text()}\n${logs}`);
+
+  const linked = await link(confirmedBody);
+  const linkedPayload = await linked.json();
+  assert.equal(linked.status, 200, `${JSON.stringify(linkedPayload)}\n${logs}`);
+  assert.equal(linkedPayload.expenseId, `inbox_${confirmedInboxId}`);
+  const [actualSnapshot, messageSnapshot, forecastSnapshot] = await Promise.all([
+    financial.collection("expenses").doc(`inbox_${confirmedInboxId}`).get(),
+    financial.collection("financialInboxMessages").doc(confirmedInboxId).get(),
+    financial.collection("expenses").doc(forecastId).get(),
+  ]);
+  assert.equal(actualSnapshot.get("totalValue"), 1_467.98);
+  assert.equal(actualSnapshot.get("supplier"), "OCEANOS INVESTIMENTOS IMOBILIARIOS LTDA");
+  assert.deepEqual(actualSnapshot.get("accountAllocations").map((allocation: { amount: number }) => allocation.amount), [500, 917.98, 50]);
+  assert.equal(messageSnapshot.get("status"), "linked");
+  assert.equal(messageSnapshot.get("classification.barcode"), confirmedBarcode);
+  assert.equal(messageSnapshot.get("classification.competence"), "2026-09");
+  assert.equal(messageSnapshot.get("linkedProvisionId"), forecastId);
+  assert.equal(forecastSnapshot.get("status"), "reconciled");
   // Este E2E nunca autoriza nem envia ao banco; usa somente emuladores locais.
 });
