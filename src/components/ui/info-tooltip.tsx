@@ -3,7 +3,7 @@
 import { type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipPortal, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface InfoTooltipProps {
   title: string;
@@ -28,10 +28,12 @@ export function InfoTooltip({ title, children }: InfoTooltipProps) {
             <Info className="h-3.5 w-3.5" />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="top" align="start" className="max-w-[380px] space-y-2 p-3 text-xs leading-relaxed">
-          <p className="font-bold text-slate-950">{title}</p>
-          <div className="space-y-1 text-muted-foreground">{children}</div>
-        </TooltipContent>
+        <TooltipPortal>
+          <TooltipContent side="top" align="end" collisionPadding={16} className="w-[380px] max-w-[calc(100vw-32px)] max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto whitespace-normal break-words space-y-2 p-3 text-xs leading-relaxed">
+            <p className="font-bold text-slate-950">{title}</p>
+            <div className="space-y-1 text-muted-foreground">{children}</div>
+          </TooltipContent>
+        </TooltipPortal>
       </Tooltip>
     </TooltipProvider>
   );
