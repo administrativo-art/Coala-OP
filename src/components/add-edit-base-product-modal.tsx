@@ -23,6 +23,7 @@ import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { getUnitsPerPackageForProduct, operationalMinimum, previewMinimum } from '@/lib/replenishment-display';
 import { useDP } from '@/components/dp-context';
+import { CATEGORY_SYMBOLS, unitFullName as getUnitFullName, unitSymbol as getUnitSymbol } from '@/lib/base-product-unit-display';
 
 const stockLevelSchema = z.object({
     min: z.coerce.number().min(0, "Deve ser um valor positivo.").optional(),
@@ -63,9 +64,6 @@ const WIZARD_STEPS = [
 
 // Massa antes de Volume, como no design; o conjunto continua vindo de unitCategories.
 const CATEGORY_ORDER: readonly UnitCategory[] = [...unitCategories].sort((a, b) => (a === 'Massa' ? -1 : b === 'Massa' ? 1 : 0));
-const CATEGORY_SYMBOLS: Record<UnitCategory, string> = { Massa: 'kg', Volume: 'l', Unidade: 'un', Embalagem: 'cx', Vestimenta: 'pç' };
-const UNIT_NAMES: Record<string, string> = { un: 'unidade', kg: 'quilograma', g: 'grama', mg: 'miligrama', l: 'litro', ml: 'mililitro', bag: 'bag', pacote: 'pacote', caixa: 'caixa', peça: 'peça' };
-const UNIT_SYMBOLS: Record<string, string> = { pacote: 'pct', caixa: 'cx', peça: 'pç' };
 const COLLAPSED_DERIVED = 3;
 
 const costFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -235,8 +233,8 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
 
   const nameWatch = form.watch('name') ?? '';
   const heroName = nameWatch.trim() || 'Sem nome';
-  const unitSymbol = UNIT_SYMBOLS[unitWatch] ?? unitWatch;
-  const unitFullName = UNIT_NAMES[unitWatch] ?? unitWatch;
+  const unitSymbol = getUnitSymbol(unitWatch);
+  const unitFullName = getUnitFullName(unitWatch);
   const unitChanged = !!productToEdit && derivedCount > 0 && unitWatch !== productToEdit.unit;
   const costLabel = productToEdit && Number(costWatch) > 0 ? costFormatter.format(Number(costWatch)) : 'R$ —';
   const derivedRows = useMemo(() => {

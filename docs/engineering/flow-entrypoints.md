@@ -1282,7 +1282,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/registration/base-products/page.tsx`](../../src/app/dashboard/registration/base-products/page.tsx), [`src/app/dashboard/registration/entities/page.tsx`](../../src/app/dashboard/registration/entities/page.tsx), [`src/app/dashboard/registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx).
 
-Arquivos locais percorridos: 63.
+Arquivos locais percorridos: 61.
 
 Chamadas candidatas encontradas:
 
@@ -1352,7 +1352,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 224.
+Arquivos locais percorridos: 223.
 
 Chamadas candidatas encontradas:
 
