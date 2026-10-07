@@ -15,7 +15,9 @@ Arquivos principais:
 - `src/lib/company/company-normalizer.ts`: converte retornos externos para o formato padrao.
 - `src/lib/company/company-registration-service.ts`: salva o cadastro confirmado.
 - `src/lib/company/company-refresh-service.ts`: forca consulta externa.
-- `src/components/entity-management.tsx`: tela de Pessoas e empresas com busca automatica por CNPJ.
+- `src/components/entity-management.tsx`: tela de Pessoas e empresas com busca automatica por CNPJ; o modal Novo cadastro/Editar traz o CNPJ em destaque, com Consultar/Atualizar, e recolhe os dados fiscais da Receita num bloco ja preenchido pela consulta.
+- `src/components/entity-ficha-modal.tsx`: ficha cadastral de leitura (Dados gerais, Contato e endereco, Fiscal) aberta ao clicar na linha; cada secao leva a etapa correspondente do editor. A chave Pix nao e exibida na ficha, apenas se esta cadastrada (para quem tem `registration.entities.edit`).
+- `src/components/cadastros/entity-form-options.ts`: opcoes e rotulos compartilhados entre editor e ficha.
 
 ## Modelagem no Firestore
 
