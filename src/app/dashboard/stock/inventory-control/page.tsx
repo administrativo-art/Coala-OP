@@ -56,7 +56,10 @@ function InventoryControlContent() {
                 <div className="flex flex-col items-start gap-4 mb-4">
                     <BackButton fallbackHref="/dashboard/stock" label="Voltar para gestão de estoque" />
                 </div>
-                <ExpiryControl />
+                <ExpiryControl
+                    onOpenHistory={() => setIsHistoryModalOpen(true)}
+                    onOpenConsumption={() => setIsConsumptionModalOpen(true)}
+                />
             </div>
 
             <RadialMenu items={menuItems} />

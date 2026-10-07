@@ -3,21 +3,17 @@
 
 import * as React from 'react';
 import { useState, useMemo, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { format, parseISO, differenceInDays } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, parseISO } from 'date-fns';
 import Link from 'next/link';
 import Image from 'next/image';
 
 import Papa from 'papaparse';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield, AlertCircle, Pencil, Trash2 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Camera, Inbox, Plus, Search, X } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { canAccessUnit } from '@/lib/unit-access';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -26,22 +22,26 @@ import { useProducts } from '@/hooks/use-products';
 import { useLocations } from '@/hooks/use-locations';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
-import { type LotEntry, type Product, type BaseProduct, type RepositionActivity, type UnitCategory } from '@/types';
-import { LotCard } from './lot-card';
+import { type LotEntry, type Product, type BaseProduct } from '@/types';
 import { AddEditLotModal } from './add-edit-lot-modal';
 import { MoveStockModal } from './move-stock-modal';
-import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { LotMovementHistoryModal } from './lot-movement-history-modal';
-import { Badge } from '@/components/ui/badge';
-import { convertValue, formatQuantity } from '@/lib/conversion';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickProjectionModal } from './quick-projection-modal';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { convertValue } from '@/lib/conversion';
 import { useReposition } from '@/hooks/use-reposition';
 import { UNIFORM_STOCK_ID } from '@/lib/uniform';
-import { ToastAction } from './ui/toast';
 import { useToast } from '@/hooks/use-toast';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+import { LotDetailPanel } from './stock/lot-detail-panel';
+import {
+  ACTIVE_REPOSITION_RESERVATION_STATUSES,
+  buildReservationsByLot,
+  lotMatchesStatusFilters,
+  lotQuantityParts,
+  lotReservedQuantity,
+  lotStatusOf,
+  productInitials,
+  productSpecLine,
+} from './stock/lot-presentation';
 
 const BarcodeScannerModal = dynamic(
   () => import('./barcode-scanner-modal').then(mod => mod.BarcodeScannerModal),
@@ -67,70 +67,90 @@ export type GroupedByBaseProduct = {
   hasLeadTime: boolean;
 };
 
-const ExpiryControlContext = React.createContext<{ selectedKioskId: string }>({ selectedKioskId: '' });
-const useExpiryControlContext = () => React.useContext(ExpiryControlContext);
-const ACTIVE_REPOSITION_RESERVATION_STATUSES: RepositionActivity["status"][] = [
-  "Aguardando despacho",
-  "Aguardando recebimento",
-  "Recebido com divergência",
-  "Recebido sem divergência",
-];
+const STATUS_FILTER_NAMES: Record<string, string> = {
+  expiring: 'Vencendo',
+  expired: 'Vencidos',
+  reserved: 'Com reserva',
+  no_expiry: 'Validade indefinida',
+};
 
-function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: string }) {
-  const { activities } = useReposition();
-  
-  const summary = useMemo(() => {
-    // Só mostramos o resumo se um quiosque específico (como Matriz) estiver selecionado
-    if (!selectedKioskId || selectedKioskId === 'all') return null;
+const ROW_HOVER =
+  'transition-[transform,box-shadow,border-radius,background-color] duration-[180ms] ease-[cubic-bezier(.2,.8,.2,1)] hover:z-[3] hover:-translate-y-[3px] hover:rounded-[14px] hover:bg-white hover:shadow-[0_16px_36px_rgba(21,21,28,.16),0_2px_6px_rgba(21,21,28,.06)]';
 
-    const activeOutbound = activities.filter(act => 
-      act.kioskOriginId === selectedKioskId &&
-      ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(act.status)
-    );
+const DARK_CONTROL =
+  'flex h-12 items-center gap-2 whitespace-nowrap rounded-[14px] border border-white/15 bg-transparent px-4 text-[13.5px] font-bold text-[#f3f2ee] hover:bg-white/10';
 
-    if (activeOutbound.length === 0) return null;
+const MENU_ITEM = 'h-9 cursor-pointer rounded-[9px] px-2.5 text-[13px] font-semibold text-[#1a1b1f] focus:bg-[#f6f4ef]';
 
-    const totalReservedItems = activeOutbound.reduce((sum, act) => {
-      const itemsQty = act.items.reduce((iSum, item) => 
-        iSum + item.suggestedLots.reduce((lSum, l) => lSum + l.quantityToMove, 0), 0
-      );
-      return sum + itemsQty;
-    }, 0);
+/** Total do grupo: quantidade convertida, embalagens e (se houver) caixas. */
+function summarizeGroup(baseGroup: GroupedByBaseProduct) {
+  let totalPackages = 0;
+  const convertedTotals: { [unit: string]: number } = {};
 
-    return {
-      activityCount: activeOutbound.length,
-      itemCount: totalReservedItems
-    };
-  }, [activities, selectedKioskId]);
+  baseGroup.brands.forEach(brand => {
+    brand.products.forEach(prodGroup => {
+      prodGroup.lots.forEach(lot => {
+        totalPackages += lot.quantity;
+        const config = prodGroup.product;
+        let value = 0;
+        let unit = '';
+        if (config.secondaryUnit && typeof config.secondaryUnitValue === 'number' && config.secondaryUnitValue > 0) {
+          value = lot.quantity * config.secondaryUnitValue;
+          unit = config.secondaryUnit;
+        } else {
+          value = lot.quantity * config.packageSize;
+          unit = config.unit;
+        }
+        if (value > 0) convertedTotals[unit] = (convertedTotals[unit] ?? 0) + value;
+      });
+    });
+  });
 
-  if (!summary) return null;
+  const firstUnit = Object.keys(convertedTotals)[0];
+  let converted = '0';
+  if (firstUnit) {
+    if (Object.keys(convertedTotals).length === 1) {
+      converted = `${convertedTotals[firstUnit].toLocaleString('pt-BR')} ${firstUnit}`;
+    } else {
+      converted = 'Conversão Indisponível';
+      const baseProduct = baseGroup.baseProduct;
+      if (baseProduct) {
+        try {
+          let sum = 0;
+          for (const unit in convertedTotals) {
+            sum += convertValue(convertedTotals[unit], unit, baseProduct.unit, baseProduct.category);
+          }
+          converted = `${sum.toLocaleString('pt-BR')} ${baseProduct.unit}`;
+        } catch {
+          converted = 'Conversão Indisponível';
+        }
+      }
+    }
+  }
 
-  return (
-    <div className="mx-6 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between animate-in slide-in-from-top-2">
-      <div className="flex items-center gap-3">
-        <div className="bg-blue-500 p-2 rounded-full">
-          <Shield className="h-5 w-5 text-white" />
-        </div>
-        <div>
-          <h4 className="font-bold text-blue-900">Reservas Ativas na Matriz</h4>
-          <p className="text-sm text-blue-700">
-            {summary.activityCount} atividade(s) aguardando movimentação.
-          </p>
-        </div>
-      </div>
-      <Link href="/dashboard/stock/analysis">
-          <Button variant="outline" size="sm">
-              Ver atividades <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-      </Link>
-    </div>
-  );
+  const first = baseGroup.brands?.[0]?.products?.[0]?.product;
+  const unit = (first?.unit || '').toLowerCase();
+  const selfPackage = (unit === 'un' || unit === 'unidade') && first?.packageSize === 1;
+  const extra: string[] = [];
+  if (totalPackages > 0 && !selfPackage) {
+    extra.push(`${totalPackages.toLocaleString('pt-BR')} ${first?.packageType ? `${first.packageType}(s)` : 'unidades'}`);
+  }
+  if (first?.multiplo_caixa && first.multiplo_caixa > 0 && first.rotulo_caixa && totalPackages > 0) {
+    extra.push(`${(totalPackages / first.multiplo_caixa).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} ${first.rotulo_caixa}(s)`);
+  }
+
+  return { totalPackages, converted, extra };
 }
 
-function ExpiryControlContent() {
+type ExpiryControlProps = {
+  onOpenHistory?: () => void;
+  onOpenConsumption?: () => void;
+};
+
+function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryControlProps) {
   const { user, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
-  const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
+  const { lots, loading, addLot, updateLot, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
   const { locations, loading: locationsLoading } = useLocations();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -138,13 +158,11 @@ function ExpiryControlContent() {
   const { activities } = useReposition();
 
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { toast } = useToast();
 
   const scannedLotId = searchParams.get('lotId');
   const searchQuery = searchParams.get('search');
   const kioskQuery = searchParams.get('kioskId');
-
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -156,22 +174,16 @@ function ExpiryControlContent() {
   const [lotToEdit, setLotToEdit] = useState<LotEntry | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [lotToMove, setLotToMove] = useState<LotEntry | null>(null);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [lotForHistory, setLotForHistory] = useState<LotEntry | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [forceDelete, setForceDelete] = useState(false);
+  const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [isSearchScannerOpen, setIsSearchScannerOpen] = useState(false);
   const [quickProjectionProduct, setQuickProjectionProduct] = useState<BaseProduct | null>(null);
 
   useEffect(() => {
-    if (searchQuery) {
-        setSearchTerm(searchQuery);
-    }
-    if (kioskQuery) {
-        setSelectedKioskId(kioskQuery);
-    }
+    if (searchQuery) setSearchTerm(searchQuery);
+    if (kioskQuery) setSelectedKioskId(kioskQuery);
   }, [searchQuery, kioskQuery]);
 
+  const canSeeAllKiosks = isDefaultAdmin || user?.unitAccessScope === 'all';
 
   const visibleLots = useMemo(() => {
     if (!user || loading) return [];
@@ -196,17 +208,13 @@ function ExpiryControlContent() {
         return a.name.localeCompare(b.name);
     });
   }, [isDefaultAdmin, kiosks, user]);
-  
+
   useEffect(() => {
     if (!kioskQuery && sortedKiosks.length > 0 && !selectedKioskId) {
-      setSelectedKioskId(
-        isDefaultAdmin || user?.unitAccessScope === 'all'
-          ? 'all'
-          : sortedKiosks[0].id,
-      );
+      setSelectedKioskId(canSeeAllKiosks ? 'all' : sortedKiosks[0].id);
     }
-  }, [isDefaultAdmin, kioskQuery, selectedKioskId, sortedKiosks, user?.unitAccessScope]);
-  
+  }, [canSeeAllKiosks, kioskQuery, selectedKioskId, sortedKiosks]);
+
   useEffect(() => {
     if (scannedLotId) {
       const element = document.getElementById(`lot-instance-${scannedLotId}`);
@@ -217,6 +225,7 @@ function ExpiryControlContent() {
     }
   }, [scannedLotId, loading]);
 
+  const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   const stockOperationalCategories = useMemo(
     () => activeCategories.filter((category) => category.destination !== 'asset'),
@@ -232,41 +241,23 @@ function ExpiryControlContent() {
       (!product.operationalCategoryId && category.destination === 'stock' && category.id === 'insumo');
   };
 
-  const filteredLotsBeforeCategory = useMemo(() => {
-    const isAllKiosks = selectedKioskId === 'all';
-    
-    const kioskFilteredLots = isAllKiosks
-      ? visibleLots
-      : visibleLots.filter(lot => lot.kioskId === selectedKioskId);
+  const reservationsByLot = useMemo(() => buildReservationsByLot(activities), [activities]);
 
-    const activeLots = kioskFilteredLots.filter(lot => lot.quantity > 0);
-    
-    const preFilteredLots = activeLots.filter(lot => {
-        if (statusFilters.length === 0) return true;
-        
-        if (statusFilters.includes('no_expiry') && !lot.expiryDate) {
-            return true;
-        }
+  // Lotes ativos do quiosque escolhido: base dos indicadores.
+  const kioskLots = useMemo(() => {
+    const scoped = selectedKioskId === 'all' ? visibleLots : visibleLots.filter(lot => lot.kioskId === selectedKioskId);
+    return scoped.filter(lot => lot.quantity > 0);
+  }, [visibleLots, selectedKioskId]);
 
-        if (!lot.expiryDate) return false;
-
-        const product = products.find(p => p.id === lot.productId);
-        const urgentThreshold = product?.urgentThreshold ?? 7;
-        const days = differenceInDays(parseISO(lot.expiryDate), new Date());
-        const isExpiring = statusFilters.includes('expiring') && (days >= 0 && days <= urgentThreshold);
-        const isExpired = statusFilters.includes('expired') && days < 0;
-        return isExpiring || isExpired;
-    });
-
-    const searchedLots = preFilteredLots.filter(lot => {
-      const search = searchTerm.toLowerCase();
-      const product = products.find(p => p.id === lot.productId);
+  // Busca aplicada: base das contagens por categoria.
+  const searchedLots = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return kioskLots.filter(lot => {
+      const product = productById.get(lot.productId);
       if (!product) return false;
       const expiryDateFormatted = lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'indefinida';
       const kioskName = kiosks.find(l => l.id === lot.kioskId)?.name.toLowerCase() || '';
-
       const productBase = baseProducts.find(bp => bp.id === product.baseProductId);
-      const baseProductMatch = productBase?.name.toLowerCase().includes(search);
 
       return (
         product.baseName.toLowerCase().includes(search) ||
@@ -275,137 +266,85 @@ function ExpiryControlContent() {
         (product?.barcode && product.barcode.toLowerCase().includes(search)) ||
         expiryDateFormatted.includes(search) ||
         kioskName.includes(search) ||
-        baseProductMatch
+        !!productBase?.name.toLowerCase().includes(search)
       );
     });
+  }, [kioskLots, searchTerm, kiosks, productById, baseProducts]);
 
-    return searchedLots;
-  }, [visibleLots, searchTerm, kiosks, statusFilters, products, selectedKioskId, user, baseProducts]);
+  const filteredLotsBeforeCategory = useMemo(
+    () => searchedLots.filter(lot => lotMatchesStatusFilters(
+      statusFilters,
+      lotStatusOf(lot, productById.get(lot.productId)),
+      lotReservedQuantity(lot, reservationsByLot.get(lot.id)),
+    )),
+    [searchedLots, statusFilters, productById, reservationsByLot],
+  );
 
   const operationalCategoryCounts = useMemo(() => {
     return stockOperationalCategories.reduce((acc, category) => {
       acc[category.id] = filteredLotsBeforeCategory.filter((lot) => {
-        const product = products.find((entry) => entry.id === lot.productId);
+        const product = productById.get(lot.productId);
         return !!product && productMatchesOperationalCategory(product, category.id);
       }).length;
       return acc;
     }, {} as Record<string, number>);
-  }, [filteredLotsBeforeCategory, products, stockOperationalCategories, activeCategories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredLotsBeforeCategory, productById, stockOperationalCategories, activeCategories]);
 
+  // Indicadores do quiosque inteiro: não mudam ao filtrar por um deles.
   const stockStats = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
     const productIds = new Set<string>();
     let expiringSoon = 0;
     let expired = 0;
-    let healthy = 0;
-    let noExpiry = 0;
     let reserved = 0;
 
-    filteredLotsBeforeCategory.forEach((lot) => {
+    kioskLots.forEach((lot) => {
       productIds.add(lot.productId);
-      reserved += Number(lot.reservedQuantity ?? 0);
-
-      if (!lot.expiryDate) {
-        noExpiry += 1;
-        return;
-      }
-
-      const product = products.find((entry) => entry.id === lot.productId);
-      const urgentThreshold = product?.urgentThreshold ?? 7;
-      const days = differenceInDays(parseISO(lot.expiryDate), now);
-      if (days < 0) {
-        expired += 1;
-      } else if (days <= urgentThreshold) {
-        expiringSoon += 1;
-      } else {
-        healthy += 1;
-      }
+      if (lotReservedQuantity(lot, reservationsByLot.get(lot.id)) > 0) reserved += 1;
+      const status = lotStatusOf(lot, productById.get(lot.productId));
+      if (status.key === 'expired') expired += 1;
+      else if (status.key === 'expiring') expiringSoon += 1;
     });
 
-    return {
-      products: productIds.size,
-      lots: filteredLotsBeforeCategory.length,
-      expiringSoon,
-      expired,
-      healthy,
-      noExpiry,
-      reserved,
-    };
-  }, [filteredLotsBeforeCategory, products]);
+    return { products: productIds.size, lots: kioskLots.length, expiringSoon, expired, reserved };
+  }, [kioskLots, productById, reservationsByLot]);
 
-  const activeReservationsByLot = useMemo(() => {
-    const map = new Map<string, { total: number; destinations: Record<string, number> }>();
-    activities
-      .filter((activity) => ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(activity.status))
-      .forEach((activity) => {
-        activity.items.forEach((item) => {
-          item.suggestedLots.forEach((suggestedLot) => {
-            const current = map.get(suggestedLot.lotId) ?? { total: 0, destinations: {} };
-            current.total += suggestedLot.quantityToMove;
-            current.destinations[activity.kioskDestinationName] =
-              (current.destinations[activity.kioskDestinationName] ?? 0) + suggestedLot.quantityToMove;
-            map.set(suggestedLot.lotId, current);
-          });
-        });
-      });
-    return map;
-  }, [activities]);
-
- const groupedData = useMemo(() => {
+  const groupedData = useMemo(() => {
     const categoryFilteredLots = selectedOperationalCategoryId === 'all'
       ? filteredLotsBeforeCategory
       : filteredLotsBeforeCategory.filter((lot) => {
-          const product = products.find((entry) => entry.id === lot.productId);
+          const product = productById.get(lot.productId);
           return !!product && productMatchesOperationalCategory(product, selectedOperationalCategoryId);
         });
 
-    const lotsByProduct = categoryFilteredLots.reduce((acc, lot) => {
-        if (!acc[lot.productId]) {
-            acc[lot.productId] = [];
+    const lotsByKey: Record<string, LotEntry> = {};
+    categoryFilteredLots.forEach(lot => {
+      const key = `${lot.productId}-${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}-${lot.kioskId}`;
+      if (lotsByKey[key]) {
+        lotsByKey[key].quantity += lot.quantity;
+        if (lot.reservedQuantity) {
+          lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
         }
-        acc[lot.productId].push(lot);
-        return acc;
-    }, {} as Record<string, LotEntry[]>);
-
-    const groupedLotsByProduct: Record<string, LotEntry[]> = {};
-    for (const productId in lotsByProduct) {
-        const productLots = lotsByProduct[productId];
-        const lotsByKey: Record<string, LotEntry> = {};
-
-        productLots.forEach(lot => {
-            const key = `${lot.lotNumber}-${lot.expiryDate || 'no-expiry'}-${lot.kioskId}`;
-            if (lotsByKey[key]) {
-                lotsByKey[key].quantity += lot.quantity;
-                if (lot.reservedQuantity) {
-                    lotsByKey[key].reservedQuantity = (lotsByKey[key].reservedQuantity || 0) + lot.reservedQuantity;
-                }
-            } else {
-                lotsByKey[key] = { ...lot };
-            }
-        });
-        groupedLotsByProduct[productId] = Object.values(lotsByKey);
-    }
-    const finalLotsToGroup = Object.values(groupedLotsByProduct).flat();
-    
+      } else {
+        lotsByKey[key] = { ...lot };
+      }
+    });
 
     const groups: Map<string, GroupedByBaseProduct> = new Map();
 
-    finalLotsToGroup.forEach(lot => {
-      const product = products.find(p => p.id === lot.productId);
+    Object.values(lotsByKey).forEach(lot => {
+      const product = productById.get(lot.productId);
       if (!product) return;
 
       const baseProductId = product.baseProductId || `avulso-${product.id}`;
       const baseProduct = product.baseProductId ? baseProducts.find(bp => bp.id === product.baseProductId) : null;
       const groupName = baseProduct ? baseProduct.name : getProductFullName(product);
-      const isBaseProdGroup = !!baseProduct;
       const brandName = product.brand || 'Sem Marca';
-      
       const hasLeadTime = !!(baseProduct && Object.values(baseProduct.stockLevels).some(sl => sl.leadTime && sl.leadTime > 0));
 
       if (!groups.has(baseProductId)) {
         groups.set(baseProductId, {
-          isBaseProduct: isBaseProdGroup,
+          isBaseProduct: !!baseProduct,
           baseProductId: product.baseProductId ?? null,
           baseProduct: baseProduct ?? null,
           name: groupName,
@@ -416,40 +355,77 @@ function ExpiryControlContent() {
 
       const baseProductGroup = groups.get(baseProductId)!;
       let brandGroup = baseProductGroup.brands.find(b => b.brandName === brandName);
-
       if (!brandGroup) {
         brandGroup = { brandName, products: [] };
         baseProductGroup.brands.push(brandGroup);
       }
-      
+
       let productGroup = brandGroup.products.find(p => p.product.id === product.id);
-      
       if (!productGroup) {
-        productGroup = { product: product, lots: [] };
+        productGroup = { product, lots: [] };
         brandGroup.products.push(productGroup);
       }
-      
       productGroup.lots.push(lot);
     });
 
     groups.forEach(baseGroup => {
-        baseGroup.brands.forEach(brandGroup => {
-            brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)))
+      baseGroup.brands.forEach(brandGroup => {
+        brandGroup.products.sort((a,b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product)));
+        // Lista já vem ordenada por validade; sem validade vai para o fim.
+        brandGroup.products.forEach(productGroup => {
+          productGroup.lots.sort((a, b) => (a.expiryDate || '9999') < (b.expiryDate || '9999') ? -1 : 1);
         });
-        baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
+      });
+      baseGroup.brands.sort((a,b) => a.brandName.localeCompare(b.brandName));
     });
 
     return Array.from(groups.values()).sort((a,b) => a.name.localeCompare(b.name));
-  }, [filteredLotsBeforeCategory, selectedOperationalCategoryId, products, baseProducts, getProductFullName, activeCategories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredLotsBeforeCategory, selectedOperationalCategoryId, productById, baseProducts, getProductFullName, activeCategories]);
+
+  const shownLots = useMemo(
+    () => groupedData.reduce((sum, group) => sum + group.brands.reduce((s, b) => s + b.products.reduce((p, pg) => p + pg.lots.length, 0), 0), 0),
+    [groupedData],
+  );
+  const shownProducts = useMemo(
+    () => groupedData.reduce((sum, group) => sum + group.brands.reduce((s, b) => s + b.products.length, 0), 0),
+    [groupedData],
+  );
+
+  const selectedLot = useMemo(() => {
+    if (!selectedLotId) return null;
+    for (const group of groupedData) {
+      for (const brand of group.brands) {
+        for (const productGroup of brand.products) {
+          const lot = productGroup.lots.find(entry => entry.id === selectedLotId);
+          if (lot) return { lot, product: productGroup.product };
+        }
+      }
+    }
+    return null;
+  }, [groupedData, selectedLotId]);
+
+  // Se o lote sair da lista (baixa total, filtro), o painel fecha junto.
+  useEffect(() => {
+    if (selectedLotId && !selectedLot && !loading) setSelectedLotId(null);
+  }, [selectedLot, selectedLotId, loading]);
+
+  const reservationBanner = useMemo(() => {
+    if (!selectedKioskId || selectedKioskId === 'all') return null;
+    const outbound = activities.filter(act =>
+      act.kioskOriginId === selectedKioskId && ACTIVE_REPOSITION_RESERVATION_STATUSES.includes(act.status),
+    );
+    return outbound.length ? { activityCount: outbound.length } : null;
+  }, [activities, selectedKioskId]);
 
   const handleAddClick = () => {
     setLotToEdit(null);
     setIsAddEditModalOpen(true);
   };
-  
+
   const handleEditClick = (lotId: string) => {
     const lot = lots.find(l => l.id === lotId);
-    if(lot) {
+    if (lot) {
       setLotToEdit(lot);
       setIsAddEditModalOpen(true);
     }
@@ -457,33 +433,10 @@ function ExpiryControlContent() {
 
   const handleMoveClick = (lotId: string) => {
     const lot = lots.find(l => l.id === lotId);
-    if(lot) {
+    if (lot) {
       setLotToMove(lot);
       setIsMoveModalOpen(true);
     }
-  }
-
-  const handleDeleteClick = (lotId: string) => {
-    setDeleteTargetId(lotId);
-  };
-  
-  const handleViewHistoryClick = (lot: LotEntry) => {
-    setLotForHistory(lot);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteTargetId) return;
-
-    setIsDeleting(true);
-    const success = await forceDeleteLotById(deleteTargetId);
-    
-    if (!success) {
-      console.error(`Failed to delete lot with target ID: ${deleteTargetId}.`);
-    }
-    
-    setDeleteTargetId(null);
-    setIsDeleting(false);
-    setForceDelete(false);
   };
 
   const handleSearchScanSuccess = (decodedText: string) => {
@@ -491,21 +444,9 @@ function ExpiryControlContent() {
     setIsSearchScannerOpen(false);
   };
 
-  const handleStatusFilterChange = (filter: string, checked: boolean) => {
-    setStatusFilters(current => {
-        if (checked) {
-            return [...current, filter];
-        } else {
-            return current.filter(f => f !== filter);
-        }
-    });
-  };
-
   const toggleStatusFilter = (filter: string) => {
-    handleStatusFilterChange(filter, !statusFilters.includes(filter));
+    setStatusFilters(current => current.includes(filter) ? current.filter(f => f !== filter) : [...current, filter]);
   };
-
-  const canManageProducts = permissions.registration.items.add || permissions.registration.items.edit || permissions.registration.items.delete;
 
   const handleExportPdf = () => {
     toast({
@@ -514,7 +455,7 @@ function ExpiryControlContent() {
         variant: "destructive",
     })
   };
-  
+
   const handleExportCsv = () => {
     const csvData: any[] = [];
     groupedData.forEach(baseGroup => {
@@ -537,7 +478,7 @@ function ExpiryControlContent() {
     });
 
     const csv = Papa.unparse(csvData);
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const kioskName = selectedKioskId === 'all' ? 'Todos_os_Quiosques' : kiosks.find(k => k.id === selectedKioskId)?.name?.replace(/\s/g, '_') || 'Quiosque_Desconhecido';
@@ -548,165 +489,216 @@ function ExpiryControlContent() {
     document.body.removeChild(link);
   };
 
-  const renderTableContent = () => (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40">
-            <TableHead className="w-[34%]">Insumo / marca</TableHead>
-            <TableHead>Lote</TableHead>
-            <TableHead>Local</TableHead>
-            <TableHead>Validade</TableHead>
-            <TableHead className="text-right">Quantidade</TableHead>
-            <TableHead>Reserva</TableHead>
-            <TableHead className="w-24 text-right">Ações</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {groupedData.map((baseGroup) => {
-            const rows = baseGroup.brands.flatMap((brandGroup) =>
-              brandGroup.products.flatMap((productGroup) =>
-                productGroup.lots.map((lot) => ({ productGroup, lot }))
-              )
-            );
+  const kioskLabel = selectedKioskId === 'all'
+    ? 'Todos os quiosques'
+    : kiosks.find(k => k.id === selectedKioskId)?.name || 'Selecione…';
 
-            return (
-              <React.Fragment key={baseGroup.baseProductId || baseGroup.name}>
-                <TableRow className="bg-muted/25 hover:bg-muted/25">
-                  <TableCell colSpan={7} className="py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold uppercase tracking-tight">{baseGroup.name}</span>
-                        {baseGroup.hasLeadTime && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-blue-500 hover:text-blue-600"
-                            onClick={() => setQuickProjectionProduct(baseGroup.baseProduct)}
-                          >
-                            <LineChart className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                      <Badge variant="secondary">{rows.length} lote(s)</Badge>
-                    </div>
-                  </TableCell>
-                </TableRow>
-                {rows.map(({ productGroup, lot }) => {
-                  const product = productGroup.product;
-                  const kiosk = kiosks.find((entry) => entry.id === lot.kioskId);
-                  const location = locations.find((entry) => entry.id === lot.locationId);
-                  const reserved = activeReservationsByLot.get(lot.id);
-                  const displayReservedQty = Math.max(Number(lot.reservedQuantity ?? 0), reserved?.total ?? 0);
-                  const reservationDestinations = reserved
-                    ? Object.entries(reserved.destinations).map(([name, quantity]) => ({ name, quantity }))
-                    : [];
-                  const totalUnits = lot.quantity * product.packageSize;
-                  const quantityDetails =
-                    totalUnits === lot.quantity && ['un', 'unidade'].includes(product.unit.toLowerCase())
-                      ? `${lot.quantity.toLocaleString('pt-BR')} unidade(s)`
-                      : `${formatQuantity(totalUnits, product.unit)} · ${lot.quantity.toLocaleString('pt-BR')} ${product.packageType || 'pct'}`;
-                  const days = lot.expiryDate ? differenceInDays(parseISO(lot.expiryDate), new Date()) : null;
-                  const urgentThreshold = product.urgentThreshold ?? 7;
-                  const expiryTone =
-                    days === null ? 'secondary' :
-                    days < 0 ? 'destructive' :
-                    days <= urgentThreshold ? 'outline' :
-                    'secondary';
-                  const expiryLabel =
-                    days === null ? 'Validade indefinida' :
-                    days < 0 ? `Vencido há ${Math.abs(days)} dia(s)` :
-                    days === 0 ? 'Vence hoje' :
-                    `Vence em ${days} dia(s)`;
+  const getLotView = (lot: LotEntry, product: Product) => {
+    const status = lotStatusOf(lot, product);
+    const reservation = reservationsByLot.get(lot.id);
+    const reserved = lotReservedQuantity(lot, reservation);
+    const destinations = reservation ? Object.entries(reservation.destinations) : [];
+    return {
+      status,
+      reservation,
+      reserved,
+      destinations,
+      parts: lotQuantityParts(lot, product),
+      kioskName: kiosks.find(k => k.id === lot.kioskId)?.name || 'Quiosque desconhecido',
+      locationName: lot.locationId ? locations.find(l => l.id === lot.locationId)?.name : null,
+      expiry: lot.expiryDate ? format(parseISO(lot.expiryDate), 'dd/MM/yyyy') : 'Indefinida',
+    };
+  };
 
-                  return (
-                    <TableRow key={`${product.id}-${lot.id}`}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          {product.imageUrl ? (
-                            <Image
-                              src={product.imageUrl}
-                              alt={`Foto de ${product.baseName}`}
-                              width={32}
-                              height={32}
-                              className="h-8 w-8 rounded-md object-cover"
-                            />
-                          ) : (
-                            <div className="h-8 w-8 rounded-md bg-muted" />
-                          )}
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">{getProductFullName(product)}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {product.brand || 'Sem marca'} · {product.packageType || 'un'} com {product.packageSize}{product.unit}
-                              {product.multiplo_caixa && product.rotulo_caixa
-                                ? ` · ${product.rotulo_caixa}: ${product.multiplo_caixa}`
-                                : ''}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{lot.lotNumber}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">{kiosk?.name || 'Quiosque desconhecido'}</div>
-                        {location && <div className="text-xs text-muted-foreground">{location.name}</div>}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <Badge variant={expiryTone as any}>{expiryLabel}</Badge>
-                          {lot.expiryDate && (
-                            <div className="text-xs text-muted-foreground">
-                              {format(parseISO(lot.expiryDate), 'dd/MM/yyyy')}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="font-semibold">{quantityDetails}</div>
-                      </TableCell>
-                      <TableCell>
-                        {displayReservedQty > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            <Badge variant="secondary" className="rounded-full text-xs text-blue-700">
-                              Reserva: {displayReservedQty}
-                            </Badge>
-                            {reservationDestinations.length > 0 ? (
-                              reservationDestinations.map((destination) => (
-                                <Badge key={destination.name} variant="outline" className="rounded-full text-xs">
-                                  {destination.name}: {destination.quantity}
-                                </Badge>
-                              ))
-                            ) : (
-                              <Badge variant="outline" className="rounded-full text-xs">Em processamento</Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditClick(lot.id)} disabled={!permissions.stock.inventoryControl.editLot}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewHistoryClick(lot)}>
-                            <History className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(lot.id)} disabled={!permissions.stock.inventoryControl.writeDown}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-        </TableBody>
-      </Table>
+  const openLotProps = (lotId: string) => ({
+    id: `lot-instance-${lotId}`,
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => setSelectedLotId(lotId),
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        setSelectedLotId(lotId);
+      }
+    },
+  });
+
+  const ProductThumb = ({ product, size }: { product: Product; size: number }) => (
+    <div
+      className="flex shrink-0 items-center justify-center overflow-hidden border border-[#ebe7df] bg-[#f3f1ec] font-mono font-bold text-[#9a9ba1]"
+      style={{ width: size, height: size, borderRadius: size >= 56 ? 14 : 8, fontSize: size >= 56 ? 13 : 10 }}
+    >
+      {product.imageUrl ? (
+        <Image src={product.imageUrl} alt={`Foto de ${product.baseName}`} width={size} height={size} className="h-full w-full object-cover" />
+      ) : (
+        productInitials(product)
+      )}
     </div>
   );
 
+  const renderTableContent = () => (
+    <div className="overflow-auto rounded-[18px] border border-[#e3dfd6] bg-white">
+      <div className="min-w-[980px]">
+        <div className="grid grid-cols-[minmax(0,2.4fr)_130px_minmax(0,1.3fr)_150px_170px_minmax(0,1.2fr)] gap-3.5 border-b border-[#e3dfd6] bg-[#f6f4ef] px-[18px] py-3 text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]">
+          <span>Insumo / marca</span><span>Lote</span><span>Local</span><span>Validade</span><span className="text-right">Quantidade</span><span>Reserva</span>
+        </div>
+        {groupedData.map((baseGroup) => {
+          const rows = baseGroup.brands.flatMap(b => b.products.flatMap(pg => pg.lots.map(lot => ({ product: pg.product, lot }))))
+            .sort((a, b) => (a.lot.expiryDate || '9999') < (b.lot.expiryDate || '9999') ? -1 : 1);
+          const summary = summarizeGroup(baseGroup);
+          return (
+            <React.Fragment key={baseGroup.baseProductId || baseGroup.name}>
+              <div className="flex items-center justify-between border-b border-[#efece6] bg-[#fbfaf7] px-[18px] py-2.5">
+                <span className="text-[12.5px] font-extrabold uppercase tracking-[.02em]">{baseGroup.name}</span>
+                <span className="text-xs text-[#70757d]">{rows.length} lotes · <b className="text-[#a6325b]">{summary.converted}</b></span>
+              </div>
+              {rows.map(({ product, lot }) => {
+                const view = getLotView(lot, product);
+                return (
+                  <div
+                    key={`${product.id}-${lot.id}`}
+                    {...openLotProps(lot.id)}
+                    className={cn(
+                      'relative grid cursor-pointer grid-cols-[minmax(0,2.4fr)_130px_minmax(0,1.3fr)_150px_170px_minmax(0,1.2fr)] items-center gap-3.5 border-b border-[#f1eee8] px-[18px] py-[11px]',
+                      ROW_HOVER,
+                      selectedLotId === lot.id ? 'bg-[#fbf3f6] shadow-[inset_3px_0_0_#a6325b]' : 'bg-white',
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <ProductThumb product={product} size={30} />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate text-[13px] font-bold">{getProductFullName(product)}</span>
+                        <span className="truncate text-[11.5px] text-[#9a9ba1]">{productSpecLine({ ...product, multiplo_caixa: undefined, rotulo_caixa: undefined })}</span>
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-semibold">{lot.lotNumber}</span>
+                    <span className="flex min-w-0 flex-col"><span className="text-[13px]">{view.kioskName}</span><span className="text-[11.5px] text-[#9a9ba1]">{view.locationName}</span></span>
+                    <span className="flex flex-col items-start gap-[3px]"><span className={view.status.pillClass}>{view.status.text}</span><span className="font-mono text-[11.5px] text-[#70757d]">{view.expiry}</span></span>
+                    <span className="text-right text-[13px] font-bold">{view.parts.map(p => `${p.value} ${p.unit}`).join(' · ')}</span>
+                    <span className="text-xs font-semibold text-[#1d4ed8]">
+                      {view.reserved > 0
+                        ? `${view.reserved.toLocaleString('pt-BR')} · ${view.destinations.length ? view.destinations.map(([name]) => name).join(', ') : 'Em processamento'}`
+                        : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderCardsContent = () => (
+    <div className="flex flex-col gap-7">
+      {groupedData.map(baseGroup => {
+        const summary = summarizeGroup(baseGroup);
+        const groupLots = baseGroup.brands.reduce((s, b) => s + b.products.reduce((p, pg) => p + pg.lots.length, 0), 0);
+        return (
+          <section key={baseGroup.baseProductId || baseGroup.name} className="flex flex-col gap-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e3dfd6] px-1 pb-2">
+              <div className="flex items-center gap-2.5">
+                <h2 className="m-0 text-[19px] font-extrabold uppercase tracking-[-.01em]">{baseGroup.name}</h2>
+                {baseGroup.hasLeadTime && baseGroup.baseProduct && (
+                  <button
+                    type="button"
+                    title="Projeção de consumo"
+                    onClick={() => setQuickProjectionProduct(baseGroup.baseProduct)}
+                    className="h-6 rounded-[7px] border border-[#d7e2fb] bg-[#eef3fe] px-2 text-[11.5px] font-bold text-[#1d4ed8]"
+                  >
+                    Projeção
+                  </button>
+                )}
+                <span className="text-xs text-[#9a9ba1]">{groupLots} lotes</span>
+              </div>
+              {summary.totalPackages > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
+                  <span className="font-extrabold text-[#a6325b]">{summary.converted}</span>
+                  {summary.extra.map(item => (
+                    <React.Fragment key={item}>
+                      <span className="text-[#c4c0b8]">→</span>
+                      <span className="inline-flex h-[26px] items-center rounded-full bg-[#e6e3dc] px-2.5 text-[12.5px] font-bold">{item}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+            {baseGroup.brands.flatMap(brandGroup => brandGroup.products).map(({ product, lots: productLots }) => (
+              <div key={product.id} className="rounded-[18px] border border-[#e3dfd6] bg-white">
+                <div className="flex items-center gap-3.5 px-[18px] py-3.5">
+                  <ProductThumb product={product} size={56} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[15.5px] font-extrabold">{getProductFullName(product)}</span>
+                      {product.isArchived && <span className="rounded-full bg-[#eceae5] px-2 py-0.5 text-[11px] font-bold text-[#70757d]">Desativado</span>}
+                    </div>
+                    {(product.apparelSize || product.apparelColor || product.apparelType) && (
+                      <span className="text-xs font-semibold text-[#b45309]">
+                        {[product.apparelType, product.apparelColor, product.apparelSize && `Tam. ${product.apparelSize}`].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                    <span className="text-[12.5px] text-[#70757d]">{productSpecLine(product, { withBarcode: true })}</span>
+                  </div>
+                  <span className="whitespace-nowrap text-[12.5px] text-[#9a9ba1]">{productLots.length} {productLots.length === 1 ? 'lote' : 'lotes'}</span>
+                </div>
+                <div className="rounded-b-[18px] border-t border-[#efece6]">
+                  {productLots.map(lot => {
+                    const view = getLotView(lot, product);
+                    return (
+                      <div
+                        key={lot.id}
+                        {...openLotProps(lot.id)}
+                        className={cn(
+                          'relative cursor-pointer border-b border-[#f1eee8] px-[18px] py-[13px] last:border-b-0',
+                          ROW_HOVER,
+                          selectedLotId === lot.id ? 'bg-[#fbf3f6] shadow-[inset_3px_0_0_#a6325b]' : 'bg-transparent',
+                        )}
+                      >
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex w-[170px] flex-col gap-1">
+                            <span className="font-mono text-[12.5px] font-bold">{lot.lotNumber}</span>
+                            <span className={view.status.pillClass}>{view.status.text}</span>
+                          </div>
+                          <div className="flex min-w-[160px] flex-1 flex-col gap-0.5">
+                            <span className="text-[13px] font-semibold">{view.kioskName}</span>
+                            <span className="text-xs text-[#9a9ba1]">{view.locationName}</span>
+                          </div>
+                          <div className="flex w-[110px] flex-col gap-0.5">
+                            <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-[#9a9ba1]">Validade</span>
+                            <span className="font-mono text-[12.5px] font-semibold">{view.expiry}</span>
+                          </div>
+                          <div className="ml-auto flex min-w-[220px] items-baseline justify-end gap-3.5">
+                            {view.parts.map((part, index) => (
+                              <span key={`${part.unit}-${index}`} className="flex items-baseline gap-1">
+                                <b className="text-[19px] font-extrabold tracking-[-.02em]">{part.value}</b>
+                                <span className="text-xs text-[#70757d]">{part.unit}</span>
+                              </span>
+                            ))}
+                          </div>
+                          <span className="w-4 text-right text-base text-[#c4c0b8]">›</span>
+                        </div>
+                        {view.reserved > 0 && (
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-dashed border-[#e3dfd6] pt-2.5">
+                            <span className="text-xs font-extrabold text-[#1d4ed8]">Reserva ativa · {view.reserved.toLocaleString('pt-BR')}</span>
+                            {view.destinations.length > 0 ? view.destinations.map(([name, quantity]) => (
+                              <span key={name} className="whitespace-nowrap rounded-full bg-[#eef3fe] px-[9px] py-0.5 text-[11.5px] font-semibold text-[#1d4ed8]">{name}: {quantity}</span>
+                            )) : (
+                              <span className="whitespace-nowrap rounded-full bg-[#eef3fe] px-[9px] py-0.5 text-[11.5px] font-semibold text-[#1d4ed8]">Em processamento</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </section>
+        );
+      })}
+    </div>
+  );
 
   const renderContent = () => {
     if (loading || productsLoading || locationsLoading || baseProductsLoading) {
@@ -718,7 +710,7 @@ function ExpiryControlContent() {
         </div>
       );
     }
-    
+
     if (lots.length === 0) {
         return (
           <div className="text-center py-16 flex flex-col items-center">
@@ -736,310 +728,239 @@ function ExpiryControlContent() {
 
     if (groupedData.length === 0) {
         return (
-            <div className="text-center py-16 text-muted-foreground">
-                <p>Nenhum resultado encontrado com os filtros e busca atuais.</p>
+            <div className="rounded-[18px] border border-dashed border-[#d6d2c8] bg-white px-5 py-16 text-center text-sm text-[#70757d]">
+                Nenhum resultado com os filtros e a busca atuais.
             </div>
         );
     }
-    
-    if (inventoryViewMode === 'table') {
-      return renderTableContent();
-    }
 
-    return (
-      <div className="space-y-6">
-         {groupedData.map(baseGroup => {
-              let totalPackages = 0;
-              const convertedTotals: { [unit: string]: number } = {};
-              const baseProduct = baseProducts.find(bp => bp.id === baseGroup.baseProductId);
-
-              baseGroup.brands.forEach(brand => {
-                brand.products.forEach(prodGroup => {
-                  prodGroup.lots.forEach(lot => {
-                    totalPackages += lot.quantity;
-                    const productConfig = prodGroup.product;
-                    let lotTotalValue = 0;
-                    let lotTotalUnit = '';
-
-                    if (productConfig.secondaryUnit && typeof productConfig.secondaryUnitValue === 'number' && productConfig.secondaryUnitValue > 0) {
-                        lotTotalValue = lot.quantity * productConfig.secondaryUnitValue;
-                        lotTotalUnit = productConfig.secondaryUnit;
-                    } else {
-                        lotTotalValue = lot.quantity * productConfig.packageSize;
-                        lotTotalUnit = productConfig.unit;
-                    }
-                    
-                    if (lotTotalValue > 0) {
-                        if (!convertedTotals[lotTotalUnit]) {
-                            convertedTotals[lotTotalUnit] = 0;
-                        }
-                        convertedTotals[lotTotalUnit] += lotTotalValue;
-                    }
-                  });
-                });
-              });
-
-              const firstUnit = Object.keys(convertedTotals)[0];
-              let totalConvertedDisplay = "Conversão Indisponível";
-
-              if (firstUnit) {
-                  const allInSameUnit = Object.keys(convertedTotals).length === 1;
-                  if (allInSameUnit) {
-                      totalConvertedDisplay = `${convertedTotals[firstUnit].toLocaleString('pt-BR')} ${firstUnit}`;
-                  } else {
-                       let sumInFirstUnit = 0;
-                       let possible = true;
-                       
-                       for (const unit in convertedTotals) {
-                           try {
-                               if (baseProduct) {
-                                   sumInFirstUnit += convertValue(convertedTotals[unit], unit, baseProduct.unit, baseProduct.category);
-                                   totalConvertedDisplay = `${sumInFirstUnit.toLocaleString('pt-BR')} ${baseProduct.unit}`;
-                               } else {
-                                   possible = false;
-                                   break;
-                               }
-                           } catch (e) {
-                               possible = false;
-                               break;
-                           }
-                       }
-                       if (!possible) {
-                           totalConvertedDisplay = "Conversão Indisponível";
-                       }
-                  }
-              } else if (totalPackages > 0) {
-                  totalConvertedDisplay = "0"; // Handle cases with packages but no convertible value
-              } else {
-                  totalConvertedDisplay = "0";
-              }
-              
-              const firstProductInGroup = baseGroup.brands?.[0]?.products?.[0]?.product;
-              const packageTypeForDisplay = firstProductInGroup?.packageType ? `${firstProductInGroup.packageType}(s)` : 'unidades';
-
-              const logisticDetails = firstProductInGroup 
-                  ? { multiplo: firstProductInGroup.multiplo_caixa, rotulo: firstProductInGroup.rotulo_caixa } 
-                  : { multiplo: undefined, rotulo: undefined };
-
-              let totalBoxes: number | null = null;
-              if (logisticDetails.multiplo && logisticDetails.multiplo > 0) {
-                  totalBoxes = totalPackages / logisticDetails.multiplo;
-              }
-
-
-             return (
-                 <div key={baseGroup.baseProductId || baseGroup.name} className="space-y-4">
-                     <div className="flex items-baseline justify-between border-b pb-2">
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-xl font-bold tracking-tight">{baseGroup.name}</h2>
-                          {baseGroup.hasLeadTime && (
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600" onClick={() => setQuickProjectionProduct(baseGroup.baseProduct)}>
-                                  <LineChart className="h-5 w-5" />
-                              </Button>
-                          )}
-                        </div>
-                        {totalPackages > 0 && (
-                            <div className="flex items-center gap-2 text-sm sm:text-base">
-                                <span className="font-semibold text-primary">{totalConvertedDisplay}</span>
-                                <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
-                                <Badge variant="secondary" className="px-3 py-1 text-sm">
-                                    {totalPackages.toLocaleString('pt-BR')} {packageTypeForDisplay}
-                                </Badge>
-                                {totalBoxes !== null && logisticDetails.rotulo && (
-                                    <>
-                                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0"/>
-                                        <Badge variant="outline" className="px-3 py-1 text-sm">
-                                            {totalBoxes.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} {logisticDetails.rotulo}(s)
-                                        </Badge>
-                                    </>
-                                )}
-                            </div>
-                        )}
-                     </div>
-                     <div className="space-y-4">
-                        {baseGroup.brands.flatMap(brandGroup => brandGroup.products).map(productGroup => (
-                            <LotCard
-                                key={productGroup.product.id}
-                                productGroup={productGroup}
-                                getProductFullName={getProductFullName}
-                                kiosks={kiosks}
-                                locations={locations}
-                                onEdit={handleEditClick}
-                                onMove={handleMoveClick}
-                                onDelete={handleDeleteClick}
-                                onViewHistory={handleViewHistoryClick}
-                            />
-                        ))}
-                     </div>
-                 </div>
-             )
-         })}
-      </div>
-    );
+    return inventoryViewMode === 'table' ? renderTableContent() : renderCardsContent();
   };
+
+  const kpis: { label: string; value: number; color: string; key?: string; hint?: string }[] = [
+    { label: 'Insumos', value: stockStats.products, color: '#ffffff' },
+    { label: 'Lotes ativos', value: stockStats.lots, color: '#ffffff' },
+    { label: 'Vencendo', value: stockStats.expiringSoon, color: '#fb923c', key: 'expiring', hint: '≤ 7 dias' },
+    { label: 'Vencidos', value: stockStats.expired, color: '#fb7185', key: 'expired' },
+    { label: 'Reservas ativas', value: stockStats.reserved, color: '#93b4ff', key: 'reserved' },
+  ];
+
+  const categoryChips = [
+    { id: 'all', name: 'Todas', count: searchedLots.filter(lot => lotMatchesStatusFilters(
+        statusFilters, lotStatusOf(lot, productById.get(lot.productId)), lotReservedQuantity(lot, reservationsByLot.get(lot.id)),
+      )).length },
+    ...stockOperationalCategories.map(category => ({ id: category.id, name: category.name, count: operationalCategoryCounts[category.id] ?? 0 })),
+  ];
+
+  const activeFilterPills = [
+    ...statusFilters.map(key => ({ label: STATUS_FILTER_NAMES[key] ?? key, clear: () => toggleStatusFilter(key) })),
+    ...(selectedOperationalCategoryId !== 'all'
+      ? [{ label: stockOperationalCategories.find(c => c.id === selectedOperationalCategoryId)?.name ?? 'Categoria', clear: () => setSelectedOperationalCategoryId('all') }]
+      : []),
+  ];
 
   return (
     <>
-      <div className="w-full mx-auto animate-in fade-in zoom-in-95 h-full flex flex-col">
-        <div className='mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 space-y-4'>
-            <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder="Buscar por insumo base, produto, lote, cód. de barras..."
-                    className="h-11 rounded-lg border-border bg-background pl-10 pr-12"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="icon" 
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                    onClick={() => setIsSearchScannerOpen(true)}
-                    aria-label="Escanear código de barras para busca"
-                >
-                    <Camera className="h-4 w-4 text-muted-foreground" />
-                </Button>
-            </div>
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddClick} className="w-full sm:w-auto rounded-lg" disabled={!permissions.stock.inventoryControl.addLot}>
-                    <Plus className="mr-2 h-4 w-4" /> Adicionar lote
-                </Button>
-                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className='w-full sm:w-auto rounded-lg'>
-                            <Filter className="mr-2 h-4 w-4" />
-                            Status {statusFilters.length > 0 && `(${statusFilters.length})`}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                        <DropdownMenuLabel>Filtrar por status</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilters.includes('expiring')}
-                            onCheckedChange={(checked) => handleStatusFilterChange('expiring', !!checked)}
-                        >
-                            Vencendo em breve
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilters.includes('expired')}
-                            onCheckedChange={(checked) => handleStatusFilterChange('expired', !!checked)}
-                        >
-                            Vencidos
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilters.includes('no_expiry')}
-                            onCheckedChange={(checked) => handleStatusFilterChange('no_expiry', !!checked)}
-                        >
-                            Validade indefinida
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={() => setStatusFilters([])} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                            Limpar filtros
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+      <div className="mx-auto flex h-full w-full flex-col animate-in fade-in zoom-in-95">
+        <div className="mx-auto w-full max-w-[1520px] px-4 pb-0 pt-3 sm:px-6">
+          <div className="flex flex-col gap-[18px] rounded-[28px] bg-[#15151c] px-[26px] pb-5 pt-[22px] text-[#f3f2ee] shadow-[0_24px_60px_rgba(21,21,28,.18)]">
+            <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#f08bb1]">Estoque · {kioskLabel}</span>
 
-                 <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-                    <SelectTrigger className="w-full rounded-lg sm:w-56">
-                        <Warehouse className="mr-2 h-4 w-4" />
-                        <SelectValue placeholder="Selecione um quiosque..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {user?.username === 'Tiago Brasil' && <SelectItem value="all">Todos os quiosques</SelectItem>}
-                        {sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto rounded-lg" disabled={groupedData.length === 0}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Exportar
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="inline-flex w-full rounded-lg bg-muted p-1 sm:w-auto">
-                <Button
-                  type="button"
-                  variant={inventoryViewMode === 'cards' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-8 flex-1 rounded-md sm:flex-none"
-                  onClick={() => setInventoryViewMode('cards')}
-                >
-                  Cards
-                </Button>
-                <Button
-                  type="button"
-                  variant={inventoryViewMode === 'table' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-8 flex-1 rounded-md sm:flex-none"
-                  onClick={() => setInventoryViewMode('table')}
-                >
-                  Tabela
-                </Button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                {[
-                    { label: 'Insumos', value: stockStats.products, tone: 'text-foreground' },
-                    { label: 'Lotes ativos', value: stockStats.lots, tone: 'text-foreground' },
-                    { label: 'Vencendo', value: stockStats.expiringSoon, tone: 'text-orange-600' },
-                    { label: 'Vencidos', value: stockStats.expired, tone: 'text-rose-600' },
-                    { label: 'Reservas ativas', value: stockStats.reserved, tone: 'text-blue-600' },
-                ].map((stat) => (
-                    <div key={stat.label} className="rounded-lg border bg-card p-4 shadow-sm">
-                        <div className="text-xs font-medium text-muted-foreground">{stat.label}</div>
-                        <div className={`mt-2 text-2xl font-bold ${stat.tone}`}>{stat.value}</div>
-                    </div>
-                ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    type="button"
-                    variant={selectedOperationalCategoryId === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedOperationalCategoryId('all')}
-                    className="h-9 rounded-full px-4"
-                >
-                    Todas
-                    <span className="ml-2 rounded-full bg-background/20 px-1.5 text-xs font-bold">
-                        {filteredLotsBeforeCategory.length}
+            <div className="grid grid-cols-2 gap-1 border-b border-white/10 md:grid-cols-5">
+              {kpis.map((kpi) => {
+                const on = !!kpi.key && statusFilters.includes(kpi.key);
+                const content = (
+                  <>
+                    <span className="text-[34px] font-extrabold leading-none tracking-[-.04em]" style={{ color: kpi.value > 0 ? kpi.color : '#5d5c68' }}>
+                      {kpi.value}
                     </span>
-                </Button>
-                {stockOperationalCategories.map((category) => {
-                    const active = selectedOperationalCategoryId === category.id;
-                    const count = operationalCategoryCounts[category.id] ?? 0;
-                    return (
-                        <Button
-                            key={category.id}
-                            type="button"
-                            variant={active ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setSelectedOperationalCategoryId(category.id)}
-                            className="h-9 rounded-full px-4"
-                        >
-                            {category.name}
-                            <span className="ml-2 rounded-full bg-background/20 px-1.5 text-xs font-bold">
-                                {count}
-                            </span>
-                        </Button>
-                    );
-                })}
+                    <span className="flex items-center gap-1.5 text-[13px] font-bold">
+                      {kpi.label}
+                      <span className="text-[10.5px] font-bold text-[#8e8d99]">{kpi.key ? (on ? 'filtrando' : kpi.hint ?? '') : ''}</span>
+                    </span>
+                  </>
+                );
+                const className = cn(
+                  'flex flex-col items-start gap-1 rounded-t-xl border-b-2 px-3.5 pb-3.5 pt-1.5 text-left',
+                  on ? 'bg-white/5 text-white' : 'text-[#c8c7d0]',
+                  kpi.key ? 'cursor-pointer hover:bg-white/5' : 'cursor-default',
+                );
+                return kpi.key ? (
+                  <button key={kpi.label} type="button" aria-pressed={on} onClick={() => toggleStatusFilter(kpi.key!)} className={className} style={{ borderBottomColor: on ? kpi.color : 'transparent' }}>
+                    {content}
+                  </button>
+                ) : (
+                  <div key={kpi.label} className={className} style={{ borderBottomColor: 'transparent' }}>{content}</div>
+                );
+              })}
             </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex h-12 min-w-[260px] flex-1 items-center gap-3 rounded-[14px] border border-white/10 bg-white/[.07] pl-[18px] pr-2">
+                <Search className="h-[18px] w-[18px] shrink-0 text-[#8e8d99]" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar por insumo base, produto, lote, cód. de barras…"
+                  className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-none placeholder:text-[#8e8d99]"
+                />
+                {searchTerm && (
+                  <button type="button" onClick={() => setSearchTerm('')} aria-label="Limpar busca" className="text-[#8e8d99] hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsSearchScannerOpen(true)}
+                  title="Escanear código de barras"
+                  aria-label="Escanear código de barras para busca"
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-white/[.08] text-[#c8c7d0] hover:bg-white/15"
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+              </div>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={DARK_CONTROL}>
+                    <span className="text-[10.5px] font-semibold text-[#8e8d99]">Quiosque</span>
+                    {kioskLabel} <span className="text-[10px] text-[#8e8d99]">▾</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[250px] rounded-[14px] border-[#e3dfd6] bg-white p-1.5 shadow-[0_18px_44px_rgba(0,0,0,.24)]">
+                  {canSeeAllKiosks && (
+                    <DropdownMenuItem className={cn(MENU_ITEM, 'justify-between')} onSelect={() => setSelectedKioskId('all')}>
+                      <span>Todos os quiosques</span><span className="text-[#a6325b]">{selectedKioskId === 'all' ? '✓' : ''}</span>
+                    </DropdownMenuItem>
+                  )}
+                  {sortedKiosks.map(k => (
+                    <DropdownMenuItem key={k.id} className={cn(MENU_ITEM, 'justify-between')} onSelect={() => setSelectedKioskId(k.id)}>
+                      <span>{k.name}</span><span className="text-[#a6325b]">{selectedKioskId === k.id ? '✓' : ''}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={DARK_CONTROL}>Ações ▾</button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[220px] rounded-[14px] border-[#e3dfd6] bg-white p-1.5 shadow-[0_18px_44px_rgba(0,0,0,.24)]">
+                  {onOpenHistory && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenHistory}>Consultar histórico</DropdownMenuItem>}
+                  {onOpenConsumption && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenConsumption}>Consumo por período</DropdownMenuItem>}
+                  {(onOpenHistory || onOpenConsumption) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
+                  <DropdownMenuItem className={MENU_ITEM} onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
+                  <DropdownMenuItem className={MENU_ITEM} disabled={groupedData.length === 0} onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <button
+                type="button"
+                onClick={handleAddClick}
+                disabled={!permissions.stock.inventoryControl.addLot}
+                className="h-12 whitespace-nowrap rounded-[14px] bg-[#e0457f] px-[22px] text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(224,69,127,.35)] hover:bg-[#c93a6f] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                + Adicionar lote
+              </button>
+            </div>
+
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+              {categoryChips.map(chip => {
+                const on = selectedOperationalCategoryId === chip.id;
+                return (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => setSelectedOperationalCategoryId(chip.id)}
+                    className={cn(
+                      'inline-flex h-[34px] cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-bold',
+                      on ? 'border-[#e0457f] bg-[#e0457f] text-white' : 'border-white/10 bg-transparent text-[#c8c7d0] hover:bg-white/5',
+                    )}
+                  >
+                    {chip.name}
+                    <span className={cn('text-[11.5px] font-extrabold', on ? 'text-white/85' : 'text-[#8e8d99]')}>{chip.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <div className="mx-auto w-full max-w-[1600px] flex-1 overflow-hidden px-4 pb-6 pt-0 sm:px-6">
-                <ActiveReservationsSummary selectedKioskId={selectedKioskId} />
-                {renderContent()}
+
+        <div className="mx-auto w-full max-w-[1520px] flex-1 px-4 pb-24 pt-5 sm:px-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-baseline gap-2.5">
+                <span className="text-[28px] font-extrabold tracking-[-.03em]">{shownLots}</span>
+                <span className="text-[13px] text-[#70757d]">lotes em {shownProducts} insumos</span>
+                {activeFilterPills.map(pill => (
+                  <button
+                    key={pill.label}
+                    type="button"
+                    onClick={pill.clear}
+                    className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-[#e3dfd6] bg-white px-2.5 text-xs font-bold"
+                  >
+                    {pill.label} <span className="text-[#9a9ba1]">×</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-0.5 rounded-[11px] bg-[#e6e3dc] p-[3px]">
+                {(['cards', 'table'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setInventoryViewMode(mode)}
+                    className={cn(
+                      'h-8 rounded-[9px] px-3.5 text-[13px] font-bold',
+                      inventoryViewMode === mode ? 'bg-white text-[#1a1b1f] shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-[#70757d]',
+                    )}
+                  >
+                    {mode === 'cards' ? 'Cards' : 'Tabela'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {reservationBanner && (
+              <div className="flex flex-wrap items-center gap-3.5 rounded-2xl border border-[#d7e2fb] bg-[#eef3fe] px-[18px] py-3.5">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#1d4ed8]" />
+                <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
+                  <b className="text-[13.5px] text-[#1e3a8a]">Reservas ativas em {kioskLabel}</b>
+                  <span className="text-[12.5px] text-[#1e40af]">{reservationBanner.activityCount} atividade(s) aguardando movimentação.</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilters(current => current.includes('reserved') ? current : [...current, 'reserved'])}
+                  className="h-[34px] whitespace-nowrap rounded-[10px] border border-[#c7d6f8] bg-white px-3.5 text-[12.5px] font-bold text-[#1d4ed8]"
+                >
+                  Ver lotes reservados
+                </button>
+                <Link href="/dashboard/stock/analysis" className="whitespace-nowrap text-[12.5px] font-bold text-[#1d4ed8]">
+                  Abrir reposição →
+                </Link>
+              </div>
+            )}
+
+            {renderContent()}
+          </div>
         </div>
       </div>
-      
-      <AddEditLotModal 
+
+      {selectedLot && (
+        <LotDetailPanel
+          lot={selectedLot.lot}
+          product={selectedLot.product}
+          fullName={getProductFullName(selectedLot.product)}
+          kioskName={kiosks.find(k => k.id === selectedLot.lot.kioskId)?.name || 'Quiosque desconhecido'}
+          locationName={selectedLot.lot.locationId ? locations.find(l => l.id === selectedLot.lot.locationId)?.name : null}
+          reservation={reservationsByLot.get(selectedLot.lot.id)}
+          onClose={() => setSelectedLotId(null)}
+          onEdit={handleEditClick}
+          onMove={handleMoveClick}
+          onDelete={forceDeleteLotById}
+        />
+      )}
+
+      <AddEditLotModal
         open={isAddEditModalOpen}
         onOpenChange={setIsAddEditModalOpen}
         lotToEdit={lotToEdit}
@@ -1048,33 +969,14 @@ function ExpiryControlContent() {
         updateLot={updateLot}
         lots={lots}
       />
-      
-      {lotForHistory && (
-        <LotMovementHistoryModal lot={lotForHistory} onOpenChange={() => setLotForHistory(null)} />
-      )}
 
       {lotToMove && (
-        <MoveStockModal 
+        <MoveStockModal
             open={isMoveModalOpen}
             onOpenChange={setIsMoveModalOpen}
             lotToMove={lotToMove}
             kiosks={kiosks}
             onMoveConfirm={moveMultipleLots}
-        />
-      )}
-
-      {deleteTargetId && (
-        <DeleteConfirmationDialog 
-            open={!!deleteTargetId}
-            isDeleting={isDeleting}
-            onOpenChange={(open) => {
-              if (!open) {
-                setDeleteTargetId(null);
-                setForceDelete(false);
-              }
-            }}
-            onConfirm={handleDeleteConfirm}
-            itemName={`o lote selecionado`}
         />
       )}
 
@@ -1085,9 +987,9 @@ function ExpiryControlContent() {
           onScanSuccess={handleSearchScanSuccess}
         />
       )}
-      
+
       {quickProjectionProduct && (
-        <QuickProjectionModal 
+        <QuickProjectionModal
             baseProduct={quickProjectionProduct}
             onOpenChange={() => setQuickProjectionProduct(null)}
         />
@@ -1096,10 +998,10 @@ function ExpiryControlContent() {
   );
 }
 
-export function ExpiryControl() {
+export function ExpiryControl(props: ExpiryControlProps) {
     return (
         <Suspense fallback={<Skeleton className="h-[90vh] w-full" />}>
-            <ExpiryControlContent />
+            <ExpiryControlContent {...props} />
         </Suspense>
     );
 }
