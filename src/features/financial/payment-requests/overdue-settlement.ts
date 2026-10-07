@@ -154,7 +154,7 @@ export function planOverdueBarcodeSettlementRevision(params: {
     || Number(classification?.amountCents) !== input.principalAmountCents
     || !barcode
     || barcode.code !== input.barcode
-    || storedBarcode !== input.barcode
+    || (storedBarcode && storedBarcode !== input.barcode)
     || !isoDate.safeParse(barcode.scheduledFor).success
     || barcode.scheduledFor > input.scheduledFor
     || barcode.beneficiaryDocument !== input.beneficiaryDocument
