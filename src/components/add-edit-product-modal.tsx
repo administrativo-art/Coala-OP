@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks, Save, X } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, ChevronsUpDown, ScanLine, Search, Database, AlertTriangle, ListChecks, Save, X } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
@@ -138,6 +138,7 @@ interface AddEditProductModalProps {
   onOpenChange: (open: boolean) => void;
   productToEdit: Product | null;
   onManageBaseProducts: () => void;
+  initialStep?: number;
 }
 
 const WIZARD_STEPS = [
@@ -224,7 +225,7 @@ function lookupSourceLabel(source: ProductLookupSourceResult['fonte']) {
     return 'Cache';
 }
 
-export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
+export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts, initialStep = 1 }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
     const { firebaseUser } = useAuth();
     const { baseProducts } = useBaseProducts();
@@ -247,7 +248,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [highestStepPosition, setHighestStepPosition] = useState(0);
-    const [operationalCategoryOpen, setOperationalCategoryOpen] = useState(false);
     const [baseProductOpen, setBaseProductOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
@@ -295,6 +295,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const unitWatch = form.watch('unit');
     const logisticsMultipleWatch = form.watch('multiplo_caixa');
     const logisticsLabelWatch = form.watch('rotulo_caixa');
+    const productNameWatch = form.watch('baseName');
+    const imageUrlWatch = form.watch('imageUrl');
+    const nutritionalTableImageWatch = form.watch('nutritionalTableImageUrl');
+    const compositionImageWatch = form.watch('compositionImageUrl');
     const logisticsLabelDisplay =
         packageTypeWatch === 'Caixa' && logisticsLabelWatch === 'Caixa'
             ? 'Caixa mestra'
@@ -332,7 +336,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         try {
             const converted = convertValue(Number(packageSizeWatch), unitWatch, linkedBaseProduct.unit, categoryWatch);
             if (!isFinite(converted) || converted <= 0) return null;
-            return `${formatQuantity(converted, linkedBaseProduct.unit)}`;
+            return `${formatQuantity(converted, linkedBaseProduct.unit)} ${linkedBaseProduct.unit}`;
         } catch {
             return null;
         }
@@ -386,8 +390,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
     useEffect(() => {
         if (open) {
-            setCurrentStep(1);
-            setHighestStepPosition(0);
+            setCurrentStep(initialStep);
+            setHighestStepPosition(productToEdit ? Number.POSITIVE_INFINITY : 0);
             if (productToEdit) {
                  form.reset({
                     baseName: productToEdit.baseName,
@@ -429,10 +433,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             setBarcodeLookup(null);
             setSelectedLookupProduct(null);
             setBarcodeLookupError(null);
-            setOperationalCategoryOpen(false);
             setBaseProductOpen(false);
         }
-    }, [open, productToEdit, form]);
+    }, [open, productToEdit, form, initialStep]);
 
     useEffect(() => {
         if (form.formState.isDirty && !productToEdit) {
@@ -867,38 +870,39 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const subtitle = productToEdit
         ? getProductFullName(productToEdit)
         : 'Preencha os detalhes do insumo nas etapas abaixo.';
+    const liveName = (productNameWatch || (productToEdit ? getProductFullName(productToEdit) : 'Novo insumo')).toLocaleUpperCase('pt-BR');
+    const packageQuantity = Number(packageSizeWatch);
+    const packageQuantityLabel = Number.isFinite(packageQuantity) && packageQuantity > 0
+        ? `${formatQuantity(packageQuantity, unitWatch || 'un')} ${unitWatch || 'un'}`
+        : `— ${unitWatch || 'un'}`;
+    const packageLabel = packageTypeWatch?.toLowerCase() || 'embalagem';
+    const groupingLabel = enableLogisticsWatch && Number(logisticsMultipleWatch) > 0
+        ? `1 ${(logisticsLabelDisplay || 'agrupamento').toLowerCase()} = ${Number(logisticsMultipleWatch)} ${packageLabel}${Number(logisticsMultipleWatch) === 1 ? '' : 's'}`
+        : null;
+    const stepSummary = (stepId: number) => {
+        if (stepId === 1) return [operationalCategoryName, linkedBaseProduct ? 'base vinculada' : null].filter(Boolean).join(' · ') || 'Dados principais';
+        if (stepId === 2) return `${aliases.length} alias${aliases.length === 1 ? '' : 'es'}`;
+        if (stepId === 3) return `1 ${packageLabel} = ${packageQuantityLabel}`;
+        if (stepId === 4) return `${uniformInstructionFields.length} seç${uniformInstructionFields.length === 1 ? 'ão' : 'ões'}`;
+        if (stepId === 5) {
+            const photoCount = [nutritionalTableImageWatch, compositionImageWatch].filter(Boolean).length;
+            return `${photoCount} de 2 fotos`;
+        }
+        return '';
+    };
 
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent ref={dialogContentRef} className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
-                    {/* Header */}
-                    <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
-                        <div className="flex flex-wrap items-center gap-2">
-                            {categoryWatch && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-700">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                    {categoryWatch}
-                                </span>
-                            )}
-                            {operationalCategoryName && (
-                                <span className="inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
-                                    {operationalCategoryName}
-                                </span>
-                            )}
-                            {linkedBaseProduct && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                                    <Link2 className="h-3 w-3" />
-                                    {linkedBaseProduct.name}
-                                </span>
-                            )}
-                        </div>
-                        <DialogTitle className="text-2xl font-bold">{editingTitle}</DialogTitle>
-                        <DialogDescription className="text-sm">{subtitle}</DialogDescription>
+                <DialogContent ref={dialogContentRef} hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>{editingTitle}</DialogTitle>
+                        <DialogDescription>{subtitle}</DialogDescription>
                     </DialogHeader>
 
                     <Form {...form}>
                     <form
+                        className="grid min-h-0 grid-cols-1 lg:h-[800px] lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)_auto]"
                         onSubmit={productToEdit
                             ? (event) => {
                                 event.preventDefault();
@@ -906,14 +910,56 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                             }
                             : form.handleSubmit(onSubmit, onInvalid)}
                     >
-                        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
-                            {/* Stepper sidebar */}
-                            <aside className="border-r bg-muted/40 px-5 py-6">
-                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</p>
-                                <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${((currentStepPosition + 1) / wizardSteps.length) * 100}%` }} />
+                            {/* Painel do insumo ao vivo */}
+                            <aside className="flex min-h-0 flex-col gap-6 bg-[#15151c] px-6 py-7 text-[#f3f2ee] sm:px-7 sm:py-[30px] lg:row-span-2">
+                                <div className="flex flex-col gap-3">
+                                    <DialogDescription className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">
+                                        {productToEdit ? (linkedBaseProduct ? 'Editar insumo derivado' : 'Editar insumo') : 'Novo insumo'}
+                                    </DialogDescription>
+                                    <h2 className={cn('break-words text-[30px] font-extrabold leading-[1.05] tracking-[-.03em]', productNameWatch ? 'text-[#f3f2ee]' : 'text-[#5d5c68]')}>
+                                        {liveName}
+                                    </h2>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {operationalCategoryName && <span className="whitespace-nowrap rounded-full bg-[rgba(185,185,255,.14)] px-2.5 py-[3px] text-[11.5px] font-bold text-[#d4d4ff]">{operationalCategoryName}</span>}
+                                        <span className="whitespace-nowrap rounded-full border border-white/15 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#c8c7d0]">{categoryWatch}</span>
+                                    </div>
                                 </div>
-                                <nav className="space-y-1">
+
+                                <div className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                                    <div className="flex flex-col gap-1.5 px-4 py-4">
+                                        <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">Embalagem</span>
+                                        <div className="flex flex-wrap items-baseline gap-2.5">
+                                            <span className="text-[15px] font-bold text-[#c8c7d0]">1 {packageLabel} =</span>
+                                            <span className="font-mono text-[34px] font-bold leading-none tracking-[-.04em] text-[#b9b9ff]">{packageQuantityLabel}</span>
+                                        </div>
+                                    </div>
+                                    {linkedBaseProduct && (
+                                        <div className="flex items-center gap-2.5 border-t border-white/5 px-4 py-3">
+                                            <span className={cn('flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg text-[13px]', baseConversion ? 'bg-emerald-400/15 text-emerald-300' : 'bg-amber-400/15 font-extrabold text-amber-300')}>
+                                                {baseConversion ? '→' : '!'}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="truncate text-[13px] font-bold text-white">{baseConversion ? `${baseConversion} de ${linkedBaseProduct.name}` : `Sem conversão para ${linkedBaseProduct.name}`}</p>
+                                                <p className="text-[11.5px] text-[#8e8d99]">insumo base vinculado</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {groupingLabel && (
+                                        <div className="flex items-center gap-2.5 border-t border-white/5 px-4 py-3">
+                                            <Package className="h-[26px] w-[26px] shrink-0 rounded-lg bg-white/10 p-1.5 text-[#c8c7d0]" />
+                                            <div className="min-w-0">
+                                                <p className="truncate text-[13px] font-bold text-white">{groupingLabel}</p>
+                                                <p className="text-[11.5px] text-[#8e8d99]">agrupamento do fornecedor</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <nav className="flex min-h-0 flex-col gap-0.5" aria-label="Etapas do cadastro">
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">Etapa {currentStepPosition + 1} de {wizardSteps.length}</span>
+                                        {productToEdit && <span className="text-[11px] text-[#8e8d99]">salva por etapa</span>}
+                                    </div>
                                     {wizardSteps.map((step, index) => {
                                         const isActive = step.id === currentStep;
                                         const isDone = index < currentStepPosition;
@@ -925,18 +971,21 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 disabled={isLocked}
                                                 onClick={() => setCurrentStep(step.id)}
                                                 className={cn(
-                                                    'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm transition-colors',
-                                                    isActive ? 'font-semibold text-foreground' : 'text-muted-foreground hover:bg-muted',
-                                                    isLocked && 'cursor-not-allowed opacity-50 hover:bg-transparent',
+                                                    'flex w-full items-center gap-3 rounded-xl px-2.5 py-[9px] text-left transition-colors',
+                                                    isActive ? 'bg-white/[.08] text-white' : 'text-[#c8c7d0] hover:bg-white/[.05]',
+                                                    isLocked && 'cursor-not-allowed opacity-40 hover:bg-transparent',
                                                 )}
                                             >
                                                 <span className={cn(
-                                                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                                                    isActive ? 'bg-indigo-500 text-white' : isDone ? 'bg-indigo-100 text-indigo-600' : 'bg-muted text-muted-foreground',
+                                                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-xs font-extrabold',
+                                                    isActive ? 'bg-[#b9b9ff] text-[#15151c]' : 'bg-white/[.08] text-[#c8c7d0]',
                                                 )}>
-                                                    {isDone ? <Check className="h-4 w-4" /> : step.id}
+                                                    {isDone && !productToEdit ? <Check className="h-4 w-4" /> : step.id}
                                                 </span>
-                                                <span className="truncate">{step.label}</span>
+                                                <span className="flex min-w-0 flex-col gap-px">
+                                                    <span className="text-[13.5px] font-bold">{step.label}</span>
+                                                    <span className="truncate text-[11.5px] text-[#8e8d99]">{stepSummary(step.id)}</span>
+                                                </span>
                                             </button>
                                         );
                                     })}
@@ -944,24 +993,15 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                             </aside>
 
                             {/* Step content */}
-                            <ScrollArea className="h-[62vh]">
-                                <div className="px-6 py-6">
+                            <ScrollArea className="min-h-0 h-[62vh] lg:h-auto">
+                                <div className="px-5 py-6 sm:px-[30px]">
                                     {/* Section header */}
-                                    <div className="mb-5 flex items-start justify-between gap-4">
-                                        <div className="flex items-start gap-3">
-                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-foreground">
-                                                {React.createElement(currentStepMeta.icon, { className: 'h-4 w-4' })}
-                                            </div>
-                                            <div>
-                                                <h3 className="font-semibold leading-tight">{currentStepMeta.label}</h3>
-                                                <p className="text-sm text-muted-foreground">{currentStepMeta.description}</p>
-                                            </div>
+                                    <div className="mb-5 flex items-start justify-between gap-4 border-b border-[#e6e2da] pb-[18px]">
+                                        <div className="min-w-0">
+                                            <h3 className="text-[21px] font-extrabold leading-tight tracking-[-.02em]">{currentStepMeta.label}</h3>
+                                            <p className="mt-1 text-[13px] leading-normal text-[#70757d]">{currentStepMeta.description}</p>
                                         </div>
-                                        {currentStep === 1 && linkedBaseProduct && (
-                                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                                                <Link2 className="h-3 w-3" /> base vinculada
-                                            </span>
-                                        )}
+                                        <button type="button" aria-label="Fechar" onClick={() => onOpenChange(false)} className="-mt-2 flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#efede7] text-lg text-[#4a4f57]">×</button>
                                     </div>
 
                                     {/* ===== STEP 1 — Identificação ===== */}
@@ -971,12 +1011,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <FormLabel>Foto do insumo</FormLabel>
                                                 <div className="flex items-center gap-4">
                                                     <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-md bg-secondary">
-                                                        {form.watch('imageUrl') ? <Image src={form.watch('imageUrl')!} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
+                                                        {imageUrlWatch ? <Image src={imageUrlWatch} alt="Pré-visualização" width={96} height={96} className="object-cover" /> : <Camera className="h-10 w-10 text-muted-foreground" />}
                                                     </div>
                                                     <div className="flex flex-col gap-2">
-                                                        <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {form.watch('imageUrl') ? 'Tirar outra' : 'Tirar foto'}</Button>
+                                                        <Button type="button" variant="outline" onClick={() => setIsPhotoModalOpen(true)}><Camera className="mr-2" /> {imageUrlWatch ? 'Tirar outra' : 'Tirar foto'}</Button>
                                                         <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2" /> Upload</Button>
-                                                        {form.watch('imageUrl') && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
+                                                        {imageUrlWatch && <Button type="button" variant="destructive" size="sm" onClick={() => form.setValue('imageUrl', '', { shouldDirty: true })}><Trash2 className="mr-2" /> Remover</Button>}
                                                     </div>
                                                 </div>
                                                 <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'main')} />
@@ -1105,58 +1145,41 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 </div>
                                             )}
 
-                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            <div className="space-y-4">
                                                 <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
-                                                    <FormItem>
-                                                        <div className="flex items-center justify-between">
+                                                    <FormItem className="space-y-2">
+                                                        <div className="flex items-baseline justify-between">
                                                             <FormLabel>Categoria do item <span className="text-rose-500">*</span></FormLabel>
                                                             <span className="text-xs text-muted-foreground">define o fluxo de compra</span>
                                                         </div>
-                                                        <Popover open={operationalCategoryOpen} onOpenChange={setOperationalCategoryOpen}>
-                                                            <PopoverTrigger asChild>
-                                                                <FormControl>
-                                                                    <Button
+                                                        <div role="radiogroup" aria-label="Categoria do item" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                                                            {activeCategories.map((category) => {
+                                                                const selected = field.value === category.id;
+                                                                const hint = category.destination === 'uniform'
+                                                                    ? 'Vestimenta e instruções'
+                                                                    : category.destination === 'asset'
+                                                                        ? 'Ativo patrimonial'
+                                                                        : category.slug === 'insumo'
+                                                                            ? 'Matéria-prima e nutricional'
+                                                                            : 'Estoque e compras';
+                                                                return (
+                                                                    <button
+                                                                        key={category.id}
                                                                         type="button"
-                                                                        variant="outline"
-                                                                        role="combobox"
-                                                                        aria-expanded={operationalCategoryOpen}
-                                                                        className="w-full justify-between font-normal"
+                                                                        role="radio"
+                                                                        aria-checked={selected}
+                                                                        onClick={() => handleOperationalCategoryChange(category.id, field.onChange)}
+                                                                        className={cn(
+                                                                            'flex min-h-[68px] min-w-0 flex-col items-start gap-1 rounded-[14px] p-3 text-left',
+                                                                            selected ? 'border-2 border-[#15151c] bg-white' : 'border border-[#dcd9d1] bg-[#faf9f6]',
+                                                                        )}
                                                                     >
-                                                                        <span className={cn('truncate', !selectedOperationalCategory && 'text-muted-foreground')}>
-                                                                            {selectedOperationalCategory?.name || 'Selecione a categoria do item...'}
-                                                                        </span>
-                                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                                    </Button>
-                                                                </FormControl>
-                                                            </PopoverTrigger>
-                                                            <PopoverContent
-                                                                align="start"
-                                                                portalContainer={dialogContentRef.current}
-                                                                className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
-                                                            >
-                                                                <Command>
-                                                                    <CommandInput placeholder="Buscar categoria..." />
-                                                                    <CommandList>
-                                                                        <CommandEmpty>Nenhuma categoria encontrada.</CommandEmpty>
-                                                                        <CommandGroup>
-                                                                            {activeCategories.map((category) => (
-                                                                                <CommandItem
-                                                                                    key={category.id}
-                                                                                    value={`${category.name} ${normalizeAlias(category.name)} ${category.slug || ''}`}
-                                                                                    onSelect={() => {
-                                                                                        handleOperationalCategoryChange(category.id, field.onChange);
-                                                                                        setOperationalCategoryOpen(false);
-                                                                                    }}
-                                                                                >
-                                                                                    <Check className={cn('mr-2 h-4 w-4', field.value === category.id ? 'opacity-100' : 'opacity-0')} />
-                                                                                    <span className="truncate">{category.name}</span>
-                                                                                </CommandItem>
-                                                                            ))}
-                                                                        </CommandGroup>
-                                                                    </CommandList>
-                                                                </Command>
-                                                            </PopoverContent>
-                                                        </Popover>
+                                                                        <span className="w-full truncate text-[13.5px] font-extrabold">{category.name}</span>
+                                                                        <span className="text-[11px] leading-tight text-[#8a8f99]">{hint}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
                                                         {selectedOperationalCategory?.destination === 'asset' ? (
                                                             <FormDescription>
                                                                 Esta categoria entra no fluxo de patrimônio: nas compras, cada unidade recebida pode gerar um bem patrimonial individual.
@@ -1166,7 +1189,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     </FormItem>
                                                 )}/>
                                                 <FormField control={form.control} name="baseProductId" render={({ field }) => (
-                                                    <FormItem>
+                                                    <FormItem className="space-y-2">
                                                         <div className="flex items-center justify-between">
                                                             <FormLabel>Insumo base</FormLabel>
                                                             <span className="text-xs text-muted-foreground">agrupa e converte o estoque</span>
@@ -1367,7 +1390,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     {/* ===== STEP 3 — Detalhes logísticos ===== */}
                                     {currentStep === 3 && (
                                         <div className="space-y-5">
-                                            <Card className="space-y-4 border-amber-200 bg-amber-50/60 p-4 dark:bg-amber-900/20">
+                                            <Card className="space-y-4 rounded-[18px] border-[#e6e2da] bg-white p-[18px] shadow-none">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
                                                         <h4 className="font-medium">Embalagem e conversão</h4>
@@ -1379,41 +1402,74 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                                                    <FormField control={form.control} name="packageType" render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="flex min-h-10 items-end">Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
-                                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                                                                <SelectContent>{packageTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
-                                                            </Select>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}/>
-                                                    <FormField control={form.control} name="category" render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="flex min-h-10 items-end">Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
-                                                            <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
-                                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                                <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
-                                                            </Select>
-                                                            <FormMessage />
-                                                        </FormItem>
-                                                    )}/>
+                                                <FormField control={form.control} name="packageType" render={({ field }) => (
+                                                    <FormItem className="space-y-2">
+                                                        <FormLabel>Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                        <div role="radiogroup" aria-label="Tipo de embalagem" className="flex flex-wrap gap-1.5">
+                                                            {packageTypes.map((type) => (
+                                                                <button
+                                                                    key={type}
+                                                                    type="button"
+                                                                    role="radio"
+                                                                    aria-checked={field.value === type}
+                                                                    onClick={() => field.onChange(type)}
+                                                                    className={cn('min-h-8 whitespace-nowrap rounded-[9px] px-3 py-1.5 text-[12.5px] font-bold', field.value === type ? 'border border-[#15151c] bg-[#15151c] text-white' : 'border border-[#dcd9d1] bg-white text-[#4a4f57]')}
+                                                                >
+                                                                    {type}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="category" render={({ field }) => (
+                                                    <FormItem className="space-y-2">
+                                                        <div className="flex items-baseline justify-between gap-3">
+                                                            <FormLabel>Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <span className="text-[11.5px] text-[#8a8f99]">Trocar a categoria redefine a unidade.</span>
+                                                        </div>
+                                                        <div role="radiogroup" aria-label="Categoria da unidade" className="flex h-11 gap-1 rounded-xl bg-[#efede7] p-1">
+                                                            {unitCategories.map((category) => (
+                                                                <button
+                                                                    key={category}
+                                                                    type="button"
+                                                                    role="radio"
+                                                                    aria-checked={field.value === category}
+                                                                    onClick={() => handleCategoryChange(category as UnitCategory)}
+                                                                    className={cn('min-w-0 flex-1 truncate rounded-[9px] px-1.5 text-[13px] font-bold', field.value === category ? 'bg-white text-[#15151c] shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-[#70757d]')}
+                                                                >
+                                                                    {category}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                                                     <FormField control={form.control} name="packageSize" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel className="flex min-h-10 items-end">Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
-                                                            <FormControl><Input type="number" step="any" placeholder="ex: 144" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <FormLabel>Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormControl><Input type="number" step="any" placeholder="ex: 144" {...field} value={field.value ?? ''} className="h-11 rounded-xl border-[#dcd9d1] bg-white font-mono font-bold" /></FormControl>
                                                             <FormMessage />
                                                         </FormItem>
                                                     )}/>
                                                     <FormField control={form.control} name="unit" render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="flex min-h-10 items-end">Unidade <span className="text-rose-500">*</span></FormLabel>
-                                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                                                <SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                                                            </Select>
+                                                        <FormItem className="space-y-2">
+                                                            <FormLabel>Unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <div role="radiogroup" aria-label="Unidade" className="flex h-11 gap-1 rounded-xl bg-[#efede7] p-1">
+                                                                {getUnitsForCategory(categoryWatch).map((unit) => (
+                                                                    <button
+                                                                        key={unit}
+                                                                        type="button"
+                                                                        role="radio"
+                                                                        aria-checked={field.value === unit}
+                                                                        onClick={() => field.onChange(unit)}
+                                                                        className={cn('min-w-0 flex-1 rounded-[9px] px-2 text-[13px] font-bold', field.value === unit ? 'bg-white text-[#15151c] shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-[#70757d]')}
+                                                                    >
+                                                                        {unit}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                             <FormMessage />
                                                         </FormItem>
                                                     )}/>
@@ -1631,10 +1687,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
                                                     <button
                                                         type="button"
-                                                        onClick={() => form.watch('nutritionalTableImageUrl') ? setZoomedImage(form.watch('nutritionalTableImageUrl')!) : setIsNutritionalPhotoModalOpen(true)}
+                                                        onClick={() => nutritionalTableImageWatch ? setZoomedImage(nutritionalTableImageWatch) : setIsNutritionalPhotoModalOpen(true)}
                                                         className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-none"
                                                     >
-                                                        {form.watch('nutritionalTableImageUrl') ? <Image src={form.watch('nutritionalTableImageUrl')!} alt="Tabela Nutricional" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
+                                                        {nutritionalTableImageWatch ? <Image src={nutritionalTableImageWatch} alt="Tabela Nutricional" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
                                                     </button>
                                                     <div>
                                                         <p className="text-sm font-semibold">Tabela nutricional</p>
@@ -1643,7 +1699,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     <div className="flex gap-2">
                                                         <Button type="button" variant="outline" size="sm" onClick={() => setIsNutritionalPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
                                                         <Button type="button" variant="outline" size="sm" onClick={() => nutritionalTableFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
-                                                        {form.watch('nutritionalTableImageUrl') && <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => form.setValue('nutritionalTableImageUrl', '', { shouldDirty: true })}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                                                        {nutritionalTableImageWatch && <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => form.setValue('nutritionalTableImageUrl', '', { shouldDirty: true })}><Trash2 className="h-3.5 w-3.5" /></Button>}
                                                     </div>
                                                     <Input type="file" ref={nutritionalTableFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'nutritionalTable')} />
                                                     <FormField control={form.control} name="nutritionalTableImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
@@ -1653,10 +1709,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-6 text-center">
                                                     <button
                                                         type="button"
-                                                        onClick={() => form.watch('compositionImageUrl') ? setZoomedImage(form.watch('compositionImageUrl')!) : setIsCompositionPhotoModalOpen(true)}
+                                                        onClick={() => compositionImageWatch ? setZoomedImage(compositionImageWatch) : setIsCompositionPhotoModalOpen(true)}
                                                         className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-none"
                                                     >
-                                                        {form.watch('compositionImageUrl') ? <Image src={form.watch('compositionImageUrl')!} alt="Composição" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
+                                                        {compositionImageWatch ? <Image src={compositionImageWatch} alt="Composição" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
                                                     </button>
                                                     <div>
                                                         <p className="text-sm font-semibold">Composição / ingredientes</p>
@@ -1665,7 +1721,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     <div className="flex gap-2">
                                                         <Button type="button" variant="outline" size="sm" onClick={() => setIsCompositionPhotoModalOpen(true)}><Camera className="mr-1.5 h-3.5 w-3.5" /> Câmera</Button>
                                                         <Button type="button" variant="outline" size="sm" onClick={() => compositionFileInputRef.current?.click()}><Upload className="mr-1.5 h-3.5 w-3.5" /> Upload</Button>
-                                                        {form.watch('compositionImageUrl') && <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => form.setValue('compositionImageUrl', '', { shouldDirty: true })}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                                                        {compositionImageWatch && <Button type="button" variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => form.setValue('compositionImageUrl', '', { shouldDirty: true })}><Trash2 className="h-3.5 w-3.5" /></Button>}
                                                     </div>
                                                     <Input type="file" ref={compositionFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'composition')} />
                                                     <FormField control={form.control} name="compositionImageUrl" render={({ field }) => (<FormItem className="hidden"><FormControl><Input {...field} value={field.value ?? ''} /></FormControl></FormItem>)}/>
@@ -1713,38 +1769,33 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     )}
                                 </div>
                             </ScrollArea>
-                        </div>
 
                         {/* Footer */}
-                        <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
-                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                                {productToEdit ? 'Fechar' : 'Cancelar'}
+                        <DialogFooter className="flex flex-row items-center justify-between gap-3 border-t border-[#e6e2da] bg-[#faf9f6] px-5 py-4 sm:justify-between sm:px-[30px]">
+                            <Button type="button" variant="ghost" className="text-[#4a4f57]" onClick={() => onOpenChange(false)}>
+                                Cancelar
                             </Button>
-                            <div className="hidden flex-col items-center text-center sm:flex">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</span>
-                                <span className="text-sm font-medium">{currentStepMeta.label}</span>
-                            </div>
                             <div className="flex items-center gap-2">
                                 {currentStepPosition > 0 && (
-                                    <Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>
+                                    <Button type="button" variant="outline" className="h-11 rounded-xl border-[#dcd9d1] bg-white px-4 font-bold" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>
                                 )}
                                 {currentStepPosition < wizardSteps.length - 1 ? (
-                                    <Button type="button" variant="outline" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
+                                    <Button type="button" variant="outline" className="h-11 rounded-xl border-[#dcd9d1] bg-white px-4 font-bold" onClick={handleNext}>{productToEdit ? 'Próxima etapa' : 'Próximo'} <ChevronRight className="ml-1 h-4 w-4" /></Button>
                                 ) : null}
                                 {productToEdit ? (
                                     <Button
                                         type="button"
-                                        className="bg-indigo-500 hover:bg-indigo-600"
+                                        className="h-11 rounded-xl bg-[#15151c] px-5 font-extrabold text-white hover:bg-[#5b5bd6]"
                                         disabled={isSaving}
                                         onClick={() => void handleSaveEditStep()}
                                     >
                                         <Save className="mr-1.5 h-4 w-4" />
-                                        {isSaving ? 'Salvando' : 'Salvar alterações'}
+                                        {isSaving ? 'Salvando' : 'Salvar etapa'}
                                     </Button>
                                 ) : currentStepPosition === wizardSteps.length - 1 ? (
-                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={isSaving}>
+                                    <Button type="submit" className="h-11 rounded-xl bg-[#15151c] px-5 font-extrabold text-white hover:bg-[#5b5bd6]" disabled={isSaving}>
                                         <Save className="mr-1.5 h-4 w-4" />
-                                        {isSaving ? 'Salvando' : 'Adicionar insumo'}
+                                        {isSaving ? 'Salvando' : 'Cadastrar insumo'}
                                     </Button>
                                 ) : null}
                             </div>

@@ -19,6 +19,7 @@ import { Checkbox } from './ui/checkbox';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { Edit, Save, X } from 'lucide-react';
 import { AddEditProductModal } from './add-edit-product-modal';
+import { ProductFichaModal } from './product-ficha-modal';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
 
@@ -27,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { BulkBar, CardFooterLabel, CardGrid, CadastrosHero, Chevron, DetailDrawer, EmptyResults, GridCard, ListHead, ListRow, ListShell, ListSkeleton, ResultsBar, SelectBox, type CadastrosTabProps, type DrawerNotice } from '@/components/cadastros/cadastros-ui';
+import { BulkBar, CardFooterLabel, CardGrid, CadastrosHero, Chevron, EmptyResults, GridCard, ListHead, ListRow, ListShell, ListSkeleton, ResultsBar, SelectBox, type CadastrosTabProps } from '@/components/cadastros/cadastros-ui';
 import {
   buildChips,
   countByKey,
@@ -478,6 +479,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
   const { toast } = useToast();
 
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [editInitialStep, setEditInitialStep] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [, setIsBaseProductModalOpen] = useState(false);
   const [isOperationalCategoriesOpen, setIsOperationalCategoriesOpen] = useState(false);
@@ -489,7 +491,6 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
   const [status, setStatus] = useState<CadastrosStatus>('active');
   const [chip, setChip] = useState('all');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<DrawerNotice | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
   const loading = productsLoading || listsLoading || lotsLoading || baseProductsLoading || categoriesLoading;
@@ -543,11 +544,16 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
   const allShownSelected = shown.length > 0 && visibleSelected.length === shown.length;
   const opened = openId ? products.find(p => p.id === openId) ?? null : null;
 
-  const closeDrawer = () => { setOpenId(null); setNotice(null); };
-  const changeStatus = (next: CadastrosStatus) => { setStatus(next); setChip('all'); setSelectedProducts(new Set()); closeDrawer(); };
+  const closeFicha = () => setOpenId(null);
+  const changeStatus = (next: CadastrosStatus) => { setStatus(next); setChip('all'); setSelectedProducts(new Set()); closeFicha(); };
 
-  const handleAddNewClick = () => { setProductToEdit(null); setIsModalOpen(true); };
-  const handleEdit = (product: Product) => { closeDrawer(); setProductToEdit(product); setIsModalOpen(true); };
+  const handleAddNewClick = () => { setProductToEdit(null); setEditInitialStep(1); setIsModalOpen(true); };
+  const handleEdit = (product: Product, step = 1) => {
+    closeFicha();
+    setProductToEdit(product);
+    setEditInitialStep(step);
+    setIsModalOpen(true);
+  };
 
   const deleteBlockOf = (product: Product) => derivedItemDeleteBlock(
     lots.filter(lot => lot.productId === product.id).length,
@@ -569,23 +575,11 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
 
   const handleDeleteOne = (product: Product) => {
     const block = deleteBlockOf(product);
-    if (block) { setNotice({ kind: 'block', text: block }); return; }
-    setNotice({
-      kind: 'confirm',
-      text: `Excluir “${getProductFullName(product)}”? Essa ação não pode ser desfeita.`,
-      onConfirm: async () => {
-        setIsBusy(true);
-        try {
-          await deleteMultipleProducts([product.id]);
-          closeDrawer();
-          toast({ title: `${product.baseName} excluído.` });
-        } catch (error) {
-          toast({ title: 'Não foi possível excluir.', description: error instanceof Error ? error.message : 'Tente novamente.', variant: 'destructive' });
-        } finally {
-          setIsBusy(false);
-        }
-      },
-    });
+    if (block) {
+      toast({ title: 'Exclusão bloqueada', description: block, variant: 'destructive' });
+      return;
+    }
+    setProductsToDelete([product]);
   };
 
   const handleBulkDeleteClick = () => {
@@ -626,7 +620,6 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
   };
 
   const openedBase = opened?.baseProductId ? baseProductMap.get(opened.baseProductId) : undefined;
-  const openedCounting = opened ? countingOf(opened) : null;
 
   return (
     <>
@@ -673,7 +666,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
                   isOpen={openId === product.id}
                   isSelected={selectedProducts.has(product.id)}
                   isMuted={!!product.isArchived}
-                  onOpen={() => { setOpenId(product.id); setNotice(null); }}
+                  onOpen={() => setOpenId(product.id)}
                 >
                   <div className="relative -mx-[18px] -mt-[18px] flex h-[110px] items-end justify-between overflow-hidden rounded-t-[20px] bg-[repeating-linear-gradient(135deg,#f1efe9_0_10px,#e9e6df_10px_20px)] px-3.5 py-3">
                     {product.imageUrl ? (
@@ -731,7 +724,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
                   isSelected={selectedProducts.has(product.id)}
                   isMuted={!!product.isArchived}
                   label={`Abrir ${product.baseName}`}
-                  onOpen={() => { setOpenId(product.id); setNotice(null); }}
+                  onOpen={() => setOpenId(product.id)}
                 >
                   <SelectBox
                     checked={selectedProducts.has(product.id)}
@@ -769,39 +762,16 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
         )}
       </div>
 
-      <DetailDrawer
+      <ProductFichaModal
+        key={opened?.id ?? 'closed-product-ficha'}
         open={!!opened}
-        onClose={closeDrawer}
-        kicker="Insumo derivado"
-        title={opened?.baseName ?? ''}
-        chips={opened ? [
-          { label: opened.operationalCategoryName || 'Sem categoria' },
-          { label: controlOf(opened), tone: 'pink' },
-          ...(opened.isArchived ? [{ label: 'Arquivado', tone: 'off' as const }] : []),
-        ] : []}
-        fields={opened && openedCounting ? [
-          ['Marca', opened.brand || '—'],
-          ['Insumo base', openedBase?.name ?? 'Sem vínculo'],
-          ['Embalagem', packOf(opened)],
-          ['Forma da contagem', openedCounting.mode],
-          ['Agrupamento logístico', opened.multiplo_caixa ? `${opened.rotulo_caixa || 'Caixa'} c/ ${opened.multiplo_caixa}` : '—'],
-          ['Código de barras', opened.barcode || '—'],
-          ['Instrução de contagem', opened.countingInstruction || '—'],
-        ] : []}
-        list={opened ? {
-          title: 'Uso no sistema',
-          rows: [
-            ['Lotes', String(lots.filter(lot => lot.productId === opened.id).length)],
-            ['Listas predefinidas', String(lists.filter(list => list.items.some(item => item.productId === opened.id)).length)],
-          ],
-        } : undefined}
-        notice={notice}
-        onCancelNotice={() => setNotice(null)}
-        isBusy={isBusy}
-        onEdit={opened ? () => handleEdit(opened) : undefined}
+        onOpenChange={(nextOpen) => { if (!nextOpen) closeFicha(); }}
+        product={opened}
+        baseProduct={openedBase ?? null}
+        onEdit={(step) => { if (opened) handleEdit(opened, step); }}
         actions={opened ? [
-          { label: opened.isArchived ? 'Desarquivar' : 'Arquivar', onClick: () => void handleArchiveToggle(opened) },
-          { label: 'Excluir', isDanger: true, onClick: () => handleDeleteOne(opened) },
+          { label: opened.isArchived ? 'Desarquivar' : 'Arquivar', onClick: () => void handleArchiveToggle(opened), disabled: isBusy },
+          { label: 'Excluir', onClick: () => handleDeleteOne(opened), tone: 'danger' },
         ] : []}
       />
 
@@ -816,8 +786,12 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
 
       <AddEditProductModal
         open={isModalOpen}
-        onOpenChange={setIsModalOpen}
+        onOpenChange={(nextOpen) => {
+          setIsModalOpen(nextOpen);
+          if (!nextOpen) setEditInitialStep(1);
+        }}
         productToEdit={productToEdit}
+        initialStep={editInitialStep}
         onManageBaseProducts={() => {
             setIsModalOpen(false);
             setIsBaseProductModalOpen(true);
