@@ -155,7 +155,8 @@ export function planOverdueBarcodeSettlementRevision(params: {
     || !barcode
     || barcode.code !== input.barcode
     || storedBarcode !== input.barcode
-    || barcode.scheduledFor !== input.scheduledFor
+    || !isoDate.safeParse(barcode.scheduledFor).success
+    || barcode.scheduledFor > input.scheduledFor
     || barcode.beneficiaryDocument !== input.beneficiaryDocument
     || (storedDocument && storedDocument !== input.beneficiaryDocument)
     || input.scheduledFor !== params.today
@@ -173,6 +174,7 @@ export function planOverdueBarcodeSettlementRevision(params: {
   }
   return {
     status: "ready_to_submit" as const,
+    barcodeSnapshot: { ...barcode, scheduledFor: input.scheduledFor },
     requestedSettlementAmount: input.settlementAmountCents / 100,
     requestedLateChargeAmount: input.lateChargeAmountCents / 100,
     settlementRevision: {
