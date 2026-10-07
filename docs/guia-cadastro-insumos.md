@@ -425,9 +425,9 @@ Porque sem essa vinculação, o sistema não consegue calcular o custo por unida
 
 **Como acessar:** Menu lateral → Configurações → Operacional → Cadastros → aba "Insumo derivado" → botão "Adicionar insumo"
 
-> 📸 **[Screenshot: modal aberto — visão geral do formulário de Insumo Derivado com os cards coloridos visíveis]**
+Ao clicar em uma linha existente, o sistema abre primeiro a **ficha cadastral de leitura**, organizada em Dados gerais, Aliases e Nutricional ou Instruções. O botão **Editar** da ficha abre diretamente a etapa relacionada.
 
-O formulário é dividido em seções (cards coloridos). Siga a ordem de cima para baixo.
+Na criação e na edição, o formulário é dividido em etapas. O painel escuro à esquerda acompanha nome, embalagem, conversão, agrupamento e o resumo de cada etapa. Um cadastro novo libera as etapas conforme o avanço; ao editar, todas ficam disponíveis e **Salvar etapa** grava somente a etapa atual.
 
 ---
 
@@ -445,7 +445,7 @@ A primeira seção do formulário é dedicada à foto do produto. Ela serve para
 
 **"Remover"** (botão vermelho) — aparece somente quando já há uma foto carregada. Remove a imagem atual.
 
-> Limite de arquivo: **5MB**. Imagens maiores são rejeitadas com mensagem de erro.
+> Limite de arquivo: **10MB**. Imagens maiores são rejeitadas com mensagem de erro.
 
 ---
 
