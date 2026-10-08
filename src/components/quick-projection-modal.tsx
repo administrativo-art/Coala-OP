@@ -6,20 +6,14 @@ import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
 import { useValidatedConsumptionData } from '@/hooks/use-validated-consumption-data';
 import { convertValue, units, type UnitCategory } from '@/lib/conversion';
-import { format, addDays, differenceInDays, parseISO, getDaysInMonth } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, addDays, differenceInDays } from 'date-fns';
 import { type BaseProduct } from '@/types';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Slider } from '@/components/ui/slider';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, CheckCircle, BellRing, CalendarDays, ShoppingCart, Info, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { CancelButton, LotModalShell, PrimaryButton, ShellEyebrow, ShellFacts } from './stock/lot-modal-shell';
 import { useRouter } from 'next/navigation';
 import { useReplenishmentPolicy } from '@/hooks/use-replenishment-policy';
 import { availablePackages, operationalMinimum, shortage } from '@/lib/replenishment-display';
-import { Label } from './ui/label';
 
 interface QuickProjectionModalProps {
   baseProduct: BaseProduct;
@@ -168,89 +162,137 @@ Simulação de cobertura para ${baseProduct.name}:
     toast({ title: 'Resumo copiado!' });
   };
   
-  const getOrderStatusBadge = () => {
-    switch (projection.orderStatus) {
-        case 'ok': return <Badge variant="secondary" className="bg-green-600 text-white">OK</Badge>;
-        case 'soon': return <Badge variant="destructive" className="bg-yellow-500 text-white">Pedir em breve</Badge>;
-        case 'urgent': return <Badge variant="destructive">Urgente</Badge>;
-        case 'sem_lead_time': return <Badge variant="outline">Sem Lead Time</Badge>;
-    }
-  };
-
   const handleViewFullProjection = () => {
       onOpenChange(false);
       router.push(`/dashboard/stock/analysis/projection?baseProductId=${baseProduct.id}`);
   }
 
+  const STATUS_PILLS = {
+    ok: { label: 'OK', className: 'bg-[#e8f5ee] text-[#15803d]' },
+    soon: { label: 'Pedir em breve', className: 'bg-[#fff1e6] text-[#c2410c]' },
+    urgent: { label: 'Urgente', className: 'bg-[#ffe4e8] text-[#be123c]' },
+    sem_lead_time: { label: 'Sem lead time', className: 'bg-[#eceae5] text-[#70757d]' },
+  } as const;
+  const statusPill = STATUS_PILLS[projection.orderStatus];
+  const fmtDate = (date: Date | null) => (date ? format(date, 'dd/MM/yyyy') : 'N/A');
+  const COVERAGE_OPTIONS = [0.5, 1, 1.5, 2, 2.5, 3];
+  const monthsLabel = `${coverageMonths.toLocaleString('pt-BR')} ${coverageMonths === 1 ? 'mês' : 'meses'}`;
+
+  // Linha do tempo: estoque atual até a ruptura, depois o pedido sugerido.
+  const coverageDays = isFinite(projection.daysOfCoverage) ? projection.daysOfCoverage : null;
+  const newStockDays = projection.finalConsumptionDate && projection.ruptureDate ? differenceInDays(projection.finalConsumptionDate, projection.ruptureDate) : 0;
+  const horizon = coverageDays !== null ? Math.max(coverageDays + newStockDays, 1) : 0;
+  const pct = (days: number) => `${Math.min(100, Math.max(0, (days / horizon) * 100))}%`;
+  const orderDays = projection.orderDate ? Math.max(0, differenceInDays(projection.orderDate, new Date())) : null;
+
+  const shortageLine = minimumState.minimum === null
+    ? minimumState.label
+    : `${formatNumber(shortage(minimumState.minimum, projection.physicalAvailable) ?? 0)} ${baseProduct.unit}`;
+
   return (
-    <Dialog open={true} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader className="pr-8 text-center sm:text-center">
-          <DialogTitle className="text-center">Projeção Rápida: {baseProduct.name}</DialogTitle>
-          <DialogDescription className="text-center">
-            Simulação de cobertura baseada na média histórica da rede. A meta operacional aparece separadamente.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-            <p className="rounded-md border p-2 text-sm" role={policyEnabled === null ? 'alert' : undefined}>{policyEnabled === null && policyError ? 'Política indisponível. ' : ''}Meta operacional: {minimumState.minimum === null ? minimumState.label : `${formatNumber(minimumState.minimum)} ${baseProduct.unit}`}{minimumState.minimum !== null ? ` · falta física ${formatNumber(shortage(minimumState.minimum, projection.physicalAvailable) ?? 0)} ${baseProduct.unit}` : ''}</p>
-            <Card className="bg-muted/50">
-                <CardContent className="grid grid-cols-2 place-items-center gap-3 p-3 text-center text-sm">
-                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Estoque atual: <strong>{formatNumber(projection.totalStock)} {baseProduct.unit}</strong></span></div>
-                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Média diária: <strong>{formatNumber(projection.dailyAvg)} {baseProduct.unit}</strong></span></div>
-                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Cobertura: <strong>{isFinite(projection.daysOfCoverage) ? `${projection.daysOfCoverage} dias` : 'N/A'}</strong></span></div>
-                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Lead Time: <strong>{projection.leadTime || 0} dias</strong></span></div>
-                </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-2 gap-4">
-                <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-base flex items-center justify-between">Prazo simulado {getOrderStatusBadge()}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 space-y-2">
-                        <div className="flex items-center gap-2"><BellRing className="h-5 w-5 text-destructive" /><span className="font-semibold">Pedir até: {projection.orderDate ? format(projection.orderDate, 'dd/MM/yyyy') : 'N/A'}</span></div>
-                        <div className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /><span>Ruptura em: {projection.ruptureDate ? format(projection.ruptureDate, 'dd/MM/yyyy') : 'N/A'}</span></div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-base flex items-center justify-between">Quantidade simulada</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 space-y-2">
-                        <div className="flex items-center gap-2"><ShoppingCart className="h-5 w-5 text-primary" /><span className="font-semibold text-xl">{formatNumber(projection.suggestedOrderQty)} {baseProduct.unit}</span></div>
-                        {projection.logisticInfo && (
-                            <p className="text-xs text-muted-foreground pt-1">
-                                (equivale a ~{formatNumber(projection.logisticInfo.quantity)} {projection.logisticInfo.label}(s))
-                            </p>
-                        )}
-                        <div className="text-sm">Para cobrir {coverageMonths} mês(es) de consumo.</div>
-                        {projection.finalConsumptionDate && (
-                            <div className="flex items-center gap-2 text-sm"><CalendarDays className="h-4 w-4 text-muted-foreground" /><span>Consumo até: {format(projection.finalConsumptionDate, 'dd/MM/yyyy')}</span></div>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-            
-            <div>
-              <Label>Ajustar cobertura do pedido</Label>
-              <div className="flex items-center gap-4 mt-2">
-                <Slider defaultValue={[coverageMonths]} min={0.5} max={3} step={0.5} onValueChange={(value) => setCoverageMonths(value[0])} />
-                <span className="font-bold w-20 text-center">{coverageMonths} mês(es)</span>
-              </div>
-            </div>
+    <LotModalShell
+      open
+      onOpenChange={onOpenChange}
+      title={`Projeção rápida: ${baseProduct.name}`}
+      description="Simulação de cobertura baseada na média histórica da rede."
+      width={900}
+      sidebarWidth={280}
+      sidebar={
+        <>
+          <ShellEyebrow>Projeção rápida · Matriz</ShellEyebrow>
+          <h2 className="m-0 text-2xl font-extrabold tracking-[-.03em]">{baseProduct.name}</h2>
+          <span className="text-[12.5px] leading-normal text-[#a3a2ad]">
+            Estoque do Centro de Distribuição contra a média de consumo da rede. A meta operacional aparece separadamente.
+          </span>
+          <ShellFacts
+            rows={[
+              { label: 'Estoque atual', value: `${formatNumber(projection.totalStock)} ${baseProduct.unit}` },
+              { label: 'Média diária', value: `${formatNumber(projection.dailyAvg)} ${baseProduct.unit}` },
+              { label: 'Cobertura', value: coverageDays !== null ? `${coverageDays} dias` : 'N/A' },
+              { label: 'Lead time', value: `${projection.leadTime || 0} dias` },
+              { label: 'Meta operacional', value: minimumState.minimum === null ? minimumState.label : `${formatNumber(minimumState.minimum)} ${baseProduct.unit}` },
+            ]}
+          />
+          {minimumState.minimum !== null && (
+            <span className="text-[12.5px] text-[#a3a2ad]">Falta física pela meta: <b className="text-[#f3f2ee]">{shortageLine}</b></span>
+          )}
+          {policyEnabled === null && policyError && (
+            <span role="alert" className="rounded-xl border border-[#f5d9a3]/40 bg-[#f5d9a3]/10 px-3 py-2 text-xs text-[#f5d9a3]">Política indisponível.</span>
+          )}
+        </>
+      }
+      footer={
+        <>
+          <button type="button" onClick={handleCopySummary} className="h-11 whitespace-nowrap rounded-xl border border-[#dcd9d1] bg-white px-4 text-[13.5px] font-bold hover:bg-[#f6f4ef]">
+            Copiar resumo
+          </button>
+          <div className="flex gap-2.5">
+            <CancelButton onClick={() => onOpenChange(false)}>Fechar</CancelButton>
+            <PrimaryButton type="button" onClick={handleViewFullProjection}>Ver projeção completa →</PrimaryButton>
+          </div>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2.5 rounded-[18px] border border-[#e3dfd6] bg-white p-[18px]">
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-extrabold uppercase tracking-[.12em] text-[#9a9ba1]">Quando pedir</span>
+            <span className={cn('inline-flex h-[21px] items-center whitespace-nowrap rounded-full px-[9px] text-[11.5px] font-bold', statusPill.className)}>{statusPill.label}</span>
+          </span>
+          <span className="text-[30px] font-extrabold tracking-[-.03em]">{fmtDate(projection.orderDate)}</span>
+          <span className="text-[12.5px] text-[#70757d]">Ruptura em <b className="text-[#1a1b1f]">{fmtDate(projection.ruptureDate)}</b> · lead time de {projection.leadTime || 0} dias</span>
         </div>
+        <div className="flex flex-col gap-2.5 rounded-[18px] border border-[#e3dfd6] bg-white p-[18px]">
+          <span className="text-[10.5px] font-extrabold uppercase tracking-[.12em] text-[#9a9ba1]">Quanto pedir</span>
+          <span className="text-[30px] font-extrabold tracking-[-.03em]">{formatNumber(projection.suggestedOrderQty)} {baseProduct.unit}</span>
+          <span className="text-[12.5px] text-[#70757d]">
+            {projection.logisticInfo ? <>≈ {formatNumber(projection.logisticInfo.quantity)} {projection.logisticInfo.label}(s) · </> : null}
+            dura até <b className="text-[#1a1b1f]">{fmtDate(projection.finalConsumptionDate)}</b>
+          </span>
+        </div>
+      </div>
 
-        <DialogFooter className="justify-between pt-4 border-t">
-          <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={handleCopySummary}><Copy className="h-4 w-4"/></Button>
+      <div className="flex flex-col gap-2.5">
+        <span className="flex justify-between text-xs font-bold text-[#4a4f57]">Cobertura do pedido <b className="text-[13px] text-[#1a1b1f]">{monthsLabel}</b></span>
+        <div className="flex flex-wrap gap-1.5">
+          {COVERAGE_OPTIONS.map(option => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setCoverageMonths(option)}
+              className={cn(
+                'h-10 whitespace-nowrap rounded-full px-4 text-[13px] font-bold',
+                coverageMonths === option ? 'border-2 border-[#5b5bd6] bg-[#eeeefc] text-[#3f3fb0]' : 'border border-[#dcd9d1] bg-white text-[#4a4f57] hover:bg-[#f6f4ef]',
+              )}
+            >
+              {option.toLocaleString('pt-BR')} {option === 1 ? 'mês' : 'meses'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-[10.5px] font-extrabold uppercase tracking-[.12em] text-[#9a9ba1]">Linha do tempo</span>
+        {coverageDays === null ? (
+          <span className="rounded-xl border border-dashed border-[#d6d2c8] px-3.5 py-3 text-[12.5px] text-[#70757d]">Sem consumo registrado: não há como projetar a ruptura.</span>
+        ) : (
+          <div className="relative mt-2.5 h-11">
+            <div className="absolute inset-x-0 top-3 h-2 rounded-[9px] bg-[#ebe7df]" />
+            <div className="absolute left-0 top-3 h-2 rounded-[9px] bg-[#15151c]" style={{ width: pct(coverageDays) }} />
+            {newStockDays > 0 && (
+              <div className="absolute top-3 h-2 rounded-[9px] bg-[#5b5bd6]" style={{ left: pct(coverageDays), width: pct(newStockDays) }} />
+            )}
+            {orderDays !== null && <div className="absolute top-2 h-4 w-[3px] -translate-x-1/2 rounded bg-[#e0457f]" style={{ left: pct(orderDays) }} />}
+            <span className="absolute left-0 top-[26px] text-[11px] text-[#70757d]">Hoje</span>
+            {orderDays !== null && <span className="absolute top-[26px] -translate-x-1/2 text-[11px] font-bold text-[#e0457f]" style={{ left: pct(orderDays) }}>Pedir</span>}
+            <span className="absolute top-[26px] -translate-x-1/2 text-[11px] text-[#70757d]" style={{ left: pct(coverageDays) }}>Ruptura</span>
           </div>
-          <div className="flex gap-2">
-             <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-             <Button onClick={handleViewFullProjection}>Ver Projeção Completa</Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        )}
+        <div className="flex gap-4 text-[11.5px] text-[#70757d]">
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px] bg-[#15151c]" />Estoque atual</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px] bg-[#5b5bd6]" />Pedido sugerido</span>
+        </div>
+      </div>
+    </LotModalShell>
   );
 }

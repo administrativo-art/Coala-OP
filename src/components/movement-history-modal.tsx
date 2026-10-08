@@ -6,24 +6,17 @@ import { useMemo, useState, useEffect } from 'react';
 import { DateRange } from 'react-day-picker';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { History, ArrowRight, ArrowDownUp, Download, ChevronsUpDown, CalendarIcon, Search } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { CalendarIcon, Search } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useAuth } from '@/hooks/use-auth';
 import { type MovementRecord, type MovementType } from '@/types';
-import { Badge } from './ui/badge';
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Input } from './ui/input';
-import { Card, CardContent } from './ui/card';
 
 const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
     'ENTRADA': { label: 'Entrada', color: 'bg-green-100 text-green-800' },
@@ -206,138 +199,139 @@ export function MovementHistoryModal({
   const unitSuffix = baseProductForTotals ? ` ${baseProductForTotals.unit}` : '';
 
 
+  const tonePill = (type: string) => {
+    if (type.includes('ESTORNO')) return 'bg-[#eeeefc] text-[#3f3fb0]';
+    if (type.includes('TRANSFERENCIA')) return 'bg-[#eef3fe] text-[#1d4ed8]';
+    if (type.startsWith('ENTRADA')) return 'bg-[#e8f5ee] text-[#15803d]';
+    return 'bg-[#ffe4e8] text-[#be123c]';
+  };
+  const GRID = 'grid grid-cols-[120px_minmax(0,1.6fr)_190px_170px_90px_110px] gap-3';
+  const SORTABLE: { key: SortKey; label: string; className?: string }[] = [
+    { key: 'timestamp', label: 'Data' },
+    { key: 'productName', label: 'Produto / lote' },
+    { key: 'type', label: 'Tipo' },
+    { key: 'fromKioskId', label: 'Quiosque' },
+    { key: 'quantityChange', label: 'Qtd.', className: 'text-right' },
+    { key: 'username', label: 'Usuário' },
+  ];
+  const DARK_SELECT = 'h-[42px] rounded-xl border border-white/10 bg-white/[.07] px-3 text-[13px] font-semibold text-white outline-none focus:border-[#f08bb1] [&>option]:text-[#1a1b1f]';
+  const totals = [
+    { label: 'Total de entradas', hint: 'Compras + divergência acréscimo + estorno (devolve)', value: totalEntradas, color: '#4ade80' },
+    { label: 'Total em transferências', hint: 'Movido entre unidades', value: totalTransferencias, color: '#93b4ff' },
+    { label: 'Total de saídas', hint: 'Consumo + descarte + divergência decréscimo + estorno (retira)', value: totalSaidas, color: '#fb7185' },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-7xl sm:max-w-7xl h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Auditoria de movimentações</DialogTitle>
-          <DialogDescription>
-            Consulte o histórico completo de todas as entradas, saídas, ajustes e transferências de estoque.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        hideClose
+        flush
+        className="flex h-[min(760px,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden rounded-[26px] border-0 bg-[#faf9f6] shadow-[0_30px_80px_rgba(21,21,28,.3)] sm:w-[calc(100vw-2rem)] sm:max-w-[1120px] sm:rounded-[26px]"
+      >
+        <DialogTitle className="sr-only">Auditoria de movimentações</DialogTitle>
+        <DialogDescription className="sr-only">Consulte o histórico completo de entradas, saídas, ajustes e transferências de estoque.</DialogDescription>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-grow">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar produto, lote, usuário, observação..." className="pl-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <div className="flex flex-col gap-4 bg-[#15151c] px-7 py-[22px] text-[#f3f2ee]">
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex flex-col gap-1.5">
+              <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">Consultar histórico</span>
+              <span className="text-[22px] font-extrabold tracking-[-.02em]">Auditoria de movimentações</span>
+            </span>
+            <button type="button" onClick={() => onOpenChange(false)} aria-label="Fechar" className="h-[34px] w-[34px] rounded-[10px] border border-white/15 text-base text-[#c8c7d0] hover:bg-white/10">×</button>
+          </div>
+          <div className="grid grid-cols-1 overflow-hidden rounded-[14px] border border-white/10 bg-white/5 md:grid-cols-3">
+            {totals.map((total, index) => (
+              <div key={total.label} className={cn('flex flex-col gap-[3px] px-4 py-3.5', index > 0 && 'md:border-l md:border-white/10')}>
+                <span className="text-xs font-bold text-[#c8c7d0]">{total.label}</span>
+                <span className="text-[11px] leading-[1.4] text-[#8e8d99]">{total.hint}</span>
+                <span className="mt-1 text-[26px] font-extrabold tracking-[-.03em]" style={{ color: total.color }}>{total.value.toLocaleString('pt-BR')}{unitSuffix}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex h-[42px] min-w-[240px] flex-1 items-center gap-2.5 rounded-xl border border-white/10 bg-white/[.07] px-3.5">
+              <Search className="h-4 w-4 shrink-0 text-[#8e8d99]" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar produto, lote, usuário, observação…"
+                className="min-w-0 flex-1 border-none bg-transparent text-[13.5px] text-white outline-none placeholder:text-[#8e8d99]"
+              />
             </div>
             <Popover>
-                <PopoverTrigger asChild>
-                    <Button id="date" variant="outline" className={cn("w-full sm:w-[300px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Selecione uma data</span>}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
-                </PopoverContent>
+              <PopoverTrigger asChild>
+                <button type="button" className={cn(DARK_SELECT, 'flex items-center gap-2 whitespace-nowrap')}>
+                  <CalendarIcon className="h-4 w-4 text-[#8e8d99]" />
+                  {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM/yy')} – ${format(dateRange.to, 'dd/MM/yy')}` : format(dateRange.from, 'dd/MM/yy')) : 'Todo o período'}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} locale={ptBR} />
+              </PopoverContent>
             </Popover>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-[220px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Todos os Tipos</SelectItem>
-                    {Object.entries(MOVEMENT_TYPE_CONFIG).map(([key, {label}]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
-                </SelectContent>
-            </Select>
-            <Select value={kioskFilter} onValueChange={setKioskFilter}>
-                <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="Todos os quiosques" /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Todos os Quiosques</SelectItem>
-                    {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-                </SelectContent>
-            </Select>
+            <select aria-label="Tipo de movimentação" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className={DARK_SELECT}>
+              <option value="all">Todos os tipos</option>
+              {Object.entries(MOVEMENT_TYPE_CONFIG).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+            <select aria-label="Quiosque" value={kioskFilter} onChange={(event) => setKioskFilter(event.target.value)} className={DARK_SELECT}>
+              <option value="all">Todos os quiosques</option>
+              {kiosks.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+            </select>
+          </div>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-green-500/30"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Entradas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Compras + Divergência acréscimo + Estorno (devolve)</p><p className="text-2xl font-bold text-green-600">{totalEntradas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total em Transferências</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Movido entre unidades</p><p className="text-2xl font-bold">{totalTransferencias.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-            <Card className="border-red-500/30"><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Saídas</p><p className="text-[10px] text-muted-foreground/70 leading-tight mb-1">Consumo + Descarte + Divergência decréscimo + Estorno (retira)</p><p className="text-2xl font-bold text-red-600">{totalSaidas.toLocaleString('pt-BR')}{unitSuffix}</p></CardContent></Card>
-        </div>
-        
-        <div className="flex-grow min-h-0 overflow-auto border rounded-lg">
-              {loading ? (
-                  <div className="p-4"><Skeleton className="h-64 w-full" /></div>
-              ) : (
-                  <Table className="min-w-[820px]">
-                      <TableHeader className="sticky top-0 bg-muted z-10">
-                      <TableRow>
-                          {['timestamp', 'productName', 'type', 'quantityChange', 'fromKioskId', 'username', 'notes'].map(key => {
-                              const labels: Record<string, string> = { timestamp: 'Data', productName: 'Produto / Lote', lotNumber: 'Lote', type: 'Tipo', fromKioskId: 'Quiosque', quantityChange: 'Qtd.', username: 'Usuário', notes: 'Observação' };
-                              return (
-                                  <TableHead key={key} className="cursor-pointer whitespace-nowrap hover:bg-muted-foreground/10" onClick={() => handleSort(key as SortKey)}>
-                                      <div className="flex items-center gap-2">
-                                          {labels[key]}
-                                          {sortKey === key && <ArrowDownUp className="h-3 w-3" />}
-                                      </div>
-                                  </TableHead>
-                              )
-                          })}
-                      </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                      {enrichedHistory.length > 0 ? enrichedHistory.map((item) => {
-                          let kioskDisplay = '';
-                          const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
 
-                           if (item.type?.includes('TRANSFERENCIA')) {
-                                kioskDisplay = `${item.fromKioskName || ''} → ${item.toKioskName || ''}`;
-                            } else {
-                                kioskDisplay = item.kioskName || 'N/A';
-                            }
-                          
-                          return (
-                              <TableRow key={item.id}>
-                                  <TableCell className="text-xs font-semibold whitespace-nowrap">{timestampDate && isValid(timestampDate) ? format(timestampDate, "dd/MM/yy HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
-                                  <TableCell>
-                                      <TooltipProvider><Tooltip><TooltipTrigger>
-                                          <p className="font-medium truncate max-w-[260px] text-left">{item.productName}</p>
-                                      </TooltipTrigger><TooltipContent><p>{item.productName}</p></TooltipContent></Tooltip></TooltipProvider>
-                                      <p className="text-[10px] text-muted-foreground">Lote {item.lotNumber || '—'}</p>
-                                  </TableCell>
-                                  <TableCell className="whitespace-nowrap">
-                                      {item.type && MOVEMENT_TYPE_CONFIG[item.type] ? (() => {
-                                          let label = MOVEMENT_TYPE_CONFIG[item.type].label;
-                                          let color = MOVEMENT_TYPE_CONFIG[item.type].color;
-
-                                          if (item.type.includes('TRANSFERENCIA') && kioskFilter !== 'all') {
-                                              if (item.toKioskId === kioskFilter) {
-                                                  label = 'Transferência (Entrada)';
-                                                  color = 'bg-blue-100 text-blue-800';
-                                              } else if (item.fromKioskId === kioskFilter) {
-                                                  label = 'Transferência (Saída)';
-                                                  color = 'bg-blue-100 text-blue-800';
-                                              }
-                                          }
-
-                                          return (
-                                              <Badge className={cn("text-xs", color)}>
-                                                  {label}
-                                              </Badge>
-                                          );
-                                      })() : (
-                                          <Badge variant="secondary">{item.type || 'N/A'}</Badge>
-                                      )}
-                                  </TableCell>
-                                  <TableCell className="text-right font-bold whitespace-nowrap">{(Number(item.quantityChange) || 0).toLocaleString('pt-BR')}</TableCell>
-                                  <TableCell className="text-xs whitespace-nowrap">{kioskDisplay}</TableCell>
-                                  <TableCell className="whitespace-nowrap">{item.username}</TableCell>
-                                  <TableCell className="text-xs text-muted-foreground italic">{item.notes}</TableCell>
-                              </TableRow>
-                          )
-                      }) : (
-                          <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum registro encontrado com os filtros atuais.</TableCell></TableRow>
-                      )}
-                      </TableBody>
-                  </Table>
-              )}
-        </div>
-        <DialogFooter className="pt-4 border-t shrink-0 flex-row justify-between w-full">
-            <p className="text-sm text-muted-foreground">Página {currentPage} de {totalPages}</p>
-            <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Anterior</Button>
-                <Button variant="outline" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages}>Próxima</Button>
+        <div className="min-h-0 flex-1 overflow-auto px-7">
+          {loading ? (
+            <div className="py-4"><Skeleton className="h-64 w-full" /></div>
+          ) : (
+            <div className="min-w-[860px]">
+              <div className={cn(GRID, 'sticky top-0 z-10 border-b border-[#e3dfd6] bg-[#faf9f6] py-3 text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]')}>
+                {SORTABLE.map(column => (
+                  <button key={column.key} type="button" onClick={() => handleSort(column.key)} className={cn('flex items-center gap-1 text-left uppercase', column.className === 'text-right' && 'justify-end')}>
+                    {column.label}
+                    {sortKey === column.key && <span aria-hidden>{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                  </button>
+                ))}
+              </div>
+              {enrichedHistory.map((item) => {
+                const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
+                const isTransfer = item.type?.includes('TRANSFERENCIA');
+                const kioskDisplay = isTransfer ? `${item.fromKioskName || ''} → ${item.toKioskName || ''}` : item.kioskName || 'N/A';
+                const config = item.type ? MOVEMENT_TYPE_CONFIG[item.type] : undefined;
+                let label = config?.label ?? item.type ?? 'N/A';
+                if (isTransfer && kioskFilter !== 'all') {
+                  if (item.toKioskId === kioskFilter) label = 'Transferência (Entrada)';
+                  else if (item.fromKioskId === kioskFilter) label = 'Transferência (Saída)';
+                }
+                const quantity = Number(item.quantityChange) || 0;
+                const positive = String(item.type).startsWith('ENTRADA') || item.type === 'SAIDA_ESTORNO';
+                return (
+                  <div key={item.id} className={cn(GRID, 'items-center border-b border-[#f1eee8] py-[11px] text-[12.5px]')}>
+                    <span className="font-mono text-[11.5px] text-[#70757d]">{timestampDate && isValid(timestampDate) ? format(timestampDate, 'dd/MM/yy HH:mm', { locale: ptBR }) : 'N/A'}</span>
+                    <span className="flex min-w-0 flex-col gap-px">
+                      <b className="truncate text-[13px]" title={item.productName}>{item.productName}</b>
+                      <span className="flex gap-1.5 font-mono text-[11px] text-[#9a9ba1]">Lote {item.lotNumber || '—'}{item.notes ? <span className="truncate font-sans italic">· {item.notes}</span> : null}</span>
+                    </span>
+                    <span className={cn('inline-flex min-h-[22px] w-max max-w-full items-center rounded-full px-[9px] py-0.5 text-[11.5px] font-bold leading-[1.3]', item.type ? tonePill(item.type) : 'bg-[#eceae5] text-[#70757d]')}>{label}</span>
+                    <span className="text-[#4a4f57]">{kioskDisplay}</span>
+                    <span className={cn('text-right font-mono text-[13px] font-bold', positive ? 'text-[#15803d]' : 'text-[#be123c]')}>{quantity.toLocaleString('pt-BR')}</span>
+                    <span className="truncate text-[#4a4f57]">{item.username}</span>
+                  </div>
+                );
+              })}
+              {enrichedHistory.length === 0 && <div className="p-10 text-center text-[13px] text-[#70757d]">Nenhum registro encontrado com os filtros atuais.</div>}
             </div>
-        </DialogFooter>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-[#e6e2da] bg-[#faf9f6] px-7 py-4">
+          <button type="button" onClick={() => onOpenChange(false)} className="h-11 rounded-xl px-3.5 text-[13.5px] font-bold text-[#70757d] hover:bg-[#f0eee9] hover:text-[#1a1b1f]">Fechar</button>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12.5px] text-[#70757d]">Página {currentPage} de {totalPages} · {totalRecords.toLocaleString('pt-BR')} registros</span>
+            <button type="button" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} className="h-10 rounded-xl border border-[#dcd9d1] bg-white px-3.5 text-[13px] font-bold disabled:opacity-50">Anterior</button>
+            <button type="button" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages} className="h-10 rounded-xl border border-[#dcd9d1] bg-white px-3.5 text-[13px] font-bold disabled:opacity-50">Próxima</button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
