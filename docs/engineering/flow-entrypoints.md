@@ -1360,7 +1360,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 213.
+Arquivos locais percorridos: 214.
 
 Chamadas candidatas encontradas:
 
@@ -1730,7 +1730,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx), [`src/app/dashboard/inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx), [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx), [`src/app/dashboard/stock/transfer/page.tsx`](../../src/app/dashboard/stock/transfer/page.tsx), [`src/app/dashboard/stock/write-down/page.tsx`](../../src/app/dashboard/stock/write-down/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 58.
 
 Chamadas candidatas encontradas:
 

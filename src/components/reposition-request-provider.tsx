@@ -67,7 +67,7 @@ export function RepositionRequestProvider({ children }: { children: React.ReactN
   }, [pathname, permissions?.stock?.analysis?.restock, firebaseUser]);
 
   const createRequest = useCallback(
-    async (data: Pick<RepositionRequest, "kioskId" | "kioskName" | "items" | "notes">) => {
+    async (data: Pick<RepositionRequest, "kioskId" | "items" | "notes">) => {
       if (!firebaseUser) return null;
       const payload = await createRepositionRequest(firebaseUser, data);
       setRequests((current) =>
@@ -82,7 +82,7 @@ export function RepositionRequestProvider({ children }: { children: React.ReactN
   );
 
   const updateRequest = useCallback(
-    async (requestId: string, updates: Partial<RepositionRequest>) => {
+    async (requestId: string, updates: { status: "Cancelada" }) => {
       if (!firebaseUser) return;
       const payload = await updateRepositionRequestRequest(firebaseUser, requestId, updates);
       setRequests((current) =>

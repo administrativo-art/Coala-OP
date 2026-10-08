@@ -9,6 +9,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasActiveAccount() {
+      let account = isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+      return isAuthenticated()
+        && account.get('isActive', true) != false
+        && account.get('sessionVersion', 0) == request.auth.token.get('sessionVersion', 0);
+    }
+
     function hasCurrentProfileCompliance() {
       let compliance = isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -19,7 +29,7 @@ service cloud.firestore {
     }
 
     function isAuth() {
-      return isAuthenticated() && hasCurrentProfileCompliance();
+      return hasActiveAccount() && hasCurrentProfileCompliance();
     }
 
     function isAdmin() {
@@ -270,7 +280,7 @@ service cloud.firestore {
     // Usuários: escrita somente via APIs/Cloud Functions.
     match /users/{userId} {
       // O diretório de terceiros é servido pela API, que aplica o escopo de unidades.
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if hasActiveAccount() && request.auth.uid == userId;
       allow write: if false;
     }
 

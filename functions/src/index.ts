@@ -11,6 +11,7 @@ import { reconciliationDates } from './pdv-reconciliation-policy.js';
 import { PDVLEGAL_SECRET_NAMES } from './pdv-secret-contract.js';
 import { randomUUID } from 'node:crypto';
 import { applyUserTerminationEffects } from './user-termination-effects.js';
+import { assertActiveSession } from './active-session.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
@@ -60,6 +61,18 @@ const DEV_DELETE_USER_UIDS = new Set(
     .map((uid) => uid.trim())
     .filter(Boolean)
 );
+
+function storedSessionVersion(value: unknown) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+async function writeSessionClaim(userId: string, sessionVersion: number) {
+  const user = await auth.getUser(userId);
+  await auth.setCustomUserClaims(userId, {
+    ...(user.customClaims ?? {}),
+    sessionVersion,
+  });
+}
 
 function getBrtDate(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BRT, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -864,6 +877,7 @@ export const syncGoalsForRange = onCall(
   },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    await assertActiveSession(db, request.auth);
 
     // Verifica permissão: admin customClaim OU settings.manageUsers no perfil
     const token = request.auth.token;
@@ -950,6 +964,7 @@ export const createUser = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');
     }
+    await assertActiveSession(db, request.auth);
     
     // Verifica se é admin via claims
     if (!request.auth.token.isDefaultAdmin) {
@@ -1014,6 +1029,7 @@ export const deleteUser = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Não autenticado.');
     }
+    await assertActiveSession(db, request.auth);
     if (!DEV_DELETE_USER_UIDS.has(request.auth.uid)) {
       throw new HttpsError('permission-denied', 'Exclusão permanente restrita ao acesso técnico.');
     }
@@ -1044,6 +1060,7 @@ export const terminateUser = onCall(
   { cors: internalAppCors },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    await assertActiveSession(db, request.auth);
     if (!(await canManageUserAccess(request.auth.token))) {
       throw new HttpsError('permission-denied', 'Sem permissão para desligar usuários.');
     }
@@ -1063,10 +1080,6 @@ export const terminateUser = onCall(
     }
 
     try {
-      // 1. Desativa no Firebase Auth para bloquear login sem perder o UID.
-      await auth.updateUser(uid, { disabled: true });
-
-      // 2. Mantém o documento no Firestore marcado como inativo.
       const nowIso = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
         isActive: false,
@@ -1082,8 +1095,31 @@ export const terminateUser = onCall(
           employmentRelationshipType: targetSnapshot.get('employmentRelationshipType') ?? null,
         }),
       };
+      const sessionVersion = await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(targetRef);
+        if (!current.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
+        const nextVersion = storedSessionVersion(current.get('sessionVersion')) + 1;
+        transaction.update(targetRef, { ...updatePayload, sessionVersion: nextVersion });
+        return nextVersion;
+      });
 
-      await targetRef.update(updatePayload);
+      await Promise.all([
+        auth.updateUser(uid, { disabled: true }),
+        auth.revokeRefreshTokens(uid),
+        writeSessionClaim(uid, sessionVersion),
+        hrDb.collection('rh_access_cache').doc(uid).set({
+          status: 'inactive',
+          is_active: false,
+          session_version: sessionVersion,
+          access_revoked_at: nowIso,
+          updated_at: FieldValue.serverTimestamp(),
+        }, { merge: true }),
+        financialDb.collection('users').doc(uid).set({
+          active: false,
+          sessionVersion,
+          syncedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }),
+      ]);
 
       return { success: true };
     } catch (error: any) {
@@ -1098,6 +1134,7 @@ export const reactivateUser = onCall(
   { cors: internalAppCors },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    await assertActiveSession(db, request.auth);
     if (!(await canManageUserAccess(request.auth.token))) {
       throw new HttpsError('permission-denied', 'Sem permissão para reativar usuários.');
     }
@@ -1105,32 +1142,53 @@ export const reactivateUser = onCall(
     const { uid } = request.data;
     if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
 
+    const targetRef = db.collection('users').doc(uid);
+    const targetSnapshot = await targetRef.get();
+    if (!targetSnapshot.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
+    const sessionVersion = storedSessionVersion(targetSnapshot.get('sessionVersion'));
+
     try {
+      await writeSessionClaim(uid, sessionVersion);
       await auth.updateUser(uid, { disabled: false });
 
-      await db.collection('users').doc(uid).update({
-        isActive: true,
-        inactivationType: FieldValue.delete(),
-        terminationDate: FieldValue.delete(),
-        terminationReason: FieldValue.delete(),
-        terminationCause: FieldValue.delete(),
-        terminationNotes: FieldValue.delete(),
-        terminationRelationshipType: FieldValue.delete(),
-        terminationProcessId: FieldValue.delete(),
-        employmentStatus: 'active',
-        terminationEffectsVersion: FieldValue.delete(),
-        terminationEffectsAppliedAt: FieldValue.delete(),
-        terminationEffectsReportPath: FieldValue.delete(),
-        inactivationHistory: FieldValue.arrayUnion({
-          type: 'reactivation',
-          at: new Date().toISOString(),
-          actorUid: request.auth.uid,
-          reason: 'Reativação/recontratação',
-          cause: null,
-          notes: null,
-          terminationDate: null,
+      const nowIso = new Date().toISOString();
+      await Promise.all([
+        targetRef.update({
+          isActive: true,
+          inactivationType: FieldValue.delete(),
+          terminationDate: FieldValue.delete(),
+          terminationReason: FieldValue.delete(),
+          terminationCause: FieldValue.delete(),
+          terminationNotes: FieldValue.delete(),
+          terminationRelationshipType: FieldValue.delete(),
+          terminationProcessId: FieldValue.delete(),
+          employmentStatus: 'active',
+          terminationEffectsVersion: FieldValue.delete(),
+          terminationEffectsAppliedAt: FieldValue.delete(),
+          terminationEffectsReportPath: FieldValue.delete(),
+          inactivationHistory: FieldValue.arrayUnion({
+            type: 'reactivation',
+            at: nowIso,
+            actorUid: request.auth.uid,
+            reason: 'Reativação/recontratação',
+            cause: null,
+            notes: null,
+            terminationDate: null,
+          }),
         }),
-      });
+        hrDb.collection('rh_access_cache').doc(uid).set({
+          status: 'active',
+          is_active: true,
+          session_version: sessionVersion,
+          access_reactivated_at: nowIso,
+          updated_at: FieldValue.serverTimestamp(),
+        }, { merge: true }),
+        financialDb.collection('users').doc(uid).set({
+          active: true,
+          sessionVersion,
+          syncedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }),
+      ]);
 
       const employees = await hrDb.collection('employees').where('auth_uid', '==', uid).get();
       const employeeWrites = hrDb.batch();
@@ -1191,7 +1249,18 @@ export const onUserProfileChange = onDocumentWritten(
     const profileSnap = await db.collection('profiles').doc(profileId).get();
     const isDefaultAdmin = profileSnap.exists && profileSnap.data()?.isDefaultAdmin === true;
 
-    await auth.setCustomUserClaims(userId, { profileId, isDefaultAdmin });
+    const sessionVersion = storedSessionVersion(userData.sessionVersion);
+    await Promise.all([
+      auth.setCustomUserClaims(userId, { profileId, isDefaultAdmin, sessionVersion }),
+      financialDb.collection('users').doc(userId).set({
+        profileId,
+        active: userData.isActive !== false && userData.active !== false,
+        isDefaultAdmin,
+        permissions: profileSnap.data()?.permissions?.financial ?? { view: false },
+        sessionVersion,
+        syncedAt: FieldValue.serverTimestamp(),
+      }, { merge: true }),
+    ]);
     console.log(`✅ Claims atualizados: ${userId} profileId=${profileId} isDefaultAdmin=${isDefaultAdmin}`);
   }
 );
@@ -1217,13 +1286,15 @@ export const onProfileChange = onDocumentWritten(
 
     const promises = usersSnap.docs.map(async (userDoc) => {
       const active = userDoc.data().isActive !== false && userDoc.data().active !== false;
+      const sessionVersion = storedSessionVersion(userDoc.data().sessionVersion);
       await Promise.all([
-        auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin }),
+        auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin, sessionVersion }),
         financialDb.collection('users').doc(userDoc.id).set({
           profileId,
           active,
           isDefaultAdmin,
           permissions: financialPermissions,
+          sessionVersion,
           syncedAt: FieldValue.serverTimestamp(),
         }, { merge: true }),
       ]);

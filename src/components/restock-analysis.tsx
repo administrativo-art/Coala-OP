@@ -278,7 +278,6 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
     try {
       const requestId = await createRepositionRequest({
         kioskId: destinationKiosk.id,
-        kioskName: destinationKiosk.name,
         items: requestItems,
       });
       if (!requestId) throw new Error("A criação da solicitação falhou e não retornou um ID.");

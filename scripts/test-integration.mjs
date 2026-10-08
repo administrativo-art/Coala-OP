@@ -77,8 +77,8 @@ const child = spawn(
     "--config",
     "firebase.test.json",
     "--only",
-    "firestore",
-    "node --conditions=react-server --import tsx --test --test-concurrency=1 tests/integration/cash-closure-repository.test.mjs tests/integration/dp-day-off-publication.test.mjs tests/integration/pdv-sales-reconciliation.test.mjs tests/integration/financial-budgets.test.mjs tests/integration/financial-paid-beneficiary-review.test.mjs tests/integration/cash-withdrawal-classification.test.mjs tests/integration/acquirer-fees.test.mjs tests/integration/dre-cmv-closure.test.mjs tests/integration/stone-pix-request.test.mjs tests/integration/pdv-stone-review-state.test.mjs tests/integration/replenishment-notices.test.mjs",
+    "firestore,auth",
+    "node --conditions=react-server --import tsx --test --test-concurrency=1 tests/integration/cash-closure-repository.test.mjs tests/integration/dp-day-off-publication.test.mjs tests/integration/pdv-sales-reconciliation.test.mjs tests/integration/financial-budgets.test.mjs tests/integration/financial-paid-beneficiary-review.test.mjs tests/integration/cash-withdrawal-classification.test.mjs tests/integration/acquirer-fees.test.mjs tests/integration/dre-cmv-closure.test.mjs tests/integration/stone-pix-request.test.mjs tests/integration/pdv-stone-review-state.test.mjs tests/integration/replenishment-notices.test.mjs tests/integration/first-access-consumption.test.mjs && node --import tsx --test --test-concurrency=1 tests/integration/reposition-request-scope.test.mjs",
   ],
   { env, shell: process.platform === "win32", stdio: "inherit" },
 );

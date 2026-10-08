@@ -7,8 +7,13 @@ import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { canReceivePurchase } from "@/lib/purchasing-permissions";
-import { canAccessAnyUnit } from "@/lib/unit-access";
+import { canAccessAnyUnit, canAccessUnit } from "@/lib/unit-access";
 import { type OperationalUploadKind } from "@/lib/operational-upload-client";
+import { WORKSPACE_ID } from "@/lib/workspace";
+import { AppError } from "@/lib/observability/app-error";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +25,12 @@ const ALLOWED_KINDS = new Set<OperationalUploadKind>([
   "dispatch-document",
   "purchase-receipt",
 ]);
+
+type UploadInput = {
+  kind: OperationalUploadKind;
+  targetId: string;
+  file: File;
+};
 
 function sanitizeSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 160);
@@ -72,27 +83,100 @@ async function assertTargetAccess(
 ) {
   if (kind === "purchase-receipt") {
     if (!context.isDefaultAdmin && !canReceivePurchase(context.permissions)) {
-      throw new Error("Sem permissão para anexar comprovantes de recebimento.");
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para anexar comprovantes de recebimento." });
     }
     const target = await dbAdmin.collection("purchase_receipts").doc(targetId).get();
-    if (!target.exists) throw new Error("Recebimento não encontrado.");
+    if (!target.exists) throw new AppError({ code: "OPERATIONAL_UPLOAD_TARGET_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Recebimento não encontrado." });
+    const receipt = target.data() ?? {};
+    const orderId = typeof receipt.purchaseOrderId === "string" ? receipt.purchaseOrderId : "";
+    const order = orderId
+      ? await dbAdmin.collection("purchase_orders").doc(orderId).get()
+      : null;
+    const workspaceId = typeof receipt.workspaceId === "string"
+      ? receipt.workspaceId
+      : order?.get("workspaceId");
+    if (workspaceId !== WORKSPACE_ID) {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Recebimento fora do workspace ativo." });
+    }
+    const destinationKioskId = typeof receipt.destinationKioskId === "string"
+      ? receipt.destinationKioskId
+      : order?.get("destinationKioskId");
+    if (
+      typeof destinationKioskId === "string"
+      && destinationKioskId
+      && !canAccessUnit(context.userDoc, destinationKioskId, { isDefaultAdmin: context.isDefaultAdmin })
+    ) {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_UNIT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Recebimento fora do seu escopo de unidades." });
+    }
     return;
   }
 
   if (!canManageReposition(context)) {
-    throw new Error("Sem permissão para anexar documentos da reposição.");
+    throw new AppError({ code: "OPERATIONAL_UPLOAD_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para anexar documentos da reposição." });
   }
   const target = await dbAdmin.collection("repositionActivities").doc(targetId).get();
-  if (!target.exists) throw new Error("Reposição não encontrada.");
+  if (!target.exists) throw new AppError({ code: "OPERATIONAL_UPLOAD_TARGET_NOT_FOUND", kind: "NOT_FOUND", safeMessage: "Reposição não encontrada." });
   const activity = target.data() ?? {};
   if (!canAccessAnyUnit(
     context.userDoc,
     [activity.kioskOriginId, activity.kioskDestinationId],
     { isDefaultAdmin: context.isDefaultAdmin }
   )) {
-    throw new Error("Reposição fora do seu escopo de unidades.");
+    throw new AppError({ code: "OPERATIONAL_UPLOAD_UNIT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Reposição fora do seu escopo de unidades." });
   }
 }
+
+const uploadContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "operations.upload.create",
+  version: 1,
+  surface: { method: "POST", path: "/api/uploads/operations" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "custom", strategy: "operational-upload-permission" },
+  resourceScope: { kind: "custom", strategy: "operational-upload-target" },
+  input: { kind: "schema", schema: "operations.upload-form", unknownFields: "reject" },
+  effects: { mode: "external", audit: "server-authoritative" },
+  errorExposure: "sanitized",
+});
+
+const uploadEnforcer = defineSecurityEnforcer<NextRequest, { params: Promise<Record<string, never>> }, unknown, ServerUserContext, UploadInput, { targetId: string }>({
+  id: "operations-upload-polymorphic-target-v1",
+  guarantees: [
+    "authenticated-user",
+    "active-user",
+    "authorization:operational-upload-permission",
+    "scope:operational-upload-target",
+    "input-validated",
+    "fields-allowlisted",
+  ],
+  async enforce({ request }) {
+    const actor = await requireUser(request).catch((cause) => {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_AUTH_REQUIRED", kind: "AUTHENTICATION", cause });
+    });
+    const formData = await request.formData();
+    const rawKind = formData.get("kind");
+    const rawTargetId = formData.get("targetId");
+    const file = formData.get("file");
+    if (typeof rawKind !== "string" || !ALLOWED_KINDS.has(rawKind as OperationalUploadKind)) {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_KIND_INVALID", kind: "VALIDATION", safeMessage: "Tipo de upload inválido." });
+    }
+    if (typeof rawTargetId !== "string" || !(file instanceof File)) {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Arquivo ou identificador ausente." });
+    }
+    const targetId = sanitizeSegment(rawTargetId);
+    if (!targetId || targetId !== rawTargetId) {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_TARGET_INVALID", kind: "VALIDATION", safeMessage: "Identificador inválido." });
+    }
+    const kind = rawKind as OperationalUploadKind;
+    const maxBytes = kind === "reposition-signature" ? SIGNATURE_MAX_BYTES : DOCUMENT_MAX_BYTES;
+    if (file.size <= 0 || file.size > maxBytes) {
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_SIZE_INVALID", kind: "VALIDATION", safeMessage: kind === "reposition-signature" ? "Assinatura acima do limite de 2 MB." : "Documento acima do limite de 10 MB." });
+    }
+    await assertTargetAccess(actor, kind, targetId);
+    return { actor, input: { kind, targetId, file }, resource: { targetId } };
+  },
+});
 
 function buildObjectPath(
   kind: OperationalUploadKind,
@@ -109,60 +193,12 @@ function buildObjectPath(
   return `operations/${folder}/${targetId}/${Date.now()}-${token}.${extension}`;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const context = await requireUser(request);
-    const formData = await request.formData();
-    const rawKind = formData.get("kind");
-    const rawTargetId = formData.get("targetId");
-    const file = formData.get("file");
-
-    if (
-      typeof rawKind !== "string" ||
-      !ALLOWED_KINDS.has(rawKind as OperationalUploadKind)
-    ) {
-      return NextResponse.json({ error: "Tipo de upload inválido." }, { status: 400 });
-    }
-    if (typeof rawTargetId !== "string") {
-      return NextResponse.json({ error: "Identificador ausente." }, { status: 400 });
-    }
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Arquivo ausente." }, { status: 400 });
-    }
-
-    const kind = rawKind as OperationalUploadKind;
-    const targetId = sanitizeSegment(rawTargetId);
-    if (!targetId || targetId !== rawTargetId) {
-      return NextResponse.json({ error: "Identificador inválido." }, { status: 400 });
-    }
-
-    const maxBytes = kind === "reposition-signature"
-      ? SIGNATURE_MAX_BYTES
-      : DOCUMENT_MAX_BYTES;
-    if (file.size <= 0 || file.size > maxBytes) {
-      return NextResponse.json(
-        {
-          error: kind === "reposition-signature"
-            ? "Assinatura acima do limite de 2 MB."
-            : "Documento acima do limite de 10 MB.",
-        },
-        { status: 400 },
-      );
-    }
-
-    await assertTargetAccess(context, kind, targetId);
-
+export const POST = secureRoute({ contract: uploadContract, enforcer: uploadEnforcer }, async ({ security }) => {
+    const { actor: context, input: { kind, targetId, file } } = security;
     const buffer = Buffer.from(await file.arrayBuffer());
     const detected = detectFile(buffer);
     if (!detected || (kind === "reposition-signature" && detected.kind !== "image")) {
-      return NextResponse.json(
-        {
-          error: kind === "reposition-signature"
-            ? "Envie uma assinatura PNG, JPG ou WEBP válida."
-            : "Envie uma imagem ou PDF válido.",
-        },
-        { status: 400 },
-      );
+      throw new AppError({ code: "OPERATIONAL_UPLOAD_FILE_INVALID", kind: "VALIDATION", safeMessage: kind === "reposition-signature" ? "Envie uma assinatura PNG, JPG ou WEBP válida." : "Envie uma imagem ou PDF válido." });
     }
 
     const downloadToken = randomUUID();
@@ -191,14 +227,4 @@ export async function POST(request: NextRequest) {
       `/o/${encodeURIComponent(objectPath)}?alt=media&token=${downloadToken}`;
 
     return NextResponse.json({ url, path: objectPath }, { status: 201 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao enviar arquivo.";
-    const status =
-      message.includes("Authorization") || message.includes("Usuário")
-        ? 401
-        : message.startsWith("Sem permissão") || message.includes("escopo de unidades")
-          ? 403
-          : 400;
-    return NextResponse.json({ error: message }, { status });
-  }
-}
+});

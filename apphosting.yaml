@@ -40,6 +40,18 @@ env:
     secret: RESEND_WEBHOOK_SECRET
   - variable: OPENAI_API_KEY
     secret: OPENAI_API_KEY
+  - variable: OPENAI_ADMIN_KEY
+    secret: OPENAI_ADMIN_KEY
+  - variable: OPENAI_MONTHLY_CREDIT_BUDGET_USD
+    value: "10"
+  - variable: OPENAI_PREPAID_CREDIT_BALANCE_USD
+    secret: OPENAI_PREPAID_CREDIT_BALANCE_USD
+  - variable: OPENAI_PREPAID_CREDIT_BALANCE_AS_OF
+    value: "2026-10-08T16:03:00-03:00"
+  - variable: GOOGLE_CLOUD_BILLING_EXPORT_PROJECT_ID
+    value: "smart-converter-752gf"
+  - variable: GOOGLE_CLOUD_BILLING_MAX_BYTES_PER_QUERY
+    value: "250000000"
   - variable: OPENAI_DOCUMENT_MODEL
     value: "gpt-5.6-terra"
   - variable: OPENAI_FINANCIAL_DOCUMENT_MODEL

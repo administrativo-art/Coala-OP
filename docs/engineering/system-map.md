@@ -36,6 +36,6 @@
 
 Para uma pergunta ou mudança, siga o [procedimento de investigação](investigation-harness.md), abra o guia pertinente e confira a implementação. [Regras aprovadas e comportamento implementado](business-rules.md) ficam separados; [verificações](verification.md) são escolhidas pelo impacto. Guias amplos dão caminhos e contratos observáveis, mas **não certificam todas as regras internas** de cada tela.
 
-Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
+Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). A política incremental de rotas está no [contrato executável de segurança](security-contract.md) e no [inventário de contratos](security-contract-inventory.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
 
 Orçamentos por categoria/projeto, [comparação com despesas](../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).

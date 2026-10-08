@@ -4,6 +4,20 @@ export type AiBillingBreakdown = {
   costUsd: number;
 };
 
+export type BillingAlert = {
+  level: "none" | "warning" | "critical" | "unavailable";
+  basis: "openai_budget" | "bigquery_panel_estimate";
+  usedPercent: number | null;
+};
+
+export type AiKeyUsage = {
+  key: string;
+  label: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+};
+
 export type AiBillingDailyCost = {
   date: string;
   costUsd: number;
@@ -26,11 +40,12 @@ export type AiBillingOverview = {
     projectId: string | null;
   };
   credits: {
-    source: "project_spend_limit" | "configured_monthly_budget" | "unavailable";
+    prepaidBalanceUsd: number | null;
+    prepaidBalanceObservedAt: string | null;
+    source: "project_spend_limit" | "organization_spend_limit" | "configured_monthly_budget" | "unavailable";
     interval: string | null;
     limitUsd: number | null;
     spentUsd: number | null;
-    availableUsd: number | null;
     usedPercent: number | null;
     note: string;
   };
@@ -41,19 +56,23 @@ export type AiBillingOverview = {
     daily: AiBillingDailyCost[];
     byLineItem: AiBillingBreakdown[];
     byProject: AiBillingBreakdown[];
+    byApiKey: AiBillingBreakdown[];
   };
   usage: {
     requests: number;
     inputTokens: number;
     outputTokens: number;
     byModel: AiModelUsage[];
+    byApiKey: AiKeyUsage[];
   };
   configuration: {
     adminKeyConfigured: boolean;
     projectIdConfigured: boolean;
     spendLimitFound: boolean;
+    prepaidBalanceConfigured: boolean;
   };
   warnings: string[];
+  alert: BillingAlert;
 };
 
 export type AppCostBreakdown = {
@@ -95,5 +114,13 @@ export type AppCostOverview = {
     consoleUrl: string;
     requiredRoles: string[];
   };
+  queryEstimate: {
+    bytesPerQuery: number | null;
+    maximumBytesBilled: number;
+    monthlyPanelBytesAtHourlyRefresh: number | null;
+    monthlyFreeBytes: number;
+    note: string;
+  };
+  alert: BillingAlert;
   warnings: string[];
 };
