@@ -178,7 +178,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/inventory-control` | [page.tsx](../../src/app/dashboard/inventory-control/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx), [movement-history-modal.tsx](../../src/components/movement-history-modal.tsx) |
+| `dashboard/inventory-control` | [page.tsx](../../src/app/dashboard/inventory-control/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx), [stock-write-down.tsx](../../src/components/stock-write-down.tsx) |
 
 ## items (1)
 
@@ -303,7 +303,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/stock/audit` | [page.tsx](../../src/app/dashboard/stock/audit/page.tsx) | Retorna `null` |
 | `dashboard/stock/audit/stock-audit` | [page.tsx](../../src/app/dashboard/stock/audit/stock-audit/page.tsx) | Retorna `null` |
 | `dashboard/stock/count` | [page.tsx](../../src/app/dashboard/stock/count/page.tsx) | [stock-session-management.tsx](../../src/components/stock-session-management.tsx) |
-| `dashboard/stock/inventory-control` | [page.tsx](../../src/app/dashboard/stock/inventory-control/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx), [movement-history-modal.tsx](../../src/components/movement-history-modal.tsx) |
+| `dashboard/stock/inventory-control` | [page.tsx](../../src/app/dashboard/stock/inventory-control/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx), [stock-write-down.tsx](../../src/components/stock-write-down.tsx) |
 | `dashboard/stock/item-requests` | [page.tsx](../../src/app/dashboard/stock/item-requests/page.tsx) | [item-addition-request-management.tsx](../../src/components/item-addition-request-management.tsx) |
 | `dashboard/stock/movement-history` | [page.tsx](../../src/app/dashboard/stock/movement-history/page.tsx) | Retorna `null` |
 | `dashboard/stock` | [page.tsx](../../src/app/dashboard/stock/page.tsx) | [stock-management.tsx](../../src/components/stock-management.tsx) |
@@ -314,9 +314,9 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/stock/purchasing/suggestion` | [page.tsx](../../src/app/dashboard/stock/purchasing/suggestion/page.tsx) | Retorna `null` |
 | `dashboard/stock/reposition` | [page.tsx](../../src/app/dashboard/stock/reposition/page.tsx) | [reposition-management.tsx](../../src/components/reposition-management.tsx), [use-reposition.ts](../../src/hooks/use-reposition.ts) |
 | `dashboard/stock/returns` | [page.tsx](../../src/app/dashboard/stock/returns/page.tsx) | [return-request-management.tsx](../../src/components/return-request-management.tsx), [add-return-request-modal.tsx](../../src/components/add-return-request-modal.tsx) |
-| `dashboard/stock/transfer` | [page.tsx](../../src/app/dashboard/stock/transfer/page.tsx) | [stock-transfer.tsx](../../src/components/stock-transfer.tsx) |
+| `dashboard/stock/transfer` | [page.tsx](../../src/app/dashboard/stock/transfer/page.tsx) | Redireciona para `/dashboard/stock/inventory-control` |
 | `dashboard/stock/uniforms` | [page.tsx](../../src/app/dashboard/stock/uniforms/page.tsx) | [uniform-management.tsx](../../src/components/uniform-management.tsx) |
-| `dashboard/stock/write-down` | [page.tsx](../../src/app/dashboard/stock/write-down/page.tsx) | [stock-write-down.tsx](../../src/components/stock-write-down.tsx) |
+| `dashboard/stock/write-down` | [page.tsx](../../src/app/dashboard/stock/write-down/page.tsx) | Redireciona para `/dashboard/stock/inventory-control` |
 
 ## tasks (1)
 
