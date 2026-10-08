@@ -6,17 +6,8 @@ import { useState } from 'react';
 import QRCode from 'qrcode';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { CancelButton, LotModalShell, ShellEyebrow, ShellFacts } from './stock/lot-modal-shell';
 import { labelSizes, type LabelSize } from '@/lib/label-sizes';
 
 interface LabelSettingsModalProps {
@@ -37,44 +28,62 @@ export function LabelSettingsModal({ isOpen, onClose }: LabelSettingsModalProps)
         toast({ title: "Impressão de etiquetas em atualização." });
     };
 
+    const current = labelSizes.find((size: LabelSize) => size.id === labelSizeId);
+
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Configurações de Etiqueta</DialogTitle>
-                    <DialogDescription>
-                        Personalize a aparência das etiquetas de lote. A alteração será salva para toda a empresa.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="py-4 space-y-2">
-                    <h3 className="text-lg font-medium">Tamanho da etiqueta</h3>
-                    <p className="text-sm text-muted-foreground">
-                        Selecione o modelo de etiqueta que você utiliza para a impressão.
-                    </p>
-                    <div className="flex items-center gap-2">
-                        <Select value={labelSizeId || ''} onValueChange={handleSizeChange} disabled={loading}>
-                            <SelectTrigger className="w-full max-w-sm">
-                                <SelectValue placeholder="Selecione um tamanho..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {labelSizes.map((size: LabelSize) => (
-                                    <SelectItem key={size.id} value={size.id}>
-                                        {size.name} ({size.width}mm x {size.height}mm)
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button variant="outline" onClick={handlePrintSample} disabled={loading}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Eye className="mr-2 h-4 w-4" />} Ver exemplo
-                        </Button>
-                    </div>
-                </div>
-                 <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>
-                        Fechar
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <LotModalShell
+            open={isOpen}
+            onOpenChange={(open) => { if (!open) onClose(); }}
+            title="Configurações de etiqueta"
+            description="Personalize a aparência das etiquetas de lote. A alteração é salva para toda a empresa."
+            width={820}
+            sidebarWidth={280}
+            sidebar={
+                <>
+                    <ShellEyebrow>Etiquetas</ShellEyebrow>
+                    <h2 className="m-0 text-xl font-extrabold leading-[1.2] tracking-[-.02em]">Etiqueta de lote</h2>
+                    <span className="text-[12.5px] leading-normal text-[#a3a2ad]">A alteração é salva para toda a empresa e vale para todas as impressões de etiqueta.</span>
+                    <ShellFacts
+                        rows={[
+                            { label: 'Modelo', value: current ? current.name : '—' },
+                            { label: 'Tamanho', value: current ? `${current.width} × ${current.height} mm` : '—' },
+                        ]}
+                    />
+                </>
+            }
+            footer={
+                <>
+                    <CancelButton onClick={onClose}>Fechar</CancelButton>
+                    <button type="button" onClick={handlePrintSample} disabled={loading} className="h-11 whitespace-nowrap rounded-xl border border-[#dcd9d1] bg-white px-4 text-[13.5px] font-bold hover:bg-[#f6f4ef] disabled:opacity-50">
+                        Ver exemplo
+                    </button>
+                </>
+            }
+        >
+            <div className="flex flex-col gap-1">
+                <h3 className="m-0 text-[21px] font-extrabold tracking-[-.02em]">Tamanho da etiqueta</h3>
+                <span className="text-[13px] text-[#70757d]">Selecione o modelo de etiqueta que você usa na impressão.</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {labelSizes.map((size: LabelSize) => {
+                    const on = labelSizeId === size.id;
+                    return (
+                        <button
+                            key={size.id}
+                            type="button"
+                            disabled={loading}
+                            onClick={() => handleSizeChange(size.id)}
+                            className={cn(
+                                'flex flex-col items-start gap-[3px] rounded-[14px] px-3.5 py-3 text-left disabled:opacity-60',
+                                on ? 'border-2 border-[#5b5bd6] bg-[#eeeefc]' : 'border border-[#dcd9d1] bg-white hover:bg-[#f6f4ef]',
+                            )}
+                        >
+                            <span className="text-[13.5px] font-bold">{size.name}</span>
+                            <span className="text-xs text-[#70757d]">{size.width}mm × {size.height}mm</span>
+                        </button>
+                    );
+                })}
+            </div>
+        </LotModalShell>
     );
 }
