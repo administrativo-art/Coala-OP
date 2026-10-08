@@ -111,7 +111,7 @@ export function ProductFichaModal({ open, onOpenChange, product, baseProduct, on
                 type="button"
                 onClick={() => product.imageUrl && setZoomedImage(product.imageUrl)}
                 disabled={!product.imageUrl}
-                className={cn('relative flex h-[170px] overflow-hidden rounded-[20px] border border-white/10 text-left disabled:cursor-default', product.imageUrl ? 'bg-white' : 'bg-[repeating-linear-gradient(135deg,#1f1f28_0_10px,#24242e_10px_20px)]')}
+                className={cn('relative flex h-[220px] overflow-hidden rounded-[20px] border border-white/10 text-left disabled:cursor-default', product.imageUrl ? 'bg-white' : 'bg-[repeating-linear-gradient(135deg,#1f1f28_0_10px,#24242e_10px_20px)]')}
               >
                 {product.imageUrl ? <Image src={product.imageUrl} alt={product.baseName} fill sizes="360px" className="object-contain" /> : null}
                 <span className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
