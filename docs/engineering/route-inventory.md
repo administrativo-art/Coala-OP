@@ -213,7 +213,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/pricing/competitors` | [page.tsx](../../src/app/dashboard/pricing/competitors/page.tsx) | Redireciona para `/dashboard/pricing/price-comparison` |
 | `dashboard/pricing/cost-analysis` | [page.tsx](../../src/app/dashboard/pricing/cost-analysis/page.tsx) | [pricing-simulator.tsx](../../src/components/pricing-simulator.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 | `dashboard/pricing` | [page.tsx](../../src/app/dashboard/pricing/page.tsx) | Ler a própria página |
-| `dashboard/pricing/price-comparison` | [page.tsx](../../src/app/dashboard/pricing/price-comparison/page.tsx) | [price-comparison-table.tsx](../../src/components/price-comparison-table.tsx), [competitor-management-modal.tsx](../../src/components/competitor-management-modal.tsx) |
+| `dashboard/pricing/price-comparison` | [page.tsx](../../src/app/dashboard/pricing/price-comparison/page.tsx) | [competitors-workspace.tsx](../../src/components/competitors/competitors-workspace.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 
 ## processes (1)
 
@@ -306,7 +306,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/stock/inventory-control` | [page.tsx](../../src/app/dashboard/stock/inventory-control/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx), [stock-write-down.tsx](../../src/components/stock-write-down.tsx) |
 | `dashboard/stock/item-requests` | [page.tsx](../../src/app/dashboard/stock/item-requests/page.tsx) | [item-addition-request-management.tsx](../../src/components/item-addition-request-management.tsx) |
 | `dashboard/stock/movement-history` | [page.tsx](../../src/app/dashboard/stock/movement-history/page.tsx) | Retorna `null` |
-| `dashboard/stock` | [page.tsx](../../src/app/dashboard/stock/page.tsx) | [stock-management.tsx](../../src/components/stock-management.tsx) |
+| `dashboard/stock` | [page.tsx](../../src/app/dashboard/stock/page.tsx) | [cadastros-ui.tsx](../../src/components/cadastros/cadastros-ui.tsx) |
 | `dashboard/stock/purchasing/history` | [page.tsx](../../src/app/dashboard/stock/purchasing/history/page.tsx) | [purchase-history-dashboard.tsx](../../src/components/purchase-history-dashboard.tsx) |
 | `dashboard/stock/purchasing` | [page.tsx](../../src/app/dashboard/stock/purchasing/page.tsx) | [use-purchase.ts](../../src/hooks/use-purchase.ts), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 | `dashboard/stock/purchasing/sessions/[sessionId]` | [page.tsx](../../src/app/dashboard/stock/purchasing/sessions/[sessionId]/page.tsx) | [use-purchase.ts](../../src/hooks/use-purchase.ts), [purchase-session-card.tsx](../../src/components/purchase-session-card.tsx) |

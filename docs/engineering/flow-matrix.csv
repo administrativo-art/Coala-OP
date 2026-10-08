@@ -144,7 +144,7 @@ src/app/dashboard/stock/count/page.tsx,active,stock-count,
 src/app/dashboard/stock/inventory-control/page.tsx,active,stock-control,
 src/app/dashboard/stock/item-requests/page.tsx,active,stock-requests,
 src/app/dashboard/stock/movement-history/page.tsx,inactive,,
-src/app/dashboard/stock/page.tsx,navigation,stock-control;stock-count;stock-analysis;purchasing;stock-returns;stock-reposition,
+src/app/dashboard/stock/page.tsx,redirect,stock-control;stock-count;stock-analysis;purchasing;stock-returns;stock-reposition,/dashboard/inventory-control
 src/app/dashboard/stock/purchasing/history/page.tsx,active,purchasing,
 src/app/dashboard/stock/purchasing/page.tsx,navigation,purchasing,
 src/app/dashboard/stock/purchasing/sessions/[sessionId]/page.tsx,active,purchasing,
