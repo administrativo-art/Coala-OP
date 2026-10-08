@@ -3,8 +3,10 @@ import "server-only";
 import type {
   AiBillingBreakdown,
   AiBillingOverview,
+  AiKeyUsage,
   AiModelUsage,
 } from "@/features/ai-management/types";
+import { budgetAlert, createHourlyCache, nextOpenAiPageToken, openAiBillingWindow, openAiSpendLimitUsd, optionalBillingBuckets, positiveFinite } from "@/features/ai-management/billing-policy";
 
 const OPENAI_API_URL = "https://api.openai.com/v1";
 
@@ -41,10 +43,6 @@ function unix(value: Date) {
   return Math.floor(value.getTime() / 1000);
 }
 
-function utcDate(year: number, month: number, day = 1) {
-  return new Date(Date.UTC(year, month, day, 0, 0, 0));
-}
-
 async function fetchOpenAiJson<T>(url: URL, adminKey: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -70,6 +68,7 @@ async function fetchAllBuckets(params: {
 }) {
   const buckets: NonNullable<OpenAiPage["data"]> = [];
   let page: string | null = null;
+  const seenPages = new Set<string>();
   do {
     const url = new URL(`${OPENAI_API_URL}${params.path}`);
     url.searchParams.set("start_time", String(params.startTime));
@@ -80,15 +79,18 @@ async function fetchAllBuckets(params: {
     if (params.projectId) url.searchParams.append("project_ids", params.projectId);
     if (page) url.searchParams.set("page", page);
     const payload = await fetchOpenAiJson<OpenAiPage>(url, params.adminKey);
+    page = nextOpenAiPageToken(payload.has_more, payload.next_page, seenPages);
+    if (page) seenPages.add(page);
     buckets.push(...(payload.data || []));
-    page = payload.has_more && payload.next_page ? payload.next_page : null;
   } while (page);
   return buckets;
 }
 
-async function fetchProjectSpendLimit(adminKey: string, projectId: string | null) {
-  if (!projectId) return null;
-  const url = new URL(`${OPENAI_API_URL}/organization/projects/${encodeURIComponent(projectId)}/spend_limit`);
+async function fetchSpendLimit(adminKey: string, projectId: string | null) {
+  const path = projectId
+    ? `/organization/projects/${encodeURIComponent(projectId)}/spend_limit`
+    : "/organization/spend_limit";
+  const url = new URL(`${OPENAI_API_URL}${path}`);
   try {
     return await fetchOpenAiJson<Record<string, unknown>>(url, adminKey);
   } catch {
@@ -102,10 +104,21 @@ function sortedBreakdown(values: Map<string, number>, fallbackLabel: string): Ai
     .sort((left, right) => right.costUsd - left.costUsd || left.label.localeCompare(right.label));
 }
 
+const cachedOverview = createHourlyCache<AiBillingOverview>((value) => value.connected);
+
 export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBillingOverview> {
   const adminKey = process.env.OPENAI_ADMIN_KEY?.trim() || "";
+  const projectId = process.env.OPENAI_PROJECT_ID?.trim() || "";
+  const budget = process.env.OPENAI_MONTHLY_CREDIT_BUDGET_USD?.trim() || "";
+  const window = openAiBillingWindow(now);
+  return cachedOverview(JSON.stringify([Boolean(adminKey), projectId, budget, window.queryStart, window.endExclusive]), now, () => readOpenAiBillingOverview(now));
+}
+
+async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> {
+  const adminKey = process.env.OPENAI_ADMIN_KEY?.trim() || "";
   const configuredProjectId = process.env.OPENAI_PROJECT_ID?.trim() || null;
-  const configuredMonthlyBudget = number(process.env.OPENAI_MONTHLY_CREDIT_BUDGET_USD);
+  const budgetInput = process.env.OPENAI_MONTHLY_CREDIT_BUDGET_USD?.trim() || "";
+  const configuredMonthlyBudget = positiveFinite(budgetInput);
   const generatedAt = now.toISOString();
   const unavailable: AiBillingOverview = {
     provider: "openai",
@@ -122,8 +135,8 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
       usedPercent: null,
       note: "A API oficial informa custos e limites, mas não expõe o saldo exato de créditos pré-pagos da conta.",
     },
-    costs: { currentMonthUsd: null, previousMonthUsd: null, last30DaysUsd: null, daily: [], byLineItem: [], byProject: [] },
-    usage: { requests: 0, inputTokens: 0, outputTokens: 0, byModel: [] },
+    costs: { currentMonthUsd: null, previousMonthUsd: null, last30DaysUsd: null, daily: [], byLineItem: [], byProject: [], byApiKey: [] },
+    usage: { requests: 0, inputTokens: 0, outputTokens: 0, byModel: [], byApiKey: [] },
     configuration: {
       adminKeyConfigured: Boolean(adminKey),
       projectIdConfigured: Boolean(configuredProjectId),
@@ -132,40 +145,57 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
     warnings: adminKey
       ? []
       : ["Configure OPENAI_ADMIN_KEY no servidor para consultar custos e uso oficiais da OpenAI."],
+    alert: budgetAlert(null, null, "openai_budget"),
   };
   if (!adminKey) return unavailable;
 
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  const previousMonthStart = utcDate(year, month - 1, 1);
-  const currentMonthStart = utcDate(year, month, 1);
-  const nextMonthStart = utcDate(year, month + 1, 1);
-  const last30Start = new Date(now.getTime() - 30 * 86_400_000);
-  const queryEnd = now < nextMonthStart ? new Date(now.getTime() + 86_400_000) : nextMonthStart;
+  const window = openAiBillingWindow(now);
+  const previousMonthStart = new Date(`${window.previousMonthStart}T00:00:00.000Z`);
+  const currentMonthStart = new Date(`${window.currentMonthStart}T00:00:00.000Z`);
+  const last30Start = new Date(`${window.last30DaysStart}T00:00:00.000Z`);
+  const queryStart = new Date(`${window.queryStart}T00:00:00.000Z`);
+  const queryEnd = new Date(`${window.endExclusive}T00:00:00.000Z`);
 
   try {
-    const [costBuckets, usageResult] = await Promise.all([
+    const [costBuckets, usageResult, keyCosts, keyCompletions] = await Promise.all([
       fetchAllBuckets({
         path: "/organization/costs",
-        startTime: unix(previousMonthStart),
+        startTime: unix(queryStart),
         endTime: unix(queryEnd),
         adminKey,
         projectId: configuredProjectId,
         groupBy: ["project_id", "line_item"],
       }),
-      fetchAllBuckets({
+      optionalBillingBuckets(() => fetchAllBuckets({
         path: "/organization/usage/completions",
         startTime: unix(currentMonthStart),
         endTime: unix(queryEnd),
         adminKey,
         projectId: configuredProjectId,
         groupBy: ["project_id", "model"],
-      }).catch(() => []),
+      })),
+      optionalBillingBuckets(() => fetchAllBuckets({
+        path: "/organization/costs",
+        startTime: unix(currentMonthStart),
+        endTime: unix(queryEnd),
+        adminKey,
+        projectId: configuredProjectId,
+        groupBy: ["api_key_id"],
+      })),
+      optionalBillingBuckets(() => fetchAllBuckets({
+        path: "/organization/usage/completions",
+        startTime: unix(currentMonthStart),
+        endTime: unix(queryEnd),
+        adminKey,
+        projectId: configuredProjectId,
+        groupBy: ["api_key_id"],
+      })),
     ]);
 
     const daily = new Map<string, number>();
     const lineItems = new Map<string, number>();
     const projects = new Map<string, number>();
+    const apiKeys = new Map<string, number>();
     let currentMonthUsd = 0;
     let previousMonthUsd = 0;
     let last30DaysUsd = 0;
@@ -187,8 +217,16 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
       }
     }
 
+    for (const bucket of keyCosts.buckets) {
+      for (const result of bucket.results || []) {
+        const apiKeyId = String(result.api_key_id || "Sem chave atribuída");
+        apiKeys.set(apiKeyId, (apiKeys.get(apiKeyId) || 0) + amountValue(result.amount));
+      }
+    }
+
     const modelUsage = new Map<string, AiModelUsage>();
-    for (const bucket of usageResult) {
+    const keyUsage = new Map<string, AiKeyUsage>();
+    for (const bucket of usageResult.buckets) {
       for (const result of bucket.results || []) {
         const model = String(result.model || "Modelo não identificado");
         const current = modelUsage.get(model) || { model, requests: 0, inputTokens: 0, outputTokens: 0 };
@@ -198,6 +236,16 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
         modelUsage.set(model, current);
       }
     }
+    for (const bucket of keyCompletions.buckets) {
+      for (const result of bucket.results || []) {
+        const key = String(result.api_key_id || "Sem chave atribuída");
+        const currentKey = keyUsage.get(key) || { key, label: key, requests: 0, inputTokens: 0, outputTokens: 0 };
+        currentKey.requests += number(result.num_model_requests);
+        currentKey.inputTokens += number(result.input_tokens);
+        currentKey.outputTokens += number(result.output_tokens);
+        keyUsage.set(key, currentKey);
+      }
+    }
     const byModel = [...modelUsage.values()].sort((left, right) => right.requests - left.requests || left.model.localeCompare(right.model));
     const usage = byModel.reduce((total, entry) => ({
       requests: total.requests + entry.requests,
@@ -205,18 +253,19 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
       outputTokens: total.outputTokens + entry.outputTokens,
     }), { requests: 0, inputTokens: 0, outputTokens: 0 });
 
-    const inferredProjectIds = [...projects.keys()].filter((key) => key.startsWith("proj_"));
-    const effectiveProjectId = configuredProjectId || (inferredProjectIds.length === 1 ? inferredProjectIds[0]! : null);
-    const spendLimit = await fetchProjectSpendLimit(adminKey, effectiveProjectId);
-    const spendLimitValue = amountValue(spendLimit?.threshold_amount ?? spendLimit?.amount);
-    const limitUsd = spendLimitValue > 0 ? spendLimitValue : configuredMonthlyBudget > 0 ? configuredMonthlyBudget : null;
-    const source = spendLimitValue > 0
-      ? "project_spend_limit" as const
-      : configuredMonthlyBudget > 0
+    const effectiveProjectId = configuredProjectId;
+    const spendLimit = await fetchSpendLimit(adminKey, effectiveProjectId);
+    // Spend-limit thresholds are returned in cents; organization costs are returned in dollars.
+    const spendLimitUsd = openAiSpendLimitUsd(spendLimit);
+    const limitUsd = spendLimitUsd ?? configuredMonthlyBudget;
+    const source = spendLimitUsd !== null
+      ? (effectiveProjectId ? "project_spend_limit" : "organization_spend_limit")
+      : configuredMonthlyBudget !== null
         ? "configured_monthly_budget" as const
         : "unavailable" as const;
     const availableUsd = limitUsd === null ? null : rounded(Math.max(0, limitUsd - currentMonthUsd));
-    const usedPercent = limitUsd === null ? null : rounded(Math.min(100, (currentMonthUsd / limitUsd) * 100), 2);
+    const alert = budgetAlert(currentMonthUsd, limitUsd, "openai_budget");
+    const usedPercent = alert.usedPercent;
 
     return {
       provider: "openai",
@@ -226,14 +275,14 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
       scope: { type: effectiveProjectId ? "project" : "organization", projectId: effectiveProjectId },
       credits: {
         source,
-        interval: String(spendLimit?.interval || "monthly"),
+        interval: limitUsd === null ? null : "month",
         limitUsd: limitUsd === null ? null : rounded(limitUsd),
         spentUsd: rounded(currentMonthUsd),
         availableUsd,
         usedPercent,
         note: limitUsd === null
           ? "Custos oficiais carregados. Configure um limite de gasto no projeto OpenAI ou OPENAI_MONTHLY_CREDIT_BUDGET_USD para calcular o disponível."
-          : "Disponível calculado pelo limite mensal menos o custo oficial acumulado; não representa o saldo pré-pago da conta.",
+          : "Disponível calculado pelo limite mensal menos o custo oficial acumulado; não representa o saldo pré-pago da conta. Atrasos na contabilização podem alterar o valor.",
       },
       costs: {
         currentMonthUsd: rounded(currentMonthUsd),
@@ -242,20 +291,28 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
         daily: [...daily.entries()].map(([date, costUsd]) => ({ date, costUsd: rounded(costUsd) })).sort((left, right) => left.date.localeCompare(right.date)),
         byLineItem: sortedBreakdown(lineItems, "Outros"),
         byProject: sortedBreakdown(projects, "Organização"),
+        byApiKey: sortedBreakdown(apiKeys, "Sem chave atribuída"),
       },
-      usage: { ...usage, byModel },
+      usage: { ...usage, byModel, byApiKey: [...keyUsage.values()].sort((a, b) => b.requests - a.requests || a.key.localeCompare(b.key)) },
       configuration: {
         adminKeyConfigured: true,
         projectIdConfigured: Boolean(configuredProjectId),
-        spendLimitFound: spendLimitValue > 0,
+        spendLimitFound: spendLimitUsd !== null,
       },
-      warnings: usageResult.length === 0 ? ["Os custos foram carregados, mas o detalhamento de tokens não ficou disponível."] : [],
+      warnings: [
+        ...(usageResult.failed ? ["Os custos foram carregados, mas o detalhamento de tokens não ficou disponível."] : []),
+        ...(keyCosts.failed ? ["Os custos totais foram carregados, mas o detalhamento por chave não ficou disponível."] : []),
+        ...(keyCompletions.failed ? ["O uso total foi carregado, mas o uso por chave não ficou disponível."] : []),
+        ...(budgetInput && configuredMonthlyBudget === null ? ["OPENAI_MONTHLY_CREDIT_BUDGET_USD deve ser um número positivo em USD."] : []),
+        ...(spendLimit && spendLimitUsd === null ? ["O limite retornado pela OpenAI não é mensal em USD; ele não foi usado no cálculo."] : []),
+      ],
+      alert,
     };
-  } catch (error) {
+  } catch {
     return {
       ...unavailable,
       configured: true,
-      warnings: [error instanceof Error ? error.message : "Não foi possível consultar o billing da OpenAI."],
+      warnings: ["Não foi possível consultar os custos da OpenAI. Confira o acesso administrativo e tente novamente."],
     };
   }
 }
