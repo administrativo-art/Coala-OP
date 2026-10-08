@@ -10,6 +10,7 @@ Esta fase separa detecção de remediação. Encontrar uma vulnerabilidade, um s
 - CodeQL para JavaScript/TypeScript em pull requests, push para `main` e agenda semanal;
 - referências de GitHub Actions fixadas por SHA integral de release oficial;
 - ratchet de `npm audit` separado entre raiz e `functions`;
+- ratchet de contrato de segurança para toda rota de API nova ou alterada;
 - `coala-supply-chain-audit` local e explicit-only.
 
 O CodeQL é report-only nesta fase: seus achados aparecem em code scanning, mas o job não é um required check. Erro de execução do scanner continua sendo falha do workflow.
@@ -31,6 +32,10 @@ Novos achados `low` ou `moderate` transitivos e alterações não relacionadas �
 Exceções ficam em `config/vulnerability-exceptions.json`. Cada exceção deve identificar exatamente o `findingKey`, ter justificativa e data de expiração. Exceção expirada, duplicada ou incompleta invalida a execução. Alterar baseline ou exceção exige revisão humana explícita; o CI nunca os regenera.
 
 Uma falha de rede ou resposta inválida do registry é falha operacional distinta, não aprovação silenciosa.
+
+## Ratchet de contratos de API
+
+O [contrato executável de segurança](security-contract.md) separa garantias mínimas da estratégia que as implementa. Rotas novas ou arquivos de rota alterados precisam usar `secureRoute` em cada método exportado ou possuir exceção temporária delimitada. O arquivo `config/security-contract-baseline.json` guarda o hash da dívida legada observada na implantação inicial: igualdade de hash permite evolução incremental, mas não aprova a segurança da rota. O CI executa `npm run check:security-contracts` em modo somente leitura e também confere o [inventário](security-contract-inventory.md).
 
 ## Tratamento de achados
 

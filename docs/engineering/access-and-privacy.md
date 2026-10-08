@@ -1,5 +1,9 @@
 # Acesso, privacidade e entradas compartilhadas
 
+## Contrato estrutural das APIs
+
+Rotas novas ou qualquer arquivo de rota alterado passam a declarar identidade, autorização, escopo, entrada, efeitos, auditoria e exposição de erros pelo [contrato executável de segurança](security-contract.md). O gate preserva as rotas legadas intactas por hash para permitir migração progressiva; isso não valida os controles existentes nem altera seu comportamento. Nesta entrega de infraestrutura, nenhuma rota foi migrada e nenhum achado de segurança foi corrigido.
+
 Avisos de compra por destino usam `requireUser`, permissão `stock.view` ou leitura de compras e `canAccessUnit`; a consulta filtra `workspaceId`, `destinationKioskId` e status ativo antes de paginar. Ignorar um aviso exige permissão de recebimento de compras, mesmo escopo de unidade e motivo persistido no item. O estado da política de reposição em `GET /api/stock/replenishment-policy` exige sessão autenticada e não revela configuração adicional. Cadastro de rota direta exige permissão existente de insumos, acesso à unidade e vínculo ativo `dp_units` com quiosque comercial/misto.
 
 As três rotas novas de reposição usam o envelope central de erros. O adaptador `server-authentication-failure.ts` classifica somente falhas de autenticação conhecidas do `requireUser` legado como 401 e conformidade cadastral como 403; falha desconhecida de infraestrutura segue para o erro sanitizado com `eventId`, sem ser escondida como problema de login. O adaptador não amplia acesso nem substitui verificação de token/perfil. Não foram criadas permissões novas ou alterados padrões de perfis.

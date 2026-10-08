@@ -9,3 +9,9 @@
 - [ ] Se migrei uma tela real, anexei capturas e preenchi `docs/design/validacao-visual.md`.
 - [ ] Linhas clicáveis usam `LiftRow` e abrem `SidePanel`.
 - [ ] Estados de carregando, vazio e sem resultados tratados.
+
+## Checklist de segurança de API
+
+- [ ] Se alterei ou criei `src/app/api/**/route.*`, todos os métodos exportados usam `secureRoute` ou há exceção temporária delimitada e justificada.
+- [ ] Testei o cenário legítimo e a tentativa indevida pertinente; não tratei a declaração do enforcer como prova comportamental.
+- [ ] Executei `npm run check:security-contracts` e revisei o inventário gerado.
