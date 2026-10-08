@@ -1,26 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  BarChart3,
-  CheckCircle2,
-  CircleDollarSign,
-  Coins,
-  ExternalLink,
-  Loader2,
-  RefreshCw,
-  ServerCog,
-  Sparkles,
-} from "lucide-react";
-
-import { Badge } from "@/components/ui/badge";
+import { ListSkeleton } from "@/components/cadastros/cadastros-ui";
+import { StatTile } from "@/components/patterns/stat-tile";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { StatusPill } from "@/components/ui/status-pill";
 import { useAuth } from "@/hooks/use-auth";
 import type { AiBillingOverview, AppCostBreakdown, AppCostOverview } from "@/features/ai-management/types";
 import { cn } from "@/lib/utils";
+import type React from "react";
+
+const monoValue = (value: string) => <span className="block truncate font-ds-mono text-[22px] leading-tight">{value}</span>;
+
+/** Cartão de seção: título, apoio e conteúdo, no padrão do guia. */
+function Section({ title, description, aside, children }: { title: string; description?: string; aside?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-5">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-extrabold">{title}</h2>
+          {description ? <p className="mt-0.5 text-[13px] text-ds-ink-muted">{description}</p> : null}
+        </div>
+        {aside}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function Alert({ tone, title, children }: { tone: "warn" | "danger"; title?: string; children: React.ReactNode }) {
+  return (
+    <div role="alert" className={`rounded-ds-card border px-5 py-4 text-[13px] ${tone === "danger" ? "border-ds-confirm-border bg-ds-confirm-bg text-ds-confirm-ink" : "border-ds-alert-border bg-ds-alert-bg text-ds-alert-ink"}`}>
+      {title ? <p className="font-extrabold">{title}</p> : null}
+      <div className={title ? "mt-1 leading-relaxed" : "leading-relaxed"}>{children}</div>
+    </div>
+  );
+}
 
 type AiBillingSettingsProps = {
   view: "credits" | "costs";
@@ -51,224 +66,120 @@ function formatDate(value: string) {
   );
 }
 
-function MetricCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-  highlight = false,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  icon: typeof Coins;
-  highlight?: boolean;
-}) {
-  return (
-    <Card className={cn("overflow-hidden", highlight && "border-[#e5a9bd] bg-[#fff8fa]")}>
-      <CardContent className="p-5 sm:p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-            <p className="mt-2 truncate text-2xl font-bold tracking-tight text-foreground">{value}</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
-          </div>
-          <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground",
-            highlight && "bg-[#f7dbe5] text-[#9d365b]",
-          )}>
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function OpenAiSetupNotice({ configured }: { configured: boolean }) {
   return (
-    <Card className="border-amber-200 bg-amber-50/80">
-      <CardContent className="flex gap-3 p-5 sm:p-5">
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-        <div className="space-y-1 text-sm text-amber-950">
-          <p className="font-semibold">
-            {configured ? "A OpenAI não respondeu à consulta de billing" : "Conecte o billing da OpenAI"}
-          </p>
-          <p className="leading-relaxed text-amber-900/80">
-            {configured
-              ? "Confira se a chave administrativa possui acesso à organização e tente atualizar novamente."
-              : "Configure OPENAI_ADMIN_KEY somente no servidor. Para calcular o disponível, defina também um limite no projeto OpenAI ou OPENAI_MONTHLY_CREDIT_BUDGET_USD."}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <Alert tone="warn" title={configured ? "A OpenAI não respondeu à consulta de billing" : "Conecte o billing da OpenAI"}>
+      {configured
+        ? "Confira se a chave administrativa possui acesso à organização e tente atualizar novamente."
+        : "Configure OPENAI_ADMIN_KEY somente no servidor. Para calcular o disponível, defina também um limite no projeto OpenAI ou OPENAI_MONTHLY_CREDIT_BUDGET_USD."}
+    </Alert>
   );
 }
 
 function GoogleCloudSetupNotice({ overview }: { overview: AppCostOverview }) {
   return (
-    <Card className="border-amber-200 bg-amber-50/80">
-      <CardContent className="space-y-4 p-5 sm:p-6">
-        <div className="flex gap-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-          <div className="space-y-1 text-sm text-amber-950">
-            <p className="font-semibold">
-              {overview.setup.billingExportFound
-                ? "O export de billing não pôde ser consultado"
-                : "Ative o export do Cloud Billing para BigQuery"}
-            </p>
-            <p className="leading-relaxed text-amber-900/80">
-              {overview.setup.billingExportFound
-                ? "A tabela foi localizada, mas a credencial do APP precisa conseguir executar e ler a consulta no BigQuery."
-                : "O Google/Firebase não oferece o custo consolidado do projeto em uma API direta. O export de billing é a fonte oficial para preencher este painel."}
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-3 text-xs text-amber-950/80 sm:grid-cols-3">
-          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">1.</span> Habilite somente o export padrão de custos.</div>
-          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">2.</span> Informe a tabela em <code>GOOGLE_CLOUD_BILLING_EXPORT_TABLE</code>.</div>
-          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">3.</span> Conceda acesso de leitura e execução no BigQuery.</div>
-        </div>
-        <Button asChild variant="outline" size="sm" className="border-amber-300 bg-white text-amber-950 hover:bg-amber-100">
-          <a href={overview.setup.consoleUrl} target="_blank" rel="noreferrer">
-            Abrir exportação do Cloud Billing
-            <ExternalLink className="ml-2 h-4 w-4" />
-          </a>
-        </Button>
-      </CardContent>
-    </Card>
+    <Alert
+      tone="warn"
+      title={overview.setup.billingExportFound ? "O export de billing não pôde ser consultado" : "Ative o export do Cloud Billing para BigQuery"}
+    >
+      <p>
+        {overview.setup.billingExportFound
+          ? "A tabela foi localizada, mas a credencial do APP precisa conseguir executar e ler a consulta no BigQuery."
+          : "O Google/Firebase não oferece o custo consolidado do projeto em uma API direta. O export de billing é a fonte oficial para preencher este painel."}
+      </p>
+      <ol className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+        <li className="rounded-ds-btn border border-ds-alert-border bg-white/60 p-3"><strong>1.</strong> Habilite somente o export padrão de custos.</li>
+        <li className="rounded-ds-btn border border-ds-alert-border bg-white/60 p-3"><strong>2.</strong> Informe a tabela em <code className="font-ds-mono">GOOGLE_CLOUD_BILLING_EXPORT_TABLE</code>.</li>
+        <li className="rounded-ds-btn border border-ds-alert-border bg-white/60 p-3"><strong>3.</strong> Conceda acesso de leitura e execução no BigQuery.</li>
+      </ol>
+      <Button asChild variant="ds-secondary" size="md" className="mt-4">
+        <a href={overview.setup.consoleUrl} target="_blank" rel="noreferrer">Abrir exportação do Cloud Billing ↗</a>
+      </Button>
+    </Alert>
   );
 }
 
 function CreditsView({ overview }: { overview: AiBillingOverview }) {
   const usedPercent = overview.credits.usedPercent ?? 0;
+  const barTone = usedPercent >= 90 ? "bg-ds-danger" : usedPercent >= 70 ? "bg-ds-warn" : "bg-ds-accent-ink";
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="Disponível no mês"
-          value={formatUsd(overview.credits.availableUsd)}
-          description="Limite mensal menos o custo acumulado."
-          icon={Coins}
-          highlight
-        />
-        <MetricCard
-          title="Limite mensal"
-          value={formatUsd(overview.credits.limitUsd)}
-          description={overview.credits.source === "project_spend_limit" ? "Limite do projeto OpenAI." : "Orçamento mensal configurado no APP."}
-          icon={CircleDollarSign}
-        />
-        <MetricCard
-          title="Consumido no mês"
-          value={formatUsd(overview.credits.spentUsd)}
-          description={overview.credits.usedPercent === null ? "Custo oficial acumulado." : `${overview.credits.usedPercent.toLocaleString("pt-BR")}% do limite mensal.`}
-          icon={BarChart3}
-        />
-        <MetricCard
-          title="Requisições GPT"
-          value={formatNumber(overview.usage.requests)}
-          description={`${formatNumber(overview.usage.inputTokens + overview.usage.outputTokens)} tokens no mês.`}
-          icon={Sparkles}
-        />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatTile className="ring-1 ring-ds-accent-ink" label="Disponível no mês" value={monoValue(formatUsd(overview.credits.availableUsd))} hint="Limite mensal menos o custo acumulado." />
+        <StatTile label="Limite mensal" value={monoValue(formatUsd(overview.credits.limitUsd))} hint={overview.credits.source === "project_spend_limit" ? "Limite do projeto OpenAI." : "Orçamento mensal configurado no APP."} />
+        <StatTile label="Consumido no mês" value={monoValue(formatUsd(overview.credits.spentUsd))} hint={overview.credits.usedPercent === null ? "Custo oficial acumulado." : `${overview.credits.usedPercent.toLocaleString("pt-BR")}% do limite mensal.`} />
+        <StatTile label="Requisições GPT" value={monoValue(formatNumber(overview.usage.requests))} hint={`${formatNumber(overview.usage.inputTokens + overview.usage.outputTokens)} tokens no mês.`} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Uso do limite mensal</CardTitle>
-              <CardDescription className="mt-1">Acompanhamento do orçamento usado pela Mel e demais chamadas GPT.</CardDescription>
-            </div>
-            <Badge variant="secondary">{overview.credits.usedPercent === null ? "Sem limite" : `${usedPercent.toLocaleString("pt-BR")}% usado`}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Progress
-            value={usedPercent}
-            className="h-3 bg-[#f1e8e3]"
-            indicatorClassName={usedPercent >= 90 ? "bg-red-500" : usedPercent >= 70 ? "bg-amber-500" : "bg-[#a6325b]"}
-          />
-          <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>{overview.credits.note}</span>
-            <a
-              href="https://platform.openai.com/settings/organization/billing/overview"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-[#993556] hover:underline"
-            >
-              Ver saldo pré-pago oficial
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        </CardContent>
-      </Card>
+      <Section
+        title="Uso do limite mensal"
+        description="Acompanhamento do orçamento usado pela Mel e demais chamadas GPT."
+        aside={<StatusPill variant={overview.credits.usedPercent === null ? "neutral" : usedPercent >= 90 ? "danger" : usedPercent >= 70 ? "warn" : "ok"}>{overview.credits.usedPercent === null ? "Sem limite" : `${usedPercent.toLocaleString("pt-BR")}% usado`}</StatusPill>}
+      >
+        <div
+          className="h-3 overflow-hidden rounded-full bg-ds-muted"
+          role="progressbar"
+          aria-label="Uso do limite mensal"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(Math.min(usedPercent, 100))}
+        >
+          <div className={cn("h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none", barTone)} style={{ width: `${Math.min(Math.max(usedPercent, 0), 100)}%` }} />
+        </div>
+        <div className="mt-4 flex flex-col gap-3 rounded-ds-btn-lg border border-ds-border bg-ds-warm p-4 text-xs leading-relaxed text-ds-ink-muted sm:flex-row sm:items-center sm:justify-between">
+          <span>{overview.credits.note}</span>
+          <a
+            href="https://platform.openai.com/settings/organization/billing/overview"
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 font-extrabold text-ds-accent-ink underline underline-offset-2"
+          >
+            Ver saldo pré-pago oficial ↗
+          </a>
+        </div>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Uso por modelo</CardTitle>
-          <CardDescription>Requisições e tokens processados no mês atual.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {overview.usage.byModel.length ? (
-            <div className="divide-y rounded-xl border">
-              {overview.usage.byModel.map((entry) => (
-                <div key={entry.model} className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
-                  <p className="truncate text-sm font-semibold">{entry.model}</p>
-                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{formatNumber(entry.requests)}</span> requisições</p>
-                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{formatNumber(entry.inputTokens + entry.outputTokens)}</span> tokens</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum uso por modelo foi retornado.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function AppCostBreakdownList({
-  title,
-  description,
-  values,
-  currency,
-}: {
-  title: string;
-  description: string;
-  values: AppCostBreakdown[];
-  currency: string;
-}) {
-  const maximum = Math.max(...values.map((entry) => Math.abs(entry.cost)), 0);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {values.length ? (
-          <div className="space-y-4">
-            {values.slice(0, 10).map((entry) => (
-              <div key={entry.key} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="truncate font-medium text-foreground">{entry.label}</span>
-                  <span className="shrink-0 font-semibold">{formatCurrency(entry.cost, currency)}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-[#a6325b]"
-                    style={{ width: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "0%" }}
-                  />
-                </div>
+      <Section title="Uso por modelo" description="Requisições e tokens processados no mês atual.">
+        {overview.usage.byModel.length ? (
+          <div className="divide-y divide-ds-divider overflow-hidden rounded-ds-btn-lg border border-ds-border bg-white">
+            {overview.usage.byModel.map((entry) => (
+              <div key={entry.model} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
+                <p className="truncate font-ds-mono text-[13px] font-bold">{entry.model}</p>
+                <p className="text-xs text-ds-ink-muted"><span className="font-ds-mono font-bold text-ds-ink">{formatNumber(entry.requests)}</span> requisições</p>
+                <p className="text-xs text-ds-ink-muted"><span className="font-ds-mono font-bold text-ds-ink">{formatNumber(entry.inputTokens + entry.outputTokens)}</span> tokens</p>
               </div>
             ))}
           </div>
         ) : (
-          <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Sem custos para detalhar.</p>
+          <p className="rounded-ds-btn-lg border border-dashed border-ds-border-input p-8 text-center text-sm text-ds-ink-muted">Nenhum uso por modelo foi retornado.</p>
         )}
-      </CardContent>
-    </Card>
+      </Section>
+    </div>
+  );
+}
+
+function AppCostBreakdownList({ title, description, values, currency }: { title: string; description: string; values: AppCostBreakdown[]; currency: string }) {
+  const maximum = Math.max(...values.map((entry) => Math.abs(entry.cost)), 0);
+  return (
+    <Section title={title} description={description}>
+      {values.length ? (
+        <div className="space-y-3.5">
+          {values.slice(0, 10).map((entry) => (
+            <div key={entry.key} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="truncate font-semibold">{entry.label}</span>
+                <span className="shrink-0 font-ds-mono font-bold">{formatCurrency(entry.cost, currency)}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-ds-muted">
+                <div className="h-full rounded-full bg-ds-accent-ink" style={{ width: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "0%" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-ds-btn-lg border border-dashed border-ds-border-input p-8 text-center text-sm text-ds-ink-muted">Sem custos para detalhar.</p>
+      )}
+    </Section>
   );
 }
 
@@ -277,45 +188,32 @@ function AppCostsView({ overview }: { overview: AppCostOverview }) {
   const maximum = Math.max(...last30Daily.map((entry) => Math.abs(entry.cost)), 0);
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Custo líquido no mês" value={formatCurrency(overview.costs.currentMonth, overview.currency)} description={`Bruto de ${formatCurrency(overview.costs.grossCurrentMonth, overview.currency)}, após créditos.`} icon={CircleDollarSign} highlight />
-        <MetricCard title="Mês anterior" value={formatCurrency(overview.costs.previousMonth, overview.currency)} description="Custo líquido consolidado do mês anterior." icon={BarChart3} />
-        <MetricCard title="Últimos 30 dias" value={formatCurrency(overview.costs.last30Days, overview.currency)} description="Janela móvel até a última exportação." icon={ServerCog} />
-        <MetricCard title="Créditos e descontos" value={formatCurrency(Math.abs(overview.costs.creditsCurrentMonth || 0), overview.currency)} description="Créditos abatidos do custo bruto neste mês." icon={Coins} />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatTile className="ring-1 ring-ds-accent-ink" label="Custo líquido no mês" value={monoValue(formatCurrency(overview.costs.currentMonth, overview.currency))} hint={`Bruto de ${formatCurrency(overview.costs.grossCurrentMonth, overview.currency)}, após créditos.`} />
+        <StatTile label="Mês anterior" value={monoValue(formatCurrency(overview.costs.previousMonth, overview.currency))} hint="Custo líquido consolidado do mês anterior." />
+        <StatTile label="Últimos 30 dias" value={monoValue(formatCurrency(overview.costs.last30Days, overview.currency))} hint="Janela móvel até a última exportação." />
+        <StatTile label="Créditos e descontos" value={monoValue(formatCurrency(Math.abs(overview.costs.creditsCurrentMonth || 0), overview.currency))} hint="Créditos abatidos do custo bruto neste mês." />
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Custo diário</CardTitle>
-              <CardDescription className="mt-1">Custo líquido diário do projeto Firebase no Google Cloud.</CardDescription>
-            </div>
-            <Badge variant="outline">{overview.currency}</Badge>
+      <Section title="Custo diário" description="Custo líquido diário do projeto Firebase no Google Cloud." aside={<StatusPill variant="neutral">{overview.currency}</StatusPill>}>
+        {last30Daily.length ? (
+          <div className="flex h-52 items-end gap-1 overflow-hidden rounded-ds-btn-lg border border-ds-border bg-ds-warm px-3 pb-8 pt-4" role="img" aria-label="Custo líquido diário dos últimos 30 dias">
+            {last30Daily.map((entry, index) => (
+              <div key={entry.date} className="group relative flex h-full min-w-0 flex-1 items-end" title={`${formatDate(entry.date)}: ${formatCurrency(entry.cost, overview.currency)}`}>
+                <div
+                  className="w-full min-w-[3px] rounded-t bg-ds-accent transition-colors group-hover:bg-ds-accent-ink motion-reduce:transition-none"
+                  style={{ height: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "2%" }}
+                />
+                {(index === 0 || index === last30Daily.length - 1 || index % 7 === 0) ? (
+                  <span className="absolute left-1/2 top-[calc(100%+0.35rem)] -translate-x-1/2 whitespace-nowrap font-ds-mono text-[10px] text-ds-ink-muted">{formatDate(entry.date)}</span>
+                ) : null}
+              </div>
+            ))}
           </div>
-        </CardHeader>
-        <CardContent>
-          {last30Daily.length ? (
-            <div className="flex h-52 items-end gap-1 overflow-hidden rounded-xl border bg-muted/20 px-3 pb-8 pt-4">
-              {last30Daily.map((entry, index) => (
-                <div key={entry.date} className="group relative flex h-full min-w-0 flex-1 items-end" title={`${formatDate(entry.date)}: ${formatCurrency(entry.cost, overview.currency)}`}>
-                  <div
-                    className="w-full min-w-[3px] rounded-t bg-[#c66a89] transition-colors group-hover:bg-[#9d365b]"
-                    style={{ height: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "2%" }}
-                  />
-                  {(index === 0 || index === last30Daily.length - 1 || index % 7 === 0) ? (
-                    <span className="absolute left-1/2 top-[calc(100%+0.35rem)] -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground">
-                      {formatDate(entry.date)}
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum custo diário foi retornado.</p>
-          )}
-        </CardContent>
-      </Card>
+        ) : (
+          <p className="rounded-ds-btn-lg border border-dashed border-ds-border-input p-8 text-center text-sm text-ds-ink-muted">Nenhum custo diário foi retornado.</p>
+        )}
+      </Section>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <AppCostBreakdownList title="Por serviço" description="Firestore, App Hosting, Cloud Run, Storage e demais serviços vinculados." values={overview.costs.byService} currency={overview.currency} />
@@ -356,23 +254,18 @@ export function AiBillingSettings({ view }: AiBillingSettingsProps) {
 
   if (loading) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-2xl border bg-card">
-        <Loader2 className="h-6 w-6 animate-spin text-[#a6325b]" />
+      <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Consultando o billing">
+        <ListSkeleton rows={4} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
-        <CardContent className="flex flex-col items-start gap-4 p-5 sm:p-6">
-          <div className="flex gap-3 text-sm text-red-800">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-            <div><p className="font-semibold">Falha ao carregar o billing</p><p className="mt-1">{error}</p></div>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Tentar novamente</Button>
-        </CardContent>
-      </Card>
+      <Alert tone="danger" title="Falha ao carregar o billing">
+        <p>{error}</p>
+        <Button type="button" variant="ds-secondary" size="md" className="mt-3" onClick={() => void load()}>Tentar novamente</Button>
+      </Alert>
     );
   }
 
@@ -385,15 +278,14 @@ export function AiBillingSettings({ view }: AiBillingSettingsProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {overview.connected ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-600" />}
-          <span>{overview.connected ? `${isAppCost ? "Google Cloud/Firebase" : "OpenAI"} conectado` : `${isAppCost ? "Google Cloud/Firebase" : "OpenAI"} não conectado`}</span>
-          <span>• {scopeLabel}</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs text-ds-ink-muted">
+          <StatusPill variant={overview.connected ? "ok" : "warn"}>
+            {overview.connected ? `${isAppCost ? "Google Cloud/Firebase" : "OpenAI"} conectado` : `${isAppCost ? "Google Cloud/Firebase" : "OpenAI"} não conectado`}
+          </StatusPill>
+          <span>{scopeLabel}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Atualizar
-        </Button>
+        <Button type="button" variant="ds-secondary" size="md" onClick={() => void load()} disabled={loading}>Atualizar</Button>
       </div>
 
       {!overview.connected
@@ -405,10 +297,7 @@ export function AiBillingSettings({ view }: AiBillingSettingsProps) {
           : <CreditsView overview={overview} />}
 
       {overview.warnings.filter(() => overview.connected || overview.configured).map((warning) => (
-        <div key={warning} className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>{warning}</span>
-        </div>
+        <Alert key={warning} tone="warn">{warning}</Alert>
       ))}
     </div>
   );

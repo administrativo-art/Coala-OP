@@ -1,11 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Calculator, CircleHelp, Layers3, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { resolveUnitAccess } from "@/lib/unit-access";
-import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/layout/page-header";
 import { createBudgetSchema, createBudgetRuleSchema } from "@/features/financial/budgets/schemas";
 import { budgetRequest as request, validateBudgetPeople } from "./budget-api";
 import { BudgetCompositionEditor } from "./budget-composition-editor";
@@ -15,16 +12,18 @@ import { allowedBudgetCenters, budgetScopeQuery, compositionTotal, manualComposi
 import { financialDateKey } from "@/features/financial/lib/financial-dates";
 import type { FinancialBudgetRule, FinancialBudgetSummary } from "@/features/financial/budgets/types";
 import { formatCurrency } from "@/features/financial/lib/utils";
-import { useToast } from "@/hooks/use-toast";
-import { Badge } from "@/components/ui/badge";
+import { ControlPanel } from "@/components/patterns/control-panel";
+import { Field, fieldInputClass } from "@/components/patterns/field";
+import { StatTile } from "@/components/patterns/stat-tile";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import BudgetProjectsManagement from "./budget-projects-management";
-import { Label } from "@/components/ui/label";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import BudgetProjectsManagement from "./budget-projects-management";
+import { budgetRuleModeLabel, summarizeBudgets, usagePercent } from "./settings-model";
 
 type AccountOption = { id: string; name: string; active?: boolean; isGroup?: boolean; parentId?: string | null };
 type InputOption = { id: string; name: string; unit: string };
@@ -32,7 +31,10 @@ type Mode = "manual" | "fixed" | "expense_previous" | "expense_average" | "consu
 const todayMonth = () => financialDateKey(new Date())!.slice(0, 7);
 
 export default function BudgetsManagement({ canManage }: { canManage: boolean }) {
-  const { toast } = useToast();
+  /* Resultado e falha aparecem em texto fixo na tela, não em toast (docs/design/feedback.md). */
+  const [notice, setNotice] = useState<{ kind: "ok" | "error"; title: string; description?: string } | null>(null);
+  const toast = ({ variant, title, description }: { variant?: "destructive"; title: string; description?: string }) =>
+    setNotice({ kind: variant === "destructive" ? "error" : "ok", title, description });
   const { user, permissions, isDefaultAdmin } = useAuth();
   const canViewPersonnel = isDefaultAdmin || Boolean(permissions.financial?.view && permissions.financial.personnelCosts?.view);
   const canEditPersonnel = canManage && (isDefaultAdmin || Boolean(canViewPersonnel && permissions.financial?.settings?.view && permissions.financial?.personnelCosts?.edit));
@@ -231,137 +233,167 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
     finally { setSaving(false); }
   }
 
-  return <PageContainer variant="wide" surface className="space-y-5">
-    <PageHeader title="Orçamentos" description="Planeje por categoria e centro de custo; confira o comprometido e a compra ainda esperada."
-      actions={canManage && <Button disabled={saving || !scopeAllowed} onClick={() => setFormOpen(!formOpen)}><Plus className="mr-2 h-4 w-4" />{formOpen ? "Fechar cadastro" : "Novo orçamento"}</Button>} />
-    <div className="space-y-2"><Label htmlFor="budget-center">Escopo do cadastro e filtro da consulta</Label>
-      <Select disabled={saving} value={resultCenterId || (allUnits ? "global" : "")} onValueChange={(value) => { setResultCenterId(value === "global" ? "" : value); resetForm(); }}>
-        <SelectTrigger id="budget-center"><SelectValue placeholder="Selecione um centro de custo autorizado" /></SelectTrigger><SelectContent>
-          {allUnits && <SelectItem value="global">Global · todas as unidades</SelectItem>}
-          {visibleCenters.map((center) => <SelectItem key={center.id} value={center.id}>{center.name}{center.active === false ? " · inativo" : ""}</SelectItem>)}
-        </SelectContent></Select>
-      <p className="text-xs text-muted-foreground">O centro de custo usa o cadastro de centros de resultado e suas unidades vinculadas. No escopo global, a consulta reúne todos os centros; novos envelopes são globais. Trocar o escopo reinicia o cadastro.</p>
-      {!scopeAllowed && <p role="status" className="text-sm text-muted-foreground">Selecione um centro permitido para consultar ou cadastrar orçamentos.</p>}
-      {catalogError && <p role="alert" className="text-sm text-destructive">{catalogError}</p>}
-    </div>
-    <Card className="rounded-2xl border-[#e2ded4] shadow-sm">
-      <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1"><CardTitle className="flex items-center gap-2"><Layers3 className="h-5 w-5 text-primary" /> Orçamentos por categoria</CardTitle>
-          <CardDescription>Acompanhe um conjunto de compras e despesas. Cada despesa das contas escolhidas reduz o valor disponível do mês.</CardDescription></div>
-      </CardHeader>
-      {formOpen && canManage && scopeAllowed && <CardContent className="border-t pt-6"><fieldset disabled={saving} className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2"><Label htmlFor="budget-name">1. Qual grupo de gastos deseja acompanhar?</Label>
-            <Input id="budget-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Insumos da sorveteria" />
-            <p className="text-xs text-muted-foreground">Use um nome que ajude a reconhecer a finalidade do orçamento.</p></div>
-          <div className="space-y-2"><Label htmlFor="budget-month">Competência inicial</Label>
-            <Input id="budget-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-            <p className="text-xs text-muted-foreground">As despesas serão comparadas pela competência contábil deste mês.</p></div>
-        </div>
-        <div className="space-y-2"><Label>2. Quais contas entram nesse orçamento?</Label>
-          <div className="grid max-h-48 gap-2 overflow-y-auto rounded-xl border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3">
-            {postingAccounts.map((account) => <label key={account.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-background p-2 text-sm">
-              <Checkbox checked={selectedAccounts.includes(account.id)} onCheckedChange={(checked) => setSelectedAccounts(checked
-                ? [...selectedAccounts, account.id] : selectedAccounts.filter((id) => id !== account.id))} />
-              <span>{account.name}</span></label>)}
-          </div><p className="text-xs text-muted-foreground">Uma conta pode ter orçamentos em centros distintos no mesmo mês. Um envelope global não pode se sobrepor aos locais. Despesas com rateio entram apenas pela parcela elegível.</p></div>
-        {canEditPersonnel && <label className="flex items-start gap-2 text-sm"><Checkbox disabled={saving || !resultCenterId} checked={composed} onCheckedChange={(value) => { setComposed(value === true); if (value === true && mode !== "manual" && mode !== "fixed") setMode("manual"); }} />
-          <span>Detalhar por colaborador (opcional; selecione um centro de custo). O total será a soma da composição.</span></label>}
-        <div className="space-y-3"><Label>3. Como o valor será definido?</Label>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-            {([
-              ["manual", "Manual", "Defina somente este mês."],
-              ["fixed", "Automático fixo", "Repita o valor informado nos meses seguintes."],
-              ["expense_previous", "Mês anterior", "Use os gastos do último mês fechado."],
-              ["expense_average", "Média de meses", "Use a média de meses fechados."],
-              ["consumption_price", "Consumo e preços", "Estime a compra pelos insumos, estoque e preços médios."],
-            ] as const).map(([value, title, detail]) => <button key={value} type="button" disabled={saving || (composed && value !== "manual" && value !== "fixed") || (Boolean(resultCenterId) && value === "consumption_price")} onClick={() => setMode(value)}
-              aria-pressed={mode === value}
-              className={`rounded-xl border p-3 text-left transition-colors ${mode === value ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
-              <span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs text-muted-foreground">{detail}</span>
-            </button>)}
-          </div>
-          {(mode === "manual" || mode === "fixed") && !composed && <div className="max-w-xs space-y-2"><Label htmlFor="budget-amount">{mode === "manual" ? "Valor orçado (R$)" : "Valor mensal (R$)"}</Label>
-            <CurrencyInput id="budget-amount" value={amount === "" ? "" : Number(amount)} onChange={(value) => setAmount(String(value))} /></div>}
-          {(mode === "expense_average" || mode === "consumption_price") && <div className="max-w-xs space-y-2"><Label>Média dos últimos meses fechados</Label>
-            <Select value={averageMonths} onValueChange={setAverageMonths}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-              {[2, 3, 4, 6, 12].map((count) => <SelectItem key={count} value={String(count)}>{count} meses</SelectItem>)}
-            </SelectContent></Select></div>}
-          {mode === "consumption_price" && <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-            <p className="text-sm font-semibold">Quais insumos compõem o grupo?</p>
-            <p className="text-xs text-muted-foreground">O cálculo usa o consumo registrado nas unidades, o estoque da matriz e os preços efetivos das compras. Se faltar informação, a prévia aponta o que revisar.</p>
-            <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-              {inputs.map((item) => <label key={item.id} className="flex cursor-pointer items-start gap-2 rounded-lg bg-background p-2 text-sm">
-                <Checkbox checked={selectedInputs.includes(item.id)} onCheckedChange={(checked) => setSelectedInputs(checked
-                  ? [...selectedInputs, item.id] : selectedInputs.filter((id) => id !== item.id))} />
-                <span>{item.name} <span className="text-xs text-muted-foreground">({item.unit})</span></span>
-              </label>)}
-            </div>
-            <div className="max-w-xs space-y-2"><Label htmlFor="budget-stock-days">Estoque desejado após o mês (dias de consumo)</Label>
-              <Input id="budget-stock-days" type="number" min="0" max="60" step="1" value={closingStockDays} onChange={(event) => setClosingStockDays(event.target.value)} />
-              <p className="text-xs text-muted-foreground">Ex.: 7 significa terminar o mês com estoque para aproximadamente sete dias.</p></div>
-          </div>}
-          {composed && canEditPersonnel && resultCenterId && <BudgetCompositionEditor key={resultCenterId} lines={composition} onChange={setComposition} resultCenterId={resultCenterId}
-            accounts={postingAccounts.filter((account) => selectedAccounts.includes(account.id))} month={month} centerName={visibleCenters.find((center) => center.id === resultCenterId)?.name ?? "Centro selecionado"} repeating={mode === "fixed"} disabled={saving} />}
-          {mode !== "manual" && <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1"><Label htmlFor="budget-end-month">Última competência (opcional)</Label><Input id="budget-end-month" type="month" min={month} value={endMonth} onChange={(event) => setEndMonth(event.target.value)} /><p className="text-xs text-muted-foreground">Sem fim definido, a regra se repete até ser pausada.</p></div>
-            <div className="space-y-1"><Label htmlFor="budget-lead">Antecedência da geração automática</Label><Select disabled={saving} value={String(generationLeadMonths)} onValueChange={(value) => setGenerationLeadMonths(value === "1" ? 1 : 0)}><SelectTrigger id="budget-lead"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">0 · somente competência corrente</SelectItem><SelectItem value="1">1 · incluir competência seguinte</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">A antecedência gera o planejamento; a data da compra continua definida nas linhas.</p></div>
-          </div>}
-          {mode !== "manual" && <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={showPreview} disabled={saving}><Calculator className="mr-2 h-4 w-4" />Calcular prévia</Button>
-            {preview && <p className="text-sm">Valor sugerido para {month}: <strong>{formatCurrency(preview.amountCents / 100)}</strong>
-              {preview.snapshot.referenceMonths.length > 0 && <span className="ml-1 text-muted-foreground">com base em {preview.snapshot.referenceMonths.join(", ")}</span>}</p>}
-          </div>}
-          {mode === "consumption_price" && preview?.snapshot.inputEstimates && <div className="space-y-2 rounded-xl border bg-muted/20 p-4 text-sm">
-            <p className="font-semibold">Como chegamos ao valor</p>
-            {preview.snapshot.inputEstimates.map((item) => <div key={item.baseProductId} className="grid gap-1 border-t pt-2 sm:grid-cols-[minmax(0,1fr)_110px_120px]">
-              <span>{item.name} <span className="text-muted-foreground">({item.unit})</span></span>
-              <span>{item.additionalPurchaseQuantity.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} a comprar</span>
-              <strong>{formatCurrency(item.additionalPurchaseAmountCents / 100)}</strong>
-              <span className="text-xs text-muted-foreground sm:col-span-3">Consumo previsto {item.forecastQuantity.toFixed(2)} · estoque projetado {item.openingStockQuantity.toFixed(2)} · pedidos confirmados {item.inboundQuantity.toFixed(2)} · preço médio {formatCurrency(item.averagePriceCentsPerUnit / 100)}/{item.unit}</span>
-            </div>)}
-            <p className="border-t pt-2 text-xs text-muted-foreground">Compras já lançadas neste mês: {formatCurrency((preview.snapshot.committedAmountCents ?? 0) / 100)}. Elas fazem parte do total e não são descontadas novamente.</p>
-          </div>}
-        </div>
-        <div className="rounded-xl border bg-muted/20 p-4 text-sm" aria-live="polite"><p className="font-semibold">Conferência antes de salvar</p>
-          <p>{name || "Informe a finalidade"} · {visibleCenters.find((center) => center.id === resultCenterId)?.name ?? "Global"} · competência {month}</p>
-          <p>{selectedAccounts.map((id) => accountNames.get(id)).filter(Boolean).join(" · ") || "Selecione as contas"}</p>
-          <p>{composed ? `${composition.length} linhas · ` : ""}Total: {formatCurrency((composed ? compositionTotal(composition) : mode === "manual" ? Math.round(Number(amount) * 100) : preview?.amountCents ?? 0) / 100)}</p>
-          <p>{mode === "manual" ? "Somente este mês, com estimativa manual." : `Repetir desde ${month}${endMonth ? ` até ${endMonth}` : ", até pausar"}. Geração com ${generationLeadMonths} mês de antecedência.`}</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900">
-          <span className="flex items-start gap-2"><CircleHelp className="mt-0.5 h-4 w-4 shrink-0" />A criação do orçamento não lança despesas nem agenda pagamentos. Ela define um limite para acompanhar os gastos.</span>
-          <Button onClick={save} disabled={saving || (composed && (!composition.length || !canEditPersonnel)) || (mode !== "manual" && !preview)}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{mode === "manual" ? "Criar orçamento" : "Salvar regra e gerar mês"}</Button>
-        </div>
-      </fieldset></CardContent>}
-    </Card>
+  const totals = summarizeBudgets(budgets);
+  const visibleBudgets = !loading && budgets.length > 0 && loadedScope === currentScope && scopeAllowed;
+  const MODE_OPTIONS = [
+    ["manual", "Manual", "Defina somente este mês."],
+    ["fixed", "Automático fixo", "Repita o valor informado nos meses seguintes."],
+    ["expense_previous", "Mês anterior", "Use os gastos do último mês fechado."],
+    ["expense_average", "Média de meses", "Use a média de meses fechados."],
+    ["consumption_price", "Consumo e preços", "Estime a compra pelos insumos, estoque e preços médios."],
+  ] as const;
+  const darkField = "h-12 rounded-ds-btn-lg border border-white/10 bg-white/[0.07] px-4 text-[14px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
+  const checkItem = "flex cursor-pointer items-start gap-2.5 rounded-ds-btn bg-white px-2.5 py-2 text-[13px] font-semibold";
 
-    <Card className="rounded-2xl border-[#e2ded4] shadow-sm"><CardHeader className="gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div><CardTitle>Orçamentos do mês</CardTitle><CardDescription>O comprometido inclui despesas abertas e pagas; pagar não desconta uma segunda vez.</CardDescription></div>
-      <div className="flex gap-2"><div className="relative"><CalendarDays className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input disabled={saving} aria-label="Mês dos orçamentos" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="w-44 pl-9" /></div>
-        <Button disabled={saving || loading || !scopeAllowed} variant="outline" size="icon" onClick={() => void refresh()} aria-label="Atualizar orçamentos"><RefreshCw className="h-4 w-4" /></Button></div>
-    </CardHeader><CardContent className="space-y-3">
-      {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      {loading ? <div role="status" aria-label="Carregando orçamentos" className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> : budgets.length === 0 || loadedScope !== currentScope || !scopeAllowed
-        ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Ainda não há orçamento para este mês.</p>
-        : budgets.map((budget) => <div key={budget.id} className="rounded-xl border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{budget.name}</h3>
-            <Badge variant={budget.active ? "secondary" : "outline"}>{budget.active ? "Ativo" : "Inativo"}</Badge>
-            <Badge variant="outline">{budget.source === "manual" ? "Manual" : "Gerado automaticamente"}</Badge></div>
-            <p className="mt-1 text-sm">{budget.resultCenterName ?? "Global · todas as unidades"}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{budget.accountPlanIds.map((id) => accountNames.get(id) ?? id).join(" · ")}</p></div>
-            {canManage && (!(budget.hasComposition || budget.composition?.length) || canEditPersonnel) && <Button disabled={saving} variant="ghost" size="sm" onClick={() => void toggleBudget(budget)}>{budget.active ? "Inativar" : "Reativar"}</Button>}</div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {[["Previsto", budget.budgetedAmountCents], ["Comprometido", budget.consumedAmountCents], ["Saldo orçamentário", budget.balanceAmountCents]].map(([label, cents]) =>
-              <div key={label} className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="font-mono text-lg font-bold">{formatCurrency(Number(cents) / 100)}</p></div>)}
+  return <div className="space-y-5">
+    <ControlPanel className="flex flex-col gap-[18px] px-[26px] pb-5 pt-[22px]">
+      <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Orçamentos</span>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[260px] flex-1 space-y-1.5">
+          <label htmlFor="budget-center" className="block text-xs font-bold text-ds-on-dark-sub">Escopo do cadastro e da consulta</label>
+          <Select disabled={saving} value={resultCenterId || (allUnits ? "global" : "")} onValueChange={(value) => { setResultCenterId(value === "global" ? "" : value); resetForm(); }}>
+            <SelectTrigger id="budget-center" className={cn(darkField, "w-full")}><SelectValue placeholder="Selecione um centro de custo autorizado" /></SelectTrigger>
+            <SelectContent>
+              {allUnits && <SelectItem value="global">Global · todas as unidades</SelectItem>}
+              {visibleCenters.map((center) => <SelectItem key={center.id} value={center.id}>{center.name}{center.active === false ? " · inativo" : ""}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="budget-list-month" className="block text-xs font-bold text-ds-on-dark-sub">Competência</label>
+          <input id="budget-list-month" disabled={saving} aria-label="Mês dos orçamentos" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className={cn(darkField, "w-44 [color-scheme:dark]")} />
+        </div>
+        <Button type="button" variant="on-dark-secondary" size="xl" disabled={saving || loading || !scopeAllowed} onClick={() => void refresh()}>Atualizar</Button>
+        {canManage && <Button type="button" variant="primary-page" size="xl" disabled={saving || !scopeAllowed} onClick={() => setFormOpen(!formOpen)} className="whitespace-nowrap">{formOpen ? "Fechar cadastro" : "+ Novo orçamento"}</Button>}
+      </div>
+      <p className="text-xs text-ds-on-dark-muted">O centro usa o cadastro de centros de resultado e suas unidades. No escopo global, a consulta reúne todos os centros e novos envelopes são globais. Trocar o escopo reinicia o cadastro.</p>
+    </ControlPanel>
+
+    {!scopeAllowed && <p role="status" className="text-sm text-ds-ink-muted">Selecione um centro permitido para consultar ou cadastrar orçamentos.</p>}
+    {catalogError && <p role="alert" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[12.5px] font-semibold text-ds-confirm-ink">{catalogError}</p>}
+    {notice && <div role={notice.kind === "error" ? "alert" : "status"} className={cn("flex items-start justify-between gap-3 rounded-ds-btn border px-3.5 py-3 text-[12.5px] font-semibold",
+      notice.kind === "error" ? "border-ds-confirm-border bg-ds-confirm-bg text-ds-confirm-ink" : "border-ds-border bg-ds-surface text-ds-ink-2")}>
+      <span>{notice.title}{notice.description ? <span className="block font-normal">{notice.description}</span> : null}</span>
+      <button type="button" onClick={() => setNotice(null)} className="shrink-0 font-bold underline-offset-2 hover:underline">Dispensar</button>
+    </div>}
+
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatTile label="Previsto" value={<span className="font-ds-mono text-[24px]">{formatCurrency(totals.budgetedCents / 100)}</span>} hint={`${totals.activeCount} de ${totals.count} orçamentos ativos`} />
+      <StatTile label="Comprometido" value={<span className="font-ds-mono text-[24px]">{formatCurrency(totals.consumedCents / 100)}</span>} hint="Despesas abertas e pagas" />
+      <StatTile label="Saldo orçamentário" value={<span className={cn("font-ds-mono text-[24px]", totals.balanceCents < 0 && "text-ds-danger")}>{formatCurrency(totals.balanceCents / 100)}</span>} hint="Previsto menos comprometido" />
+      <StatTile label="Regras automáticas" value={rules.length} hint={showInactiveRules ? "Incluindo inativas" : "Ativas neste escopo"} />
+    </div>
+
+    {formOpen && canManage && scopeAllowed && <section className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-6" aria-label="Novo orçamento"><fieldset disabled={saving} className="space-y-6">
+      <header><h2 className="text-lg font-extrabold">Novo orçamento por categoria</h2>
+        <p className="text-[13px] text-ds-ink-muted">Acompanhe um conjunto de compras e despesas. Cada despesa das contas escolhidas reduz o valor disponível do mês.</p></header>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="1. Qual grupo de gastos deseja acompanhar?" htmlFor="budget-name" hint="Use um nome que ajude a reconhecer a finalidade do orçamento.">
+          <Input id="budget-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Insumos da sorveteria" className={fieldInputClass} /></Field>
+        <Field label="Competência inicial" htmlFor="budget-month" hint="As despesas serão comparadas pela competência contábil deste mês.">
+          <Input id="budget-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className={fieldInputClass} /></Field>
+      </div>
+      <Field label="2. Quais contas entram nesse orçamento?" hint="Uma conta pode ter orçamentos em centros distintos no mesmo mês. Um envelope global não pode se sobrepor aos locais. Despesas com rateio entram apenas pela parcela elegível.">
+        <div className="grid max-h-48 gap-2 overflow-y-auto rounded-ds-btn-lg border border-ds-border bg-ds-warm p-3 sm:grid-cols-2 lg:grid-cols-3">
+          {postingAccounts.map((account) => <label key={account.id} className={checkItem}>
+            <Checkbox checked={selectedAccounts.includes(account.id)} onCheckedChange={(checked) => setSelectedAccounts(checked
+              ? [...selectedAccounts, account.id] : selectedAccounts.filter((id) => id !== account.id))} />
+            <span>{account.name}</span></label>)}
+        </div>
+      </Field>
+      {canEditPersonnel && <label className="flex items-start gap-2.5 text-[13px] font-semibold"><Checkbox disabled={saving || !resultCenterId} checked={composed} onCheckedChange={(value) => { setComposed(value === true); if (value === true && mode !== "manual" && mode !== "fixed") setMode("manual"); }} />
+        <span>Detalhar por colaborador (opcional; selecione um centro de custo). O total será a soma da composição.</span></label>}
+      <div className="space-y-3"><p className="text-xs font-bold text-ds-ink-2">3. Como o valor será definido?</p>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {MODE_OPTIONS.map(([value, title, detail]) => <button key={value} type="button" disabled={saving || (composed && value !== "manual" && value !== "fixed") || (Boolean(resultCenterId) && value === "consumption_price")} onClick={() => setMode(value)}
+            aria-pressed={mode === value}
+            className={cn("rounded-ds-btn-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink disabled:opacity-50",
+              mode === value ? "border-ds-modal bg-ds-modal-soft" : "border-ds-border bg-white hover:bg-ds-warm")}>
+            <span className="block text-[13px] font-bold">{title}</span><span className="mt-1 block text-xs text-ds-ink-muted">{detail}</span>
+          </button>)}
+        </div>
+        {(mode === "manual" || mode === "fixed") && !composed && <div className="max-w-xs"><Field label={mode === "manual" ? "Valor orçado (R$)" : "Valor mensal (R$)"} htmlFor="budget-amount">
+          <CurrencyInput id="budget-amount" value={amount === "" ? "" : Number(amount)} onChange={(value) => setAmount(String(value))} className={fieldInputClass} /></Field></div>}
+        {(mode === "expense_average" || mode === "consumption_price") && <div className="max-w-xs"><Field label="Média dos últimos meses fechados" htmlFor="budget-average">
+          <Select value={averageMonths} onValueChange={setAverageMonths}><SelectTrigger id="budget-average" className={fieldInputClass}><SelectValue /></SelectTrigger><SelectContent>
+            {[2, 3, 4, 6, 12].map((count) => <SelectItem key={count} value={String(count)}>{count} meses</SelectItem>)}
+          </SelectContent></Select></Field></div>}
+        {mode === "consumption_price" && <div className="space-y-3 rounded-ds-btn-lg border border-ds-border bg-ds-warm p-4">
+          <p className="text-[13px] font-bold">Quais insumos compõem o grupo?</p>
+          <p className="text-xs text-ds-ink-muted">O cálculo usa o consumo registrado nas unidades, o estoque da matriz e os preços efetivos das compras. Se faltar informação, a prévia aponta o que revisar.</p>
+          <div className="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+            {inputs.map((item) => <label key={item.id} className={checkItem}>
+              <Checkbox checked={selectedInputs.includes(item.id)} onCheckedChange={(checked) => setSelectedInputs(checked
+                ? [...selectedInputs, item.id] : selectedInputs.filter((id) => id !== item.id))} />
+              <span>{item.name} <span className="text-xs font-normal text-ds-ink-muted">({item.unit})</span></span>
+            </label>)}
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${Math.min(Math.max(budget.usageRatio, 0) * 100, 100)}%` }} /></div>
-          <p className="mt-2 text-xs text-muted-foreground">{budget.expenses.length} despesa(s) vinculada(s) automaticamente.</p>
-          {budget.issues.length > 0 && <p className="mt-2 text-xs text-amber-700">{budget.issues.join(" ")}</p>}
-          <BudgetDetails budget={budget} accounts={accounts} canManage={canManage} canViewPersonnel={canViewPersonnel} canEditPersonnel={canEditPersonnel} canViewExpenses={isDefaultAdmin || permissions.financial?.expenses?.view === true} onSaved={refresh} />
-        </div>)}
-    </CardContent></Card>
+          <div className="max-w-xs"><Field label="Estoque desejado após o mês (dias de consumo)" htmlFor="budget-stock-days" hint="Ex.: 7 significa terminar o mês com estoque para aproximadamente sete dias.">
+            <Input id="budget-stock-days" type="number" min="0" max="60" step="1" value={closingStockDays} onChange={(event) => setClosingStockDays(event.target.value)} className={fieldInputClass} /></Field></div>
+        </div>}
+        {composed && canEditPersonnel && resultCenterId && <BudgetCompositionEditor key={resultCenterId} lines={composition} onChange={setComposition} resultCenterId={resultCenterId}
+          accounts={postingAccounts.filter((account) => selectedAccounts.includes(account.id))} month={month} centerName={visibleCenters.find((center) => center.id === resultCenterId)?.name ?? "Centro selecionado"} repeating={mode === "fixed"} disabled={saving} />}
+        {mode !== "manual" && <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Última competência (opcional)" htmlFor="budget-end-month" hint="Sem fim definido, a regra se repete até ser pausada.">
+            <Input id="budget-end-month" type="month" min={month} value={endMonth} onChange={(event) => setEndMonth(event.target.value)} className={fieldInputClass} /></Field>
+          <Field label="Antecedência da geração automática" htmlFor="budget-lead" hint="A antecedência gera o planejamento; a data da compra continua definida nas linhas.">
+            <Select disabled={saving} value={String(generationLeadMonths)} onValueChange={(value) => setGenerationLeadMonths(value === "1" ? 1 : 0)}><SelectTrigger id="budget-lead" className={fieldInputClass}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">0 · somente competência corrente</SelectItem><SelectItem value="1">1 · incluir competência seguinte</SelectItem></SelectContent></Select></Field>
+        </div>}
+        {mode !== "manual" && <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="ds-secondary" size="md" onClick={showPreview} disabled={saving}>Calcular prévia</Button>
+          {preview && <p className="text-[13px]">Valor sugerido para {month}: <strong className="font-ds-mono">{formatCurrency(preview.amountCents / 100)}</strong>
+            {preview.snapshot.referenceMonths.length > 0 && <span className="ml-1 text-ds-ink-muted">com base em {preview.snapshot.referenceMonths.join(", ")}</span>}</p>}
+        </div>}
+        {mode === "consumption_price" && preview?.snapshot.inputEstimates && <div className="space-y-2 rounded-ds-btn-lg border border-ds-border bg-ds-warm p-4 text-[13px]">
+          <p className="font-bold">Como chegamos ao valor</p>
+          {preview.snapshot.inputEstimates.map((item) => <div key={item.baseProductId} className="grid gap-1 border-t border-ds-divider pt-2 sm:grid-cols-[minmax(0,1fr)_110px_120px]">
+            <span>{item.name} <span className="text-ds-ink-muted">({item.unit})</span></span>
+            <span>{item.additionalPurchaseQuantity.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} a comprar</span>
+            <strong className="font-ds-mono">{formatCurrency(item.additionalPurchaseAmountCents / 100)}</strong>
+            <span className="text-xs text-ds-ink-muted sm:col-span-3">Consumo previsto {item.forecastQuantity.toFixed(2)} · estoque projetado {item.openingStockQuantity.toFixed(2)} · pedidos confirmados {item.inboundQuantity.toFixed(2)} · preço médio {formatCurrency(item.averagePriceCentsPerUnit / 100)}/{item.unit}</span>
+          </div>)}
+          <p className="border-t border-ds-divider pt-2 text-xs text-ds-ink-muted">Compras já lançadas neste mês: {formatCurrency((preview.snapshot.committedAmountCents ?? 0) / 100)}. Elas fazem parte do total e não são descontadas novamente.</p>
+        </div>}
+      </div>
+      <div className="rounded-ds-btn-lg border border-ds-border bg-ds-warm p-4 text-[13px]" aria-live="polite"><p className="font-bold">Conferência antes de salvar</p>
+        <p>{name || "Informe a finalidade"} · {visibleCenters.find((center) => center.id === resultCenterId)?.name ?? "Global"} · competência {month}</p>
+        <p>{selectedAccounts.map((id) => accountNames.get(id)).filter(Boolean).join(" · ") || "Selecione as contas"}</p>
+        <p>{composed ? `${composition.length} linhas · ` : ""}Total: <span className="font-ds-mono">{formatCurrency((composed ? compositionTotal(composition) : mode === "manual" ? Math.round(Number(amount) * 100) : preview?.amountCents ?? 0) / 100)}</span></p>
+        <p>{mode === "manual" ? "Somente este mês, com estimativa manual." : `Repetir desde ${month}${endMonth ? ` até ${endMonth}` : ", até pausar"}. Geração com ${generationLeadMonths} mês de antecedência.`}</p>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-ds-btn-lg border border-ds-border bg-ds-info-bg px-4 py-3 text-[13px] text-ds-info">
+        <span>A criação do orçamento não lança despesas nem agenda pagamentos. Ela define um limite para acompanhar os gastos.</span>
+        <Button type="button" variant="primary-modal" size="md" loading={saving} onClick={save} disabled={composed && (!composition.length || !canEditPersonnel) || (mode !== "manual" && !preview)}>{mode === "manual" ? "Criar orçamento" : "Salvar regra e gerar mês"}</Button>
+      </div>
+    </fieldset></section>}
+
+    <section aria-label="Orçamentos do mês" className="space-y-3">
+      <header><h2 className="text-lg font-extrabold">Orçamentos do mês</h2>
+        <p className="text-[13px] text-ds-ink-muted">O comprometido inclui despesas abertas e pagas; pagar não desconta uma segunda vez.</p></header>
+      {error && <p role="alert" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[12.5px] font-semibold text-ds-confirm-ink">{error}</p>}
+      {loading ? <div role="status" aria-label="Carregando orçamentos" className="space-y-2">{[0, 1, 2].map((row) => <div key={row} className="h-24 animate-pulse rounded-ds-card bg-ds-muted" />)}</div>
+        : !visibleBudgets
+          ? <p className="rounded-ds-card-lg border border-dashed border-ds-border-input p-8 text-center text-sm text-ds-ink-muted">Ainda não há orçamento para este mês.</p>
+          : budgets.map((budget) => <article key={budget.id} className={cn("rounded-ds-card-lg border border-ds-border bg-ds-surface p-5", !budget.active && "opacity-70")}>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2"><h3 className="text-[15px] font-extrabold">{budget.name}</h3>
+                <StatusPill variant={budget.active ? "ok" : "neutral"}>{budget.active ? "Ativo" : "Inativo"}</StatusPill>
+                <StatusPill variant="info">{budget.source === "manual" ? "Manual" : "Gerado automaticamente"}</StatusPill></div>
+              <p className="mt-1 text-[13px] font-semibold">{budget.resultCenterName ?? "Global · todas as unidades"}</p>
+              <p className="mt-0.5 text-xs text-ds-ink-muted">{budget.accountPlanIds.map((id) => accountNames.get(id) ?? id).join(" · ")}</p></div>
+              {canManage && (!(budget.hasComposition || budget.composition?.length) || canEditPersonnel) && <Button type="button" disabled={saving} variant="ds-secondary" size="md" onClick={() => void toggleBudget(budget)}>{budget.active ? "Inativar" : "Reativar"}</Button>}</div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {[["Previsto", budget.budgetedAmountCents], ["Comprometido", budget.consumedAmountCents], ["Saldo orçamentário", budget.balanceAmountCents]].map(([label, cents]) =>
+                <div key={label} className="rounded-ds-btn bg-ds-warm p-3"><p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{label}</p>
+                  <p className={cn("mt-0.5 font-ds-mono text-lg font-bold", label === "Saldo orçamentário" && Number(cents) < 0 && "text-ds-danger")}>{formatCurrency(Number(cents) / 100)}</p></div>)}
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-ds-muted" role="progressbar" aria-label={`Consumo de ${budget.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(usagePercent(budget.usageRatio))}>
+              <div className={cn("h-full", budget.usageRatio > 1 ? "bg-ds-danger" : "bg-ds-accent")} style={{ width: `${usagePercent(budget.usageRatio)}%` }} /></div>
+            <p className="mt-2 text-xs text-ds-ink-muted">{budget.expenses.length} despesa(s) vinculada(s) automaticamente.</p>
+            {budget.issues.length > 0 && <p className="mt-2 text-xs font-semibold text-ds-warn">{budget.issues.join(" ")}</p>}
+            <BudgetDetails budget={budget} accounts={accounts} canManage={canManage} canViewPersonnel={canViewPersonnel} canEditPersonnel={canEditPersonnel} canViewExpenses={isDefaultAdmin || permissions.financial?.expenses?.view === true} onSaved={refresh} />
+          </article>)}
+    </section>
 
     {isDefaultAdmin && canManage && <BudgetForecastConversion key={`${month}:${resultCenterId}`} month={month} resultCenterId={resultCenterId} onSaved={refresh} onImport={(rows) => {
       setName(`Vale-transporte — ${month}`); setMode("manual"); setComposed(true); setFormOpen(true); setPreview(null);
@@ -372,14 +404,20 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
     }} />}
     {allUnits && <BudgetProjectsManagement canManage={canManage} accounts={postingAccounts} />}
 
-    <Card className="rounded-2xl border-[#e2ded4] shadow-sm"><CardHeader><CardTitle>Regras automáticas</CardTitle>
-      <CardDescription>Uma regra ativa cria um orçamento independente em cada mês, mantendo o valor original de cada geração.</CardDescription></CardHeader>
-      <CardContent className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm"><Checkbox disabled={saving} checked={showInactiveRules} onCheckedChange={(value) => setShowInactiveRules(value === true)} />Consultar regras inativas</label>
-        {canManage && <Button variant="outline" disabled={saving || !scopeAllowed} onClick={() => void generateMonth()}>Gerar competência {month}</Button>}</div>
-        {!loading && loadedScope === currentScope && scopeAllowed && rules.map((rule) => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
-        <div><p className="font-medium">{rule.name} · {rule.resultCenterName ?? "Global"}</p><p className="text-xs text-muted-foreground">{rule.mode === "fixed" ? "Valor fixo" : rule.mode === "expense_previous" ? "Último mês fechado" : rule.mode === "consumption_price" ? "Consumo e preço dos insumos" : `Média de ${rule.averageMonths} meses`} · desde {rule.startMonth}{rule.endMonth ? ` até ${rule.endMonth}` : " · sem fim definido"} · antecedência {rule.generationLeadMonths ?? 0}</p></div>
-        {canManage && (!(rule.hasComposition || rule.composition?.length) || canEditPersonnel) && <Button disabled={saving} variant="outline" size="sm" onClick={() => void toggleRule(rule)}>{rule.active ? "Pausar" : "Reativar"}</Button>}
-      </div>)}{!loading && !rules.length && <p className="text-sm text-muted-foreground">Nenhuma regra {showInactiveRules ? "inativa" : "ativa"} neste escopo.</p>}</CardContent></Card>
-  </PageContainer>;
+    <section aria-label="Regras automáticas" className="space-y-3">
+      <header className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-extrabold">Regras automáticas</h2>
+        <p className="text-[13px] text-ds-ink-muted">Uma regra ativa cria um orçamento independente em cada mês, mantendo o valor original de cada geração.</p></div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-[13px] font-semibold"><Checkbox disabled={saving} checked={showInactiveRules} onCheckedChange={(value) => setShowInactiveRules(value === true)} />Consultar regras inativas</label>
+          {canManage && <Button type="button" variant="ds-secondary" size="md" disabled={saving || !scopeAllowed} onClick={() => void generateMonth()}>Gerar competência {month}</Button>}</div></header>
+      <div className="overflow-hidden rounded-ds-card-lg border border-ds-border bg-ds-warm">
+        {!loading && loadedScope === currentScope && scopeAllowed && rules.map((rule) => <div key={rule.id} className={cn("flex flex-wrap items-center justify-between gap-3 border-b border-ds-divider px-5 py-3 last:border-b-0", rule.active === false && "opacity-60")}>
+          <div className="min-w-0"><p className="text-[13.5px] font-bold">{rule.name} · {rule.resultCenterName ?? "Global"}</p>
+            <p className="text-xs text-ds-ink-muted">{budgetRuleModeLabel(rule)} · desde {rule.startMonth}{rule.endMonth ? ` até ${rule.endMonth}` : " · sem fim definido"} · antecedência {rule.generationLeadMonths ?? 0}</p></div>
+          {canManage && (!(rule.hasComposition || rule.composition?.length) || canEditPersonnel) && <Button type="button" disabled={saving} variant="ds-secondary" size="md" onClick={() => void toggleRule(rule)}>{rule.active ? "Pausar" : "Reativar"}</Button>}
+        </div>)}
+        {!loading && !rules.length && <p className="px-5 py-8 text-center text-sm text-ds-ink-muted">Nenhuma regra {showInactiveRules ? "inativa" : "ativa"} neste escopo.</p>}
+      </div>
+    </section>
+  </div>;
 }
