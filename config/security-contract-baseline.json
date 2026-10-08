@@ -1,0 +1,3219 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "4b95663e6f8fc2ad2dc08f89899b61e07afe726e",
+  "note": "Dívida estrutural congelada; presença no baseline não aprova autenticação ou autorização.",
+  "routes": [
+    {
+      "source": "src/app/api/admin/fix-receipts/route.ts",
+      "route": "/api/admin/fix-receipts",
+      "sha256": "794903622b3681bb33f09b62c4baf01c8b3be603c763a0c5f436c7d158d086e7",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/ai/analyze-consumption/route.ts",
+      "route": "/api/ai/analyze-consumption",
+      "sha256": "20dac567cc80fdf2869cff23b43d121e5ac2b74ea2eaf4b7f4a7137269ed2867",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/ai/analyze-goals/route.ts",
+      "route": "/api/ai/analyze-goals",
+      "sha256": "5c6a18692e2cbcc30e6e016c826a39a32e433e54f5f71da245153a571da52ba6",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/assets/route.ts",
+      "route": "/api/assets",
+      "sha256": "68f46d12ce177aef4924e4e7d0c8f53a3c677a10fcd4515128e71d9a39d49ac0",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/assets/[assetId]/route.ts",
+      "route": "/api/assets/[assetId]",
+      "sha256": "6ddac08da4b66144689daddf2ceb47feb7505297ca360301d4344921b92a0595",
+      "methods": [
+        "GET",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/assets/[assetId]/movements/route.ts",
+      "route": "/api/assets/[assetId]/movements",
+      "sha256": "1201bc6eb0cd3c4a10abc77edbf6b84ae090c96bf1ef475c6fdf20354b973bba",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/assets/barcode-labels/route.ts",
+      "route": "/api/assets/barcode-labels",
+      "sha256": "e1b3e1cf02ec790ace10981d97a54148a1cb205f24c6ec5372002311e94ae690",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/assets/categories/route.ts",
+      "route": "/api/assets/categories",
+      "sha256": "df87395b9bdefb8d94f8e596e291514a4c93de65693ae8dfb7d41e85cc3afea7",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/assets/upload/route.ts",
+      "route": "/api/assets/upload",
+      "sha256": "e10d3edfc6a31b09effa6b7b7b5bbf57371f84fc93bd89660cd94b48f3d53a1a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/audit/log/route.ts",
+      "route": "/api/audit/log",
+      "sha256": "33e76e98e8b5cc454a6011a59258bc767573e2ddc4d8d003af78a7561a124ab3",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/audit/logs/route.ts",
+      "route": "/api/audit/logs",
+      "sha256": "dab5d211a50a03223efc2489b5d51492bf3c9a905be1056589aa8a98d4109ab3",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/auth/first-access/[token]/route.ts",
+      "route": "/api/auth/first-access/[token]",
+      "sha256": "d9eb6db70a01feb0ce14c0b453a044114fdda30350c5278a0542f094874a3aae",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/auth/forgot-password/route.ts",
+      "route": "/api/auth/forgot-password",
+      "sha256": "15ce738789bf0c9bfbbdf6c5792f0935a01fa6c9794137a8b09e4d0355cae866",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/auth/last-login/route.ts",
+      "route": "/api/auth/last-login",
+      "sha256": "9d29971201a7a0c3cbaa1c6a16fe70e3fd545aeaf04a147271b427d7ccc14a25",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/auth/password-changed/route.ts",
+      "route": "/api/auth/password-changed",
+      "sha256": "89ac960d88610ff7769e70e84db573ddcb79530707b19470afb153afce7a1479",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/catalogo/route.ts",
+      "route": "/api/catalogo",
+      "sha256": "a5c807d8d5355554e741da7723425ecd5851be593345d1c909bd8a8b7ca392e4",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/client/bootstrap/route.ts",
+      "route": "/api/client/bootstrap",
+      "sha256": "b117508a5b25cbbc16825ffed8d72a6cae0a64f36003bfcc5a00c35f0dbf6763",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/collaborator/dashboard/route.ts",
+      "route": "/api/collaborator/dashboard",
+      "sha256": "5da6f45513cebbb91b4ede29ce6b08b66dc920d20a3624b3898c4fed1b710966",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/collaborator/schedule/route.ts",
+      "route": "/api/collaborator/schedule",
+      "sha256": "aca819754ad81c4b4a73483754a2d2df644e2603f49d534b255b0262662bfb2f",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/companies/route.ts",
+      "route": "/api/companies",
+      "sha256": "f92bfa0a49e43c59d6983942cbfac6582eedd17c4e47458404c7622679bffa7e",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/companies/[id]/route.ts",
+      "route": "/api/companies/[id]",
+      "sha256": "16c44ffc392a34b0e350d9b9044b9e2e4056a5b2b2f93ab95c12ba5f6bd02cc4",
+      "methods": [
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/companies/[id]/consultation-history/route.ts",
+      "route": "/api/companies/[id]/consultation-history",
+      "sha256": "8301081bc9e3c5031bee6f3ee6ab8aac8342e666f435e312ddee1f63f9162f83",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/companies/cnpj/[cnpj]/route.ts",
+      "route": "/api/companies/cnpj/[cnpj]",
+      "sha256": "c8da18104e04cc8c4b1da36e4ee5bc99f33413cbc229f201bc472937ea21cddd",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/companies/cnpj/[cnpj]/refresh/route.ts",
+      "route": "/api/companies/cnpj/[cnpj]/refresh",
+      "sha256": "dd1cbe0790709ae4a683c182e43742ef2cf7b567e0ee3e268ef9f870e6e831f2",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/companies/document-signatories/route.ts",
+      "route": "/api/companies/document-signatories",
+      "sha256": "f22e862af64269429a13f5c879a2d9a64bb36e6a3664995be1709995cc341599",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/collective-agreements/route.ts",
+      "route": "/api/documents/collective-agreements",
+      "sha256": "bbb4818abd558951089e74746ab5d81cc3141d6df0d5cb1a974b686750ac57ff",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/collective-agreements/[id]/route.ts",
+      "route": "/api/documents/collective-agreements/[id]",
+      "sha256": "89290d0eb7ad3fcd16a48e24390714a4770345c669960ff046a01833a5a88f33",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/company/route.ts",
+      "route": "/api/documents/company",
+      "sha256": "9df4c00d688550b8685d06e3846f834d7aef49bf74a1d90d1ca5cee14221c504",
+      "methods": [
+        "DELETE",
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/company/access/route.ts",
+      "route": "/api/documents/company/access",
+      "sha256": "2ed79aadb78e4329d662fcfe2c7a0e5eef216788f12ac460c41eff4850d52a09",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/company/analyze/route.ts",
+      "route": "/api/documents/company/analyze",
+      "sha256": "a06acfca3c014224b8dee20d1cc185e26ce7645bbfa996d7b27aec929067d4b2",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/company/units/route.ts",
+      "route": "/api/documents/company/units",
+      "sha256": "ed95435fe5b8786fe3f3fcddacd2da225dcc25da45197f4f3aba8f2c2037e0cf",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generate/route.ts",
+      "route": "/api/documents/generate",
+      "sha256": "921919dae0a53a5527a287897cb8e1686d51d04c32a673cd1d590b2783f6d75d",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generated/route.ts",
+      "route": "/api/documents/generated",
+      "sha256": "1965194939b72d9ee6637086fe12a148c80cfeabbfa7d0ac9c1f8991518f0051",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generated/[id]/route.ts",
+      "route": "/api/documents/generated/[id]",
+      "sha256": "d7db27c08ec6e5f964869c4afcf2b9c199f1865caa5742194d9154b37bd94b3b",
+      "methods": [
+        "DELETE",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generated/[id]/audit/route.ts",
+      "route": "/api/documents/generated/[id]/audit",
+      "sha256": "9c7ae931616a569bd16c7840167063665d41c7a32c2910767113b0a00829f167",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generated/[id]/file/route.ts",
+      "route": "/api/documents/generated/[id]/file",
+      "sha256": "659f9e1fd555fe235249d19e91adcc28b2d6bdabbb30635028ee853fe7cad311",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generated/[id]/signature/route.ts",
+      "route": "/api/documents/generated/[id]/signature",
+      "sha256": "89b960b4f1317301849d7b7169dfed11bb4f8b02bbc31737dcc45d1fc209b4a8",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generator/parties/route.ts",
+      "route": "/api/documents/generator/parties",
+      "sha256": "24ae89059ff2e4d8808a4e82ac85e05b5244e848eaa28ca74ae6d4b7d610810a",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/generator/templates/route.ts",
+      "route": "/api/documents/generator/templates",
+      "sha256": "4c75b025da42a583fb74fbfbe4da41acafe1d2ee9edde9aa7f9832dc155d13bb",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/route.ts",
+      "route": "/api/documents/templates",
+      "sha256": "1b3f9b2455629ef25b7b904eb7aa03b9321beede3aaf70bdb6f01804825dd699",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/route.ts",
+      "route": "/api/documents/templates/[id]",
+      "sha256": "1f82e5d58373eb5ef24c2859cb3abd042a97771b60b41a69adccf3705efdc2d1",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/ai-plan/route.ts",
+      "route": "/api/documents/templates/[id]/ai-plan",
+      "sha256": "b1da6339360caff84cabc928edd25a085dad549ff4a3ddf48a6439affc484530",
+      "methods": [
+        "GET",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/editable-version/route.ts",
+      "route": "/api/documents/templates/[id]/editable-version",
+      "sha256": "296e1cb29dbfae45cd17e7f05e5597628684600fc5e55b6e5d360af3abd7552a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/editor/route.ts",
+      "route": "/api/documents/templates/[id]/editor",
+      "sha256": "1a899803a53869955eb3ec0ee798842cf6235b2fc8680fc1eb729fb85611a56b",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/file/route.ts",
+      "route": "/api/documents/templates/[id]/file",
+      "sha256": "eea4e04bb9457dcce62ef2dfdcecfda73209fb610b8285b8e33f3f32d914b345",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/integrity/route.ts",
+      "route": "/api/documents/templates/[id]/integrity",
+      "sha256": "ccfcb8664d542638b035efbe11156b423f6486942126e9a41a8899eca50790e1",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/preview/route.ts",
+      "route": "/api/documents/templates/[id]/preview",
+      "sha256": "8db6e8a76b7c27f9cd06984f0601cc746d03f7938b7b9fff4b603949dda5b59a",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/source/route.ts",
+      "route": "/api/documents/templates/[id]/source",
+      "sha256": "67a8669499b60c33a8a687407f9aff05a50cce4f1cdae3ba569e507484b17690",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/text/route.ts",
+      "route": "/api/documents/templates/[id]/text",
+      "sha256": "5d108b059a728f638fa6b11ae539aa4fbe165cae20f02869490de6ac94b5b233",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/documents/templates/[id]/workflow/route.ts",
+      "route": "/api/documents/templates/[id]/workflow",
+      "sha256": "9e2e5863a8735d704aa3eff3a581122aefcfc48c825c234d74e2bbf376c149e7",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/bootstrap/route.ts",
+      "route": "/api/dp/bootstrap",
+      "sha256": "323c471312d218a22d9598d790282818682d2f3cbd15a321fd61a2a876b059c3",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/natasha/availability/route.ts",
+      "route": "/api/dp/natasha/availability",
+      "sha256": "62fd6bd843a7f1eb7c2af89317cc8442d56dfc1e82ad2ddd3891ac04fc7624e5",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/natasha/shift-definitions/route.ts",
+      "route": "/api/dp/natasha/shift-definitions",
+      "sha256": "4256dd7168387657a426433b8f14850fe13aeffb3e93d6fc5603270006115cad",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/natasha/team/route.ts",
+      "route": "/api/dp/natasha/team",
+      "sha256": "049528aef97258a658dcfd9c3daec9fab1e526f6451d20158b73522d3ceb806b",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts",
+      "route": "/api/dp/schedules/[scheduleId]/coverage-demands/[date]",
+      "sha256": "226b66e097db299b75bb8a670bb6b481beda02c62f7454abf1038a8c18a8fbfd",
+      "methods": [
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts",
+      "route": "/api/dp/schedules/[scheduleId]/day-offs",
+      "sha256": "59d9d3957981244d25382b58f115389c5f64502f7d80909b8f85e7204d3abadc",
+      "methods": [
+        "DELETE",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts",
+      "route": "/api/dp/schedules/[scheduleId]/shifts/[shiftId]",
+      "sha256": "a3f4cc39aa2bb5e2db5b06ccf8ba70b4a003af6f8c162da4e83b2eabf40fa4fb",
+      "methods": [
+        "DELETE",
+        "PATCH",
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts",
+      "route": "/api/dp/schedules/[scheduleId]/shifts/bulk",
+      "sha256": "377f852277cf402368169c6f1105e2821e9e9189b5ab0cc30d1867708cc00eac",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/schedules/[scheduleId]/vacations/route.ts",
+      "route": "/api/dp/schedules/[scheduleId]/vacations",
+      "sha256": "ce328019b9bd87846158143ce1065f7df752cccd529ea2f990d94c215a542d23",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/unit-groups/route.ts",
+      "route": "/api/dp/unit-groups",
+      "sha256": "64c44149770b9730a000c4aa2374dda9f006bf905846432ef4d252f1f0b8cfc9",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/unit-groups/[groupId]/route.ts",
+      "route": "/api/dp/unit-groups/[groupId]",
+      "sha256": "1b7017f437f6520cf755f04dc0d45d14fe30db975e9a23081710124a6abbcbe9",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/unit-organizations/route.ts",
+      "route": "/api/dp/unit-organizations",
+      "sha256": "47d55cc0531434b6e4497d09063b2638f520d1f26944a0638eab676241634b50",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/unit-organizations/[organizationId]/route.ts",
+      "route": "/api/dp/unit-organizations/[organizationId]",
+      "sha256": "22d7066a438a318244388f8ed436cf17a3b9ff7a048897f377720f4e7753c488",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/units/route.ts",
+      "route": "/api/dp/units",
+      "sha256": "0ac6727216e45e3d41de02365d07b19aedb73adf60b4056d903fccf249e79450",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/units/[unitId]/route.ts",
+      "route": "/api/dp/units/[unitId]",
+      "sha256": "e25ef63f634a0dfbd60e018e949f4ccb6999cf85d7c982f8e179d82039a82f44",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/vacations/route.ts",
+      "route": "/api/dp/vacations",
+      "sha256": "0655a50f7e70f7d07f16eb2a63af999bca4b7689416df81bb7a5f952e04498c9",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/vacations/[vacationId]/route.ts",
+      "route": "/api/dp/vacations/[vacationId]",
+      "sha256": "44bceb9fbec339d326727e6bf183afe835e9bc3f5f441c7710deaecd7137fc68",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/vacations/[vacationId]/assets/[kind]/route.ts",
+      "route": "/api/dp/vacations/[vacationId]/assets/[kind]",
+      "sha256": "2bc46ce61ea0c0d6d5cc06400cd09d6b28b356ab53f971077596eead2af1910a",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/vacations/[vacationId]/events/route.ts",
+      "route": "/api/dp/vacations/[vacationId]/events",
+      "sha256": "5478cdc6f993ca3eae7082f442db986c3f14da8e74eb7b829cb89d9c064dace8",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/vacations/[vacationId]/notice/route.ts",
+      "route": "/api/dp/vacations/[vacationId]/notice",
+      "sha256": "d8964436c2c07ae88cda5eb125dd2accad2d6dc8cb0ad21dcf7120b12d0d5cbb",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/dp/vacations/[vacationId]/receipt-documents/[documentId]/route.ts",
+      "route": "/api/dp/vacations/[vacationId]/receipt-documents/[documentId]",
+      "sha256": "fe9b3ae5e29ec74a4d2445a5733740c642b16ceee4ef4b9115ed08ffbe8b6cbd",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/accounts/route.ts",
+      "route": "/api/financial/accounts",
+      "sha256": "4e92c36a31f80a52017716cf0d2360acf6fbda5afa2e5fb03fafca08c1718bb7",
+      "methods": [
+        "DELETE",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/acquirer-fees/route.ts",
+      "route": "/api/financial/acquirer-fees",
+      "sha256": "da392a20a19d328988dd9c431d3af99e0a15f15b4b974f2b96709770a5b5db95",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/agent/route.ts",
+      "route": "/api/financial/agent",
+      "sha256": "312693d6460631d8e56af19923961bb2cce667d12b9dfe65cd5c6cd5cec902dd",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/analysis-routines/route.ts",
+      "route": "/api/financial/analysis-routines",
+      "sha256": "3b40fa3a2f1349016258ae870dc4ab5eaf37aab0396ba5be40badde64015a07a",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/analysis-routines/scheduler/route.ts",
+      "route": "/api/financial/analysis-routines/scheduler",
+      "sha256": "adddf6a1df5805b9a3418525f64e8383aa621a632bf730ae3454cabe9e7e61f3",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/beneficiaries/route.ts",
+      "route": "/api/financial/beneficiaries",
+      "sha256": "0dbcd9927b150785804be28a557cb6d1949806190a410275821e55889ffa1e25",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/beneficiaries/entities/[entityId]/route.ts",
+      "route": "/api/financial/beneficiaries/entities/[entityId]",
+      "sha256": "d1fa999b0531c7fefdada7b85775def3c7fb7b5be888fbd493a54f8e4e50b37f",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/bootstrap/route.ts",
+      "route": "/api/financial/bootstrap",
+      "sha256": "e2d8254524cf606efa76412aacf967cbb5e64c899c7659675950a820350984d5",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-inputs/route.ts",
+      "route": "/api/financial/budget-inputs",
+      "sha256": "ac9a1b3b3c9a8ea8850bcfb3030922b5502255730fe55d99aff72e31010666dd",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-projects/route.ts",
+      "route": "/api/financial/budget-projects",
+      "sha256": "3573d7d050fae14cda43e413ac257755bd0db7f0a42bd913b261cc7d6e96482b",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-projects/[id]/route.ts",
+      "route": "/api/financial/budget-projects/[id]",
+      "sha256": "644926e1f50d502df5d210991ecd40de175797f3405337e3ec2704cb79e5e7a2",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-projects/[id]/candidates/route.ts",
+      "route": "/api/financial/budget-projects/[id]/candidates",
+      "sha256": "4513eb933bc4d2c6533081672dc9c1f722e6c5e02c1bcf16551dc5b22b20b5d0",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-projects/[id]/expenses/route.ts",
+      "route": "/api/financial/budget-projects/[id]/expenses",
+      "sha256": "bffb1882358797dae9cd4be033d9c570dff3012a8a10d3619874c8b1e711c875",
+      "methods": [
+        "DELETE",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-projects/[id]/stages/route.ts",
+      "route": "/api/financial/budget-projects/[id]/stages",
+      "sha256": "6e1dbb6ba1c9a75e28f85bb5fd818fef05d687c49c5c20c3ed11ba5d6fd0385a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-rules/route.ts",
+      "route": "/api/financial/budget-rules",
+      "sha256": "b83bc47fdd7ce599e0c3f23bf9ce3a65c1f0d30898d37696caba905330696026",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-rules/[id]/route.ts",
+      "route": "/api/financial/budget-rules/[id]",
+      "sha256": "1fa31c2bec849601ed8dc5e1f5fa97b095bdda2d276a8633848060f4d947beb9",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-rules/generate/route.ts",
+      "route": "/api/financial/budget-rules/generate",
+      "sha256": "6c0252a4c6021deae243be540c8ffb6a8bc13c5e99a04e5459b362ee7250bba5",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budget-rules/preview/route.ts",
+      "route": "/api/financial/budget-rules/preview",
+      "sha256": "e5f596b6837f7811f4c0e7cd72f677e302d762cee6a5993d13f728276f4b8e94",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/route.ts",
+      "route": "/api/financial/budgets",
+      "sha256": "12e4c46090f38323571ae6cb5af3b3d809faaefac8a8f30efd70804d700daab5",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/[id]/route.ts",
+      "route": "/api/financial/budgets/[id]",
+      "sha256": "7726c88604959160c42175537066408a9c7f002519d614ea007a338c12f716db",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/[id]/coverage/route.ts",
+      "route": "/api/financial/budgets/[id]/coverage",
+      "sha256": "0933c55eb66de7adafbe01bc91f991c6bce4f8e30236df0c4928485279d5664b",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/cash-projections/route.ts",
+      "route": "/api/financial/budgets/cash-projections",
+      "sha256": "f746c45d292318a20a9078d7159610014302bfa8b42727ab691245154d28531b",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/centers/route.ts",
+      "route": "/api/financial/budgets/centers",
+      "sha256": "bbd7c3bc8147f6c2f08fcb96d8f047b138e25c8ef0ed52453ae05fc3b4b1626f",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/forecast-conversion/route.ts",
+      "route": "/api/financial/budgets/forecast-conversion",
+      "sha256": "4f978c1c8eee389b3efd4b391d63ac108fbb3ccab14e7228b96a426c004d3d2b",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/budgets/person-references/route.ts",
+      "route": "/api/financial/budgets/person-references",
+      "sha256": "7efe266c861504d8fe25bc7ee6facc71638bcc9ea3b8850fecb8ce6c26b2c66d",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/card-statements/[statementId]/reconcile/route.ts",
+      "route": "/api/financial/card-statements/[statementId]/reconcile",
+      "sha256": "93f02aff9db6a391569670377f4d2351ed2f7396b17154606b81d4f95531683c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/card-statements/import/route.ts",
+      "route": "/api/financial/card-statements/import",
+      "sha256": "0e9a98a126f3c30a5d9951ecb018bb618b607718747746e60982bcc22b77f4a8",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/card-statements/import-preview/route.ts",
+      "route": "/api/financial/card-statements/import-preview",
+      "sha256": "cdc6a62a232d0ff11734a01317eb149abae50fd827f5188d85fbadc0fc45c7d9",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/route.ts",
+      "route": "/api/financial/cash-closures",
+      "sha256": "5143d64f4ced435d8123be1eaa762aeeab94d0c13b28fd26e2b49ef29e7464a8",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]",
+      "sha256": "4c039009689fb8b87a638055a365f3980516de87e88631ed31230a94b843d77f",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/audit/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]/audit",
+      "sha256": "1afffee17d560cba392092420f79b3041eb201e92d89a0bf4b78cb5b415e7100",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/expected-adjustment/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]/expected-adjustment",
+      "sha256": "1a651d57976a443ceb8681a6fcb2b19934d0569956f71276251032bcf4a7bf9c",
+      "methods": [
+        "DELETE",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/finalize/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]/finalize",
+      "sha256": "22187cf1d8eef25880964ca9dceab657c219bd85ccac27c84585a679691a8534",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/reopen/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]/reopen",
+      "sha256": "801ec1cd206018b3d579c1bbdf1e8e0fa16c4a7a8956edf818e420bbbd1be21a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]/split-deposit",
+      "sha256": "301d14637d8238fd98b16bfc637145142f67a3a1578ed3fd7d1fb7c8544ae912",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts",
+      "route": "/api/financial/cash-closures/[closureId]/withdrawals",
+      "sha256": "f7833959fe8ee8d24753b2ac6632014b25e73f8e19e35ec7505dde662e8365e8",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/months/route.ts",
+      "route": "/api/financial/cash-closures/months",
+      "sha256": "2050e28101893e82cebd54ac654463d00d595da5e71bb9036c060b6ec2c127a7",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/overview/route.ts",
+      "route": "/api/financial/cash-closures/overview",
+      "sha256": "ae6ae3ed353fc3d936e67cb3b2828cafc8116d0211ffa2c0709055c372cdd794",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-closures/sync/route.ts",
+      "route": "/api/financial/cash-closures/sync",
+      "sha256": "4773cb387aa9e97689e4b0302f0c80ed2962594ef2e10c366b4eb96f57bea779",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/route.ts",
+      "route": "/api/financial/cash-counting-sessions",
+      "sha256": "cd0fd4225c408c379c0179a04244a2f038601b24f3452453b5311d300cd2464f",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/[sessionId]/route.ts",
+      "route": "/api/financial/cash-counting-sessions/[sessionId]",
+      "sha256": "ecb2c1f022c501e8558fbac049a3d67e8b02a048c42a30fbb664445430e3ae76",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/[sessionId]/cancel/route.ts",
+      "route": "/api/financial/cash-counting-sessions/[sessionId]/cancel",
+      "sha256": "ec52044ce78f10a0b77d25dd8d5144b27b81832150b170083d931405df048087",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/[sessionId]/coins/exchange/route.ts",
+      "route": "/api/financial/cash-counting-sessions/[sessionId]/coins/exchange",
+      "sha256": "b67702b5607ce86f458c2cabab606dce61bd50c2856a47005267e2e30bdd41b1",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/[sessionId]/denominations/route.ts",
+      "route": "/api/financial/cash-counting-sessions/[sessionId]/denominations",
+      "sha256": "d24f37cf0bdbaf94fda41927f93d17311ec4d9e68022335d27c1162e68b0c9e8",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/[sessionId]/draft-position/route.ts",
+      "route": "/api/financial/cash-counting-sessions/[sessionId]/draft-position",
+      "sha256": "a676c3d880c24a5342f0657e297bcb843fc82eeeb26ff486b6ab168e84f79b77",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-counting-sessions/[sessionId]/finish/route.ts",
+      "route": "/api/financial/cash-counting-sessions/[sessionId]/finish",
+      "sha256": "e8e11875f73745aa7f02582dcd96224a21510db2fc325a24388835d7c99531fc",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/route.ts",
+      "route": "/api/financial/cash-deposits",
+      "sha256": "a2224ab63a57441bf30d20cd5df486569840292597034a77aa2e14bf1e7a8368",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/[batchId]/route.ts",
+      "route": "/api/financial/cash-deposits/[batchId]",
+      "sha256": "9c88381a1ddeb63970f9ac06b98d85484a9d0b3f21d88bb51edcd973535c561e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/[batchId]/cancel/route.ts",
+      "route": "/api/financial/cash-deposits/[batchId]/cancel",
+      "sha256": "5138183b45dda6fcbe0d7fda8819947958912d5d8a52643973db887a949a5534",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/[batchId]/coins/route.ts",
+      "route": "/api/financial/cash-deposits/[batchId]/coins",
+      "sha256": "c8cd5f54042a338fc4721bbc6ad22099ebf6cc03e05e99d520cfb350f8e39b77",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/[batchId]/issue/route.ts",
+      "route": "/api/financial/cash-deposits/[batchId]/issue",
+      "sha256": "8f4e5dca3ef32aa63baedcd44fbe3a64a88aea0b8db174bf7dfd4dbbbcbc9e8a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/[batchId]/pdf/route.ts",
+      "route": "/api/financial/cash-deposits/[batchId]/pdf",
+      "sha256": "6256ae7508099deb0b9c25607ba01315051d4d5ed8658ede2ec5cf9112f0f00c",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/[batchId]/refresh/route.ts",
+      "route": "/api/financial/cash-deposits/[batchId]/refresh",
+      "sha256": "396d1032a9a7ed671ef1b994999945b94a589cb16559b181a667c1901f196ac0",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/adjustments/allocate/route.ts",
+      "route": "/api/financial/cash-deposits/adjustments/allocate",
+      "sha256": "239c709fd9f5c15436a88a8368e49c116e80419748116c85ee1c14dba9e281c7",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/coins/exchange/route.ts",
+      "route": "/api/financial/cash-deposits/coins/exchange",
+      "sha256": "c2e7554fbdf048a3c5cc68d96edac5140f6e104e5fcc259e35e62ec24d1ba37a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/inter/webhook/route.ts",
+      "route": "/api/financial/cash-deposits/inter/webhook",
+      "sha256": "c4c1ec57a80d1e31f20fdee36be12d055d01da2670e1cf49b5692ee84329006b",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/reports/route.ts",
+      "route": "/api/financial/cash-deposits/reports",
+      "sha256": "a8f89ce845fee5a57e79fd20025a7b5355ae1e2ddff69d9015ce12b27bbfc740",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/cash-deposits/reports/export/route.ts",
+      "route": "/api/financial/cash-deposits/reports/export",
+      "sha256": "433386e7175aa3643161424568007a6e99d9e091bd69e0f7a6b5b5ab6ea65870",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/data/route.ts",
+      "route": "/api/financial/data",
+      "sha256": "4688b82664d7eff2721dc5e53a33678ed2143a22d39ed3245586fbcf4ef318ab",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/dre/cmv-closure/route.ts",
+      "route": "/api/financial/dre/cmv-closure",
+      "sha256": "c6f727fd2b092cf085f24b433fa653631d1d3b02ecf69c295f78a4d51e6e865d",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/dre/source-data/route.ts",
+      "route": "/api/financial/dre/source-data",
+      "sha256": "dc73847af23027c3801c562a44cb8bbd37023ab48dc8b3cfc3bd5c3cc17f7055",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/dre/stock-cmv/route.ts",
+      "route": "/api/financial/dre/stock-cmv",
+      "sha256": "fc79a484b4da979aa4b5e0ac7c28225f4f09b58c632cb1714c3c83abc6bcfa86",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]/route.ts",
+      "route": "/api/financial/expenses/[expenseId]/adjustments/[adjustmentId]",
+      "sha256": "094e2750715c9b9572654bf58ed4371df6b5b884d74af642db5523ae3ca4c33e",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/expenses/[expenseId]/boleto/route.ts",
+      "route": "/api/financial/expenses/[expenseId]/boleto",
+      "sha256": "66b5223e021e4e1d72e8f96eaf99e526837c3becf59a297300a66ef96848057b",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/expenses/[expenseId]/boleto/payment/route.ts",
+      "route": "/api/financial/expenses/[expenseId]/boleto/payment",
+      "sha256": "7aa9abcd10e1fe5e36de10d5df7e62d422a67b491c04798b5da57ab98a132dc4",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/expenses/[expenseId]/payments/route.ts",
+      "route": "/api/financial/expenses/[expenseId]/payments",
+      "sha256": "9b4d8e46d658edae7e17aa680bc5ce6ca791c824b45e5af1ac00eac687196caf",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/expenses/[expenseId]/reconcile-provision/route.ts",
+      "route": "/api/financial/expenses/[expenseId]/reconcile-provision",
+      "sha256": "47c67b4bb8123316f6d7137857d91b7b3186b41bea641e9d7a5d934c76be5464",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/expenses/[expenseId]/settlement/route.ts",
+      "route": "/api/financial/expenses/[expenseId]/settlement",
+      "sha256": "2571b31f63558f528057fe21a0401c926514c0db1b4ad9d78b35353b594452b5",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/import-sessions/[sessionId]/route.ts",
+      "route": "/api/financial/import-sessions/[sessionId]",
+      "sha256": "9a544137c6619b44edb35f7a6c1b3cf2176477bedd9bb4fbd18a64d224988452",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/route.ts",
+      "route": "/api/financial/inbox",
+      "sha256": "e2750302bbdb3d75cb4ef90326f598a132b545a7e57b468b692cefc6dc3ecd43",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/[id]/route.ts",
+      "route": "/api/financial/inbox/[id]",
+      "sha256": "acf57d70ba31c9d0d6d7b78acd6d74fce78ed6e9bf6ac299d148a48ddc6f79e7",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/[id]/analyze/route.ts",
+      "route": "/api/financial/inbox/[id]/analyze",
+      "sha256": "5019be4533df97f68cec2139fc65e954061fd8058f6fb32b40f0b97568e2c362",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/[id]/files/[fileId]/route.ts",
+      "route": "/api/financial/inbox/[id]/files/[fileId]",
+      "sha256": "6bfc53515b80c73b30022b97316d791d2417c5367b59f84eb8158f7780634b86",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/[id]/link/route.ts",
+      "route": "/api/financial/inbox/[id]/link",
+      "sha256": "28128e59bf23b1c444cc7dbb5a468cd6ae582874f6dc325e86da6537c8b85a61",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/[id]/payment/route.ts",
+      "route": "/api/financial/inbox/[id]/payment",
+      "sha256": "5108e8daa93be0f0b0a109ea055f13c04c0f63933cf978bad7dea14e62bfe4dd",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/[id]/restore/route.ts",
+      "route": "/api/financial/inbox/[id]/restore",
+      "sha256": "7ce98e162290dd1a212103046f9259690bd888e70dc7b9125865fb78fff1f368",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/bulk-review/route.ts",
+      "route": "/api/financial/inbox/bulk-review",
+      "sha256": "fe4fe55c1dbd4b55ba9ca04f9f770f9f4c755a79f3f5ff5955fb2c6392fd1a10",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/inbox/settings/route.ts",
+      "route": "/api/financial/inbox/settings",
+      "sha256": "8c3725dcd842c1ee5902a20ee5582d9983a979c9b18870b9da0e5bb449e5ba73",
+      "methods": [
+        "GET",
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/management-analysis/route.ts",
+      "route": "/api/financial/management-analysis",
+      "sha256": "363567d583349890f20f89760f8b9612cd35c0d64478b42b9f67eb823b25e13b",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/route.ts",
+      "route": "/api/financial/payment-requests",
+      "sha256": "7ae044a67eee9251d329f9a8ccdd2fbec1ba28d150b3da0e3f616683c7d2f452",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/[id]/authorize/route.ts",
+      "route": "/api/financial/payment-requests/[id]/authorize",
+      "sha256": "db6aaaa719323ffc50e0e85ad281bec2769c01a6b26f80f4222dc6233f7d0477",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/[id]/proof/route.ts",
+      "route": "/api/financial/payment-requests/[id]/proof",
+      "sha256": "b20e29f436a54967f9c922403f54a3b07fd317032982f906715effac3006e8e2",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/[id]/refresh/route.ts",
+      "route": "/api/financial/payment-requests/[id]/refresh",
+      "sha256": "3a4b39666cece99d2cfb1d5a40477accae12bb4d35421a2b040c8ee24a8776b9",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/payment-requests/[id]/submit/route.ts",
+      "route": "/api/financial/payment-requests/[id]/submit",
+      "sha256": "14694291d2cc624b7d004f467a1cdc4f3c879a2cabf4c94569596ef9552be92c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/pdv-stone-review/route.ts",
+      "route": "/api/financial/pdv-stone-review",
+      "sha256": "b606e5e85cca9b43655e9ad35c7da15b1e5d7f801dc2788e7934fe30e51f32df",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-agenda/route.ts",
+      "route": "/api/financial/stone-agenda",
+      "sha256": "83936169e3ad0949ee52f11c675e6a187e6ceb208d79f4f1c7f2ec7d531400eb",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-anticipations/route.ts",
+      "route": "/api/financial/stone-anticipations",
+      "sha256": "1395c980490e7f8df3463c621fa506b161810dda16be110a3b73e554f34db15e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-future-receivables/route.ts",
+      "route": "/api/financial/stone-future-receivables",
+      "sha256": "88756df10af9e1621cc43e1f443d8d46d2a293825de741a34f14553e0b8c17df",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-mappings/route.ts",
+      "route": "/api/financial/stone-mappings",
+      "sha256": "de3b090be717a289d805cae4ef5d7cbcfef704fe68aded92840447b46f2df278",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-portfolio/route.ts",
+      "route": "/api/financial/stone-portfolio",
+      "sha256": "0e5f83ac6e43a8c6627db528ae77e9b66ce4e5c0938e2a81cb7b1df2aaae69ec",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-portfolio-cron/route.ts",
+      "route": "/api/financial/stone-portfolio-cron",
+      "sha256": "95a63028acd3263e720ea410b4925c8ab02e7aea26fb1c92c776545b0e6a7120",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-receipts/reconcile/route.ts",
+      "route": "/api/financial/stone-receipts/reconcile",
+      "sha256": "9d958b44c5f80258ec6136d8579e852b083a785ff57a79fae13fed7eaf5d7731",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/financial/stone-wallet-position/route.ts",
+      "route": "/api/financial/stone-wallet-position",
+      "sha256": "d01af9fbe358da9c978e45e0ef676a0bf928bad411cd4ecbcb0d60bdf90e878f",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/admin/aggregates/recompute/route.ts",
+      "route": "/api/forms/analytics/admin/aggregates/recompute",
+      "sha256": "9349490ceb5dee1bb19c1af5eaca9d0bba5607f10213221828f7ad2e7c8ebb25",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/admin/privacy/anonymize-due/route.ts",
+      "route": "/api/forms/analytics/admin/privacy/anonymize-due",
+      "sha256": "b026362344546ffa4f665ff959fed9247d49f018c78d0afc0fa6c83dad3c4b20",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/admin/privacy/backfill/route.ts",
+      "route": "/api/forms/analytics/admin/privacy/backfill",
+      "sha256": "525230136d08ddc1236b42284ea0fee1b464a27914d25cb35eaa7870ace235b8",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/admin/reprocess/execute/route.ts",
+      "route": "/api/forms/analytics/admin/reprocess/execute",
+      "sha256": "cbbc6b1c9b3b934507814f3b9fd8147018ec2a0ee6de76fab30d34d1c69d2d20",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/admin/reprocess/simulate/route.ts",
+      "route": "/api/forms/analytics/admin/reprocess/simulate",
+      "sha256": "6da560e503accd2915f165e864d3b498a4717f23e8b3ae8517ec59abb093e909",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/criteria/route.ts",
+      "route": "/api/forms/analytics/criteria",
+      "sha256": "c5c2155763146a3169c408d2e93003098d0618ef87f749d5a6ba09291138132f",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/criteria/[criterionId]/route.ts",
+      "route": "/api/forms/analytics/criteria/[criterionId]",
+      "sha256": "168bf4db8ea5e6c6836c4582aef2eaa04466a78af46d22e3f4562983f914ac5a",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/domains/route.ts",
+      "route": "/api/forms/analytics/domains",
+      "sha256": "bbb4776f2e1651cae9d448d45716528239520cb1a056fc07e8f6f172f1f64cae",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/domains/[domainId]/route.ts",
+      "route": "/api/forms/analytics/domains/[domainId]",
+      "sha256": "a3f8fc115597bb1d3e8be54bba4e407498b34c3317c60d28939d1ce664186d1b",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/jobs/anonymize-due/route.ts",
+      "route": "/api/forms/analytics/jobs/anonymize-due",
+      "sha256": "020a4aa69cce45c8846e0d1b89291d2bd5b71c68729e8f7de5484bd12619fe42",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/jobs/recompute-daily/route.ts",
+      "route": "/api/forms/analytics/jobs/recompute-daily",
+      "sha256": "7fc93373c65e1282d5b588bb1ff8f3992b97119b5f7cf6de90e2098185507bad",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/route.ts",
+      "route": "/api/forms/analytics/occurrences",
+      "sha256": "bc2dc3049455134c42921fd6c8671510867f551ac2dcf1bbc642aa48368fd8bf",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/[occurrenceId]/route.ts",
+      "route": "/api/forms/analytics/occurrences/[occurrenceId]",
+      "sha256": "ad7bf56c9d08b34cc85b6e05cd07dec9ffdca5aa815607aeaa01aa47a2be322a",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/[occurrenceId]/cancel/route.ts",
+      "route": "/api/forms/analytics/occurrences/[occurrenceId]/cancel",
+      "sha256": "cac7cfbd2f34d312208f6815b54f41eb403d1a65bef9b5592b1d981948f7e293",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/[occurrenceId]/reject-resolution/route.ts",
+      "route": "/api/forms/analytics/occurrences/[occurrenceId]/reject-resolution",
+      "sha256": "ee2dfb112eac35e9346635aae81670d43bbf925ef1723049f1cfeea05a5241fd",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/[occurrenceId]/resolve/route.ts",
+      "route": "/api/forms/analytics/occurrences/[occurrenceId]/resolve",
+      "sha256": "b7cfc592cf3551a68c6e9fcae7cce314a67d586ec56b6060eaf2e8c4567d70f2",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/[occurrenceId]/validate-resolution/route.ts",
+      "route": "/api/forms/analytics/occurrences/[occurrenceId]/validate-resolution",
+      "sha256": "391850af11f04eb24cd87eb80b72773e341029cbc5d1f3b29533e59c3d97430c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/occurrences/export.csv/route.ts",
+      "route": "/api/forms/analytics/occurrences/export.csv",
+      "sha256": "3ac1a1b3d738177270e75bd9c55dbe476e9c7df93150c3be90d3f82555e17613",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/results/route.ts",
+      "route": "/api/forms/analytics/results",
+      "sha256": "dff8c619e60960d69123f8c07b5977aab6bfd997ea75ecb0102b3bdce4adecb4",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/results/[resultId]/route.ts",
+      "route": "/api/forms/analytics/results/[resultId]",
+      "sha256": "9545babf7bd64b6f30b5bd78c90714552243f63b0340ed78b366ddca44d688b2",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/retention-policies/route.ts",
+      "route": "/api/forms/analytics/retention-policies",
+      "sha256": "d08c3554f31ca70bfda5fbbc8b0d37843819cb72e3fe07ee94878565ad163437",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/retention-policies/[policyId]/route.ts",
+      "route": "/api/forms/analytics/retention-policies/[policyId]",
+      "sha256": "fbf5981a01bd807b5167121bc2adfa4e49246acb492219f5e8d1a15048cf622e",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/seed/route.ts",
+      "route": "/api/forms/analytics/seed",
+      "sha256": "7ea8eb4a5ba1df6f116c192b60b44947dfaeb3a8668b122ebdfa60137cd8a56c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/summary/route.ts",
+      "route": "/api/forms/analytics/summary",
+      "sha256": "bca16a167cf8c1d01fe8d72ed87b677da5d184ac31090015f071405edc99a55f",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/targets/route.ts",
+      "route": "/api/forms/analytics/targets",
+      "sha256": "ddccc63e7820b68fa0332f705eb146555095233e2dbf743424190fda35fd973f",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/analytics/targets/[targetId]/route.ts",
+      "route": "/api/forms/analytics/targets/[targetId]",
+      "sha256": "b033b4147aa3f0314abd23f2137bc60acce1663832d807e4ca703882a8cacdee",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/bootstrap/route.ts",
+      "route": "/api/forms/bootstrap",
+      "sha256": "1418ab42110f8d37466014f25d5f5a670cded500e252bc5d06788fe6f5c069a2",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/events/trigger/route.ts",
+      "route": "/api/forms/events/trigger",
+      "sha256": "91642736126234b13b73c81e76d9f005e01f678fbcf46d00ed877261f774982f",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/executions/route.ts",
+      "route": "/api/forms/executions",
+      "sha256": "fdb70b0d1944cbbd7b08232dac529f8eedf882e1ed6f3733a71570cde1492794",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/executions/[executionId]/route.ts",
+      "route": "/api/forms/executions/[executionId]",
+      "sha256": "bc5e82a5a589a04d2153ebf4455587f63229acb942bba941b80284ea1b41942b",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/executions/[executionId]/claim/route.ts",
+      "route": "/api/forms/executions/[executionId]/claim",
+      "sha256": "656045a2d63d7f0e4eb25142521bf0be93219bb8c48c96ab9881b5bfe67341e7",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/models/route.ts",
+      "route": "/api/forms/models",
+      "sha256": "317553773773c7de4c07b38930e9372d47a0508c4d58176ac30224d02001b776",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/models/[modelId]/route.ts",
+      "route": "/api/forms/models/[modelId]",
+      "sha256": "587f5a931bb4c06ff90edf5b5ff38c9101374db7dcda0c29b0adbd51f7a10783",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/navigation/route.ts",
+      "route": "/api/forms/navigation",
+      "sha256": "a7ad42c173005bc15096143e84f2455c6ee6a90307d98d4404f94ac52d24ff4b",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/projects/route.ts",
+      "route": "/api/forms/projects",
+      "sha256": "63fa9b5a28d8c0395c735a2869561dd25f9989cb51a946299b837cecc08ac48c",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/projects/[projectId]/route.ts",
+      "route": "/api/forms/projects/[projectId]",
+      "sha256": "91b3c209484248707be6d452f1652cb449bdb62c11c495359b18837d7dcbedbd",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/projects/ensure-units/route.ts",
+      "route": "/api/forms/projects/ensure-units",
+      "sha256": "665751446d0d1ee24914855f4a310faba01100e04d76fa02997c4ebba7315e33",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/scheduler/route.ts",
+      "route": "/api/forms/scheduler",
+      "sha256": "a15bbf6c2c4aa8f3b118595893b250c7bbc98e8182fd7acca6de1f364ed3f324",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/subtypes/route.ts",
+      "route": "/api/forms/subtypes",
+      "sha256": "770f9bd6c1e91626cba927502c321d0c0f79dad1d5e00add4b332790e81b9a61",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/subtypes/[subtypeId]/route.ts",
+      "route": "/api/forms/subtypes/[subtypeId]",
+      "sha256": "d5bbbdfdf22bce02b13a7000b63c4d6f8203d7aa970d729565aa56d77790bd9f",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/templates/route.ts",
+      "route": "/api/forms/templates",
+      "sha256": "4fcf6b90b30d596cae40cb3ac4a0e1aa4f348f2f4bc9e0185d6d3ea96a306685",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/templates/[templateId]/route.ts",
+      "route": "/api/forms/templates/[templateId]",
+      "sha256": "f139682b15940ee0f2720d733648cc7d92832224decab910f579482794747fae",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/templates/[templateId]/application/route.ts",
+      "route": "/api/forms/templates/[templateId]/application",
+      "sha256": "325b26dd650f18f8d89564cc2d2b3efe14ad304a3dce5e358b9cfbd85181a7a9",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/types/route.ts",
+      "route": "/api/forms/types",
+      "sha256": "3c165f57666b1376007ba4d73ab91065082838ee828a836d58b9f7b2da401e39",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/types/[typeId]/route.ts",
+      "route": "/api/forms/types/[typeId]",
+      "sha256": "8366cd6672b5293292523899f5b7a80b1ace698cca76fe886ecfc3f8ce1e8667",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/forms/upload/route.ts",
+      "route": "/api/forms/upload",
+      "sha256": "94429589ddfb6ca71a3c527781b0c3d0fcda71afb15286d2522cae41a3c3af09",
+      "methods": [
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/accountant/[token]/route.ts",
+      "route": "/api/hr/accountant/[token]",
+      "sha256": "de226e6341aeecf2dd956d63be8c52576a3d49b927b9c83ae551a9cb10e10529",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/apply/route.ts",
+      "route": "/api/hr/apply",
+      "sha256": "ff1aa8e48b33a5ccc38a44fcd428837f41735bb57ddf26436ae98ee83e2d184b",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/aso-clinics/route.ts",
+      "route": "/api/hr/aso-clinics",
+      "sha256": "8853bf3b1d8d535b2d9101fa2b1de46cef52fe421b8ae3db47048f6afe218efd",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/aso/candidate/[token]/route.ts",
+      "route": "/api/hr/aso/candidate/[token]",
+      "sha256": "bfaa37ade38a0d582f9ce0bea4e22de58f34c7b8e0d3713afee65f9610ec9033",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/aso/clinic/[token]/route.ts",
+      "route": "/api/hr/aso/clinic/[token]",
+      "sha256": "b8d644995d6cff806fdfeecb645773de737d91ad28e33f2fe40281bb60a1aacd",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/bootstrap/route.ts",
+      "route": "/api/hr/bootstrap",
+      "sha256": "2dcc53e7c8f8ec26a97f77102d15a25297eb88064258cc29d4f1cb56309f6894",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/candidates/route.ts",
+      "route": "/api/hr/candidates",
+      "sha256": "cc98bbf0b795d9bd6f1d80dde6702cb3a71d171ba6374b847c1cbbfcb1e675b0",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/candidates/[id]/route.ts",
+      "route": "/api/hr/candidates/[id]",
+      "sha256": "62883eb7b9e7c73241bb25fd6765df82ede42be73816a73248230cf1abee4ad1",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/candidates/[id]/profile/route.ts",
+      "route": "/api/hr/candidates/[id]/profile",
+      "sha256": "69117e9041938e3e50a9a505f88b3a857c45b459e4256ea0e8dd3ada4b395e90",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/collaborators/[userId]/pdv-access/route.ts",
+      "route": "/api/hr/collaborators/[userId]/pdv-access",
+      "sha256": "27b67be764ca4240ad97afcfd13aec9d5e97e8dcd6b480673e854b608c06137e",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/consents/image-voice/[employeeId]/route.ts",
+      "route": "/api/hr/consents/image-voice/[employeeId]",
+      "sha256": "45279eae1d3719290e3e65bb88ce45e8900a84634f1da47d36568ca3cceeb0a0",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/departments/route.ts",
+      "route": "/api/hr/departments",
+      "sha256": "4ed53fa1774c0e9cfc57c8e30f9f3b191750e8795b4284573ef60b7631bda7e6",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/departments/[departmentId]/route.ts",
+      "route": "/api/hr/departments/[departmentId]",
+      "sha256": "68209adb4e039582e1db9f9c06ab057a077dd23a0054c78d9220b80418216927",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/route.ts",
+      "route": "/api/hr/employee-documents",
+      "sha256": "c3cc270b921fe78522982296001fa429c8c5e6278bd9bd595d2bc971edd0c5a4",
+      "methods": [
+        "DELETE",
+        "GET",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/access/route.ts",
+      "route": "/api/hr/employee-documents/access",
+      "sha256": "a810355f39a5fa9c3f3274f6362c8126955d73e5d16592a5e8af82b2f7916bd5",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/analyze-upload/route.ts",
+      "route": "/api/hr/employee-documents/analyze-upload",
+      "sha256": "3fe07c4c4d8c30322fbf0455b5855c91e10e91e773a035d7ba61426c3316f0dd",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/batches/route.ts",
+      "route": "/api/hr/employee-documents/batches",
+      "sha256": "fe4751b4a309e7adf1b379ee6646b27bf04e31f400b1a9be643dafe3d8fb1bce",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/cleanup/route.ts",
+      "route": "/api/hr/employee-documents/cleanup",
+      "sha256": "8831d8c1f8ea7cfa4a10525f8cd883bcc690f9c9b38bc9ecc840ca85ac03ea69",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/confirm/route.ts",
+      "route": "/api/hr/employee-documents/confirm",
+      "sha256": "f71aaa9b6f5d0bee2593634c33e86cd5fa09fab46006d0832599faf497d959ee",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/item/route.ts",
+      "route": "/api/hr/employee-documents/item",
+      "sha256": "0ebe41fd9379b0875afa02ad01635ba63afc4e2ae0158a954cce5db5f4d06a20",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/reanalyze/route.ts",
+      "route": "/api/hr/employee-documents/reanalyze",
+      "sha256": "bc15e48cd8d608a4ab3d1d42b8214174219872d675a6234416bcb6dedb3cb5ca",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/summary/route.ts",
+      "route": "/api/hr/employee-documents/summary",
+      "sha256": "3e5924b0f4d69f3c31781e20d5862d35c0ee4dec706f5719826151454b76dd6e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/employee-documents/visibility/route.ts",
+      "route": "/api/hr/employee-documents/visibility",
+      "sha256": "35bb567a78da9aef1d6d5a5f4b1dd1213167e4750e2932615811613638f4c21d",
+      "methods": [
+        "GET",
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/functions/route.ts",
+      "route": "/api/hr/functions",
+      "sha256": "db4efff4805f70419cacb1ead73a6a2440caeea4fcb9203373743a656f2e83c7",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/functions/[functionId]/route.ts",
+      "route": "/api/hr/functions/[functionId]",
+      "sha256": "725f1d9a1dc1b9b79fe29b54ab9913514eddb4794c1ba6fa4025a1026855b03f",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/integration-templates/route.ts",
+      "route": "/api/hr/integration-templates",
+      "sha256": "d7d6404da6544574c66c60484f0f003cb6c37073ec50a881b8c0b72475402c1c",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/integration-templates/[templateId]/route.ts",
+      "route": "/api/hr/integration-templates/[templateId]",
+      "sha256": "5f22691f3cd65a67a744f2aa90e0b7e3620959c01288c2bfdc2c88640f70ee5b",
+      "methods": [
+        "DELETE",
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/integration-templates/[templateId]/publish/route.ts",
+      "route": "/api/hr/integration-templates/[templateId]/publish",
+      "sha256": "b377732a801eeaf644aa30a12b69555fe686ca61a0bdca41fe77e65c82ab3e01",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/integration-templates/[templateId]/versions/[version]/route.ts",
+      "route": "/api/hr/integration-templates/[templateId]/versions/[version]",
+      "sha256": "3ab3a43504be05b530a61b0ba34f4aa20e933ab319e8d982086a050a9e4bfd33",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/integrations/pdvlegal/catalog/route.ts",
+      "route": "/api/hr/integrations/pdvlegal/catalog",
+      "sha256": "2630e2c71279645027333a7171bbeb30b4ee8b6ce67b8bd6617a62f9c1c5ef82",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/login-access/route.ts",
+      "route": "/api/hr/login-access",
+      "sha256": "86cac0a756623de2d962cff30bf9206ce833659aabb48576a9bd0c6e9ead0752",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/login-access/audit/route.ts",
+      "route": "/api/hr/login-access/audit",
+      "sha256": "ec986a02ec1d6b0c7d1da8d30e68057100c003a3513794a58fcc64f5e1f99133",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/navigation/route.ts",
+      "route": "/api/hr/navigation",
+      "sha256": "619e383ba214e41e2c965db1650a212495bc83f4bdf8e4d9cc04ead5927d5795",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/route.ts",
+      "route": "/api/hr/onboarding",
+      "sha256": "235035d1b80d20c4312fecc04a6d4aff8e88b0accaeaab0b493e3b4ecf1392dd",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/route.ts",
+      "route": "/api/hr/onboarding/[id]",
+      "sha256": "1b42fce316b2147f4143f274ee3345b37f4f5ba51e6596c320f35eba4999e2e6",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/accountant-form/route.tsx",
+      "route": "/api/hr/onboarding/[id]/accountant-form",
+      "sha256": "5968ec8b4ca9a6144d5a0df28f56116bc183ad328fd9e1b352c33ff1684fd28b",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/accountant-workflow/route.ts",
+      "route": "/api/hr/onboarding/[id]/accountant-workflow",
+      "sha256": "c86c588678a0e9a5c6f09ba081089fdbbaee7b91c3b1760e372c50543ed72adf",
+      "methods": [
+        "GET",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/aso-guide/route.tsx",
+      "route": "/api/hr/onboarding/[id]/aso-guide",
+      "sha256": "dbe083b8571f3dd2da39a56f08ded6f07af7e1d88f6d80a6b2e413f99c431f82",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/aso-workflow/route.ts",
+      "route": "/api/hr/onboarding/[id]/aso-workflow",
+      "sha256": "16e91e57ed8773024fdbbc8c76df1ec02881f8b6abf1f0e4e8c2bd76f7cec25a",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/integration/route.ts",
+      "route": "/api/hr/onboarding/[id]/integration",
+      "sha256": "b833d7cdd12a37359818ea48a918e8d26b46b3cbb0c14fa69700a103907ecab6",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/pj-workflow/route.ts",
+      "route": "/api/hr/onboarding/[id]/pj-workflow",
+      "sha256": "49bd161787f3c911938986f5f42987491690503a32c3bf8b240d54777dbd6bd9",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/probation/route.ts",
+      "route": "/api/hr/onboarding/[id]/probation",
+      "sha256": "ffa51cffedacb2f6abac92629c8c636a91b0b1b0a8be09827e0cbebf85c7474c",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/signature-documents/route.ts",
+      "route": "/api/hr/onboarding/[id]/signature-documents",
+      "sha256": "644f846307aa0a764fff24d4f66cfad56dab1411e02e53ab4a62bf996abe000f",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/[id]/training/route.ts",
+      "route": "/api/hr/onboarding/[id]/training",
+      "sha256": "5fa35224c066bced1d657336f4ca96941086bd3a6e50d2d11cd448eb77317cd4",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/access-catalog/route.ts",
+      "route": "/api/hr/onboarding/access-catalog",
+      "sha256": "c05a7458b827d6f270807ccc23a755954fb61d79d5b2b904f2666c16e4b1395a",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/onboarding/public/[token]/route.ts",
+      "route": "/api/hr/onboarding/public/[token]",
+      "sha256": "44c7cdbf4534611359e9b4d2fd4ac1eafbf0a7ea11225dcded12ef99c97b63c5",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/openings/route.ts",
+      "route": "/api/hr/openings",
+      "sha256": "e1422b7e7d2953a5e759dac20e522a255dd9c76d371fd0e0271a4bd825560274",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/openings/[id]/route.ts",
+      "route": "/api/hr/openings/[id]",
+      "sha256": "1e4edf36e74b26352b3da6a853edfd8c6d802851d96f7dcfce22ed93688ae448",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/openings/public/route.ts",
+      "route": "/api/hr/openings/public",
+      "sha256": "b8db14eae4fb6c345f5b91f575b5292fadf0c806a60d65162495dfe11cba0935",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/probation/alerts/route.ts",
+      "route": "/api/hr/probation/alerts",
+      "sha256": "579aef8f6d35647c1b59888a43bd87fdfc24f03b470199f5ba470538dd60b2d6",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/public-stats/route.ts",
+      "route": "/api/hr/public-stats",
+      "sha256": "7e7cc86d8a309838f6b3ef84af06b7849acd12211a5b1b7cf85be3565818add0",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/recruitment/forms/talent-pool/route.ts",
+      "route": "/api/hr/recruitment/forms/talent-pool",
+      "sha256": "3286da8848967f1134f52a1a72b19dd6f9a5131d828c341086730d3f6aecc635",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/recruitment/forms/talent-pool/public/route.ts",
+      "route": "/api/hr/recruitment/forms/talent-pool/public",
+      "sha256": "97ea386ded54afd420350ede573e2452e9004f7f760977100bb44528bded99de",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/roles/route.ts",
+      "route": "/api/hr/roles",
+      "sha256": "a4c61d878ca4e4e5e6081e0c0dc14cecbfe0750997e49a76d1bddaf12fadf37e",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/roles/[roleId]/route.ts",
+      "route": "/api/hr/roles/[roleId]",
+      "sha256": "543fb37c1f6a82b046cd7890d18b06262eb1cb6b7209cd89e40b07f37b9f684c",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/roles/[roleId]/sync-profile/route.ts",
+      "route": "/api/hr/roles/[roleId]/sync-profile",
+      "sha256": "a24215df91d928dbbd04e1c4d6c9a4cd48e02ce8fe6fdfe8875d98ad6f573d9f",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/talent/route.ts",
+      "route": "/api/hr/talent",
+      "sha256": "65553cb5fc7b6ad2ef6ddf2c1eb6678a691defde82d99e9b1e590a6480f68298",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/termination-accountant/[token]/route.ts",
+      "route": "/api/hr/termination-accountant/[token]",
+      "sha256": "0bf8bc2023ee80d8fa0485a576707264510a25151b68dedfdf66ed7347eadf0d",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/termination-documents/[token]/route.ts",
+      "route": "/api/hr/termination-documents/[token]",
+      "sha256": "5b84ca10a3235b94ac59bbb8774e7d0b71c90ee588cff1b8f45c9021744cc0cc",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/terminations/route.ts",
+      "route": "/api/hr/terminations",
+      "sha256": "d1921bcb2b7cae2415d50361697a8589e454c643c6515f06ce24eccec6b628db",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/terminations/[id]/route.ts",
+      "route": "/api/hr/terminations/[id]",
+      "sha256": "8269af95ca4e6b29c2670a4c931867b81ce2fc701e4ef7017e8333389241411d",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/terminations/[id]/asset/route.ts",
+      "route": "/api/hr/terminations/[id]/asset",
+      "sha256": "46a1e6dc3c1839c0934a74af8c79369e7f8371e114f2e0cf865b5cc31478270c",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/terminations/[id]/letter/route.ts",
+      "route": "/api/hr/terminations/[id]/letter",
+      "sha256": "fe3d768315bf5f44dec03a860b9128dfae43a264d8f0652f9352279c867492c6",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/upload/route.ts",
+      "route": "/api/hr/upload",
+      "sha256": "3630ce42739f7112a1294349a9af449b615d3f1a896c976316f88df0cce7533d",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/hr/vacation-accountant/[token]/route.ts",
+      "route": "/api/hr/vacation-accountant/[token]",
+      "sha256": "ab69cb0a4a057a5699602131d2568114179be20b7648a6293773059d76e6996d",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/bizneo/push-schedule/route.ts",
+      "route": "/api/integrations/bizneo/push-schedule",
+      "sha256": "8544d66a6971c28a94f49a25e4d967e2c683f7ea204a9b82d0c053a697ac0360",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/bizneo/shift-templates/route.ts",
+      "route": "/api/integrations/bizneo/shift-templates",
+      "sha256": "91c2a69659dc6e9386bebf73262e89572aa0a1b622b41c330e7cd8eaacfaf4f3",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/bizneo/sync-taxons/route.ts",
+      "route": "/api/integrations/bizneo/sync-taxons",
+      "sha256": "b07b6b028fd8dc8023dc14b05435331e180c471bb47da767089cab0032407323",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/bizneo/sync-users/route.ts",
+      "route": "/api/integrations/bizneo/sync-users",
+      "sha256": "7b65fc78a09baa85d02f9fc5a32e13b155cdab3b034e104dbdbf9eb1ee82009e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/feed/route.ts",
+      "route": "/api/integrations/instagram/feed",
+      "sha256": "6e4e6d6b2a51eb020ca7a12821e4c872a2a2cba0db4a63dad7c668306110b08f",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/insights/route.ts",
+      "route": "/api/integrations/instagram/insights",
+      "sha256": "3c04066b4253107c3678b94eac903d25b51f3c4e836a5eec06e77ab5459a2ccb",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/media/route.ts",
+      "route": "/api/integrations/instagram/media",
+      "sha256": "669f455e6afb462becdddf475273f1fa9cab95180a60b0174db1d6ceca72aa85",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/media/[id]/route.ts",
+      "route": "/api/integrations/instagram/media/[id]",
+      "sha256": "a1cc6254ec0a944644e86469c5461dc2f806a071a1856bd37533163d628ab2b1",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/media/folders/route.ts",
+      "route": "/api/integrations/instagram/media/folders",
+      "sha256": "464e74feee23b06ba56d3fc375285d5288b9efb14d27061127b4f15c747148c7",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/media/folders/[id]/route.ts",
+      "route": "/api/integrations/instagram/media/folders/[id]",
+      "sha256": "e1e3bc9e1f56de16e3c2632e0cc7344c21b60e715fb44655e29538b9705642a3",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/media/move/route.ts",
+      "route": "/api/integrations/instagram/media/move",
+      "sha256": "da0fc0b63ba163b48c1d3fca91ff918b07bc699e36151fc70a7ea94a0bdabcf6",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/posts/route.ts",
+      "route": "/api/integrations/instagram/posts",
+      "sha256": "eaa54d94ea67212e988317fbd6239339c94ddcb990c88085ddbe9324c4c6ba92",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/posts/[id]/route.ts",
+      "route": "/api/integrations/instagram/posts/[id]",
+      "sha256": "fad1a71ab407eb28e19b1e23f991c553d63421ad076054ff60e1a4951f790234",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/posts/[id]/actions/route.ts",
+      "route": "/api/integrations/instagram/posts/[id]/actions",
+      "sha256": "601f556cc69faf504d3c5d841b994fb1619ab4f4d4df603454311fe68c17fd3a",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/posts/[id]/media/route.ts",
+      "route": "/api/integrations/instagram/posts/[id]/media",
+      "sha256": "39b703bb57c54e03b8249e3c259505a9305ed5e94e03346b7c6fdc6da8391eff",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/posts/[id]/media/[mediaId]/route.ts",
+      "route": "/api/integrations/instagram/posts/[id]/media/[mediaId]",
+      "sha256": "5eaa1f3944f836fb3a4e3df8c4e4a5b453deb4450cff0f9f005af9b28af84f67",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/schedule/route.ts",
+      "route": "/api/integrations/instagram/schedule",
+      "sha256": "3b5858c2079165efa103408b56d02da80d4d0a09dff2eef996697f2eca1c4e35",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/schedule/[id]/route.ts",
+      "route": "/api/integrations/instagram/schedule/[id]",
+      "sha256": "7db7c02bd09c3c356f4e39dae8e403fc547459c3760019b7018eb354624c416a",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/instagram/schedule/[id]/media/[index]/route.ts",
+      "route": "/api/integrations/instagram/schedule/[id]/media/[index]",
+      "sha256": "54b21bf5c704c3d78306a167eef58e0025464d2419104aea85f0c4dadb71445a",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/marketing/products/route.ts",
+      "route": "/api/integrations/marketing/products",
+      "sha256": "87698326b03ff7b888b7768eec7759f80dd0d6cf82de5c363e4955b34fcbe57b",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/pdvlegal/filiais/route.ts",
+      "route": "/api/integrations/pdvlegal/filiais",
+      "sha256": "0d69ced95d28d9297bf103bf2adf96762bb8d12a666a262215041dbb7d4d6073",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/pdvlegal/inspect/route.ts",
+      "route": "/api/integrations/pdvlegal/inspect",
+      "sha256": "3c2d96752ee9043c9d46d16fb216ad840bf8748d4ffeda6fb95dceaa6aca8f00",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/integrations/pdvlegal/sync/route.ts",
+      "route": "/api/integrations/pdvlegal/sync",
+      "sha256": "b30fa389bd666ba2d9566ddd3a004443c2d76e01bce7a639c23623d27b0fd945",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/cash-closures/daily-sync/route.ts",
+      "route": "/api/jobs/cash-closures/daily-sync",
+      "sha256": "83ba8ed03c64e9ffe7bd11a34c6d5677caff2c97f78f8087ba99390014e6b01f",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/cash-deposits/reconcile/route.ts",
+      "route": "/api/jobs/cash-deposits/reconcile",
+      "sha256": "b59c70f7082e66754c88d8907e37d434d9bc5479fc89afee980d614ee32a93a5",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/documents/retention-reconcile/route.ts",
+      "route": "/api/jobs/documents/retention-reconcile",
+      "sha256": "66acc20921f1b6542bc6ef79cb9e6a50262b13beeb751decfed3e03f3e7f4534",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/financial-budgets/generate/route.ts",
+      "route": "/api/jobs/financial-budgets/generate",
+      "sha256": "2c957d47e47401e422eae9e15555c866cb864b232fc3ba75619b6968c777d851",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/financial-inbox/maintenance/route.ts",
+      "route": "/api/jobs/financial-inbox/maintenance",
+      "sha256": "eb7cbd4a470494bf3e5f0bf8618acc829a67075146d03b1ea3837a0e9374767b",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/inter/cobrancas/reconcile/route.ts",
+      "route": "/api/jobs/inter/cobrancas/reconcile",
+      "sha256": "62cbcd576367ae65fd705a5f73bbfa3824c3b7460a02332e293c74eb64efe9ba",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/inter/reconcile/route.ts",
+      "route": "/api/jobs/inter/reconcile",
+      "sha256": "0031d2a431c42e38b71b6b362fda9c1943d384f87bec847d0e6de88dcb8024b1",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/inter/statements/sync/route.ts",
+      "route": "/api/jobs/inter/statements/sync",
+      "sha256": "41f560ef8e7404993d070570e9ecd5b301afc9f4a4bd361ca12616d1e7b102dd",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/stone-pix/request/route.ts",
+      "route": "/api/jobs/stone-pix/request",
+      "sha256": "62ecfb6737d80dd4e56f929b6de214980e9eeb8fb50e5a241a876165ec3f86a1",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/jobs/stone-sales-review/reconcile/route.ts",
+      "route": "/api/jobs/stone-sales-review/reconcile",
+      "sha256": "7106a869a0eeb6a70d80072966b72e7d4e2cbbef74d6e2497c889dbc643eab9e",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/mercadorias/route.ts",
+      "route": "/api/mercadorias",
+      "sha256": "a365fead61ae418019362663f3c8ef22b2da785a0f3373917900ec1a04f879c1",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/mercadorias/export/route.ts",
+      "route": "/api/mercadorias/export",
+      "sha256": "8973e04cdae1c959b7c0113d39917f436cf2cce7db4f650dcb225e0b477159f7",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/observability/client-errors/route.ts",
+      "route": "/api/observability/client-errors",
+      "sha256": "b830263dd873a61571d45f995d3c00ec382229d08261468a421b7775d3d1de0d",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/privacy/incidents/route.ts",
+      "route": "/api/privacy/incidents",
+      "sha256": "d84bf82533b11334e224d66286104a009fa166d4d8de76c9298ee51a18c69339",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/privacy/incidents/[id]/route.ts",
+      "route": "/api/privacy/incidents/[id]",
+      "sha256": "23a56cd2977bc373608abd26360d6fd4a5a6435ef66c53160f85129b3ec58a1f",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/privacy/requests/route.ts",
+      "route": "/api/privacy/requests",
+      "sha256": "8aa591d845f40ce744e10c602683ccfd436cb507e93cd55649ebdf23b9e9b5ff",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/privacy/requests/[id]/route.ts",
+      "route": "/api/privacy/requests/[id]",
+      "sha256": "d374b2c0ef62a3347aca982b80afcd5247c785dae5f566dffe192b6d29fb89bd",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/processes/route.ts",
+      "route": "/api/processes",
+      "sha256": "df1f437bb35ada206cde1fbd86f2eef598df5419ef4de3f7f5bd21459c7eacb1",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/products/route.ts",
+      "route": "/api/products",
+      "sha256": "62783aab100dfa92f2d78ca0ee76145636e9e53aedbc48c485b2daeca13db566",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/products/[id]/route.ts",
+      "route": "/api/products/[id]",
+      "sha256": "7ec4700eb5b025eaa5e5b39cd18ab70a67db527dac3b1797ca18418affd78906",
+      "methods": [
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/products/barcode/[codigo]/route.ts",
+      "route": "/api/products/barcode/[codigo]",
+      "sha256": "2817edd16cc8d6be9635b9363845260161336cc5939a28639f1bf705678e3dad",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/products/barcode/[codigo]/sources/route.ts",
+      "route": "/api/products/barcode/[codigo]/sources",
+      "sha256": "7a82d57c7af0e63b68d4f231c66e4ddb1a031ee02b87884e1fe12304a737f48b",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/profile-compliance/route.ts",
+      "route": "/api/profile-compliance",
+      "sha256": "fa2c004eca9482295d761b8aae82abec60465be860931e76666b5ff644178c83",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/profile-compliance/overview/route.ts",
+      "route": "/api/profile-compliance/overview",
+      "sha256": "ef2250eb5e8785e7b777186584559c3d8d2e74a73ae97085b2b3bdb7e3afd52c",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/public/bio/route.ts",
+      "route": "/api/public/bio",
+      "sha256": "9f09a07f4d5e72b4a509f998f5a14e6f9b076725620420fe9c207c8189c12fd5",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/public/bio/analytics/route.ts",
+      "route": "/api/public/bio/analytics",
+      "sha256": "8ba51ef6e711040d8a1f28b63122f28e7e03896abd75f45110412670455f4625",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/public/bio/media/[id]/route.ts",
+      "route": "/api/public/bio/media/[id]",
+      "sha256": "b728ef57ccfd732624feadb78e9cb887be57fafac960c5757c2bf88266494745",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/purchasing/[...path]/route.ts",
+      "route": "/api/purchasing/[...path]",
+      "sha256": "d4e339e3085eb14ca5ab89fd1de88a3495a99a89a4d6709bffac27dfbb41a414",
+      "methods": [
+        "DELETE",
+        "GET",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/purchasing/pending-by-destination/route.ts",
+      "route": "/api/purchasing/pending-by-destination",
+      "sha256": "5d650a98c0815abc4f9f7de0f2f02641d1f6915271e9dfb73024c6c55436e0de",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/purchasing/pending-by-destination/ignore/route.ts",
+      "route": "/api/purchasing/pending-by-destination/ignore",
+      "sha256": "d655404424fe1f56625664fa724260051aa104de01ddbdc49682b13f4b80521e",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/registry/[...path]/route.ts",
+      "route": "/api/registry/[...path]",
+      "sha256": "090f983346a629ea23436b710d657c92f8b4063dc36c4953fd9712ded60e5782",
+      "methods": [
+        "DELETE",
+        "GET",
+        "PATCH",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/registry/cnpj/[cnpj]/route.ts",
+      "route": "/api/registry/cnpj/[cnpj]",
+      "sha256": "7eeab48063325350356b4e142249c845df2b3a3866121fc6ec32b44320730a6e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/rh/employee-profile/[employeeId]/route.ts",
+      "route": "/api/rh/employee-profile/[employeeId]",
+      "sha256": "be177cc3f998263e897e2b7f133f3f8398338d13f76f7649125f86ca21dc789c",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts",
+      "route": "/api/rh/employee-profile/[employeeId]/image-voice-consent",
+      "sha256": "6bd0bd982d4f19071560904994ad606b1b1abec7c781c398e72effda57146a68",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/rh/field-map/route.ts",
+      "route": "/api/rh/field-map",
+      "sha256": "fa060fefd597b9a8222294c7e7d817de54e903e126942657512786df155add2e",
+      "methods": [
+        "GET",
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/settings/ai-management/route.ts",
+      "route": "/api/settings/ai-management",
+      "sha256": "42c9d00e36a4e2bf4fed4bdc4edd50e4216864172204748e4a156f7ec128bebd",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/settings/public-bio/route.ts",
+      "route": "/api/settings/public-bio",
+      "sha256": "0b3b328afa77668a58fa3c91701bc85088ecde519424fe697b56865f046591ff",
+      "methods": [
+        "GET",
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/settings/public-bio/media/route.ts",
+      "route": "/api/settings/public-bio/media",
+      "sha256": "a50000313d1b97e63126ca7e7e0c90df6ad611b8b0bc31db1b409f2195b2737c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/settings/public-bio/media/[id]/route.ts",
+      "route": "/api/settings/public-bio/media/[id]",
+      "sha256": "cb84681410c4dc08f2553c0711a91d562f8c2b19d70f73d8348259fb71b358c8",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/asset/[...assetPath]/route.ts",
+      "route": "/api/signage/asset/[...assetPath]",
+      "sha256": "3502ae0058c2131202e16b979dd32ce1acd1d60eed74cfb821eb76520a4b3eab",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/heartbeat/route.ts",
+      "route": "/api/signage/heartbeat",
+      "sha256": "1edc66c03e37693b5273a3b6bd1f013de8c2e23cf73ee79d60bee710f3aef2be",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/public/[kioskId]/route.ts",
+      "route": "/api/signage/public/[kioskId]",
+      "sha256": "f32efb0f37bbb865f9c01ce8c64fba57b39c5b64d2abe89ce8c640ac9adb6ede",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/publish/route.ts",
+      "route": "/api/signage/publish",
+      "sha256": "6e8f5965a5bd8526d4f2c3646ac6bcc56f357d8f8e05d31674689a53f386b522",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/slides/route.ts",
+      "route": "/api/signage/slides",
+      "sha256": "2c20098d2db768771abe22eb2eae038a1b6fb14afdff67be4a9c3ef534ecbf2b",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/slides/[slideId]/route.ts",
+      "route": "/api/signage/slides/[slideId]",
+      "sha256": "a9eaafc8ca502984960a150276ba0f87382075a41249df70e2a02c900aa3e85c",
+      "methods": [
+        "DELETE",
+        "PUT"
+      ]
+    },
+    {
+      "source": "src/app/api/signage/upload/route.ts",
+      "route": "/api/signage/upload",
+      "sha256": "87576ce6a3dfea2a2e7b362f615d98b7bd13234ab2ffdbf2ac68da90de99f5b2",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/count-sessions/route.ts",
+      "route": "/api/stock/count-sessions",
+      "sha256": "93c7b754dbc7c36afba0a8032f627d95602fcd37530adea8f37c8b9642e4ae2e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/item-requests/route.ts",
+      "route": "/api/stock/item-requests",
+      "sha256": "2fc792271965e0cd081f13a7c31d6d7f145fa8e9da4ea49d4244d181c2a62299",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/item-requests/[requestId]/route.ts",
+      "route": "/api/stock/item-requests/[requestId]",
+      "sha256": "0fd6d8d00914e04fa57487914ca127d35606bd51c235c90c0e15915ed9ee7765",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/movement-history/route.ts",
+      "route": "/api/stock/movement-history",
+      "sha256": "33f5a8b11e3e8808b4e4134a4158ff96b981f960869ca2a2064e16167ddc301e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/replenishment-policy/route.ts",
+      "route": "/api/stock/replenishment-policy",
+      "sha256": "71bc408d938d9e85dd30e3824227b42fc0dbcc5fbcf698c0dae1dd347bd0fd3e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-activities/route.ts",
+      "route": "/api/stock/reposition-activities",
+      "sha256": "123b0335c184e205bbc088f4dec4afb7c5cd85ba3dae67693e14b1caf9e530ae",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-activities/[activityId]/route.ts",
+      "route": "/api/stock/reposition-activities/[activityId]",
+      "sha256": "713613cd5d32753233ffb4981c244e0617d28eb11a624f0b1d7656aa07ba0058",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-activities/[activityId]/finalize/route.ts",
+      "route": "/api/stock/reposition-activities/[activityId]/finalize",
+      "sha256": "11fb13520f904c0f20fd702edd8078e9ff330ea063e2b4f0e63118372977b9dd",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-activities/[activityId]/reopen-audit/route.ts",
+      "route": "/api/stock/reposition-activities/[activityId]/reopen-audit",
+      "sha256": "2aef31222d7bc8bcac87ab6744e3008072f70de9eb762a5f058fc58964e37a75",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-activities/[activityId]/reopen-dispatch/route.ts",
+      "route": "/api/stock/reposition-activities/[activityId]/reopen-dispatch",
+      "sha256": "926b7cf9e41c2f23aa5b12288537b3fbd4e07e2cb6e50d2d6db7e17fafb36dd2",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-activities/[activityId]/revert/route.ts",
+      "route": "/api/stock/reposition-activities/[activityId]/revert",
+      "sha256": "f44b24ca4612ac67d23b57f71da9dac3fb27c43614f31a888a6f3cb338e8f158",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-requests/route.ts",
+      "route": "/api/stock/reposition-requests",
+      "sha256": "bb3f52dcef74ddea45b5885b660bd9bc3d0cc7054d7139f9647b36e80d9a2aba",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/reposition-requests/[requestId]/route.ts",
+      "route": "/api/stock/reposition-requests/[requestId]",
+      "sha256": "66843142e57d36f69906ed3fb081443b3854775efd925085a5ba0d63c8881e5d",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/return-requests/route.ts",
+      "route": "/api/stock/return-requests",
+      "sha256": "e94c229a9da14a9890a52929df989b2a4ef3d0c78050b1c96135d31184e318ce",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/stock/return-requests/[requestId]/route.ts",
+      "route": "/api/stock/return-requests/[requestId]",
+      "sha256": "640661da37357939524f63b2ec0f3f762e823cd3f5856d1791fe398d1819f7b4",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/route.ts",
+      "route": "/api/tasks",
+      "sha256": "2e1fb6479321c98aa4e0611c59eb278ff0df467ca69cc311141e7b27235afcec",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/[taskId]/route.ts",
+      "route": "/api/tasks/[taskId]",
+      "sha256": "9dc33c203e9690442b7d92e41b9835faeebecae62c92709fa3242f2667fbc0a6",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/[taskId]/status/route.ts",
+      "route": "/api/tasks/[taskId]/status",
+      "sha256": "8fd5b5c9e5e150b3d7ee68a3df81770ef3edbf73f4f3f3b68f095afec550fc22",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/navigation/route.ts",
+      "route": "/api/tasks/navigation",
+      "sha256": "e979e4e92907deed3fdfe822fb334f524945100c61f507e3a6ed8b20f4a25e2e",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/projects/route.ts",
+      "route": "/api/tasks/projects",
+      "sha256": "20b4dc24491dc03fdb85533c606626f72496eb0b6e4cd7bf78286ad4e19474ac",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/projects/[projectId]/route.ts",
+      "route": "/api/tasks/projects/[projectId]",
+      "sha256": "986c1f8219de1d4ac745fdce7b66048b5e443443df0a80feaefbf83c334bbdd9",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/purchase-receipt-sync/route.ts",
+      "route": "/api/tasks/purchase-receipt-sync",
+      "sha256": "b85936e5e5398f5b818314015481d1a6d33dc58782792e2fda8067694d25ad1c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/statuses/route.ts",
+      "route": "/api/tasks/statuses",
+      "sha256": "2fe22e124609f25273b3ecc1252ebf45186496da7e08b87a6e26931a65b22adc",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/statuses/[statusId]/route.ts",
+      "route": "/api/tasks/statuses/[statusId]",
+      "sha256": "af3b2f9d76803a88c650e0d5f601b3901277989d54f804a45aa73e34adee2fd1",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/subprojects/route.ts",
+      "route": "/api/tasks/subprojects",
+      "sha256": "ada506a97b98b35ac6de9bc2fd9ea33117745a096a732699a1bf1773be9a63f3",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/tasks/subprojects/[subprojectId]/route.ts",
+      "route": "/api/tasks/subprojects/[subprojectId]",
+      "sha256": "0029e2cc3b32a5932f6a44cf122232589ce864d4076ce0d447b6ca47039026f4",
+      "methods": [
+        "DELETE",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/uniforms/route.ts",
+      "route": "/api/uniforms",
+      "sha256": "c3ad9e0939eff5388836df5850124319c272023aaa248cfba0bd6dfeab357dd3",
+      "methods": [
+        "GET",
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/uniforms/deliver/route.ts",
+      "route": "/api/uniforms/deliver",
+      "sha256": "704c5e858f2f0c12be49174612902b3308ea1679af29134b7032a38a7194ed28",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/uniforms/exchange/route.ts",
+      "route": "/api/uniforms/exchange",
+      "sha256": "7279a6e468caf68f9b7ad03481d0180601a7a875ac107b3dc5df809cb526e216",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/uniforms/return/route.ts",
+      "route": "/api/uniforms/return",
+      "sha256": "e2866085cda313c4ddf082ac2761e4a7af9e4f43674d86b23ea1eaad133fe827",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/uniforms/terms/[id]/route.ts",
+      "route": "/api/uniforms/terms/[id]",
+      "sha256": "197db6bf84bc3d650bba04b1d18da7bd57ea07aaa39c438ee93131d24f7444c5",
+      "methods": [
+        "GET"
+      ]
+    },
+    {
+      "source": "src/app/api/uploads/operations/route.ts",
+      "route": "/api/uploads/operations",
+      "sha256": "973157a40caf5478408d3611a8edb949777c287c8ca9d83e5fcdfba792fc4fd4",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/users/route.ts",
+      "route": "/api/users",
+      "sha256": "d557492a3ccc83f2a0673a7e08db225ff70b943b9aaa92b442268d69806eb238",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/users/[userId]/route.ts",
+      "route": "/api/users/[userId]",
+      "sha256": "4a1adfe5b78a455b9f27ee63abb8ecb454df53c25b039352271164ed40e37243",
+      "methods": [
+        "PATCH"
+      ]
+    },
+    {
+      "source": "src/app/api/webhooks/autentique/route.ts",
+      "route": "/api/webhooks/autentique",
+      "sha256": "8aa455c73932d1d5f8cfbbe289c35d56dbf8a5eca2a19397049b152814e60688",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/webhooks/inter/banking/route.ts",
+      "route": "/api/webhooks/inter/banking",
+      "sha256": "0efb9dd61a6c31e8c2e5c4ec0ccb85697c69bbce01ad53952812a32ad29e535c",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/webhooks/inter/cobranca/route.ts",
+      "route": "/api/webhooks/inter/cobranca",
+      "sha256": "27233be140042f1bc40c8f37d47a0d1f6d0437c65b09c446167330ad78ac7ed4",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/webhooks/resend/route.ts",
+      "route": "/api/webhooks/resend",
+      "sha256": "1200e66c702d57e6c2b9d27e0fb133f29b49dacdbf03ba04f07dee1a80e80412",
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "source": "src/app/api/webhooks/stone/conciliation/route.ts",
+      "route": "/api/webhooks/stone/conciliation",
+      "sha256": "0d93033f78b3988c8d9ea5e524c21e51883131693362967d5c95b286c1dadc55",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    }
+  ]
+}
