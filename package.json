@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint src tests scripts --quiet",
     "lint:report": "eslint src tests scripts",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "next typegen && node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts tests/unit/**/*.test.ts",
     "test:integration": "node scripts/test-integration.mjs",
     "test:e2e": "node scripts/test-e2e.mjs",

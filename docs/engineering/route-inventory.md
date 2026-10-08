@@ -33,6 +33,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/conversions` | [page.tsx](../../src/app/dashboard/conversions/page.tsx) | [measure-converter.tsx](../../src/components/measure-converter.tsx) |
 
+## design (1)
+
+| Pasta sob `src/app` | Arquivo | Próximo ponto direto |
+| --- | --- | --- |
+| `dashboard/design` | [page.tsx](../../src/app/dashboard/design/page.tsx) | [design-guide.tsx](../../src/components/design/design-guide.tsx) |
+
 ## documents (9)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
@@ -331,4 +337,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **159 páginas** no checkout usado para a geração.
+Total: **160 páginas** no checkout usado para a geração.

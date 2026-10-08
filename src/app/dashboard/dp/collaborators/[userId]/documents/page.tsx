@@ -923,6 +923,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   }
 
   async function remove(item: DocumentRow) {
+    // eslint-disable-next-line no-restricted-globals -- legado preservado até a migração isolada do módulo de DP
     if (!confirm(`Excluir definitivamente o arquivo “${item.originalName}”?`)) return;
     setBusy(true);
     try {

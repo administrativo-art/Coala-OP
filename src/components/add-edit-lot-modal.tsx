@@ -194,6 +194,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
             form.setValue('imageUrl', product.imageUrl || '');
         }, 100);
     } else {
+        // eslint-disable-next-line no-restricted-globals -- legado preservado até a migração isolada do módulo de Estoque
         alert("Nenhum insumo encontrado para este código de barras.");
     }
   };
