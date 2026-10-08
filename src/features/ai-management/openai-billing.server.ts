@@ -6,7 +6,7 @@ import type {
   AiKeyUsage,
   AiModelUsage,
 } from "@/features/ai-management/types";
-import { budgetAlert, createHourlyCache, nextOpenAiPageToken, openAiBillingWindow, openAiSpendLimitUsd, optionalBillingBuckets, positiveFinite } from "@/features/ai-management/billing-policy";
+import { budgetAlert, createHourlyCache, isoTimestamp, nextOpenAiPageToken, nonNegativeFinite, openAiBillingWindow, openAiSpendLimitUsd, optionalBillingBuckets, positiveFinite } from "@/features/ai-management/billing-policy";
 
 const OPENAI_API_URL = "https://api.openai.com/v1";
 
@@ -110,8 +110,10 @@ export async function loadOpenAiBillingOverview(now = new Date()): Promise<AiBil
   const adminKey = process.env.OPENAI_ADMIN_KEY?.trim() || "";
   const projectId = process.env.OPENAI_PROJECT_ID?.trim() || "";
   const budget = process.env.OPENAI_MONTHLY_CREDIT_BUDGET_USD?.trim() || "";
+  const prepaidBalance = process.env.OPENAI_PREPAID_CREDIT_BALANCE_USD?.trim() || "";
+  const prepaidBalanceObservedAt = process.env.OPENAI_PREPAID_CREDIT_BALANCE_AS_OF?.trim() || "";
   const window = openAiBillingWindow(now);
-  return cachedOverview(JSON.stringify([Boolean(adminKey), projectId, budget, window.queryStart, window.endExclusive]), now, () => readOpenAiBillingOverview(now));
+  return cachedOverview(JSON.stringify([Boolean(adminKey), projectId, budget, prepaidBalance, prepaidBalanceObservedAt, window.queryStart, window.endExclusive]), now, () => readOpenAiBillingOverview(now));
 }
 
 async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> {
@@ -119,6 +121,11 @@ async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> 
   const configuredProjectId = process.env.OPENAI_PROJECT_ID?.trim() || null;
   const budgetInput = process.env.OPENAI_MONTHLY_CREDIT_BUDGET_USD?.trim() || "";
   const configuredMonthlyBudget = positiveFinite(budgetInput);
+  const prepaidBalanceInput = process.env.OPENAI_PREPAID_CREDIT_BALANCE_USD?.trim() || "";
+  const prepaidBalanceObservedAtInput = process.env.OPENAI_PREPAID_CREDIT_BALANCE_AS_OF?.trim() || "";
+  const prepaidBalanceUsd = nonNegativeFinite(prepaidBalanceInput);
+  const prepaidBalanceObservedAt = isoTimestamp(prepaidBalanceObservedAtInput);
+  const prepaidBalanceConfigured = prepaidBalanceUsd !== null && prepaidBalanceObservedAt !== null;
   const generatedAt = now.toISOString();
   const unavailable: AiBillingOverview = {
     provider: "openai",
@@ -127,11 +134,12 @@ async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> 
     generatedAt,
     scope: { type: configuredProjectId ? "project" : "organization", projectId: configuredProjectId },
     credits: {
+      prepaidBalanceUsd,
+      prepaidBalanceObservedAt,
       source: "unavailable",
       interval: null,
       limitUsd: null,
       spentUsd: null,
-      availableUsd: null,
       usedPercent: null,
       note: "A API oficial informa custos e limites, mas não expõe o saldo exato de créditos pré-pagos da conta.",
     },
@@ -141,6 +149,7 @@ async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> 
       adminKeyConfigured: Boolean(adminKey),
       projectIdConfigured: Boolean(configuredProjectId),
       spendLimitFound: false,
+      prepaidBalanceConfigured,
     },
     warnings: adminKey
       ? []
@@ -263,7 +272,6 @@ async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> 
       : configuredMonthlyBudget !== null
         ? "configured_monthly_budget" as const
         : "unavailable" as const;
-    const availableUsd = limitUsd === null ? null : rounded(Math.max(0, limitUsd - currentMonthUsd));
     const alert = budgetAlert(currentMonthUsd, limitUsd, "openai_budget");
     const usedPercent = alert.usedPercent;
 
@@ -274,15 +282,16 @@ async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> 
       generatedAt,
       scope: { type: effectiveProjectId ? "project" : "organization", projectId: effectiveProjectId },
       credits: {
+        prepaidBalanceUsd,
+        prepaidBalanceObservedAt,
         source,
         interval: limitUsd === null ? null : "month",
         limitUsd: limitUsd === null ? null : rounded(limitUsd),
         spentUsd: rounded(currentMonthUsd),
-        availableUsd,
         usedPercent,
         note: limitUsd === null
-          ? "Custos oficiais carregados. Configure um limite de gasto no projeto OpenAI ou OPENAI_MONTHLY_CREDIT_BUDGET_USD para calcular o disponível."
-          : "Disponível calculado pelo limite mensal menos o custo oficial acumulado; não representa o saldo pré-pago da conta. Atrasos na contabilização podem alterar o valor.",
+          ? "Custos oficiais carregados. Configure uma régua mensal para ativar os alertas de 80% e 95%."
+          : "A régua mensal serve somente ao controle e aos alertas do APP. Ela não adiciona crédito, não bloqueia a cobrança e não representa o saldo pré-pago.",
       },
       costs: {
         currentMonthUsd: rounded(currentMonthUsd),
@@ -298,12 +307,16 @@ async function readOpenAiBillingOverview(now: Date): Promise<AiBillingOverview> 
         adminKeyConfigured: true,
         projectIdConfigured: Boolean(configuredProjectId),
         spendLimitFound: spendLimitUsd !== null,
+        prepaidBalanceConfigured,
       },
       warnings: [
         ...(usageResult.failed ? ["Os custos foram carregados, mas o detalhamento de tokens não ficou disponível."] : []),
         ...(keyCosts.failed ? ["Os custos totais foram carregados, mas o detalhamento por chave não ficou disponível."] : []),
         ...(keyCompletions.failed ? ["O uso total foi carregado, mas o uso por chave não ficou disponível."] : []),
         ...(budgetInput && configuredMonthlyBudget === null ? ["OPENAI_MONTHLY_CREDIT_BUDGET_USD deve ser um número positivo em USD."] : []),
+        ...(prepaidBalanceInput && prepaidBalanceUsd === null ? ["OPENAI_PREPAID_CREDIT_BALANCE_USD deve ser zero ou um número positivo em USD."] : []),
+        ...(prepaidBalanceObservedAtInput && prepaidBalanceObservedAt === null ? ["OPENAI_PREPAID_CREDIT_BALANCE_AS_OF deve ser uma data ISO com fuso horário."] : []),
+        ...((prepaidBalanceUsd === null) !== (prepaidBalanceObservedAt === null) ? ["O saldo pré-pago manual exige valor e data de conferência válidos."] : []),
         ...(spendLimit && spendLimitUsd === null ? ["O limite retornado pela OpenAI não é mensal em USD; ele não foi usado no cálculo."] : []),
       ],
       alert,
