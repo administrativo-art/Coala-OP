@@ -10,6 +10,8 @@ export interface InlineConfirmProps {
   message: React.ReactNode
   confirmLabel?: string
   cancelLabel?: string
+  /** Texto do botão enquanto `loading`. */
+  loadingLabel?: string
   loading?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -23,6 +25,7 @@ export function InlineConfirm({
   message,
   confirmLabel = "Excluir",
   cancelLabel = "Cancelar",
+  loadingLabel = "Excluindo…",
   loading,
   onConfirm,
   onCancel,
@@ -59,7 +62,7 @@ export function InlineConfirm({
         >
           {cancelLabel}
         </button>
-        <Button type="button" variant="danger" size="xs" loading={loading} loadingLabel="Excluindo…" onClick={onConfirm}>
+        <Button type="button" variant="danger" size="xs" loading={loading} loadingLabel={loadingLabel} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>
