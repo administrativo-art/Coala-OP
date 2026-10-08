@@ -40,11 +40,12 @@ export type AiBillingOverview = {
     projectId: string | null;
   };
   credits: {
+    prepaidBalanceUsd: number | null;
+    prepaidBalanceObservedAt: string | null;
     source: "project_spend_limit" | "organization_spend_limit" | "configured_monthly_budget" | "unavailable";
     interval: string | null;
     limitUsd: number | null;
     spentUsd: number | null;
-    availableUsd: number | null;
     usedPercent: number | null;
     note: string;
   };
@@ -68,6 +69,7 @@ export type AiBillingOverview = {
     adminKeyConfigured: boolean;
     projectIdConfigured: boolean;
     spendLimitFound: boolean;
+    prepaidBalanceConfigured: boolean;
   };
   warnings: string[];
   alert: BillingAlert;

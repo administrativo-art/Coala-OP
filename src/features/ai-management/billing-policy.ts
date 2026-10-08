@@ -66,6 +66,20 @@ export function positiveFinite(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+export function nonNegativeFinite(value: unknown): number | null {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export function isoTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(trimmed)) return null;
+  const parsed = new Date(trimmed);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
 export function maximumBytesBilled(value: unknown): number {
   const configured = positiveFinite(value);
   return configured === null ? MAX_BIGQUERY_BYTES_BILLED : Math.min(Math.max(1, Math.floor(configured)), MAX_BIGQUERY_BYTES_BILLED);
