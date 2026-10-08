@@ -493,3 +493,68 @@
     display: none !important;
   }
 }
+
+/* Guia de design do Coala (docs/design). Prefixo --ds- para não colidir com os tokens shadcn (HSL). */
+@layer base {
+  :root {
+    /* superfícies */
+    --ds-bg-page: #f0eee9;
+    --ds-bg-topbar: #f3f1ec;
+    --ds-surface: #ffffff;
+    --ds-surface-warm: #fffdf9;
+    --ds-surface-input: #faf9f6;
+    --ds-surface-muted: #f6f4ef;
+    --ds-surface-seg: #e6e3dc;
+    --ds-surface-dark: #15151c;
+    --ds-surface-dark-hover: #2a2a35;
+    /* bordas */
+    --ds-border: #e3dfd6;
+    --ds-border-input: #dcd9d1;
+    --ds-divider: #f1eee8;
+    --ds-border-footer: #e6e2da;
+    /* texto */
+    --ds-ink: #1a1b1f;
+    --ds-ink-2: #4a4f57;
+    --ds-ink-muted: #5f646c;
+    --ds-ink-faint: #6e737a;
+    --ds-ink-on-dark: #f3f2ee;
+    --ds-ink-on-dark-2: #c8c7d0;
+    --ds-ink-on-dark-muted: #8e8d99;
+    --ds-ink-on-dark-sub: #a9a8b3;
+    --ds-indicator-zero: #77768a;
+    /* marca */
+    --ds-accent: #d13670;
+    --ds-accent-hover: #b8325f;
+    --ds-accent-ink: #a6325b;
+    --ds-accent-ink-hover: #8e294d;
+    --ds-accent-soft: #fbe7ef;
+    --ds-accent-row: #fbf3f6;
+    --ds-accent-kicker-dark: #f08bb1;
+    --ds-modal-accent: #5b5bd6;
+    --ds-modal-accent-soft: #eeeefc;
+    --ds-modal-accent-ink: #3f3fb0;
+    /* status */
+    --ds-ok-bg: #e8f5ee;      --ds-ok: #147337;
+    --ds-warn-bg: #fff1e6;    --ds-warn: #c2410c;
+    --ds-danger-bg: #ffe4e8;  --ds-danger: #be123c;
+    --ds-info-bg: #eef3fe;    --ds-info: #1d4ed8;
+    --ds-neutral-bg: #eceae5; --ds-neutral: #5f646c;
+    --ds-alert-bg: #fff7e6;   --ds-alert-border: #f5d9a3; --ds-alert-ink: #6b4500;
+    --ds-confirm-bg: #fff1f3; --ds-confirm-border: #fecdd6; --ds-confirm-ink: #881337;
+    --ds-disabled: #b9b8c2;
+    /* raios */
+    --ds-r-pill: 999px; --ds-r-sm: 9px; --ds-r-md: 11px; --ds-r-btn: 12px; --ds-r-btn-lg: 14px;
+    --ds-r-card: 18px; --ds-r-card-lg: 20px; --ds-r-modal: 26px; --ds-r-panel: 28px;
+    /* sombras */
+    --ds-shadow-lift: 0 16px 36px rgba(21,21,28,.16), 0 2px 6px rgba(21,21,28,.06);
+    --ds-shadow-menu: 0 18px 44px rgba(0,0,0,.14);
+    --ds-shadow-modal: 0 30px 80px rgba(21,21,28,.22), 0 2px 6px rgba(0,0,0,.06);
+    --ds-shadow-panel: 0 24px 60px rgba(21,21,28,.18);
+    --ds-shadow-cta: 0 8px 24px rgba(209,54,112,.35);
+    --ds-shadow-side: -24px 0 60px rgba(0,0,0,.18);
+    --ds-scrim: rgba(21,21,28,.45);
+    /* movimento */
+    --ds-ease-lift: cubic-bezier(.2,.8,.2,1);
+    --ds-dur: .18s;
+  }
+}

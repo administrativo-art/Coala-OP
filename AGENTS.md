@@ -56,6 +56,14 @@
 - Depois de merge, rollout ou encerramento de um worktree temporário, confira `git worktree list` e o espaço livre. Para registros órfãos, use `git worktree prune --dry-run --verbose` e valide os caminhos antes de executar o prune; não faça exclusão automática em massa.
 - Ao publicar uma atualização destas instruções, confirme em quais branches ela foi integrada. Worktrees antigos e sessões já abertas não são atualizados automaticamente: antes de retomar um chamado, confira a versão aplicável, preserve alterações locais e leia as regras atualizadas. Não sobrescreva `AGENTS.md` modificado de outra tarefa nem declare que a publicação, sozinha, atualizou todas as sessões.
 
+## Design de interface
+
+- Ao criar ou alterar UI, leia `docs/design/README.md` e o arquivo do padrão que a tela usa (botões, listas, painel lateral, modais, feedback). O guia vivo está em `/dashboard/design`.
+- Use os tokens `--ds-*` / classes `ds-*` e os componentes de `src/components/patterns/` (`LiftRow`, `SidePanel`, `WizardModal`, `InlineConfirm`, `Segmented`, `FilterChips`, `ControlPanel`), as variantes de `Button` e o `StatusPill`. Não use hex solto em `className` (o lint avisa).
+- Nunca use `alert()` ou `confirm()` (o lint bloqueia): erro em texto junto do campo e confirmação destrutiva inline com `InlineConfirm`.
+- Uma ação principal por área; rótulos no formato verbo + objeto. Percorra o checklist de `.github/pull_request_template.md` antes de concluir.
+- Decisões de design em aberto ficam em `docs/design/decisoes/`; não escolha por conta própria um ponto listado ali como "em aberto".
+
 ## Padrão de construção de módulos
 
 - Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.

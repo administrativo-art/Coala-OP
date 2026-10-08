@@ -76,6 +76,7 @@ export function ItemManagement() {
     if (usedInLists.length > 0) messages.push(`está nas listas predefinidas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
 
     if (messages.length > 0) {
+      // eslint-disable-next-line no-restricted-globals -- legado preservado até a migração isolada de Cadastros
       alert(`Não é possível excluir o insumo: este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
       return;
     }
