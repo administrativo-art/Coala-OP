@@ -114,7 +114,7 @@ function StatusPill({ done }: { done: boolean }) {
   );
 }
 
-export function InternalPrivacySettings() {
+export function InternalPrivacySettings({ canManage }: { canManage: boolean }) {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
@@ -224,7 +224,7 @@ export function InternalPrivacySettings() {
         </div>
       </section>
 
-      <PrivacyGovernancePanel />
+      <PrivacyGovernancePanel canManage={canManage} />
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
