@@ -11,10 +11,12 @@ import {
   dryRunBytes,
   maximumBytesBilled,
   nextOpenAiPageToken,
+  nonNegativeFinite,
   openAiBillingWindow,
   openAiSpendLimitUsd,
   optionalBillingBuckets,
   positiveFinite,
+  isoTimestamp,
   projectPanelMonthlyBytes,
   queryWithinLimit,
 } from "../../src/features/ai-management/billing-policy";
@@ -26,6 +28,16 @@ test("OpenAI budget rejects invalid values and converts official cents to USD", 
   assert.equal(openAiSpendLimitUsd({ threshold_amount: 10000, currency: "USD", interval: "month" }), 100);
   assert.equal(openAiSpendLimitUsd({ threshold_amount: 10000, currency: "EUR", interval: "month" }), null);
   assert.equal(openAiSpendLimitUsd({ threshold_amount: 10000, currency: "USD", interval: "day" }), null);
+});
+
+test("manual prepaid balance accepts zero and requires an ISO timestamp with timezone", () => {
+  assert.equal(nonNegativeFinite("8.86"), 8.86);
+  assert.equal(nonNegativeFinite("0"), 0);
+  assert.equal(nonNegativeFinite("-0.01"), null);
+  assert.equal(nonNegativeFinite("invalid"), null);
+  assert.equal(isoTimestamp("2026-10-08T16:03:00-03:00"), "2026-10-08T19:03:00.000Z");
+  assert.equal(isoTimestamp("2026-10-08T16:03:00"), null);
+  assert.equal(isoTimestamp("invalid"), null);
 });
 
 test("budget alerts use 80 and 95 percent without hiding an overrun", () => {

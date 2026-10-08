@@ -11,7 +11,6 @@ import {
   Loader2,
   RefreshCw,
   ServerCog,
-  Sparkles,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -124,7 +123,7 @@ function OpenAiSetupNotice({ configured }: { configured: boolean }) {
           <p className="leading-relaxed text-amber-900/80">
             {configured
               ? "Confira se a chave administrativa possui acesso à organização e tente atualizar novamente."
-              : "Configure OPENAI_ADMIN_KEY somente no servidor. Para calcular o disponível, defina também um limite no projeto OpenAI ou OPENAI_MONTHLY_CREDIT_BUDGET_USD."}
+              : "Configure OPENAI_ADMIN_KEY somente no servidor. Para ativar os alertas, defina também uma régua no projeto OpenAI ou OPENAI_MONTHLY_CREDIT_BUDGET_USD."}
           </p>
         </div>
       </CardContent>
@@ -142,19 +141,19 @@ function GoogleCloudSetupNotice({ overview }: { overview: AppCostOverview }) {
             <p className="font-semibold">
               {overview.setup.billingExportFound
                 ? "O export de billing não pôde ser consultado"
-                : "Ative o export do Cloud Billing para BigQuery"}
+                : "Aguardando a tabela do Cloud Billing"}
             </p>
             <p className="leading-relaxed text-amber-900/80">
               {overview.setup.billingExportFound
                 ? "A tabela foi localizada, mas a credencial do APP precisa conseguir executar e ler a consulta no BigQuery."
-                : "O Google/Firebase não oferece o custo consolidado do projeto em uma API direta. O export de billing é a fonte oficial para preencher este painel."}
+                : "Se o export acabou de ser ativado, o Google pode levar algumas horas para criar e preencher a primeira tabela. O painel fará a detecção automaticamente."}
             </p>
           </div>
         </div>
         <div className="grid gap-3 text-xs text-amber-950/80 sm:grid-cols-3">
-          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">1.</span> Habilite somente o export padrão de custos.</div>
-          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">2.</span> Informe a tabela em <code>GOOGLE_CLOUD_BILLING_EXPORT_TABLE</code>.</div>
-          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">3.</span> Conceda acesso de leitura e execução no BigQuery.</div>
+          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">1.</span> Confirme que o export padrão está ativo.</div>
+          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">2.</span> Aguarde a tabela <code>gcp_billing_export_v1_*</code>.</div>
+          <div className="rounded-lg border border-amber-200 bg-white/50 p-3"><span className="font-bold text-amber-950">3.</span> O painel detectará a tabela automaticamente.</div>
         </div>
         <Button asChild variant="outline" size="sm" className="border-amber-300 bg-white text-amber-950 hover:bg-amber-100">
           <a href={overview.setup.consoleUrl} target="_blank" rel="noreferrer">
@@ -169,34 +168,39 @@ function GoogleCloudSetupNotice({ overview }: { overview: AppCostOverview }) {
 
 function CreditsView({ overview }: { overview: AiBillingOverview }) {
   const usedPercent = overview.credits.usedPercent ?? 0;
+  const prepaidObservedAt = overview.credits.prepaidBalanceObservedAt
+    ? formatBillingGeneratedAt(overview.credits.prepaidBalanceObservedAt)
+    : null;
   return (
     <div className="space-y-5">
       <BillingAlertNotice alert={overview.alert} provider="openai" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Disponível no mês"
-          value={formatUsd(overview.credits.availableUsd)}
-          description="Limite mensal menos o custo acumulado."
+          title="Saldo pré-pago"
+          value={formatUsd(overview.credits.prepaidBalanceUsd)}
+          description={prepaidObservedAt
+            ? `Saldo conferido no Billing oficial em ${prepaidObservedAt} (Belém). Atualização manual.`
+            : "Saldo não disponível pela API; consulte o Billing oficial."}
           icon={Coins}
           highlight
         />
         <MetricCard
-          title="Limite mensal"
+          title="Régua mensal interna"
           value={formatUsd(overview.credits.limitUsd)}
-          description={overview.credits.source === "project_spend_limit" ? "Limite do projeto OpenAI." : overview.credits.source === "organization_spend_limit" ? "Limite da organização OpenAI." : overview.credits.source === "configured_monthly_budget" ? "Orçamento mensal configurado no APP." : "Nenhum limite mensal encontrado."}
+          description={overview.credits.source === "project_spend_limit" ? "Limite oficial do projeto usado como régua de alerta." : overview.credits.source === "organization_spend_limit" ? "Limite oficial da organização usado como régua de alerta." : overview.credits.source === "configured_monthly_budget" ? "Referência de alerta configurada no APP; não altera a cobrança." : "Nenhuma régua mensal encontrada."}
           icon={CircleDollarSign}
         />
         <MetricCard
-          title="Consumido no mês"
+          title="Gasto oficial no mês"
           value={formatUsd(overview.credits.spentUsd)}
-          description={overview.credits.usedPercent === null ? "Custo oficial acumulado." : `${overview.credits.usedPercent.toLocaleString("pt-BR")}% do limite mensal.`}
+          description="Custo retornado pela API da OpenAI; não é calculado a partir da régua."
           icon={BarChart3}
         />
         <MetricCard
-          title="Requisições GPT"
-          value={formatNumber(overview.usage.requests)}
-          description={`${formatNumber(overview.usage.inputTokens + overview.usage.outputTokens)} tokens no mês.`}
-          icon={Sparkles}
+          title="Uso da régua"
+          value={overview.credits.usedPercent === null ? "Sem régua" : `${overview.credits.usedPercent.toLocaleString("pt-BR")}%`}
+          description="Gasto oficial dividido pela régua interna. Serve somente aos alertas de 80% e 95%."
+          icon={BarChart3}
         />
       </div>
 
@@ -204,10 +208,10 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Uso do limite mensal</CardTitle>
-              <CardDescription className="mt-1">Acompanhamento do orçamento usado pela Mel e demais chamadas GPT.</CardDescription>
+              <CardTitle className="text-base">Acompanhamento da régua interna</CardTitle>
+              <CardDescription className="mt-1">Referência de controle do APP; não representa saldo, crédito ou cobrança disponível.</CardDescription>
             </div>
-            <Badge variant="secondary">{overview.credits.usedPercent === null ? "Sem limite" : `${usedPercent.toLocaleString("pt-BR")}% usado`}</Badge>
+            <Badge variant="secondary">{overview.credits.usedPercent === null ? "Sem régua" : `${usedPercent.toLocaleString("pt-BR")}% da régua`}</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -278,7 +282,7 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Uso por modelo</CardTitle>
-          <CardDescription>Requisições e tokens processados no mês atual.</CardDescription>
+          <CardDescription>{formatNumber(overview.usage.requests)} requisições e {formatNumber(overview.usage.inputTokens + overview.usage.outputTokens)} tokens processados no mês atual.</CardDescription>
         </CardHeader>
         <CardContent>
           {overview.usage.byModel.length ? (
