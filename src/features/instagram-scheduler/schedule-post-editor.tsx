@@ -2,17 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   AtSign,
   Bookmark,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   Heart,
   ImageOff,
   Images,
-  Loader2,
   MapPin,
   MessageCircle,
   MoreHorizontal,
@@ -24,6 +21,12 @@ import {
   instagramStatusLabels,
   type InstagramScheduleListItem,
 } from "./contracts";
+import { Field } from "@/components/patterns/field";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { StatTile } from "@/components/patterns/stat-tile";
+import { Button } from "@/components/ui/button";
+import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
+import { cn } from "@/lib/utils";
 import { ProtectedMedia } from "./protected-media";
 import { MediaFormatInfo } from "./media-format-info";
 import { carouselHasDifferentRatios, mediaPreviewRatio, mediaRatio, type MediaDimensions } from "./media-presentation";
@@ -47,6 +50,24 @@ type SchedulePostEditorProps = {
     changes: { scheduledAt?: string; mediaOrder?: number[]; caption?: string },
   ) => Promise<boolean>;
   onCancel: (id: string) => Promise<boolean>;
+};
+
+const statusVariant: Record<InstagramScheduleListItem["status"], StatusPillVariant> = {
+  uploading: "info",
+  scheduled: "info",
+  processing: "warn",
+  paused: "neutral",
+  published: "ok",
+  failed: "danger",
+  manual_review: "warn",
+  cancelled: "neutral",
+};
+
+const formatDot: Record<InstagramScheduleListItem["format"], string> = {
+  feed_image: "bg-ds-info",
+  carousel: "bg-ds-warn",
+  reel: "bg-ds-accent",
+  story: "bg-ds-ink",
 };
 
 function bytesLabel(value: number) {
@@ -154,70 +175,49 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
     }
   }
 
+  const panelClass = "rounded-ds-card-lg border border-ds-border bg-ds-surface p-4";
   return (
-    <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="instagram-editor-title">
-      <header className="flex flex-wrap items-center gap-3 border-b border-[#EADFD3] bg-white px-4 py-3.5 md:px-7">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] font-bold text-[#7A5646] hover:bg-[#F4ECE2] hover:text-[#4A1A04]"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Voltar
-        </button>
+    <section className="flex min-h-0 flex-1 flex-col bg-ds-warm font-ds text-ds-ink" aria-labelledby="instagram-editor-title">
+      <header className="flex flex-wrap items-center gap-3 border-b border-ds-border bg-ds-dark px-4 py-4 md:px-7">
+        <Button type="button" variant="on-dark-secondary" size="md" onClick={onClose}>← Voltar</Button>
         <div className="min-w-0">
-          <h1 id="instagram-editor-title" className="truncate text-[20px] font-extrabold tracking-tight text-[#4A1A04]">
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Publicação · {theme.label}</p>
+          <h1 id="instagram-editor-title" className="truncate text-[22px] font-extrabold tracking-[-0.02em] text-ds-on-dark">
             {instagramPostTitle(item)}
           </h1>
         </div>
-        <span
-          className="rounded-full px-2.5 py-1 text-[11px] font-extrabold"
-          style={{ background: theme.background, color: theme.ink }}
-        >
-          {instagramStatusLabels[item.status]}
-        </span>
+        <StatusPill variant={statusVariant[item.status]}>{instagramStatusLabels[item.status]}</StatusPill>
         {item.permalink && (
-          <a
-            href={item.permalink}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto flex items-center gap-1.5 rounded-lg border border-[#EADFD3] bg-white px-3 py-2 text-[12px] font-bold hover:border-[#F462A7]"
-          >
-            Ver no Instagram <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          </a>
+          <Button asChild variant="on-dark-secondary" size="md" className="ml-auto">
+            <a href={item.permalink} target="_blank" rel="noreferrer">Ver no Instagram ↗</a>
+          </Button>
         )}
       </header>
 
       <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6 overflow-auto px-4 py-5 md:px-7 md:py-6">
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-[#EADFD3] bg-white p-4">
-              <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#7A5646]">Formato</div>
+            <div className={panelClass}>
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Formato</p>
               <div className="mt-2 flex items-center gap-2 text-[16px] font-extrabold">
-                <span className="h-3 w-3 rounded-full" style={{ background: theme.dot }} />
+                <span className={cn("h-3 w-3 rounded-full", formatDot[item.format])} />
                 {theme.label}
               </div>
-              {orderedMedia.length > 1 && <p className="mt-2 text-[11px]">Mídia {activeMediaIndex + 1} de {orderedMedia.length}</p>}
+              {orderedMedia.length > 1 && <p className="mt-2 text-[11px] text-ds-ink-muted">Mídia {activeMediaIndex + 1} de {orderedMedia.length}</p>}
               <MediaFormatInfo format={item.format} media={activeMedia} />
-              {mixedCarousel && <p className="mt-2 text-[11px] text-[#8A5A18]">Proporções diferentes: o carrossel usa o enquadramento da primeira mídia e pode cortar as demais.</p>}
+              {mixedCarousel && <p className="mt-2 text-[11px] text-ds-warn">Proporções diferentes: o carrossel usa o enquadramento da primeira mídia e pode cortar as demais.</p>}
             </div>
-            <div className="rounded-xl border border-[#EADFD3] bg-white p-4">
-              <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#7A5646]">Publicação</div>
-              <div className="mt-2 text-[15px] font-extrabold">{longDate(originalDate)} · {originalTime}</div>
-            </div>
-            <div className="rounded-xl border border-[#EADFD3] bg-white p-4">
-              <div className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#7A5646]">Destino</div>
-              <div className="mt-2 text-[15px] font-extrabold">Instagram{item.shareToFeed && item.format === "reel" ? " + grade" : ""}</div>
-            </div>
+            <StatTile label="Publicação" value={<span className="text-[18px]">{longDate(originalDate)} · <span className="font-ds-mono">{originalTime}</span></span>} />
+            <StatTile label="Destino" value={<span className="text-[18px]">Instagram{item.shareToFeed && item.format === "reel" ? " + grade" : ""}</span>} />
           </div>
 
           <section aria-labelledby="editor-media-title">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h2 id="editor-media-title" className="text-[14px] font-extrabold text-[#4A1A04]">Mídia</h2>
-              <span className="text-[12px] text-[#7A5646]">{item.media.length} {item.media.length === 1 ? "arquivo" : "arquivos"}</span>
+              <h2 id="editor-media-title" className="text-[14px] font-extrabold">Mídia</h2>
+              <span className="text-[12px] text-ds-ink-muted">{item.media.length} {item.media.length === 1 ? "arquivo" : "arquivos"}</span>
             </div>
             {item.format === "story" && item.media.length > 1 && (
-              <p className="mb-3 rounded-lg bg-[#FDEAF3] px-3 py-2 text-[12px] font-semibold leading-5 text-[#7D184A]">
+              <p className="mb-3 rounded-ds-btn border border-ds-border bg-ds-accent-soft px-3 py-2 text-[12px] font-semibold leading-5 text-ds-accent-ink">
                 A Meta publicará os quadros na ordem abaixo, do 1 ao {item.media.length}.
               </p>
             )}
@@ -225,14 +225,13 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
               {orderedMedia.map((media, index) => (
                 <div
                   key={`${media.fileName}-${mediaOrder[index]}`}
-                  className="overflow-hidden rounded-xl border bg-white"
-                  style={{ borderColor: activeMediaIndex === index ? "#D90F6F" : "#EADFD3" }}
+                  className={cn("overflow-hidden rounded-ds-btn-lg border bg-white", activeMediaIndex === index ? "border-ds-accent-ink" : "border-ds-border")}
                 >
                   <button
                     type="button"
                     aria-pressed={activeMediaIndex === index}
                     onClick={() => setActiveMediaIndex(index)}
-                    className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-[#D90F6F]"
+                    className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
                   >
                     <div className="relative" style={{ aspectRatio: mediaRatio(media) ?? 1 }}>
                       {media.previewUrl || media.kind === "video" ? (
@@ -245,26 +244,26 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                           onDimensions={(value) => recordDimensions(media.previewUrl, value)}
                         />
                       ) : (
-                        <div className="grid h-full place-items-center bg-[#F3E8DC] text-[#7A5646]"><ImageOff className="h-6 w-6" /></div>
+                        <div className="grid h-full place-items-center bg-ds-muted text-ds-ink-faint"><ImageOff className="h-6 w-6" /></div>
                       )}
                       {orderedMedia.length > 1 && (
-                        <span className="absolute left-2 top-2 rounded-full bg-[#4A1A04]/90 px-2 py-0.5 text-[10px] font-extrabold text-white">{index + 1}</span>
+                        <span className="absolute left-2 top-2 rounded-full bg-ds-dark/90 px-2 py-0.5 font-ds-mono text-[10px] font-bold text-white">{index + 1}</span>
                       )}
                     </div>
                     <div className="p-2.5">
                       <div className="truncate text-[11px] font-bold" title={media.fileName}>{media.fileName}</div>
-                      <div className="mt-0.5 text-[10px] text-[#7A5646]">{bytesLabel(media.sizeBytes)}</div>
+                      <div className="mt-0.5 font-ds-mono text-[10px] text-ds-ink-muted">{bytesLabel(media.sizeBytes)}</div>
                       <MediaFormatInfo format={item.format} media={media} />
                     </div>
                   </button>
                   {editable && item.format === "story" && orderedMedia.length > 1 && (
-                    <div className="grid grid-cols-2 border-t border-[#EADFD3]">
+                    <div className="grid grid-cols-2 border-t border-ds-divider">
                       <button
                         type="button"
                         onClick={() => moveMedia(index, -1)}
                         disabled={index === 0 || saving}
                         aria-label={`Mover ${media.fileName} para antes`}
-                        className="flex items-center justify-center gap-1 border-r border-[#EADFD3] px-2 py-2 text-[10px] font-extrabold text-[#7A5646] disabled:opacity-30"
+                        className="flex items-center justify-center gap-1 border-r border-ds-divider px-2 py-2 text-[10px] font-extrabold text-ds-ink-muted hover:bg-ds-muted disabled:opacity-30"
                       >
                         <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Antes
                       </button>
@@ -273,7 +272,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                         onClick={() => moveMedia(index, 1)}
                         disabled={index === orderedMedia.length - 1 || saving}
                         aria-label={`Mover ${media.fileName} para depois`}
-                        className="flex items-center justify-center gap-1 px-2 py-2 text-[10px] font-extrabold text-[#7A5646] disabled:opacity-30"
+                        className="flex items-center justify-center gap-1 px-2 py-2 text-[10px] font-extrabold text-ds-ink-muted hover:bg-ds-muted disabled:opacity-30"
                       >
                         Depois <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
@@ -287,46 +286,45 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
           {item.format !== "story" && (
             <section aria-labelledby="editor-caption-title">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 id="editor-caption-title" className="text-[14px] font-extrabold text-[#4A1A04]">Legenda</h2>
-                <span className="text-[12px] text-[#7A5646]">{caption.length} / 2.200</span>
+                <h2 id="editor-caption-title" className="text-[14px] font-extrabold">Legenda</h2>
+                <span className="font-ds-mono text-[12px] text-ds-ink-muted">{caption.length} / 2.200</span>
               </div>
               <textarea aria-labelledby="editor-caption-title" value={caption}
                 onChange={(event) => setCaption(event.target.value)} disabled={!editable || saving}
                 maxLength={2_200} rows={7} placeholder="Sem legenda."
-                className="w-full resize-y rounded-xl border border-[#EADFD3] bg-white p-4 text-[14px] leading-6 text-[#4A1A04] focus:border-[#D90F6F] focus:outline-none disabled:opacity-75" />
+                className="w-full resize-y rounded-ds-md border border-ds-border-input bg-ds-input p-4 text-[14px] leading-6 text-ds-ink placeholder:text-ds-ink-faint focus-visible:border-ds-modal focus-visible:bg-white focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft disabled:opacity-75" />
             </section>
           )}
 
           {item.location && (
-            <section className="flex items-start gap-3 rounded-xl border border-[#EADFD3] bg-white p-4">
-              <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-[#217A8F]" aria-hidden="true" />
+            <section className={cn(panelClass, "flex items-start gap-3")}>
+              <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-ds-info" aria-hidden="true" />
               <div>
                 <h2 className="text-[13px] font-extrabold">Localização marcada</h2>
-                <p className="mt-0.5 text-[13px] text-[#7A5646]">{item.location.name}</p>
+                <p className="mt-0.5 text-[13px] text-ds-ink-muted">{item.location.name}</p>
               </div>
             </section>
           )}
 
           {item.storyMentions.length > 0 && (
-            <section className="flex items-start gap-3 rounded-xl border border-[#EADFD3] bg-white p-4">
-              <AtSign className="mt-0.5 h-5 w-5 shrink-0 text-[#D90F6F]" aria-hidden="true" />
+            <section className={cn(panelClass, "flex items-start gap-3")}>
+              <AtSign className="mt-0.5 h-5 w-5 shrink-0 text-ds-accent-ink" aria-hidden="true" />
               <div>
                 <h2 className="text-[13px] font-extrabold">Menção no Story</h2>
-                <p className="mt-0.5 text-[13px] text-[#7A5646]">
+                <p className="mt-0.5 text-[13px] text-ds-ink-muted">
                   {item.storyMentions.map((username) => `@${username}`).join(", ")} · sem adesivo visível
                 </p>
               </div>
             </section>
           )}
 
-          <section className="rounded-xl border border-[#EADFD3] bg-white p-4" aria-labelledby="editor-schedule-title">
+          <section className={panelClass} aria-labelledby="editor-schedule-title">
             <div className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-[#D90F6F]" aria-hidden="true" />
+              <CalendarClock className="h-5 w-5 text-ds-accent-ink" aria-hidden="true" />
               <h2 id="editor-schedule-title" className="text-[14px] font-extrabold">Quando publicar</h2>
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <div className="flex min-w-[180px] flex-1 flex-col gap-1.5 text-[12px] font-bold text-[#7A5646]">
-                Data
+              <Field label="Data" className="min-w-[180px] flex-1">
                 <ScheduleDatePicker
                   value={date}
                   minimum={minimumSchedule.date}
@@ -336,9 +334,8 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     setLocalError(null);
                   }}
                 />
-              </div>
-              <label className="flex min-w-[150px] flex-1 flex-col gap-1.5 text-[12px] font-bold text-[#7A5646]">
-                Horário · HH:MM
+              </Field>
+              <Field label="Horário · HH:MM" className="min-w-[150px] flex-1">
                 <ScheduleTimeInput
                   value={time}
                   minimum={date === minimumSchedule.date ? minimumSchedule.time : undefined}
@@ -348,20 +345,20 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     setLocalError(null);
                   }}
                 />
-              </label>
+              </Field>
             </div>
-            <p className="mt-3 text-[12px] leading-5 text-[#7A5646]">
+            <p className="mt-3 text-[12px] leading-5 text-ds-ink-muted">
               {editable
                 ? "Horário de São Luís. Escolha pelo menos dois minutos no futuro."
                 : "Esta publicação está disponível somente para consulta."}
             </p>
-            {localError && <p role="alert" className="mt-2 text-[12px] font-bold text-[#C0392B]">{localError}</p>}
+            {localError && <p role="alert" className="mt-2 text-[12px] font-bold text-ds-danger">{localError}</p>}
           </section>
         </div>
 
-        <aside className="border-t border-[#EADFD3] bg-[#F4ECE2] px-5 py-7 xl:border-l xl:border-t-0">
+        <aside className="border-t border-ds-border bg-ds-muted px-5 py-7 xl:border-l xl:border-t-0">
           <div className="sticky top-7 mx-auto flex max-w-[310px] flex-col items-center gap-3">
-            <div className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#7A5646]">Prévia · {theme.label}</div>
+            <div className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Prévia · {theme.label}</div>
             <div className="w-full rounded-[34px] bg-[#283137] p-2.5 shadow-[0_20px_40px_rgba(74,26,4,.18)]">
               {item.format === "story" ? (
                 <div className="relative aspect-[9/16] overflow-hidden rounded-[27px] bg-[#181818] text-white">
@@ -504,66 +501,42 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                 </div>
               )}
             </div>
-            <div className="text-center text-[12px] text-[#7A5646]">{longDate(date)} · {time}</div>
-            <p className="text-center text-[10px] text-[#7A5646]">Prévia aproximada. A proporção não verifica todos os requisitos de publicação.</p>
+            <div className="text-center text-[12px] text-ds-ink-muted">{longDate(date)} · <span className="font-ds-mono">{time}</span></div>
+            <p className="text-center text-[10px] text-ds-ink-muted">Prévia aproximada. A proporção não verifica todos os requisitos de publicação.</p>
           </div>
         </aside>
       </div>
 
-      <footer className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-[#EADFD3] bg-white px-4 py-3 md:px-7">
-        <div className="text-[12px] text-[#7A5646]">
-          {editable ? "Confira a prévia, a legenda, a ordem e o horário antes de salvar." : instagramStatusLabels[item.status]}
-        </div>
-        <div className="ml-auto flex gap-2">
-          {editable && (confirmingCancel ? (
-            <>
-              <button
-                type="button"
-                onClick={() => void cancelSchedule()}
-                disabled={saving}
-                className="rounded-lg bg-[#A52E24] px-4 py-2.5 text-[13px] font-extrabold text-white disabled:opacity-50"
-              >
-                Confirmar cancelamento
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingCancel(false)}
-                disabled={saving}
-                className="rounded-lg border border-[#EADFD3] bg-white px-4 py-2.5 text-[13px] font-bold disabled:opacity-50"
-              >
-                Manter
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmingCancel(true)}
-              disabled={saving}
-              className="rounded-lg border border-[#E8B9B3] bg-white px-4 py-2.5 text-[13px] font-bold text-[#A52E24] disabled:opacity-50"
-            >
-              Cancelar agendamento
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded-lg border border-[#EADFD3] bg-white px-4 py-2.5 text-[13px] font-bold disabled:opacity-50"
-          >
-            Fechar
-          </button>
-          {editable && (
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving || !changed || !scheduledAt}
-              className="flex min-w-[150px] items-center justify-center gap-2 rounded-lg bg-[#F462A7] px-4 py-2.5 text-[13px] font-extrabold text-[#4A1A04] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-              Salvar alterações
-            </button>
-          )}
-        </div>
+      <footer className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t border-ds-border bg-white px-4 py-3 md:px-7">
+        {confirmingCancel ? (
+          <InlineConfirm
+            className="flex-1"
+            message="Cancelar este agendamento? A publicação não será feita."
+            confirmLabel="Confirmar cancelamento"
+            cancelLabel="Manter"
+            loadingLabel="Cancelando…"
+            loading={saving}
+            onCancel={() => setConfirmingCancel(false)}
+            onConfirm={() => void cancelSchedule()}
+          />
+        ) : (
+          <>
+            <div className="text-[12px] text-ds-ink-muted">
+              {editable ? "Confira a prévia, a legenda, a ordem e o horário antes de salvar." : instagramStatusLabels[item.status]}
+            </div>
+            <div className="ml-auto flex flex-wrap gap-2">
+              {editable && (
+                <Button type="button" variant="danger-link" size="md" disabled={saving} onClick={() => setConfirmingCancel(true)}>Cancelar agendamento</Button>
+              )}
+              <Button type="button" variant="ds-secondary" size="md" disabled={saving} onClick={onClose}>Fechar</Button>
+              {editable && (
+                <Button type="button" variant="primary-modal" size="md" loading={saving} loadingLabel="Salvando…" disabled={!changed || !scheduledAt} onClick={() => void save()} className="min-w-[150px]">
+                  Salvar alterações
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </footer>
     </section>
   );

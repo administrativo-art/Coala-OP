@@ -54,7 +54,7 @@ const validInsightsSections = new Set<InstagramInsightsSection>(instagramInsight
 export default function InstagramProgramacaoPage() {
   const router = useRouter();
   const request = useAuthenticatedApi();
-  const { firebaseUser, isAuthenticated, isDefaultAdmin, loading: authLoading, logout, permissions } = useAuth();
+  const { user, firebaseUser, isAuthenticated, isDefaultAdmin, loading: authLoading, logout, permissions } = useAuth();
   const canManageBio = isDefaultAdmin || (permissions.settings.view && permissions.settings.managePublicBio);
   const [activeView, setActiveView] = useState<InstagramWorkspaceView>("posts");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -636,12 +636,17 @@ export default function InstagramProgramacaoPage() {
   }
 
   return (
-    <main className="flex min-h-screen bg-[#FAF5EF] font-sans text-[#4A1A04]">
+    <main className="flex min-h-screen bg-ds-warm font-ds text-ds-ink">
       <InstagramWorkspaceSidebar
         activeView={activeView}
         activeInsightsSection={insightsSection}
         email={firebaseUser?.email}
+        person={user ? { name: user.username, role: user.jobRoleName, avatarUrl: user.avatarUrl ?? firebaseUser?.photoURL } : null}
         canManageBio={canManageBio}
+        counts={{
+          calendar: schedules.filter((item) => item.status === "scheduled").length,
+          posts: editorialPosts.length,
+        }}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
         onSelect={selectView}
@@ -667,7 +672,7 @@ export default function InstagramProgramacaoPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/instagram/coala-logo.png" alt="" className="absolute left-[-14px] top-[-37px] h-auto w-[108px] max-w-none" />
           </div>
-          <span className="text-[12px] font-bold text-[#7A5646]">Programação Instagram</span>
+          <span className="text-[14px] font-extrabold text-ds-ink">Coala <span className="text-ds-accent-ink">Pulse</span></span>
         </div>
 
         {error && (
@@ -686,6 +691,7 @@ export default function InstagramProgramacaoPage() {
           />
         ) : activeView === "posts" ? (
           <EditorialPostsView
+            onOpenReports={() => selectView("reports")}
             posts={editorialPosts}
             loading={editorialLoading}
             createRequested={createRequested}
@@ -745,13 +751,10 @@ export default function InstagramProgramacaoPage() {
             onFutureFeature={(label) => say(`${label} será implementado em uma próxima etapa.`)}
           />
         ) : activeView === "bio" && canManageBio ? (
-          <div className="mx-auto w-full max-w-[1440px] px-4 py-5 md:px-7 md:py-7">
-            <header className="mb-6">
-              <p className="text-xs font-extrabold uppercase tracking-[0.1em] text-[#D90F6F]">Relacionar</p>
-              <h1 className="mt-1 text-2xl font-black text-[#4A1A04] md:text-3xl">Link na bio</h1>
-              <p className="mt-1 text-sm text-[#7A5646]">Edite, visualize e publique a página oficial sem sair da programação do Instagram.</p>
-            </header>
-            <PublicBioSettings />
+          <div className="w-full flex-1 bg-ds-warm px-4 py-5 font-ds text-ds-ink md:px-7 md:py-7">
+            <div className="mx-auto w-full max-w-[1440px]">
+              <PublicBioSettings />
+            </div>
           </div>
         ) : activeView === "reports" ? (
           <InsightsView

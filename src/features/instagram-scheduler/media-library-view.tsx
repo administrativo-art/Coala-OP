@@ -1,20 +1,16 @@
 "use client";
 
 import { useMemo, useRef, useState, type DragEvent } from "react";
-import {
-  CalendarClock,
-  ChevronDown,
-  ChevronRight,
-  Film,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Library,
-  Pencil,
-  Search,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { Film } from "lucide-react";
+
+import { BulkBar } from "@/components/patterns/bulk-bar";
+import { ControlSearch } from "@/components/patterns/control-panel";
+import { FilterChips } from "@/components/patterns/filter-chips";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { SelectBox } from "@/components/patterns/select-box";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { HeroChip, PulseHero } from "./hero-panel";
 
 import type {
   InstagramMediaFolder,
@@ -22,11 +18,7 @@ import type {
   InstagramMediaLibraryKind,
   InstagramScheduleListItem,
 } from "./contracts";
-import {
-  DeleteFolderDialog,
-  FolderNameDialog,
-  MoveToFolderDialog,
-} from "./media-folder-dialogs";
+import { FolderNameDialog, MoveToFolderDialog } from "./media-folder-dialogs";
 import {
   buildFolderTree,
   folderPath,
@@ -61,8 +53,7 @@ type Dialog =
   | { type: "create"; parentId: string | null }
   | { type: "rename"; folder: InstagramMediaFolder }
   | { type: "move-folder"; folder: InstagramMediaFolder }
-  | { type: "move-media"; ids: string[] }
-  | { type: "delete"; folder: InstagramMediaFolder };
+  | { type: "move-media"; ids: string[] };
 
 type MediaLibraryViewProps = {
   folders: InstagramMediaFolder[];
@@ -116,6 +107,8 @@ export function MediaLibraryView({
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
   const path = useMemo(() => folderPath(folders, currentFolderId), [folders, currentFolderId]);
@@ -172,6 +165,7 @@ export function MediaLibraryView({
   const showFolders = !scheduledView && !query.trim();
 
   function openFolder(folderId: string | null) {
+    setConfirmingDelete(false);
     setScheduledView(false);
     setChecked(new Set());
     setSelectedId(null);
@@ -234,7 +228,7 @@ export function MediaLibraryView({
     await onMoveFolder(folderId, targetFolderId);
   }
 
-  const dropClass = (key: string) => (dropTarget === key ? "outline outline-2 outline-[#D90F6F]" : "");
+  const dropClass = (key: string) => (dropTarget === key ? "outline outline-2 outline-ds-accent-ink" : "");
   const dropProps = (key: string, targetFolderId: string | null) => ({
     onDragOver: (event: DragEvent) => allowDrop(event, key),
     onDragLeave: () => setDropTarget((current) => (current === key ? null : current)),
@@ -247,7 +241,7 @@ export function MediaLibraryView({
     return (
       <li key={node.id}>
         <div
-          className={`flex items-center rounded-lg ${active ? "bg-white font-extrabold shadow-sm" : "hover:bg-white/70"} ${dropClass(`tree:${node.id}`)}`}
+          className={cn("flex items-center rounded-ds-btn", active ? "bg-ds-accent-row font-extrabold" : "hover:bg-ds-muted", dropClass(`tree:${node.id}`))}
           style={{ paddingLeft: (node.depth - 1) * 12 }}
           draggable
           onDragStart={(event) => dragFolder(event, node.id)}
@@ -256,6 +250,7 @@ export function MediaLibraryView({
           <button
             type="button"
             aria-label={open ? "Recolher" : "Expandir"}
+            aria-expanded={open}
             disabled={node.children.length === 0}
             onClick={() => setCollapsed((current) => {
               const next = new Set(current);
@@ -263,17 +258,16 @@ export function MediaLibraryView({
               else next.add(node.id);
               return next;
             })}
-            className="grid h-7 w-5 shrink-0 place-items-center text-[#7A5646] disabled:opacity-0"
+            className="grid h-7 w-5 shrink-0 place-items-center text-[11px] text-ds-ink-faint disabled:opacity-0"
           >
-            {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+            {open ? "▾" : "▸"}
           </button>
           <button
             type="button"
             aria-pressed={active}
             onClick={() => openFolder(node.id)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left text-[13px]"
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
           >
-            {active ? <FolderOpen className="h-4 w-4 shrink-0" aria-hidden="true" /> : <Folder className="h-4 w-4 shrink-0 text-[#7A5646]" aria-hidden="true" />}
             <span className="truncate">{node.name}</span>
           </button>
         </div>
@@ -292,103 +286,97 @@ export function MediaLibraryView({
     return flat;
   }, [tree]);
 
-  const iconButton =
-    "flex h-9 items-center gap-1.5 rounded-[9px] border border-[#EADFD3] bg-white px-3 text-[12px] font-bold text-[#4A1A04] hover:border-[#F462A7] disabled:opacity-50";
+  const unusedCount = media.filter((item) => item.uses.length === 0).length;
+  const folderButton = (active: boolean) => cn("flex w-full items-center gap-2 rounded-ds-btn px-2 py-2 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink", active ? "bg-ds-accent-row font-extrabold" : "hover:bg-ds-muted");
+
+  async function removeCurrentFolder() {
+    if (!currentFolder) return;
+    setDeleting(true);
+    try {
+      if (await onDeleteFolder(currentFolder.id)) {
+        setConfirmingDelete(false);
+        openFolder(currentFolder.parentId);
+      } else {
+        setConfirmingDelete(false);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="instagram-media-title">
-      <header className="flex flex-wrap items-center gap-3 border-b border-[#EADFD3] px-4 py-4 md:px-7">
-        <h1 id="instagram-media-title" className="text-[22px] font-extrabold tracking-tight text-[#4A1A04]">Biblioteca de mídia</h1>
-        <label className="relative min-w-[190px] flex-1 sm:max-w-[380px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7A5646]" aria-hidden="true" />
-          <span className="sr-only">Buscar por nome</span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar nesta pasta…"
-            className="h-9 w-full rounded-[9px] border border-[#EADFD3] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-[#F462A7]"
-          />
-        </label>
-        <div className="flex rounded-[9px] bg-[#F3E8DC] p-[3px] text-[13px]">
-          {([
-            ["all", "Tudo"],
-            ["image", "Fotos"],
-            ["video", "Vídeos"],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={kind === value}
-              onClick={() => setKind(value)}
-              className={`rounded-[7px] px-3 py-1.5 ${kind === value ? "bg-white font-extrabold shadow-sm" : "font-medium"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-[#5E3A28]">
-          <input type="checkbox" checked={unusedOnly} onChange={(event) => setUnusedOnly(event.target.checked)} className="accent-[#D90F6F]" />
-          Nunca usadas
-        </label>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setDialog({ type: "create", parentId: currentFolderId })}
-            disabled={scheduledView}
-            className={iconButton}
-          >
-            <FolderPlus className="h-4 w-4" aria-hidden="true" />
-            {currentFolderId ? "Nova subpasta" : "Nova pasta"}
-          </button>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading || scheduledView}
-            className="flex h-9 items-center gap-2 rounded-[9px] bg-[#F462A7] px-3.5 text-[13px] font-extrabold text-[#4A1A04] transition hover:bg-[#E9509A] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Upload className={`h-4 w-4 ${uploading ? "animate-pulse" : ""}`} aria-hidden="true" />
-            {uploading ? "Enviando…" : "Enviar arquivos"}
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
-            className="sr-only"
-            onChange={(event) => void uploadSelection(event.target.files)}
-          />
-        </div>
-      </header>
+    <section className="flex min-h-0 flex-1 flex-col gap-5 bg-ds-warm px-4 py-5 font-ds text-ds-ink md:px-7" aria-labelledby="instagram-media-title">
+      <PulseHero
+        kicker="Programação do Instagram"
+        title="Biblioteca de mídia"
+        titleId="instagram-media-title"
+        actions={(
+          <>
+            <Button type="button" variant="on-dark-secondary" size="xl" onClick={() => setDialog({ type: "create", parentId: currentFolderId })} disabled={scheduledView} className="whitespace-nowrap">
+              {currentFolderId ? "Nova subpasta" : "Nova pasta"}
+            </Button>
+            <Button type="button" variant="primary-page" size="xl" loading={uploading} loadingLabel="Enviando…" onClick={() => inputRef.current?.click()} disabled={scheduledView} className="whitespace-nowrap">
+              + Enviar arquivos
+            </Button>
+          </>
+        )}
+        compactActions={(
+          <Button type="button" variant="primary-page" size="md" loading={uploading} loadingLabel="Enviando…" onClick={() => inputRef.current?.click()} disabled={scheduledView} className="whitespace-nowrap">
+            + Enviar arquivos
+          </Button>
+        )}
+        search={<ControlSearch value={query} onChange={setQuery} placeholder="Buscar nesta pasta pelo nome" />}
+        chips={(
+          <>
+            <HeroChip value={media.length} label={scheduledView ? "Arquivos dos agendamentos" : "Arquivos nesta pasta"} />
+            <HeroChip value={unusedCount} label="Nunca usadas" tone="warning" active={unusedOnly} onClick={() => setUnusedOnly((current) => !current)} />
+            <span aria-hidden="true" className="mx-1 h-5 w-px bg-white/15" />
+            <FilterChips
+              chips={[{ value: "image", label: "Fotos" }, { value: "video", label: "Vídeos" }]}
+              value={kind === "all" ? null : kind}
+              onChange={(value) => setKind((value as InstagramMediaLibraryKind | null) ?? "all")}
+              allLabel="Tudo"
+            />
+          </>
+        )}
+      />
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+        className="sr-only"
+        aria-label="Escolher arquivos"
+        onChange={(event) => void uploadSelection(event.target.files)}
+      />
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)_300px]">
-        <aside className="hidden overflow-y-auto border-r border-[#EADFD3] px-3 py-4 lg:block">
-          <div className="px-2 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.09em] text-[#7A5646]">Pastas</div>
+      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)_300px]">
+        <aside className="hidden self-start overflow-y-auto rounded-ds-card-lg border border-ds-border bg-ds-surface px-3 py-4 lg:block">
+          <div className="px-2 pb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Pastas</div>
           <button
             type="button"
             aria-pressed={!scheduledView && currentFolderId === null}
             onClick={() => openFolder(null)}
             {...dropProps("tree:root", null)}
-            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] ${!scheduledView && currentFolderId === null ? "bg-white font-extrabold shadow-sm" : "hover:bg-white/70"} ${dropClass("tree:root")}`}
+            className={cn(folderButton(!scheduledView && currentFolderId === null), dropClass("tree:root"))}
           >
-            <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="truncate">Biblioteca</span>
           </button>
           <ul>{tree.map(renderTreeNode)}</ul>
-          <div className="mt-3 border-t border-[#EADFD3] pt-3">
+          <div className="mt-3 border-t border-ds-divider pt-3">
             <button
               type="button"
               aria-pressed={scheduledView}
-              onClick={() => { setScheduledView(true); setChecked(new Set()); setSelectedId(null); }}
-              className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] ${scheduledView ? "bg-white font-extrabold shadow-sm" : "hover:bg-white/70"}`}
+              onClick={() => { setScheduledView(true); setChecked(new Set()); setSelectedId(null); setConfirmingDelete(false); }}
+              className={folderButton(scheduledView)}
             >
-              <CalendarClock className="h-4 w-4 shrink-0 text-[#7A5646]" aria-hidden="true" />
               <span className="truncate">Agendamentos</span>
-              <span className="ml-auto text-[10px] font-bold text-[#7A5646]">leitura</span>
+              <span className="ml-auto text-[10px] font-bold text-ds-ink-faint">leitura</span>
             </button>
           </div>
         </aside>
 
-        <div className="min-h-0 overflow-y-auto p-4">
+        <div className="min-h-0 min-w-0 overflow-y-auto">
           <label className="mb-3 block lg:hidden">
             <span className="sr-only">Pasta</span>
             <select
@@ -400,7 +388,7 @@ export function MediaLibraryView({
                 }
                 openFolder(event.target.value || null);
               }}
-              className="h-9 w-full rounded-[9px] border border-[#EADFD3] bg-white px-3 text-[13px] font-bold"
+              className="h-10 w-full rounded-ds-md border border-ds-border-input bg-ds-input px-3 text-[13px] font-bold"
             >
               {mobileOptions.map((option) => (
                 <option key={option.id ?? "root"} value={option.id ?? ""}>{option.label}</option>
@@ -411,25 +399,25 @@ export function MediaLibraryView({
 
           <nav aria-label="Caminho da pasta" className="mb-3 flex flex-wrap items-center gap-1 text-[13px]">
             {scheduledView ? (
-              <span className="font-extrabold text-[#4A1A04]">Agendamentos</span>
+              <span className="font-extrabold">Agendamentos</span>
             ) : (
               <>
                 <button
                   type="button"
                   onClick={() => openFolder(null)}
                   {...dropProps("crumb:root", null)}
-                  className={`rounded px-1.5 py-0.5 font-bold hover:bg-[#F4ECE2] ${path.length === 0 ? "text-[#4A1A04]" : "text-[#7A5646]"} ${dropClass("crumb:root")}`}
+                  className={cn("rounded-ds-sm px-1.5 py-0.5 font-bold hover:bg-ds-muted", path.length === 0 ? "text-ds-ink" : "text-ds-ink-muted", dropClass("crumb:root"))}
                 >
                   Biblioteca
                 </button>
                 {path.map((folder, index) => (
                   <span key={folder.id} className="flex items-center gap-1">
-                    <ChevronRight className="h-3.5 w-3.5 text-[#7A5646]" aria-hidden="true" />
+                    <span aria-hidden="true" className="text-ds-ink-faint">›</span>
                     <button
                       type="button"
                       onClick={() => openFolder(folder.id)}
                       {...dropProps(`crumb:${folder.id}`, folder.id)}
-                      className={`rounded px-1.5 py-0.5 font-bold hover:bg-[#F4ECE2] ${index === path.length - 1 ? "text-[#4A1A04]" : "text-[#7A5646]"} ${dropClass(`crumb:${folder.id}`)}`}
+                      className={cn("rounded-ds-sm px-1.5 py-0.5 font-bold hover:bg-ds-muted", index === path.length - 1 ? "text-ds-ink" : "text-ds-ink-muted", dropClass(`crumb:${folder.id}`))}
                     >
                       {folder.name}
                     </button>
@@ -437,35 +425,32 @@ export function MediaLibraryView({
                 ))}
               </>
             )}
-            {currentFolder && !scheduledView && (
+            {currentFolder && !scheduledView && !confirmingDelete && (
               <span className="ml-auto flex items-center gap-1.5">
-                <button type="button" onClick={() => setDialog({ type: "rename", folder: currentFolder })} className={iconButton}>
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Renomear
-                </button>
-                <button type="button" onClick={() => setDialog({ type: "move-folder", folder: currentFolder })} className={iconButton}>
-                  <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" /> Mover
-                </button>
-                <button type="button" onClick={() => setDialog({ type: "delete", folder: currentFolder })} className={`${iconButton} text-[#A52E24]`}>
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Excluir
-                </button>
+                <Button type="button" variant="ds-secondary" size="xs" onClick={() => setDialog({ type: "rename", folder: currentFolder })}>Renomear</Button>
+                <Button type="button" variant="ds-secondary" size="xs" onClick={() => setDialog({ type: "move-folder", folder: currentFolder })}>Mover</Button>
+                <Button type="button" variant="danger-link" size="xs" onClick={() => setConfirmingDelete(true)}>Excluir</Button>
               </span>
             )}
           </nav>
 
+          {confirmingDelete && currentFolder ? (
+            <InlineConfirm
+              className="mb-3"
+              message={`Excluir a pasta “${currentFolder.name}”? Nenhum arquivo é apagado: as mídias e as subpastas sobem para a pasta de cima.`}
+              confirmLabel="Excluir pasta"
+              cancelLabel="Manter"
+              loadingLabel="Excluindo…"
+              loading={deleting}
+              onCancel={() => setConfirmingDelete(false)}
+              onConfirm={() => void removeCurrentFolder()}
+            />
+          ) : null}
+
           {scheduledView && (
-            <p className="mb-3 rounded-xl border border-[#EADFD3] bg-white px-3 py-2 text-[12px] text-[#7A5646]">
+            <p className="mb-3 rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-[12px] text-ds-ink-muted">
               Estes arquivos pertencem aos agendamentos e não podem ser movidos nem enviados para pastas por aqui.
             </p>
-          )}
-
-          {checked.size > 0 && (
-            <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#F4A6D0] bg-[#FFF3F9] px-3 py-2 text-[13px]">
-              <span className="font-extrabold text-[#4A1A04]">{checked.size} selecionado{checked.size > 1 ? "s" : ""}</span>
-              <button type="button" onClick={() => setDialog({ type: "move-media", ids: [...checked] })} className={iconButton}>
-                <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" /> Mover para…
-              </button>
-              <button type="button" onClick={() => setChecked(new Set())} className="ml-auto text-[12px] font-bold text-[#7A5646] underline">Limpar seleção</button>
-            </div>
           )}
 
           {showFolders && subfolders.length > 0 && (
@@ -478,9 +463,9 @@ export function MediaLibraryView({
                   onDragStart={(event) => dragFolder(event, folder.id)}
                   onClick={() => openFolder(folder.id)}
                   {...dropProps(`card:${folder.id}`, folder.id)}
-                  className={`flex items-center gap-2 rounded-xl border border-[#EADFD3] bg-white px-3 py-3 text-left text-[13px] font-bold text-[#4A1A04] hover:border-[#F462A7] ${dropClass(`card:${folder.id}`)}`}
+                  className={cn("flex items-center gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3 py-3 text-left text-[13px] font-bold hover:shadow-ds-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink", dropClass(`card:${folder.id}`))}
                 >
-                  <Folder className="h-5 w-5 shrink-0 text-[#D90F6F]" aria-hidden="true" />
+                  <span aria-hidden="true" className="text-ds-accent-ink">▤</span>
                   <span className="min-w-0 truncate">{folder.name}</span>
                 </button>
               ))}
@@ -488,10 +473,10 @@ export function MediaLibraryView({
           )}
 
           {loading && media.length === 0 ? (
-            <div className="grid min-h-64 place-items-center text-[13px] text-[#7A5646]">Carregando biblioteca…</div>
+            <div role="status" className="grid min-h-64 place-items-center text-[13px] text-ds-ink-muted">Carregando biblioteca…</div>
           ) : visible.length === 0 ? (
             !(showFolders && subfolders.length > 0) && (
-              <div className="grid min-h-64 place-items-center rounded-2xl border border-dashed border-[#D9C8B6] bg-white px-8 text-center text-[13px] text-[#7A5646]">
+              <div className="grid min-h-64 place-items-center rounded-ds-card-lg border border-dashed border-ds-border-input px-8 text-center text-[13px] text-ds-ink-muted">
                 {scheduledView || query.trim() || kind !== "all" || unusedOnly
                   ? "Nada encontrado com esses filtros."
                   : "Esta pasta está vazia. Envie arquivos ou arraste mídias de outra pasta."}
@@ -515,29 +500,25 @@ export function MediaLibraryView({
                       className="block w-full min-w-0 text-left focus-visible:outline-none"
                     >
                       <div
-                        className="relative aspect-[4/5] overflow-hidden rounded-lg border border-[#EADFD3] bg-[#F3E8DC]"
-                        style={{ outline: selected?.id === item.id ? "2px solid #D90F6F" : "none", outlineOffset: "2px" }}
+                        className={cn(
+                          "relative aspect-[4/5] overflow-hidden rounded-ds-btn border border-ds-border bg-ds-muted outline-offset-2",
+                          selected?.id === item.id && "outline outline-2 outline-ds-accent-ink"
+                        )}
                       >
                         <ProtectedMedia url={item.previewUrl} kind={item.kind} alt={item.name} />
                         {item.kind === "video" && (
-                          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-[#4A1A04] px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-ds-sm bg-ds-dark px-1.5 py-0.5 text-[10px] font-extrabold text-white">
                             <Film className="h-2.5 w-2.5" aria-hidden="true" /> Vídeo
                           </span>
                         )}
                       </div>
-                      <div className="mt-1.5 truncate text-[12px] font-bold text-[#4A1A04]">{item.name}</div>
-                      <div className="text-[10px] text-[#7A5646]">{item.uses.length ? `Usada em ${item.uses.length} post` : "Nunca usada"}</div>
+                      <div className="mt-1.5 truncate text-[12px] font-bold">{item.name}</div>
+                      <div className="text-[10px] text-ds-ink-muted">{item.uses.length ? `Usada em ${item.uses.length} post` : "Nunca usada"}</div>
                     </button>
                     {item.libraryId !== null && (
-                      <label className={`absolute left-1.5 top-1.5 grid h-6 w-6 cursor-pointer place-items-center rounded bg-white/90 shadow ${isChecked ? "" : "opacity-80"}`}>
-                        <span className="sr-only">Selecionar {item.name}</span>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleChecked(item.libraryId!)}
-                          className="h-4 w-4 accent-[#D90F6F]"
-                        />
-                      </label>
+                      <span className="absolute left-1.5 top-1.5 rounded-ds-sm bg-white/90 p-1 shadow-ds-lift">
+                        <SelectBox checked={isChecked} onToggle={() => toggleChecked(item.libraryId!)} label={`Selecionar ${item.name}`} />
+                      </span>
                     )}
                   </div>
                 );
@@ -547,59 +528,57 @@ export function MediaLibraryView({
 
           {hasMore && !scheduledView && (
             <div className="mt-4 text-center">
-              <button type="button" onClick={onLoadMore} disabled={loading} className={iconButton}>
+              <Button type="button" variant="ds-secondary" size="md" onClick={onLoadMore} disabled={loading}>
                 {loading ? "Carregando…" : "Carregar mais"}
-              </button>
+              </Button>
             </div>
           )}
         </div>
 
-        <aside className="hidden border-l border-[#EADFD3] bg-white p-5 xl:flex xl:flex-col xl:gap-4">
+        <aside className="hidden self-start rounded-ds-card-lg border border-ds-border bg-ds-surface p-5 xl:flex xl:flex-col xl:gap-4">
           {selected ? (
             <>
-              <div className="aspect-[4/5] max-h-[340px] overflow-hidden rounded-[10px] border border-[#EADFD3] bg-[#F3E8DC]">
+              <div className="aspect-[4/5] max-h-[340px] overflow-hidden rounded-ds-btn border border-ds-border bg-ds-muted">
                 <ProtectedMedia url={selected.previewUrl} kind={selected.kind} alt={selected.name} eager />
               </div>
               <div>
-                <h2 className="break-words text-[18px] font-extrabold text-[#4A1A04]">{selected.name}</h2>
-                <p className="mt-1 text-[12px] text-[#7A5646]">
+                <h2 className="break-words text-[18px] font-extrabold">{selected.name}</h2>
+                <p className="mt-1 text-[12px] text-ds-ink-muted">
                   {scheduledView ? "Agendamentos" : path.map((folder) => folder.name).join(" / ") || "Biblioteca"} · {selected.kind === "video" ? "vídeo" : "foto"} · {sizeLabel(selected.sizeBytes)}
                 </p>
                 {selected.width && selected.height && (
-                  <p className="mt-1 text-[11px] text-[#7A5646]">{selected.width} × {selected.height} px</p>
+                  <p className="mt-1 font-ds-mono text-[11px] text-ds-ink-muted">{selected.width} × {selected.height} px</p>
                 )}
               </div>
               <div className="space-y-1.5 text-[12px]">
-                <div className="font-extrabold text-[#4A1A04]">{selected.uses.length ? `Usada em ${selected.uses.length} post` : "Ainda não usada"}</div>
+                <div className="font-extrabold">{selected.uses.length ? `Usada em ${selected.uses.length} post` : "Ainda não usada"}</div>
                 {selected.uses.map((use) => (
-                  <div key={use.id} className="font-semibold text-[#217A8F]">{use.title} · {use.date}</div>
+                  <div key={use.id} className="font-semibold text-ds-info">{use.title} · {use.date}</div>
                 ))}
               </div>
               {selected.libraryId && (
-                <button
-                  type="button"
-                  onClick={() => setDialog({ type: "move-media", ids: [selected.libraryId!] })}
-                  className={iconButton}
-                >
-                  <FolderOpen className="h-4 w-4" aria-hidden="true" /> Mover para…
-                </button>
+                <Button type="button" variant="ds-secondary" size="md" onClick={() => setDialog({ type: "move-media", ids: [selected.libraryId!] })}>Mover para…</Button>
               )}
-              <button
-                type="button"
-                onClick={() => onFutureFeature("Editor de posts")}
-                className="mt-auto rounded-[9px] bg-[#F462A7] px-3 py-2.5 text-[13px] font-extrabold text-[#4A1A04]"
-              >
+              <Button type="button" variant="primary-modal" size="md" onClick={() => onFutureFeature("Editor de posts")} className="mt-auto">
                 Criar post com esta mídia · em breve
-              </button>
+              </Button>
             </>
           ) : (
-            <p className="text-[13px] text-[#7A5646]">Selecione um arquivo para conferir seus detalhes.</p>
+            <p className="text-[13px] text-ds-ink-muted">Selecione um arquivo para conferir seus detalhes.</p>
           )}
         </aside>
       </div>
-      <footer className="border-t border-[#EADFD3] bg-white px-4 py-2 text-[11px] text-[#7A5646] md:px-7">
+
+      <p className="text-[11px] text-ds-ink-muted">
         Crie pastas e subpastas, arraste arquivos e pastas para reorganizar. A busca e os filtros valem para os arquivos já carregados nesta pasta. Imagens: 8 MB. Vídeos: 24 MB. Arquivos dos agendamentos ficam na pasta “Agendamentos”, somente leitura.
-      </footer>
+      </p>
+
+      <BulkBar
+        count={checked.size}
+        summary={`${checked.size} selecionado${checked.size > 1 ? "s" : ""}`}
+        actions={[{ label: "Mover para…", onClick: () => setDialog({ type: "move-media", ids: [...checked] }) }]}
+        onClear={() => setChecked(new Set())}
+      />
 
       {dialog?.type === "create" && (
         <FolderNameDialog
@@ -638,13 +617,6 @@ export function MediaLibraryView({
             if (moved) setChecked(new Set());
             return moved;
           }}
-          onClose={() => setDialog(null)}
-        />
-      )}
-      {dialog?.type === "delete" && (
-        <DeleteFolderDialog
-          folderName={dialog.folder.name}
-          onConfirm={() => onDeleteFolder(dialog.folder.id)}
           onClose={() => setDialog(null)}
         />
       )}
