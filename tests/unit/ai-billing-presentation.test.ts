@@ -1,20 +1,21 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { billingAlertPresentation, formatBillingBytes, formatBillingGeneratedAt } from "../../src/components/ai-management/billing-presentation";
 
-test("OpenAI alert labels reflect the configured monthly budget status", () => {
+test("OpenAI alert labels make the internal ruler distinct from prepaid balance", () => {
   const unavailable = billingAlertPresentation({ basis: "openai_budget", level: "unavailable", usedPercent: null }, "openai");
-  assert.equal(unavailable.pill, "Sem limite");
-  assert.match(unavailable.description, /Defina um limite mensal/);
+  assert.equal(unavailable.pill, "Sem régua");
+  assert.match(unavailable.description, /Defina uma régua mensal/);
 
   const warning = billingAlertPresentation({ basis: "openai_budget", level: "warning", usedPercent: 80 }, "openai");
   assert.equal(warning.pillVariant, "warn");
-  assert.match(warning.description, /80% do limite mensal/);
+  assert.match(warning.description, /80% da régua interna/);
 
   const critical = billingAlertPresentation({ basis: "openai_budget", level: "critical", usedPercent: 101 }, "openai");
   assert.equal(critical.pillVariant, "danger");
-  assert.match(critical.description, /101% do limite mensal/);
+  assert.match(critical.description, /101% da régua interna/);
 });
 
 test("Google alert says the forecast covers panel queries, not the whole account", () => {
@@ -36,4 +37,15 @@ test("BigQuery estimate formats binary units and unavailable values", () => {
 test("billing timestamp uses the app timezone and rejects invalid values", () => {
   assert.equal(formatBillingGeneratedAt("2026-10-08T14:25:00.000Z"), "08/10/2026, 11:25");
   assert.equal(formatBillingGeneratedAt("invalid"), null);
+});
+
+test("OpenAI cards keep prepaid balance, official spend and internal ruler distinct", () => {
+  const source = readFileSync("src/components/ai-management/ai-billing-settings.tsx", "utf8");
+
+  assert.match(source, /title="Saldo pré-pago"/);
+  assert.match(source, /title="Régua mensal interna"/);
+  assert.match(source, /title="Gasto oficial no mês"/);
+  assert.match(source, /title="Uso da régua"/);
+  assert.doesNotMatch(source, /title="Disponível no mês"/);
+  assert.doesNotMatch(source, /Limite mensal menos o custo acumulado/);
 });

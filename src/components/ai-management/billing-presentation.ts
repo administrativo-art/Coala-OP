@@ -22,19 +22,19 @@ export function billingAlertPresentation(alert: BillingAlert, provider: "openai"
   const percent = alert.usedPercent?.toLocaleString("pt-BR");
   const level = alert.level;
   const title = provider === "openai"
-    ? level === "unavailable" ? "Alerta de orçamento indisponível" : level === "critical" ? "Orçamento OpenAI em 95% ou mais" : level === "warning" ? "Atenção ao orçamento OpenAI" : "Orçamento OpenAI acompanhado"
+    ? level === "unavailable" ? "Régua interna indisponível" : level === "critical" ? "Régua interna em 95% ou mais" : level === "warning" ? "Atenção à régua interna" : "Régua interna acompanhada"
     : level === "unavailable" ? "Estimativa da franquia indisponível" : level === "critical" ? "Projeção do painel em 95% ou mais" : level === "warning" ? "Atenção à projeção do painel" : "Projeção do painel abaixo de 80%";
   const description = provider === "openai"
     ? level === "unavailable"
-      ? "Defina um limite mensal para acompanhar os marcos de 80% e 95% do orçamento."
-      : `${percent}% do limite mensal utilizado. Alertas em 80% e 95%; o custo pode ser contabilizado com atraso.`
+      ? "Defina uma régua mensal para acompanhar os marcos de 80% e 95%."
+      : `${percent}% da régua interna utilizado pelo gasto oficial. Alertas em 80% e 95%; o custo pode ser contabilizado com atraso.`
     : level === "unavailable"
       ? "A projeção mensal da franquia ainda não pôde ser validada para este painel."
       : `${percent}% de 1 TiB projetado para as consultas deste painel, considerando até 25 consultas por dia em uma instância. Não mede o uso total da franquia da conta.`;
   return {
     title,
     description,
-    pill: level === "critical" ? "95% ou mais" : level === "warning" ? "80% ou mais" : level === "unavailable" ? provider === "openai" ? "Sem limite" : "Sem estimativa" : "Abaixo de 80%",
+    pill: level === "critical" ? "95% ou mais" : level === "warning" ? "80% ou mais" : level === "unavailable" ? provider === "openai" ? "Sem régua" : "Sem estimativa" : "Abaixo de 80%",
     pillVariant: level === "critical" ? "danger" as const : level === "warning" ? "warn" as const : level === "unavailable" ? "neutral" as const : "ok" as const,
   };
 }
