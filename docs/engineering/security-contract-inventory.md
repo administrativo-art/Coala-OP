@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **383**
-- Totalmente contratados: **1**
-- Legados congelados: **382**
+- Totalmente contratados: **4**
+- Legados congelados: **379**
 - Exceções temporárias: **0**
 - Violações: **0**
 
@@ -367,8 +367,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/stock/reposition-activities/[activityId]/reopen-audit` | POST | `LEGACY_BASELINE` | [src/app/api/stock/reposition-activities/[activityId]/reopen-audit/route.ts](../../src/app/api/stock/reposition-activities/[activityId]/reopen-audit/route.ts) |
 | `/api/stock/reposition-activities/[activityId]/reopen-dispatch` | POST | `LEGACY_BASELINE` | [src/app/api/stock/reposition-activities/[activityId]/reopen-dispatch/route.ts](../../src/app/api/stock/reposition-activities/[activityId]/reopen-dispatch/route.ts) |
 | `/api/stock/reposition-activities/[activityId]/revert` | POST | `LEGACY_BASELINE` | [src/app/api/stock/reposition-activities/[activityId]/revert/route.ts](../../src/app/api/stock/reposition-activities/[activityId]/revert/route.ts) |
-| `/api/stock/reposition-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/stock/reposition-requests/route.ts](../../src/app/api/stock/reposition-requests/route.ts) |
-| `/api/stock/reposition-requests/[requestId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/stock/reposition-requests/[requestId]/route.ts](../../src/app/api/stock/reposition-requests/[requestId]/route.ts) |
+| `/api/stock/reposition-requests` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/stock/reposition-requests/route.ts](../../src/app/api/stock/reposition-requests/route.ts) |
+| `/api/stock/reposition-requests/[requestId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/stock/reposition-requests/[requestId]/route.ts](../../src/app/api/stock/reposition-requests/[requestId]/route.ts) |
 | `/api/stock/return-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/stock/return-requests/route.ts](../../src/app/api/stock/return-requests/route.ts) |
 | `/api/stock/return-requests/[requestId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/stock/return-requests/[requestId]/route.ts](../../src/app/api/stock/return-requests/[requestId]/route.ts) |
 | `/api/tasks` | GET, POST | `LEGACY_BASELINE` | [src/app/api/tasks/route.ts](../../src/app/api/tasks/route.ts) |
@@ -387,7 +387,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/uniforms/exchange` | POST | `LEGACY_BASELINE` | [src/app/api/uniforms/exchange/route.ts](../../src/app/api/uniforms/exchange/route.ts) |
 | `/api/uniforms/return` | POST | `LEGACY_BASELINE` | [src/app/api/uniforms/return/route.ts](../../src/app/api/uniforms/return/route.ts) |
 | `/api/uniforms/terms/[id]` | GET | `LEGACY_BASELINE` | [src/app/api/uniforms/terms/[id]/route.ts](../../src/app/api/uniforms/terms/[id]/route.ts) |
-| `/api/uploads/operations` | POST | `LEGACY_BASELINE` | [src/app/api/uploads/operations/route.ts](../../src/app/api/uploads/operations/route.ts) |
+| `/api/uploads/operations` | POST ✓ | `CONTRACTED` | [src/app/api/uploads/operations/route.ts](../../src/app/api/uploads/operations/route.ts) |
 | `/api/users` | POST | `LEGACY_BASELINE` | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) |
 | `/api/users/[userId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/[userId]/route.ts) |
 | `/api/webhooks/autentique` | POST | `LEGACY_BASELINE` | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) |
