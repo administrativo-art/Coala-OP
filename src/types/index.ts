@@ -956,6 +956,8 @@ export type User = {
     };
   }>;
   isActive?: boolean;
+  /** Incrementada ao suspender acesso; tokens com versão anterior permanecem inválidos após readmissão. */
+  sessionVersion?: number;
   inactivationType?: 'temporary' | 'contract_termination';
   inactivationHistory?: Array<{
     type: 'temporary' | 'contract_termination' | 'reactivation';

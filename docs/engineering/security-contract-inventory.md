@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **383**
-- Totalmente contratados: **0**
-- Legados congelados: **383**
+- Totalmente contratados: **1**
+- Legados congelados: **382**
 - Exceções temporárias: **0**
 - Violações: **0**
 
@@ -23,7 +23,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/assets/upload` | POST | `LEGACY_BASELINE` | [src/app/api/assets/upload/route.ts](../../src/app/api/assets/upload/route.ts) |
 | `/api/audit/log` | POST | `LEGACY_BASELINE` | [src/app/api/audit/log/route.ts](../../src/app/api/audit/log/route.ts) |
 | `/api/audit/logs` | GET | `LEGACY_BASELINE` | [src/app/api/audit/logs/route.ts](../../src/app/api/audit/logs/route.ts) |
-| `/api/auth/first-access/[token]` | GET, POST | `LEGACY_BASELINE` | [src/app/api/auth/first-access/[token]/route.ts](../../src/app/api/auth/first-access/[token]/route.ts) |
+| `/api/auth/first-access/[token]` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/auth/first-access/[token]/route.ts](../../src/app/api/auth/first-access/[token]/route.ts) |
 | `/api/auth/forgot-password` | POST | `LEGACY_BASELINE` | [src/app/api/auth/forgot-password/route.ts](../../src/app/api/auth/forgot-password/route.ts) |
 | `/api/auth/last-login` | POST | `LEGACY_BASELINE` | [src/app/api/auth/last-login/route.ts](../../src/app/api/auth/last-login/route.ts) |
 | `/api/auth/password-changed` | POST | `LEGACY_BASELINE` | [src/app/api/auth/password-changed/route.ts](../../src/app/api/auth/password-changed/route.ts) |

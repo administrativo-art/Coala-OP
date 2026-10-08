@@ -294,6 +294,8 @@ export type RhAccessCache = {
   job_function_id?:     string;
   job_function_ids?:    string[];
   function_ids?:        string[];
+  is_active?:           boolean;
+  session_version?:     number;
   profile_compliance_status?: 'pending' | 'complete' | 'overdue';
   profile_compliance_policy_version?: number;
   profile_compliance_next_review_at?: Timestamp;

@@ -9,7 +9,7 @@ import {
 } from "@/types";
 import { applyLegacyFormalizationFallbacks } from "@/lib/hr-formalization-permissions";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { verifyAuth } from "@/lib/verify-auth";
+import { verifyAuthWithUser } from "@/lib/verify-auth";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { requiresProfileCompliance } from "@/features/hr/profile-compliance-access.server";
 
@@ -104,17 +104,15 @@ export type ServerUserContext = {
 };
 
 export async function requireUser(req: NextRequest): Promise<ServerUserContext> {
-  const decoded = await verifyAuth(req, { enforceProfileCompliance: false });
+  const { decoded, userSnap } = await verifyAuthWithUser(req, { enforceProfileCompliance: false });
   if (!decoded.uid) {
     throw new Error("Usuário inválido.");
   }
 
-  const userSnap = await dbAdmin.collection("users").doc(decoded.uid).get();
-  if (!userSnap.exists) {
-    throw new Error("Usuário não encontrado.");
-  }
-
   const userData = userSnap.data() ?? {};
+  if (userData.isActive === false) {
+    throw new Error("Conta inativa.");
+  }
   if (requiresProfileCompliance(userData, req)) {
     throw new Error("Atualização cadastral obrigatória pendente.");
   }

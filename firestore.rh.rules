@@ -6,7 +6,12 @@ service cloud.firestore {
     // ─── Helpers ────────────────────────────────────────────────────────────
 
     function isAuth() {
-      return request.auth != null;
+      let cache = request.auth != null
+        ? get(/databases/$(database)/documents/rh_access_cache/$(request.auth.uid)).data
+        : {};
+      return request.auth != null
+          && cache.get('is_active', true) != false
+          && cache.get('session_version', 0) == request.auth.token.get('sessionVersion', 0);
     }
 
     function isDefaultAdmin() {

@@ -177,6 +177,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await user.getIdToken(true);
           void recordLoginAccess(user);
           const userData = fallbackUser ?? ({ id: userDocSnap!.id, ...userDocSnap!.data() } as User);
+          if (userData.isActive === false) {
+            await signOut(auth);
+            setAppUser(null);
+            setPermissions(defaultGuestPermissions);
+            setPermissionsReady(true);
+            setLoading(false);
+            return;
+          }
           setAppUser(userData);
         } else {
           await signOut(auth);
