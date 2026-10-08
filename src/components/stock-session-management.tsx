@@ -617,8 +617,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   };
 
   const handleExport = () => {
-    // eslint-disable-next-line no-restricted-globals -- legado preservado até a migração isolada do módulo de Estoque
-    alert('Função de exportação a ser implementada.');
+    toast({ title: 'Exportação indisponível', description: 'A função de exportação ainda será implementada.' });
   };
 
   if (activeSession) {
