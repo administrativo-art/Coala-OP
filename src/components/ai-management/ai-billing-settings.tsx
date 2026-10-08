@@ -18,8 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { StatusPill } from "@/components/ui/status-pill";
+import { billingAlertPresentation, formatBillingBytes, formatBillingGeneratedAt } from "@/components/ai-management/billing-presentation";
 import { useAuth } from "@/hooks/use-auth";
-import type { AiBillingOverview, AppCostBreakdown, AppCostOverview } from "@/features/ai-management/types";
+import type { AiBillingOverview, AppCostBreakdown, AppCostOverview, BillingAlert } from "@/features/ai-management/types";
 import { cn } from "@/lib/utils";
 
 type AiBillingSettingsProps = {
@@ -44,6 +46,31 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR", { notation: value >= 1_000_000 ? "compact" : "standard" }).format(value);
 }
 
+function BillingAlertNotice({ alert, provider }: { alert: BillingAlert; provider: "openai" | "google" }) {
+  const presentation = billingAlertPresentation(alert, provider);
+  const isCritical = alert.level === "critical";
+  const isWarning = alert.level === "warning";
+  const Icon = alert.level === "none" ? CheckCircle2 : AlertTriangle;
+  return (
+    <div
+      role={isCritical || isWarning ? "alert" : "status"}
+      className={cn(
+        "flex gap-3 rounded-ds-card border p-4 text-sm",
+        isCritical ? "border-ds-danger bg-ds-danger-bg text-ds-danger" : isWarning ? "border-ds-alert-border bg-ds-alert-bg text-ds-alert-ink" : "border-ds-border bg-ds-surface-warm text-ds-ink",
+      )}
+    >
+      <Icon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+      <div className="min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-bold">{presentation.title}</p>
+          <StatusPill variant={presentation.pillVariant}>{presentation.pill}</StatusPill>
+        </div>
+        <p className="text-xs leading-relaxed">{presentation.description}</p>
+      </div>
+    </div>
+  );
+}
+
 function formatDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(
@@ -65,7 +92,7 @@ function MetricCard({
   highlight?: boolean;
 }) {
   return (
-    <Card className={cn("overflow-hidden", highlight && "border-[#e5a9bd] bg-[#fff8fa]")}>
+    <Card className={cn("overflow-hidden", highlight && "border-ds-accent bg-ds-accent-soft")}>
       <CardContent className="p-5 sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -75,7 +102,7 @@ function MetricCard({
           </div>
           <div className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground",
-            highlight && "bg-[#f7dbe5] text-[#9d365b]",
+            highlight && "bg-ds-accent-soft text-ds-accent-ink",
           )}>
             <Icon className="h-5 w-5" />
           </div>
@@ -144,6 +171,7 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
   const usedPercent = overview.credits.usedPercent ?? 0;
   return (
     <div className="space-y-5">
+      <BillingAlertNotice alert={overview.alert} provider="openai" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Disponível no mês"
@@ -155,7 +183,7 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
         <MetricCard
           title="Limite mensal"
           value={formatUsd(overview.credits.limitUsd)}
-          description={overview.credits.source === "project_spend_limit" ? "Limite do projeto OpenAI." : "Orçamento mensal configurado no APP."}
+          description={overview.credits.source === "project_spend_limit" ? "Limite do projeto OpenAI." : overview.credits.source === "organization_spend_limit" ? "Limite da organização OpenAI." : overview.credits.source === "configured_monthly_budget" ? "Orçamento mensal configurado no APP." : "Nenhum limite mensal encontrado."}
           icon={CircleDollarSign}
         />
         <MetricCard
@@ -183,18 +211,20 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Progress
-            value={usedPercent}
-            className="h-3 bg-[#f1e8e3]"
-            indicatorClassName={usedPercent >= 90 ? "bg-red-500" : usedPercent >= 70 ? "bg-amber-500" : "bg-[#a6325b]"}
-          />
+          {overview.credits.usedPercent !== null ? (
+            <Progress
+              value={Math.min(usedPercent, 100)}
+              className="h-3 bg-ds-surface-muted"
+              indicatorClassName={overview.alert.level === "critical" ? "bg-ds-danger" : overview.alert.level === "warning" ? "bg-ds-warn" : "bg-ds-accent"}
+            />
+          ) : null}
           <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 p-4 text-xs leading-relaxed text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <span>{overview.credits.note}</span>
             <a
               href="https://platform.openai.com/settings/organization/billing/overview"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-[#993556] hover:underline"
+              className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-ds-accent-ink hover:text-ds-accent-ink-hover hover:underline"
             >
               Ver saldo pré-pago oficial
               <ExternalLink className="h-3.5 w-3.5" />
@@ -202,6 +232,48 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Custo por ID de chave</CardTitle>
+            <CardDescription>Custo oficial no mês, agrupado pelo ID de chave retornado pela OpenAI. IDs não revelam o segredo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {overview.costs.byApiKey.length ? (
+              <div className="divide-y divide-ds-divider rounded-ds-card border border-ds-border">
+                {overview.costs.byApiKey.map((entry) => (
+                  <div key={entry.key} className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+                    <span className="min-w-0 break-all font-ds-mono text-xs text-ds-ink" title={entry.label}>{entry.label}</span>
+                    <span className="shrink-0 font-semibold text-ds-ink">{formatUsd(entry.costUsd)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum custo por chave foi retornado.</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Uso por ID de chave</CardTitle>
+            <CardDescription>Requisições e tokens no mês. A ausência de um ID não significa ausência de custo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {overview.usage.byApiKey.length ? (
+              <div className="divide-y divide-ds-divider rounded-ds-card border border-ds-border">
+                {overview.usage.byApiKey.map((entry) => (
+                  <div key={entry.key} className="grid gap-2 p-4 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <span className="min-w-0 break-all font-ds-mono text-xs text-ds-ink" title={entry.label}>{entry.label}</span>
+                    <span className="text-xs text-ds-ink-muted sm:text-right">
+                      <span className="font-semibold text-ds-ink">{formatNumber(entry.requests)}</span> requisições · <span className="font-semibold text-ds-ink">{formatNumber(entry.inputTokens + entry.outputTokens)}</span> tokens
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum uso por chave foi retornado.</p>}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -257,7 +329,7 @@ function AppCostBreakdownList({
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-[#a6325b]"
+                    className="h-full rounded-full bg-ds-accent"
                     style={{ width: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "0%" }}
                   />
                 </div>
@@ -267,6 +339,36 @@ function AppCostBreakdownList({
         ) : (
           <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Sem custos para detalhar.</p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function GoogleQueryEstimate({ overview }: { overview: AppCostOverview }) {
+  const estimate = overview.queryEstimate;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Estimativa das consultas deste painel</CardTitle>
+        <CardDescription>Projeção de bytes consultados no BigQuery. A franquia de consultas é compartilhada pela conta.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <BillingAlertNotice alert={overview.alert} provider="google" />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-ds-md border border-ds-border bg-ds-surface-warm p-3">
+            <p className="text-xs text-ds-ink-muted">Por consulta</p>
+            <p className="mt-1 font-semibold text-ds-ink">{formatBillingBytes(estimate.bytesPerQuery)}</p>
+          </div>
+          <div className="rounded-ds-md border border-ds-border bg-ds-surface-warm p-3">
+            <p className="text-xs text-ds-ink-muted">Projeção mensal do painel</p>
+            <p className="mt-1 font-semibold text-ds-ink">{formatBillingBytes(estimate.monthlyPanelBytesAtHourlyRefresh)}</p>
+          </div>
+          <div className="rounded-ds-md border border-ds-border bg-ds-surface-warm p-3">
+            <p className="text-xs text-ds-ink-muted">Franquia mensal de consultas</p>
+            <p className="mt-1 font-semibold text-ds-ink">{formatBillingBytes(estimate.monthlyFreeBytes)}</p>
+          </div>
+        </div>
+        <p className="text-xs leading-relaxed text-ds-ink-muted">{estimate.note} Teto por consulta deste painel: {formatBillingBytes(estimate.maximumBytesBilled)}.</p>
       </CardContent>
     </Card>
   );
@@ -284,6 +386,8 @@ function AppCostsView({ overview }: { overview: AppCostOverview }) {
         <MetricCard title="Créditos e descontos" value={formatCurrency(Math.abs(overview.costs.creditsCurrentMonth || 0), overview.currency)} description="Créditos abatidos do custo bruto neste mês." icon={Coins} />
       </div>
 
+      <GoogleQueryEstimate overview={overview} />
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -300,7 +404,7 @@ function AppCostsView({ overview }: { overview: AppCostOverview }) {
               {last30Daily.map((entry, index) => (
                 <div key={entry.date} className="group relative flex h-full min-w-0 flex-1 items-end" title={`${formatDate(entry.date)}: ${formatCurrency(entry.cost, overview.currency)}`}>
                   <div
-                    className="w-full min-w-[3px] rounded-t bg-[#c66a89] transition-colors group-hover:bg-[#9d365b]"
+                    className="w-full min-w-[3px] rounded-t bg-ds-accent transition-colors group-hover:bg-ds-accent-hover"
                     style={{ height: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "2%" }}
                   />
                   {(index === 0 || index === last30Daily.length - 1 || index % 7 === 0) ? (
@@ -357,7 +461,7 @@ export function AiBillingSettings({ view }: AiBillingSettingsProps) {
   if (loading) {
     return (
       <div className="flex h-56 items-center justify-center rounded-2xl border bg-card">
-        <Loader2 className="h-6 w-6 animate-spin text-[#a6325b]" />
+        <Loader2 className="h-6 w-6 animate-spin text-ds-accent-ink" />
       </div>
     );
   }
@@ -382,23 +486,28 @@ export function AiBillingSettings({ view }: AiBillingSettingsProps) {
   const scopeLabel = isAppCost
     ? `Projeto: ${overview.projectId}`
     : `Escopo: ${overview.scope.type === "project" ? "projeto OpenAI" : "organização OpenAI"}`;
+  const generatedAtLabel = formatBillingGeneratedAt(overview.generatedAt);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           {overview.connected ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-600" />}
           <span>{overview.connected ? `${isAppCost ? "Google Cloud/Firebase" : "OpenAI"} conectado` : `${isAppCost ? "Google Cloud/Firebase" : "OpenAI"} não conectado`}</span>
-          <span>• {scopeLabel}</span>
+          <span className="hidden sm:inline" aria-hidden="true">•</span>
+          <span className="basis-full break-all sm:basis-auto">{scopeLabel}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />Atualizar
-        </Button>
+        <div className="text-xs leading-relaxed text-muted-foreground sm:text-right">
+          {generatedAtLabel
+            ? <time dateTime={overview.generatedAt}>Atualizado em {generatedAtLabel} (Belém)</time>
+            : <span>Horário da atualização indisponível</span>}
+          <span className="block">Cache de até 1 h</span>
+        </div>
       </div>
 
       {!overview.connected
         ? isAppCost
-          ? <GoogleCloudSetupNotice overview={overview} />
+          ? <><GoogleCloudSetupNotice overview={overview} /><GoogleQueryEstimate overview={overview} /></>
           : <OpenAiSetupNotice configured={overview.configured} />
         : isAppCost
           ? <AppCostsView overview={overview} />

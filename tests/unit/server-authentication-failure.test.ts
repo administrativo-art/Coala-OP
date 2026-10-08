@@ -11,6 +11,8 @@ test('missing/expired tokens map to 401, compliance to 403, without hiding infra
   }
   assert.throws(() => rethrowServerAuthenticationFailure(new Error('Atualização cadastral obrigatória pendente.')),
     (value: unknown) => value instanceof AppError && value.httpStatus === 403);
+  assert.throws(() => rethrowServerAuthenticationFailure(new Error('Conta inativa.')),
+    (value: unknown) => value instanceof AppError && value.httpStatus === 403);
   const outage = new Error('database unavailable');
   assert.throws(() => rethrowServerAuthenticationFailure(outage), (value: unknown) => value === outage);
 });
