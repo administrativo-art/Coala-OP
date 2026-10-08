@@ -1737,7 +1737,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx), [`src/app/dashboard/inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx), [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx), [`src/app/dashboard/stock/transfer/page.tsx`](../../src/app/dashboard/stock/transfer/page.tsx), [`src/app/dashboard/stock/write-down/page.tsx`](../../src/app/dashboard/stock/write-down/page.tsx).
 
-Arquivos locais percorridos: 63.
+Arquivos locais percorridos: 60.
 
 Chamadas candidatas encontradas:
 
@@ -1769,7 +1769,6 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `settings.manageLabels` — [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx)
 - `stock.inventoryControl` — [`src/components/stock/lot-detail-panel.tsx`](../../src/components/stock/lot-detail-panel.tsx)
 - `stock.inventoryControl.addLot` — [`src/components/expiry-control.tsx`](../../src/components/expiry-control.tsx)
-- `stock.inventoryControl.transfer` — [`src/components/stock-transfer.tsx`](../../src/components/stock-transfer.tsx)
 
 ## `stock-count`
 

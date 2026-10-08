@@ -2,11 +2,12 @@
 "use client";
 
 import { Suspense, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
 import { MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StockWriteDown } from '@/components/stock-write-down';
+import { StockTransfer } from '@/components/stock-transfer';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 import { LabelSettingsModal } from '@/components/label-settings';
@@ -15,8 +16,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { BackButton } from '@/components/navigation/back-button';
 
 function InventoryControlContent() {
-    const router = useRouter();
     const { permissions } = useAuth();
+    const [isWriteDownOpen, setIsWriteDownOpen] = useState(false);
+    const [isTransferOpen, setIsTransferOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
@@ -25,12 +27,12 @@ function InventoryControlContent() {
       {
         icon: <MinusCircle className="h-6 w-6" />,
         label: 'Realizar Baixa',
-        onClick: () => router.push('/dashboard/stock/write-down'),
+        onClick: () => setIsWriteDownOpen(true),
       },
       {
         icon: <Truck className="h-6 w-6" />,
         label: 'Realizar Transferência',
-        onClick: () => router.push('/dashboard/stock/transfer'),
+        onClick: () => setIsTransferOpen(true),
       },
       {
         icon: <History className="h-6 w-6" />,
@@ -70,6 +72,9 @@ function InventoryControlContent() {
             </div>
 
             <RadialMenu items={menuItems} />
+
+            <StockWriteDown open={isWriteDownOpen} onOpenChange={setIsWriteDownOpen} />
+            <StockTransfer open={isTransferOpen} onOpenChange={setIsTransferOpen} />
 
             {isHistoryModalOpen && (
                 <MovementHistoryModal open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen} />
