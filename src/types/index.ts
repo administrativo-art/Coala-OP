@@ -3277,8 +3277,8 @@ export interface RepositionContextType {
 export interface RepositionRequestContextType {
   requests: RepositionRequest[];
   loading: boolean;
-  createRepositionRequest: (data: Pick<RepositionRequest, "kioskId" | "kioskName" | "items" | "notes">) => Promise<string | null>;
-  updateRepositionRequest: (requestId: string, updates: Partial<RepositionRequest>) => Promise<void>;
+  createRepositionRequest: (data: Pick<RepositionRequest, "kioskId" | "items" | "notes">) => Promise<string | null>;
+  updateRepositionRequest: (requestId: string, updates: { status: "Cancelada" }) => Promise<void>;
   refreshRepositionRequests: () => Promise<void>;
 }
 
