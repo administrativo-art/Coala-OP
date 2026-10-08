@@ -504,7 +504,7 @@ function DepartmentSubtabs({
 }
 
 export default function SettingsPage() {
-  const { permissions } = useAuth();
+  const { permissions, isDefaultAdmin } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -642,7 +642,7 @@ export default function SettingsPage() {
       label: "Privacidade",
       title: "Privacidade interna",
       description: "Aviso interno, inventário LGPD, fornecedores, retenção e pendências de governança.",
-      content: <InternalPrivacySettings />,
+      content: <InternalPrivacySettings canManage={Boolean(isDefaultAdmin || permissions.settings.manageUsers || permissions.settings.manageProfiles || permissions.dp?.collaborators?.edit || permissions.dp?.collaborators?.terminate)} />,
     },
     {
       value: "profile-compliance",

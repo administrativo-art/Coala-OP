@@ -208,6 +208,7 @@ export function InternalAuditPanel() {
                   <Badge variant="outline" className="mb-1 border-pink-200 bg-pink-50 text-pink-600">
                     {MODULE_LABELS[log.module] ?? log.module}
                   </Badge>
+                  {log.trust_source === "client-declared" ? <Badge variant="outline" className="mb-1 ml-1 border-amber-200 bg-amber-50 text-amber-700">Declarado pelo cliente</Badge> : null}
                   <p className="truncate text-xs font-black text-slate-700">{ACTION_LABELS[log.action] ?? log.action}</p>
                 </div>
                 <span className="truncate font-semibold text-slate-700">{getTarget(log.metadata)}</span>

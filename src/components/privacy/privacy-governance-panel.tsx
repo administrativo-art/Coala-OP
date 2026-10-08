@@ -65,7 +65,7 @@ function dateOnly(value: string | null) {
   return date.toLocaleDateString("pt-BR");
 }
 
-export function PrivacyGovernancePanel() {
+export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
   const { firebaseUser } = useAuth();
   const { toast } = useToast();
   const [requests, setRequests] = useState<PrivacyRequest[]>([]);
@@ -129,7 +129,7 @@ export function PrivacyGovernancePanel() {
 
   async function submitRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     try {
       const payload = await createPrivacyRequest(firebaseUser, requestForm);
       setRequests((current) => [payload.request, ...current]);
@@ -142,7 +142,7 @@ export function PrivacyGovernancePanel() {
 
   async function submitIncident(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     try {
       const payload = await createSecurityIncident(firebaseUser, incidentForm);
       setIncidents((current) => [payload.incident, ...current]);
@@ -154,19 +154,20 @@ export function PrivacyGovernancePanel() {
   }
 
   async function closeRequest(item: PrivacyRequest) {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     const payload = await updatePrivacyRequest(firebaseUser, item.id, { status: "completed", owner: item.owner ?? "", response: item.response ?? "Atendimento registrado internamente." });
     setRequests((current) => current.map((entry) => (entry.id === item.id ? payload.request : entry)));
   }
 
   async function resolveIncident(item: SecurityIncident) {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     const payload = await updateSecurityIncident(firebaseUser, item.id, { status: "resolved", owner: item.owner ?? "", resolutionNotes: item.resolutionNotes ?? "Resolvido internamente." });
     setIncidents((current) => current.map((entry) => (entry.id === item.id ? payload.incident : entry)));
   }
 
   return (
     <section className="space-y-4">
+      {!canManage ? <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-800">Acesso somente para consulta. Alterações exigem permissão de gestão de usuários, perfis ou colaboradores.</div> : null}
       <div className="grid gap-3 md:grid-cols-4">
         {[
           ["Pedidos em aberto", stats.openRequests],
@@ -229,7 +230,7 @@ export function PrivacyGovernancePanel() {
             </div>
             <Field label="Responsavel"><Input value={requestForm.owner} onChange={(e) => setRequestForm((f) => ({ ...f, owner: e.target.value }))} /></Field>
             <Field label="Descricao"><Textarea value={requestForm.description} onChange={(e) => setRequestForm((f) => ({ ...f, description: e.target.value }))} /></Field>
-            <Button type="submit" className="rounded-xl bg-pink-500 text-white hover:bg-pink-600">Registrar pedido</Button>
+            {canManage ? <Button type="submit" className="rounded-xl bg-pink-500 text-white hover:bg-pink-600">Registrar pedido</Button> : null}
           </form>
         </Card>
 
@@ -269,7 +270,7 @@ export function PrivacyGovernancePanel() {
             </div>
             <Field label="Medidas tomadas"><Textarea value={incidentForm.containmentActions} onChange={(e) => setIncidentForm((f) => ({ ...f, containmentActions: e.target.value }))} /></Field>
             <Field label="Responsavel"><Input value={incidentForm.owner} onChange={(e) => setIncidentForm((f) => ({ ...f, owner: e.target.value }))} /></Field>
-            <Button type="submit" className="rounded-xl bg-slate-950 text-white hover:bg-slate-800">Registrar incidente</Button>
+            {canManage ? <Button type="submit" className="rounded-xl bg-slate-950 text-white hover:bg-slate-800">Registrar incidente</Button> : null}
           </form>
         </Card>
       </div>
@@ -286,7 +287,7 @@ export function PrivacyGovernancePanel() {
                 <Badge variant="outline" className={statusTone(item.status)}>{statusLabels[item.status]}</Badge>
               </div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-600">{item.description}</p>
-              {item.status !== "completed" && item.status !== "rejected" ? (
+              {canManage && item.status !== "completed" && item.status !== "rejected" ? (
                 <Button type="button" size="sm" variant="outline" className="mt-3 h-8 rounded-lg" onClick={() => void closeRequest(item)}>
                   <CheckCircle2 className="mr-2 h-3.5 w-3.5" /> Concluir
                 </Button>
@@ -311,7 +312,7 @@ export function PrivacyGovernancePanel() {
                   <AlertTriangle className="h-3.5 w-3.5" /> Gravidade {item.severity === "critical" ? "critica" : "alta"}
                 </p>
               )}
-              {item.status !== "resolved" && item.status !== "dismissed" ? (
+              {canManage && item.status !== "resolved" && item.status !== "dismissed" ? (
                 <Button type="button" size="sm" variant="outline" className="mt-3 h-8 rounded-lg" onClick={() => void resolveIncident(item)}>
                   <CheckCircle2 className="mr-2 h-3.5 w-3.5" /> Resolver
                 </Button>
@@ -345,4 +346,3 @@ function ListCard({ title, empty, loading, children }: { title: string; empty: s
     </Card>
   );
 }
-

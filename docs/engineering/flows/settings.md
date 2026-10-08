@@ -36,7 +36,7 @@ A [API da bio](../../../src/app/api/settings/public-bio/route.ts) usa `requireBi
 
 A [consulta de gestão de IA](../../../src/app/api/settings/ai-management/route.ts) exige administrador padrão ou `settings.view` com `settings.viewAiCosts`; relatório de custo não implica autorização para alterar cobrança no provedor.
 
-Os endpoints de [solicitações de privacidade](../../../src/app/api/privacy/requests/route.ts) e [incidentes](../../../src/app/api/privacy/incidents/route.ts) usam [`requirePrivacyUser`](../../../src/app/api/privacy/_lib.ts), gravam `privacyRequests`/`securityIncidents`, prazos e auditoria. A guarda admite permissões alternativas, inclusive `settings.view`; não presumir acesso exclusivamente administrativo. Textos/checklists exibidos nas configurações não comprovam auditoria de segurança nem regra de retenção aprovada. Testar permissões, concorrência de revisão/publicação e referências de unidades no item 2.
+Os endpoints de [solicitações de privacidade](../../../src/app/api/privacy/requests/route.ts) e [incidentes](../../../src/app/api/privacy/incidents/route.ts) aplicam contratos distintos de consulta e gestão. `settings.view` lê; somente administrador padrão, gestão de usuários/perfis ou edição/desligamento de colaboradores cria e altera. Schemas estritos rejeitam campos server-owned, workspace é revalidado e registro+auditoria ficam na mesma transação. A interface oculta as ações para leitores. Testes em emulador cobrem leitor versus gestor; máquina de estados completa e execução do TTL continuam pendentes.
 
 ## Evidências da etapa 2
 

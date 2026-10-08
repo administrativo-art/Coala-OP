@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **383**
-- Totalmente contratados: **4**
-- Legados congelados: **379**
+- Totalmente contratados: **10**
+- Legados congelados: **373**
 - Exceções temporárias: **0**
 - Violações: **0**
 
@@ -21,8 +21,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/assets/barcode-labels` | GET, POST | `LEGACY_BASELINE` | [src/app/api/assets/barcode-labels/route.ts](../../src/app/api/assets/barcode-labels/route.ts) |
 | `/api/assets/categories` | GET, POST | `LEGACY_BASELINE` | [src/app/api/assets/categories/route.ts](../../src/app/api/assets/categories/route.ts) |
 | `/api/assets/upload` | POST | `LEGACY_BASELINE` | [src/app/api/assets/upload/route.ts](../../src/app/api/assets/upload/route.ts) |
-| `/api/audit/log` | POST | `LEGACY_BASELINE` | [src/app/api/audit/log/route.ts](../../src/app/api/audit/log/route.ts) |
-| `/api/audit/logs` | GET | `LEGACY_BASELINE` | [src/app/api/audit/logs/route.ts](../../src/app/api/audit/logs/route.ts) |
+| `/api/audit/log` | POST ✓ | `CONTRACTED` | [src/app/api/audit/log/route.ts](../../src/app/api/audit/log/route.ts) |
+| `/api/audit/logs` | GET ✓ | `CONTRACTED` | [src/app/api/audit/logs/route.ts](../../src/app/api/audit/logs/route.ts) |
 | `/api/auth/first-access/[token]` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/auth/first-access/[token]/route.ts](../../src/app/api/auth/first-access/[token]/route.ts) |
 | `/api/auth/forgot-password` | POST | `LEGACY_BASELINE` | [src/app/api/auth/forgot-password/route.ts](../../src/app/api/auth/forgot-password/route.ts) |
 | `/api/auth/last-login` | POST | `LEGACY_BASELINE` | [src/app/api/auth/last-login/route.ts](../../src/app/api/auth/last-login/route.ts) |
@@ -323,10 +323,10 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/mercadorias` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) |
 | `/api/mercadorias/export` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) |
 | `/api/observability/client-errors` | POST | `LEGACY_BASELINE` | [src/app/api/observability/client-errors/route.ts](../../src/app/api/observability/client-errors/route.ts) |
-| `/api/privacy/incidents` | GET, POST | `LEGACY_BASELINE` | [src/app/api/privacy/incidents/route.ts](../../src/app/api/privacy/incidents/route.ts) |
-| `/api/privacy/incidents/[id]` | PATCH | `LEGACY_BASELINE` | [src/app/api/privacy/incidents/[id]/route.ts](../../src/app/api/privacy/incidents/[id]/route.ts) |
-| `/api/privacy/requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/privacy/requests/route.ts](../../src/app/api/privacy/requests/route.ts) |
-| `/api/privacy/requests/[id]` | PATCH | `LEGACY_BASELINE` | [src/app/api/privacy/requests/[id]/route.ts](../../src/app/api/privacy/requests/[id]/route.ts) |
+| `/api/privacy/incidents` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/privacy/incidents/route.ts](../../src/app/api/privacy/incidents/route.ts) |
+| `/api/privacy/incidents/[id]` | PATCH ✓ | `CONTRACTED` | [src/app/api/privacy/incidents/[id]/route.ts](../../src/app/api/privacy/incidents/[id]/route.ts) |
+| `/api/privacy/requests` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/privacy/requests/route.ts](../../src/app/api/privacy/requests/route.ts) |
+| `/api/privacy/requests/[id]` | PATCH ✓ | `CONTRACTED` | [src/app/api/privacy/requests/[id]/route.ts](../../src/app/api/privacy/requests/[id]/route.ts) |
 | `/api/processes` | GET | `LEGACY_BASELINE` | [src/app/api/processes/route.ts](../../src/app/api/processes/route.ts) |
 | `/api/products` | POST | `LEGACY_BASELINE` | [src/app/api/products/route.ts](../../src/app/api/products/route.ts) |
 | `/api/products/[id]` | PUT | `LEGACY_BASELINE` | [src/app/api/products/[id]/route.ts](../../src/app/api/products/[id]/route.ts) |
