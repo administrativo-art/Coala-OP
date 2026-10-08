@@ -53,8 +53,15 @@ function InventoryControlContent() {
     return (
         <>
             <div className="space-y-4">
-                <div className="flex flex-col items-start gap-4 mb-4">
-                    <BackButton fallbackHref="/dashboard/stock" label="Voltar para gestão de estoque" />
+                <div className="mx-auto flex w-full max-w-[1520px] items-center gap-3.5 px-4 pt-5 sm:px-6">
+                    <BackButton
+                        fallbackHref="/dashboard/stock"
+                        label="Voltar para gestão de estoque"
+                        iconOnly
+                        className="h-9 w-9 shrink-0 rounded-[11px] border-[#e3dfd6] bg-white text-[#70757d] hover:bg-[#f6f4ef]"
+                        iconClassName="h-4 w-4"
+                    />
+                    <h1 className="m-0 text-2xl font-extrabold tracking-[-.025em]">Controle de Estoque</h1>
                 </div>
                 <ExpiryControl
                     onOpenHistory={() => setIsHistoryModalOpen(true)}
