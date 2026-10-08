@@ -15,23 +15,28 @@ test("edita com prévia, publica somente links externos e mantém a edição pro
   await page.getByRole("button", { name: "Entrar no sistema" }).click();
   await expect(page.getByRole("button", { name: "Entrar no sistema" })).toBeHidden();
 
-  await page.goto("/dashboard/settings?department=operacional&tab=public-bio");
+  // A edição da bio fica na Programação do Instagram (Link na bio), em três abas.
+  await page.goto("/instagram-programacao?view=bio");
   await expect(page.getByText("Prévia ao vivo")).toBeVisible();
-  await expect(page.getByText("Imagens do cardápio")).toBeVisible();
+  await page.getByRole("tab", { name: /Cardápio e promoções/ }).click();
+  await expect(page.getByRole("heading", { name: "Imagens do cardápio" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Imagens das promoções" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Copiar link" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Acessar página" })).toBeVisible();
   await expect(page.getByAltText("QR Code da página pública Coala Shakes")).toBeVisible();
 
+  await page.getByRole("tab", { name: /Botões/ }).click();
   const urls = page.getByPlaceholder("https://");
   await urls.first().fill("https://op.coalashakes.com/dashboard");
   await page.getByRole("button", { name: "Publicar página" }).click();
-  await expect(page.getByRole("status")).toContainText("destino público e válido");
+  await expect(page.getByRole("alert").filter({ hasText: "destino público e válido" })).toBeVisible();
 
   for (let index = 0; index < await urls.count(); index += 1) {
     await urls.nth(index).fill(`https://example.com/coala-${index}`);
   }
-  await page.getByRole("checkbox", { name: "Mostrar Promoções" }).uncheck();
+  const promotions = page.getByRole("switch", { name: "Mostrar Promoções" });
+  await expect(promotions).toBeChecked();
+  await promotions.click();
   await page.getByRole("button", { name: "Salvar rascunho" }).click();
   await expect(page.getByRole("status")).toContainText("Rascunho salvo");
   expect((await (await request.get("/api/public/bio")).json()).page).toBeNull();
