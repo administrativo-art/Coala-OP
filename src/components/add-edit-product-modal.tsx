@@ -894,7 +894,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent ref={dialogContentRef} hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+                <DialogContent ref={dialogContentRef} hideClose flush className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
                     <DialogHeader className="sr-only">
                         <DialogTitle>{editingTitle}</DialogTitle>
                         <DialogDescription>{subtitle}</DialogDescription>

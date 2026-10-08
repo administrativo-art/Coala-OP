@@ -59,7 +59,7 @@ function PhotoSlot({ url, label, height, onZoom }: { url?: string; label: string
   }
   return (
     <button type="button" onClick={() => onZoom(url)} aria-label={`Ampliar foto — ${label}`} style={{ height }} className="relative cursor-zoom-in overflow-hidden rounded-xl border border-[#d6d2c8]">
-      <Image src={url} alt={label} fill sizes="150px" className="object-cover" />
+      <Image src={url} alt={label} fill sizes="150px" className="object-contain" />
       <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[10px] font-bold text-white">{label}</span>
     </button>
   );
@@ -179,7 +179,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px] sm:p-0">
+        <DialogContent hideClose flush className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px] sm:p-0">
           <DialogTitle className="sr-only">Ficha cadastral de {baseProduct.name}</DialogTitle>
           <DialogDescription className="sr-only">Informações completas do insumo base.</DialogDescription>
           <div className="grid min-h-0 grid-cols-1 lg:h-[780px] lg:grid-cols-[380px_minmax(0,1fr)]">

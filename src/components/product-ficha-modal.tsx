@@ -102,7 +102,7 @@ export function ProductFichaModal({ open, onOpenChange, product, baseProduct, on
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent hideClose className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
+        <DialogContent hideClose flush className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden rounded-[26px] border-0 bg-[#faf9f6] sm:w-[calc(100vw-2rem)] sm:max-w-[1080px] sm:rounded-[26px]">
           <DialogTitle className="sr-only">Ficha cadastral de {product.baseName}</DialogTitle>
           <DialogDescription className="sr-only">Informações completas do insumo derivado.</DialogDescription>
           <div className="grid min-h-0 grid-cols-1 lg:h-[800px] lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -111,9 +111,9 @@ export function ProductFichaModal({ open, onOpenChange, product, baseProduct, on
                 type="button"
                 onClick={() => product.imageUrl && setZoomedImage(product.imageUrl)}
                 disabled={!product.imageUrl}
-                className="relative flex h-[170px] overflow-hidden rounded-[20px] border border-white/10 bg-[repeating-linear-gradient(135deg,#1f1f28_0_10px,#24242e_10px_20px)] text-left disabled:cursor-default"
+                className={cn('relative flex h-[170px] overflow-hidden rounded-[20px] border border-white/10 text-left disabled:cursor-default', product.imageUrl ? 'bg-white' : 'bg-[repeating-linear-gradient(135deg,#1f1f28_0_10px,#24242e_10px_20px)]')}
               >
-                {product.imageUrl ? <Image src={product.imageUrl} alt={product.baseName} fill sizes="360px" className="object-cover" /> : null}
+                {product.imageUrl ? <Image src={product.imageUrl} alt={product.baseName} fill sizes="360px" className="object-contain" /> : null}
                 <span className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
                   <span className="text-[11px] font-bold text-[#c8c7d0]">{product.imageUrl ? 'Ampliar foto' : 'Sem foto do insumo'}</span>
                   <span className="rounded-lg bg-[#f3f2ee] px-2 py-1 text-[11px] font-extrabold tracking-[.06em] text-[#15151c]">
@@ -240,7 +240,7 @@ export function ProductFichaModal({ open, onOpenChange, product, baseProduct, on
                       ].map((slot) => (
                         <button key={slot.label} type="button" disabled={!slot.image} onClick={() => slot.image && setZoomedImage(slot.image)} className="overflow-hidden rounded-2xl border border-[#e6e2da] bg-white p-3.5 text-left disabled:cursor-default">
                           <span className="relative flex h-[260px] items-center justify-center overflow-hidden rounded-xl border border-dashed border-[#d6d2c8] bg-[#f4f3ef]">
-                            {slot.image ? <Image src={slot.image} alt={slot.label} fill sizes="360px" className="object-cover" /> : <ImageIcon className="h-8 w-8 text-[#b7b2a8]" />}
+                            {slot.image ? <Image src={slot.image} alt={slot.label} fill sizes="360px" className="object-contain" /> : <ImageIcon className="h-8 w-8 text-[#b7b2a8]" />}
                             {slot.image ? <ZoomIn className="absolute right-3 top-3 h-5 w-5 rounded-md bg-black/55 p-1 text-white" /> : null}
                           </span>
                           <span className="mt-3 block text-[13.5px] font-extrabold">{slot.label}</span>

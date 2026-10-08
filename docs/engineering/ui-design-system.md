@@ -210,6 +210,9 @@ O módulo de Pessoal ainda possui uma compactação legada aplicada pelo layout.
 - Conteúdo extenso rola dentro do diálogo; a página ao fundo permanece estável.
 - Passos de orientação usam grade responsiva em telas largas e rolagem horizontal controlada em telas estreitas.
 - Título de diálogo usa `18px` e peso `bold`; descrição usa `14px` e altura de linha de `20px`.
+- Modais de ficha e de cadastro com painel lateral escuro (`#15151c`) vão de borda a borda: o painel encosta no topo, na base e na lateral do modal, sem moldura creme em volta. O `DialogContent` tem `sm:p-6` por padrão, que `p-0` sozinho não anula; use a prop `flush`, que zera o padding em todas as larguras.
+- Foto de insumo dentro de um espaço fixo (painel escuro, tabela nutricional, composição) usa `object-contain` sobre fundo neutro: a imagem aparece inteira, sem corte. `object-cover` só serve para miniaturas decorativas.
+- Em formulários por unidade (ex.: parâmetros por quiosque), os cartões ficam agrupados por tipo de unidade (Abastecimento, Unidade comercial) e cada grupo pode ser recolhido; o cabeçalho do grupo mostra o total de unidades.
 - O `InfoTooltip` explicativo usa portal para não ser recortado por áreas roláveis de um diálogo. Mantém margem da viewport, quebra de texto e altura limitada ao espaço disponível, com rolagem para textos longos; abertura por hover e foco permanece.
 
 ## Acessibilidade
