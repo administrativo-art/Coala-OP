@@ -2,28 +2,39 @@ import "server-only";
 
 import { adminApp } from "@/lib/firebase-admin";
 import type { AppCostBreakdown, AppCostOverview } from "@/features/ai-management/types";
+import { appendCompletedQueryPage, collectCatalogPages, type BigQueryQueryPage, type CollectedQueryRows } from "@/features/ai-management/bigquery-query-pages";
+import {
+  BIGQUERY_MONTHLY_FREE_BYTES,
+  belemBillingWindow,
+  budgetAlert,
+  createHourlyCache,
+  dryRunBytes,
+  maximumBytesBilled,
+  projectPanelMonthlyBytes,
+  queryWithinLimit,
+} from "@/features/ai-management/billing-policy";
 
 const BIGQUERY_API_URL = "https://bigquery.googleapis.com/bigquery/v2";
 // O export padrão é suficiente para o painel e custa menos para consultar que o detalhado.
 const BILLING_TABLE_PREFIXES = ["gcp_billing_export_v1_", "gcp_billing_export_resource_v1_"];
-const DEFAULT_MAXIMUM_BYTES_BILLED = 250_000_000;
 
 type BigQueryDatasetList = {
   datasets?: Array<{ datasetReference?: { projectId?: string; datasetId?: string } }>;
+  nextPageToken?: string;
   error?: { message?: string };
 };
 
 type BigQueryTableList = {
   tables?: Array<{ tableReference?: { projectId?: string; datasetId?: string; tableId?: string } }>;
+  nextPageToken?: string;
   error?: { message?: string };
 };
 
-type BigQueryQueryResponse = {
-  jobComplete?: boolean;
-  schema?: { fields?: Array<{ name?: string }> };
-  rows?: Array<{ f?: Array<{ v?: unknown }> }>;
+type BigQueryQueryResponse = BigQueryQueryPage & {
   error?: { message?: string };
-  errors?: Array<{ message?: string }>;
+  totalBytesProcessed?: string;
+  jobReference?: { projectId?: string; jobId?: string; location?: string };
+  location?: string;
 };
 
 type BillingTable = {
@@ -52,14 +63,6 @@ function rounded(value: number, digits = 6) {
   return Number(value.toFixed(digits));
 }
 
-function unixDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function utcDate(year: number, month: number, day = 1) {
-  return new Date(Date.UTC(year, month, day, 0, 0, 0));
-}
-
 function consoleUrl(projectId: string) {
   return `https://console.cloud.google.com/billing/export?project=${encodeURIComponent(projectId)}`;
 }
@@ -70,6 +73,7 @@ function blankOverview(params: {
   generatedAt: string;
   configured: boolean;
   table?: BillingTable | null;
+  bytesPerQuery?: number | null;
   warnings: string[];
 }): AppCostOverview {
   return {
@@ -100,7 +104,19 @@ function blankOverview(params: {
       consoleUrl: consoleUrl(params.projectId),
       requiredRoles: ["roles/bigquery.jobUser", "roles/bigquery.dataViewer"],
     },
+    queryEstimate: queryEstimate(params.bytesPerQuery ?? null, new Date(params.generatedAt)),
+    alert: budgetAlert(null, null, "bigquery_panel_estimate"),
     warnings: params.warnings,
+  };
+}
+
+function queryEstimate(bytesPerQuery: number | null, now: Date): AppCostOverview["queryEstimate"] {
+  return {
+    bytesPerQuery,
+    maximumBytesBilled: maximumBytesBilled(process.env.GOOGLE_CLOUD_BILLING_MAX_BYTES_PER_QUERY),
+    monthlyPanelBytesAtHourlyRefresh: bytesPerQuery === null ? null : projectPanelMonthlyBytes(bytesPerQuery, now),
+    monthlyFreeBytes: BIGQUERY_MONTHLY_FREE_BYTES,
+    note: "Estimativa somente deste painel em uma instância do servidor, com até 24 consultas horárias mais uma na virada de cada dia, mantendo o volume do dry run. Mais instâncias ou outros usos do BigQuery elevam o total; a franquia de 1 TiB é compartilhada pela conta.",
   };
 }
 
@@ -135,19 +151,26 @@ function configuredTable(): BillingTable | null {
 }
 
 async function discoverBillingTable(exportProjectId: string, token: string): Promise<BillingTable | null> {
-  const datasets = await googleJson<BigQueryDatasetList>(
-    `${BIGQUERY_API_URL}/projects/${encodeURIComponent(exportProjectId)}/datasets?all=true&maxResults=1000`,
-    token,
-  );
+  const datasets = await collectCatalogPages(async (pageToken) => {
+    const url = new URL(`${BIGQUERY_API_URL}/projects/${encodeURIComponent(exportProjectId)}/datasets`);
+    url.searchParams.set("all", "true");
+    url.searchParams.set("maxResults", "1000");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const page = await googleJson<BigQueryDatasetList>(url.toString(), token);
+    return { items: page.datasets || [], nextPageToken: page.nextPageToken };
+  });
   const candidates: BillingTable[] = [];
-  for (const dataset of (datasets.datasets || []).slice(0, 100)) {
+  for (const dataset of datasets) {
     const datasetId = dataset.datasetReference?.datasetId;
     if (!datasetId) continue;
-    const tables = await googleJson<BigQueryTableList>(
-      `${BIGQUERY_API_URL}/projects/${encodeURIComponent(exportProjectId)}/datasets/${encodeURIComponent(datasetId)}/tables?maxResults=1000`,
-      token,
-    );
-    for (const table of tables.tables || []) {
+    const tables = await collectCatalogPages(async (pageToken) => {
+      const url = new URL(`${BIGQUERY_API_URL}/projects/${encodeURIComponent(exportProjectId)}/datasets/${encodeURIComponent(datasetId)}/tables`);
+      url.searchParams.set("maxResults", "1000");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const page = await googleJson<BigQueryTableList>(url.toString(), token);
+      return { items: page.tables || [], nextPageToken: page.nextPageToken };
+    });
+    for (const table of tables) {
       const tableId = table.tableReference?.tableId || "";
       if (BILLING_TABLE_PREFIXES.some((prefix) => tableId.startsWith(prefix))) {
         candidates.push({ projectId: exportProjectId, datasetId, tableId, detectedAutomatically: true });
@@ -187,32 +210,43 @@ async function queryCosts(params: {
   endDate: string;
   token: string;
 }) {
+  const maxBytes = maximumBytesBilled(process.env.GOOGLE_CLOUD_BILLING_MAX_BYTES_PER_QUERY);
+  const requestBody = {
+    query: querySql(params.table),
+    useLegacySql: false,
+    timeoutMs: 30_000,
+    maximumBytesBilled: String(maxBytes),
+    parameterMode: "NAMED",
+    queryParameters: [
+      { name: "projectId", parameterType: { type: "STRING" }, parameterValue: { value: params.targetProjectId } },
+      { name: "startDate", parameterType: { type: "DATE" }, parameterValue: { value: params.startDate } },
+      { name: "endDate", parameterType: { type: "DATE" }, parameterValue: { value: params.endDate } },
+    ],
+  };
+  const endpoint = `${BIGQUERY_API_URL}/projects/${encodeURIComponent(params.table.projectId)}/queries`;
+  const dryRun = await googleJson<BigQueryQueryResponse>(endpoint, params.token, {
+    method: "POST",
+    // An unlimited dry run is free and reveals when the real query would exceed our hard cap.
+    body: JSON.stringify({ ...requestBody, maximumBytesBilled: undefined, dryRun: true }),
+  });
+  const estimatedBytes = dryRunBytes(dryRun.totalBytesProcessed);
+  if (estimatedBytes === null) {
+    throw new Error("O dry run não retornou uma estimativa válida de bytes; a consulta foi cancelada.");
+  }
+  if (!queryWithinLimit(estimatedBytes, maxBytes)) {
+    return { rows: null, estimatedBytes };
+  }
   const response = await googleJson<BigQueryQueryResponse>(
-    `${BIGQUERY_API_URL}/projects/${encodeURIComponent(params.table.projectId)}/queries`,
+    endpoint,
     params.token,
     {
       method: "POST",
-      body: JSON.stringify({
-        query: querySql(params.table),
-        useLegacySql: false,
-        timeoutMs: 30_000,
-        maximumBytesBilled: String(
-          Math.max(10_000_000, number(process.env.GOOGLE_CLOUD_BILLING_MAX_BYTES_PER_QUERY) || DEFAULT_MAXIMUM_BYTES_BILLED),
-        ),
-        parameterMode: "NAMED",
-        queryParameters: [
-          { name: "projectId", parameterType: { type: "STRING" }, parameterValue: { value: params.targetProjectId } },
-          { name: "startDate", parameterType: { type: "DATE" }, parameterValue: { value: params.startDate } },
-          { name: "endDate", parameterType: { type: "DATE" }, parameterValue: { value: params.endDate } },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
     },
   );
-  if (!response.jobComplete) throw new Error("A consulta de billing excedeu 30 segundos. Tente atualizar novamente.");
-  if (response.errors?.length) throw new Error(response.errors[0]?.message || "A consulta de billing falhou.");
-  const names = (response.schema?.fields || []).map((field) => field.name || "");
-  return (response.rows || []).map((row): CostRow => {
-    const values = new Map(names.map((name, index) => [name, row.f?.[index]?.v]));
+  const collected = await collectQueryRows(response, params.table.projectId, params.token);
+  const rows = collected.rows.map((row): CostRow => {
+    const values = new Map(collected.fieldNames.map((name, index) => [name, row.f?.[index]?.v]));
     return {
       usageDate: String(values.get("usage_date") || ""),
       service: String(values.get("service") || "Serviço não identificado"),
@@ -223,6 +257,41 @@ async function queryCosts(params: {
       netCost: number(values.get("net_cost")),
     };
   });
+  return { rows, estimatedBytes };
+}
+
+async function collectQueryRows(initial: BigQueryQueryResponse, fallbackProjectId: string, token: string) {
+  const job = initial.jobReference;
+  let page = initial;
+  let collected: CollectedQueryRows | null = null;
+  let incompleteAttempts = 0;
+  let requestedPageToken: string | null = null;
+  const seenTokens = new Set<string>();
+  const getResults = async (pageToken: string | null) => {
+    if (!job?.jobId) throw new Error("O BigQuery não retornou a referência do job para continuar a consulta.");
+    const projectId = job.projectId || fallbackProjectId;
+    const url = new URL(`${BIGQUERY_API_URL}/projects/${encodeURIComponent(projectId)}/queries/${encodeURIComponent(job.jobId)}`);
+    const location = job.location || initial.location;
+    if (location) url.searchParams.set("location", location);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    url.searchParams.set("timeoutMs", "30000");
+    return googleJson<BigQueryQueryResponse>(url.toString(), token);
+  };
+
+  while (true) {
+    if (!page.jobComplete) {
+      if (++incompleteAttempts > 3) throw new Error("A consulta do BigQuery não terminou no prazo.");
+      page = await getResults(requestedPageToken);
+      continue;
+    }
+    collected = appendCompletedQueryPage(collected, page);
+    const nextToken = collected.nextPageToken;
+    if (!nextToken) return collected;
+    if (seenTokens.has(nextToken)) throw new Error("O BigQuery repetiu um token de página.");
+    seenTokens.add(nextToken);
+    requestedPageToken = nextToken;
+    page = await getResults(nextToken);
+  }
 }
 
 function breakdown(map: Map<string, number>): AppCostBreakdown[] {
@@ -231,17 +300,30 @@ function breakdown(map: Map<string, number>): AppCostBreakdown[] {
     .sort((left, right) => right.cost - left.cost || left.label.localeCompare(right.label));
 }
 
+const cachedOverview = createHourlyCache<AppCostOverview>((value) => value.connected);
+
 export async function loadGoogleCloudCostOverview(now = new Date()): Promise<AppCostOverview> {
+  const projectId = process.env.FIREBASE_PROJECT_ID?.trim() || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() || "";
+  const exportProjectId = process.env.GOOGLE_CLOUD_BILLING_EXPORT_PROJECT_ID?.trim() || "";
+  const table = process.env.GOOGLE_CLOUD_BILLING_EXPORT_TABLE?.trim() || "";
+  const maxBytes = process.env.GOOGLE_CLOUD_BILLING_MAX_BYTES_PER_QUERY?.trim() || "";
+  const window = belemBillingWindow(now);
+  return cachedOverview(JSON.stringify([projectId, exportProjectId, table, maxBytes, window.queryStart, window.endExclusive]), now, () => readGoogleCloudCostOverview(now));
+}
+
+async function readGoogleCloudCostOverview(now: Date): Promise<AppCostOverview> {
   const projectId = process.env.FIREBASE_PROJECT_ID?.trim()
     || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim()
     || "smart-converter-752gf";
   const exportProjectId = process.env.GOOGLE_CLOUD_BILLING_EXPORT_PROJECT_ID?.trim() || projectId;
   const generatedAt = now.toISOString();
   const explicitTable = configuredTable();
+  let detectedTable = explicitTable;
 
   try {
     const token = await accessToken();
     const table = explicitTable || await discoverBillingTable(exportProjectId, token);
+    detectedTable = table;
     if (!table) {
       return blankOverview({
         projectId,
@@ -252,19 +334,23 @@ export async function loadGoogleCloudCostOverview(now = new Date()): Promise<App
       });
     }
 
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const previousMonthStart = utcDate(year, month - 1, 1);
-    const currentMonthStart = utcDate(year, month, 1);
-    const queryEnd = new Date(now.getTime() + 86_400_000);
-    const last30Start = new Date(now.getTime() - 30 * 86_400_000);
-    const rows = await queryCosts({
+    const window = belemBillingWindow(now);
+    const result = await queryCosts({
       table,
       targetProjectId: projectId,
-      startDate: unixDate(previousMonthStart),
-      endDate: unixDate(queryEnd),
+      startDate: window.queryStart,
+      endDate: window.endExclusive,
       token,
     });
+    const estimate = queryEstimate(result.estimatedBytes, now);
+    if (!result.rows) {
+      return blankOverview({
+        projectId, exportProjectId, generatedAt, configured: true, table,
+        bytesPerQuery: result.estimatedBytes,
+        warnings: [`O dry run estimou ${result.estimatedBytes.toLocaleString("pt-BR")} bytes, acima do teto de ${estimate.maximumBytesBilled.toLocaleString("pt-BR")}; a consulta foi cancelada.`],
+      });
+    }
+    const rows = result.rows;
 
     let currentMonth = 0;
     let previousMonth = 0;
@@ -276,18 +362,17 @@ export async function loadGoogleCloudCostOverview(now = new Date()): Promise<App
     const skus = new Map<string, number>();
     const currencies = new Set<string>();
     for (const row of rows) {
-      const date = new Date(`${row.usageDate}T00:00:00.000Z`);
       currencies.add(row.currency);
       daily.set(row.usageDate, (daily.get(row.usageDate) || 0) + row.netCost);
-      if (date >= currentMonthStart && date < queryEnd) {
+      if (row.usageDate >= window.currentMonthStart && row.usageDate < window.endExclusive) {
         currentMonth += row.netCost;
         grossCurrentMonth += row.grossCost;
         creditsCurrentMonth += row.credits;
         services.set(row.service, (services.get(row.service) || 0) + row.netCost);
         skus.set(row.sku, (skus.get(row.sku) || 0) + row.netCost);
       }
-      if (date >= previousMonthStart && date < currentMonthStart) previousMonth += row.netCost;
-      if (date >= last30Start && date < queryEnd) last30Days += row.netCost;
+      if (row.usageDate >= window.previousMonthStart && row.usageDate < window.currentMonthStart) previousMonth += row.netCost;
+      if (row.usageDate >= window.last30DaysStart && row.usageDate < window.endExclusive) last30Days += row.netCost;
     }
 
     const currency = currencies.size === 1 ? [...currencies][0]! : "USD";
@@ -319,16 +404,18 @@ export async function loadGoogleCloudCostOverview(now = new Date()): Promise<App
         consoleUrl: consoleUrl(projectId),
         requiredRoles: ["roles/bigquery.jobUser", "roles/bigquery.dataViewer"],
       },
+      queryEstimate: estimate,
+      alert: budgetAlert(estimate.monthlyPanelBytesAtHourlyRefresh, BIGQUERY_MONTHLY_FREE_BYTES, "bigquery_panel_estimate"),
       warnings: currencies.size > 1 ? ["O export retornou mais de uma moeda; confira o detalhamento no Cloud Billing."] : [],
     };
-  } catch (error) {
+  } catch {
     return blankOverview({
       projectId,
       exportProjectId,
       generatedAt,
-      configured: Boolean(explicitTable),
-      table: explicitTable,
-      warnings: [error instanceof Error ? error.message : "Não foi possível consultar os custos do Google Cloud."],
+      configured: Boolean(detectedTable),
+      table: detectedTable,
+      warnings: ["Não foi possível consultar os custos do Google Cloud. Confira o export e as permissões do BigQuery."],
     });
   }
 }
