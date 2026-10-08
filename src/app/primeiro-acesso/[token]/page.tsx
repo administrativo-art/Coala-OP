@@ -11,6 +11,16 @@ type LinkState =
   | { status: "done"; email: string | null }
   | { status: "error"; message: string };
 
+function apiErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback;
+  const error = (payload as { error?: unknown }).error;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return fallback;
+}
+
 export default function FirstAccessPage() {
   const params = useParams<{ token: string }>();
   const searchParams = useSearchParams();
@@ -45,7 +55,7 @@ export default function FirstAccessPage() {
     fetch(`/api/auth/first-access/${encodeURIComponent(token)}`)
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.error ?? "Link invalido.");
+        if (!response.ok) throw new Error(apiErrorMessage(payload, "Link inválido."));
         return payload as {
           email?: string | null;
           username?: string | null;
@@ -95,7 +105,7 @@ export default function FirstAccessPage() {
         body: JSON.stringify({ action: step === "pdv" ? "pdv_password" : "coala_password", password }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error ?? "Nao foi possivel definir a senha.");
+      if (!response.ok) throw new Error(apiErrorMessage(payload, "Não foi possível definir a senha."));
       if (step === "pdv") {
         setPassword("");
         setConfirmPassword("");

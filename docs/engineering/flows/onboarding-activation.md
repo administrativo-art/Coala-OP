@@ -10,7 +10,7 @@ A [tela de recrutamento](../../../src/components/hr/recruitment/recruitment-onbo
 
 1. [`createCollaboratorFromOnboarding`](../../../src/app/api/hr/onboarding/%5Bid%5D/route.ts) obtém ou cria usuário no Firebase Auth, evita reutilizar conta existente de origem incompatível, resolve cargo, função, unidade, turno e perfil padrão e grava `users/{uid}` no banco principal. Grava `employees/{uid}`, valores de campos, privacidade e consentimento no banco RH. Promove documentos aprovados, artefatos admissionais e documentos assinados ao arquivo do colaborador, sincroniza foto e cria link de primeiro acesso. PJ segue `createPjUserFromOnboarding`.
 2. A rota registra no processo IDs, promoção documental, status de acesso, link e alertas Bizneo/PDV; depois faz auditoria e tenta enviar e-mail de primeiro acesso usando o snapshot do modelo de integração. `create_first_access_link` só gera novo link para conta criada por esta integração e ainda sem senha cadastrada. [Fonte](../../../src/app/api/hr/onboarding/%5Bid%5D/route.ts).
-3. [`maybeAdvanceAfterFirstAccess`](../../../src/lib/hr/onboarding-access-provisioning.ts) exige conta criada, e-mail entregue e primeiro acesso usado. Em transação, marca o provisionamento `completed` e a integração `active`. O [webhook de e-mail](../../../src/app/api/webhooks/resend/route.ts) usa essa função após entrega; o uso do link é controlado em [`first-access-links.ts`](../../../src/lib/first-access-links.ts).
+3. [`consumeFirstAccessLink`](../../../src/lib/first-access-links.ts) reserva o token em transação com lease de cinco minutos, altera somente a senha no Auth e finaliza token+usuário em transação. Requisição concorrente observa `in_progress` ou `used`; conta inativa é recusada e não é reativada pelo link. Depois, [`maybeAdvanceAfterFirstAccess`](../../../src/lib/hr/onboarding-access-provisioning.ts) exige conta criada, e-mail entregue e primeiro acesso usado e marca o provisionamento `completed`/integração `active`. O [webhook de e-mail](../../../src/app/api/webhooks/resend/route.ts) usa a mesma função após entrega.
 4. `verify_integrations` consulta Bizneo e PDV Legal e atualiza os alertas. `complete` exige provisionamento concluído, e-mail entregue, senha criada e alertas obrigatórios resolvidos; então marca `completed`/`done`. [Rota](../../../src/app/api/hr/onboarding/%5Bid%5D/route.ts).
 
 ## Dados, acesso e dependências
@@ -22,7 +22,7 @@ A [tela de recrutamento](../../../src/components/hr/recruitment/recruitment-onbo
 | `onboardingProcesses`, `firstAccessLinks`, e-mail | Estado da integração, token e entrega | Rota, webhook e transação de avanço. |
 | Bizneo e PDV Legal | Busca e associação de IDs | `verifyAccessIntegrations`, conclusão bloqueada por alertas pendentes. |
 
-**Inferência de impacto:** Auth, banco principal, banco RH, e-mail e integrações externas não compartilham transação. A rota só grava `collaboratorUserId` no processo após a função de criação retornar; falha intermediária pode deixar conta/cadastro criado sem o ponteiro final. Conferir idempotência e origem da conta antes de retentar. Mudanças em perfil padrão ou promoção documental afetam o primeiro acesso e o arquivo do colaborador.
+**Inferência de impacto:** Auth, banco principal, banco RH, e-mail e integrações externas não compartilham transação. A reserva elimina consumo duplo, mas uma falha depois de mudar a senha e antes da finalização mantém o link reservado até o lease expirar; isso é recuperação controlada, não atomicidade global. A rota só grava `collaboratorUserId` no processo após a função de criação retornar; falha intermediária pode deixar conta/cadastro criado sem o ponteiro final. Conferir idempotência e origem da conta antes de retentar.
 
 ## Verificação e limites
 
@@ -34,4 +34,4 @@ A [verificação por grupo](../flow-verification.md) aponta testes disponíveis 
 
 ## Limite da base principal
 
-A main não contém comparação de versão/outbox da correção local anterior nem a opção `persistOnboarding: false`. Conferir gravação do gerador de primeiro acesso e do handler separadamente. Conta, token, metadados e e-mail não compartilham uma transação global; falha parcial e retomada permanecem casos pendentes. Ver [controle de etapas](onboarding-stage-control.md).
+A main não contém outbox para coordenar Auth e os dois bancos nem a opção `persistOnboarding: false`. Conta, token, metadados e e-mail não compartilham uma transação global; o lease de consumo cobre concorrência do token, não todas as falhas distribuídas. Ver [controle de etapas](onboarding-stage-control.md).

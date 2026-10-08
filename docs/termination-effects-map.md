@@ -6,10 +6,10 @@ Este contrato separa referências operacionais de referências históricas. Um d
 
 | Área | Referência | Tratamento no desligamento | Natureza |
 |---|---|---|---|
-| Autenticação | Firebase Auth | desabilitar login | automático |
-| Usuário principal | `users/{uid}` | marcar inativo/encerrado e registrar data/motivo | automático |
+| Autenticação | Firebase Auth | desabilitar login, revogar refresh tokens e versionar a sessão | automático |
+| Usuário principal | `users/{uid}` | marcar inativo/encerrado, incrementar `sessionVersion` e registrar data/motivo sem apagar o cadastro | automático |
 | Cadastro RH | `employees.auth_uid/source_user_id` | sincronizar `terminated`, data e inatividade | automático |
-| Cache RH | `rh_access_cache` | revogar cache de acesso | automático |
+| Cache RH e espelho financeiro | `rh_access_cache`, `coala-financeiro/users` | marcar inativo e espelhar a versão de sessão; regras rejeitam token anterior | automático |
 | Escopo e unidades | campos do usuário | deixam de conceder acesso porque a conta fica inativa; dados permanecem para histórico | preservado |
 | Responsabilidade estrutural | `dp_unitGroups` e `dp_unitOrganizations` | remover a pessoa, preservar cargo/função e exigir sucessor | automático + pendência |
 | Escalas | `dp_schedules/*/shifts` | preservar até o último dia e remover datas posteriores | automático |

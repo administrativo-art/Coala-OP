@@ -34,6 +34,86 @@ const rules = {
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
 
+test("conta inativa ou token de sessão anterior não acessa o próprio cadastro", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-account-lifecycle", firestore: { rules: rules.main } });
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await Promise.all([
+        setDoc(doc(db, "users/current"), { isActive: true, sessionVersion: 4 }),
+        setDoc(doc(db, "users/inactive"), { isActive: false, sessionVersion: 4 }),
+      ]);
+    });
+    await assertSucceeds(getDoc(doc(env.authenticatedContext("current", { sessionVersion: 4 }).firestore(), "users/current")));
+    await assertFails(getDoc(doc(env.authenticatedContext("current", { sessionVersion: 3 }).firestore(), "users/current")));
+    await assertFails(getDoc(doc(env.authenticatedContext("inactive", { sessionVersion: 4 }).firestore(), "users/inactive")));
+  } finally { await env.cleanup(); }
+});
+
+test("sessão revogada também perde acesso direto aos bancos RH e financeiro", async () => {
+  const rhEnv = await initializeTestEnvironment({ projectId: "demo-security-rh-session-lifecycle", firestore: { rules: rules.rh } });
+  const financialEnv = await initializeTestEnvironment({ projectId: "demo-security-financial-session-lifecycle", firestore: { rules: rules.financial } });
+  try {
+    await rhEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "rh_access_cache/person"), {
+        rh_role: "employee",
+        bizneo_employee_id: "employee-person",
+        is_active: true,
+        session_version: 7,
+        profile_compliance_status: "complete",
+        profile_compliance_policy_version: 1,
+      });
+      await setDoc(doc(db, "employees/employee-person"), { unit_id: "unit-a" });
+    });
+    const currentRh = rhEnv.authenticatedContext("person", { sessionVersion: 7 }).firestore();
+    const staleRh = rhEnv.authenticatedContext("person", { sessionVersion: 6 }).firestore();
+    await assertSucceeds(getDoc(doc(currentRh, "employees/employee-person")));
+    await assertFails(getDoc(doc(staleRh, "employees/employee-person")));
+
+    await financialEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, "users/person"), { active: true, sessionVersion: 7, permissions: { view: true, expenses: { view: true } } });
+      await setDoc(doc(db, "expenses/expense"), { status: "pending" });
+    });
+    const currentFinancial = financialEnv.authenticatedContext("person", { sessionVersion: 7 }).firestore();
+    const staleFinancial = financialEnv.authenticatedContext("person", { sessionVersion: 6 }).firestore();
+    await assertSucceeds(getDoc(doc(currentFinancial, "expenses/expense")));
+    await assertFails(getDoc(doc(staleFinancial, "expenses/expense")));
+  } finally {
+    await Promise.all([rhEnv.cleanup(), financialEnv.cleanup()]);
+  }
+});
+
+test("claim administrativa antiga não contorna a versão de sessão financeira", async () => {
+  const env = await initializeTestEnvironment({
+    projectId: "demo-security-financial-admin-session-lifecycle",
+    firestore: { rules: rules.financial },
+  });
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await Promise.all([
+        setDoc(doc(db, "users/admin"), {
+          active: true,
+          sessionVersion: 9,
+          isDefaultAdmin: true,
+          permissions: { view: true },
+        }),
+        setDoc(doc(db, "users/other"), {
+          active: true,
+          sessionVersion: 0,
+          permissions: { view: true },
+        }),
+      ]);
+    });
+    const current = env.authenticatedContext("admin", { isDefaultAdmin: true, sessionVersion: 9 }).firestore();
+    const stale = env.authenticatedContext("admin", { isDefaultAdmin: true, sessionVersion: 8 }).firestore();
+    await assertSucceeds(getDocs(collection(current, "users")));
+    await assertFails(getDocs(collection(stale, "users")));
+  } finally { await env.cleanup(); }
+});
+
 test("despesa quitada na origem protege financeiro e permite notas/anexos; cliente não forja origem", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-source-settlement", firestore: { rules: rules.financial } });
   try {

@@ -27,6 +27,7 @@ import {
   canEditRhProfilesFromPermissions,
   resolveRhRoleFromPermissions,
 } from './access-policy.js';
+import { assertActiveSession } from '../active-session.js';
 
 const db = getFirestore('coala');
 const hrDb = getFirestore('coala-rh');
@@ -379,6 +380,7 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
   { cors: internalAppCors },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    await assertActiveSession(db, request.auth);
 
     const uid = request.auth.uid;
     const { employee_id, field_key, value } = request.data;
