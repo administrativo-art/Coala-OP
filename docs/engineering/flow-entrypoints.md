@@ -8,7 +8,7 @@ Grupos com página ativa: **55**. Atualize com `python3 scripts/generate-flow-en
 
 Páginas: [`src/app/dashboard/assets/page.tsx`](../../src/app/dashboard/assets/page.tsx).
 
-Arquivos locais percorridos: 24.
+Arquivos locais percorridos: 23.
 
 Chamadas candidatas encontradas:
 
@@ -517,7 +517,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/assets/page.tsx`](../../src/app/dashboard/financial/assets/page.tsx).
 
-Arquivos locais percorridos: 25.
+Arquivos locais percorridos: 24.
 
 Chamadas candidatas encontradas:
 
@@ -1692,7 +1692,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/stock/analysis/consumption/page.tsx`](../../src/app/dashboard/stock/analysis/consumption/page.tsx), [`src/app/dashboard/stock/analysis/movement-analysis/page.tsx`](../../src/app/dashboard/stock/analysis/movement-analysis/page.tsx), [`src/app/dashboard/stock/analysis/projection/page.tsx`](../../src/app/dashboard/stock/analysis/projection/page.tsx), [`src/app/dashboard/stock/analysis/restock/page.tsx`](../../src/app/dashboard/stock/analysis/restock/page.tsx), [`src/app/dashboard/stock/analysis/sales/page.tsx`](../../src/app/dashboard/stock/analysis/sales/page.tsx), [`src/app/dashboard/stock/analysis/valuation/page.tsx`](../../src/app/dashboard/stock/analysis/valuation/page.tsx).
 
-Arquivos locais percorridos: 87.
+Arquivos locais percorridos: 88.
 
 Chamadas candidatas encontradas:
 
@@ -1745,7 +1745,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx), [`src/app/dashboard/inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx), [`src/app/dashboard/stock/inventory-control/page.tsx`](../../src/app/dashboard/stock/inventory-control/page.tsx), [`src/app/dashboard/stock/transfer/page.tsx`](../../src/app/dashboard/stock/transfer/page.tsx), [`src/app/dashboard/stock/write-down/page.tsx`](../../src/app/dashboard/stock/write-down/page.tsx).
 
-Arquivos locais percorridos: 65.
+Arquivos locais percorridos: 63.
 
 Chamadas candidatas encontradas:
 

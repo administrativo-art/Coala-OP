@@ -3,21 +3,16 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { type Kiosk, type BaseProduct, type MovementRecord } from "@/types";
-import { Scale, Info, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { CancelButton, LotModalShell, ShellEyebrow } from './stock/lot-modal-shell';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useMovementHistory } from '@/hooks/use-movement-history';
 import { useProducts } from '@/hooks/use-products';
 import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, getMonth, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface FinancialPeriodAnalysisModalProps {
     open: boolean;
@@ -148,104 +143,115 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
         setIsLoading(false);
     };
 
+    // Gera a análise assim que quiosque, ano e mês estão escolhidos.
+    useEffect(() => {
+        if (open && kioskId && period.year && period.month && historyLoaded) void handleAnalyze();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, kioskId, period.year, period.month, historyLoaded]);
+
+    useEffect(() => {
+        if (!open) {
+            setKioskId('');
+            setPeriod({ month: '', year: '' });
+            setAnalysisResult(null);
+        }
+    }, [open]);
+
+    const kioskButton = (on: boolean) => cn(
+        'flex h-[38px] items-center rounded-xl border px-3.5 text-left text-[13px] font-bold',
+        on ? 'border-[#f08bb1] bg-[#f08bb1]/15 text-white' : 'border-white/10 bg-transparent text-[#c8c7d0] hover:bg-white/5',
+    );
+    const pill = (on: boolean) => cn(
+        'h-8 rounded-[9px] px-3 text-[12.5px] font-bold capitalize',
+        on ? 'bg-white text-[#1a1b1f] shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-[#70757d] hover:bg-[#f0eee9]',
+    );
+    const kioskName = kiosks.find(k => k.id === kioskId)?.name;
+    const monthName = availableMonths.find(m => m.value === period.month)?.label;
+    const title = kioskName && monthName ? `${kioskName} · ${monthName} de ${period.year}` : 'Escolha o quiosque e o mês';
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2"><Scale /> Análise de Consumo por Período</DialogTitle>
-                    <DialogDescription>
-                       Calcule o consumo teórico dos insumos para o período selecionado.
-                    </DialogDescription>
-                </DialogHeader>
-
-                 <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-4 items-end border p-4 rounded-lg">
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Quiosque</label>
-                        <Select value={kioskId} onValueChange={setKioskId}>
-                            <SelectTrigger><SelectValue placeholder="Selecione..."/></SelectTrigger>
-                            <SelectContent>{sortedKiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}</SelectContent>
-                        </Select>
+        <LotModalShell
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Análise de consumo por período"
+            description="Calcule o consumo teórico dos insumos para o período selecionado."
+            width={920}
+            height={660}
+            sidebarWidth={260}
+            sidebar={
+                <>
+                    <ShellEyebrow>Consumo por período</ShellEyebrow>
+                    <h2 className="m-0 text-[22px] font-extrabold leading-[1.2] tracking-[-.02em]">Consumo teórico por insumo</h2>
+                    <div className="flex flex-col gap-2">
+                        <ShellEyebrow>Quiosque</ShellEyebrow>
+                        {sortedKiosks.map(k => (
+                            <button key={k.id} type="button" onClick={() => setKioskId(k.id)} className={kioskButton(kioskId === k.id)}>{k.name}</button>
+                        ))}
                     </div>
-                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Ano</label>
-                         <Select value={period.year} onValueChange={(y) => setPeriod({ year: y, month: '' })} disabled={!kioskId}>
-                            <SelectTrigger><SelectValue placeholder="Ano"/></SelectTrigger>
-                            <SelectContent>{availableYears.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
-                        </Select>
+                    <div className="mt-auto rounded-[14px] border border-white/10 bg-white/5 p-3.5 text-[11.5px] leading-[1.6] text-[#a3a2ad]">
+                        <b className="text-xs text-[#f3f2ee]">Como é calculado</b>
+                        <br />
+                        (Estoque inicial + Compras + Transferências recebidas + Ajustes de entrada) − (Transferências enviadas + Estoque final + Ajustes de saída)
                     </div>
-                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Mês</label>
-                         <Select value={period.month} onValueChange={(m) => setPeriod(p => ({...p, month: m}))} disabled={!period.year}>
-                            <SelectTrigger><SelectValue placeholder="Mês"/></SelectTrigger>
-                            <SelectContent>{availableMonths.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
-                    <Button onClick={handleAnalyze} disabled={isLoading || !kioskId || !period.month || !period.year}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                        Analisar
-                    </Button>
+                </>
+            }
+            footer={
+                <>
+                    <CancelButton onClick={() => onOpenChange(false)}>Fechar</CancelButton>
+                    <span />
+                </>
+            }
+        >
+            <div className="flex items-start justify-between gap-4 border-b border-[#e6e2da] pb-4">
+                <div className="flex flex-col gap-1">
+                    <h3 className="m-0 text-[21px] font-extrabold tracking-[-.02em]">{title}</h3>
+                    <span className="text-[13px] text-[#70757d]">Escolha o quiosque e o mês para gerar a análise.</span>
                 </div>
-
-
-                <div className="flex-1 overflow-y-auto pr-4">
-                    {isLoading ? (
-                         <div className="flex items-center justify-center h-full">
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
-                         </div>
-                    ) : analysisResult === null ? (
-                        <div className="flex h-full flex-col items-center justify-center text-muted-foreground text-center">
-                            <Info className="h-12 w-12 mb-4" />
-                            <p className="font-semibold">Aguardando seleção</p>
-                            <p className="text-sm">Selecione o quiosque e o período para gerar a análise.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex gap-0.5 rounded-[11px] bg-[#e6e3dc] p-[3px]">
+                    {availableYears.map(y => (
+                        <button key={y} type="button" onClick={() => setPeriod({ year: y, month: '' })} className={pill(period.year === y)}>{y}</button>
+                    ))}
+                    {availableYears.length === 0 && <span className="px-3 py-1.5 text-[12.5px] text-[#70757d]">{historyLoading ? 'Carregando…' : 'Sem histórico'}</span>}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                    {availableMonths.map(m => (
+                        <button
+                            key={m.value}
+                            type="button"
+                            onClick={() => setPeriod(p => ({ ...p, month: m.value }))}
+                            className={cn('h-8 rounded-[9px] border px-3 text-[12.5px] font-bold capitalize', period.month === m.value ? 'border-[#5b5bd6] bg-[#eeeefc] text-[#3f3fb0]' : 'border-[#dcd9d1] bg-white text-[#4a4f57] hover:bg-[#f6f4ef]')}
+                        >
+                            {m.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            {isLoading ? (
+                <div className="flex flex-1 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#9a9ba1]" /></div>
+            ) : analysisResult === null ? (
+                <div className="flex flex-col gap-1 rounded-2xl border border-dashed border-[#d6d2c8] px-5 py-12 text-center">
+                    <b className="text-sm">Aguardando seleção</b>
+                    <span className="text-[12.5px] text-[#70757d]">Selecione o quiosque e o período para gerar a análise.</span>
+                </div>
+            ) : analysisResult.length === 0 ? (
+                <div className="rounded-[14px] border border-[#f5d9a3] bg-[#fff7e6] px-4 py-3.5 text-[12.5px] text-[#6b4500]">
+                    <b>Nenhum dado encontrado.</b> Não há movimentações para o período e quiosque selecionados.
+                </div>
+            ) : (
+                <div className="overflow-hidden rounded-2xl border border-[#e3dfd6] bg-white">
+                    <div className="grid grid-cols-[minmax(0,1fr)_180px] gap-3 bg-[#f6f4ef] px-4 py-[11px] text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]">
+                        <span>Insumo</span><span className="text-right">Consumo teórico</span>
+                    </div>
+                    {analysisResult.map(res => (
+                        <div key={res.baseProductId} className="grid grid-cols-[minmax(0,1fr)_180px] items-center gap-3 border-t border-[#f1eee8] px-4 py-3">
+                            <b className="text-[13.5px]">{res.baseProductName}</b>
+                            <span className="text-right text-sm font-extrabold tabular-nums">{formatNumber(res.consumoTeorico)} {res.unit}</span>
                         </div>
-                    ) : analysisResult.length === 0 ? (
-                        <Alert>
-                            <Info className="h-4 w-4" />
-                            <AlertTitle>Nenhum dado encontrado</AlertTitle>
-                            <AlertDescription>
-                                Não foram encontradas movimentações para o período e quiosque selecionados.
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Produto</TableHead>
-                                    <TableHead className="text-right">
-                                        <div className="flex items-center justify-end gap-1">
-                                            Consumo Teórico
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p className="max-w-xs text-center">
-                                                          (Estoque Inicial + Entradas por Compra + Transferências Recebidas + Ajustes de Entrada) - (Transferências Enviadas + Estoque Final + Ajustes de Saída)
-                                                        </p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {analysisResult.map(res => (
-                                    <TableRow key={res.baseProductId}>
-                                        <TableCell className="font-medium">{res.baseProductName}</TableCell>
-                                        <TableCell className="text-right font-semibold">{formatNumber(res.consumoTeorico)} {res.unit}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
+                    ))}
                 </div>
-
-                <DialogFooter className="pt-4 border-t">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            )}
+        </LotModalShell>
     );
 }
