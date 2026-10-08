@@ -1027,17 +1027,18 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
                                             <FormField control={form.control} name="baseName" render={({ field }) => (<FormItem><FormLabel>Nome do insumo <span className="text-rose-500">*</span></FormLabel><FormControl><Input placeholder="ex: Ovomaltine" {...field} /></FormControl><FormMessage /></FormItem>)}/>
 
-                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                            <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+                                                <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><div className="flex h-5 items-center"><FormLabel>Marca</FormLabel></div><FormControl><Input placeholder="ex: Nestlé" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                                 <FormField control={form.control} name="barcode" render={({ field }) => (
                                                     <FormItem>
-                                                        <div className="flex items-center justify-between">
+                                                        <div className="flex h-5 items-center justify-between gap-2">
                                                             <FormLabel>Código de barras</FormLabel>
-                                                            <span className="text-xs text-muted-foreground">EAN-8 / EAN-13 / UPC / GTIN</span>
+                                                            <span className="truncate text-xs text-muted-foreground">EAN-8 / EAN-13 / UPC / GTIN</span>
                                                         </div>
                                                         <div className="flex gap-2">
                                                             <FormControl>
                                                                 <Input
+                                                                    className="min-w-0"
                                                                     placeholder="Escanear ou digitar"
                                                                     {...field}
                                                                     value={field.value ?? ''}
