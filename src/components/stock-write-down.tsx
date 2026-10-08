@@ -1,267 +1,289 @@
-
-
 "use client";
 
-import { useState, useMemo } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
+import { useReposition } from '@/hooks/use-reposition';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Skeleton } from './ui/skeleton';
-import { Inbox, ListOrdered, Save, Trash2, ArrowRight } from 'lucide-react';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import Image from 'next/image';
-import { ScrollArea } from './ui/scroll-area';
-import { type MovementType } from '@/types';
+import { cn } from '@/lib/utils';
+import { type LotEntry, type MovementType, type Product } from '@/types';
+import {
+  CancelButton,
+  LotModalShell,
+  MODAL_ERROR_TEXT,
+  MODAL_INPUT,
+  PrimaryButton,
+  ShellEyebrow,
+  ShellFacts,
+} from './stock/lot-modal-shell';
+import {
+  WRITE_DOWN_REASONS,
+  buildReservationsByLot,
+  lotAvailableQuantity,
+  lotStatusOf,
+  parseWriteDownQuantity,
+  validateWriteDown,
+} from './stock/lot-presentation';
 
-const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
-    { value: 'SAIDA_CONSUMO', label: 'Consumo / Venda' },
-    { value: 'SAIDA_DESCARTE_VENCIMENTO', label: 'Descarte por Vencimento' },
-    { value: 'SAIDA_DESCARTE_AVARIA', label: 'Descarte por Avaria/Quebra' },
-    { value: 'SAIDA_DESCARTE_PERDA', label: 'Extravio de mercadoria' },
-    { value: 'SAIDA_DESCARTE_OUTROS', label: 'Outros (especificar)'},
-];
+type DraftItem = { lotId: string; qty: string; type: MovementType; obs: string };
+type DoneItem = { name: string; sub: string; qty: string };
 
-const writeDownItemSchema = z.object({
-  lotId: z.string(),
-  quantity: z.coerce.number().min(0.01, "Deve ser > 0"),
-  type: z.custom<MovementType>(val => typeof val === 'string' && DIVERGENCE_REASONS.some(r => r.value === val), 'Selecione um tipo válido'),
-  notes: z.string().optional(),
-}).refine(data => {
-    if (data.type === 'SAIDA_DESCARTE_OUTROS' && (!data.notes || data.notes.trim() === '')) {
-        return false;
-    }
-    return true;
-}, {
-    message: 'A observação é obrigatória para o tipo "Outros".',
-    path: ['notes'],
-});
+const nf = (value: number) => value.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
-const writeDownFormSchema = z.object({
-  items: z.array(writeDownItemSchema).min(1, "Adicione pelo menos um item para baixa."),
-});
+const kioskButton = (on: boolean) => cn(
+  'flex h-[38px] items-center rounded-xl border px-3.5 text-left text-[13px] font-bold',
+  on ? 'border-[#f08bb1] bg-[#f08bb1]/15 text-white' : 'border-white/10 bg-transparent text-[#c8c7d0] hover:bg-white/5',
+);
 
-type WriteDownFormValues = z.infer<typeof writeDownFormSchema>;
+interface StockWriteDownProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 
-export function StockWriteDown() {
+export function StockWriteDown({ open, onOpenChange }: StockWriteDownProps) {
   const { user } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading: lotsLoading, consumeFromLot } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
+  const { activities } = useReposition();
   const { toast } = useToast();
-  
-  const [selectedKioskId, setSelectedKioskId] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<WriteDownFormValues>({
-    resolver: zodResolver(writeDownFormSchema),
-    defaultValues: { items: [] },
-  });
+  const [kioskId, setKioskId] = useState('');
+  const [query, setQuery] = useState('');
+  const [items, setItems] = useState<DraftItem[]>([]);
+  const [tried, setTried] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState<DoneItem[] | null>(null);
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "items",
-  });
+  useEffect(() => {
+    if (!open) {
+      setKioskId('');
+      setQuery('');
+      setItems([]);
+      setTried(false);
+      setDone(null);
+    }
+  }, [open]);
+
+  const reservations = useMemo(() => buildReservationsByLot(activities), [activities]);
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
 
   const kioskLots = useMemo(() => {
-    if (!selectedKioskId) return [];
-    const productMap = new Map(products.map(p => [p.id, p]));
-    
+    if (!kioskId) return [];
     return lots
-      .filter(lot => lot.kioskId === selectedKioskId && lot.quantity > 0)
-      .map(lot => ({
-        lot,
-        product: productMap.get(lot.productId)
-      }))
-      .filter(item => !!item.product && item.product.operationalDestination !== 'uniform' && item.product.category !== 'Vestimenta')
-      .sort((a, b) => {
-        const nameA = getProductFullName(a.product!);
-        const nameB = getProductFullName(b.product!);
-        return nameA.localeCompare(nameB);
-      });
-  }, [selectedKioskId, lots, products, getProductFullName]);
-  
-  const handleAddItem = (lotId: string) => {
-    const existingIndex = fields.findIndex(field => field.lotId === lotId);
-    if (existingIndex === -1) {
-        append({ lotId: lotId, quantity: 1, type: 'SAIDA_CONSUMO', notes: '' });
-    }
+      .filter(lot => lot.kioskId === kioskId && lot.quantity > 0)
+      .map(lot => ({ lot, product: productMap.get(lot.productId) }))
+      .filter((entry): entry is { lot: LotEntry; product: Product } => !!entry.product && entry.product.operationalDestination !== 'uniform' && entry.product.category !== 'Vestimenta')
+      .sort((a, b) => getProductFullName(a.product).localeCompare(getProductFullName(b.product), 'pt-BR'));
+  }, [kioskId, lots, productMap, getProductFullName]);
+
+  const visibleLots = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return kioskLots.filter(({ lot, product }) => !term || `${getProductFullName(product)} ${lot.lotNumber}`.toLowerCase().includes(term));
+  }, [kioskLots, query, getProductFullName]);
+
+  const availableOf = (lot: LotEntry) => lotAvailableQuantity(lot, reservations.get(lot.id));
+  const errorOf = (item: DraftItem) => {
+    const lot = lots.find(l => l.id === item.lotId);
+    return lot ? validateWriteDown({ quantity: item.qty, type: item.type, notes: item.obs, available: availableOf(lot) }) : 'Lote não encontrado.';
   };
 
-  const onSubmit = async (values: WriteDownFormValues) => {
+  const addItem = (lot: LotEntry, product: Product) => {
+    if (items.some(item => item.lotId === lot.id)) return;
+    const expired = lotStatusOf(lot, product).key === 'expired';
+    setItems(current => [...current, { lotId: lot.id, qty: '1', type: expired ? 'SAIDA_DESCARTE_VENCIMENTO' : 'SAIDA_CONSUMO', obs: '' }]);
+  };
+  const updateItem = (lotId: string, patch: Partial<DraftItem>) => setItems(current => current.map(item => (item.lotId === lotId ? { ...item, ...patch } : item)));
+
+  const submit = async () => {
+    if (done) {
+      setItems([]);
+      setTried(false);
+      setDone(null);
+      return;
+    }
+    if (items.length === 0) return;
+    if (items.some(item => errorOf(item))) {
+      setTried(true);
+      return;
+    }
     if (!user) {
       toast({ variant: 'destructive', title: 'Erro', description: 'Usuário não autenticado.' });
       return;
     }
-    setIsSubmitting(true);
+
+    setSaving(true);
+    const recorded: DoneItem[] = [];
     try {
-        for (const item of values.items) {
-            await consumeFromLot({
-                lotId: item.lotId,
-                quantityToConsume: item.quantity,
-                type: item.type,
-                notes: item.notes,
-            }, user);
-        }
-        toast({ title: 'Sucesso!', description: 'Baixas registradas com sucesso.' });
-        form.reset({ items: [] });
+      // Gravadas uma a uma: se uma falhar, as anteriores continuam registradas.
+      for (const item of items) {
+        await consumeFromLot({ lotId: item.lotId, quantityToConsume: parseWriteDownQuantity(item.qty), type: item.type, notes: item.obs.trim() || undefined }, user);
+        const lot = lots.find(l => l.id === item.lotId)!;
+        const product = productMap.get(lot.productId);
+        recorded.push({
+          name: product ? getProductFullName(product) : lot.productName,
+          sub: `Lote ${lot.lotNumber} · ${WRITE_DOWN_REASONS.find(r => r.value === item.type)?.label}`,
+          qty: `−${nf(parseWriteDownQuantity(item.qty))}`,
+        });
+      }
+      setDone(recorded);
+      setItems([]);
+      setTried(false);
     } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Erro ao dar baixa', description: error.message || 'Não foi possível processar a solicitação.' });
+      if (recorded.length > 0) setDone(recorded);
+      toast({ variant: 'destructive', title: 'Erro ao dar baixa', description: `${recorded.length} baixa(s) gravada(s) antes da falha. ${error?.message || 'Não foi possível processar a solicitação.'}` });
+      setItems(current => current.filter(item => !recorded.some((_, index) => items[index]?.lotId === item.lotId)));
     } finally {
-        setIsSubmitting(false);
+      setSaving(false);
     }
   };
-  
+
   const loading = lotsLoading || productsLoading;
+  const kioskName = kiosks.find(k => k.id === kioskId)?.name;
+  const n = items.length;
+  const submitLabel = done ? 'Nova baixa em lote' : saving ? 'Processando…' : n ? `Registrar ${n} ${n === 1 ? 'baixa' : 'baixas'}` : 'Registrar baixas';
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><ListOrdered /> Baixa de Estoque</CardTitle>
-        <CardDescription>
-          Selecione um quiosque, adicione os lotes para baixa e preencha as informações.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <Select value={selectedKioskId} onValueChange={(value) => { setSelectedKioskId(value); form.reset({ items: [] }); }}>
-          <SelectTrigger><SelectValue placeholder="Selecione um quiosque..." /></SelectTrigger>
-          <SelectContent>
-            {kiosks.map(k => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+    <LotModalShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Realizar baixa"
+      description="Registre várias baixas de estoque de uma vez."
+      width={1120}
+      height={760}
+      sidebarWidth={280}
+      sidebar={
+        <>
+          <ShellEyebrow>Realizar baixa</ShellEyebrow>
+          <h2 className="m-0 text-[22px] font-extrabold leading-[1.2] tracking-[-.02em]">Registrar várias baixas de uma vez</h2>
+          <div className="flex flex-col gap-2">
+            <ShellEyebrow>Quiosque</ShellEyebrow>
+            {kiosks.map(k => (
+              <button key={k.id} type="button" onClick={() => { setKioskId(k.id); setItems([]); setTried(false); setDone(null); }} className={kioskButton(kioskId === k.id)}>{k.name}</button>
+            ))}
+          </div>
+          <ShellFacts rows={[{ label: 'Itens na baixa', value: n }, { label: 'Lotes no quiosque', value: kioskLots.length }]} />
+          <span className="mt-auto text-[11.5px] leading-normal text-[#77768a]">
+            Uniformes não entram aqui; use o fluxo de uniformes. As baixas são gravadas uma a uma: se uma falhar, as anteriores continuam registradas.
+          </span>
+        </>
+      }
+      footer={
+        <>
+          <CancelButton onClick={() => onOpenChange(false)}>{done ? 'Fechar' : 'Cancelar'}</CancelButton>
+          <PrimaryButton type="button" onClick={submit} disabled={saving || (!done && n === 0)}>{submitLabel}</PrimaryButton>
+        </>
+      }
+    >
+      <div className="-mx-[30px] -my-[26px] flex min-h-0 flex-1 flex-col">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e6e2da] px-7 pb-4 pt-[22px]">
+          <div className="flex flex-col gap-1">
+            <h3 className="m-0 text-[21px] font-extrabold tracking-[-.02em]">{done ? 'Baixas registradas' : 'Itens para baixa'}</h3>
+            <span className="text-[13px] text-[#70757d]">{done ? `${done.length} baixa(s) gravada(s) em ${kioskName}.` : 'Escolha os lotes, a quantidade e o motivo de cada baixa.'}</span>
+          </div>
+          <button type="button" onClick={() => onOpenChange(false)} aria-label="Fechar" className="h-[34px] w-[34px] shrink-0 rounded-full bg-[#efede7] text-lg text-[#4a4f57]">×</button>
+        </div>
 
-        {loading && selectedKioskId && <Skeleton className="h-64 w-full" />}
-        
-        {selectedKioskId && !loading && (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Coluna da esquerda - Itens disponíveis */}
-                <div className="space-y-2">
-                  <h3 className="font-semibold">Itens em estoque ({kioskLots.length})</h3>
-                  <ScrollArea className="h-96 rounded-md border p-2">
-                    <div className="space-y-2">
-                      {kioskLots.length > 0 ? kioskLots.map(({lot, product}) => (
-                        <div key={lot.id} className="flex items-center justify-between p-2 border rounded-md">
-                          <div>
-                            <p className="font-medium">{getProductFullName(product!)}</p>
-                            {(product?.apparelSize || product?.apparelColor || product?.apparelType) && (
-                              <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                                {[product.apparelType, product.apparelColor, product.apparelSize && `Tam. ${product.apparelSize}`].filter(Boolean).join(' · ')}
-                              </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Qtd: {lot.quantity}</p>
-                          </div>
-                          <Button size="icon" variant="outline" onClick={() => handleAddItem(lot.id)} disabled={fields.some(f => f.lotId === lot.id)}>
-                              <ArrowRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )) : (
-                        <div className="text-center text-muted-foreground p-8">
-                          <Inbox className="h-8 w-8 mx-auto mb-2" />
-                          <p>Nenhum lote em estoque.</p>
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </div>
+        {!kioskId && !done && <div className="flex flex-1 items-center justify-center p-10 text-center text-[13.5px] text-[#70757d]">Escolha o quiosque ao lado para ver os lotes em estoque.</div>}
 
-                {/* Coluna da direita - Itens para baixa */}
-                <div className="space-y-2">
-                  <h3 className="font-semibold">Itens para baixa ({fields.length})</h3>
-                    <ScrollArea className="h-96 rounded-md border p-2">
-                        {fields.length > 0 ? (
-                            <div className="space-y-2">
-                                {fields.map((field, index) => {
-                                    const lot = lots.find(l => l.id === field.lotId);
-                                    if (!lot) return null;
-                                    const product = products.find(p => p.id === lot.productId);
+        {done && (
+          <div className="flex flex-1 flex-col gap-2 overflow-auto px-7 py-[22px]">
+            {done.map((entry, index) => (
+              <div key={index} className="flex items-center gap-3 rounded-xl border border-[#e3dfd6] bg-white px-3.5 py-3">
+                <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#e8f5ee] text-xs font-extrabold text-[#15803d]">✓</span>
+                <span className="flex flex-1 flex-col gap-0.5"><b className="text-[13px]">{entry.name}</b><span className="text-xs text-[#70757d]">{entry.sub}</span></span>
+                <span className="font-mono text-[13px] font-bold">{entry.qty}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
-                                    return (
-                                        <Card key={field.id} className="p-4 space-y-4 relative">
-                                            <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive" onClick={() => remove(index)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                            <div className="flex items-start gap-4">
-                                                {product?.imageUrl && (
-                                                    <Image src={product.imageUrl} alt={product.baseName} width={48} height={48} className="rounded-md object-cover" />
-                                                )}
-                                                <div>
-                                                    <p className="font-semibold">{getProductFullName(product!)}</p>
-                                                    <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber} | Disponível: {lot.quantity}</p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <FormField
-                                                  control={form.control}
-                                                  name={`items.${index}.quantity`}
-                                                  render={({ field }) => (
-                                                    <FormItem>
-                                                      <FormLabel>Quantidade</FormLabel>
-                                                      <FormControl><Input type="number" {...field} max={lot.quantity} /></FormControl>
-                                                      <FormMessage />
-                                                    </FormItem>
-                                                  )}
-                                                />
-                                                <FormField
-                                                  control={form.control}
-                                                  name={`items.${index}.type`}
-                                                  render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Motivo</FormLabel>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
-                                                            <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                                            <SelectContent>
-                                                               {DIVERGENCE_REASONS.map(reason => <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>)}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <FormMessage/>
-                                                    </FormItem>
-                                                  )}
-                                                />
-                                            </div>
-                                             <FormField
-                                                  control={form.control}
-                                                  name={`items.${index}.notes`}
-                                                  render={({ field }) => (
-                                                    <FormItem>
-                                                      <FormLabel>Observação</FormLabel>
-                                                      <FormControl><Textarea placeholder="Opcional, exceto para 'Outros'" {...field} /></FormControl>
-                                                      <FormMessage />
-                                                    </FormItem>
-                                                  )}
-                                                />
-                                        </Card>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                             <div className="text-center text-muted-foreground p-8">
-                                <p>Adicione itens da lista à esquerda para registrar uma baixa.</p>
-                             </div>
-                        )}
-                    </ScrollArea>
+        {kioskId && !done && (
+          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+            <div className="flex min-h-0 flex-col border-[#e6e2da] md:border-r">
+              <div className="flex flex-col gap-2.5 px-5 py-3.5">
+                <span className="text-xs font-bold text-[#4a4f57]">Itens em estoque ({kioskLots.length})</span>
+                <div className="flex h-[38px] items-center gap-2 rounded-[11px] border border-[#dcd9d1] bg-white px-3 focus-within:border-[#5b5bd6]">
+                  <span className="text-[#9a9ba1]">⌕</span>
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar por nome ou lote" className="min-w-0 flex-1 border-none bg-transparent text-[13px] outline-none" />
                 </div>
               </div>
-              <CardFooter className="justify-end border-t pt-6 -mx-6 -mb-6 px-6">
-                <Button type="submit" disabled={isSubmitting || fields.length === 0}>
-                  <Save className="mr-2 h-4 w-4"/>
-                  {isSubmitting ? 'Processando...' : `Confirmar Baixa (${fields.length})`}
-                </Button>
-              </CardFooter>
-            </form>
-          </Form>
+              <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-5 pb-4">
+                {loading && <span className="py-5 text-[12.5px] text-[#70757d]">Carregando…</span>}
+                {visibleLots.map(({ lot, product }) => {
+                  const added = items.some(item => item.lotId === lot.id);
+                  const reserved = lot.quantity - availableOf(lot);
+                  return (
+                    <div key={lot.id} className="flex items-center gap-2.5 rounded-xl border border-[#e3dfd6] bg-white px-3 py-2.5">
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-[13px] font-bold">{getProductFullName(product)}</span>
+                        {(product.apparelSize || product.apparelColor || product.apparelType) && (
+                          <span className="text-xs font-medium text-[#b45309]">{[product.apparelType, product.apparelColor, product.apparelSize && `Tam. ${product.apparelSize}`].filter(Boolean).join(' · ')}</span>
+                        )}
+                        <span className="text-[11.5px] text-[#70757d]">Lote {lot.lotNumber} · {nf(lot.quantity)} {(product.packageType || 'un').toLowerCase()}(s){reserved > 0 ? ` · ${nf(reserved)} reservado(s)` : ''}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => addItem(lot, product)}
+                        disabled={added}
+                        className={cn('h-8 whitespace-nowrap rounded-[9px] border px-3 text-xs font-bold', added ? 'cursor-default border-[#e3dfd6] bg-[#f0eee9] text-[#9a9ba1]' : 'border-[#dcd9d1] bg-white hover:bg-[#f6f4ef]')}
+                      >
+                        {added ? 'Na lista' : 'Adicionar'}
+                      </button>
+                    </div>
+                  );
+                })}
+                {!loading && visibleLots.length === 0 && <span className="px-1 py-5 text-[12.5px] text-[#70757d]">Nenhum lote em estoque.</span>}
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-col">
+              <span className="px-5 pb-2.5 pt-3.5 text-xs font-bold text-[#4a4f57]">Itens para baixa ({n})</span>
+              <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto px-5 pb-4">
+                {n === 0 && <div className="rounded-[14px] border border-dashed border-[#d6d2c8] px-4 py-7 text-center text-[12.5px] text-[#70757d]">Adicione lotes da lista ao lado.</div>}
+                {items.map(item => {
+                  const lot = lots.find(l => l.id === item.lotId);
+                  if (!lot) return null;
+                  const product = productMap.get(lot.productId);
+                  const error = tried ? errorOf(item) : null;
+                  return (
+                    <div key={item.lotId} className="flex flex-col gap-2.5 rounded-[14px] border border-[#e3dfd6] bg-white p-3.5">
+                      <div className="flex items-start gap-2.5">
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <b className="text-[13.5px]">{product ? getProductFullName(product) : lot.productName}</b>
+                          <span className="text-xs text-[#70757d]">Lote {lot.lotNumber} · disponível {nf(availableOf(lot))} {(product?.packageType || 'un').toLowerCase()}(s)</span>
+                        </span>
+                        <button type="button" onClick={() => setItems(current => current.filter(entry => entry.lotId !== item.lotId))} aria-label="Remover item" className="whitespace-nowrap text-xs font-bold text-[#be123c]">Remover</button>
+                      </div>
+                      <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-2.5">
+                        <label className="flex flex-col gap-[5px] text-xs font-bold text-[#4a4f57]">
+                          Quantidade
+                          <input value={item.qty} onChange={(event) => updateItem(item.lotId, { qty: event.target.value })} inputMode="decimal" className={cn(MODAL_INPUT, 'h-10', error && /quantidade|disponível/i.test(error) && 'border-[#e11d48]')} />
+                        </label>
+                        <label className="flex flex-col gap-[5px] text-xs font-bold text-[#4a4f57]">
+                          Motivo
+                          <select value={item.type} onChange={(event) => updateItem(item.lotId, { type: event.target.value as MovementType })} className={cn(MODAL_INPUT, 'h-10 px-2.5 text-[13px]')}>
+                            {WRITE_DOWN_REASONS.map(reason => <option key={reason.value} value={reason.value}>{reason.label}</option>)}
+                          </select>
+                        </label>
+                      </div>
+                      <input
+                        value={item.obs}
+                        onChange={(event) => updateItem(item.lotId, { obs: event.target.value })}
+                        placeholder={item.type === 'SAIDA_DESCARTE_OUTROS' ? 'Observação (obrigatória)' : 'Observação (opcional)'}
+                        className={cn(MODAL_INPUT, 'h-[38px] text-[13px]', error && /observação/i.test(error) && 'border-[#e11d48]')}
+                      />
+                      {error && <span className={MODAL_ERROR_TEXT}>{error}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </LotModalShell>
   );
 }
