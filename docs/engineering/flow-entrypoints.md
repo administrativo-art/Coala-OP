@@ -2,7 +2,7 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **54**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **55**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
@@ -296,6 +296,14 @@ Arquivos locais percorridos: 4.
 Chamadas candidatas encontradas:
 
 - `/api/hr/consents/image-voice/` — interface [`src/app/dashboard/documents/consents/[employeeId]/page.tsx`](../../src/app/dashboard/documents/consents/%5BemployeeId%5D/page.tsx); rota candidata [`src/app/api/hr/consents/image-voice/[employeeId]/route.ts`](../../src/app/api/hr/consents/image-voice/%5BemployeeId%5D/route.ts)
+
+## `design-guide`
+
+Páginas: [`src/app/dashboard/design/page.tsx`](../../src/app/dashboard/design/page.tsx).
+
+Arquivos locais percorridos: 13.
+
+Nenhuma string de API encontrada no percurso estático; investigar chamadas indiretas, ações de servidor e SDKs.
 
 ## `document-generation`
 
@@ -841,7 +849,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 67.
+Arquivos locais percorridos: 68.
 
 Chamadas candidatas encontradas:
 
@@ -1352,7 +1360,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 225.
+Arquivos locais percorridos: 227.
 
 Chamadas candidatas encontradas:
 
