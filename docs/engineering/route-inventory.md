@@ -57,7 +57,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [employee-document-options.ts](../../src/lib/hr/employee-document-options.ts), [employee-document-signature.ts](../../src/lib/hr/employee-document-signature.ts) |
+| `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [inline-confirm.tsx](../../src/components/patterns/inline-confirm.tsx), [employee-document-options.ts](../../src/lib/hr/employee-document-options.ts) |
 | `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | [user-management.tsx](../../src/components/user-management.tsx) |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
 | `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [dp-units.ts](../../src/lib/dp-units.ts) |
