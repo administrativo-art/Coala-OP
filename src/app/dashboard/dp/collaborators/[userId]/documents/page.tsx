@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -28,6 +28,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BackButton } from "@/components/navigation/back-button";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -382,6 +383,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const ownProfileOnly = permissions.dp?.collaborators?.ownProfileOnly === true;
   const canAccessThisProfile = !ownProfileOnly || currentUser?.id === userId;
   const [items, setItems] = useState<DocumentRow[]>([]);
+  const [removeTarget, setRemoveTarget] = useState<DocumentRow | null>(null);
+  const removeTriggerRef = useRef<HTMLElement | null>(null);
   const [category, setCategory] = useState<EmployeeDocumentCategoryId>("personal");
   const [expandedCategory, setExpandedCategory] = useState<EmployeeDocumentCategoryId | null>("personal");
   const [activeFolderPath, setActiveFolderPath] = useState<string[]>([]);
@@ -923,11 +926,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   }
 
   async function remove(item: DocumentRow) {
-    // eslint-disable-next-line no-restricted-globals -- legado preservado até a migração isolada do módulo de DP
-    if (!confirm(`Excluir definitivamente o arquivo “${item.originalName}”?`)) return;
     setBusy(true);
     try {
       await request(`/api/hr/employee-documents?id=${encodeURIComponent(item.id)}`, { method: "DELETE" });
+      setRemoveTarget(null);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao excluir.");
@@ -1527,11 +1529,33 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                   })}
                                 </DropdownMenuContent>
                               </DropdownMenu>
-                              <button onClick={() => void remove(item)} className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600" title="Excluir"><Trash2 className="h-4 w-4" /></button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  removeTriggerRef.current = event.currentTarget;
+                                  setRemoveTarget(item);
+                                }}
+                                className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600"
+                                title="Excluir"
+                                aria-label={`Excluir ${item.originalName}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </>
                           ) : null}
                         </div>
                       </div>
+
+                      {removeTarget?.id === item.id ? (
+                        <InlineConfirm
+                          className="mt-3"
+                          message={`Excluir definitivamente o arquivo “${item.originalName}”? Esta ação não pode ser desfeita.`}
+                          loading={busy}
+                          returnFocusRef={removeTriggerRef}
+                          onCancel={() => setRemoveTarget(null)}
+                          onConfirm={() => void remove(item)}
+                        />
+                      ) : null}
 
                       {isExpanded ? (
                         <div className="mt-4 border-t pt-4">
