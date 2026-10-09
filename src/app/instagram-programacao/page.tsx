@@ -296,6 +296,15 @@ export default function InstagramProgramacaoPage() {
     }
   }, [activeView, firebaseUser, insightsPeriod, loadInsights]);
 
+  /* O desempenho da etapa Resultado usa os mesmos dados dos Relatórios; carrega uma vez ao abrir os posts. */
+  const performanceRequested = useRef(false);
+  useEffect(() => {
+    if (activeView === "posts" && firebaseUser && !insights && !performanceRequested.current) {
+      performanceRequested.current = true;
+      void loadInsights(insightsPeriod);
+    }
+  }, [activeView, firebaseUser, insights, insightsPeriod, loadInsights]);
+
   useEffect(() => {
     if (!authLoading && activeView === "bio" && !canManageBio) selectView("calendar");
     // selectView atualiza apenas estado e URL; esperar o bootstrap de permissões evita piscar conteúdo restrito.
@@ -692,6 +701,7 @@ export default function InstagramProgramacaoPage() {
         ) : activeView === "posts" ? (
           <EditorialPostsView
             onOpenReports={() => selectView("reports")}
+            performance={{ items: insights ? [...insights.content, ...insights.activeStories] : null, loading: insightsLoading, error: insightsError }}
             posts={editorialPosts}
             loading={editorialLoading}
             createRequested={createRequested}

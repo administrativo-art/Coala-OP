@@ -14,6 +14,10 @@ Painel escuro com kicker, título, subtítulo, ações, busca, **chips de indica
 - O recorte do encolhimento só existe enquanto o painel encolhe; um recorte fixo cortava a sombra em retângulo nas quinas.
 - Telas cujo contêiner usa `space-y` (em vez de `flex gap-5`) passam `stack`.
 
+## Cabeçalho das demais listas (`PageHero`)
+
+[`PageHero`](../../src/components/patterns/page-hero.tsx) é o mesmo painel escuro **sem a faixa fina**, para as telas de lista fora do Instagram: kicker (área), título `h1`, subtítulo, ações à direita (a principal em `primary-page`, a secundária em `on-dark-secondary`), chips e, nos filhos, a busca. O título **mora dentro do painel**; não há título solto acima nem botão de voltar (a navegação é a barra lateral). [`HeroChip`](../../src/components/patterns/hero-chip.tsx) é compartilhado com o `PulseHero`. Em uso: Avarias, Uniformes, Pedidos de compra e Colaboradores; as demais telas migram a cada redesenho.
+
 ## Painel lateral compacto
 
 `SidePanel compact`: cabeçalho baixo (subtítulo só para leitor de tela) e espaçamento menor, para conteúdos que não devem rolar. O painel de post tem 1040px e se dimensiona para caber sem rolagem interna em telas comuns; abaixo disso rola por segurança.
@@ -26,6 +30,8 @@ Para registros com ciclo de vida (o post): quatro etapas na ordem do fluxo, **Pl
 - Cada etapa libera por estado e por regra (aprovação depois de produzir; publicação depois das duas aprovações válidas para a versão atual; resultado depois de agendar ou publicar). O servidor continua sendo o controle; a tela só explica o bloqueio.
 - Planejamento em três blocos, **O quê / Por quê / Quando**; avisos de estratégia (dia cheio, horário próximo, formato repetido, data passada); checklist antes de aprovar; confirmação exata das ações autorizadas inalterada.
 - Editar o que entra no hash do conteúdo invalida as aprovações e a tela avisa antes; editar só o planejamento apenas sinaliza "alterado depois da aprovação".
+- **Resultado** mostra o desempenho do post publicado, casado pelo identificador da mídia no Instagram com os dados dos Relatórios (período carregado): primeiro a métrica do **objetivo planejado** (Awareness→alcance, Engajamento→interações, Vendas→cliques no link, Relacionamento→comentários e respostas, Institucional→visualizações), depois alcance, visualizações, interações, taxa de interação e as métricas do formato. Sem dados, a tela explica que a Meta leva horas para medir ou que o post saiu do período. Lógica em [`result-model.ts`](../../src/features/instagram-posts/result-model.ts).
+- O painel **Novo post** já pede o planejamento (motivos, data alvo, objetivo e chamada para ação), com os mesmos avisos de estratégia; tudo opcional na criação, mas os dois motivos continuam obrigatórios para produzir.
 - Etapa de edição tem "Salvar" e o avanço explícito ("Concluir planejamento", "Ir para a aprovação").
 
 ## Prévia no celular
