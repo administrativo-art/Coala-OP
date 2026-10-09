@@ -1,13 +1,12 @@
-
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
+import { Layers } from 'lucide-react';
+
 import { type ProductSimulation } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import Image from 'next/image';
-import { Settings } from 'lucide-react';
 
 interface AssemblyInstructionsModalProps {
   open: boolean;
@@ -16,56 +15,54 @@ interface AssemblyInstructionsModalProps {
 }
 
 export function AssemblyInstructionsModal({ open, onOpenChange, simulation }: AssemblyInstructionsModalProps) {
-    if (!simulation) return null;
+  if (!simulation) return null;
 
-    const instructions = simulation.ppo?.assemblyInstructions || [];
+  const instructions = simulation.ppo?.assemblyInstructions || [];
 
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <Settings /> Modo de Montagem: {simulation.name}
-                    </DialogTitle>
-                    <DialogDescription>
-                        Siga as etapas abaixo para a montagem correta da mercadoria.
-                    </DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="flex-1 pr-6 -mr-6">
-                    <div className="space-y-6 py-4">
-                        {instructions.length > 0 ? (
-                            instructions.map(phase => (
-                                <div key={phase.id} className="p-4 border rounded-lg bg-muted/30">
-                                    <h3 className="font-semibold text-lg mb-4">{phase.name}</h3>
-                                    <ol className="space-y-4">
-                                        {phase.etapas.map((etapa, index) => (
-                                            <li key={etapa.id} className="grid grid-cols-[auto_1fr_auto] gap-4 items-start">
-                                                <span className="font-bold text-primary pt-1">{index + 1}.</span>
-                                                <div>
-                                                    <p className="font-medium">{etapa.text}</p>
-                                                    {etapa.quantity && etapa.unit && (
-                                                        <span className="text-sm text-muted-foreground">({etapa.quantity} {etapa.unit})</span>
-                                                    )}
-                                                </div>
-                                                {etapa.imageUrl && (
-                                                    <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={80} height={80} className="rounded-md object-cover" />
-                                                )}
-                                            </li>
-                                        ))}
-                                    </ol>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="text-center text-muted-foreground py-16">
-                                <p>Nenhuma instrução de montagem cadastrada para esta mercadoria.</p>
-                            </div>
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[min(80vh,760px)] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden rounded-ds-modal border-0 bg-ds-page p-0 font-ds shadow-ds-modal sm:max-w-2xl">
+        <DialogHeader className="shrink-0 space-y-0 bg-ds-dark px-6 py-5 pr-14 text-left text-ds-on-dark">
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Modo de montagem</p>
+          <DialogTitle className="mt-1 text-xl font-extrabold">{simulation.name}</DialogTitle>
+          <DialogDescription className="mt-0.5 text-[12.5px] text-ds-on-dark-sub">Siga as etapas abaixo para a montagem correta da mercadoria.</DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {instructions.length > 0 ? (
+            instructions.map(phase => (
+              <section key={phase.id} className="space-y-2">
+                <h3 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">{phase.name}</h3>
+                <ol className="space-y-2">
+                  {phase.etapas.map((etapa, index) => (
+                    <li key={etapa.id} className="flex items-start gap-3 rounded-ds-card border border-ds-border bg-ds-surface p-4">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-ds-sm bg-ds-dark text-[14px] font-extrabold text-white">{index + 1}</span>
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <p className="text-[14px] font-semibold leading-snug text-ds-ink">{etapa.text}</p>
+                        {etapa.quantity && etapa.unit && (
+                          <span className="inline-flex h-[21px] items-center rounded-ds-pill bg-ds-neutral-bg px-[9px] text-[11.5px] font-bold text-ds-neutral">{etapa.quantity} {etapa.unit}</span>
                         )}
-                    </div>
-                </ScrollArea>
-                <DialogFooter className="pt-4 border-t">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
+                      </div>
+                      {etapa.imageUrl && (
+                        <Image src={etapa.imageUrl} alt={`Etapa: ${etapa.text}`} width={72} height={72} className="h-[72px] w-[72px] shrink-0 rounded-ds-md border border-ds-border object-cover" />
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ))
+          ) : (
+            <div className="rounded-ds-card border border-dashed border-ds-border-input px-4 py-14 text-center text-ds-ink-faint">
+              <Layers aria-hidden="true" size={26} className="mx-auto mb-2" />
+              <p className="text-[13px] font-semibold">Nenhuma instrução de montagem cadastrada para esta mercadoria.</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="shrink-0 border-t border-ds-border bg-ds-warm px-6 py-4">
+          <Button variant="primary-modal" size="md" onClick={() => onOpenChange(false)}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
