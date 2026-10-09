@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
+import { StatusPill } from '@/components/ui/status-pill';
 import { ptBR } from 'date-fns/locale';
 
 import { useGoals } from '@/contexts/goals-context';
@@ -36,6 +37,19 @@ function prizeShareOf(items: GoalPeriodDoc[], employeeGoals: EmployeeGoal[]) {
   const prized = items.filter(p => getPeriodBonus(p, employeeGoals));
   const revenue = prized.reduce((sum, p) => sum + p.currentValue, 0);
   return revenue > 0 ? (summarizePrizes(items, employeeGoals).totalPrize / revenue) * 100 : null;
+}
+
+const tierLabel = { below: 'Abaixo do alvo', target: 'Alvo', up: 'UP', top: 'TOP' } as const;
+const tierVariant = { below: 'danger', target: 'warn', up: 'info', top: 'ok' } as const;
+
+/** Faixa atingida e o próximo nível a buscar (alvo → UP → TOP), com quanto faltou para ele. */
+function tierProgress(sum: { revenue: number; target: number; up: number; top: number }) {
+  const reached = reachedTier({ currentValue: sum.revenue, targetValue: sum.target, upValue: sum.up, topValue: sum.top });
+  const next = reached === 'below' ? { label: 'Alvo', value: sum.target }
+    : reached === 'target' ? (sum.up > 0 ? { label: 'UP', value: sum.up } : null)
+    : reached === 'up' ? (sum.top > 0 ? { label: 'TOP', value: sum.top } : null)
+    : null;
+  return { reached, next: next ? { ...next, missing: Math.max(next.value - sum.revenue, 0) } : null };
 }
 
 function premiumHint(t: { apuratedCount: number; calculatedCount: number; pendingCount: number }) {
@@ -177,10 +191,13 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
           .map(([kioskId, list]) => {
             const unitTarget = list.reduce((sum, p) => sum + p.targetValue, 0);
             const unitRevenue = list.reduce((sum, p) => sum + p.currentValue, 0);
-            return { kioskId, name: getKioskName(kioskId), target: unitTarget, revenue: unitRevenue, pct: unitTarget > 0 ? (unitRevenue / unitTarget) * 100 : 0, ...summarizePrizes(list, employeeGoals) };
+            const up = list.reduce((sum, p) => sum + (p.upValue ?? 0), 0);
+            const top = list.reduce((sum, p) => sum + (p.topValue ?? 0), 0);
+            return { kioskId, name: getKioskName(kioskId), target: unitTarget, revenue: unitRevenue, tier: tierProgress({ revenue: unitRevenue, target: unitTarget, up, top }), pct: unitTarget > 0 ? (unitRevenue / unitTarget) * 100 : 0, ...summarizePrizes(list, employeeGoals) };
           })
           .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-        return { key, count: items.length, target, revenue, pct: target > 0 ? (revenue / target) * 100 : 0, units, prizeShare: prizeShareOf(items, employeeGoals), ...summarizePrizes(items, employeeGoals) };
+        const tierCounts = units.reduce((acc, unit) => { acc[unit.tier.reached] += 1; return acc; }, { below: 0, target: 0, up: 0, top: 0 });
+        return { key, count: items.length, target, revenue, tierCounts, pct: target > 0 ? (revenue / target) * 100 : 0, units, prizeShare: prizeShareOf(items, employeeGoals), ...summarizePrizes(items, employeeGoals) };
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closedPeriods, employeeGoals, kiosks]);
@@ -375,7 +392,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
           <SectionCard title="Tendência do atingimento" subtitle="Cada ponto é um mês com metas encerradas (até os últimos 12), somando as unidades do filtro; a linha tracejada é 100%. Na tabela, clique no mês para ver a meta e o realizado de cada unidade.">
             <TrendChart points={monthly.slice(-12).map(row => ({ key: row.key, pct: row.pct }))} />
             <div className="overflow-x-auto border-t border-ds-divider">
-              <table className="w-full min-w-[640px] text-left text-[13px]">
+              <table className="w-full min-w-[860px] text-left text-[13px]">
                 <thead>
                   <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
                     <th className="px-5 py-3 font-extrabold">Mês</th>
@@ -383,6 +400,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                     <th className="px-3 py-3 text-right font-extrabold">Alvo</th>
                     <th className="px-3 py-3 text-right font-extrabold">Realizado</th>
                     <th className="px-3 py-3 text-right font-extrabold">Atingimento</th>
+                    <th className="px-3 py-3 text-left font-extrabold">Faixa e próximo nível</th>
                     <th className="px-3 py-3 text-right font-extrabold">Premiação</th>
                     <th className="px-5 py-3 text-right font-extrabold">% do faturamento</th>
                   </tr>
@@ -409,6 +427,9 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                           <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-muted">{fmtBRL(row.target)}</td>
                           <td className="px-3 py-2.5 text-right font-bold text-ds-ink">{fmtBRL(row.revenue)}</td>
                           <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.pct))}>{fmtPct(row.pct)}</td>
+                          <td className="px-3 py-2.5 text-[12px] font-semibold text-ds-ink-muted">
+                            {(['top', 'up', 'target', 'below'] as const).filter(key => row.tierCounts[key] > 0).map(key => `${row.tierCounts[key]}× ${tierLabel[key]}`).join(' · ')}
+                          </td>
                           <td className="px-3 py-2.5 text-right font-extrabold text-ds-ok">{(row.apuratedCount + row.calculatedCount) > 0 ? fmtBRL(row.totalPrize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
                           <td className="px-5 py-2.5 text-right font-semibold text-ds-ink-2">{row.prizeShare === null ? '—' : fmtPct(row.prizeShare)}</td>
                         </tr>
@@ -419,6 +440,12 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                             <td className="px-3 py-2 text-right text-[12.5px] font-semibold text-ds-ink-muted">{fmtBRL(unit.target)}</td>
                             <td className="px-3 py-2 text-right text-[12.5px] font-bold text-ds-ink">{fmtBRL(unit.revenue)}</td>
                             <td className={cn('px-3 py-2 text-right text-[12.5px] font-extrabold', attainmentTone(unit.pct))}>{fmtPct(unit.pct)}</td>
+                            <td className="px-3 py-2">
+                              <StatusPill variant={tierVariant[unit.tier.reached]}>{tierLabel[unit.tier.reached]}</StatusPill>
+                              <span className="ml-2 text-[12px] font-semibold text-ds-ink-muted">
+                                {unit.tier.next ? `próximo: ${unit.tier.next.label} ${fmtBRL(unit.tier.next.value)} (faltou ${fmtBRL(unit.tier.next.missing)})` : 'nível máximo atingido'}
+                              </span>
+                            </td>
                             <td className="px-3 py-2 text-right text-[12.5px] font-extrabold text-ds-ok">{(unit.apuratedCount + unit.calculatedCount) > 0 ? fmtBRL(unit.totalPrize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
                             <td className="px-5 py-2" />
                           </tr>
