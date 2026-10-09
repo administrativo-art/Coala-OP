@@ -175,7 +175,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/commercial/page.tsx`](../../src/app/dashboard/commercial/page.tsx).
 
-Arquivos locais percorridos: 2.
+Arquivos locais percorridos: 7.
 
 Chamadas candidatas encontradas:
 
