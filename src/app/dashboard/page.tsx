@@ -41,7 +41,10 @@ import { SalesWidget } from "@/features/management-dashboard/widgets/sales-widge
 import { ScheduleWidget, type ScheduleDay } from "@/features/management-dashboard/widgets/schedule-widget"
 import { TasksWidget, type TaskItem } from "@/features/management-dashboard/widgets/tasks-widget"
 import { VacationsWidget, type VacationItem } from "@/features/management-dashboard/widgets/vacations-widget"
-import { canViewTechnicalSheets } from "@/lib/commercial-permissions"
+import { MANAGEMENT_WIDGET_BY_ID } from "@/features/management-dashboard/catalog"
+import type { ManagementWidgetId } from "@/features/management-dashboard/types"
+import { MonthFilter } from "@/features/management-dashboard/widgets/month-filter"
+import { listRecentMonths, monthKeyOf, monthStartOf } from "@/features/management-dashboard/widgets/month-range"
 import { cn } from "@/lib/utils"
 import type { DPSchedule, DPShift, GoalPeriodDoc, Kiosk, SalesReport, User } from "@/types"
 
@@ -54,12 +57,14 @@ function isSameOrAfter(left: Date, right: Date) {
   return left.getTime() >= right.getTime()
 }
 
-function getCurrentGoalPeriods(periods: GoalPeriodDoc[], today: Date) {
+/** Metas que cobrem algum dia do mês (ativas ou já encerradas; canceladas ficam de fora). */
+function getGoalPeriodsForMonth(periods: GoalPeriodDoc[], monthStart: Date) {
+  const monthEndDate = endOfMonth(monthStart)
   return periods.filter((period) => {
-    if (period.status !== "active") return false
+    if (period.status === "cancelled") return false
     const start = toDate(period.startDate)
     const end = toDate(period.endDate)
-    return !!start && !!end && isSameOrBefore(startOfDay(start), today) && isSameOrAfter(startOfDay(end), today)
+    return !!start && !!end && isSameOrBefore(startOfDay(start), monthEndDate) && isSameOrAfter(startOfDay(end), monthStart)
   })
 }
 
@@ -184,6 +189,8 @@ function ManagementDashboard() {
   const router = useRouter()
   const canViewManagementDashboard = permissions.dashboard.view
   const canViewCollaboratorDashboard = permissions.dashboard.collaborator ?? permissions.dashboard.view
+  /** Cada widget só aparece para quem tem acesso ao módulo de origem (regra única no catálogo). */
+  const canShowWidget = (id: ManagementWidgetId) => MANAGEMENT_WIDGET_BY_ID.get(id)?.canView(permissions) ?? false
 
   const { kiosks } = useKiosks()
   const { periods, loading: goalsLoading } = useGoals()
@@ -201,6 +208,8 @@ function ManagementDashboard() {
   const [selectedScheduleUnitId, setSelectedScheduleUnitId] = useState("")
   const [monthlyScheduleUnitId, setMonthlyScheduleUnitId] = useState("")
   const [selectedSalesKioskId, setSelectedSalesKioskId] = useState("all")
+  const [salesMonth, setSalesMonth] = useState<string | null>(null)
+  const [goalsMonth, setGoalsMonth] = useState<string | null>(null)
   const [vacationStatusFilter, setVacationStatusFilter] = useState("all")
   const [goalsModalOpen, setGoalsModalOpen] = useState(false)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
@@ -251,46 +260,58 @@ function ManagementDashboard() {
     [salesReports, selectedSalesKioskId]
   )
 
+  const currentMonthKey = monthKeyOf(today)
+  const monthChoices = useMemo(() => listRecentMonths(today, 13), [today])
+
   const currentReports = useMemo(
-    () => salesFilteredByUnit.filter((report) => report.month === today.getMonth() + 1 && report.year === today.getFullYear()),
-    [salesFilteredByUnit, today]
+    () => salesFilteredByUnit.filter((report) => monthKeyOf(new Date(report.year, report.month - 1, 1)) === (salesMonth ?? currentMonthKey)),
+    [salesFilteredByUnit, salesMonth, currentMonthKey]
   )
 
   const latestSalesPeriod = salesFilteredByUnit[0] ? { month: salesFilteredByUnit[0].month, year: salesFilteredByUnit[0].year } : null
   const visibleSalesReports = useMemo(() => {
-    if (currentReports.length > 0 || !latestSalesPeriod) return currentReports
+    // Sem escolha do usuário e sem vendas no mês atual, mostra o último mês com dados.
+    if (currentReports.length > 0 || salesMonth !== null || !latestSalesPeriod) return currentReports
     return salesFilteredByUnit.filter((report) => report.month === latestSalesPeriod.month && report.year === latestSalesPeriod.year)
-  }, [currentReports, latestSalesPeriod, salesFilteredByUnit])
+  }, [currentReports, latestSalesPeriod, salesFilteredByUnit, salesMonth])
+
+  const salesMonthValue = salesMonth ?? (visibleSalesReports[0] ? monthKeyOf(new Date(visibleSalesReports[0].year, visibleSalesReports[0].month - 1, 1)) : currentMonthKey)
+  const salesElapsedDay = salesMonthValue === currentMonthKey ? today.getDate() : 31
 
   const previousReports = useMemo(() => {
-    const reference = visibleSalesReports[0]
-    if (!reference) return []
-    const previousDate = new Date(reference.year, reference.month - 2, 1)
+    const previousDate = new Date(monthStartOf(salesMonthValue).getFullYear(), monthStartOf(salesMonthValue).getMonth() - 1, 1)
     return salesFilteredByUnit.filter((report) => report.month === previousDate.getMonth() + 1 && report.year === previousDate.getFullYear())
-  }, [salesFilteredByUnit, visibleSalesReports])
+  }, [salesFilteredByUnit, salesMonthValue])
 
   const sameElapsedCurrentReports = useMemo(
-    () => visibleSalesReports.filter((report) => reportBelongsToSameElapsedPeriod(report, today.getDate())),
-    [today, visibleSalesReports]
+    () => visibleSalesReports.filter((report) => reportBelongsToSameElapsedPeriod(report, salesElapsedDay)),
+    [salesElapsedDay, visibleSalesReports]
   )
 
   const sameElapsedPreviousReports = useMemo(
-    () => previousReports.filter((report) => reportBelongsToSameElapsedPeriod(report, today.getDate())),
-    [previousReports, today]
+    () => previousReports.filter((report) => reportBelongsToSameElapsedPeriod(report, salesElapsedDay)),
+    [previousReports, salesElapsedDay]
+  )
+
+  // Faturamento e metas: mês próprio, independente da unidade escolhida em "mais vendidas".
+  const goalsMonthValue = goalsMonth ?? currentMonthKey
+  const goalsMonthStart = monthStartOf(goalsMonthValue)
+  const goalsReports = useMemo(
+    () => salesReports.filter((report) => monthKeyOf(new Date(report.year, report.month - 1, 1)) === goalsMonthValue),
+    [salesReports, goalsMonthValue]
   )
 
   const currentRevenue = useMemo(
-    () =>
-      visibleSalesReports.reduce((sum, report) => sum + getSalesReportRevenue(report), 0),
-    [visibleSalesReports]
+    () => goalsReports.reduce((sum, report) => sum + getSalesReportRevenue(report), 0),
+    [goalsReports]
   )
 
   const projectedRevenue = useMemo(
-    () => getProjectedRevenue(visibleSalesReports, today),
-    [today, visibleSalesReports]
+    () => getProjectedRevenue(goalsReports, today),
+    [today, goalsReports]
   )
 
-  const currentGoals = useMemo(() => getCurrentGoalPeriods(periods, today), [periods, today])
+  const currentGoals = useMemo(() => getGoalPeriodsForMonth(periods, goalsMonthStart), [periods, goalsMonthValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const goalsByKiosk = useMemo(() => {
     return currentGoals
@@ -489,8 +510,9 @@ function ManagementDashboard() {
   )
 
   const daysInMonth = monthEnd.getDate()
-  const monthProgress = today.getDate() / daysInMonth
   const monthLabel = format(today, "MMMM 'de' yyyy", { locale: ptBR })
+  const goalsMonthLabel = format(goalsMonthStart, "MMMM 'de' yyyy", { locale: ptBR })
+  const monthProgress = goalsMonthValue === currentMonthKey ? today.getDate() / daysInMonth : 1
   const dayDiff = (date: Date) => Math.round((startOfDay(date).getTime() - today.getTime()) / 86_400_000)
 
   const toTaskItem = (task: (typeof pendingNewTasks)[number]): TaskItem => {
@@ -719,7 +741,7 @@ function ManagementDashboard() {
 
       <ManagementDashboardBuilder firebaseUser={firebaseUser} userId={firebaseUser?.uid ?? user?.id ?? ""} userName={user?.username ?? "Usuário"} permissions={permissions}>
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-6 xl:grid-cols-12">
-        {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
+        {canShowWidget("goals-revenue") && (
           <GoalsWidget
             revenue={currentRevenue}
             targetTotal={currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0)}
@@ -728,14 +750,15 @@ function ManagementDashboard() {
             goalCount={currentGoals.length}
             loading={goalsLoading}
             monthProgress={monthProgress}
-            monthLabel={monthLabel}
+            monthLabel={goalsMonthLabel}
+            monthFilter={<MonthFilter label="Mês e ano das metas" value={goalsMonthValue} months={monthChoices} onChange={setGoalsMonth} />}
             formatMoney={formatCurrency}
             formatCompact={compactCurrency}
             onDetails={() => setGoalsModalOpen(true)}
           />
         )}
 
-        <TasksWidget
+        {canShowWidget("pending-tasks") && <TasksWidget
           loading={tasksLoading}
           pendingCount={pendingTaskCount}
           overdueCount={overdueTasks.length}
@@ -746,19 +769,21 @@ function ManagementDashboard() {
           pending={taskItems.slice(0, 4)}
           approvals={approvalTaskItems.slice(0, 3)}
           overdue={overdueTaskItems.slice(0, 3)}
-        />
+        />}
 
-        {permissions.dashboard.operational && (
+        {canShowWidget("critical-restock") && (
           <RestockWidget unitName={cdKiosk?.name ?? null} unavailableReason={restockUnavailable} items={restockItems} />
         )}
 
-        {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
+        {canShowWidget("best-sellers") && (
           <SalesWidget
             items={allBestSellers.slice(0, 8)}
             totalQuantity={salesTotalQuantity}
             periodLabel={formatSalesPeriod(visibleSalesReports)}
             onDetails={() => setSalesModalOpen(true)}
             unitFilter={
+              <div className="flex gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+              <MonthFilter label="Mês e ano das vendas" value={salesMonthValue} months={monthChoices} onChange={setSalesMonth} />
               <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
                 <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
                   <SelectValue placeholder="Filtrar unidade" />
@@ -774,11 +799,12 @@ function ManagementDashboard() {
                     ))}
                 </SelectContent>
               </Select>
+              </div>
             }
           />
         )}
 
-        {permissions.dp?.view && (
+        {canShowWidget("weekly-schedule") && (
           <ScheduleWidget
             days={scheduleDays}
             emptyMessage={scheduleEmptyMessage}
@@ -803,11 +829,11 @@ function ManagementDashboard() {
           />
         )}
 
-        {permissions.dp?.view && (
+        {canShowWidget("vacation-calendar") && (
           <VacationsWidget loading={vacationsLoading} items={vacationItems} monthLabel={monthLabel} monthDays={daysInMonth} todayDay={today.getDate()} onDetails={() => setVacationsModalOpen(true)} />
         )}
 
-        {permissions.financial?.view && (
+        {canShowWidget("pending-payments") && (
           <PaymentsWidget
             loading={expensesLoading}
             overdueTotal={financialSummary.overdueTotal}
@@ -820,11 +846,11 @@ function ManagementDashboard() {
           />
         )}
 
-        {permissions.financial?.view && <HubWidget widgetId="financial-shortcuts" title="Central financeira" compactTitle="Financeiro" subtitle="Caixa, despesas e DRE" href="/dashboard/financial" icon={widgetIcons.financeHub} tone="ok" {...financeHub} />}
-        {permissions.stock.view && <HubWidget widgetId="stock-shortcuts" title="Central de estoque" compactTitle="Estoque" subtitle="Controle, compras e análises" href="/dashboard/stock" icon={widgetIcons.stockHub} tone="warn" {...stockHub} />}
-        {permissions.dp.view && <HubWidget widgetId="people-shortcuts" title="Central de pessoas" compactTitle="Pessoas" subtitle="Equipe, escalas, férias e documentos" href="/dashboard/dp" icon={widgetIcons.peopleHub} tone="info" {...peopleHub} />}
-        {permissions.dashboard.operational && <HubWidget widgetId="operations-shortcuts" title="Central de operações" compactTitle="Operações" subtitle="Tarefas, formulários e rotinas" href="/dashboard/operations" icon={widgetIcons.operationsHub} tone="accent" {...operationsHub} />}
-        {permissions.settings.viewAiCosts && <HubWidget widgetId="ai-costs-shortcuts" title="IA e infraestrutura" compactTitle="IA e infra" subtitle="Custos, limites e alertas dos serviços" href="/dashboard/settings" icon={widgetIcons.aiHub} tone="neutral" {...aiHub} />}
+        {canShowWidget("financial-shortcuts") && <HubWidget widgetId="financial-shortcuts" title="Central financeira" compactTitle="Financeiro" subtitle="Caixa, despesas e DRE" href="/dashboard/financial" icon={widgetIcons.financeHub} tone="ok" {...financeHub} />}
+        {canShowWidget("stock-shortcuts") && <HubWidget widgetId="stock-shortcuts" title="Central de estoque" compactTitle="Estoque" subtitle="Controle, compras e análises" href="/dashboard/stock" icon={widgetIcons.stockHub} tone="warn" {...stockHub} />}
+        {canShowWidget("people-shortcuts") && <HubWidget widgetId="people-shortcuts" title="Central de pessoas" compactTitle="Pessoas" subtitle="Equipe, escalas, férias e documentos" href="/dashboard/dp" icon={widgetIcons.peopleHub} tone="info" {...peopleHub} />}
+        {canShowWidget("operations-shortcuts") && <HubWidget widgetId="operations-shortcuts" title="Central de operações" compactTitle="Operações" subtitle="Tarefas, formulários e rotinas" href="/dashboard/operations" icon={widgetIcons.operationsHub} tone="accent" {...operationsHub} />}
+        {canShowWidget("ai-costs-shortcuts") && <HubWidget widgetId="ai-costs-shortcuts" title="IA e infraestrutura" compactTitle="IA e infra" subtitle="Custos, limites e alertas dos serviços" href="/dashboard/settings" icon={widgetIcons.aiHub} tone="neutral" {...aiHub} />}
       </div>
       </ManagementDashboardBuilder>
 
@@ -833,14 +859,14 @@ function ManagementDashboard() {
           <DialogHeader>
             <div className="px-6 pt-6">
               <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Detalhe das metas</div>
-              <DialogTitle className="text-2xl font-black text-ds-ink">Metas e faturamento</DialogTitle>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Faturamento e metas</DialogTitle>
               <DialogDescription className="text-base font-semibold text-ds-ink-faint">Progresso atual por quiosque e consolidado geral.</DialogDescription>
             </div>
           </DialogHeader>
           <div className="border-t border-ds-divider p-6">
             <div className="mb-6 grid gap-3 md:grid-cols-3">
-              <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={formatSalesPeriod(visibleSalesReports)} />
-              <Metric label="Meta geral atual" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))} detail={`${currentGoals.length} meta(s) ativa(s)`} />
+              <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={goalsMonthLabel} />
+              <Metric label="Meta geral" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))} detail={`${currentGoals.length} meta(s) no mês`} />
               <Metric label="Projetado" value={compactCurrency(projectedRevenue.value)} detail={projectedRevenue.detail} />
             </div>
             <div className="space-y-5">

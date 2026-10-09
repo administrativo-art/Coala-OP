@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { cn } from "@/lib/utils";
 
 import { widgetIcons } from "./icons";
@@ -17,6 +19,8 @@ export type GoalsWidgetProps = {
   /** Fração do mês já decorrida (0 a 1): serve de ritmo esperado. */
   monthProgress: number;
   monthLabel: string;
+  /** Filtro de mês/ano exibido sob o título. */
+  monthFilter?: ReactNode;
   formatMoney: (value: number) => string;
   formatCompact: (value: number) => string;
   onDetails: () => void;
@@ -29,7 +33,7 @@ function paceTone(progress: number, expected: number): { tone: Tone; label: stri
 }
 
 export function GoalsWidget(props: GoalsWidgetProps) {
-  const { revenue, targetTotal, projected, rows, goalCount, loading, monthProgress, monthLabel, formatMoney, formatCompact, onDetails } = props;
+  const { revenue, targetTotal, projected, rows, goalCount, loading, monthProgress, monthLabel, monthFilter, formatMoney, formatCompact, onDetails } = props;
   const currentGoalsTotal = rows.reduce((sum, row) => sum + row.current, 0);
   const overall = targetTotal > 0 ? currentGoalsTotal / targetTotal : 0;
   const overallPace = paceTone(overall, monthProgress);
@@ -39,10 +43,11 @@ export function GoalsWidget(props: GoalsWidgetProps) {
     <WidgetCard widgetId="goals-revenue">
       {(density) => (
         <>
-          <WidgetHead icon={widgetIcons.goals} tone="accent" title={density === "compact" ? "Metas" : "Metas e faturamento"} subtitle={monthLabel} href="/dashboard/goals/tracking" density={density} />
+          <WidgetHead icon={widgetIcons.goals} tone="accent" title={density === "compact" ? "Metas" : "Faturamento e metas"} subtitle={monthLabel} href="/dashboard/goals/tracking" density={density} />
+          {density !== "compact" ? monthFilter : null}
 
           {rows.length === 0 ? (
-            <WidgetEmpty>{loading ? "Carregando metas..." : "Nenhuma meta ativa para hoje."}</WidgetEmpty>
+            <WidgetEmpty>{loading ? "Carregando metas..." : "Nenhuma meta neste mês."}</WidgetEmpty>
           ) : density === "compact" ? (
             <>
               <div className="flex items-center gap-4">
