@@ -9,6 +9,7 @@ import {
   budgetAlert,
   createHourlyCache,
   dryRunBytes,
+  googleBillingExportCoverage,
   maximumBytesBilled,
   nextOpenAiPageToken,
   nonNegativeFinite,
@@ -93,6 +94,23 @@ test("Google billing month and last 30 calendar days follow America/Belem at UTC
   const march = belemBillingWindow(new Date("2026-03-01T13:00:00Z"));
   assert.equal(march.last30DaysStart, "2026-01-31");
   assert.equal(march.queryStart, "2026-01-31");
+});
+
+test("Google billing export stays unavailable until the project reaches yesterday", () => {
+  const now = new Date("2026-10-08T20:00:00Z");
+  assert.deepEqual(googleBillingExportCoverage([], now), {
+    status: "empty",
+    firstUsageDate: null,
+    lastUsageDate: null,
+    expectedThroughDate: "2026-10-07",
+  });
+  assert.deepEqual(googleBillingExportCoverage(["2026-09-03", "2026-09-01"], now), {
+    status: "backfilling",
+    firstUsageDate: "2026-09-01",
+    lastUsageDate: "2026-09-03",
+    expectedThroughDate: "2026-10-07",
+  });
+  assert.equal(googleBillingExportCoverage(["2026-10-07"], now).status, "current");
 });
 
 test("OpenAI includes every UTC day of last 30 days when February is shorter", () => {
