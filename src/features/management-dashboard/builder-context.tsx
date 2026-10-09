@@ -4,7 +4,7 @@ import { createContext, useContext, useRef, useState, type ReactNode } from "rea
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, Copy, GripVertical, LayoutDashboard, Library, Plus, Redo2, Save, Trash2, Undo2, X } from "lucide-react";
+import { Check, Copy, GripVertical, LayoutDashboard, Library, Map as MapIcon, Plus, Redo2, Save, Trash2, Undo2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import type { PermissionSet } from "@/types";
 import { MANAGEMENT_WIDGET_CATALOG, MANAGEMENT_WIDGET_BY_ID } from "./catalog";
 import { createDefaultManagementLayout } from "./default-layout";
 import { cloneLayout } from "./layout-policy";
+import { PanelMap } from "./panel-map";
 import { useManagementDashboardLayouts } from "./use-layouts";
 import type { ManagementDashboardLayout, ManagementWidgetId } from "./types";
 
@@ -29,7 +30,8 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
   const store = useManagementDashboardLayouts(firebaseUser, userId, userName);
   const [draft, setDraft] = useState<ManagementDashboardLayout | null>(null);
   const [editing, setEditing] = useState(false);
-  const [panel, setPanel] = useState<"catalog" | "settings" | null>(null);
+  const [panel, setPanel] = useState<"catalog" | "settings" | "map" | null>(null);
+  const [recentId, setRecentId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -62,12 +64,12 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
     forceHistoryRender((value) => value + 1);
   }
   function startEditing() { setDraft(structuredClone(store.activeLayout)); resetHistory(); setEditing(true); setSavedMessage(false); }
-  function cancelEditing() { setDraft(null); resetHistory(); setEditing(false); setPanel(null); setSelectedId(null); }
+  function cancelEditing() { setDraft(null); resetHistory(); setEditing(false); setPanel(null); setSelectedId(null); setRecentId(null); }
   async function save() {
     if (!draft) return;
     const personalDraft = draft.ownerId === userId && draft.visibility === "personal" ? draft : cloneLayout(draft, userId, userName);
     const saved = await store.save(personalDraft);
-    setDraft(saved); resetHistory(); setEditing(false); setPanel(null); setSelectedId(null); setSavedMessage(true);
+    setDraft(saved); resetHistory(); setEditing(false); setPanel(null); setSelectedId(null); setRecentId(null); setSavedMessage(true);
   }
   function onDragEnd(event: DragEndEvent) {
     if (!draft || !event.over || event.active.id === event.over.id) return;
@@ -81,10 +83,24 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
     const definition = MANAGEMENT_WIDGET_BY_ID.get(id); if (!definition) return;
     const instanceId = `${id}_${crypto.randomUUID().slice(0, 8)}`;
     updateDraft({ ...draft, widgets: [...draft.widgets, { instanceId, widgetId: id, layouts: structuredClone(definition.defaultLayouts), config: {} }] });
-    setSelectedId(instanceId); setPanel("settings");
+    setSelectedId(instanceId); setRecentId(instanceId); setPanel("map");
   }
   function removeSelected() { if (!draft || !selectedId || draft.lockedWidgetIds.includes(selectedId)) return; updateDraft({ ...draft, widgets: draft.widgets.filter((item) => item.instanceId !== selectedId) }); setSelectedId(null); setPanel("catalog"); }
-  function resizeSelected(w: number, h: number) { if (!draft || !selectedId) return; updateDraft({ ...draft, widgets: draft.widgets.map((item) => item.instanceId === selectedId ? { ...item, layouts: { desktop: { ...item.layouts.desktop, w, h }, tablet: { ...item.layouts.tablet, w: Math.min(6, w), h }, mobile: { ...item.layouts.mobile, w: 1, h: Math.max(2, h) } } } : item) }); }
+  function resizeWidget(instanceId: string, w: number, h: number) { if (!draft) return; updateDraft({ ...draft, widgets: draft.widgets.map((item) => item.instanceId === instanceId ? { ...item, layouts: { desktop: { ...item.layouts.desktop, w, h }, tablet: { ...item.layouts.tablet, w: Math.min(6, w), h }, mobile: { ...item.layouts.mobile, w: 1, h: Math.max(2, h) } } } : item) }); }
+  function resizeSelected(w: number, h: number) { if (selectedId) resizeWidget(selectedId, w, h); }
+  function reorderByInstance(activeId: string, overId: string) {
+    if (!draft) return;
+    const from = draft.widgets.findIndex((item) => item.instanceId === activeId);
+    const to = draft.widgets.findIndex((item) => item.instanceId === overId);
+    if (from < 0 || to < 0) return;
+    updateDraft({ ...draft, widgets: arrayMove(draft.widgets, from, to) });
+  }
+  function removeWidget(instanceId: string) { if (!draft || draft.lockedWidgetIds.includes(instanceId)) return; updateDraft({ ...draft, widgets: draft.widgets.filter((item) => item.instanceId !== instanceId) }); setSelectedId(null); setRecentId(null); }
+  function selectFromMap(instanceId: string) {
+    setSelectedId(instanceId);
+    const widgetId = draft?.widgets.find((item) => item.instanceId === instanceId)?.widgetId;
+    if (widgetId) document.querySelector(`[data-widget-id="${widgetId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
   function renamePanel(name: string) { if (draft) updateDraft({ ...draft, name }); }
   function createPanel() { const next = createDefaultManagementLayout(userId, userName); next.id = `layout_${crypto.randomUUID().replaceAll("-", "")}`; next.name = "Novo painel"; setDraft(next); resetHistory(); setEditing(true); }
   function duplicatePanel() { const next = cloneLayout(store.activeLayout, userId, userName); setDraft(next); resetHistory(); setEditing(true); setSavedMessage(false); }
@@ -113,6 +129,7 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
           {editing ? <>
             <Button variant="ds-ghost" size="xs" disabled={history.current.length === 0} onClick={undo} aria-label="Desfazer"><Undo2 className="h-3.5 w-3.5" /></Button>
             <Button variant="ds-ghost" size="xs" disabled={future.current.length === 0} onClick={redo} aria-label="Refazer"><Redo2 className="h-3.5 w-3.5" /></Button>
+            <Button variant="ds-secondary" size="xs" onClick={() => setPanel("map")}><MapIcon className="h-3.5 w-3.5" />Mapa</Button>
             <Button variant="ds-secondary" size="xs" onClick={() => setPanel("catalog")}><Library className="h-3.5 w-3.5" />Biblioteca</Button>
             <Button variant="ds-ghost" size="xs" onClick={cancelEditing}><X className="h-3.5 w-3.5" />Descartar</Button>
             <Button variant="primary-page" size="xs" loading={store.saving} loadingLabel="Salvando…" onClick={() => void save()}><Save className="h-3.5 w-3.5" />Salvar painel</Button>
@@ -135,8 +152,8 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
         </SortableContext>
       </DndContext>
 
-      <SidePanel open={panel !== null} onOpenChange={(open) => !open && setPanel(null)} kicker={panel === "catalog" ? "Biblioteca de widgets" : selectedDefinition?.module} title={panel === "catalog" ? "Adicionar ao painel" : selectedDefinition?.title ?? "Configurar widget"} subtitle={panel === "catalog" ? "Escolha widgets permitidos para o seu perfil." : selectedDefinition?.description}>
-        {panel === "catalog" ? <div className="space-y-3">
+      <SidePanel open={panel !== null} onOpenChange={(open) => !open && setPanel(null)} kicker={panel === "catalog" ? "Biblioteca de widgets" : panel === "map" ? "Mapa do painel" : selectedDefinition?.module} title={panel === "catalog" ? "Adicionar ao painel" : panel === "map" ? "Organizar o painel" : selectedDefinition?.title ?? "Configurar widget"} subtitle={panel === "catalog" ? "Escolha widgets permitidos para o seu perfil." : panel === "map" ? "Reordene e ajuste tamanhos com a visão do todo." : selectedDefinition?.description}>
+        {panel === "map" ? <PanelMap widgets={layout.widgets.filter((item) => MANAGEMENT_WIDGET_BY_ID.get(item.widgetId)?.canView(permissions))} selectedId={selectedId} recentId={recentId} lockedIds={layout.lockedWidgetIds} onSelect={selectFromMap} onReorder={reorderByInstance} onResize={resizeWidget} onRemove={removeWidget} /> : panel === "catalog" ? <div className="space-y-3">
           {Array.from(new Set(visibleCatalog.map((item) => item.module))).map((module) => <PanelSection key={module} title={module} aside={`${visibleCatalog.filter((item) => item.module === module).length} widgets`}>
             {visibleCatalog.filter((item) => item.module === module).map((definition) => {
               const added = layout.widgets.some((item) => item.widgetId === definition.id);
@@ -170,7 +187,7 @@ export function ManagementWidgetFrame({ id, children, className }: { id: Managem
   const selected = !!placement && placement.instanceId === state?.selectedId;
   const order = placement ? state?.layout.widgets.indexOf(placement) : undefined;
   const spanClasses = placement ? `${tabletSpan[Math.min(6, placement.layouts.tablet.w)]} ${desktopSpan[Math.min(12, placement.layouts.desktop.w)]}` : "md:col-span-3 xl:col-span-6";
-  return <div ref={sortable.setNodeRef} style={{ order, transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }} className={cn("relative min-w-0 col-span-1", spanClasses, className, state?.editing && "rounded-ds-btn-lg ring-2 ring-ds-accent", selected && "ring-4")} onClick={state?.editing ? () => { state.select(placement?.instanceId ?? null); state.openSettings(); } : undefined}>
+  return <div ref={sortable.setNodeRef} data-widget-id={id} style={{ order, transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }} className={cn("relative min-w-0 col-span-1", spanClasses, className, state?.editing && "rounded-ds-btn-lg ring-2 ring-ds-accent", selected && "ring-4")} onClick={state?.editing ? () => { state.select(placement?.instanceId ?? null); state.openSettings(); } : undefined}>
     {state?.editing ? <button type="button" aria-label="Mover widget" className="absolute right-3 top-3 z-20 flex h-8 w-8 cursor-grab items-center justify-center rounded-ds-sm bg-ds-dark text-white shadow-md" {...sortable.attributes} {...sortable.listeners}><GripVertical className="h-4 w-4" /></button> : null}
     {children}
   </div>;

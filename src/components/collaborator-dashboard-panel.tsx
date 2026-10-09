@@ -95,16 +95,16 @@ function stockExpiryBadgeClass(level: StockExpiryAlertLevel) {
     case "expired":
     case "today":
     case "invalid":
-      return "border-red-200 bg-red-50 text-red-700";
+      return "border-ds-divider bg-ds-danger-bg text-ds-danger";
     case "urgent":
-      return "border-orange-200 bg-orange-50 text-orange-700";
+      return "border-ds-divider bg-ds-warn-bg text-ds-warn";
     case "warning":
-      return "border-amber-200 bg-amber-50 text-amber-700";
+      return "border-ds-divider bg-ds-accent-soft text-ds-accent-ink";
     case "ok":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+      return "border-ds-divider bg-ds-ok-bg text-ds-ok";
     case "none":
     default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
+      return "border-ds-divider bg-ds-muted text-ds-ink-muted";
   }
 }
 
@@ -182,19 +182,19 @@ const STATUS_LABELS: Record<FormExecution["status"], string> = {
 };
 
 const STATUS_TEXT: Record<FormExecution["status"], string> = {
-  pending: "text-amber-600",
-  in_progress: "text-blue-600",
-  completed: "text-emerald-600",
-  overdue: "text-red-500",
-  canceled: "text-slate-500",
+  pending: "text-ds-warn",
+  in_progress: "text-ds-info",
+  completed: "text-ds-ok",
+  overdue: "text-ds-danger",
+  canceled: "text-ds-ink-muted",
 };
 
 const STATUS_DOT: Record<FormExecution["status"], string> = {
-  pending: "bg-amber-500",
-  in_progress: "bg-blue-500",
-  completed: "bg-emerald-500",
-  overdue: "bg-red-500",
-  canceled: "bg-slate-400",
+  pending: "bg-ds-warn",
+  in_progress: "bg-ds-info",
+  completed: "bg-ds-ok",
+  overdue: "bg-ds-danger",
+  canceled: "bg-ds-ink-faint",
 };
 
 function timeOf(value: unknown) {
@@ -426,7 +426,7 @@ function LiveClock() {
   }, []);
 
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-sm font-medium tabular-nums text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 font-mono text-sm font-medium tabular-nums text-ds-ink-muted">
       <Clock className="h-3.5 w-3.5" />
       {now ? format(now, "HH:mm") : "--:--"}
     </span>
@@ -461,7 +461,7 @@ function ProgressRing({ value, total, done }: { value: number; total: number; do
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="text-lg font-bold tracking-tight">
           {value}
-          <span className="font-medium text-muted-foreground">/{total}</span>
+          <span className="font-medium text-ds-ink-muted">/{total}</span>
         </span>
       </div>
     </div>
@@ -473,9 +473,9 @@ function ProgressRing({ value, total, done }: { value: number; total: number; do
 /* -------------------------------------------------------------------------- */
 
 const TYPE_BADGE = {
-  form: { label: "Formulário", icon: FileText, className: "bg-indigo-50 text-indigo-700" },
-  task: { label: "Tarefa", icon: CheckSquare, className: "bg-teal-50 text-teal-700" },
-  count: { label: "Contagem", icon: ListOrdered, className: "bg-violet-50 text-violet-700" },
+  form: { label: "Formulário", icon: FileText, className: "bg-ds-accent-soft text-ds-accent-ink" },
+  task: { label: "Tarefa", icon: CheckSquare, className: "bg-ds-info-bg text-ds-info" },
+  count: { label: "Contagem", icon: ListOrdered, className: "bg-ds-info-bg text-ds-info" },
 } as const;
 
 function TimelineItem({
@@ -510,14 +510,14 @@ function TimelineItem({
   return (
     <div className="grid grid-cols-[52px_1fr] gap-3">
       <div className="relative flex flex-col items-end pr-1 pt-3.5">
-        <span className={`font-mono text-xs tabular-nums ${timeOverdue ? "font-semibold text-red-500" : "text-muted-foreground"}`}>
+        <span className={`font-mono text-xs tabular-nums ${timeOverdue ? "font-semibold text-ds-danger" : "text-ds-ink-muted"}`}>
           {time}
         </span>
         <span className={`absolute right-[-13px] top-4 h-2.5 w-2.5 rounded-full ring-4 ring-background ${dot}`} />
-        {!isLast ? <span className="absolute right-[-8px] top-7 h-[calc(100%+0.75rem)] w-px bg-border" /> : null}
+        {!isLast ? <span className="absolute right-[-8px] top-7 h-[calc(100%+0.75rem)] w-px bg-ds-divider" /> : null}
       </div>
 
-      <div className="rounded-xl border bg-white p-4 shadow-sm">
+      <div className="rounded-ds-card border border-ds-border bg-ds-surface p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -532,13 +532,13 @@ function TimelineItem({
             </div>
             {titleHref ? (
               <Link href={titleHref} className="group/title block">
-                <h4 className={`mt-2 font-semibold underline-offset-2 group-hover/title:underline ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
-                {meta ? <p className="mt-0.5 text-xs text-muted-foreground group-hover/title:text-foreground">{meta}</p> : null}
+                <h4 className={`mt-2 font-semibold underline-offset-2 group-hover/title:underline ${completed ? "text-ds-ink-muted line-through" : ""}`}>{title}</h4>
+                {meta ? <p className="mt-0.5 text-xs text-ds-ink-muted group-hover/title:text-ds-ink">{meta}</p> : null}
               </Link>
             ) : (
               <>
-                <h4 className={`mt-2 font-semibold ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
-                {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+                <h4 className={`mt-2 font-semibold ${completed ? "text-ds-ink-muted line-through" : ""}`}>{title}</h4>
+                {meta ? <p className="mt-0.5 text-xs text-ds-ink-muted">{meta}</p> : null}
               </>
             )}
           </div>
@@ -553,18 +553,18 @@ function TimelineMarker({ time, label, now, isLast }: { time: string; label: str
   return (
     <div className="grid grid-cols-[52px_1fr] gap-3">
       <div className="relative flex flex-col items-end pr-1 pt-0.5">
-        <span className={`font-mono text-xs tabular-nums ${now ? "font-semibold text-indigo-600" : "text-muted-foreground/70"}`}>
+        <span className={`font-mono text-xs tabular-nums ${now ? "font-semibold text-ds-accent-ink" : "text-ds-ink-faint"}`}>
           {time}
         </span>
         <span
           className={`absolute right-[-13px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-background ${
-            now ? "bg-indigo-600" : "bg-muted-foreground/30"
+            now ? "bg-ds-accent" : "bg-ds-border"
           }`}
         />
-        {!isLast ? <span className="absolute right-[-8px] top-3.5 h-[calc(100%+0.75rem)] w-px bg-border" /> : null}
+        {!isLast ? <span className="absolute right-[-8px] top-3.5 h-[calc(100%+0.75rem)] w-px bg-ds-divider" /> : null}
       </div>
       <div className="pt-0.5">
-        <span className={`text-sm ${now ? "font-semibold uppercase tracking-[0.12em] text-indigo-600" : "text-muted-foreground"}`}>
+        <span className={`text-sm ${now ? "font-semibold uppercase tracking-[0.12em] text-ds-accent-ink" : "text-ds-ink-muted"}`}>
           {label}
         </span>
       </div>
@@ -577,22 +577,22 @@ function NextActionCard({ execution }: { execution: FormExecution }) {
   const overdue = execution.status === "overdue";
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-ds-card border border-ds-border bg-ds-muted p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-indigo-600 p-2.5 text-white">
+        <div className="rounded-ds-card bg-ds-accent p-2.5 text-white">
           <FileText className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-600">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ds-accent-ink">
             Próxima ação{overdue ? " · Atrasada" : ""}
           </p>
           <p className="truncate font-semibold">
             {execution.template_name}
-            {time ? <span className="font-normal text-muted-foreground"> · até {time}</span> : null}
+            {time ? <span className="font-normal text-ds-ink-muted"> · até {time}</span> : null}
           </p>
         </div>
       </div>
-      <Button asChild className="bg-indigo-600 text-white hover:bg-indigo-700 sm:shrink-0">
+      <Button asChild className="bg-ds-accent text-white hover:bg-ds-accent-hover sm:shrink-0">
         <Link href={`/dashboard/forms/${execution.id}/view`}>
           <ArrowRight className="mr-2 h-4 w-4" />
           Preencher agora
@@ -663,25 +663,25 @@ function CountSummary({ session }: { session: StockAuditSession }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ds-ink-muted">
           {session.kioskName} · iniciada {format(new Date(session.startedAt), "dd/MM 'às' HH:mm", { locale: ptBR })}
         </p>
         <span className="text-sm font-semibold">
-          {counted}/{total} <span className="font-normal text-muted-foreground">itens</span>
+          {counted}/{total} <span className="font-normal text-ds-ink-muted">itens</span>
         </span>
       </div>
 
       {expirySummary.attention > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-ds-card border border-ds-divider bg-ds-warn-bg p-3 text-sm text-ds-warn">
           <div className="flex flex-wrap items-center gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+            <AlertTriangle className="h-4 w-4 shrink-0 text-ds-warn" />
             <span className="font-semibold">Atenção de validade</span>
             {expirySummary.expired > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("expired")}>{expirySummary.expired} vencido(s)</Badge> : null}
             {expirySummary.today > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("today")}>{expirySummary.today} vence(m) hoje</Badge> : null}
             {expirySummary.urgent > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("urgent")}>{expirySummary.urgent} em até 7 dias</Badge> : null}
             {expirySummary.warning > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("warning")}>{expirySummary.warning} em até 30 dias</Badge> : null}
           </div>
-          <p className="mt-1 text-xs text-amber-800/80">Aviso apenas visual; não altera a quantidade contada.</p>
+          <p className="mt-1 text-xs text-ds-warn">Aviso apenas visual; não altera a quantidade contada.</p>
         </div>
       ) : null}
 
@@ -693,12 +693,12 @@ function CountSummary({ session }: { session: StockAuditSession }) {
           return (
             <div
               key={key}
-              className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${isTouched ? "border-indigo-200 bg-indigo-50/40" : ""}`}
+              className={`flex items-center justify-between gap-3 rounded-ds-card border p-3 ${isTouched ? "border-ds-divider bg-ds-accent-soft" : ""}`}
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">{item.productName}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-muted-foreground">{item.displayUnit} · Val: {formatStockExpiryDate(item.expiryDate)}</p>
+                  <p className="text-xs text-ds-ink-muted">{item.displayUnit} · Val: {formatStockExpiryDate(item.expiryDate)}</p>
                   <Badge variant="outline" className={stockExpiryBadgeClass(expiryAlert.level)}>{expiryAlert.label}</Badge>
                 </div>
               </div>
@@ -706,14 +706,14 @@ function CountSummary({ session }: { session: StockAuditSession }) {
                 <button
                   type="button"
                   onClick={() => adjust(item, -1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border bg-white text-muted-foreground transition-colors hover:bg-muted"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-ds-border bg-ds-surface text-ds-ink-muted transition-colors hover:bg-ds-muted"
                   aria-label="Diminuir"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
                 <span
                   className={`flex h-9 w-14 items-center justify-center rounded-lg border text-center font-mono text-sm tabular-nums ${
-                    isTouched ? "border-indigo-300 bg-white" : "bg-white text-muted-foreground"
+                    isTouched ? "border-ds-divider bg-ds-surface" : "bg-ds-surface text-ds-ink-muted"
                   }`}
                 >
                   {isTouched ? quantities[key] ?? 0 : "—"}
@@ -721,7 +721,7 @@ function CountSummary({ session }: { session: StockAuditSession }) {
                 <button
                   type="button"
                   onClick={() => adjust(item, 1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border bg-white text-muted-foreground transition-colors hover:bg-muted"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-ds-border bg-ds-surface text-ds-ink-muted transition-colors hover:bg-ds-muted"
                   aria-label="Aumentar"
                 >
                   <Plus className="h-4 w-4" />
@@ -733,14 +733,14 @@ function CountSummary({ session }: { session: StockAuditSession }) {
       </div>
 
       {saveError ? (
-        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{saveError}</div>
+        <div className="rounded-ds-card border border-ds-danger bg-ds-danger-bg p-3 text-sm text-ds-danger">{saveError}</div>
       ) : null}
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ds-ink-muted">
           {saved ? "Contagem concluída e estoque atualizado." : `Conte todos os itens para concluir (${counted}/${total}).`}
         </p>
-        <Button onClick={submit} disabled={!canSubmit} className="bg-indigo-600 text-white hover:bg-indigo-700">
+        <Button onClick={submit} disabled={!canSubmit} className="bg-ds-accent text-white hover:bg-ds-accent-hover">
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {saved ? "Concluída" : "Concluir contagem"}
         </Button>
@@ -754,15 +754,15 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
     <TimelineItem
       type="count"
       time="—"
-      dot="bg-amber-500"
+      dot="bg-ds-warn"
       statusLabel="Em aberto"
-      statusClass="text-amber-600"
+      statusClass="text-ds-warn"
       title={`Contagem · ${session.kioskName}`}
       meta={`${session.items.length} ${session.items.length === 1 ? "item" : "itens"}`}
       action={
         <Dialog>
           <DialogTrigger asChild>
-            <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">
+            <Button size="sm" className="bg-ds-accent text-white hover:bg-ds-accent-hover">
               Continuar
             </Button>
           </DialogTrigger>
@@ -786,10 +786,10 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
 
 function RecorteTile({ label, pct, value, target }: { label: string; pct: number; value: number; target: number }) {
   return (
-    <div className="rounded-xl border bg-muted/20 p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+    <div className="rounded-ds-card border border-ds-border bg-ds-muted p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ds-ink-muted">{label}</p>
       <p className="mt-1 text-2xl font-bold tracking-tight">{pct.toFixed(0)}%</p>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-xs text-ds-ink-muted">
         {money(value)} de {money(target)}
       </p>
     </div>
@@ -823,16 +823,16 @@ function GoalProgressRow({
   }).length;
 
   return (
-    <div className="space-y-3 rounded-xl border p-4">
+    <div className="space-y-3 rounded-ds-card border border-ds-border p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="font-semibold">{unitName ?? "Meta da unidade"}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ds-ink-muted">
             período {format(periodStart, "eee dd/MM", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase())} –{" "}
             {format(periodEnd, "eee dd/MM/yyyy", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase())}
           </p>
         </div>
-        <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
+        <Badge className="border-ds-divider bg-ds-ok-bg text-ds-ok">
           {period.status === "active" ? "Ativa" : period.status}
         </Badge>
       </div>
@@ -844,72 +844,72 @@ function GoalProgressRow({
       </div>
 
       <div className="grid gap-2 md:grid-cols-2">
-        <div className="rounded-xl border bg-muted/20 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">% Meta UP</p>
+        <div className="rounded-ds-card border border-ds-border bg-ds-muted p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ds-ink-muted">% Meta UP</p>
           <p className="mt-1 text-2xl font-bold tracking-tight">{upPct.toFixed(1)}%</p>
-          <p className="mt-1 text-xs text-muted-foreground">alvo {money(upTarget)}</p>
+          <p className="mt-1 text-xs text-ds-ink-muted">alvo {money(upTarget)}</p>
         </div>
-        <div className="rounded-xl border bg-muted/20 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Dias batidos</p>
+        <div className="rounded-ds-card border border-ds-border bg-ds-muted p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ds-ink-muted">Dias batidos</p>
           <p className="mt-1 text-2xl font-bold tracking-tight">
             {hitCount}/{elapsedDays.length}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">alvo diário atingido</p>
+          <p className="mt-1 text-xs text-ds-ink-muted">alvo diário atingido</p>
         </div>
       </div>
 
       {bonusContext ? (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+        <div className="rounded-ds-card border border-ds-divider bg-ds-ok-bg p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Bonificação estimada</p>
-              <p className="mt-1 text-sm font-semibold text-emerald-950">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-ds-ok">Bonificação estimada</p>
+              <p className="mt-1 text-sm font-semibold text-ds-ok">
                 {period.goalMethodSnapshot?.name ?? "Forma de meta"} · {bonusContext.roleLabel}
               </p>
               {bonusContext.collaboratorMessage ? (
-                <p className="mt-2 rounded-lg bg-white/75 px-3 py-2 text-sm font-semibold text-emerald-800">
+                <p className="mt-2 rounded-lg bg-ds-surface px-3 py-2 text-sm font-semibold text-ds-ok">
                   {bonusContext.collaboratorMessage}
                 </p>
               ) : null}
             </div>
-            <div className="rounded-xl bg-white px-4 py-3 text-right">
-              <p className="text-xs text-emerald-700/80">Sua bonificação estimada</p>
-              <p className="mt-1 text-2xl font-black text-emerald-950">R$ {formatCurrencyBRL(bonusContext.individualBonus)}</p>
+            <div className="rounded-ds-card bg-ds-surface px-4 py-3 text-right">
+              <p className="text-xs text-ds-ok">Sua bonificação estimada</p>
+              <p className="mt-1 text-2xl font-black text-ds-ok">R$ {formatCurrencyBRL(bonusContext.individualBonus)}</p>
             </div>
           </div>
-          <div className="mt-3 grid gap-2 text-xs text-emerald-800 md:grid-cols-3">
-            <div className="rounded-lg bg-white/70 px-3 py-2">
+          <div className="mt-3 grid gap-2 text-xs text-ds-ok md:grid-cols-3">
+            <div className="rounded-lg bg-ds-surface px-3 py-2">
               Equipe: R$ {formatCurrencyBRL(bonusContext.preview.totalTeamBonus)}
             </div>
-            <div className="rounded-lg bg-white/70 px-3 py-2">
+            <div className="rounded-lg bg-ds-surface px-3 py-2">
               Realizado: R$ {formatCurrencyBRL(bonusContext.preview.revenue)}
             </div>
-            <div className="rounded-lg bg-white/70 px-3 py-2">
+            <div className="rounded-lg bg-ds-surface px-3 py-2">
               Papel: {bonusContext.roleLabel}
             </div>
           </div>
         </div>
       ) : null}
 
-      <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
-        <div className="flex justify-between text-xs font-semibold text-muted-foreground">
+      <div className="space-y-2 rounded-ds-card border border-ds-border bg-ds-muted p-4">
+        <div className="flex justify-between text-xs font-semibold text-ds-ink-muted">
           <span>Meta · {money(goal.targetValue)}</span>
           <span>{pct.toFixed(1)}%</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-indigo-600" style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div className="h-2 overflow-hidden rounded-full bg-ds-muted">
+          <div className="h-full rounded-full bg-ds-accent" style={{ width: `${Math.min(pct, 100)}%` }} />
         </div>
-        <div className="flex justify-between text-xs font-semibold text-blue-500">
+        <div className="flex justify-between text-xs font-semibold text-ds-info">
           <span>Meta UP · {money(upTarget)}</span>
           <span>{upPct.toFixed(1)}%</span>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-blue-100">
-          <div className="h-full rounded-full bg-blue-400" style={{ width: `${Math.min(upPct, 100)}%` }} />
+        <div className="h-1.5 overflow-hidden rounded-full bg-ds-info-bg">
+          <div className="h-full rounded-full bg-ds-info" style={{ width: `${Math.min(upPct, 100)}%` }} />
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border">
-        <div className="grid grid-cols-[1fr_1fr_1fr_48px] bg-muted/30 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+      <div className="overflow-hidden rounded-ds-card border border-ds-border">
+        <div className="grid grid-cols-[1fr_1fr_1fr_48px] bg-ds-muted px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ds-ink-muted">
           <span>Dia</span>
           <span className="text-right">Alvo</span>
           <span className="text-right">Realizado</span>
@@ -925,12 +925,12 @@ function GoalProgressRow({
             <div
               key={key}
               className={`grid grid-cols-[1fr_1fr_1fr_48px] border-b px-4 py-2 text-xs last:border-b-0 ${
-                isSameDay(day, today) ? "bg-indigo-50/70" : ""
+                isSameDay(day, today) ? "bg-ds-accent-soft" : ""
               }`}
             >
               <span className="font-medium">{format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase())}</span>
-              <span className="text-right text-muted-foreground">{money(dayTarget)}</span>
-              <span className={`text-right font-semibold ${value > 0 ? "text-foreground" : "text-muted-foreground"}`}>
+              <span className="text-right text-ds-ink-muted">{money(dayTarget)}</span>
+              <span className={`text-right font-semibold ${value > 0 ? "text-ds-ink" : "text-ds-ink-muted"}`}>
                 {pastOrToday ? money(value) : "-"}
               </span>
               <span className="text-center">{!pastOrToday ? "-" : hit ? "✓" : value > 0 ? "!" : "•"}</span>
@@ -958,10 +958,10 @@ function SidebarCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+    <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <span className="text-muted-foreground">{icon}</span>
+          <span className="text-ds-ink-muted">{icon}</span>
           {title}
         </div>
         {action}
@@ -992,9 +992,9 @@ function SidebarEscala({
   }, [shifts, todayKey]);
 
   const mockShifts = [
-    { day: "Hoje", label: "Tarde", time: "15:45-22:00", tone: "border-indigo-100 bg-indigo-50 text-indigo-700" },
-    { day: "Amanhã", label: "Manhã", time: "10:00-16:15", tone: "border-emerald-100 bg-emerald-50 text-emerald-700" },
-    { day: "Sábado", label: "Descanso", time: "folga", tone: "border-zinc-100 bg-zinc-50 text-zinc-500" },
+    { day: "Hoje", label: "Tarde", time: "15:45-22:00", tone: "border-ds-divider bg-ds-accent-soft text-ds-accent-ink" },
+    { day: "Amanhã", label: "Manhã", time: "10:00-16:15", tone: "border-ds-divider bg-ds-ok-bg text-ds-ok" },
+    { day: "Sábado", label: "Descanso", time: "folga", tone: "border-ds-divider bg-ds-muted text-ds-ink-muted" },
   ];
 
   return (
@@ -1004,7 +1004,7 @@ function SidebarEscala({
       action={
         <Link
           href="/dashboard/collaborator/schedule"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-pink-600 hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-ds-accent-ink hover:underline"
         >
           Ver escala
           <ArrowRight className="h-3.5 w-3.5" />
@@ -1012,24 +1012,24 @@ function SidebarEscala({
       }
     >
       {loading ? (
-        <div className="flex items-center justify-center py-4 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center py-4 text-xs text-ds-ink-muted">
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
           Carregando...
         </div>
       ) : upcoming.length === 0 && showMockup ? (
         <div className="space-y-2">
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-indigo-600">Mockup visual</p>
-            <p className="mt-0.5 text-xs font-semibold text-indigo-900">Como a escala aparecerá quando houver turnos.</p>
+          <div className="rounded-ds-card border border-ds-divider bg-ds-accent-soft px-3 py-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-accent-ink">Mockup visual</p>
+            <p className="mt-0.5 text-xs font-semibold text-ds-accent-ink">Como a escala aparecerá quando houver turnos.</p>
           </div>
           <div className="space-y-1.5">
             {mockShifts.map((shift) => (
-              <div key={`${shift.day}-${shift.label}`} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${shift.tone}`}>
+              <div key={`${shift.day}-${shift.label}`} className={`flex items-center justify-between rounded-ds-card border px-3 py-2 ${shift.tone}`}>
                 <div className="min-w-0">
                   <p className="text-xs font-black">{shift.day}</p>
                   <p className="truncate text-[11px] font-semibold opacity-80">{shift.label}</p>
                 </div>
-                <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums">
+                <span className="rounded-full bg-ds-surface px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums">
                   {shift.time}
                 </span>
               </div>
@@ -1037,7 +1037,7 @@ function SidebarEscala({
           </div>
         </div>
       ) : upcoming.length === 0 ? (
-        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+        <p className="rounded-ds-card border border-ds-border border-dashed bg-ds-muted px-3 py-4 text-sm text-ds-ink-muted">
           Nenhum turno futuro encontrado para este mês.
         </p>
       ) : (
@@ -1052,11 +1052,11 @@ function SidebarEscala({
               : format(new Date(`${shift.date}T12:00:00`), "eee dd/MM", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase());
             return (
               <div key={shift.id} className="flex items-center justify-between gap-2 py-1 text-sm">
-                <span className={isToday ? "font-semibold text-indigo-600" : "text-muted-foreground"}>
+                <span className={isToday ? "font-semibold text-ds-accent-ink" : "text-ds-ink-muted"}>
                   {label}
-                  {definition?.name ? <span className="ml-1.5 text-xs text-muted-foreground/70">{definition.name}</span> : null}
+                  {definition?.name ? <span className="ml-1.5 text-xs text-ds-ink-faint">{definition.name}</span> : null}
                 </span>
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                <span className="font-mono text-xs tabular-nums text-ds-ink-muted">
                   {shift.startTime}–{shift.endTime}
                 </span>
               </div>
@@ -1077,25 +1077,25 @@ function MockGoalMiniCard() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+      <div className="rounded-ds-card border border-ds-divider bg-ds-accent-soft px-3 py-2.5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Mockup visual</p>
-            <p className="mt-0.5 text-xs font-semibold text-pink-800">Meta do quiosque</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-accent-ink">Mockup visual</p>
+            <p className="mt-0.5 text-xs font-semibold text-ds-accent-ink">Meta do quiosque</p>
           </div>
-          <Badge variant="outline" className="rounded-full border-pink-200 bg-white text-[10px] font-black text-pink-600">
+          <Badge variant="outline" className="rounded-full border-ds-divider bg-ds-surface text-[10px] font-black text-ds-accent-ink">
             Meta Alvo ativa
           </Badge>
         </div>
       </div>
 
-      <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+      <div className="rounded-ds-card border border-ds-divider bg-ds-ok-bg px-3 py-2.5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Bonificação estimada</p>
-            <p className="mt-0.5 text-xs text-emerald-800">Quiosque médio por faixas</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-ok">Bonificação estimada</p>
+            <p className="mt-0.5 text-xs text-ds-ok">Quiosque médio por faixas</p>
           </div>
-          <p className="text-base font-black text-emerald-950">R$ 0,00</p>
+          <p className="text-base font-black text-ds-ok">R$ 0,00</p>
         </div>
       </div>
 
@@ -1103,26 +1103,26 @@ function MockGoalMiniCard() {
         const pctValue = percent(row.teamValue, row.target);
         const ownShare = percent(row.ownValue, row.teamValue);
         return (
-          <div key={row.label} className="rounded-xl border border-zinc-100 bg-white/80 px-3 py-2">
+          <div key={row.label} className="rounded-ds-card border border-ds-divider bg-ds-surface px-3 py-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-black uppercase tracking-[0.12em] text-zinc-500">{row.label}</span>
-              <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-black text-pink-600">
+              <span className="font-black uppercase tracking-[0.12em] text-ds-ink-muted">{row.label}</span>
+              <span className="rounded-full bg-ds-accent-soft px-2 py-0.5 text-[10px] font-black text-ds-accent-ink">
                 Meta Alvo · {pctValue.toFixed(0)}%
               </span>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-pink-500" style={{ width: `${Math.min(pctValue, 100)}%` }} />
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ds-muted">
+              <div className="h-full rounded-full bg-ds-accent" style={{ width: `${Math.min(pctValue, 100)}%` }} />
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
               <div>
-                <p className="font-bold text-zinc-400">Equipe</p>
-                <p className="font-black text-zinc-800">{money(row.teamValue)}</p>
-                <p className="font-medium text-zinc-400">de {money(row.target)}</p>
+                <p className="font-bold text-ds-ink-faint">Equipe</p>
+                <p className="font-black text-ds-ink">{money(row.teamValue)}</p>
+                <p className="font-medium text-ds-ink-faint">de {money(row.target)}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-blue-500">Você</p>
-                <p className="font-black text-blue-600">{money(row.ownValue)}</p>
-                <p className="font-medium text-blue-500">{ownShare.toFixed(1)}% do faturado</p>
+                <p className="font-bold text-ds-info">Você</p>
+                <p className="font-black text-ds-info">{money(row.ownValue)}</p>
+                <p className="font-medium text-ds-info">{ownShare.toFixed(1)}% do faturado</p>
               </div>
             </div>
           </div>
@@ -1142,16 +1142,16 @@ function MockGoalDetail() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-pink-100 bg-pink-50/70 p-4">
+      <div className="rounded-ds-card-lg border border-ds-divider bg-ds-accent-soft p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <Badge variant="outline" className="rounded-full border-pink-200 bg-white text-pink-600">Mockup visual</Badge>
+            <Badge variant="outline" className="rounded-full border-ds-divider bg-ds-surface text-ds-accent-ink">Mockup visual</Badge>
             <h3 className="mt-3 text-lg font-black tracking-tight">Meta do quiosque</h3>
-            <p className="text-sm text-muted-foreground">Exemplo de como a meta aparecerá quando houver dados reais.</p>
+            <p className="text-sm text-ds-ink-muted">Exemplo de como a meta aparecerá quando houver dados reais.</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Faixa ativa</p>
-            <p className="text-base font-black text-pink-600">Meta Alvo</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-ink-muted">Faixa ativa</p>
+            <p className="text-base font-black text-ds-accent-ink">Meta Alvo</p>
           </div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -1160,24 +1160,24 @@ function MockGoalDetail() {
             { label: "Semana", value: 6354.5, target: 6548.39 },
             { label: "Mês", value: 12639.5, target: 29000 },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-white px-3 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">{item.label}</p>
+            <div key={item.label} className="rounded-ds-card bg-ds-surface px-3 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-ink-faint">{item.label}</p>
               <p className="mt-1 text-base font-black">{money(item.value)}</p>
-              <p className="text-xs font-semibold text-pink-600">{percent(item.value, item.target).toFixed(1)}% da Meta Alvo</p>
+              <p className="text-xs font-semibold text-ds-accent-ink">{percent(item.value, item.target).toFixed(1)}% da Meta Alvo</p>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="rounded-2xl border p-4">
-        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Sua contribuição diária</p>
-        <div className="mt-3 overflow-hidden rounded-xl border">
+      <div className="rounded-ds-card-lg border border-ds-border p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-ds-ink-muted">Sua contribuição diária</p>
+        <div className="mt-3 overflow-hidden rounded-ds-card border border-ds-border">
           {days.map((day) => (
             <div key={day.label} className="grid grid-cols-[1fr_1fr_1fr_90px] items-center gap-3 border-b px-3 py-2.5 text-xs last:border-b-0">
               <span className="font-bold">{day.label}</span>
-              <span className="text-right text-muted-foreground">Unidade {money(day.total)}</span>
-              <span className="text-right font-black text-blue-600">Você {money(day.own)}</span>
-              <span className="text-right font-semibold text-zinc-500">{day.status}</span>
+              <span className="text-right text-ds-ink-muted">Unidade {money(day.total)}</span>
+              <span className="text-right font-black text-ds-info">Você {money(day.own)}</span>
+              <span className="text-right font-semibold text-ds-ink-muted">{day.status}</span>
             </div>
           ))}
         </div>
@@ -1227,50 +1227,50 @@ function SidebarMetas({
     <Dialog>
       <DialogTrigger asChild>
         <button type="button" className="block w-full text-left">
-          <div className="rounded-2xl border bg-white p-4 shadow-sm transition-colors hover:border-indigo-200 hover:bg-muted/20">
+          <div className="rounded-ds-card-lg border bg-ds-surface p-4 shadow-sm transition-colors hover:border-ds-divider hover:bg-ds-muted">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold">
-                <Flag className="h-4 w-4 text-muted-foreground" />
+                <Flag className="h-4 w-4 text-ds-ink-muted" />
                 Metas
               </div>
-              <span className="inline-flex items-center text-xs font-medium text-indigo-600">
+              <span className="inline-flex items-center text-xs font-medium text-ds-accent-ink">
                 Detalhes
                 <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
               </span>
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-4 text-xs text-muted-foreground">
+              <div className="flex items-center justify-center py-4 text-xs text-ds-ink-muted">
                 <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                 Carregando...
               </div>
             ) : rows.length === 0 && showMockup ? (
               <MockGoalMiniCard />
             ) : rows.length === 0 ? (
-              <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+              <p className="rounded-ds-card border border-ds-border border-dashed bg-ds-muted px-3 py-4 text-sm text-ds-ink-muted">
                 Nenhuma meta ativa vinculada a você no momento.
               </p>
             ) : (
               <div className="space-y-3">
                 {goalUnits.length > 1 ? (
-                  <p className="text-[11px] font-medium text-muted-foreground">
+                  <p className="text-[11px] font-medium text-ds-ink-muted">
                     {kioskName(primary!.goal.kioskId)}
-                    <span className="text-muted-foreground/60"> · +{goalUnits.length - 1} unidade(s)</span>
+                    <span className="text-ds-ink-faint"> · +{goalUnits.length - 1} unidade(s)</span>
                   </p>
                 ) : null}
                 {primaryBonusContext ? (
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+                  <div className="rounded-ds-card border border-ds-divider bg-ds-ok-bg px-3 py-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Sua bonificação estimada</p>
-                        <p className="mt-0.5 text-xs text-emerald-800">{primaryBonusContext.roleLabel}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-ok">Sua bonificação estimada</p>
+                        <p className="mt-0.5 text-xs text-ds-ok">{primaryBonusContext.roleLabel}</p>
                       </div>
-                      <p className="text-base font-black text-emerald-950">
+                      <p className="text-base font-black text-ds-ok">
                         R$ {formatCurrencyBRL(primaryBonusContext.individualBonus)}
                       </p>
                     </div>
                     {primaryBonusContext.collaboratorMessage ? (
-                      <p className="mt-2 text-xs font-semibold text-emerald-800">
+                      <p className="mt-2 text-xs font-semibold text-ds-ok">
                         {primaryBonusContext.collaboratorMessage}
                       </p>
                     ) : null}
@@ -1279,14 +1279,14 @@ function SidebarMetas({
                 {rows.map((row) => (
                   <div key={row.label} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold uppercase tracking-[0.12em] text-muted-foreground">{row.label}</span>
-                      <span className="text-muted-foreground">
+                      <span className="font-semibold uppercase tracking-[0.12em] text-ds-ink-muted">{row.label}</span>
+                      <span className="text-ds-ink-muted">
                         {money(row.value)} / {money(row.target)} ·{" "}
-                        <span className="font-semibold text-foreground">{row.pct.toFixed(0)}%</span>
+                        <span className="font-semibold text-ds-ink">{row.pct.toFixed(0)}%</span>
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-indigo-600" style={{ width: `${Math.min(row.pct, 100)}%` }} />
+                    <div className="h-1.5 overflow-hidden rounded-full bg-ds-muted">
+                      <div className="h-full rounded-full bg-ds-accent" style={{ width: `${Math.min(row.pct, 100)}%` }} />
                     </div>
                   </div>
                 ))}
@@ -1303,14 +1303,14 @@ function SidebarMetas({
         </DialogHeader>
 
         {loading ? (
-          <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex min-h-40 items-center justify-center text-sm text-ds-ink-muted">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Carregando metas...
           </div>
         ) : goalUnits.length === 0 && showMockup ? (
           <MockGoalDetail />
         ) : goalUnits.length === 0 ? (
-          <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+          <div className="rounded-ds-card border border-ds-border border-dashed bg-ds-muted p-6 text-sm text-ds-ink-muted">
             Nenhuma meta ativa vinculada a você no momento.
           </div>
         ) : goalUnits.length === 1 ? (
@@ -1345,7 +1345,7 @@ function SidebarMetas({
         )}
 
         <div className="flex justify-end border-t pt-4">
-          <Button asChild className="bg-indigo-600 text-white hover:bg-indigo-700">
+          <Button asChild className="bg-ds-accent text-white hover:bg-ds-accent-hover">
             <Link href="/dashboard/goals/tracking">
               Acompanhar metas
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -1362,34 +1362,34 @@ function SidebarComunicados({ showMockup }: { showMockup?: boolean }) {
     <SidebarCard
       icon={<Bell className="h-4 w-4" />}
       title="Comunicados"
-      action={showMockup ? <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Mockup</span> : undefined}
+      action={showMockup ? <span className="rounded-full border border-ds-divider bg-ds-warn-bg px-2 py-0.5 text-[10px] font-black text-ds-warn">Mockup</span> : undefined}
     >
       {showMockup ? (
         <div className="space-y-2">
-          <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+          <div className="rounded-ds-card border border-ds-divider bg-ds-accent-soft px-3 py-2.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Operação</p>
-                <p className="mt-0.5 truncate text-xs font-black text-pink-950">Novo padrão de fechamento</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-pink-800">Conferir dinheiro líquido e anexar evidência no fim do turno.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ds-accent-ink">Operação</p>
+                <p className="mt-0.5 truncate text-xs font-black text-ds-accent-ink">Novo padrão de fechamento</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-ds-accent-ink">Conferir dinheiro líquido e anexar evidência no fim do turno.</p>
               </div>
-              <Badge variant="outline" className="shrink-0 rounded-full border-pink-200 bg-white text-[10px] text-pink-600">
+              <Badge variant="outline" className="shrink-0 rounded-full border-ds-divider bg-ds-surface text-[10px] text-ds-accent-ink">
                 Hoje
               </Badge>
             </div>
           </div>
-          <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5">
+          <div className="rounded-ds-card border border-ds-divider bg-ds-surface px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <FileText className="h-3.5 w-3.5 text-ds-ink-muted" />
               <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-zinc-900">Checklist de atendimento atualizado</p>
-                <p className="text-[11px] text-muted-foreground">Leitura rápida · 2 min</p>
+                <p className="truncate text-xs font-bold text-ds-ink">Checklist de atendimento atualizado</p>
+                <p className="text-[11px] text-ds-ink-muted">Leitura rápida · 2 min</p>
               </div>
             </div>
           </div>
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+        <p className="rounded-ds-card border border-ds-border border-dashed bg-ds-muted px-3 py-4 text-sm text-ds-ink-muted">
           Nenhum comunicado para exibir.
         </p>
       )}
@@ -1417,16 +1417,16 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className="group flex min-h-24 items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
+      className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg border bg-ds-surface p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md"
     >
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-ds-card ${tone}`}>
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">{title}</span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{description}</span>
+        <span className="block text-sm font-semibold text-ds-ink">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-ds-ink-muted">{description}</span>
       </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-ds-ink-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ds-accent-ink" />
     </Link>
   );
 }
@@ -1668,9 +1668,9 @@ function CollaboratorDashboardPanelInner() {
             completed={completed}
             action={
               completed ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                <CheckCircle2 className="h-5 w-5 text-ds-ok" />
               ) : (
-                <Button asChild size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">
+                <Button asChild size="sm" className="bg-ds-accent text-white hover:bg-ds-accent-hover">
                   <Link href={`/dashboard/forms/${execution.id}/view`}>Preencher</Link>
                 </Button>
               )
@@ -1690,9 +1690,9 @@ function CollaboratorDashboardPanelInner() {
           <TimelineItem
             type="task"
             time="—"
-            dot="bg-amber-500"
+            dot="bg-ds-warn"
             statusLabel="A fazer"
-            statusClass="text-amber-600"
+            statusClass="text-ds-warn"
             title={task.title}
             meta={task.description}
             action={
@@ -1715,16 +1715,16 @@ function CollaboratorDashboardPanelInner() {
           <TimelineItem
             type="task"
             time="—"
-            dot="bg-amber-500"
+            dot="bg-ds-warn"
             statusLabel="A fazer"
-            statusClass="text-amber-600"
+            statusClass="text-ds-warn"
             title={receipt.title}
             titleHref={receipt.link}
             meta={receipt.description}
             action={
               <Button
                 size="sm"
-                className="bg-indigo-600 text-white hover:bg-indigo-700"
+                className="bg-ds-accent text-white hover:bg-ds-accent-hover"
                 onClick={() => setConfirmingReceipt({ activityId: receipt.activityId, description: receipt.description })}
               >
                 Concluir
@@ -1747,13 +1747,13 @@ function CollaboratorDashboardPanelInner() {
           <TimelineItem
             type="task"
             time={time}
-            dot="bg-emerald-500"
+            dot="bg-ds-ok"
             statusLabel={receipt.hasDivergence ? "Concluído com divergência" : "Concluído"}
-            statusClass={receipt.hasDivergence ? "text-amber-600" : "text-emerald-600"}
+            statusClass={receipt.hasDivergence ? "text-ds-warn" : "text-ds-ok"}
             title={receipt.title}
             meta={`${receipt.description} · Concluído por ${receipt.completedBy}`}
             completed
-            action={<CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+            action={<CheckCircle2 className="h-5 w-5 text-ds-ok" />}
             isLast={isLast}
           />
         ),
@@ -1821,9 +1821,9 @@ function CollaboratorDashboardPanelInner() {
         {/* Left column */}
         <div className="space-y-6">
           {/* Greeting hero */}
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{dateEyebrow}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">{dateEyebrow}</p>
               <LiveClock />
             </div>
             <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
@@ -1833,18 +1833,18 @@ function CollaboratorDashboardPanelInner() {
                 </h2>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
                   {todayShift ? (
-                    <span className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600">
+                    <span className="inline-flex items-center gap-2 text-sm font-medium text-ds-accent-ink">
                       <Clock className="h-4 w-4" />
                       {todayShift.name} · {todayShift.time}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <span className="inline-flex items-center gap-2 text-sm font-medium text-ds-ink-muted">
                       <Clock className="h-4 w-4" />
                       Sem turno hoje
                     </span>
                   )}
                   {todayShift?.unit ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-ds-muted px-2.5 py-1 text-xs font-medium text-ds-ink-muted">
                       <MapPin className="h-3.5 w-3.5" />
                       {todayShift.unit}
                     </span>
@@ -1856,7 +1856,7 @@ function CollaboratorDashboardPanelInner() {
                 <ProgressRing value={routinesDone} total={routinesTotal} done={allDone} />
                 <div className="max-w-[170px]">
                   <p className="font-semibold">{allDone ? "Rotina do dia concluída" : "Rotinas do dia"}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ds-ink-muted">
                     {loadingForms
                       ? "Carregando rotinas..."
                       : allDone
@@ -1879,7 +1879,7 @@ function CollaboratorDashboardPanelInner() {
           {/* Acessos rápidos */}
           {(canViewTechnicalSheets(permissions) || canAccessOwnProfile) ? (
             <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Acessos rápidos</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">Acessos rápidos</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 {canViewTechnicalSheets(permissions) ? (
                   <QuickAccessCard
@@ -1887,7 +1887,7 @@ function CollaboratorDashboardPanelInner() {
                     icon={<BookOpen className="h-5 w-5" />}
                     title="Ficha técnica"
                     description="Produtos e modos de preparo"
-                    tone="bg-pink-50 text-pink-600"
+                    tone="bg-ds-accent-soft text-ds-accent-ink"
                   />
                 ) : null}
                 {canAccessOwnProfile ? (
@@ -1896,7 +1896,7 @@ function CollaboratorDashboardPanelInner() {
                     icon={<UserRound className="h-5 w-5" />}
                     title="Meu perfil"
                     description="Dados pessoais e benefícios"
-                    tone="bg-sky-50 text-sky-600"
+                    tone="bg-ds-info-bg text-ds-info"
                   />
                 ) : null}
                 {canAccessOwnProfile ? (
@@ -1905,7 +1905,7 @@ function CollaboratorDashboardPanelInner() {
                     icon={<FolderOpen className="h-5 w-5" />}
                     title="Meus documentos"
                     description="Contracheques, termos e recibos"
-                    tone="bg-emerald-50 text-emerald-600"
+                    tone="bg-ds-ok-bg text-ds-ok"
                   />
                 ) : null}
               </div>
@@ -1914,18 +1914,18 @@ function CollaboratorDashboardPanelInner() {
 
           {/* Linha do dia */}
           <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Linha do dia</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">Linha do dia</p>
 
             {loadingForms ? (
-              <div className="flex min-h-28 items-center justify-center text-sm text-muted-foreground">
+              <div className="flex min-h-28 items-center justify-center text-sm text-ds-ink-muted">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Carregando rotinas...
               </div>
             ) : formsError ? (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{formsError}</div>
+              <div className="rounded-ds-card border border-ds-danger bg-ds-danger-bg p-4 text-sm text-ds-danger">{formsError}</div>
             ) : timeline.length === 0 ? (
-              <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
-                <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" />
+              <div className="flex min-h-28 items-center justify-center rounded-ds-card border border-ds-border border-dashed text-sm text-ds-ink-muted">
+                <CheckCircle2 className="mr-2 h-4 w-4 text-ds-ok" />
                 Nenhuma rotina para hoje.
               </div>
             ) : (
@@ -1972,7 +1972,7 @@ function CollaboratorDashboardPanelInner() {
             <DialogDescription>{confirmingReceipt.description}</DialogDescription>
           ) : null}
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ds-ink-muted">
           Isso registra <strong>tudo recebido conforme enviado</strong>, sem divergência, e conclui a tarefa.
           Se algo chegou a menos ou a mais, abra a tela de recebimento pelo texto do card para ajustar.
         </p>
@@ -1981,7 +1981,7 @@ function CollaboratorDashboardPanelInner() {
             Cancelar
           </Button>
           <Button
-            className="bg-indigo-600 text-white hover:bg-indigo-700"
+            className="bg-ds-accent text-white hover:bg-ds-accent-hover"
             onClick={handleQuickConfirmReceipt}
             disabled={isConfirmingReceipt}
           >
