@@ -623,9 +623,9 @@ Chamadas candidatas encontradas:
 
 ## `goals`
 
-Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/history/page.tsx`](../../src/app/dashboard/goals/history/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
+Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
 
-Arquivos locais percorridos: 52.
+Arquivos locais percorridos: 57.
 
 Chamadas candidatas encontradas:
 
@@ -652,9 +652,9 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `goals.manage` — [`src/app/dashboard/goals/history/page.tsx`](../../src/app/dashboard/goals/history/page.tsx)
+- `goals.manage` — [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx)
 - `goals.view` — [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx)
-- `settings.manageUsers` — [`src/app/dashboard/goals/history/page.tsx`](../../src/app/dashboard/goals/history/page.tsx)
+- `settings.manageUsers` — [`src/components/goals-history-view.tsx`](../../src/components/goals-history-view.tsx)
 
 ## `help`
 
