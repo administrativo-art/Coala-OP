@@ -50,6 +50,7 @@ api,src/app/api/documents/templates/[id]/source/route.ts,,docs/engineering/flows
 api,src/app/api/documents/templates/[id]/text/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/[id]/workflow/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dashboard/layouts/route.ts,,docs/engineering/flows/platform-home.md,Layouts pessoais do painel por UID; modelos compartilhados somente para administradores; preferencia ativa individual.
 api,src/app/api/dp/bootstrap/route.ts,,docs/engineering/flows/dp-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/natasha/team/route.ts,,docs/engineering/flows/dp-schedules.md,Equipe candidata minima da Natasha; leitura autenticada por unidades com permissao dupla e limites fail-closed; sem escala ou escrita.
 api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Ferias da equipe candidata na competencia e continuidade; leitura autenticada limitada e sem folgas indisponibilidades ou escrita.

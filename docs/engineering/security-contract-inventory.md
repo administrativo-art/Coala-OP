@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **383**
-- Totalmente contratados: **5**
+- Arquivos de rota: **384**
+- Totalmente contratados: **6**
 - Legados congelados: **378**
 - Exceções temporárias: **0**
 - Violações: **0**
@@ -37,6 +37,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/companies/cnpj/[cnpj]` | GET | `LEGACY_BASELINE` | [src/app/api/companies/cnpj/[cnpj]/route.ts](../../src/app/api/companies/cnpj/[cnpj]/route.ts) |
 | `/api/companies/cnpj/[cnpj]/refresh` | POST | `LEGACY_BASELINE` | [src/app/api/companies/cnpj/[cnpj]/refresh/route.ts](../../src/app/api/companies/cnpj/[cnpj]/refresh/route.ts) |
 | `/api/companies/document-signatories` | GET | `LEGACY_BASELINE` | [src/app/api/companies/document-signatories/route.ts](../../src/app/api/companies/document-signatories/route.ts) |
+| `/api/dashboard/layouts` | DELETE ✓, GET ✓, PATCH ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dashboard/layouts/route.ts](../../src/app/api/dashboard/layouts/route.ts) |
 | `/api/documents/collective-agreements` | GET, POST | `LEGACY_BASELINE` | [src/app/api/documents/collective-agreements/route.ts](../../src/app/api/documents/collective-agreements/route.ts) |
 | `/api/documents/collective-agreements/[id]` | PATCH | `LEGACY_BASELINE` | [src/app/api/documents/collective-agreements/[id]/route.ts](../../src/app/api/documents/collective-agreements/[id]/route.ts) |
 | `/api/documents/company` | DELETE, GET, POST | `LEGACY_BASELINE` | [src/app/api/documents/company/route.ts](../../src/app/api/documents/company/route.ts) |
