@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { format } from 'date-fns';
+import { ChevronRight } from 'lucide-react';
 import { ptBR } from 'date-fns/locale';
 
 import { useGoals } from '@/contexts/goals-context';
@@ -11,10 +12,10 @@ import { ControlPanel, ControlIndicator } from '@/components/patterns/control-pa
 import { FilterChips } from '@/components/patterns/filter-chips';
 import { GoalsHistoryView, type GoalsHistoryStatus } from '@/components/goals-history-view';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DarkField, EmptyBox, PanelStat, SectionCard, attainmentTone, darkControlClass, fmtBRL, fmtPct, kickerClass } from '@/components/goals/goals-ui';
+import { DarkField, EmptyBox, HoverHint, PanelStat, SectionCard, attainmentTone, darkControlClass, fmtBRL, fmtPct, kickerClass } from '@/components/goals/goals-ui';
 import { type EmployeeGoal, type GoalPeriodDoc, type GoalType, type GoalPeriod } from '@/types';
 import { getGoalAttainment } from '@/lib/goals-history';
-import { buildEmployeeEarnings, getPeriodBonus, reachedTier, summarizePrizes, type EmployeeEarningsRow } from '@/lib/goals-earnings';
+import { buildEmployeeEarnings, getPeriodBonus, periodMonthKey, reachedTier, summarizePrizes, type EmployeeEarningsRow } from '@/lib/goals-earnings';
 import { useKioskGroups } from '@/hooks/use-kiosk-groups';
 import { getUserDisplayName } from '@/lib/user-display';
 import { cn } from '@/lib/utils';
@@ -107,6 +108,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
   const [filterStatus, setFilterStatus] = useState<GoalsHistoryStatus | null>(null);
   const [filterKioskId, setFilterKioskId] = useState('all');
   const [filterGroupId, setFilterGroupId] = useState<string | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [perfView, setPerfView] = useState<'general' | 'group' | 'unit'>('general');
   const [perfTarget, setPerfTarget] = useState('all');
   const { groups: kioskGroups, groupOf, hasMultipleGroups } = useKioskGroups();
@@ -151,6 +153,13 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
     };
   }, [closedPeriods, employeeGoals]);
 
+  /** Meses cobertos pela análise: deixa claro o que está sendo analisado antes de qualquer filtro. */
+  const coverage = useMemo(() => {
+    const keys = [...new Set(closedPeriods.map(periodMonthKey))].sort();
+    return { keys, first: keys[0], last: keys[keys.length - 1] };
+  }, [closedPeriods]);
+  const hasDateFilter = Boolean(filterDateStart || filterDateEnd);
+
   const monthly = useMemo(() => {
     const groups = new Map<string, GoalPeriodDoc[]>();
     for (const period of closedPeriods) {
@@ -162,9 +171,19 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
       .map(([key, items]) => {
         const target = items.reduce((sum, p) => sum + p.targetValue, 0);
         const revenue = items.reduce((sum, p) => sum + p.currentValue, 0);
-        return { key, count: items.length, target, revenue, pct: target > 0 ? (revenue / target) * 100 : 0, prizeShare: prizeShareOf(items, employeeGoals), ...summarizePrizes(items, employeeGoals) };
+        const byKiosk = new Map<string, GoalPeriodDoc[]>();
+        for (const period of items) byKiosk.set(period.kioskId, [...(byKiosk.get(period.kioskId) ?? []), period]);
+        const units = [...byKiosk.entries()]
+          .map(([kioskId, list]) => {
+            const unitTarget = list.reduce((sum, p) => sum + p.targetValue, 0);
+            const unitRevenue = list.reduce((sum, p) => sum + p.currentValue, 0);
+            return { kioskId, name: getKioskName(kioskId), target: unitTarget, revenue: unitRevenue, pct: unitTarget > 0 ? (unitRevenue / unitTarget) * 100 : 0, ...summarizePrizes(list, employeeGoals) };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        return { key, count: items.length, target, revenue, pct: target > 0 ? (revenue / target) * 100 : 0, units, prizeShare: prizeShareOf(items, employeeGoals), ...summarizePrizes(items, employeeGoals) };
       });
-  }, [closedPeriods, employeeGoals]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedPeriods, employeeGoals, kiosks]);
 
   const kioskRows = useMemo(() => {
     const groups = new Map<string, GoalPeriodDoc[]>();
@@ -174,6 +193,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
         kioskId,
         name: getKioskName(kioskId),
         count: items.length,
+        monthKeys: [...new Set(items.map(periodMonthKey))].sort(),
         avg: items.reduce((sum, p) => sum + getGoalAttainment(p), 0) / items.length,
         best: Math.max(...items.map(getGoalAttainment)),
         hits: items.filter(p => getGoalAttainment(p) >= 100).length,
@@ -189,8 +209,20 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
 
   /** Desempenho dos colaboradores em seções: geral, por grupo ou por unidade (com escolha opcional de um alvo). */
   const performanceSections = useMemo(() => {
-    if (perfView === 'general') return [{ id: 'general', title: 'Todos os colaboradores', rows: earnings }];
-    const sections: { id: string; title: string; rows: EmployeeEarningsRow[] }[] = [];
+    type PerfRow = EmployeeEarningsRow & { groupLabel?: string };
+    if (perfView === 'general') {
+      // Quem atua em unidades de grupos diferentes aparece em uma linha por grupo; dentro de um mesmo grupo o resultado é somado.
+      const perGroup = kioskGroups.map(group => ({
+        group,
+        rows: buildEmployeeEarnings(closedPeriods.filter(p => group.kioskIds.includes(p.kioskId)), employeeGoals),
+      }));
+      const groupsByEmployee = new Map<string, number>();
+      for (const { rows } of perGroup) for (const row of rows) groupsByEmployee.set(row.employeeId, (groupsByEmployee.get(row.employeeId) ?? 0) + 1);
+      const rows: PerfRow[] = perGroup.flatMap(({ group, rows: groupRows }) =>
+        groupRows.map(row => ((groupsByEmployee.get(row.employeeId) ?? 0) > 1 ? { ...row, groupLabel: group.name } : row)));
+      return [{ id: 'general', title: 'Todos os colaboradores', rows }];
+    }
+    const sections: { id: string; title: string; rows: PerfRow[] }[] = [];
     if (perfView === 'group') {
       for (const group of kioskGroups) {
         if (perfTarget !== 'all' && perfTarget !== group.id) continue;
@@ -207,7 +239,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
     }
     return sections;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfView, perfTarget, earnings, kioskGroups, closedPeriods, employeeGoals, kiosks]);
+  }, [perfView, perfTarget, kioskGroups, closedPeriods, employeeGoals, kiosks]);
 
   const perfTargets = useMemo(() => {
     if (perfView === 'group') return kioskGroups.map(group => ({ id: group.id, name: group.name }));
@@ -261,6 +293,11 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
 
         {tab === 'overview' ? (
           <>
+            <p className="mt-4 text-[12.5px] font-bold text-ds-on-dark-2">
+              {coverage.keys.length === 0
+                ? 'Nenhuma meta encerrada no filtro.'
+                : <>Analisando {coverage.keys.length} {coverage.keys.length === 1 ? 'mês' : 'meses'} com metas encerradas: <span className="capitalize">{monthLabel(coverage.first!)}</span>{coverage.first !== coverage.last && <> a <span className="capitalize">{monthLabel(coverage.last!)}</span></>}. {hasDateFilter ? 'Período filtrado abaixo.' : 'Sem filtro de datas: considera todo o histórico.'}</>}
+            </p>
             <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-5">
               <PanelStat
                 label="Realizado"
@@ -335,7 +372,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
         <EmptyBox>Nenhuma meta encerrada encontrada para esses filtros.</EmptyBox>
       ) : (
         <>
-          <SectionCard title="Tendência do atingimento" subtitle="Cada ponto é um mês com metas encerradas (até os últimos 12), somando todos os quiosques do filtro. A linha tracejada é 100% da meta.">
+          <SectionCard title="Tendência do atingimento" subtitle="Cada ponto é um mês com metas encerradas (até os últimos 12), somando as unidades do filtro; a linha tracejada é 100%. Na tabela, clique no mês para ver a meta e o realizado de cada unidade.">
             <TrendChart points={monthly.slice(-12).map(row => ({ key: row.key, pct: row.pct }))} />
             <div className="overflow-x-auto border-t border-ds-divider">
               <table className="w-full min-w-[640px] text-left text-[13px]">
@@ -351,17 +388,44 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                   </tr>
                 </thead>
                 <tbody>
-                  {monthly.map(row => (
-                    <tr key={row.key} className="border-t border-ds-divider">
-                      <td className="px-5 py-2.5 font-extrabold capitalize text-ds-ink">{monthLabel(row.key)}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.count}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-muted">{fmtBRL(row.target)}</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-ds-ink">{fmtBRL(row.revenue)}</td>
-                      <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.pct))}>{fmtPct(row.pct)}</td>
-                      <td className="px-3 py-2.5 text-right font-extrabold text-ds-ok">{row.apuratedCount > 0 ? fmtBRL(row.totalPrize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
-                      <td className="px-5 py-2.5 text-right font-semibold text-ds-ink-2">{row.prizeShare === null ? '—' : fmtPct(row.prizeShare)}</td>
-                    </tr>
-                  ))}
+                  {monthly.map(row => {
+                    const open = expandedMonths.has(row.key);
+                    return (
+                      <Fragment key={row.key}>
+                        <tr className="border-t border-ds-divider">
+                          <td className="px-5 py-2.5 font-extrabold capitalize text-ds-ink">
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              aria-label={`${open ? 'Recolher' : 'Expandir'} unidades de ${monthLabel(row.key)}`}
+                              onClick={() => setExpandedMonths(prev => { const next = new Set(prev); if (next.has(row.key)) next.delete(row.key); else next.add(row.key); return next; })}
+                              className="inline-flex items-center gap-1.5 rounded-ds-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                            >
+                              <ChevronRight aria-hidden="true" className={cn('h-4 w-4 text-ds-ink-faint transition-transform motion-reduce:transition-none', open && 'rotate-90')} />
+                              {monthLabel(row.key)}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.count}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-muted">{fmtBRL(row.target)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-ds-ink">{fmtBRL(row.revenue)}</td>
+                          <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.pct))}>{fmtPct(row.pct)}</td>
+                          <td className="px-3 py-2.5 text-right font-extrabold text-ds-ok">{(row.apuratedCount + row.calculatedCount) > 0 ? fmtBRL(row.totalPrize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
+                          <td className="px-5 py-2.5 text-right font-semibold text-ds-ink-2">{row.prizeShare === null ? '—' : fmtPct(row.prizeShare)}</td>
+                        </tr>
+                        {open && row.units.map(unit => (
+                          <tr key={unit.kioskId} className="border-t border-ds-divider bg-ds-warm">
+                            <td className="py-2 pl-12 pr-3 text-[12.5px] font-bold text-ds-ink-2">{unit.name}</td>
+                            <td className="px-3 py-2 text-right text-[12.5px] font-semibold text-ds-ink-muted">1</td>
+                            <td className="px-3 py-2 text-right text-[12.5px] font-semibold text-ds-ink-muted">{fmtBRL(unit.target)}</td>
+                            <td className="px-3 py-2 text-right text-[12.5px] font-bold text-ds-ink">{fmtBRL(unit.revenue)}</td>
+                            <td className={cn('px-3 py-2 text-right text-[12.5px] font-extrabold', attainmentTone(unit.pct))}>{fmtPct(unit.pct)}</td>
+                            <td className="px-3 py-2 text-right text-[12.5px] font-extrabold text-ds-ok">{(unit.apuratedCount + unit.calculatedCount) > 0 ? fmtBRL(unit.totalPrize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
+                            <td className="px-5 py-2" />
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -376,7 +440,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[14px] font-extrabold text-ds-ink">{item.name}</div>
-                        <div className="text-[12px] font-semibold text-ds-ink-muted">{item.count} meta(s) encerrada(s) · melhor {fmtPct(item.best, 0)}</div>
+                        <div className="text-[12px] font-semibold text-ds-ink-muted">{item.count} meta(s) encerrada(s)<HoverHint label={`Meses das metas de ${item.name}`}>{item.monthKeys.map(monthLabel).join(', ')}</HoverHint> · melhor {fmtPct(item.best, 0)}</div>
                       </div>
                       <div className="text-right">
                         <div className={cn('text-[22px] font-extrabold leading-none', attainmentTone(item.avg))}>{fmtPct(item.avg, 0)}</div>
@@ -400,7 +464,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
 
           <SectionCard
             title="Desempenho dos colaboradores"
-            subtitle="Atingimento individual e tendência. Valores pagos ficam na aba Fechamentos."
+            subtitle="Atingimento individual e tendência. Em Geral e Por grupo o resultado soma as unidades do mesmo grupo; quem atua em grupos diferentes aparece separado por grupo. Valores pagos ficam na aba Fechamentos."
             action={(
               <div className="flex flex-wrap items-center gap-2">
                 <div role="radiogroup" aria-label="Agrupar desempenho" className="inline-flex rounded-[11px] bg-ds-seg p-[3px]">
@@ -462,9 +526,15 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                             <tr key={row.employeeId} className="border-t border-ds-divider">
                               <td className="px-5 py-2.5">
                                 <div className="font-extrabold text-ds-ink">{getUserName(row.employeeId)}</div>
-                                <div className="text-[12px] font-semibold text-ds-ink-muted">{row.role ? roleLabels[row.role] : '—'} · {row.kioskIds.map(getKioskName).join(', ')}</div>
+                                <div className="text-[12px] font-semibold text-ds-ink-muted">
+                                  {row.role ? roleLabels[row.role] : '—'} · {row.kioskIds.map(getKioskName).join(', ')}
+                                  {'groupLabel' in row && row.groupLabel && <span className="ml-2 rounded-ds-pill bg-ds-info-bg px-2 py-0.5 text-[11px] font-bold text-ds-info">Grupo {row.groupLabel}</span>}
+                                </div>
                               </td>
-                              <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.periodCount}</td>
+                              <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">
+                                {row.periodCount}
+                                <HoverHint label={`Meses das metas de ${getUserName(row.employeeId)}`}>{row.monthKeys.map(monthLabel).join(', ') || '—'}</HoverHint>
+                              </td>
                               <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.avgAttainment))}>{fmtPct(row.avgAttainment)}</td>
                               <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{fmtPct(row.bestAttainment, 0)}</td>
                               <td className="px-5 py-2.5 text-right font-extrabold">

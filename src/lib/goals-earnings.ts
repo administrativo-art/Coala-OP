@@ -2,6 +2,13 @@ import type { EmployeeGoal, GoalClosureBonusSnapshot, GoalParticipantRole, GoalP
 import { buildGoalClosureBonusSnapshot } from '@/lib/goal-bonus-snapshot';
 import { getGoalPeriodResolvedDayCount } from '@/lib/goals-history';
 
+/** Mês (`yyyy-MM`) em que o período começa. */
+export function periodMonthKey(period: Pick<GoalPeriodDoc, 'startDate'>): string {
+  const date = period.startDate?.toDate?.();
+  if (!date) return '0000-00';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export interface PeriodBonus {
   bonus: GoalClosureBonusSnapshot;
   /** `true` quando não havia apuração gravada e o valor foi calculado agora pela regra do método. */
@@ -48,6 +55,8 @@ export interface EmployeeEarningsRow {
   bestAttainment: number;
   role: GoalParticipantRole | null;
   kioskIds: string[];
+  /** Meses (`yyyy-MM`) das metas encerradas em que a pessoa participou, em ordem. */
+  monthKeys: string[];
   /** Pontos percentuais: média das últimas 3 metas menos a média das 3 anteriores. Nulo com menos de 4 metas. */
   trend: number | null;
 }
@@ -60,7 +69,7 @@ export interface EmployeeEarningsRow {
 export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: EmployeeGoal[]): EmployeeEarningsRow[] {
   const closed = new Map(periods.filter(period => period.status === 'closed').map(period => [period.id, period]));
   const byEmployee = new Map<string, {
-    perPeriod: Map<string, { revenue: number; target: number; endsAt: number }>;
+    perPeriod: Map<string, { revenue: number; target: number; endsAt: number; monthKey: string }>;
     prize: number;
     prizeCalculated: number;
     prizedPeriods: Set<string>;
@@ -76,7 +85,7 @@ export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: E
       entry = { perPeriod: new Map(), prize: 0, prizeCalculated: 0, prizedPeriods: new Set(), role: null, kioskIds: new Set() };
       byEmployee.set(goal.employeeId, entry);
     }
-    const slot = entry.perPeriod.get(period.id) ?? { revenue: 0, target: 0, endsAt: period.endDate?.toDate?.()?.getTime?.() ?? 0 };
+    const slot = entry.perPeriod.get(period.id) ?? { revenue: 0, target: 0, endsAt: period.endDate?.toDate?.()?.getTime?.() ?? 0, monthKey: periodMonthKey(period) };
     slot.revenue += goal.currentValue ?? 0;
     slot.target += goal.targetValue ?? 0;
     entry.perPeriod.set(period.id, slot);
@@ -112,6 +121,7 @@ export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: E
         bestAttainment: attainments.length ? Math.max(...attainments) : 0,
         role: entry.role,
         kioskIds: [...entry.kioskIds],
+        monthKeys: [...new Set([...entry.perPeriod.values()].map(slot => slot.monthKey))].sort(),
         trend: computeTrend([...entry.perPeriod.values()].sort((a, b) => a.endsAt - b.endsAt).map(slot => (slot.target > 0 ? (slot.revenue / slot.target) * 100 : 0))),
       };
     })

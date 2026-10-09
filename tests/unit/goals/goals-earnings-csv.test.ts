@@ -6,7 +6,7 @@ import type { EmployeeEarningsRow } from '../../../src/lib/goals-earnings';
 
 const row = (employeeId: string, prize: number): EmployeeEarningsRow => ({
   employeeId, periodCount: 2, prizedPeriodCount: 2, revenue: 1234.5, target: 1000, prize,
-  avgAttainment: 123.456, bestAttainment: 130, role: 'fixed', kioskIds: ['k1', 'k2'], trend: null, prizeCalculated: 0,
+  avgAttainment: 123.456, bestAttainment: 130, role: 'fixed', kioskIds: ['k1', 'k2'], trend: null, prizeCalculated: 0, monthKeys: [],
 });
 
 test('gera CSV por grupo e unidade, com BOM, separador ; e vírgula decimal', () => {
