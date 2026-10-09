@@ -28,9 +28,9 @@ function BillingAlertNotice({ alert, provider }: { alert: BillingAlert; provider
 }
 
 /** Cartão de seção: título, apoio e conteúdo, no padrão do guia. */
-function Section({ title, description, aside, children }: { title: string; description?: string; aside?: React.ReactNode; children: React.ReactNode }) {
+function Section({ id, title, description, aside, children }: { id?: string; title: string; description?: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-5">
+    <section id={id} className="scroll-mt-24 rounded-ds-card-lg border border-ds-border bg-ds-surface p-5">
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-extrabold">{title}</h2>
@@ -79,6 +79,19 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(
     new Date(year, month - 1, day),
   );
+}
+
+function formatLongDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric" }).format(
+    new Date(year, month - 1, day),
+  );
+}
+
+function formatPercent(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "Não disponível";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
 
 function OpenAiSetupNotice({ configured }: { configured: boolean }) {
@@ -247,41 +260,172 @@ function GoogleQueryEstimate({ overview }: { overview: AppCostOverview }) {
 
 function AppCostsView({ overview }: { overview: AppCostOverview }) {
   const last30Daily = useMemo(() => overview.costs.daily.slice(-30), [overview.costs.daily]);
-  const maximum = Math.max(...last30Daily.map((entry) => Math.abs(entry.cost)), 0);
+  const coverageIncomplete = overview.coverage.status === "empty" || overview.coverage.status === "backfilling";
+  const currentCoverage = overview.coverage.status === "current";
+  const monthlyChart = useMemo(() => {
+    const latestDate = overview.coverage.lastUsageDate ?? last30Daily.at(-1)?.date;
+    if (!latestDate) return [];
+    const [year, month, lastDay] = latestDate.split("-").map(Number);
+    if (!year || !month || !lastDay) return [];
+    const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+    const costsByDay = new Map(
+      overview.costs.daily
+        .filter((entry) => entry.date.startsWith(monthPrefix))
+        .map((entry) => [Number(entry.date.slice(-2)), entry.cost]),
+    );
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const actualTotal = Array.from({ length: lastDay }, (_, index) => costsByDay.get(index + 1) ?? 0)
+      .reduce((total, value) => total + value, 0);
+    const dailyAverage = lastDay ? actualTotal / lastDay : 0;
+    let cumulative = 0;
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const projected = day > lastDay;
+      if (!projected) cumulative += costsByDay.get(day) ?? 0;
+      const value = projected
+        ? currentCoverage ? actualTotal + dailyAverage * (day - lastDay) : null
+        : cumulative;
+      return {
+        date: `${monthPrefix}${String(day).padStart(2, "0")}`,
+        day,
+        projected,
+        value,
+      };
+    });
+  }, [currentCoverage, last30Daily, overview.costs.daily, overview.coverage.lastUsageDate]);
+  const chartMaximum = Math.max(...monthlyChart.map((entry) => Math.abs(entry.value ?? 0)), 0);
+  const projectedMonth = useMemo(() => {
+    if (!currentCoverage || overview.costs.currentMonth === null || !overview.coverage.lastUsageDate) return null;
+    const [year, month, elapsedDays] = overview.coverage.lastUsageDate.split("-").map(Number);
+    if (!year || !month || !elapsedDays) return null;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return (overview.costs.currentMonth / elapsedDays) * daysInMonth;
+  }, [currentCoverage, overview.costs.currentMonth, overview.coverage.lastUsageDate]);
+  const projectedChange = projectedMonth !== null && overview.costs.previousMonth
+    ? ((projectedMonth - overview.costs.previousMonth) / Math.abs(overview.costs.previousMonth)) * 100
+    : null;
+  const coverageLabel = currentCoverage ? "Atualizado" : coverageIncomplete ? "Em preenchimento" : "Indisponível";
+  const coverageVariant = currentCoverage ? "ok" : coverageIncomplete ? "warn" : "neutral";
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatTile className="ring-1 ring-ds-accent-ink" label="Custo líquido no mês" value={monoValue(formatCurrency(overview.costs.currentMonth, overview.currency))} hint={`Bruto de ${formatCurrency(overview.costs.grossCurrentMonth, overview.currency)}, após créditos.`} />
-        <StatTile label="Mês anterior" value={monoValue(formatCurrency(overview.costs.previousMonth, overview.currency))} hint="Custo líquido consolidado do mês anterior." />
-        <StatTile label="Últimos 30 dias" value={monoValue(formatCurrency(overview.costs.last30Days, overview.currency))} hint="Janela móvel até a última exportação." />
-        <StatTile label="Créditos e descontos" value={monoValue(formatCurrency(Math.abs(overview.costs.creditsCurrentMonth || 0), overview.currency))} hint="Créditos abatidos do custo bruto neste mês." />
-      </div>
+      {coverageIncomplete ? (
+        <Alert tone="warn" title="Export do projeto ainda em preenchimento">
+          {overview.coverage.lastUsageDate
+            ? <>O BigQuery contém dados somente até <strong>{formatDate(overview.coverage.lastUsageDate)}</strong>; o esperado é alcançar pelo menos <strong>{formatDate(overview.coverage.expectedThroughDate)}</strong>. Os totais ficam indisponíveis para não exibir um zero ou valor parcial como consolidado.</>
+            : "A tabela existe, mas ainda não recebeu dias de uso deste projeto. Os totais serão liberados automaticamente quando o preenchimento avançar."}
+          <span className="mt-1 block">Escopo mantido exclusivamente no projeto <strong>{overview.projectId}</strong>; outros projetos da conta de faturamento não são incluídos.</span>
+        </Alert>
+      ) : null}
 
-      <GoogleQueryEstimate overview={overview} />
+      <nav aria-label="Seções do relatório de custos" className="flex gap-2 overflow-x-auto pb-1">
+        {[
+          ["#google-cost-summary", "Resumo do projeto"],
+          ["#google-cost-daily", "Custo diário"],
+          ["#google-cost-services", "Serviços"],
+          ["#google-cost-skus", "SKUs"],
+        ].map(([href, label], index) => (
+          <Button key={href} asChild variant="ds-secondary" size="sm" className={cn("shrink-0", index === 0 && "border-ds-accent-ink bg-ds-accent-row text-ds-ink")}>
+            <a href={href} aria-current={index === 0 ? "location" : undefined}>{label}</a>
+          </Button>
+        ))}
+      </nav>
 
-      <Section title="Custo diário" description="Custo líquido diário do projeto Firebase no Google Cloud." aside={<StatusPill variant="neutral">{overview.currency}</StatusPill>}>
-        {last30Daily.length ? (
-          <div className="flex h-52 items-end gap-1 overflow-hidden rounded-ds-btn-lg border border-ds-border bg-ds-warm px-3 pb-8 pt-4" role="img" aria-label="Custo líquido diário dos últimos 30 dias">
-            {last30Daily.map((entry, index) => (
-              <div key={entry.date} className="group relative flex h-full min-w-0 flex-1 items-end" title={`${formatDate(entry.date)}: ${formatCurrency(entry.cost, overview.currency)}`}>
-                <div
-                  className="w-full min-w-[3px] rounded-t bg-ds-accent transition-colors group-hover:bg-ds-accent-ink motion-reduce:transition-none"
-                  style={{ height: maximum ? `${Math.max(2, (Math.abs(entry.cost) / maximum) * 100)}%` : "2%" }}
-                />
-                {(index === 0 || index === last30Daily.length - 1 || index % 7 === 0) ? (
-                  <span className="absolute left-1/2 top-[calc(100%+0.35rem)] -translate-x-1/2 whitespace-nowrap font-ds-mono text-[10px] text-ds-ink-muted">{formatDate(entry.date)}</span>
-                ) : null}
-              </div>
-            ))}
+      <Section
+        id="google-cost-summary"
+        title="Resumo do projeto"
+        description={`Custos do Google Cloud atribuídos exclusivamente a ${overview.projectId}.`}
+        aside={<StatusPill variant={coverageVariant}>{coverageLabel}</StatusPill>}
+      >
+        <div className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-warm">
+          <div className="grid gap-px bg-ds-border lg:grid-cols-[1.35fr_1fr_1fr]">
+            <div className="bg-ds-surface p-5 sm:p-6">
+              <p className="text-xs font-extrabold uppercase tracking-wide text-ds-ink-muted">Custo líquido neste mês</p>
+              <p className="mt-2 font-ds-mono text-3xl font-bold tracking-tight text-ds-ink">{formatCurrency(overview.costs.currentMonth, overview.currency)}</p>
+              <p className="mt-2 text-xs leading-relaxed text-ds-ink-muted">
+                {overview.coverage.lastUsageDate
+                  ? `Dados exportados até ${formatLongDate(overview.coverage.lastUsageDate)}.`
+                  : "Nenhum dia de uso deste projeto foi exportado ainda."}
+              </p>
+            </div>
+            <div className="bg-ds-surface p-5 sm:p-6">
+              <p className="text-xs font-extrabold uppercase tracking-wide text-ds-ink-muted">Projeção para o mês</p>
+              <p className="mt-2 font-ds-mono text-2xl font-bold text-ds-ink">{formatCurrency(projectedMonth, overview.currency)}</p>
+              <p className="mt-2 text-xs text-ds-ink-muted">{projectedMonth === null ? "Disponível quando a exportação alcançar a data esperada." : `${formatPercent(projectedChange)} em relação ao mês anterior.`}</p>
+            </div>
+            <div className="bg-ds-surface p-5 sm:p-6">
+              <p className="text-xs font-extrabold uppercase tracking-wide text-ds-ink-muted">Mês anterior</p>
+              <p className="mt-2 font-ds-mono text-2xl font-bold text-ds-ink">{formatCurrency(overview.costs.previousMonth, overview.currency)}</p>
+              <p className="mt-2 text-xs text-ds-ink-muted">Custo líquido consolidado pelo export.</p>
+            </div>
           </div>
+          <div className="grid gap-3 border-t border-ds-border p-4 sm:grid-cols-3">
+            <div><p className="text-[11px] font-bold uppercase text-ds-ink-muted">Custo bruto</p><p className="mt-1 font-ds-mono text-sm font-bold">{formatCurrency(overview.costs.grossCurrentMonth, overview.currency)}</p></div>
+            <div><p className="text-[11px] font-bold uppercase text-ds-ink-muted">Créditos e descontos</p><p className="mt-1 font-ds-mono text-sm font-bold">{formatCurrency(overview.costs.creditsCurrentMonth === null ? null : Math.abs(overview.costs.creditsCurrentMonth), overview.currency)}</p></div>
+            <div><p className="text-[11px] font-bold uppercase text-ds-ink-muted">Últimos 30 dias</p><p className="mt-1 font-ds-mono text-sm font-bold">{formatCurrency(overview.costs.last30Days, overview.currency)}</p></div>
+          </div>
+        </div>
+
+      </Section>
+
+      <Section id="google-cost-daily" title="Custo acumulado no mês" description="Realizado e projeção pelo ritmo médio do projeto, sem incluir Getaloo ou outros projetos." aside={<StatusPill variant="neutral">{overview.currency}</StatusPill>}>
+        {monthlyChart.some((entry) => entry.value !== null) ? (
+          <>
+            <div className="flex h-72 items-end gap-1 overflow-hidden rounded-ds-btn-lg border border-ds-border bg-ds-warm px-3 pb-8 pt-5" role="img" aria-label="Custo acumulado do projeto no mês">
+              {monthlyChart.map((entry) => (
+                <div key={entry.date} className="group relative flex h-full min-w-0 flex-1 items-end" title={`${formatDate(entry.date)}: ${formatCurrency(entry.value, overview.currency)}${entry.projected ? " (projeção)" : ""}`}>
+                  {entry.value !== null ? (
+                    <div
+                      className={cn("w-full min-w-[3px] rounded-t transition-colors motion-reduce:transition-none", entry.projected ? "bg-ds-border-input group-hover:bg-ds-ink-muted" : "bg-ds-accent group-hover:bg-ds-accent-ink")}
+                      style={{ height: chartMaximum ? `${Math.max(2, (Math.abs(entry.value) / chartMaximum) * 100)}%` : "2%" }}
+                    />
+                  ) : null}
+                  {(entry.day === 1 || entry.day === monthlyChart.length || entry.day % 5 === 0) ? (
+                    <span className="absolute left-1/2 top-[calc(100%+0.4rem)] -translate-x-1/2 whitespace-nowrap font-ds-mono text-[10px] text-ds-ink-muted">{entry.day}</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-xs text-ds-ink-muted">
+              <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-sm bg-ds-accent" />Custo acumulado exportado</span>
+              {currentCoverage ? <span className="inline-flex items-center gap-2"><span className="size-2.5 rounded-sm bg-ds-border-input" />Estimativa até o fim do mês</span> : null}
+            </div>
+
+            <div className="mt-5 overflow-x-auto rounded-ds-card border border-ds-border">
+              <table className="w-full min-w-[760px] text-left text-xs">
+                <thead className="bg-ds-warm text-[11px] uppercase tracking-wide text-ds-ink-muted">
+                  <tr>
+                    <th className="px-4 py-3 font-extrabold">Projeto</th>
+                    <th className="px-4 py-3 font-extrabold">ID do projeto</th>
+                    <th className="px-4 py-3 text-right font-extrabold">Custo bruto</th>
+                    <th className="px-4 py-3 text-right font-extrabold">Créditos</th>
+                    <th className="px-4 py-3 text-right font-extrabold">Custo líquido</th>
+                    <th className="px-4 py-3 font-extrabold">Cobertura</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-ds-border bg-ds-surface">
+                    <td className="px-4 py-4 font-bold text-ds-ink"><span aria-hidden className="mr-2 inline-block size-2 rounded-full bg-ds-accent-ink" />Coala ERP Estoque</td>
+                    <td className="px-4 py-4 font-ds-mono text-ds-ink-muted">{overview.projectId}</td>
+                    <td className="px-4 py-4 text-right font-ds-mono font-bold">{formatCurrency(overview.costs.grossCurrentMonth, overview.currency)}</td>
+                    <td className="px-4 py-4 text-right font-ds-mono font-bold">{formatCurrency(overview.costs.creditsCurrentMonth === null ? null : Math.abs(overview.costs.creditsCurrentMonth), overview.currency)}</td>
+                    <td className="px-4 py-4 text-right font-ds-mono font-bold">{formatCurrency(overview.costs.currentMonth, overview.currency)}</td>
+                    <td className="px-4 py-4"><StatusPill variant={coverageVariant}>{coverageLabel}</StatusPill></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-ds-ink-muted">Esta visão não soma outros projetos da conta de faturamento. O projeto Getaloo permanece fora deste painel.</p>
+          </>
         ) : (
           <p className="rounded-ds-btn-lg border border-dashed border-ds-border-input p-8 text-center text-sm text-ds-ink-muted">Nenhum custo diário foi retornado.</p>
         )}
       </Section>
 
+      <GoogleQueryEstimate overview={overview} />
+
       <div className="grid gap-5 xl:grid-cols-2">
-        <AppCostBreakdownList title="Por serviço" description="Firestore, App Hosting, Cloud Run, Storage e demais serviços vinculados." values={overview.costs.byService} currency={overview.currency} />
-        <AppCostBreakdownList title="Por SKU" description="Itens específicos que formam o custo de cada serviço Google Cloud." values={overview.costs.bySku} currency={overview.currency} />
+        <div id="google-cost-services" className="scroll-mt-24"><AppCostBreakdownList title="Por serviço" description="Firestore, App Hosting, Cloud Run, Storage e demais serviços vinculados." values={overview.costs.byService} currency={overview.currency} /></div>
+        <div id="google-cost-skus" className="scroll-mt-24"><AppCostBreakdownList title="Por SKU" description="Itens específicos que formam o custo de cada serviço Google Cloud." values={overview.costs.bySku} currency={overview.currency} /></div>
       </div>
     </div>
   );
@@ -337,7 +481,7 @@ export function AiBillingSettings({ view }: AiBillingSettingsProps) {
 
   const isAppCost = overview.provider === "google_cloud_billing";
   const scopeLabel = isAppCost
-    ? `Projeto: ${overview.projectId}`
+    ? `Somente o projeto: ${overview.projectId}`
     : `Escopo: ${overview.scope.type === "project" ? "projeto OpenAI" : "organização OpenAI"}`;
 
   const generatedAtLabel = formatBillingGeneratedAt(overview.generatedAt);
