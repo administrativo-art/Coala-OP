@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **383 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **384 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -59,6 +59,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/companies/cnpj/[cnpj]` | GET | [src/app/api/companies/cnpj/[cnpj]/route.ts](../../src/app/api/companies/cnpj/%5Bcnpj%5D/route.ts) | [registry](flows/registry.md) |
 | `/api/companies/cnpj/[cnpj]/refresh` | POST | [src/app/api/companies/cnpj/[cnpj]/refresh/route.ts](../../src/app/api/companies/cnpj/%5Bcnpj%5D/refresh/route.ts) | [registry](flows/registry.md) |
 | `/api/companies/document-signatories` | GET | [src/app/api/companies/document-signatories/route.ts](../../src/app/api/companies/document-signatories/route.ts) | [document-generation](flows/document-generation.md) |
+| `/api/dashboard/layouts` | GET, PUT, PATCH, DELETE | [src/app/api/dashboard/layouts/route.ts](../../src/app/api/dashboard/layouts/route.ts) | [platform-home](flows/platform-home.md) |
 | `/api/documents/collective-agreements` | GET, POST | [src/app/api/documents/collective-agreements/route.ts](../../src/app/api/documents/collective-agreements/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/collective-agreements/[id]` | PATCH | [src/app/api/documents/collective-agreements/[id]/route.ts](../../src/app/api/documents/collective-agreements/%5Bid%5D/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company` | GET, POST, DELETE | [src/app/api/documents/company/route.ts](../../src/app/api/documents/company/route.ts) | [company-documents](flows/company-documents.md) |

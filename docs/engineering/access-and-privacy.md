@@ -1,5 +1,9 @@
 # Acesso, privacidade e entradas compartilhadas
 
+## Painel de gestão personalizado
+
+Os layouts do painel de gestão são gravados somente pela API autenticada em `managementDashboardLayouts`; o cliente não acessa essa coleção diretamente. Painéis pessoais usam o UID verificado no token como `ownerId`, são listados apenas para o próprio UID e não podem ser alterados ou excluídos por outro usuário, inclusive por chamada direta com um ID conhecido. A seleção ativa fica em `managementDashboardPreferences/{uid}`. Modelos `shared` ou `template` podem ser publicados apenas por administrador padrão ou perfil com `settings.manageProfiles`; a personalização sempre gera uma cópia `personal` antes da gravação.
+
 ## Contrato estrutural das APIs
 
 Rotas novas ou qualquer arquivo de rota alterado passam a declarar identidade, autorização, escopo, entrada, efeitos, auditoria e exposição de erros pelo [contrato executável de segurança](security-contract.md). O gate preserva as rotas legadas intactas por hash para permitir migração progressiva; isso não valida os controles existentes nem altera seu comportamento. Nesta entrega de infraestrutura, nenhuma rota foi migrada e nenhum achado de segurança foi corrigido.
