@@ -1,79 +1,50 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  AlertCircle, ChevronDown, ChevronRight, GripVertical, Info, Loader2, MoreHorizontal, PlusCircle, X,
-} from "lucide-react";
-import {
-  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove,
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useToast } from "@/hooks/use-toast";
+import { X } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
+import { CadastrosHero, EmptyResults, ListShell, ListSkeleton, SoftPill } from "@/components/cadastros/cadastros-ui";
+import { Field, fieldInputClass } from "@/components/patterns/field";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { errorMessageOf, PanelErrorNote, PanelFormFooter, PanelSelectField, PanelSwitchRow } from "@/components/patterns/panel-form";
+import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-// ── constants ─────────────────────────────────────────────────────────────────
-
-const DRE_POSITIONS = [
-  { value: "impostos_deducoes",       label: "Impostos e deduções" },
-  { value: "custos_variaveis",        label: "Custos variáveis" },
-  { value: "pessoal",                 label: "Pessoal" },
-  { value: "despesas_operacionais",   label: "Despesas operacionais" },
-  { value: "ocupacao",                label: "Ocupação" },
-  { value: "despesas_financeiras",    label: "Despesas financeiras" },
-  { value: "receita_financeira",      label: "Receita financeira" },
-  { value: "receita_nao_operacional", label: "Receita não operacional" },
-  { value: "despesa_nao_operacional", label: "Despesa não operacional" },
-  { value: "impostos_resultado",      label: "IR / CSLL" },
-] as const;
-
-const DRE_POS_COLORS: Record<string, string> = {
-  impostos_deducoes:       "text-red-700 bg-red-50 border-red-200",
-  custos_variaveis:        "text-orange-700 bg-orange-50 border-orange-200",
-  pessoal:                 "text-blue-700 bg-blue-50 border-blue-200",
-  despesas_operacionais:   "text-purple-700 bg-purple-50 border-purple-200",
-  ocupacao:                "text-indigo-700 bg-indigo-50 border-indigo-200",
-  despesas_financeiras:    "text-rose-700 bg-rose-50 border-rose-200",
-  receita_financeira:      "text-teal-700 bg-teal-50 border-teal-200",
-  receita_nao_operacional: "text-slate-700 bg-slate-50 border-slate-200",
-  despesa_nao_operacional: "text-slate-700 bg-slate-50 border-slate-200",
-  impostos_resultado:      "text-amber-700 bg-amber-50 border-amber-200",
-};
-
-const GROUP_COLORS = [
-  "#22c55e","#3b82f6","#8b5cf6","#eab308",
-  "#ef4444","#ec4899","#14b8a6","#f97316",
-];
-
-// ── types & schema ────────────────────────────────────────────────────────────
+import {
+  buildPlanTree,
+  collectDescendantIds,
+  DRE_POSITIONS,
+  dreLabel,
+  flattenPlan,
+  matchesFinanceQuery,
+  normalizeFinanceText,
+  summarizePlan,
+  type PlanNode,
+} from "./settings-model";
 
 type Account = {
   id: string;
@@ -86,11 +57,15 @@ type Account = {
   order?: number;
   active?: boolean;
   isGroup?: boolean;
-  children?: Account[];
 };
 
+type PanelState =
+  | { mode: "view"; item: Account; number: string }
+  | { mode: "edit"; item: Account; number: string }
+  | { mode: "create"; parentId: string | null };
+
 const accountFormSchema = z.object({
-  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres."),
+  name: z.string().trim().min(2, "Nome deve ter pelo menos 2 caracteres."),
   description: z.string().optional(),
   parentId: z.string().nullable().optional(),
   includeInDre: z.boolean(),
@@ -99,40 +74,12 @@ const accountFormSchema = z.object({
 });
 type AccountFormValues = z.infer<typeof accountFormSchema>;
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+type SavePayload = { values: AccountFormValues; searchTerms: string[] };
 
-function buildTree(items: Account[], parentId: string | null = null): Account[] {
-  return items
-    .filter((item) => (item.parentId ?? null) === parentId)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((item) => ({ ...item, children: buildTree(items, item.id) }));
-}
-
-function collectDescendantIds(items: Account[], parentId: string): Set<string> {
-  const result = new Set<string>();
-  const visit = (id: string) => {
-    items
-      .filter((item) => item.parentId === id)
-      .forEach((child) => {
-        if (result.has(child.id)) return;
-        result.add(child.id);
-        visit(child.id);
-      });
-  };
-  visit(parentId);
-  return result;
-}
-
-async function apiRequest(
-  method: "POST" | "PATCH" | "DELETE",
-  body?: unknown,
-  queryId?: string
-) {
+async function apiRequest(method: "POST" | "PATCH" | "DELETE", body?: unknown, queryId?: string) {
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error("Não autenticado.");
-  const url = queryId
-    ? `/api/financial/accounts?id=${queryId}`
-    : "/api/financial/accounts";
+  const url = queryId ? `/api/financial/accounts?id=${queryId}` : "/api/financial/accounts";
   const res = await fetchWithTimeout(url, {
     method,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -145,8 +92,8 @@ async function apiRequest(
 
 async function persistOrder(ids: string[]) {
   const token = await auth.currentUser?.getIdToken();
-  if (!token) return;
-  await Promise.all(
+  if (!token) throw new Error("Não autenticado.");
+  const responses = await Promise.all(
     ids.map((id, index) =>
       fetchWithTimeout("/api/financial/accounts", {
         method: "PATCH",
@@ -155,752 +102,578 @@ async function persistOrder(ids: string[]) {
       })
     )
   );
+  if (responses.some((response) => !response.ok)) throw new Error("Não foi possível salvar a nova ordem.");
 }
 
-function DreBadge({ position, isPatrimonial }: { position?: string | null; isPatrimonial?: boolean }) {
-  if (isPatrimonial) {
-    return (
-      <span className="ml-1.5 shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-        Patrimonial
-      </span>
-    );
-  }
-  if (!position) return null;
-  const pos = DRE_POSITIONS.find((p) => p.value === position);
-  if (!pos) return null;
-  return (
-    <span className={cn("ml-1.5 shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium", DRE_POS_COLORS[position] ?? "")}>
-      {pos.label}
-    </span>
-  );
+function ClassificationPill({ account }: { account: Account }) {
+  if (account.is_dre_account === false) return <StatusPill variant="neutral">Patrimonial</StatusPill>;
+  const label = dreLabel(account.dre_position);
+  return label ? <StatusPill variant="info">{label}</StatusPill> : null;
 }
 
-function AccountInfoTooltip({ account }: { account: Account }) {
-  const description = account.description?.trim();
-  const searchTerms = (account.searchTerms ?? []).filter((term) => term.trim().length > 0);
-  const hasMetadata = !!description || searchTerms.length > 0;
+/* ───────────────────────── Linha do plano ───────────────────────── */
 
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-            hasMetadata && "text-slate-500"
-          )}
-          aria-label={`Ver descrição e palavras-chave de ${account.name}`}
-        >
-          <Info className="h-3.5 w-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" align="start" className="max-w-sm p-3">
-        <div className="space-y-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Descrição</p>
-            <p className="mt-1 text-xs leading-relaxed text-foreground">
-              {description || "Sem descrição cadastrada."}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Palavras-chave</p>
-            {searchTerms.length > 0 ? (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {searchTerms.map((term) => (
-                  <span key={term} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
-                    {term}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">Sem palavras-chave cadastradas.</p>
-            )}
-          </div>
-        </div>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+type RowHandlers = {
+  expanded: ReadonlySet<string>;
+  canManage: boolean;
+  selectedId: string | null;
+  onToggle: (id: string) => void;
+  onOpen: (account: Account, number: string) => void;
+  onReorder: (ids: string[]) => void;
+};
 
-// ── sortable row (any depth) ──────────────────────────────────────────────────
-
-function SortableRow({
+function PlanRowBody({
   node,
   number,
   depth,
-  topLevelIndex,
   expanded,
-  canManage,
+  selected,
+  handle,
   onToggle,
-  onEdit,
-  onDelete,
-  onAddChild,
+  onOpen,
 }: {
-  node: Account;
+  node: PlanNode<Account>;
   number: string;
   depth: number;
-  topLevelIndex: number;
-  expanded: Set<string>;
-  canManage: boolean;
-  onToggle: (id: string) => void;
-  onEdit: (account: Account) => void;
-  onDelete: (account: Account) => void;
-  onAddChild: (parentId: string) => void;
+  expanded: boolean;
+  selected: boolean;
+  handle?: React.ReactNode;
+  onToggle: (() => void) | null;
+  onOpen: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: node.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  const color = GROUP_COLORS[topLevelIndex % GROUP_COLORS.length];
-  const hasChildren = (node.children?.length ?? 0) > 0;
-  const isExpanded = expanded.has(node.id);
-  const isRoot = depth === 0;
-
+  const hasChildren = node.children.length > 0;
   return (
-    <div ref={setNodeRef} style={style}>
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm transition-colors",
-          isRoot ? "hover:bg-muted/80" : "hover:bg-muted/70",
-          isDragging && "border-border bg-muted/20"
-        )}
-        style={{ paddingLeft: `${8 + depth * 20}px` }}
-      >
-        {/* drag handle */}
-        {canManage && (
-          <button
-            type="button"
-            className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
-        )}
-
-        {/* expand toggle */}
+    <div
+      className={cn(
+        "flex items-center gap-2 border-b border-ds-divider px-3 py-1.5 transition-colors hover:bg-ds-surface",
+        selected && "bg-ds-accent-soft/40",
+        node.active === false && "opacity-60"
+      )}
+      style={{ paddingLeft: `${12 + depth * 22}px` }}
+    >
+      {handle ?? <span className="h-6 w-5 shrink-0" aria-hidden="true" />}
+      {onToggle && hasChildren ? (
         <button
           type="button"
-          className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground"
-          onClick={() => hasChildren && onToggle(node.id)}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Recolher" : "Expandir"} ${node.name}`}
+          onClick={onToggle}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-ds-sm text-[11px] text-ds-ink-faint hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
         >
-          {hasChildren ? (
-            isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-          ) : (
-            <span className="h-3.5 w-3.5" />
-          )}
+          {expanded ? "▾" : "▸"}
         </button>
-
-        {/* color dot */}
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: color, opacity: isRoot ? 1 : 0.5 }}
-        />
-
-        {/* number */}
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{number}</span>
-
-        {/* name */}
-        <div className={cn("flex min-w-0 flex-1 items-center gap-1.5", isRoot && "font-semibold")}>
-          <span className="min-w-0 truncate">{node.name}</span>
-          <AccountInfoTooltip account={node} />
-        </div>
-
-        {/* dre badge */}
-        <DreBadge position={node.dre_position} isPatrimonial={node.is_dre_account === false} />
-
-        {/* actions */}
-        {canManage && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                {node.name}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onAddChild(node.id)}>
-                <PlusCircle className="mr-2 h-3.5 w-3.5" />
-                Adicionar subconta
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onEdit(node)}>Editar</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => onDelete(node)}
-              >
-                Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
-      {/* children */}
-      {hasChildren && isExpanded && (
-        <ChildrenLevel
-          nodes={node.children!}
-          depth={depth + 1}
-          topLevelIndex={topLevelIndex}
-          expanded={expanded}
-          canManage={canManage}
-          onToggle={onToggle}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onAddChild={onAddChild}
-          parentNumber={number}
-        />
+      ) : (
+        <span className="h-6 w-6 shrink-0" aria-hidden="true" />
       )}
+      <button
+        type="button"
+        aria-label={`Abrir ${node.name}`}
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-ds-sm py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+      >
+        <span className="w-12 shrink-0 font-ds-mono text-[11px] tabular-nums text-ds-ink-faint">{number}</span>
+        <span className={cn("min-w-0 truncate text-[13.5px]", depth === 0 ? "font-bold" : "font-semibold")}>{node.name}</span>
+        {node.active === false ? <StatusPill variant="neutral">Inativa</StatusPill> : null}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          <ClassificationPill account={node} />
+          <span className="text-[13px] text-ds-ink-faint">›</span>
+        </span>
+      </button>
     </div>
   );
 }
 
-// ── children level (sortable context per parent) ──────────────────────────────
-
-function ChildrenLevel({
-  nodes,
-  depth,
-  topLevelIndex,
-  expanded,
-  canManage,
-  onToggle,
-  onEdit,
-  onDelete,
-  onAddChild,
-  parentNumber,
-}: {
-  nodes: Account[];
-  depth: number;
-  topLevelIndex: number;
-  expanded: Set<string>;
-  canManage: boolean;
-  onToggle: (id: string) => void;
-  onEdit: (account: Account) => void;
-  onDelete: (account: Account) => void;
-  onAddChild: (parentId: string) => void;
-  parentNumber: string;
-}) {
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+function SortableRow({ node, number, depth, handlers }: { node: PlanNode<Account>; number: string; depth: number; handlers: RowHandlers }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: node.id });
+  const isExpanded = handlers.expanded.has(node.id);
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}>
+      <PlanRowBody
+        node={node}
+        number={number}
+        depth={depth}
+        expanded={isExpanded}
+        selected={handlers.selectedId === node.id}
+        onToggle={() => handlers.onToggle(node.id)}
+        onOpen={() => handlers.onOpen(node, number)}
+        handle={
+          handlers.canManage ? (
+            <button
+              type="button"
+              aria-label={`Reordenar ${node.name}`}
+              className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-ds-sm text-ds-ink-faint hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
+              {...attributes}
+              {...listeners}
+            >
+              ⋮⋮
+            </button>
+          ) : undefined
+        }
+      />
+      {node.children.length > 0 && isExpanded ? <Level nodes={node.children} depth={depth + 1} prefix={number} handlers={handlers} /> : null}
+    </div>
   );
+}
 
+function Level({ nodes, depth, prefix, handlers }: { nodes: Array<PlanNode<Account>>; depth: number; prefix: string; handlers: RowHandlers }) {
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const [items, setItems] = useState(nodes);
-  useEffect(() => { setItems(nodes); }, [nodes]);
+  useEffect(() => setItems(nodes), [nodes]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = items.findIndex((i) => i.id === active.id);
-    const newIndex = items.findIndex((i) => i.id === over.id);
-    const reordered = arrayMove(items, oldIndex, newIndex);
+    const reordered = arrayMove(items, items.findIndex((item) => item.id === active.id), items.findIndex((item) => item.id === over.id));
     setItems(reordered);
-    void persistOrder(reordered.map((i) => i.id));
+    handlers.onReorder(reordered.map((item) => item.id));
   }
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <div className="mt-0.5 space-y-0.5">
-          {items.map((node, index) => (
-            <SortableRow
-              key={node.id}
-              node={node}
-              number={`${parentNumber}.${index + 1}`}
-              depth={depth}
-              topLevelIndex={topLevelIndex}
-              expanded={expanded}
-              canManage={canManage}
-              onToggle={onToggle}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onAddChild={onAddChild}
-            />
-          ))}
-        </div>
+      <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+        {items.map((node, index) => (
+          <SortableRow key={node.id} node={node} number={prefix ? `${prefix}.${index + 1}` : String(index + 1)} depth={depth} handlers={handlers} />
+        ))}
       </SortableContext>
     </DndContext>
   );
 }
 
-// ── main component ────────────────────────────────────────────────────────────
+/* ───────────────────────── Tela ───────────────────────── */
+
+type ClassFilter = "all" | "dre" | "patrimonial" | "unclassified";
 
 export default function AccountPlansManagement({ canManage = true }: { canManage?: boolean }) {
-  const { toast } = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [classFilter, setClassFilter] = useState<ClassFilter>("all");
+  const [panel, setPanel] = useState<PanelState | null>(null);
 
   const load = useCallback(async () => {
     if (!auth.currentUser) return;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const token = await auth.currentUser.getIdToken();
-      const res = await fetchWithTimeout("/api/financial/data?path=accounts", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
+      const res = await fetchWithTimeout("/api/financial/data?path=accounts", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || "Falha ao carregar contas.");
       setAccounts((payload.docs ?? []) as Account[]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro desconhecido.");
+    } catch (error) {
+      setLoadError(errorMessageOf(error, "Erro desconhecido."));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const tree = useMemo(() => buildTree(accounts), [accounts]);
+  const tree = useMemo(() => buildPlanTree(accounts), [accounts]);
+  const [rootItems, setRootItems] = useState<Array<PlanNode<Account>>>([]);
+  useEffect(() => setRootItems(tree), [tree]);
 
-  const [rootItems, setRootItems] = useState<Account[]>([]);
-  useEffect(() => { setRootItems(tree); }, [tree]);
+  const summary = useMemo(() => summarizePlan(accounts), [accounts]);
+  const filtering = query.trim().length > 0 || classFilter !== "all";
+  const matcher = useMemo(() => {
+    if (!filtering) return null;
+    return (item: Account) => {
+      const inClass =
+        classFilter === "all" ||
+        (classFilter === "patrimonial" ? item.is_dre_account === false : classFilter === "dre" ? item.is_dre_account !== false && !!item.dre_position : item.is_dre_account !== false && !item.dre_position);
+      return inClass && matchesFinanceQuery(query, item.name, item.description, dreLabel(item.dre_position), ...(item.searchTerms ?? []));
+    };
+  }, [filtering, query, classFilter]);
 
+  const flatRows = useMemo(() => flattenPlan(tree, expanded, matcher), [tree, expanded, matcher]);
+
+  const reorder = useCallback(async (ids: string[]) => {
+    setOrderError(null);
+    try {
+      await persistOrder(ids);
+    } catch (error) {
+      setOrderError(errorMessageOf(error, "Não foi possível salvar a nova ordem."));
+      void load();
+    }
+  }, [load]);
+
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   function handleRootDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = rootItems.findIndex((i) => i.id === active.id);
-    const newIndex = rootItems.findIndex((i) => i.id === over.id);
-    const reordered = arrayMove(rootItems, oldIndex, newIndex);
+    const reordered = arrayMove(rootItems, rootItems.findIndex((item) => item.id === active.id), rootItems.findIndex((item) => item.id === over.id));
     setRootItems(reordered);
-    void persistOrder(reordered.map((i) => i.id));
+    void reorder(reordered.map((item) => item.id));
   }
 
-  function toggleExpand(id: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+  const toggle = (id: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
+  const allExpanded = expanded.size > 0;
+
+  async function save({ values, searchTerms }: SavePayload, current: Account | null) {
+    const dre_position = values.includeInDre ? values.dre_position ?? null : null;
+    const is_dre_account = values.isPatrimonial ? false : true;
+    const searchTermsPayload = searchTerms.length > 0 ? searchTerms : null;
+    if (current) {
+      await apiRequest("PATCH", {
+        id: current.id,
+        name: values.name,
+        description: values.description ?? null,
+        parentId: values.parentId ?? null,
+        dre_position,
+        is_dre_account,
+        searchTerms: searchTermsPayload,
+      });
+      setAccounts((prev) =>
+        prev.map((item) =>
+          item.id === current.id
+            ? { ...item, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined }
+            : item
+        )
+      );
+      return;
+    }
+    const siblings = accounts.filter((item) => (item.parentId ?? null) === (values.parentId ?? null));
+    const { id } = await apiRequest("POST", {
+      name: values.name,
+      description: values.description ?? null,
+      parentId: values.parentId ?? null,
+      dre_position,
+      is_dre_account,
+      order: siblings.length,
+      searchTerms: searchTermsPayload,
+    });
+    setAccounts((prev) => [
+      ...prev,
+      { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined, order: siblings.length, active: true },
+    ]);
+    if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
   }
 
-  function expandAll() { setExpanded(new Set(accounts.map((a) => a.id))); }
-  function collapseAll() { setExpanded(new Set()); }
+  async function remove(item: Account) {
+    if (accounts.some((entry) => entry.parentId === item.id)) throw new Error("Remova as subcontas primeiro.");
+    await apiRequest("DELETE", undefined, item.id);
+    setAccounts((prev) => prev.filter((entry) => entry.id !== item.id));
+  }
 
-  // ── form ────────────────────────────────────────────────────────────────────
+  const handlers: RowHandlers = {
+    expanded,
+    canManage,
+    selectedId: panel && panel.mode !== "create" ? panel.item.id : null,
+    onToggle: toggle,
+    onOpen: (item, number) => setPanel({ mode: "view", item, number }),
+    onReorder: (ids) => void reorder(ids),
+  };
 
+  const chips = [
+    { id: "all", label: "Todas", count: summary.total },
+    { id: "dre", label: "Na DRE", count: summary.dre },
+    { id: "patrimonial", label: "Patrimoniais", count: summary.patrimonial },
+    { id: "unclassified", label: "Sem classificação", count: summary.unclassified },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <CadastrosHero
+        kicker="Plano de contas"
+        tabs={null}
+        search={{ value: query, placeholder: "Buscar conta, descrição ou palavra-chave", onChange: setQuery }}
+        manage={accounts.length > 0 && !filtering ? { label: allExpanded ? "Recolher tudo" : "Expandir tudo", onClick: () => setExpanded(allExpanded ? new Set() : new Set(accounts.map((item) => item.id))) } : undefined}
+        primary={canManage ? { label: "Nova conta raiz", onClick: () => setPanel({ mode: "create", parentId: null }) } : undefined}
+        chips={chips}
+        activeChip={classFilter}
+        onChip={(id) => setClassFilter(id as ClassFilter)}
+      />
+
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[28px] font-extrabold tracking-[-0.03em]">{filtering ? flatRows.length : summary.total}</span>
+        <span className="text-[13px] text-ds-ink-faint">{filtering ? `de ${summary.total} contas` : "contas"}</span>
+        <span className="text-[13px] text-ds-ink-muted">· Categorias e subcontas que classificam despesas e resultados.</span>
+      </div>
+      {filtering ? <p className="-mt-3 text-xs text-ds-ink-muted">Com filtro ou busca ativa a lista aparece sem hierarquia e sem reordenação.</p> : null}
+
+      {loadError ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-ds-card border border-ds-confirm-border bg-ds-confirm-bg px-5 py-4">
+          <p className="text-[13px] font-semibold text-ds-confirm-ink">{loadError}</p>
+          <Button type="button" variant="ds-secondary" size="md" onClick={() => void load()}>Tentar novamente</Button>
+        </div>
+      ) : null}
+      <PanelErrorNote message={orderError} />
+
+      {loading ? (
+        <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando plano de contas">
+          <ListSkeleton rows={6} />
+        </div>
+      ) : (
+        <ListShell minWidth={720}>
+          {filtering ? (
+            flatRows.length > 0 ? (
+              flatRows.map((row) => (
+                <PlanRowBody
+                  key={row.item.id}
+                  node={row.item}
+                  number={row.number}
+                  depth={0}
+                  expanded={false}
+                  selected={handlers.selectedId === row.item.id}
+                  onToggle={null}
+                  onOpen={() => handlers.onOpen(row.item, row.number)}
+                />
+              ))
+            ) : (
+              <EmptyResults title="Nenhuma conta encontrada com esses filtros." onClear={() => { setQuery(""); setClassFilter("all"); }} />
+            )
+          ) : rootItems.length > 0 ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
+              <SortableContext items={rootItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                {rootItems.map((node, index) => (
+                  <SortableRow key={node.id} node={node} number={String(index + 1)} depth={0} handlers={handlers} />
+                ))}
+              </SortableContext>
+            </DndContext>
+          ) : !loadError ? (
+            <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma conta cadastrada.</p>
+          ) : null}
+        </ListShell>
+      )}
+
+      <AccountPanel
+        state={panel}
+        accounts={accounts}
+        canManage={canManage}
+        onClose={() => setPanel(null)}
+        onMode={setPanel}
+        onSave={save}
+        onRemove={remove}
+      />
+    </div>
+  );
+}
+
+/* ───────────────────────── Painel ───────────────────────── */
+
+function AccountPanel({
+  state,
+  accounts,
+  canManage,
+  onClose,
+  onMode,
+  onSave,
+  onRemove,
+}: {
+  state: PanelState | null;
+  accounts: Account[];
+  canManage: boolean;
+  onClose: () => void;
+  onMode: (state: PanelState) => void;
+  onSave: (payload: SavePayload, current: Account | null) => Promise<void>;
+  onRemove: (item: Account) => Promise<void>;
+}) {
   const form = useForm<AccountFormValues>({
     resolver: zodResolver(accountFormSchema),
     defaultValues: { name: "", description: "", parentId: null, includeInDre: false, dre_position: null, isPatrimonial: false },
   });
+  const { register, control, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = form;
+  const includeInDre = watch("includeInDre");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [terms, setTerms] = useState<string[]>([]);
+  const [termInput, setTermInput] = useState("");
+  const item = state && state.mode !== "create" ? state.item : null;
+  const editing = state?.mode === "edit" || state?.mode === "create";
 
-  const includeInDre = form.watch("includeInDre");
-  const isPatrimonial = form.watch("isPatrimonial");
-
-  // Palavras-chave de busca (chips), fora do zod — mesmo padrão dos aliases de produto.
-  const [searchTerms, setSearchTerms] = useState<string[]>([]);
-  const [searchTermInput, setSearchTermInput] = useState("");
-
-  const normalizeTerm = (value: string) =>
-    value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
-
-  function handleAddSearchTerm() {
-    const term = searchTermInput.trim();
-    if (!term) return;
-    const normalized = normalizeTerm(term);
-    if (!searchTerms.some((existing) => normalizeTerm(existing) === normalized)) {
-      setSearchTerms((prev) => [...prev, term]);
+  useEffect(() => {
+    setSaveError(null);
+    setConfirmingDelete(false);
+    setTermInput("");
+    if (!state || state.mode === "view") return;
+    if (state.mode === "edit") {
+      reset({
+        name: state.item.name,
+        description: state.item.description ?? "",
+        parentId: state.item.parentId ?? null,
+        includeInDre: !!state.item.dre_position,
+        dre_position: state.item.dre_position ?? null,
+        isPatrimonial: state.item.is_dre_account === false,
+      });
+      setTerms(state.item.searchTerms ?? []);
+    } else {
+      reset({ name: "", description: "", parentId: state.parentId, includeInDre: false, dre_position: null, isPatrimonial: false });
+      setTerms([]);
     }
-    setSearchTermInput("");
-  }
-
-  function handleRemoveSearchTerm(term: string) {
-    setSearchTerms((prev) => prev.filter((entry) => entry !== term));
-  }
+  }, [state, reset]);
 
   const parentOptions = useMemo(() => {
-    if (!editingAccount) return accounts;
-    const blockedIds = collectDescendantIds(accounts, editingAccount.id);
-    blockedIds.add(editingAccount.id);
-    return accounts.filter((account) => !blockedIds.has(account.id));
-  }, [accounts, editingAccount]);
+    const blocked = item ? collectDescendantIds(accounts, item.id) : new Set<string>();
+    if (item) blocked.add(item.id);
+    return accounts.filter((account) => !blocked.has(account.id)).map((account) => ({ id: account.id, name: account.name }));
+  }, [accounts, item]);
 
-  function openAdd(parentId: string | null = null) {
-    setEditingAccount(null);
-    form.reset({ name: "", description: "", parentId, includeInDre: false, dre_position: null, isPatrimonial: false });
-    setSearchTerms([]);
-    setSearchTermInput("");
-    setDialogOpen(true);
-  }
+  const hasChildren = item ? accounts.some((account) => account.parentId === item.id) : false;
+  const parentName = item?.parentId ? accounts.find((account) => account.id === item.parentId)?.name : undefined;
 
-  function openEdit(account: Account) {
-    setEditingAccount(account);
-    form.reset({
-      name: account.name,
-      description: account.description ?? "",
-      parentId: account.parentId ?? null,
-      includeInDre: !!account.dre_position,
-      dre_position: account.dre_position ?? null,
-      isPatrimonial: account.is_dre_account === false,
-    });
-    setSearchTerms(account.searchTerms ?? []);
-    setSearchTermInput("");
-    setDialogOpen(true);
-  }
-
-  async function onSubmit(values: AccountFormValues) {
-    const dre_position = values.includeInDre ? (values.dre_position ?? null) : null;
-    // Regra: patrimonial → false, caso contrário → true (sempre explícito)
-    const is_dre_account = values.isPatrimonial ? false : true;
-    try {
-      const searchTermsPayload = searchTerms.length > 0 ? searchTerms : null;
-      if (editingAccount) {
-        await apiRequest("PATCH", {
-          id: editingAccount.id,
-          name: values.name,
-          description: values.description ?? null,
-          parentId: values.parentId ?? null,
-          dre_position,
-          is_dre_account,
-          searchTerms: searchTermsPayload,
-        });
-        setAccounts((prev) =>
-          prev.map((a) =>
-            a.id === editingAccount.id
-              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined }
-              : a
-          )
-        );
-        toast({ title: "Conta atualizada." });
-      } else {
-        const siblings = accounts.filter((a) => (a.parentId ?? null) === (values.parentId ?? null));
-        const { id } = await apiRequest("POST", {
-          name: values.name,
-          description: values.description ?? null,
-          parentId: values.parentId ?? null,
-          dre_position,
-          is_dre_account,
-          order: siblings.length,
-          searchTerms: searchTermsPayload,
-        });
-        setAccounts((prev) => [
-          ...prev,
-          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined, order: siblings.length, active: true },
-        ]);
-        if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
-        toast({ title: "Conta criada." });
-      }
-      setDialogOpen(false);
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Erro ao salvar." });
-    }
-  }
-
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    const hasChildren = accounts.some((a) => a.parentId === deleteTarget.id);
-    if (hasChildren) {
-      toast({ variant: "destructive", title: "Remova as subcontas primeiro." });
-      setDeleteTarget(null);
-      return;
-    }
-    try {
-      await apiRequest("DELETE", undefined, deleteTarget.id);
-      setAccounts((prev) => prev.filter((a) => a.id !== deleteTarget.id));
-      toast({ title: "Conta removida." });
-    } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Erro ao remover." });
-    } finally {
-      setDeleteTarget(null);
-    }
+  function addTerm() {
+    const term = termInput.trim();
+    if (!term) return;
+    const normalized = normalizeFinanceText(term);
+    if (!terms.some((existing) => normalizeFinanceText(existing) === normalized)) setTerms((current) => [...current, term]);
+    setTermInput("");
   }
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Plano de contas</CardTitle>
-              <CardDescription>
-                Estruture categorias e subcontas para classificar despesas e resultados.
-              </CardDescription>
+    <SidePanel
+      open={!!state}
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      kicker={state?.mode === "create" ? "Nova conta" : state?.mode === "edit" ? "Editar conta" : "Conta"}
+      title={state?.mode === "create" ? "Sem nome" : item?.name ?? ""}
+      subtitle={state && state.mode !== "create" ? `Posição ${state.number} no plano de contas` : "Categoria ou subconta do plano."}
+    >
+      {state && !editing && item ? (
+        <>
+          <PanelSection title="Classificação">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+              <PanelField label="Situação"><StatusPill variant={item.active === false ? "neutral" : "ok"}>{item.active === false ? "Inativa" : "Ativa"}</StatusPill></PanelField>
+              <PanelField label="Conta pai">{parentName ?? "Raiz"}</PanelField>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button type="button" onClick={expandAll} className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
-                Expandir tudo
-              </button>
-              <button type="button" onClick={collapseAll} className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
-                Recolher tudo
-              </button>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-3">
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              <TooltipProvider delayDuration={150}>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
-                  <SortableContext items={rootItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-1">
-                      {rootItems.map((node, index) => (
-                        <SortableRow
-                          key={node.id}
-                          node={node}
-                          number={`${index + 1}`}
-                          depth={0}
-                          topLevelIndex={index}
-                          expanded={expanded}
-                          canManage={canManage}
-                          onToggle={toggleExpand}
-                          onEdit={openEdit}
-                          onDelete={setDeleteTarget}
-                          onAddChild={(parentId) => openAdd(parentId)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              </TooltipProvider>
-
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => openAdd(null)}
-                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  Nova conta raiz
-                </button>
+            <PanelField label="Demonstrativo">
+              {item.is_dre_account === false ? "Patrimonial (fora da DRE)" : dreLabel(item.dre_position) ?? "Sem posição na DRE"}
+            </PanelField>
+          </PanelSection>
+          <PanelSection title="Uso">
+            <PanelField label="Descrição">{item.description?.trim() || "Sem descrição cadastrada."}</PanelField>
+            <PanelField label="Palavras-chave">
+              {item.searchTerms?.length ? (
+                <span className="flex flex-wrap gap-1.5">{item.searchTerms.map((term) => <SoftPill key={term}>{term}</SoftPill>)}</span>
+              ) : (
+                "Sem palavras-chave cadastradas."
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Add / Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingAccount ? "Editar conta" : "Nova conta"}</DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl><Input placeholder="Ex: Salários" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição <span className="text-muted-foreground">(opcional)</span></FormLabel>
-                    <FormControl><Textarea rows={2} placeholder="Descreva o uso desta conta..." {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="space-y-2">
-                <Label>Palavras-chave de busca <span className="text-muted-foreground">(opcional)</span></Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={searchTermInput}
-                    onChange={(event) => setSearchTermInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        handleAddSearchTerm();
-                      }
-                    }}
-                    placeholder="Ex: uniforme, EPI, fardamento..."
-                  />
-                  <Button type="button" variant="outline" onClick={handleAddSearchTerm} disabled={!searchTermInput.trim()}>
-                    Adicionar
-                  </Button>
+            </PanelField>
+          </PanelSection>
+          {canManage ? (
+            <div className="mt-auto space-y-3 border-t border-ds-divider pt-4">
+              {confirmingDelete ? (
+                <InlineConfirm
+                  message={`Excluir “${item.name}”? Despesas já lançadas nessa conta não são afetadas.`}
+                  loading={deleting}
+                  onCancel={() => setConfirmingDelete(false)}
+                  onConfirm={async () => {
+                    setDeleting(true);
+                    setSaveError(null);
+                    try {
+                      await onRemove(item);
+                      onClose();
+                    } catch (error) {
+                      setConfirmingDelete(false);
+                      setSaveError(errorMessageOf(error, "Não foi possível excluir a conta."));
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="primary-modal" size="md" onClick={() => onMode({ mode: "edit", item, number: state.number })}>Editar conta</Button>
+                  <Button type="button" variant="ds-secondary" size="md" onClick={() => onMode({ mode: "create", parentId: item.id })}>Adicionar subconta</Button>
+                  <Button type="button" variant="danger-link" size="md" disabled={hasChildren} onClick={() => setConfirmingDelete(true)} className="col-span-2">Excluir conta</Button>
                 </div>
-                {searchTerms.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {searchTerms.map((term) => (
-                      <span key={term} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
-                        {term}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSearchTerm(term)}
-                          className="text-muted-foreground hover:text-foreground"
-                          aria-label={`Remover ${term}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Termos que direcionam as buscas para esta conta (ex.: &ldquo;uniforme&rdquo; encontra esta conta mesmo que o nome não contenha a palavra).
-                </p>
+              )}
+              {hasChildren && !confirmingDelete ? <p className="text-xs text-ds-ink-muted">Remova ou mova as subcontas antes de excluir esta conta.</p> : null}
+              <PanelErrorNote message={saveError} />
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {state && editing ? (
+        <form
+          noValidate
+          className="flex flex-1 flex-col gap-5"
+          onSubmit={handleSubmit(async (values) => {
+            setSaveError(null);
+            try {
+              await onSave({ values, searchTerms: terms }, item);
+              onClose();
+            } catch (error) {
+              setSaveError(errorMessageOf(error, "Não foi possível salvar a conta."));
+            }
+          })}
+        >
+          <Field label="Nome" htmlFor="account-name" error={errors.name?.message}>
+            <Input id="account-name" placeholder="Ex.: Salários" aria-invalid={!!errors.name} className={fieldInputClass} {...register("name")} />
+          </Field>
+          <Field label="Descrição" htmlFor="account-description" requirement="opcional">
+            <Textarea id="account-description" rows={2} placeholder="Descreva o uso desta conta." className={cn(fieldInputClass, "h-auto py-2.5")} {...register("description")} />
+          </Field>
+          <Field label="Palavras-chave de busca" htmlFor="account-terms" requirement="opcional" hint="Direcionam as buscas para esta conta: “uniforme” encontra a conta mesmo que o nome não contenha a palavra.">
+            <div className="flex gap-2">
+              <Input
+                id="account-terms"
+                value={termInput}
+                onChange={(event) => setTermInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addTerm();
+                  }
+                }}
+                placeholder="Ex.: uniforme, EPI, fardamento"
+                className={fieldInputClass}
+              />
+              <Button type="button" variant="ds-secondary" size="md" disabled={!termInput.trim()} onClick={addTerm}>Adicionar</Button>
+            </div>
+            {terms.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {terms.map((term) => (
+                  <span key={term} className="inline-flex items-center gap-1 rounded-full bg-ds-muted px-2.5 py-1 text-xs font-semibold text-ds-ink-2">
+                    {term}
+                    <button type="button" aria-label={`Remover ${term}`} onClick={() => setTerms((current) => current.filter((entry) => entry !== term))} className="text-ds-ink-faint hover:text-ds-ink">
+                      <X aria-hidden="true" className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
               </div>
-
-              <FormField
-                control={form.control}
-                name="parentId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Conta pai <span className="text-muted-foreground">(opcional)</span></FormLabel>
-                    <Select value={field.value ?? "none"} onValueChange={(v) => field.onChange(v === "none" ? null : v)}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Sem pai (raiz)" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none"><span className="text-muted-foreground">Sem pai (raiz)</span></SelectItem>
-                        {parentOptions.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="includeInDre"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center justify-between rounded-lg border px-4 py-3">
-                      <div>
-                        <FormLabel className="text-sm font-medium">Entra na DRE</FormLabel>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Vincule esta conta a uma posição do demonstrativo de resultados.
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked);
-                            if (!checked) form.setValue("dre_position", null);
-                            if (checked) form.setValue("isPatrimonial", false);
-                          }}
-                        />
-                      </FormControl>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              {!includeInDre && (
-                <FormField
-                  control={form.control}
-                  name="isPatrimonial"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
-                        <div>
-                          <FormLabel className="text-sm font-medium">Conta patrimonial</FormLabel>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Estoque, ativo imobilizado, aplicações financeiras. Não aparece na DRE nem em &ldquo;Não classificado&rdquo;.
-                          </p>
-                        </div>
-                        <FormControl>
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              {includeInDre && (
-                <FormField
-                  control={form.control}
-                  name="dre_position"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Posição na DRE</FormLabel>
-                      <Select value={field.value ?? "none"} onValueChange={(v) => field.onChange(v === "none" ? null : v)}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Selecione a posição" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none"><span className="text-muted-foreground">Sem posição</span></SelectItem>
-                          {DRE_POSITIONS.map((p) => (
-                            <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-                <Button type="submit" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editingAccount ? "Salvar" : "Criar"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conta?</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{deleteTarget?.name}</strong> será removida permanentemente. Despesas já lançadas nessa conta não serão afetadas.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void handleDelete()}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+            ) : null}
+          </Field>
+          <Controller control={control} name="parentId" render={({ field }) => (
+            <PanelSelectField id="account-parent" label="Conta pai" requirement="opcional" value={field.value} onChange={(value) => field.onChange(value || null)} noneLabel="Sem pai (raiz)" options={parentOptions} />
+          )} />
+          <Controller control={control} name="includeInDre" render={({ field }) => (
+            <PanelSwitchRow
+              id="account-dre"
+              label="Entra na DRE"
+              description="Vincule esta conta a uma posição do demonstrativo de resultados."
+              checked={field.value}
+              onChange={(checked) => {
+                field.onChange(checked);
+                if (!checked) setValue("dre_position", null);
+                if (checked) setValue("isPatrimonial", false);
+              }}
+            />
+          )} />
+          {!includeInDre ? (
+            <Controller control={control} name="isPatrimonial" render={({ field }) => (
+              <PanelSwitchRow id="account-patrimonial" label="Conta patrimonial" description="Estoque, ativo imobilizado, aplicações. Não aparece na DRE nem em “Não classificado”." checked={field.value} onChange={field.onChange} />
+            )} />
+          ) : (
+            <Controller control={control} name="dre_position" render={({ field }) => (
+              <PanelSelectField id="account-dre-position" label="Posição na DRE" value={field.value} onChange={(value) => field.onChange(value || null)} noneLabel="Sem posição" options={DRE_POSITIONS.map((entry) => ({ id: entry.value, name: entry.label }))} />
+            )} />
+          )}
+          <PanelErrorNote message={saveError} />
+          <PanelFormFooter submitting={isSubmitting} creating={state.mode === "create"} noun="conta" onCancel={() => (item && state.mode === "edit" ? onMode({ mode: "view", item, number: state.number }) : onClose())} />
+        </form>
+      ) : null}
+    </SidePanel>
   );
 }
