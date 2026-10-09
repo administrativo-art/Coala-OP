@@ -12,9 +12,14 @@ import {
   Calendar,
   CalendarDays,
   CircleDollarSign,
+  Boxes,
+  Cpu,
   ListTodo,
   Target,
   TrendingUp,
+  UsersRound,
+  Wallet,
+  Workflow,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -39,6 +44,8 @@ import { useAllTasks } from "@/hooks/use-all-tasks"
 import { financialCollection } from "@/features/financial/lib/repositories"
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection"
 import { formatCurrency, toDate } from "@/features/financial/lib/utils"
+import { ManagementDashboardBuilder, ManagementWidgetFrame } from "@/features/management-dashboard/builder-context"
+import type { ManagementWidgetId } from "@/features/management-dashboard/types"
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions"
 import { cn } from "@/lib/utils"
 import type { DPSchedule, DPShift, GoalPeriodDoc, Kiosk, SalesReport, User } from "@/types"
@@ -66,6 +73,7 @@ function getKioskName(kiosks: Kiosk[], kioskId: string) {
 }
 
 function DashboardCard({
+  widgetId,
   title,
   description,
   href,
@@ -74,6 +82,7 @@ function DashboardCard({
   hideDetailsLink,
   children,
 }: {
+  widgetId: ManagementWidgetId
   title: string
   description: string
   href: string
@@ -83,39 +92,55 @@ function DashboardCard({
   children: ReactNode
 }) {
   return (
-    <Card className={cn("overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm", className)}>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-zinc-100 px-4 py-3">
+    <ManagementWidgetFrame id={widgetId} className={className}>
+    <Card className="h-full overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface shadow-ds-lift">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 px-5 pb-2 pt-4">
         <div>
-          <CardTitle className="text-sm font-extrabold tracking-tight text-zinc-950">{title}</CardTitle>
-          <CardDescription className="mt-0.5 max-w-[320px] text-xs leading-snug text-zinc-400">{description}</CardDescription>
+          <CardTitle className="text-[15px] font-extrabold tracking-tight text-ds-ink">{title}</CardTitle>
+          <CardDescription className="mt-1 max-w-[360px] text-xs leading-snug text-ds-ink-faint">{description}</CardDescription>
         </div>
-        <div className="rounded-lg bg-pink-100/70 p-2 text-pink-500">
+        <div className="rounded-ds-sm bg-ds-accent-soft p-2 text-ds-accent-ink">
           <Icon className="h-4 w-4" />
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-4 p-5">
         {children}
         {!hideDetailsLink ? (
-          <Link href={href} className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500">
+          <Link href={href} className="inline-flex items-center gap-2 px-1 text-xs font-extrabold text-ds-accent-ink hover:text-ds-accent-ink-hover">
             Ver detalhes <ArrowRight className="h-4 w-4" />
           </Link>
         ) : null}
       </CardContent>
     </Card>
+    </ManagementWidgetFrame>
   )
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-xs text-zinc-400">{children}</p>
+  return <p className="rounded-ds-btn border border-dashed border-ds-border px-3 py-4 text-xs text-ds-ink-faint">{children}</p>
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
-      <p className="text-xs font-semibold text-zinc-400">{label}</p>
-      <p className="mt-0.5 text-xl font-black tracking-tight text-zinc-950">{value}</p>
-      {detail ? <p className="mt-0.5 text-[11px] font-medium text-zinc-400">{detail}</p> : null}
+    <div className="rounded-ds-btn border border-ds-border bg-ds-surface p-3 shadow-sm">
+      <p className="text-xs font-semibold text-ds-ink-faint">{label}</p>
+      <p className="mt-0.5 text-xl font-extrabold tracking-tight text-ds-ink">{value}</p>
+      {detail ? <p className="mt-0.5 text-[11px] font-medium text-ds-ink-faint">{detail}</p> : null}
     </div>
+  )
+}
+
+function ModuleShortcutCard({ widgetId, title, description, href, icon, links }: { widgetId: ManagementWidgetId; title: string; description: string; href: string; icon: ElementType; links: Array<{ label: string; href: string }> }) {
+  return (
+    <DashboardCard widgetId={widgetId} title={title} description={description} href={href} icon={icon}>
+      <div className="grid gap-2">
+        {links.map((link) => (
+          <Link key={link.href} href={link.href} className="flex items-center justify-between rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2.5 text-xs font-bold text-ds-ink hover:bg-ds-muted">
+            {link.label}<ArrowRight className="h-3.5 w-3.5 text-ds-ink-faint" />
+          </Link>
+        ))}
+      </div>
+    </DashboardCard>
   )
 }
 
@@ -218,7 +243,7 @@ function getReportDateKey(report: { year: number; month: number; day?: number })
 }
 
 function ManagementDashboard() {
-  const { user, users, permissions } = useAuth()
+  const { firebaseUser, user, users, permissions } = useAuth()
   const router = useRouter()
   const canViewManagementDashboard = permissions.dashboard.view
   const canViewCollaboratorDashboard = permissions.dashboard.collaborator ?? permissions.dashboard.view
@@ -547,27 +572,28 @@ function ManagementDashboard() {
   }
 
   return (
-    <div className="w-full space-y-3 pb-6">
-      <div className="flex flex-col justify-between gap-3 border-b border-zinc-200 pb-3 md:flex-row md:items-end">
+    <div className="w-full space-y-3 pb-8 font-ds">
+      <div className="flex flex-col justify-between gap-3 pb-1 md:flex-row md:items-end">
         <div className="min-w-0">
-          <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-2.5 py-1 text-[11px] font-extrabold text-pink-500">
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-ds-border bg-ds-accent-soft px-2.5 py-1 text-[11px] font-extrabold text-ds-accent-ink">
             <Target className="h-3 w-3" />
             Painel da gestão
           </div>
-          <h1 className="text-xl font-black tracking-tight text-zinc-950">Bem-vindo, {user?.username}!</h1>
-          <p className="mt-1 max-w-2xl text-xs font-medium text-zinc-400">
-            Dados operacionais, comerciais, DP e financeiro para acompanhamento diário.
+          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Painel da gestão</h1>
+          <p className="mt-1 max-w-2xl text-sm font-medium text-ds-ink-muted">
+            Olá, {user?.username}. Organize os indicadores e atalhos mais importantes para sua rotina.
           </p>
         </div>
-        <div className="hidden items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-500 shadow-sm sm:flex">
-          <Calendar className="h-4 w-4 text-zinc-400" />
+        <div className="hidden items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-xs font-semibold text-ds-ink-muted shadow-sm sm:flex">
+          <Calendar className="h-4 w-4 text-ds-ink-faint" />
           {format(today, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+      <ManagementDashboardBuilder firebaseUser={firebaseUser} userId={firebaseUser?.uid ?? user?.id ?? ""} userName={user?.username ?? "Usuário"} permissions={permissions}>
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-6 xl:grid-cols-12">
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
-          <DashboardCard title="Metas e faturamento" description="Meta geral, projeção e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} className="order-1" hideDetailsLink>
+          <DashboardCard widgetId="goals-revenue" title="Metas e faturamento" description="Meta geral, projeção e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} hideDetailsLink>
             <div className="grid gap-3 md:grid-cols-3">
               <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={`${visibleSalesReports.length} relatório(s) em ${formatSalesPeriod(visibleSalesReports)}`} />
               <Metric
@@ -588,17 +614,17 @@ function ManagementDashboard() {
                 {goalRows.slice(0, 5).map((goal) => (
                   <div key={goal.kioskId} className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3 text-xs">
-                      <span className="truncate font-bold text-zinc-800">{goal.name}</span>
-                      <span className="whitespace-nowrap font-semibold text-zinc-500">
+                      <span className="truncate font-bold text-ds-ink">{goal.name}</span>
+                      <span className="whitespace-nowrap font-semibold text-ds-ink-muted">
                         {formatCurrency(goal.current)} / {formatCurrency(goal.target)}
                       </span>
-                      <span className={cn("w-10 text-right text-xs font-black", goal.progress >= 0.8 ? "text-zinc-900" : "text-amber-500")}>
+                      <span className={cn("w-10 text-right text-xs font-black", goal.progress >= 0.8 ? "text-ds-ink" : "text-ds-warn")}>
                         {Math.round(goal.progress * 100)}%
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-ds-muted">
                       <div
-                        className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-pink-500" : "bg-amber-400")}
+                        className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-ds-accent" : "bg-ds-warn")}
                         style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }}
                       />
                     </div>
@@ -606,13 +632,14 @@ function ManagementDashboard() {
                 ))}
               </div>
             )}
-            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setGoalsModalOpen(true)}>
+            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setGoalsModalOpen(true)}>
               Ver detalhes <ArrowRight className="h-4 w-4" />
             </button>
           </DashboardCard>
         )}
 
         <DashboardCard
+          widgetId="pending-tasks"
           title="Tarefas pendentes"
           description="Demandas em aberto, aprovações e recebimentos."
           href="/dashboard/tasks"
@@ -648,15 +675,15 @@ function ManagementDashboard() {
                 const dueDate = task.dueDate ? startOfDay(new Date(task.dueDate)) : null
                 const isOverdue = !!dueDate && isBefore(dueDate, today)
                 return (
-                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 text-xs shadow-sm">
+                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-ds-divider bg-ds-surface p-3 text-xs shadow-sm">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-zinc-800">{task.title}</p>
-                      <p className="mt-0.5 text-xs font-semibold text-zinc-400">{getTaskStatusLabel(task.status)}</p>
+                      <p className="truncate text-sm font-black text-ds-ink">{task.title}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-ds-ink-faint">{getTaskStatusLabel(task.status)}</p>
                     </div>
                     <span
                       className={cn(
                         "whitespace-nowrap rounded-full px-3 py-1 text-xs font-black",
-                        isOverdue ? "bg-red-100 text-red-600" : "bg-pink-100 text-pink-600"
+                        isOverdue ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-accent-soft text-ds-accent-ink"
                       )}
                     >
                       {dueDate ? format(dueDate, "dd/MM") : "sem prazo"}
@@ -670,6 +697,7 @@ function ManagementDashboard() {
 
         {permissions.dashboard.operational && (
           <DashboardCard
+            widgetId="critical-restock"
             title="Reposição crítica do CD"
             description="Itens no mínimo, priorizando lead time."
             href="/dashboard/stock/analysis/restock"
@@ -686,19 +714,19 @@ function ManagementDashboard() {
             ) : (
               <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
                 {criticalRestockItems.map(({ base, current, minimum, minimumLabel, leadTime, ruptureDate, orderLimitDate }) => (
-                  <div key={base.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3 text-xs">
+                  <div key={base.id} className="flex items-start justify-between gap-3 rounded-lg border border-ds-danger bg-ds-danger-bg p-3 text-xs">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-zinc-800">{base.name}</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-400">Atual {numberFormatter.format(current)} · mín. {minimum === null ? minimumLabel : numberFormatter.format(minimum)}</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-400">
-                        Ruptura: <span className={cn(!ruptureDate && "text-zinc-400", ruptureDate && isSameOrBefore(ruptureDate, today) && "text-pink-500")}>
+                      <p className="truncate text-sm font-black text-ds-ink">{base.name}</p>
+                      <p className="mt-1 text-xs font-semibold text-ds-ink-faint">Atual {numberFormatter.format(current)} · mín. {minimum === null ? minimumLabel : numberFormatter.format(minimum)}</p>
+                      <p className="mt-1 text-xs font-semibold text-ds-ink-faint">
+                        Ruptura: <span className={cn(!ruptureDate && "text-ds-ink-faint", ruptureDate && isSameOrBefore(ruptureDate, today) && "text-ds-accent-ink")}>
                           {ruptureDate ? format(ruptureDate, "dd/MM/yyyy") : "sem consumo médio"}
                         </span>{" "}
                         · pedido até{" "}
                         {orderLimitDate ? format(orderLimitDate, "dd/MM/yyyy") : "sem data"}
                       </p>
                     </div>
-                    <span className="whitespace-nowrap rounded-full bg-pink-100 px-2.5 py-1 text-xs font-black text-pink-600">
+                    <span className="whitespace-nowrap rounded-full bg-ds-accent-soft px-2.5 py-1 text-xs font-black text-ds-accent-ink">
                       {leadTime ? `${leadTime}d` : "sem dia(s)"}
                     </span>
                   </div>
@@ -710,6 +738,7 @@ function ManagementDashboard() {
 
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
           <DashboardCard
+            widgetId="best-sellers"
             title="Mercadorias mais vendidas"
             description="Mês corrente, mês anterior e mesmo período."
             href="/dashboard/stock/analysis/sales"
@@ -718,7 +747,7 @@ function ManagementDashboard() {
             hideDetailsLink
           >
             <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
-              <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600">
+              <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
                 <SelectValue placeholder="Filtrar unidade" />
               </SelectTrigger>
               <SelectContent>
@@ -741,38 +770,38 @@ function ManagementDashboard() {
                     const delta = item.quantity - item.previous
                     const sameElapsedDelta = item.sameElapsedCurrent - item.sameElapsedPrevious
                     return (
-                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
+                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg border border-ds-divider bg-ds-surface p-3 shadow-sm">
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           <span
                             className={cn(
                               "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black",
-                              index === 0 && "bg-yellow-300 text-zinc-950",
-                              index === 1 && "bg-zinc-300 text-zinc-700",
-                              index === 2 && "bg-amber-500 text-white",
-                              index > 2 && "bg-zinc-100 text-zinc-400"
+                              index === 0 && "bg-ds-warn-bg text-ds-warn",
+                              index === 1 && "bg-ds-neutral-bg text-ds-neutral",
+                              index === 2 && "bg-ds-accent-soft text-ds-accent-ink",
+                              index > 2 && "bg-ds-muted text-ds-ink-faint"
                             )}
                           >
                             {index + 1}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-black text-zinc-800">{item.name}</p>
-                            <div className="mt-1.5 h-1.5 max-w-[180px] overflow-hidden rounded-full bg-zinc-100">
+                            <p className="truncate text-sm font-black text-ds-ink">{item.name}</p>
+                            <div className="mt-1.5 h-1.5 max-w-[180px] overflow-hidden rounded-full bg-ds-muted">
                               <div
-                                className="h-full rounded-full bg-pink-300"
+                                className="h-full rounded-full bg-ds-accent"
                                 style={{ width: `${Math.max(12, Math.round((item.quantity / maxBestSellerQuantity) * 100))}%` }}
                               />
                             </div>
-                            <p className="mt-1 text-xs font-semibold text-zinc-400">
+                            <p className="mt-1 text-xs font-semibold text-ds-ink-faint">
                               mês ant. {numberFormatter.format(item.previous)} · período {numberFormatter.format(item.sameElapsedCurrent)} vs {numberFormatter.format(item.sameElapsedPrevious)}
                             </p>
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-base font-black text-zinc-800">{numberFormatter.format(item.quantity)}</p>
-                          <p className={cn("text-xs font-bold", delta >= 0 ? "text-emerald-600" : "text-red-500")}>
+                          <p className="text-base font-black text-ds-ink">{numberFormatter.format(item.quantity)}</p>
+                          <p className={cn("text-xs font-bold", delta >= 0 ? "text-ds-ok" : "text-ds-danger")}>
                             {delta >= 0 ? "+" : ""}{numberFormatter.format(delta)}
                           </p>
-                          <p className={cn("text-xs font-bold", sameElapsedDelta >= 0 ? "text-emerald-600" : "text-red-500")}>
+                          <p className={cn("text-xs font-bold", sameElapsedDelta >= 0 ? "text-ds-ok" : "text-ds-danger")}>
                             per. {sameElapsedDelta >= 0 ? "+" : ""}{numberFormatter.format(sameElapsedDelta)}
                           </p>
                         </div>
@@ -783,7 +812,7 @@ function ManagementDashboard() {
               </>
             )}
             {bestSellers.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setSalesModalOpen(true)}>
+              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setSalesModalOpen(true)}>
                 Ver lista completa <ArrowRight className="h-4 w-4" />
               </button>
             ) : null}
@@ -791,10 +820,10 @@ function ManagementDashboard() {
         )}
 
         {permissions.dp?.view && (
-          <DashboardCard title="Escala da semana" description="Selecione a unidade para ver os turnos desta semana." href="/dashboard/dp/schedules" icon={Briefcase} className="order-2 xl:col-span-2" hideDetailsLink>
+          <DashboardCard widgetId="weekly-schedule" title="Escala da semana" description="Selecione a unidade para ver os turnos desta semana." href="/dashboard/dp/schedules" icon={Briefcase} hideDetailsLink>
             {currentSchedules.length > 0 ? (
               <Select value={selectedWeeklySchedule ? selectedWeeklySchedule.unitId ?? selectedWeeklySchedule.id : ""} onValueChange={setSelectedScheduleUnitId}>
-                <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600">
+                <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
                   <SelectValue placeholder="Selecionar unidade" />
                 </SelectTrigger>
                 <SelectContent>
@@ -824,22 +853,22 @@ function ManagementDashboard() {
                     <div
                       key={dateKey}
                       className={cn(
-                        "min-h-[96px] rounded-lg border bg-white p-2.5 text-center shadow-sm",
-                        isToday ? "border-pink-300 bg-pink-50/40" : "border-zinc-100"
+                        "min-h-[96px] rounded-lg border bg-ds-surface p-2.5 text-center shadow-sm",
+                        isToday ? "border-ds-accent bg-ds-accent-soft/40" : "border-ds-divider"
                       )}
                     >
-                      <p className={cn("text-xs font-black uppercase", isToday ? "text-pink-500" : "text-zinc-400")}>
+                      <p className={cn("text-xs font-black uppercase", isToday ? "text-ds-accent-ink" : "text-ds-ink-faint")}>
                         {format(date, "EEE", { locale: ptBR })}
                       </p>
-                      <p className={cn("text-xs font-bold", isToday ? "text-pink-400" : "text-zinc-300")}>{format(date, "dd/MM")}</p>
+                      <p className={cn("text-xs font-bold", isToday ? "text-ds-accent-ink" : "text-ds-ink-faint")}>{format(date, "dd/MM")}</p>
                       {dayShifts.length === 0 ? (
-                        <p className="mt-3 rounded-md bg-zinc-50 px-2 py-2 text-xs font-bold text-zinc-300">FOLGA</p>
+                        <p className="mt-3 rounded-md bg-ds-muted px-2 py-2 text-xs font-bold text-ds-ink-faint">FOLGA</p>
                       ) : (
                         <div className="mt-2 space-y-1.5">
                           {dayShifts.map((shift) => (
-                            <div key={shift.id} className="rounded-md bg-zinc-50 px-2 py-1.5">
-                              <p className="truncate text-xs font-black text-zinc-700">{getShiftUserName(selectedWeeklySchedule, shift, users)}</p>
-                              <p className="text-[10px] font-semibold text-zinc-400">{getShiftLabel(shift)}</p>
+                            <div key={shift.id} className="rounded-md bg-ds-muted px-2 py-1.5">
+                              <p className="truncate text-xs font-black text-ds-ink-2">{getShiftUserName(selectedWeeklySchedule, shift, users)}</p>
+                              <p className="text-[10px] font-semibold text-ds-ink-faint">{getShiftLabel(shift)}</p>
                             </div>
                           ))}
                         </div>
@@ -850,7 +879,7 @@ function ManagementDashboard() {
               </div>
             )}
             {currentSchedules.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setScheduleModalOpen(true)}>
+              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setScheduleModalOpen(true)}>
                 Ver escala do mês <ArrowRight className="h-4 w-4" />
               </button>
             ) : null}
@@ -858,7 +887,7 @@ function ManagementDashboard() {
         )}
 
         {permissions.dp?.view && (
-          <DashboardCard title="Calendário de ausências" description="Férias previstas até o fim do mês." href="/dashboard/dp/ferias" icon={CalendarDays} className="order-5" hideDetailsLink>
+          <DashboardCard widgetId="vacation-calendar" title="Calendário de ausências" description="Férias previstas até o fim do mês." href="/dashboard/dp/ferias" icon={CalendarDays} hideDetailsLink>
             {vacationsLoading && upcomingVacations.length === 0 ? (
               <EmptyState>Carregando férias...</EmptyState>
             ) : upcomingVacations.length === 0 ? (
@@ -868,21 +897,21 @@ function ManagementDashboard() {
                 {upcomingVacations.map(({ vacation, start }, index) => {
                   const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
                   return (
-                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 text-xs shadow-sm">
+                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-lg border border-ds-divider bg-ds-surface p-3 text-xs shadow-sm">
                       <div className="flex min-w-0 items-center gap-3">
                         <div
                           className={cn(
                             "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black text-white",
-                            index % 3 === 0 && "bg-sky-500",
-                            index % 3 === 1 && "bg-violet-600",
-                            index % 3 === 2 && "bg-pink-500"
+                            index % 3 === 0 && "bg-ds-info",
+                            index % 3 === 1 && "bg-ds-neutral",
+                            index % 3 === 2 && "bg-ds-accent"
                           )}
                         >
                           {getInitials(employeeName)}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-zinc-800">{employeeName}</p>
-                          <p className="text-xs font-semibold text-zinc-400">
+                          <p className="truncate text-sm font-black text-ds-ink">{employeeName}</p>
+                          <p className="text-xs font-semibold text-ds-ink-faint">
                             {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
                           </p>
                         </div>
@@ -890,9 +919,9 @@ function ManagementDashboard() {
                       <span
                         className={cn(
                           "rounded-lg border px-2.5 py-1 text-xs font-bold",
-                          vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
-                          vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
-                          vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
+                          vacation.status === "APPROVED" && "border-ds-ok bg-ds-ok-bg text-ds-ok",
+                          vacation.status === "PLANNED" && "border-ds-info bg-ds-info-bg text-ds-info",
+                          vacation.status === "PENDING" && "border-ds-warn bg-ds-warn-bg text-ds-warn"
                         )}
                       >
                         {getVacationStatusLabel(vacation.status)}
@@ -902,7 +931,7 @@ function ManagementDashboard() {
                 })}
               </div>
             )}
-            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setVacationsModalOpen(true)}>
+            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setVacationsModalOpen(true)}>
               Ver detalhes <ArrowRight className="h-4 w-4" />
             </button>
           </DashboardCard>
@@ -910,6 +939,7 @@ function ManagementDashboard() {
 
         {permissions.financial?.view && (
           <DashboardCard
+            widgetId="pending-payments"
             title="Pagamentos vencidos e a vencer"
             description="Todos os vencidos e próximos do mês corrente."
             href="/dashboard/financial/expenses"
@@ -921,37 +951,44 @@ function ManagementDashboard() {
               <EmptyState>Carregando pagamentos...</EmptyState>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-pink-500">Vencidos</p>
-                  <p className="mt-1 text-xl font-black text-red-600">{formatCurrency(financialSummary.overdueTotal)}</p>
-                  <p className="mt-1 text-xs font-semibold text-pink-400">{financialSummary.overdue.length} pagamento(s)</p>
+                <div className="rounded-lg border border-ds-danger bg-ds-danger-bg p-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-ds-accent-ink">Vencidos</p>
+                  <p className="mt-1 text-xl font-black text-ds-danger">{formatCurrency(financialSummary.overdueTotal)}</p>
+                  <p className="mt-1 text-xs font-semibold text-ds-accent-ink">{financialSummary.overdue.length} pagamento(s)</p>
                 </div>
-                <div className="rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-black uppercase tracking-wide text-zinc-500">A vencer no mês</p>
-                  <p className="mt-1 text-xl font-black text-zinc-800">{formatCurrency(financialSummary.upcomingTotal)}</p>
-                  <p className="mt-1 text-xs font-semibold text-zinc-400">{financialSummary.upcoming.length} pagamento(s)</p>
+                <div className="rounded-lg border border-ds-divider bg-ds-surface p-3 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">A vencer no mês</p>
+                  <p className="mt-1 text-xl font-black text-ds-ink">{formatCurrency(financialSummary.upcomingTotal)}</p>
+                  <p className="mt-1 text-xs font-semibold text-ds-ink-faint">{financialSummary.upcoming.length} pagamento(s)</p>
                 </div>
               </div>
             )}
             {!expensesLoading ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setPaymentsModalOpen(true)}>
+              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setPaymentsModalOpen(true)}>
                 Detalhar pagamentos <ArrowRight className="h-4 w-4" />
               </button>
             ) : null}
           </DashboardCard>
         )}
+
+        {permissions.financial?.view && <ModuleShortcutCard widgetId="financial-shortcuts" title="Central financeira" description="Acesso rápido aos principais fluxos financeiros." href="/dashboard/financial" icon={Wallet} links={[{ label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow" }, { label: "Despesas", href: "/dashboard/financial/expenses" }, { label: "Conciliação", href: "/dashboard/financial/sales-reconciliation" }]} />}
+        {permissions.stock.view && <ModuleShortcutCard widgetId="stock-shortcuts" title="Central de estoque" description="Controle, compras e análises do estoque." href="/dashboard/stock" icon={Boxes} links={[{ label: "Controle de estoque", href: "/dashboard/stock/inventory-control" }, { label: "Compras", href: "/dashboard/stock/purchasing" }, { label: "Análises", href: "/dashboard/stock/analysis" }]} />}
+        {permissions.dp.view && <ModuleShortcutCard widgetId="people-shortcuts" title="Central de pessoas" description="Equipe, escalas, férias e documentos." href="/dashboard/dp" icon={UsersRound} links={[{ label: "Colaboradores", href: "/dashboard/dp/collaborators" }, { label: "Escalas", href: "/dashboard/dp/schedules" }, { label: "Férias", href: "/dashboard/dp/ferias" }]} />}
+        {permissions.dashboard.operational && <ModuleShortcutCard widgetId="operations-shortcuts" title="Central de operações" description="Tarefas, formulários e rotinas operacionais." href="/dashboard/operations" icon={Workflow} links={[{ label: "Tarefas", href: "/dashboard/tasks" }, { label: "Formulários", href: "/dashboard/forms" }, { label: "Operações", href: "/dashboard/operations" }]} />}
+        {permissions.settings.viewAiCosts && <ModuleShortcutCard widgetId="ai-costs-shortcuts" title="IA e infraestrutura" description="Custos, limites e alertas dos serviços." href="/dashboard/settings" icon={Cpu} links={[{ label: "Créditos GPT", href: "/dashboard/settings" }, { label: "Custo Google Cloud", href: "/dashboard/settings" }, { label: "Alertas", href: "/dashboard/settings" }]} />}
       </div>
+      </ManagementDashboardBuilder>
 
       <Dialog open={goalsModalOpen} onOpenChange={setGoalsModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">Detalhe das metas</div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Metas e faturamento</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">Progresso atual por quiosque e consolidado geral.</DialogDescription>
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Detalhe das metas</div>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Metas e faturamento</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">Progresso atual por quiosque e consolidado geral.</DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-6 grid gap-3 md:grid-cols-3">
               <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={formatSalesPeriod(visibleSalesReports)} />
               <Metric label="Meta geral atual" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))} detail={`${currentGoals.length} meta(s) ativa(s)`} />
@@ -959,14 +996,14 @@ function ManagementDashboard() {
             </div>
             <div className="space-y-5">
               {goalRows.map((goal) => (
-                <div key={goal.kioskId} className="space-y-2 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                <div key={goal.kioskId} className="space-y-2 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
                   <div className="grid grid-cols-[1fr_auto_48px] items-center gap-4 text-sm">
-                    <span className="truncate text-base font-black text-zinc-800">{goal.name}</span>
-                    <span className="font-semibold text-zinc-500">{formatCurrency(goal.current)} / {formatCurrency(goal.target)}</span>
-                    <span className={cn("text-right font-black", goal.progress >= 0.8 ? "text-zinc-900" : "text-amber-500")}>{Math.round(goal.progress * 100)}%</span>
+                    <span className="truncate text-base font-black text-ds-ink">{goal.name}</span>
+                    <span className="font-semibold text-ds-ink-muted">{formatCurrency(goal.current)} / {formatCurrency(goal.target)}</span>
+                    <span className={cn("text-right font-black", goal.progress >= 0.8 ? "text-ds-ink" : "text-ds-warn")}>{Math.round(goal.progress * 100)}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                    <div className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-pink-500" : "bg-amber-400")} style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }} />
+                  <div className="h-2 overflow-hidden rounded-full bg-ds-muted">
+                    <div className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-ds-accent" : "bg-ds-warn")} style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }} />
                   </div>
                 </div>
               ))}
@@ -976,23 +1013,23 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={salesModalOpen} onOpenChange={setSalesModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">Ranking completo</div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Mercadorias mais vendidas</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Ranking completo</div>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Mercadorias mais vendidas</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">
                 {allBestSellers.length} produtos · {formatSalesPeriod(visibleSalesReports)} vs mês anterior
               </DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
-              <p className="text-sm font-semibold text-zinc-400">
+              <p className="text-sm font-semibold text-ds-ink-faint">
                 {allBestSellers.length} produtos · {formatSalesPeriod(visibleSalesReports)}
               </p>
               <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
-                <SelectTrigger className="h-10 w-[220px] rounded-lg border-zinc-200 bg-white px-4 font-semibold text-zinc-600">
+                <SelectTrigger className="h-10 w-[220px] rounded-lg border-ds-border bg-ds-surface px-4 font-semibold text-ds-ink-muted">
                   <SelectValue placeholder="Filtrar unidade" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1007,7 +1044,7 @@ function ManagementDashboard() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-[48px_1fr_80px_80px_80px_140px] border-b border-zinc-100 px-3 pb-3 text-xs font-black uppercase tracking-wide text-zinc-400">
+            <div className="grid grid-cols-[48px_1fr_80px_80px_80px_140px] border-b border-ds-divider px-3 pb-3 text-xs font-black uppercase tracking-wide text-ds-ink-faint">
               <span>#</span>
               <span>Produto</span>
               <span className="text-right">Qtd</span>
@@ -1015,7 +1052,7 @@ function ManagementDashboard() {
               <span className="text-right">Delta</span>
               <span>Proporção</span>
             </div>
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-ds-divider">
               {allBestSellers.map((item, index) => {
                 const delta = item.quantity - item.previous
                 return (
@@ -1023,23 +1060,23 @@ function ManagementDashboard() {
                     <span
                       className={cn(
                         "flex h-7 w-7 items-center justify-center rounded-full text-xs font-black",
-                        index === 0 && "bg-yellow-300 text-zinc-950",
-                        index === 1 && "bg-zinc-300 text-zinc-700",
-                        index === 2 && "bg-amber-500 text-white",
-                        index > 2 && "bg-zinc-100 text-zinc-400"
+                        index === 0 && "bg-ds-warn-bg text-ds-warn",
+                        index === 1 && "bg-ds-neutral-bg text-ds-neutral",
+                        index === 2 && "bg-ds-accent-soft text-ds-accent-ink",
+                        index > 2 && "bg-ds-muted text-ds-ink-faint"
                       )}
                     >
                       {index + 1}
                     </span>
-                    <span className="truncate font-black text-zinc-800">{item.name}</span>
-                    <span className="text-right font-black text-zinc-800">{numberFormatter.format(item.quantity)}</span>
-                    <span className="text-right font-semibold text-zinc-400">{numberFormatter.format(item.previous)}</span>
-                    <span className={cn("text-right font-black", delta >= 0 ? "text-emerald-600" : "text-red-500")}>
+                    <span className="truncate font-black text-ds-ink">{item.name}</span>
+                    <span className="text-right font-black text-ds-ink">{numberFormatter.format(item.quantity)}</span>
+                    <span className="text-right font-semibold text-ds-ink-faint">{numberFormatter.format(item.previous)}</span>
+                    <span className={cn("text-right font-black", delta >= 0 ? "text-ds-ok" : "text-ds-danger")}>
                       {delta >= 0 ? "+" : ""}{numberFormatter.format(delta)}
                     </span>
-                    <span className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                    <span className="h-2 overflow-hidden rounded-full bg-ds-muted">
                       <span
-                        className="block h-full rounded-full bg-pink-300"
+                        className="block h-full rounded-full bg-ds-accent"
                         style={{ width: `${Math.max(6, Math.round((item.quantity / maxAllBestSellerQuantity) * 100))}%` }}
                       />
                     </span>
@@ -1052,7 +1089,7 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={paymentsModalOpen} onOpenChange={setPaymentsModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Pagamentos vencidos e a vencer</DialogTitle>
             <DialogDescription>Vencidos em aberto e vencimentos restantes do mês corrente.</DialogDescription>
@@ -1070,7 +1107,7 @@ function ManagementDashboard() {
                       <p className="truncate font-medium">{expense.description || expense.supplier || "Pagamento sem descrição"}</p>
                       <p className="text-xs text-muted-foreground">{expense.supplier || "Fornecedor não informado"}</p>
                     </div>
-                    <p className={cn("font-semibold", overdue && "text-red-600")}>{formatCurrency(Number(expense.totalValue || 0))}</p>
+                    <p className={cn("font-semibold", overdue && "text-ds-danger")}>{formatCurrency(Number(expense.totalValue || 0))}</p>
                     <p className="text-xs text-muted-foreground">{due ? format(due, "dd/MM/yyyy") : "sem vencimento"}</p>
                   </div>
                 )
@@ -1081,15 +1118,15 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={vacationsModalOpen} onOpenChange={setVacationsModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">Calendário de ausências</div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Férias do mês</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">Ausências previstas até o fim do mês corrente.</DialogDescription>
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Calendário de ausências</div>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Férias do mês</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">Ausências previstas até o fim do mês corrente.</DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-5 flex flex-wrap gap-2">
               {[
                 ["all", "Todos"],
@@ -1102,7 +1139,7 @@ function ManagementDashboard() {
                   type="button"
                   className={cn(
                     "rounded-full border px-4 py-2 text-sm font-black",
-                    vacationStatusFilter === value ? "border-pink-500 bg-pink-500 text-white" : "border-zinc-100 bg-white text-zinc-500"
+                    vacationStatusFilter === value ? "border-ds-accent bg-ds-accent text-white" : "border-ds-divider bg-ds-surface text-ds-ink-muted"
                   )}
                   onClick={() => setVacationStatusFilter(value)}
                 >
@@ -1117,32 +1154,32 @@ function ManagementDashboard() {
                 {filteredVacations.map(({ vacation, start }, index) => {
                   const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
                   return (
-                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
                       <div
                         className={cn(
                           "flex h-12 w-12 items-center justify-center rounded-full text-sm font-black text-white",
-                          index % 5 === 0 && "bg-sky-500",
-                          index % 5 === 1 && "bg-violet-600",
-                          index % 5 === 2 && "bg-pink-500",
-                          index % 5 === 3 && "bg-orange-500",
-                          index % 5 === 4 && "bg-lime-600"
+                          index % 5 === 0 && "bg-ds-info",
+                          index % 5 === 1 && "bg-ds-neutral",
+                          index % 5 === 2 && "bg-ds-accent",
+                          index % 5 === 3 && "bg-ds-warn",
+                          index % 5 === 4 && "bg-ds-ok"
                         )}
                       >
                         {getInitials(employeeName)}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-base font-black text-zinc-800">{employeeName}</p>
-                        <p className="text-sm font-semibold text-zinc-400">
+                        <p className="truncate text-base font-black text-ds-ink">{employeeName}</p>
+                        <p className="text-sm font-semibold text-ds-ink-faint">
                           {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
                         </p>
                       </div>
-                      <p className="hidden text-sm font-semibold text-zinc-400 sm:block">{vacation.days} dia(s)</p>
+                      <p className="hidden text-sm font-semibold text-ds-ink-faint sm:block">{vacation.days} dia(s)</p>
                       <span
                         className={cn(
                           "rounded-lg border px-3 py-1 text-sm font-bold",
-                          vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
-                          vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
-                          vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
+                          vacation.status === "APPROVED" && "border-ds-ok bg-ds-ok-bg text-ds-ok",
+                          vacation.status === "PLANNED" && "border-ds-info bg-ds-info-bg text-ds-info",
+                          vacation.status === "PENDING" && "border-ds-warn bg-ds-warn-bg text-ds-warn"
                         )}
                       >
                         {getVacationStatusLabel(vacation.status)}
@@ -1157,24 +1194,24 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={scheduleModalOpen} onOpenChange={setScheduleModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-4xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-4xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">
                 {selectedMonthlySchedule ? units.find((unit) => unit.id === selectedMonthlySchedule.unitId)?.name ?? selectedMonthlySchedule.name : "Unidade"}
               </div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Escala do mês</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">Todos os turnos cadastrados · {format(today, "MMMM yyyy", { locale: ptBR })}</DialogDescription>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Escala do mês</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">Todos os turnos cadastrados · {format(today, "MMMM yyyy", { locale: ptBR })}</DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
-              <p className="text-sm font-semibold text-zinc-400">
+              <p className="text-sm font-semibold text-ds-ink-faint">
                 {new Set(monthlyScheduleShifts.map((shift) => shift.date)).size} dias com turnos · {format(today, "MMMM yyyy", { locale: ptBR })}
               </p>
               {currentSchedules.length > 0 ? (
                 <Select value={selectedMonthlySchedule ? selectedMonthlySchedule.unitId ?? selectedMonthlySchedule.id : ""} onValueChange={setMonthlyScheduleUnitId}>
-                  <SelectTrigger className="h-10 w-[220px] rounded-lg border-zinc-200 bg-white px-4 font-semibold text-zinc-600">
+                  <SelectTrigger className="h-10 w-[220px] rounded-lg border-ds-border bg-ds-surface px-4 font-semibold text-ds-ink-muted">
                     <SelectValue placeholder="Selecionar unidade" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1201,17 +1238,17 @@ function ManagementDashboard() {
                       .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""))
                     const date = new Date(`${dateKey}T12:00:00`)
                     return (
-                      <div key={dateKey} className="grid grid-cols-[72px_1fr] gap-5 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                      <div key={dateKey} className="grid grid-cols-[72px_1fr] gap-5 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
                         <div className="text-center">
-                          <p className="text-xs font-black uppercase text-zinc-400">{format(date, "EEE", { locale: ptBR })}</p>
-                          <p className="text-2xl font-black text-zinc-800">{format(date, "dd")}</p>
-                          <p className="text-sm font-bold text-zinc-300">{format(date, "MM")}</p>
+                          <p className="text-xs font-black uppercase text-ds-ink-faint">{format(date, "EEE", { locale: ptBR })}</p>
+                          <p className="text-2xl font-black text-ds-ink">{format(date, "dd")}</p>
+                          <p className="text-sm font-bold text-ds-ink-faint">{format(date, "MM")}</p>
                         </div>
                         <div className="flex flex-wrap gap-3">
                           {dayShifts.map((shift) => (
-                            <div key={shift.id} className="flex min-w-[140px] items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-2">
-                              <span className="truncate text-sm font-black text-zinc-800">{getShiftUserName(selectedMonthlySchedule, shift, users)}</span>
-                              <span className="text-xs font-bold text-zinc-400">{getShiftLabel(shift)}</span>
+                            <div key={shift.id} className="flex min-w-[140px] items-center justify-between gap-3 rounded-lg border border-ds-divider bg-ds-muted px-4 py-2">
+                              <span className="truncate text-sm font-black text-ds-ink">{getShiftUserName(selectedMonthlySchedule, shift, users)}</span>
+                              <span className="text-xs font-bold text-ds-ink-faint">{getShiftLabel(shift)}</span>
                             </div>
                           ))}
                         </div>
