@@ -99,6 +99,12 @@ export type AppCostOverview = {
     tableId: string | null;
     detectedAutomatically: boolean;
   };
+  coverage: {
+    status: "unavailable" | "empty" | "backfilling" | "current";
+    firstUsageDate: string | null;
+    lastUsageDate: string | null;
+    expectedThroughDate: string;
+  };
   costs: {
     currentMonth: number | null;
     previousMonth: number | null;

@@ -22,6 +22,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
 | `document-templates` | 4 | Traçado | [Cadastro e publicação](flows/document-templates.md) — percurso complementado; verificação integrada pendente |
+| `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
 | `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
@@ -51,7 +52,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
 | `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — visão anual/mensal desde janeiro de 2026, snapshots normalizados, rotina limitada de backfill/revisão tardia, fechamento/reabertura, eventos adversos Stone e NSU Stone do PDV cobertos localmente; amostra real confirmou somente o contrato PDV, sem homologar API Stone, scheduler/webhook, backfill real ou liquidação bancária |
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
-| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
+| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — política automática com 30%, compra direta por unidade e comparação local; motor/legado testados em emulador; E2E, piloto e ativação pendentes |
 | `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |

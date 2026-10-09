@@ -9,6 +9,7 @@ import {
   budgetAlert,
   createHourlyCache,
   dryRunBytes,
+  googleBillingExportCoverage,
   maximumBytesBilled,
   projectPanelMonthlyBytes,
   queryWithinLimit,
@@ -76,6 +77,7 @@ function blankOverview(params: {
   bytesPerQuery?: number | null;
   warnings: string[];
 }): AppCostOverview {
+  const coverage = googleBillingExportCoverage([], new Date(params.generatedAt));
   return {
     provider: "google_cloud_billing",
     configured: params.configured,
@@ -89,6 +91,7 @@ function blankOverview(params: {
       tableId: params.table?.tableId || null,
       detectedAutomatically: params.table?.detectedAutomatically || false,
     },
+    coverage: { ...coverage, status: "unavailable" },
     costs: {
       currentMonth: null,
       previousMonth: null,
@@ -351,6 +354,8 @@ async function readGoogleCloudCostOverview(now: Date): Promise<AppCostOverview> 
       });
     }
     const rows = result.rows;
+    const coverage = googleBillingExportCoverage(rows.map((row) => row.usageDate), now);
+    const exportIsCurrent = coverage.status === "current";
 
     let currentMonth = 0;
     let previousMonth = 0;
@@ -389,12 +394,13 @@ async function readGoogleCloudCostOverview(now: Date): Promise<AppCostOverview> 
         tableId: table.tableId,
         detectedAutomatically: table.detectedAutomatically,
       },
+      coverage,
       costs: {
-        currentMonth: rounded(currentMonth),
-        previousMonth: rounded(previousMonth),
-        last30Days: rounded(last30Days),
-        grossCurrentMonth: rounded(grossCurrentMonth),
-        creditsCurrentMonth: rounded(creditsCurrentMonth),
+        currentMonth: exportIsCurrent ? rounded(currentMonth) : null,
+        previousMonth: exportIsCurrent ? rounded(previousMonth) : null,
+        last30Days: exportIsCurrent ? rounded(last30Days) : null,
+        grossCurrentMonth: exportIsCurrent ? rounded(grossCurrentMonth) : null,
+        creditsCurrentMonth: exportIsCurrent ? rounded(creditsCurrentMonth) : null,
         daily: [...daily.entries()].map(([date, cost]) => ({ date, cost: rounded(cost) })).sort((left, right) => left.date.localeCompare(right.date)),
         byService: breakdown(services),
         bySku: breakdown(skus),
@@ -406,7 +412,11 @@ async function readGoogleCloudCostOverview(now: Date): Promise<AppCostOverview> 
       },
       queryEstimate: estimate,
       alert: budgetAlert(estimate.monthlyPanelBytesAtHourlyRefresh, BIGQUERY_MONTHLY_FREE_BYTES, "bigquery_panel_estimate"),
-      warnings: currencies.size > 1 ? ["O export retornou mais de uma moeda; confira o detalhamento no Cloud Billing."] : [],
+      warnings: [
+        ...(coverage.status === "empty" ? ["O export do projeto ainda não retornou nenhum dia de uso."] : []),
+        ...(coverage.status === "backfilling" ? [`O export do projeto ainda está em preenchimento: há dados somente até ${coverage.lastUsageDate}. Os totais permanecem indisponíveis para não apresentar zero ou valor parcial como consolidado.`] : []),
+        ...(currencies.size > 1 ? ["O export retornou mais de uma moeda; confira o detalhamento no Cloud Billing."] : []),
+      ],
     };
   } catch {
     return blankOverview({
