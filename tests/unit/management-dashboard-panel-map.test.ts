@@ -4,7 +4,7 @@ import { Fragment, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { createDefaultManagementLayout } from "../../src/features/management-dashboard/default-layout";
-import { PanelMap, mapHeight, mapSpan, sizeLabelOf } from "../../src/features/management-dashboard/panel-map";
+import { PanelMap, WidgetControls, mapHeight, mapSpan, sizeLabelOf } from "../../src/features/management-dashboard/panel-map";
 
 const noop = () => undefined;
 
@@ -42,18 +42,24 @@ test("rótulo de tamanho vem do catálogo", () => {
   assert.equal(sizeLabelOf(hub), "Compacto");
 });
 
-test("bloco selecionado abre os três tamanhos e a remoção", () => {
-  const { layout, html } = render({ selectedId: undefined as never });
-  assert.ok(!html.includes("Remover do painel"));
-  const first = layout.widgets[0]!;
-  const selected = render({ selectedId: first.instanceId }).html;
-  for (const label of ["Compacto", "Médio", "Amplo"]) assert.ok(selected.includes(label));
-  assert.ok(selected.includes("Remover do painel"));
+test("cada bloco tem botão de ajustes no próprio widget", () => {
+  const { layout, html } = render();
+  assert.equal((html.match(/Ajustar /g) ?? []).length, layout.widgets.length);
+  assert.ok(!html.includes("Remover do painel"), "controles só aparecem ao abrir o bloco");
+});
+
+test("controles do widget mostram os três tamanhos e a remoção", () => {
+  Object.assign(globalThis, { React: { createElement, Fragment } });
+  const first = createDefaultManagementLayout("u1", "Ana").widgets[0]!;
+  const html = renderToStaticMarkup(createElement(WidgetControls, { placement: first, locked: false, onResize: noop, onRemove: noop }));
+  for (const label of ["Compacto", "Médio", "Amplo"]) assert.ok(html.includes(label));
+  assert.ok(html.includes("Remover do painel"));
 });
 
 test("widget travado não pode ser removido", () => {
+  Object.assign(globalThis, { React: { createElement, Fragment } });
   const first = createDefaultManagementLayout("u1", "Ana").widgets[0]!;
-  const html = render({ selectedId: first.instanceId, lockedIds: [first.instanceId] }).html;
+  const html = renderToStaticMarkup(createElement(WidgetControls, { placement: first, locked: true, onResize: noop, onRemove: noop }));
   assert.match(html, /<button[^>]*disabled[^>]*>(?:(?!<\/button>)[\s\S])*Remover do painel/);
 });
 
