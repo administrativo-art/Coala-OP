@@ -1078,7 +1078,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx).
 
-Arquivos locais percorridos: 47.
+Arquivos locais percorridos: 60.
 
 Chamadas candidatas encontradas:
 
@@ -1134,6 +1134,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `reposition.receive` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `reposition.view` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `settings.viewAiCosts` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
+- `stock.analysis.restock` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `stock.audit.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 - `stock.returns.updateStatus` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.approve` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
