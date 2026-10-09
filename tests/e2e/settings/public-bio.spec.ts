@@ -25,10 +25,12 @@ test("edita com prévia, publica somente links externos e mantém a edição pro
   await expect(page.getByRole("link", { name: "Acessar página" })).toBeVisible();
   await expect(page.getByAltText("QR Code da página pública Coala Shakes")).toBeVisible();
 
+  // Com a página rolada a faixa fina repete "Publicar página"; o botão do painel é sempre o primeiro.
+  const publish = page.getByRole("button", { name: "Publicar página" }).first();
   await page.getByRole("tab", { name: /Botões/ }).click();
   const urls = page.getByPlaceholder("https://");
   await urls.first().fill("https://op.coalashakes.com/dashboard");
-  await page.getByRole("button", { name: "Publicar página" }).click();
+  await publish.click();
   await expect(page.getByRole("alert").filter({ hasText: "destino público e válido" })).toBeVisible();
 
   for (let index = 0; index < await urls.count(); index += 1) {
@@ -41,7 +43,7 @@ test("edita com prévia, publica somente links externos e mantém a edição pro
   await expect(page.getByRole("status")).toContainText("Rascunho salvo");
   expect((await (await request.get("/api/public/bio")).json()).page).toBeNull();
 
-  await page.getByRole("button", { name: "Publicar página" }).click();
+  await publish.click();
   await expect(page.getByRole("status")).toContainText("Página publicada");
   const published = await (await request.get("/api/public/bio")).json();
   expect(published.page.links).toHaveLength(5);
