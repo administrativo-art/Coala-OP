@@ -5,6 +5,8 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import { HeroChip } from '@/components/patterns/hero-chip';
+import { PageHero } from '@/components/patterns/page-hero';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PermissionGuard } from '@/components/permission-guard';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
@@ -19,7 +21,6 @@ import { canCreatePurchase, canCreateQuotation, canViewPurchasing } from '@/lib/
 import { type PurchaseFinancial, type PurchaseOrder, type PurchaseReceipt } from '@/types';
 import {
   PurchasingEmptyState,
-  PurchasingFilterChip,
   PurchasingPageFrame,
   PurchasingStatusBadge,
   isDateInPurchasingPeriod,
@@ -167,35 +168,38 @@ export default function PurchaseOrdersPage() {
       <PurchasingPageFrame>
         <PurchasingModuleNavigation activeTab="orders" activeStage="issued" />
 
-        <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Pedidos de compra</h1>
-            <p className="mt-1.5 text-[13.5px] text-zinc-600">Compras diretas e compras vindas de cotação, do pedido ao custo efetivo.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {canOpenQuotation ? (
-              <Button variant="outline" asChild className="h-[38px] rounded-[9px] border-zinc-200 bg-white px-4 text-[13px] font-bold shadow-none">
-                <Link href="/dashboard/purchasing/quotations">Nova cotação</Link>
-              </Button>
-            ) : null}
-            {canOpenDirectPurchase ? (
-              <Button onClick={() => setDirectOpen(true)} className="h-[38px] rounded-[9px] bg-violet-600 px-4 text-[13px] font-extrabold text-white hover:bg-violet-700">
-                <Plus className="mr-2 h-3.5 w-3.5" />
-                Compra direta
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-[12px] border border-zinc-200 bg-white px-3 py-2.5">
-          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={rows.length} onClick={() => setFilter('all')} />
-          <PurchasingFilterChip active={filter === 'issued'} label="Emitido" count={counts.issued} tone="blue" onClick={() => setFilter('issued')} />
-          <PurchasingFilterChip active={filter === 'to_receive'} label="A receber" count={counts.toReceive} tone="purple" onClick={() => setFilter('to_receive')} />
-          <PurchasingFilterChip active={filter === 'receiving'} label="Em recebimento" count={counts.receiving} tone="amber" onClick={() => setFilter('receiving')} />
-          <PurchasingFilterChip active={filter === 'received'} label="Recebida" count={counts.received} tone="green" onClick={() => setFilter('received')} />
-          <PurchasingFilterChip active={filter === 'cancelled'} label="Cancelada" count={counts.cancelled} tone="rose" onClick={() => setFilter('cancelled')} />
-          <span className="ml-auto text-xs text-zinc-500">{visibleRows.length} de {rows.length} pedidos</span>
-        </div>
+        <PageHero
+          className="mb-4"
+          kicker="Compras"
+          title="Pedidos de compra"
+          subtitle="Compras diretas e compras vindas de cotação, do pedido ao custo efetivo."
+          actions={(
+            <>
+              {canOpenQuotation ? (
+                <Button variant="on-dark-secondary" size="md" asChild>
+                  <Link href="/dashboard/purchasing/quotations">Nova cotação</Link>
+                </Button>
+              ) : null}
+              {canOpenDirectPurchase ? (
+                <Button type="button" variant="primary-page" size="md" onClick={() => setDirectOpen(true)}>
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  Compra direta
+                </Button>
+              ) : null}
+            </>
+          )}
+          chips={(
+            <>
+              <HeroChip value={rows.length} label="Todos" active={filter === 'all'} onClick={() => setFilter('all')} />
+              <HeroChip value={counts.issued} label="Emitido" tone="info" active={filter === 'issued'} onClick={() => setFilter('issued')} />
+              <HeroChip value={counts.toReceive} label="A receber" active={filter === 'to_receive'} onClick={() => setFilter('to_receive')} />
+              <HeroChip value={counts.receiving} label="Em recebimento" tone="warning" active={filter === 'receiving'} onClick={() => setFilter('receiving')} />
+              <HeroChip value={counts.received} label="Recebida" active={filter === 'received'} onClick={() => setFilter('received')} />
+              <HeroChip value={counts.cancelled} label="Cancelada" tone="danger" active={filter === 'cancelled'} onClick={() => setFilter('cancelled')} />
+              <span className="ml-auto text-xs text-ds-on-dark-sub">{visibleRows.length} de {rows.length} pedidos</span>
+            </>
+          )}
+        />
 
         {loading ? (
           <div className="overflow-hidden rounded-[14px] border border-zinc-200 bg-white">
