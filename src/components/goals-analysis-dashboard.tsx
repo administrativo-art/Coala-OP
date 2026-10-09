@@ -3,73 +3,93 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { BarChart3, CalendarRange, Filter, History, Store, TrendingUp } from 'lucide-react';
 
 import { useGoals } from '@/contexts/goals-context';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useAuth } from '@/hooks/use-auth';
+import { ControlPanel, ControlIndicator } from '@/components/patterns/control-panel';
+import { FilterChips } from '@/components/patterns/filter-chips';
+import { GoalsHistoryView, type GoalsHistoryStatus } from '@/components/goals-history-view';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DarkField, EmptyBox, PanelStat, SectionCard, attainmentTone, darkControlClass, fmtBRL, fmtPct, kickerClass } from '@/components/goals/goals-ui';
 import { type GoalPeriodDoc, type GoalType, type GoalPeriod } from '@/types';
-import {
-  getGoalAttainment,
-  getGoalDistributionModeLabel,
-  getGoalPeriodResolvedDailyTarget,
-  getGoalPeriodResolvedDayCount,
-  getGoalPeriodResolvedMode,
-} from '@/lib/goals-history';
+import { getGoalAttainment } from '@/lib/goals-history';
+import { buildEmployeeEarnings, reachedTier, summarizePrizes } from '@/lib/goals-earnings';
+import { getUserDisplayName } from '@/lib/user-display';
+import { cn } from '@/lib/utils';
 
 const typeLabels: Record<string, string> = {
   revenue: 'Faturamento',
-  ticket: 'Ticket Médio',
-  product_line: 'Linha de Produto',
-  product_specific: 'Produto Específico',
+  ticket: 'Ticket médio',
+  product_line: 'Linha de produto',
+  product_specific: 'Produto específico',
 };
 
-const periodLabels: Record<string, string> = {
-  daily: 'Diária',
-  weekly: 'Semanal',
-  monthly: 'Mensal',
-};
+const periodLabels: Record<string, string> = { daily: 'Diária', weekly: 'Semanal', monthly: 'Mensal' };
 
-const statusLabels: Record<string, string> = {
-  closed: 'Encerrada',
-  cancelled: 'Cancelada',
-};
+const roleLabels: Record<string, string> = { fixed: 'Colaborador', relief: 'Folguista', leader: 'Liderança' };
 
-function fmtCurrency(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+/** Premiação apurada como % do faturamento dos mesmos períodos. */
+function prizeShareOf(items: GoalPeriodDoc[]) {
+  const apurated = items.filter(p => p.closureSnapshot?.bonus);
+  const revenue = apurated.reduce((sum, p) => sum + p.currentValue, 0);
+  return revenue > 0 ? (summarizePrizes(items).totalPrize / revenue) * 100 : null;
 }
 
-function fmtTs(ts: unknown, mask: string) {
-  if (!ts || typeof ts !== 'object' || !('toDate' in (ts as Record<string, unknown>))) return '-';
+const tierMeta = [
+  { key: 'below', label: 'Abaixo do alvo', bar: 'bg-ds-danger' },
+  { key: 'target', label: 'Alvo', bar: 'bg-ds-warn' },
+  { key: 'up', label: 'UP', bar: 'bg-ds-info' },
+  { key: 'top', label: 'TOP', bar: 'bg-ds-ok' },
+] as const;
+
+function TrendChart({ points }: { points: { key: string; pct: number }[] }) {
+  if (points.length < 2) return <p className="px-5 py-8 text-center text-[13px] font-semibold text-ds-ink-faint">São necessários pelo menos 2 meses encerrados para mostrar a tendência.</p>;
+  const w = 720, h = 200, padL = 36, padR = 12, padT = 12, padB = 26;
+  const max = Math.max(120, ...points.map(p => p.pct));
+  const x = (i: number) => padL + (i * (w - padL - padR)) / (points.length - 1);
+  const y = (v: number) => padT + (1 - v / max) * (h - padT - padB);
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.pct).toFixed(1)}`).join(' ');
+  return (
+    <figure className="px-3 py-4">
+      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Atingimento mensal da meta" className="h-auto w-full">
+        <line x1={padL} x2={w - padR} y1={y(100)} y2={y(100)} className="stroke-ds-ok" strokeDasharray="4 4" />
+        <text x={padL - 6} y={y(100) + 4} textAnchor="end" className="fill-ds-ink-muted text-[10px] font-bold">100%</text>
+        <line x1={padL} x2={w - padR} y1={y(0)} y2={y(0)} className="stroke-ds-border" />
+        <path d={path} fill="none" className="stroke-ds-accent" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p, i) => (
+          <g key={p.key}>
+            <circle cx={x(i)} cy={y(p.pct)} r={4} className={p.pct >= 100 ? 'fill-ds-ok' : 'fill-ds-accent'} />
+            <text x={x(i)} y={y(p.pct) - 9} textAnchor="middle" className="fill-ds-ink text-[10.5px] font-extrabold">{Math.round(p.pct)}%</text>
+            <text x={x(i)} y={h - 8} textAnchor="middle" className="fill-ds-ink-muted text-[10px] font-bold capitalize">{monthLabel(p.key)}</text>
+          </g>
+        ))}
+      </svg>
+    </figure>
+  );
+}
+
+function monthKeyOf(period: GoalPeriodDoc) {
   try {
-    return format((ts as { toDate: () => Date }).toDate(), mask, { locale: ptBR });
+    return format(period.startDate.toDate(), 'yyyy-MM');
   } catch {
-    return '-';
+    return '0000-00';
   }
 }
 
-function getPctTone(attainment: number) {
-  if (attainment >= 100) return 'text-green-600';
-  if (attainment >= 80) return 'text-amber-500';
-  return 'text-rose-500';
+function monthLabel(key: string) {
+  const [year, month] = key.split('-').map(Number);
+  if (!year || !month) return key;
+  return format(new Date(year, month - 1, 1), 'MMM/yyyy', { locale: ptBR });
 }
 
-function getPctBadge(attainment: number) {
-  if (attainment >= 100) return 'default' as const;
-  if (attainment >= 80) return 'secondary' as const;
-  return 'outline' as const;
-}
-
-export function GoalsAnalysisDashboard() {
-  const { periods, templates, loading } = useGoals();
+export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab?: 'overview' | 'closures' }) {
+  const { periods, templates, employeeGoals, loading } = useGoals();
   const { kiosks } = useKiosks();
+  const { users } = useAuth();
 
+  const [tab, setTab] = useState<'overview' | 'closures'>(initialTab);
+  const [filterStatus, setFilterStatus] = useState<GoalsHistoryStatus | null>(null);
   const [filterKioskId, setFilterKioskId] = useState('all');
   const [filterType, setFilterType] = useState<GoalType | 'all'>('all');
   const [filterPeriod, setFilterPeriod] = useState<GoalPeriod | 'all'>('all');
@@ -77,269 +97,270 @@ export function GoalsAnalysisDashboard() {
   const [filterDateEnd, setFilterDateEnd] = useState('');
 
   const getKioskName = (id: string) => kiosks.find(k => k.id === id)?.name ?? id;
-  const getTemplate = (id: string) => templates.find(t => t.id === id);
+  const usersById = useMemo(() => Object.fromEntries(users.map(u => [u.id, u])), [users]);
+  const getUserName = (id: string) => getUserDisplayName(usersById[id], id);
 
-  const historicPeriods = useMemo(() => {
+  const closedPeriods = useMemo(() => {
+    const templateById = new Map(templates.map(t => [t.id, t]));
     return periods
-      .filter(period => period.status !== 'active')
+      .filter(period => period.status === 'closed')
       .filter(period => {
         if (filterKioskId !== 'all' && period.kioskId !== filterKioskId) return false;
-        const template = getTemplate(period.templateId);
+        const template = templateById.get(period.templateId);
         if (filterType !== 'all' && template?.type !== filterType) return false;
         if (filterPeriod !== 'all' && template?.period !== filterPeriod) return false;
-        if (filterDateStart) {
-          try {
-            if (period.startDate.toDate() < new Date(`${filterDateStart}T00:00:00`)) return false;
-          } catch {}
-        }
-        if (filterDateEnd) {
-          try {
-            if (period.endDate.toDate() > new Date(`${filterDateEnd}T23:59:59`)) return false;
-          } catch {}
-        }
+        try {
+          if (filterDateStart && period.startDate.toDate() < new Date(`${filterDateStart}T00:00:00`)) return false;
+          if (filterDateEnd && period.endDate.toDate() > new Date(`${filterDateEnd}T23:59:59`)) return false;
+        } catch { /* período sem datas válidas não é filtrado por data */ }
         return true;
-      })
-      .sort((a, b) => {
-        const aTime = a.endDate?.toDate?.()?.getTime?.() ?? 0;
-        const bTime = b.endDate?.toDate?.()?.getTime?.() ?? 0;
-        return bTime - aTime;
       });
-  }, [periods, filterKioskId, filterType, filterPeriod, filterDateStart, filterDateEnd, templates]);
+  }, [periods, templates, filterKioskId, filterType, filterPeriod, filterDateStart, filterDateEnd]);
 
-  const consolidated = useMemo(() => {
-    const totalTarget = historicPeriods.reduce((sum, period) => sum + period.targetValue, 0);
-    const totalCurrent = historicPeriods.reduce((sum, period) => sum + period.currentValue, 0);
-    const avgPct = historicPeriods.length > 0
-      ? historicPeriods.reduce((sum, period) => sum + getGoalAttainment(period), 0) / historicPeriods.length
-      : 0;
-    const withFrozenScale = historicPeriods.filter(period => getGoalPeriodResolvedMode(period) === 'scheduled_days').length;
+  const totals = useMemo(() => {
+    const target = closedPeriods.reduce((sum, p) => sum + p.targetValue, 0);
+    const revenue = closedPeriods.reduce((sum, p) => sum + p.currentValue, 0);
+    const avg = closedPeriods.length ? closedPeriods.reduce((sum, p) => sum + getGoalAttainment(p), 0) / closedPeriods.length : 0;
+    const prizes = summarizePrizes(closedPeriods);
+    const apuratedRevenue = closedPeriods.filter(p => p.closureSnapshot?.bonus).reduce((sum, p) => sum + p.currentValue, 0);
+    return { prizeShare: apuratedRevenue > 0 ? (prizes.totalPrize / apuratedRevenue) * 100 : null, target, revenue, avg, hits: closedPeriods.filter(p => getGoalAttainment(p) >= 100).length, ...prizes };
+  }, [closedPeriods]);
 
-    return {
-      totalTarget,
-      totalCurrent,
-      avgPct,
-      closedCount: historicPeriods.filter(period => period.status === 'closed').length,
-      cancelledCount: historicPeriods.filter(period => period.status === 'cancelled').length,
-      withFrozenScale,
-    };
-  }, [historicPeriods]);
-
-  const kioskComparative = useMemo(() => {
+  const monthly = useMemo(() => {
     const groups = new Map<string, GoalPeriodDoc[]>();
-    for (const period of historicPeriods) {
-      const bucket = groups.get(period.kioskId);
-      if (bucket) bucket.push(period);
-      else groups.set(period.kioskId, [period]);
+    for (const period of closedPeriods) {
+      const key = monthKeyOf(period);
+      groups.set(key, [...(groups.get(key) ?? []), period]);
     }
+    return [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, items]) => {
+        const target = items.reduce((sum, p) => sum + p.targetValue, 0);
+        const revenue = items.reduce((sum, p) => sum + p.currentValue, 0);
+        return { key, count: items.length, target, revenue, pct: target > 0 ? (revenue / target) * 100 : 0, prizeShare: prizeShareOf(items), ...summarizePrizes(items) };
+      });
+  }, [closedPeriods]);
 
-    return Array.from(groups.entries())
-      .map(([kioskId, items]) => {
-        const avgPct = items.reduce((sum, item) => sum + getGoalAttainment(item), 0) / Math.max(items.length, 1);
-        const bestPct = Math.max(...items.map(getGoalAttainment), 0);
-        return {
-          kioskId,
-          kioskName: getKioskName(kioskId),
-          count: items.length,
-          avgPct,
-          bestPct,
-          hitCount: items.filter(item => getGoalAttainment(item) >= 100).length,
-        };
-      })
-      .sort((a, b) => b.avgPct - a.avgPct);
-  }, [historicPeriods, kiosks]);
+  const kioskRows = useMemo(() => {
+    const groups = new Map<string, GoalPeriodDoc[]>();
+    for (const period of closedPeriods) groups.set(period.kioskId, [...(groups.get(period.kioskId) ?? []), period]);
+    return [...groups.entries()]
+      .map(([kioskId, items]) => ({
+        kioskId,
+        name: getKioskName(kioskId),
+        count: items.length,
+        avg: items.reduce((sum, p) => sum + getGoalAttainment(p), 0) / items.length,
+        best: Math.max(...items.map(getGoalAttainment)),
+        hits: items.filter(p => getGoalAttainment(p) >= 100).length,
+        tiers: items.reduce((acc, p) => { acc[reachedTier(p)] += 1; return acc; }, { below: 0, target: 0, up: 0, top: 0 }),
+        prizeShare: (() => {
+          const apurated = items.filter(p => p.closureSnapshot?.bonus);
+          const revenue = apurated.reduce((sum, p) => sum + p.currentValue, 0);
+          return revenue > 0 ? (summarizePrizes(items).totalPrize / revenue) * 100 : null;
+        })(),
+        ...summarizePrizes(items),
+      }))
+      .sort((a, b) => b.avg - a.avg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedPeriods, kiosks]);
+
+  const earnings = useMemo(() => buildEmployeeEarnings(closedPeriods, employeeGoals), [closedPeriods, employeeGoals]);
+
+  const scopedPeriods = useMemo(() => periods.filter(p => filterKioskId === 'all' || p.kioskId === filterKioskId), [periods, filterKioskId]);
+  const statusCounts = useMemo(() => ({
+    active: scopedPeriods.filter(p => p.status === 'active').length,
+    closed: scopedPeriods.filter(p => p.status === 'closed').length,
+    cancelled: scopedPeriods.filter(p => p.status === 'cancelled').length,
+  }), [scopedPeriods]);
+  const statusPrize = useMemo(() => summarizePrizes(scopedPeriods), [scopedPeriods]);
 
   if (loading) return <Skeleton className="h-64 w-full" />;
 
   return (
-    <div className="space-y-6">
-      <Card className="border-slate-300/70 dark:border-border/40 bg-slate-100 dark:bg-slate-900/40 rounded-2xl shadow-sm">
-        <CardContent className="pt-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">Novo</Badge>
-            <span className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">Visão Consolidada</span>
-          </div>
+    <div className="space-y-5 font-ds">
+      <ControlPanel>
+        <p className={cn(kickerClass, 'text-ds-accent-kicker')}>Metas de vendas</p>
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <h1 className="text-2xl font-extrabold">Análise</h1>
+          <p className="max-w-xl text-[13px] font-semibold text-ds-on-dark-sub">
+            {tab === 'overview' ? 'Tendência, faixas atingidas e desempenho dos períodos encerrados.' : 'Fechamentos mês a mês: o que foi pago a cada colaborador, com folha de premiação para exportar.'}
+          </p>
+        </div>
 
-          <div className="grid gap-3 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-300/70 bg-white dark:bg-card/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Total Realizado</div>
-              <div className="mt-2 text-2xl font-black">{fmtCurrency(consolidated.totalCurrent)}</div>
-              <div className="text-xs text-muted-foreground">de {fmtCurrency(consolidated.totalTarget)}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-300/70 bg-white dark:bg-card/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Atingimento Médio</div>
-              <div className={`mt-2 text-2xl font-black ${getPctTone(consolidated.avgPct)}`}>{consolidated.avgPct.toFixed(1)}%</div>
-              <div className="text-xs text-muted-foreground">{historicPeriods.length} período(s) filtrado(s)</div>
-            </div>
-            <div className="rounded-2xl border border-slate-300/70 bg-white dark:bg-card/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Encerradas</div>
-              <div className="mt-2 text-2xl font-black text-green-600">{consolidated.closedCount}</div>
-              <div className="text-xs text-muted-foreground">{consolidated.cancelledCount} cancelada(s)</div>
-            </div>
-            <div className="rounded-2xl border border-slate-300/70 bg-white dark:bg-card/60 p-4">
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Base Congelada</div>
-              <div className="mt-2 text-2xl font-black text-blue-600">{consolidated.withFrozenScale}</div>
-              <div className="text-xs text-muted-foreground">meta(s) com escala congelada</div>
-            </div>
-          </div>
+        <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Seções da análise">
+          {([['overview', 'Visão geral'], ['closures', 'Fechamentos']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={cn(
+                'inline-flex h-[34px] items-center whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark',
+                tab === key ? 'border-ds-accent bg-ds-accent text-white' : 'border-white/[.12] text-ds-on-dark-2 hover:bg-white/[.06]',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-          <div className="grid gap-3 md:grid-cols-5">
-            <div className="space-y-1 md:col-span-1">
-              <Label className="text-xs font-semibold flex items-center gap-2"><Store className="h-3.5 w-3.5" /> Quiosque</Label>
-              <Select value={filterKioskId} onValueChange={setFilterKioskId}>
-                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {kiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+        {tab === 'overview' ? (
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-5">
+              <PanelStat label="Realizado" value={fmtBRL(totals.revenue)} hint={`de ${fmtBRL(totals.target)}`} />
+              <PanelStat label="Atingimento médio" value={fmtPct(totals.avg)} tone={totals.avg >= 100 ? 'text-ds-ok' : totals.avg >= 80 ? 'text-ds-warn' : 'text-ds-danger'} hint={`${closedPeriods.length} período(s)`} />
+              <PanelStat label="Metas batidas" value={`${totals.hits}/${closedPeriods.length}`} hint="períodos com 100% ou mais" />
+              <PanelStat label="Premiação apurada" value={fmtBRL(totals.totalPrize)} tone="text-ds-ok" hint={totals.pendingCount > 0 ? `${totals.pendingCount} período(s) sem apuração` : `${totals.apuratedCount} período(s) apurado(s)`} />
+              <PanelStat label="Premiação / faturamento" value={totals.prizeShare === null ? '—' : fmtPct(totals.prizeShare)} hint="custo da premiação sobre o realizado" />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold flex items-center gap-2"><Filter className="h-3.5 w-3.5" /> Tipo</Label>
-              <Select value={filterType} onValueChange={value => setFilterType(value as GoalType | 'all')}>
-                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(typeLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="mt-5 grid grid-cols-1 gap-3 border-t border-white/10 pt-5 sm:grid-cols-2 lg:grid-cols-4">
+              <DarkField label="Tipo de meta">
+                <select className={darkControlClass} value={filterType} onChange={e => setFilterType(e.target.value as GoalType | 'all')}>
+                  <option value="all">Todos</option>
+                  {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </DarkField>
+              <DarkField label="Periodicidade">
+                <select className={darkControlClass} value={filterPeriod} onChange={e => setFilterPeriod(e.target.value as GoalPeriod | 'all')}>
+                  <option value="all">Todas</option>
+                  {Object.entries(periodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </DarkField>
+              <DarkField label="Início">
+                <input type="date" className={darkControlClass} value={filterDateStart} onChange={e => setFilterDateStart(e.target.value)} />
+              </DarkField>
+              <DarkField label="Fim">
+                <input type="date" className={darkControlClass} value={filterDateEnd} onChange={e => setFilterDateEnd(e.target.value)} />
+              </DarkField>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold flex items-center gap-2"><CalendarRange className="h-3.5 w-3.5" /> Período</Label>
-              <Select value={filterPeriod} onValueChange={value => setFilterPeriod(value as GoalPeriod | 'all')}>
-                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(periodLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold">Data início</Label>
-              <Input type="date" value={filterDateStart} onChange={event => setFilterDateStart(event.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold">Data fim</Label>
-              <Input type="date" value={filterDateEnd} onChange={event => setFilterDateEnd(event.target.value)} />
-            </div>
+          </>
+        ) : (
+          <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <ControlIndicator value={statusCounts.active} label="Ativas" tone="info" active={filterStatus === 'active'} onClick={() => setFilterStatus(filterStatus === 'active' ? null : 'active')} />
+            <ControlIndicator value={statusCounts.closed} label="Encerradas" tone="neutral" active={filterStatus === 'closed'} onClick={() => setFilterStatus(filterStatus === 'closed' ? null : 'closed')} />
+            <ControlIndicator value={statusCounts.cancelled} label="Canceladas" tone="danger" active={filterStatus === 'cancelled'} onClick={() => setFilterStatus(filterStatus === 'cancelled' ? null : 'cancelled')} />
+            <PanelStat label="Premiação apurada" value={fmtBRL(statusPrize.totalPrize)} tone="text-ds-ok" hint={statusPrize.pendingCount > 0 ? `${statusPrize.pendingCount} período(s) sem apuração` : `${statusPrize.apuratedCount} período(s)`} />
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {kioskComparative.map(item => (
-          <Card key={item.kioskId} className="border-slate-300/70 dark:border-border/40 rounded-2xl bg-white dark:bg-card/60 shadow-sm">
-            <CardContent className="pt-5 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-black">{item.kioskName}</div>
-                  <div className="text-xs text-muted-foreground">{item.count} período(s) no filtro</div>
-                </div>
-                <Badge variant={getPctBadge(item.avgPct)}>{item.avgPct.toFixed(1)}%</Badge>
+        <FilterChips
+          className="mt-5"
+          value={filterKioskId === 'all' ? null : filterKioskId}
+          onChange={value => setFilterKioskId(value ?? 'all')}
+          allLabel="Todos os quiosques"
+          chips={kiosks.map(k => ({ value: k.id, label: k.name }))}
+        />
+      </ControlPanel>
+
+      {tab === 'closures' ? (
+        <GoalsHistoryView kioskId={filterKioskId === 'all' ? null : filterKioskId} status={filterStatus} />
+      ) : closedPeriods.length === 0 ? (
+        <EmptyBox>Nenhum período encerrado encontrado para esses filtros.</EmptyBox>
+      ) : (
+        <>
+          <SectionCard title="Tendência do atingimento" subtitle="Faturamento realizado sobre a meta, mês a mês (últimos 12 meses). A linha tracejada é 100%.">
+            <TrendChart points={monthly.slice(-12).map(row => ({ key: row.key, pct: row.pct }))} />
+            <div className="overflow-x-auto border-t border-ds-divider">
+              <table className="w-full min-w-[640px] text-left text-[13px]">
+                <thead>
+                  <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
+                    <th className="px-5 py-3 font-extrabold">Mês</th>
+                    <th className="px-3 py-3 text-right font-extrabold">Metas</th>
+                    <th className="px-3 py-3 text-right font-extrabold">Alvo</th>
+                    <th className="px-3 py-3 text-right font-extrabold">Realizado</th>
+                    <th className="px-3 py-3 text-right font-extrabold">Atingimento</th>
+                    <th className="px-3 py-3 text-right font-extrabold">Premiação</th>
+                    <th className="px-5 py-3 text-right font-extrabold">% do faturamento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthly.map(row => (
+                    <tr key={row.key} className="border-t border-ds-divider">
+                      <td className="px-5 py-2.5 font-extrabold capitalize text-ds-ink">{monthLabel(row.key)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.count}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-muted">{fmtBRL(row.target)}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-ds-ink">{fmtBRL(row.revenue)}</td>
+                      <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.pct))}>{fmtPct(row.pct)}</td>
+                      <td className="px-3 py-2.5 text-right font-extrabold text-ds-ok">{row.apuratedCount > 0 ? fmtBRL(row.totalPrize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
+                      <td className="px-5 py-2.5 text-right font-semibold text-ds-ink-2">{row.prizeShare === null ? '—' : fmtPct(row.prizeShare)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Faixas atingidas por quiosque" subtitle="Em que faixa cada quiosque costuma parar. Se quase tudo fica em um extremo, a meta pode estar fácil ou difícil demais.">
+            <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+              {kioskRows.map(item => {
+                const gap = item.avg - totals.avg;
+                return (
+                  <div key={item.kioskId} className="rounded-ds-md border border-ds-border bg-ds-warm p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[14px] font-extrabold text-ds-ink">{item.name}</div>
+                        <div className="text-[12px] font-semibold text-ds-ink-muted">{item.count} período(s) · melhor {fmtPct(item.best, 0)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={cn('text-[22px] font-extrabold leading-none', attainmentTone(item.avg))}>{fmtPct(item.avg, 0)}</div>
+                        {Math.abs(gap) >= 10 && <div className={cn('mt-1 text-[11px] font-extrabold', gap < 0 ? 'text-ds-danger' : 'text-ds-ok')}>{gap < 0 ? 'abaixo' : 'acima'} da média ({gap > 0 ? '+' : ''}{gap.toFixed(0)} p.p.)</div>}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-ds-muted" role="img" aria-label={tierMeta.map(t => `${t.label}: ${item.tiers[t.key]}`).join(', ')}>
+                      {tierMeta.map(t => item.tiers[t.key] > 0 && <div key={t.key} className={t.bar} style={{ width: `${(item.tiers[t.key] / item.count) * 100}%` }} />)}
+                    </div>
+                    <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px] font-semibold text-ds-ink-2">
+                      {tierMeta.map(t => (
+                        <li key={t.key} className="flex items-center gap-1.5"><span className={cn('h-2 w-2 rounded-full', t.bar)} aria-hidden="true" />{t.label}: <b className="text-ds-ink">{item.tiers[t.key]}</b></li>
+                      ))}
+                    </ul>
+                    <p className="mt-3 text-[12px] font-semibold text-ds-ink-muted">Premiação / faturamento: <b className="text-ds-ink">{item.prizeShare === null ? '—' : fmtPct(item.prizeShare)}</b></p>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Desempenho dos colaboradores" subtitle="Atingimento individual e tendência. Valores pagos ficam na aba Fechamentos." action={<span className="text-[12.5px] font-bold text-ds-ink-muted">{earnings.length} colaborador(es)</span>}>
+            {earnings.length === 0 ? (
+              <p className="px-5 py-8 text-center text-[13px] font-semibold text-ds-ink-faint">Nenhum colaborador vinculado aos períodos filtrados.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[680px] text-left text-[13px]">
+                  <thead>
+                    <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
+                      <th className="px-5 py-3 font-extrabold">Colaborador</th>
+                      <th className="px-3 py-3 text-right font-extrabold">Metas</th>
+                      <th className="px-3 py-3 text-right font-extrabold">% médio</th>
+                      <th className="px-3 py-3 text-right font-extrabold">Melhor</th>
+                      <th className="px-5 py-3 text-right font-extrabold">Tendência</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...earnings].sort((a, b) => b.avgAttainment - a.avgAttainment).map(row => (
+                      <tr key={row.employeeId} className="border-t border-ds-divider">
+                        <td className="px-5 py-2.5">
+                          <div className="font-extrabold text-ds-ink">{getUserName(row.employeeId)}</div>
+                          <div className="text-[12px] font-semibold text-ds-ink-muted">{row.role ? roleLabels[row.role] : '—'} · {row.kioskIds.map(getKioskName).join(', ')}</div>
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.periodCount}</td>
+                        <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.avgAttainment))}>{fmtPct(row.avgAttainment)}</td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{fmtPct(row.bestAttainment, 0)}</td>
+                        <td className="px-5 py-2.5 text-right font-extrabold">
+                          {row.trend === null ? <span className="font-semibold text-ds-ink-faint" title="Precisa de pelo menos 4 metas">—</span> : (
+                            <span className={row.trend >= 0 ? 'text-ds-ok' : 'text-ds-danger'}>{row.trend >= 0 ? '▲' : '▼'} {Math.abs(row.trend).toFixed(1)} p.p.</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Média</div>
-                  <div className={`mt-1 text-lg font-black ${getPctTone(item.avgPct)}`}>{item.avgPct.toFixed(0)}%</div>
-                </div>
-                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Melhor</div>
-                  <div className="mt-1 text-lg font-black text-blue-600">{item.bestPct.toFixed(0)}%</div>
-                </div>
-                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
-                  <div className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">Batidas</div>
-                  <div className="mt-1 text-lg font-black text-green-600">{item.hitCount}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="border-slate-300/70 dark:border-border/40 rounded-2xl bg-white dark:bg-card/60 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-xl"><History className="h-5 w-5 text-primary" /> Histórico consolidado</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">Períodos encerrados com base congelada visível para auditoria.</p>
-          </div>
-          <Badge variant="outline">{historicPeriods.length} registro(s)</Badge>
-        </CardHeader>
-        <CardContent className="p-0">
-          {historicPeriods.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">Nenhum período encerrado encontrado.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Quiosque</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Mês</TableHead>
-                    <TableHead>Base</TableHead>
-                    <TableHead>Dias</TableHead>
-                    <TableHead>Meta/dia</TableHead>
-                    <TableHead>Alvo</TableHead>
-                    <TableHead>Realizado</TableHead>
-                    <TableHead>%</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Nota</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {historicPeriods.map(period => {
-                    const template = getTemplate(period.templateId);
-                    const attainment = getGoalAttainment(period);
-                    const resolvedMode = getGoalPeriodResolvedMode(period);
-                    const dayCount = getGoalPeriodResolvedDayCount(period);
-                    const dailyTarget = getGoalPeriodResolvedDailyTarget(period);
-
-                    return (
-                      <TableRow key={period.id}>
-                        <TableCell className="font-medium">{getKioskName(period.kioskId)}</TableCell>
-                        <TableCell>{template ? typeLabels[template.type] : '-'}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {fmtTs(period.startDate, 'MMM/yyyy')}
-                          <div className="text-[11px]">{fmtTs(period.startDate, 'dd/MM/yyyy')} - {fmtTs(period.endDate, 'dd/MM/yyyy')}</div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={resolvedMode === 'scheduled_days' ? 'border-blue-200 bg-blue-50 text-blue-700' : ''}>
-                            {getGoalDistributionModeLabel(resolvedMode)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{dayCount}</TableCell>
-                        <TableCell>{fmtCurrency(dailyTarget)}</TableCell>
-                        <TableCell>{fmtCurrency(period.targetValue)}</TableCell>
-                        <TableCell>{fmtCurrency(period.currentValue)}</TableCell>
-                        <TableCell>
-                          <Badge variant={getPctBadge(attainment)}>{attainment.toFixed(1)}%</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={period.status === 'closed' ? 'secondary' : 'destructive'}>
-                            {statusLabels[period.status] ?? period.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[260px] truncate text-xs text-muted-foreground">{period.closureNote ?? '-'}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="border-slate-300/70 dark:border-border/40 rounded-2xl bg-slate-100 dark:bg-slate-900/40 shadow-sm">
-        <CardContent className="pt-5">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            Leitura operacional
-          </div>
-          <div className="mt-2 text-sm text-muted-foreground">
-            Períodos encerrados com `Escala congelada` usam o snapshot salvo no fechamento. Isso preserva histórico, meta/dia e base de comparação mesmo se a escala mudar depois.
-          </div>
-        </CardContent>
-      </Card>
+            )}
+          </SectionCard>
+        </>
+      )}
     </div>
   );
 }

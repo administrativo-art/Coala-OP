@@ -4,13 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
-import { TrendingUp, BarChart2, ClipboardList, History } from 'lucide-react';
+import { Gauge, ChartNoAxesCombined } from 'lucide-react';
 import { GoalsProvider } from '@/components/goals-provider';
 
 const navItems = [
-  { label: 'Acompanhamento', href: '/dashboard/goals/tracking', icon: TrendingUp, requireManage: false },
-  { label: 'Análise', href: '/dashboard/goals/analysis', icon: BarChart2, requireManage: false },
-  { label: 'Histórico', href: '/dashboard/goals/history', icon: History, requireManage: false },
+  { label: 'Acompanhamento', href: '/dashboard/goals/tracking', icon: Gauge, requireManage: false },
+  { label: 'Análise e fechamentos', href: '/dashboard/goals/analysis', icon: ChartNoAxesCombined, requireManage: false },
 ];
 
 export default function GoalsLayout({ children }: { children: React.ReactNode }) {
@@ -24,7 +23,7 @@ export default function GoalsLayout({ children }: { children: React.ReactNode })
   return (
     <GoalsProvider>
       <div className="space-y-6">
-        <nav className="flex gap-1 border-b pb-0">
+        <nav aria-label="Metas de vendas" className="flex gap-1 border-b border-ds-border">
           {visibleItems.map(item => {
             const Icon = item.icon;
             const isActive = pathname.startsWith(item.href);
@@ -33,13 +32,13 @@ export default function GoalsLayout({ children }: { children: React.ReactNode })
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+                  'flex items-center gap-2 px-4 py-2.5 text-[13.5px] font-bold border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
                   isActive
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                    ? 'border-ds-accent text-ds-accent-ink'
+                    : 'border-transparent text-ds-ink-muted hover:text-ds-ink hover:border-ds-border-input'
                 )}
               >
-                <Icon className="h-4 w-4" />
+                <Icon aria-hidden="true" className="h-4 w-4" />
                 {item.label}
               </Link>
             );

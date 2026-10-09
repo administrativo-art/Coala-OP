@@ -140,7 +140,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/goals/analysis` | [page.tsx](../../src/app/dashboard/goals/analysis/page.tsx) | [goals-analysis-dashboard.tsx](../../src/components/goals-analysis-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
-| `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | [goals-context.tsx](../../src/contexts/goals-context.tsx), [use-kiosks.ts](../../src/hooks/use-kiosks.ts) |
+| `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | Redireciona para `/dashboard/goals/analysis?tab=closures` (a aba Fechamentos usa [goals-history-view.tsx](../../src/components/goals-history-view.tsx)) |
 | `dashboard/goals` | [page.tsx](../../src/app/dashboard/goals/page.tsx) | Redireciona para `/dashboard/goals/tracking` |
 | `dashboard/goals/registration` | [page.tsx](../../src/app/dashboard/goals/registration/page.tsx) | [goals-registration-dashboard.tsx](../../src/components/goals-registration-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 | `dashboard/goals/tracking` | [page.tsx](../../src/app/dashboard/goals/tracking/page.tsx) | [goals-tracking-dashboard.tsx](../../src/components/goals-tracking-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
@@ -212,7 +212,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/pricing/competitors` | [page.tsx](../../src/app/dashboard/pricing/competitors/page.tsx) | Redireciona para `/dashboard/pricing/price-comparison` |
 | `dashboard/pricing/cost-analysis` | [page.tsx](../../src/app/dashboard/pricing/cost-analysis/page.tsx) | [pricing-simulator.tsx](../../src/components/pricing-simulator.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
-| `dashboard/pricing` | [page.tsx](../../src/app/dashboard/pricing/page.tsx) | Ler a própria página |
+| `dashboard/pricing` | [page.tsx](../../src/app/dashboard/pricing/page.tsx) | Redireciona para `/dashboard/pricing/cost-analysis` |
 | `dashboard/pricing/price-comparison` | [page.tsx](../../src/app/dashboard/pricing/price-comparison/page.tsx) | [competitors-workspace.tsx](../../src/components/competitors/competitors-workspace.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 
 ## processes (1)

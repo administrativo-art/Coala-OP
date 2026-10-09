@@ -2,6 +2,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { ControlPanel } from '@/components/patterns/control-panel';
+import { FilterChips } from '@/components/patterns/filter-chips';
+import { PanelStat } from '@/components/goals/goals-ui';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { db, functions } from '@/lib/firebase';
@@ -17,7 +20,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -1045,7 +1047,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
         </div>
 
         {scope === 'monthly' ? (
-          <div className="mx-4 grid items-stretch gap-4 rounded-[20px] border border-zinc-200 px-5 py-5 sm:mx-12 lg:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.28fr)]">
+          <div className="mx-4 grid items-stretch gap-4 rounded-ds-card border border-zinc-200 px-5 py-5 sm:mx-12 lg:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.28fr)]">
             <div className="rounded-[16px] bg-pink-50 px-5 py-4">
               <p className="text-[12px] font-black uppercase tracking-[0.12em] text-pink-500">Faturado no mês</p>
               <p className="mt-3 whitespace-nowrap text-[clamp(1.6rem,2.5vw,2.2rem)] font-black leading-none tracking-[-0.03em] text-pink-500">R$ {fmt(totalRealized)}</p>
@@ -1064,7 +1066,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
             </div>
           </div>
         ) : (
-          <div className="mx-4 grid grid-cols-2 items-start gap-5 rounded-[20px] border border-zinc-200 px-5 py-6 sm:mx-12 sm:grid-cols-4 sm:gap-10 sm:px-9 sm:py-7">
+          <div className="mx-4 grid grid-cols-2 items-start gap-5 rounded-ds-card border border-zinc-200 px-5 py-6 sm:mx-12 sm:grid-cols-4 sm:gap-10 sm:px-9 sm:py-7">
             <div className="min-w-0">
               <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Realizado</p>
               <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-pink-500">R$ {fmt(totalRealized)}</p>
@@ -1331,7 +1333,7 @@ export function EmployeeDailyModal({
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!max-w-[1120px] w-[min(96vw,1120px)] overflow-hidden rounded-[22px] border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+        <DialogContent className="!max-w-[1120px] w-[min(96vw,1120px)] overflow-hidden rounded-ds-card border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
           <div className="flex items-center gap-4 border-b border-zinc-100 px-5 py-4">
             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
               {initials}
@@ -1465,7 +1467,7 @@ export function EmployeeDailyModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[620px] w-[min(96vw,620px)] overflow-hidden rounded-[22px] border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+      <DialogContent className="!max-w-[620px] w-[min(96vw,620px)] overflow-hidden rounded-ds-card border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
         {/* Cabeçalho */}
         <div className="flex items-center gap-4 border-b border-zinc-100 px-5 py-4">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
@@ -1676,7 +1678,7 @@ function PeriodGoalCard({ label, value, target, up, top, showTiers = true, focus
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[18px] border border-[#edf1f6] bg-[#f8fafc] px-4 py-4 text-left transition-colors ${onClick ? 'hover:border-pink-200 hover:bg-pink-50/30' : ''}`}
+      className={`rounded-ds-card border border-[#edf1f6] bg-ds-warm px-4 py-4 text-left transition-colors ${onClick ? 'hover:border-pink-200 hover:bg-pink-50/30' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -1866,7 +1868,7 @@ function SalesByHourPanel({ period, salesReports }: { period: GoalPeriodDoc; sal
   const maxHourValue = Math.max(...summary.chartHours.map(item => item.value), 1);
 
   return (
-    <div className="mt-4 rounded-[18px] border border-[#edf1f6] bg-white px-4 py-4">
+    <div className="mt-4 rounded-ds-card border border-[#edf1f6] bg-white px-4 py-4">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">Faturamento por hora</p>
@@ -1881,12 +1883,12 @@ function SalesByHourPanel({ period, salesReports }: { period: GoalPeriodDoc; sal
       </div>
 
       {summary.total <= 0 ? (
-        <div className="rounded-[14px] border border-dashed border-zinc-200 bg-[#f8fafc] px-4 py-6 text-center text-sm font-medium text-zinc-500">
+        <div className="rounded-[14px] border border-dashed border-zinc-200 bg-ds-warm px-4 py-6 text-center text-sm font-medium text-zinc-500">
           Sem dados de faturamento por hora para este período.
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.9fr)]">
-          <div className="rounded-[14px] border border-zinc-100 bg-[#f8fafc] px-3 py-3">
+          <div className="rounded-[14px] border border-zinc-100 bg-ds-warm px-3 py-3">
             <div className="flex h-36 items-end gap-1 overflow-x-auto pb-1">
               {summary.chartHours.map(item => (
                 <div key={item.hour} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
@@ -1911,7 +1913,7 @@ function SalesByHourPanel({ period, salesReports }: { period: GoalPeriodDoc; sal
             {summary.buckets
               .filter(bucket => bucket.value > 0 || summary.total > 0)
               .map(bucket => (
-                <div key={bucket.label} className="rounded-[12px] border border-zinc-100 bg-[#f8fafc] px-3 py-2.5">
+                <div key={bucket.label} className="rounded-[12px] border border-zinc-100 bg-ds-warm px-3 py-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-black text-zinc-800">{bucket.label}</p>
@@ -1991,7 +1993,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
   const topColor = topPct >= 100 ? 'text-emerald-600' : 'text-violet-500';
 
   return (
-    <div className="flex flex-col rounded-[18px] border border-[#dbe3ef] bg-white overflow-hidden shadow-[0_8px_30px_-20px_rgba(15,23,42,0.2)]">
+    <div className="flex flex-col rounded-ds-card border border-[#dbe3ef] bg-white overflow-hidden shadow-[0_8px_30px_-20px_rgba(15,23,42,0.2)]">
 
       {/* Cabeçalho */}
       <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
@@ -2103,7 +2105,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
           { label: 'Semana', value: weekStats.value, share: weekShare, suffix: 'da semana', target: activeWeekTarget },
           { label: 'Mês', value: eg.currentValue, share: monthShare, suffix: 'do mês', target: activeMonthTarget },
         ].map(item => (
-          <div key={item.label} className="rounded-[12px] border border-zinc-100 bg-[#f8fafc] px-2 py-2 text-center">
+          <div key={item.label} className="rounded-[12px] border border-zinc-100 bg-ds-warm px-2 py-2 text-center">
             <p className="text-[8px] font-black uppercase tracking-[0.12em] text-zinc-400">{item.label}</p>
             <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.08em] text-zinc-400">Faturado</p>
             <p className="truncate text-[11px] font-black tabular-nums text-zinc-800">R$ {fmt(item.value)}</p>
@@ -2922,57 +2924,40 @@ export function GoalsTrackingDashboard() {
   if (loading) return <Skeleton className="h-64 w-full" />;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
-        <div>
-          <h1 className="text-[2.15rem] font-bold tracking-[-0.04em] text-zinc-900">Metas de Faturamento</h1>
-          <p className="text-sm text-zinc-500">Acompanhamento em tempo real de performance e projeções.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-            <SelectTrigger className="h-10 w-[230px] rounded-full bg-white">
-              <Store className="mr-2 h-4 w-4 text-zinc-400" />
-              <SelectValue placeholder="Unidade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as unidades</SelectItem>
-              {availableKiosks.map(kiosk => (
-                <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 pb-12 font-ds">
+      <ControlPanel>
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Metas de vendas</p>
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold">Acompanhamento</h1>
+            <p className="mt-1 text-[13px] font-semibold text-ds-on-dark-sub">Performance e projeção das metas de faturamento em tempo real.</p>
+          </div>
           {isManager && (
-            <Button size="sm" onClick={() => setNewMetaOpen(true)} className="h-10 rounded-full bg-primary px-5 hover:bg-primary/90">
-              <Plus className="mr-2 h-4 w-4" /> Nova Meta
+            <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
+              <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
             </Button>
           )}
         </div>
-      </div>
 
-      {periodGroups.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-1">
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Total Acumulado</p>
-            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">R$ {fmt(globalRevenueStats.totalAcumulado)}</p>
+        {periodGroups.length > 0 && (
+          <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <PanelStat label="Total acumulado" value={`R$ ${fmt(globalRevenueStats.totalAcumulado)}`} />
+            <PanelStat label="Atingimento médio" value={`${globalRevenueStats.avgAting.toFixed(1)}%`} tone={globalRevenueStats.avgAting >= 100 ? 'text-ds-ok' : 'text-ds-warn'} />
+            <PanelStat label="Unidades ativas" value={globalRevenueStats.activeCount} />
+            <PanelStat label="Projeção total" value={`R$ ${fmt(globalRevenueStats.totalProjection)}`} tone={globalRevenueStats.totalProjection >= globalRevenueStats.totalTarget ? 'text-ds-ok' : 'text-ds-danger'} />
           </div>
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Atingimento Médio</p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${globalRevenueStats.avgAting >= 100 ? 'text-emerald-600' : 'text-amber-500'}`}>
-              {globalRevenueStats.avgAting.toFixed(1)}%
-            </p>
-          </div>
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Unidades Ativas</p>
-            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">{globalRevenueStats.activeCount}</p>
-          </div>
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Projeção Total</p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${globalRevenueStats.totalProjection >= globalRevenueStats.totalTarget ? 'text-emerald-600' : 'text-rose-500'}`}>
-              R$ {fmt(globalRevenueStats.totalProjection)}
-            </p>
-          </div>
-        </div>
-      )}
+        )}
+
+        {availableKiosks.length > 1 && (
+          <FilterChips
+            className="mt-5"
+            value={selectedKioskId === 'all' ? null : selectedKioskId}
+            onChange={value => setSelectedKioskId(value ?? 'all')}
+            allLabel="Todas as unidades"
+            chips={availableKiosks.map(kiosk => ({ value: kiosk.id, label: kiosk.name }))}
+          />
+        )}
+      </ControlPanel>
 
       {!loading && periodGroups.length === 0 && (
          <Card className="p-20 text-center bg-card/50 border-dashed border-2">
@@ -2997,9 +2982,9 @@ export function GoalsTrackingDashboard() {
             onOpenChange={(v) => setOpenCards(prev => ({ ...prev, [group.groupKey]: v }))}
             className="space-y-4"
           >
-            <Card className="overflow-hidden rounded-[24px] border border-[#cfd9e6] bg-[#eef3f9] shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] transition-all">
+            <Card className="overflow-hidden rounded-ds-card-lg border border-ds-border bg-ds-muted shadow-none transition-all">
               <CollapsibleTrigger asChild>
-                <div className="flex cursor-pointer items-center gap-4 px-6 py-5 transition-colors hover:bg-white/25">
+                <div className="flex cursor-pointer items-center gap-4 px-6 py-5 transition-colors hover:bg-ds-surface/60">
                   <div className="rounded-full bg-primary/10 p-2.5 shrink-0">
                     <Target className="h-5 w-5 text-primary" />
                   </div>
@@ -3091,7 +3076,7 @@ export function GoalsTrackingDashboard() {
               </CollapsibleTrigger>
 
               <CollapsibleContent>
-                <div className="space-y-8 border-t border-white/70 px-6 pb-7 pt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="space-y-8 border-t border-ds-divider px-6 pb-7 pt-3 animate-in fade-in slide-in-from-top-2 duration-300">
                   {/* ── Resumo do Período ── */}
                   <div className="space-y-4">
                     <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Visão Geral</h3>
@@ -3153,7 +3138,7 @@ export function GoalsTrackingDashboard() {
                              <button
                                type="button"
                                onClick={openMonthlyDetail}
-                               className="rounded-[22px] border border-white/80 bg-white px-5 py-5 text-left shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)] transition-shadow hover:shadow-[0_18px_50px_-38px_rgba(15,23,42,0.65)] md:col-span-2"
+                               className="rounded-ds-card border border-ds-border bg-white px-5 py-5 text-left shadow-none transition-shadow hover:shadow-ds-lift md:col-span-2"
                              >
                                <div className="flex items-end justify-between gap-3">
                                  <div className="min-w-0">
@@ -3174,7 +3159,7 @@ export function GoalsTrackingDashboard() {
                                </div>
                              </button>
                              <div className="flex flex-col gap-5">
-                               <div className="rounded-[22px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)]">
+                               <div className="rounded-ds-card border border-ds-border bg-white px-5 py-5 shadow-none">
                                  <StatItem
                                    title="Ritmo Atual"
                                    value={fmt(stats.currentPace)}
@@ -3298,11 +3283,11 @@ export function GoalsTrackingDashboard() {
 
                     return (
                       <div key={period.id} className="space-y-8">
-                        <Card className="relative overflow-hidden rounded-[24px] border border-white/80 bg-white p-7 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.45)]">
+                        <Card className="relative overflow-hidden rounded-ds-card-lg border border-ds-border bg-white p-7 shadow-none">
                           {(bonusPreview || rankingRows.length > 0) && (
                             <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.85fr)]">
                               {bonusPreview && (
-                                <div className="rounded-[18px] border border-emerald-100 bg-emerald-50 px-4 py-3">
+                                <div className="rounded-ds-card border border-emerald-100 bg-emerald-50 px-4 py-3">
                                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div className="min-w-0">
                                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Bonificação estimada</p>
@@ -3364,7 +3349,7 @@ export function GoalsTrackingDashboard() {
                               )}
 
                               {rankingRows.length > 0 && (
-                                <div className="rounded-[18px] border border-zinc-100 bg-white px-4 py-3">
+                                <div className="rounded-ds-card border border-zinc-100 bg-white px-4 py-3">
                                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">Ranking de contribuição</p>
@@ -3428,7 +3413,7 @@ export function GoalsTrackingDashboard() {
                             const periodEgs = employeeGoals.filter(eg => eg.periodId === period.id);
                             if (periodEgs.length === 0) {
                               return (
-                                <div className="rounded-[18px] border border-dashed border-[#cfd9e6] bg-[#f8fafc] px-5 py-8 text-center">
+                                <div className="rounded-ds-card border border-dashed border-ds-border bg-ds-warm px-5 py-8 text-center">
                                   <p className="text-sm font-medium text-zinc-500">Sem meta cadastrada para este período</p>
                                   {isManager && (
                                     <Button
