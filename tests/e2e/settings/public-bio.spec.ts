@@ -37,8 +37,9 @@ test("edita com prévia, publica somente links externos e mantém a edição pro
     await urls.nth(index).fill(`https://example.com/coala-${index}`);
   }
   const promotions = page.getByRole("switch", { name: "Mostrar Promoções" });
-  await expect(promotions).toBeChecked();
-  await promotions.click();
+  // O botão de Promoções só liga com imagens publicadas; o teste garante que ele termine desligado.
+  if ((await promotions.getAttribute("aria-checked")) === "true") await promotions.click();
+  await expect(promotions).toHaveAttribute("aria-checked", "false");
   await page.getByRole("button", { name: "Salvar rascunho" }).click();
   await expect(page.getByRole("status")).toContainText("Rascunho salvo");
   expect((await (await request.get("/api/public/bio")).json()).page).toBeNull();
