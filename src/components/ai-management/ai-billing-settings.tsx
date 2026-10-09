@@ -148,7 +148,7 @@ function CreditsView({ overview }: { overview: AiBillingOverview }) {
     <div className="space-y-5">
       <BillingAlertNotice alert={overview.alert} provider="openai" />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatTile className="ring-1 ring-ds-accent-ink" label="Saldo pré-pago" value={monoValue(formatUsd(overview.credits.prepaidBalanceUsd))} hint={prepaidObservedAt ? `Saldo conferido no Billing oficial em ${prepaidObservedAt} (Belém). Atualização manual.` : "Saldo não disponível pela API; consulte o Billing oficial."} />
+        <StatTile className="border-ds-accent-ink" label="Saldo pré-pago" value={monoValue(formatUsd(overview.credits.prepaidBalanceUsd))} hint={prepaidObservedAt ? `Saldo conferido no Billing oficial em ${prepaidObservedAt} (Belém). Atualização manual.` : "Saldo não disponível pela API; consulte o Billing oficial."} />
         <StatTile label="Régua mensal interna" value={monoValue(formatUsd(overview.credits.limitUsd))} hint={limitHint} />
         <StatTile label="Gasto oficial no mês" value={monoValue(formatUsd(overview.credits.spentUsd))} hint="Custo retornado pela API da OpenAI; não é calculado a partir da régua." />
         <StatTile label="Uso da régua" value={monoValue(overview.credits.usedPercent === null ? "Sem régua" : `${overview.credits.usedPercent.toLocaleString("pt-BR")}%`)} hint="Gasto oficial dividido pela régua interna. Serve somente aos alertas de 80% e 95%." />
