@@ -480,7 +480,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         </div>
         <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
           <div className="overflow-hidden">
-            <div className="ml-4 mt-0.5 space-y-0.5 pb-0.5 pl-1">
+            <div className="ml-[18px] mt-0.5 space-y-0.5 border-l border-white/10 pb-0.5 pl-2">
               {children.map((child) => renderItem(child, depth + 1))}
             </div>
           </div>
@@ -591,7 +591,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                   </h2>
                   <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
                     <div className="overflow-hidden">
-                      <div className="space-y-0.5 py-0.5">
+                      <div className="ml-[18px] space-y-0.5 border-l border-white/10 py-0.5 pl-2">
                         {section.items.map((item) => renderItem(item, 0))}
                       </div>
                     </div>
