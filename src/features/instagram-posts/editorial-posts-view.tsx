@@ -23,12 +23,15 @@ import {
   planningChangedAfterApproval,
   planningComplete,
   planningWarnings,
+  rationaleValid,
   stepDone,
   stepUnlocked,
   toBelemInput,
   type PostStep,
 } from "./planning-model";
-import { instagramPostObjectives } from "./contracts";
+import { instagramPostObjectives, type InstagramPostObjective } from "./contracts";
+import { engagementRate, findPostInsight, objectiveMetric } from "./result-model";
+import type { InstagramInsightContentItem } from "@/features/instagram-scheduler/contracts";
 
 import type {
   InstagramEditorialPost,
@@ -62,6 +65,8 @@ type EditorialPostsViewProps = {
   onAction: (id: string, input: InstagramPostActionInput) => Promise<boolean>;
   /** Abre a tela de Relatórios, onde o desempenho do post publicado é medido. */
   onOpenReports: () => void;
+  /** Mídias dos Relatórios (publicadas no período carregado); `null` enquanto não houver dados. */
+  performance?: { items: InstagramInsightContentItem[] | null; loading: boolean; error: string | null };
 };
 
 const selectClass = cn(fieldInputClass, "appearance-auto");
@@ -278,13 +283,51 @@ function Stepper({ post, step, onStep }: { post: InstagramEditorialPost; step: P
   );
 }
 
-function PostDrawer({ post, others, onUpdate, onUpload, onAction, onOpenReports }: {
+const numberFormat = new Intl.NumberFormat("pt-BR");
+const metricValue = (value: number | null) => (value === null ? "—" : numberFormat.format(value));
+
+/** Desempenho do post publicado, comparado com o objetivo planejado. */
+function PerformanceBlock({ post, performance }: { post: InstagramEditorialPost; performance: EditorialPostsViewProps["performance"] }) {
+  const item = performance?.items ? findPostInsight(post, performance.items) : null;
+  const metric = item ? objectiveMetric(post.planning.objective, item) : null;
+  const rate = item ? engagementRate(item) : null;
+  const extra = item && post.format === "story"
+    ? [["Respostas", item.replies], ["Cliques no link", item.storyLinkClicks]] as const
+    : item ? [["Curtidas", item.likes], ["Comentários", item.comments], ["Compartilhamentos", item.shares], ["Salvamentos", item.saves]] as const : [];
+  return (
+    <Block title="Desempenho" hint="Dados da Meta, do período carregado nos Relatórios">
+      {performance?.loading && !item ? <p className="text-[13px] text-ds-ink-muted" role="status">Buscando o desempenho…</p>
+        : performance?.error && !item ? <p className="text-[13px] text-ds-danger" role="alert">{performance.error}</p>
+        : !item ? <p className="text-[13px] text-ds-ink-muted">Ainda sem números desta publicação. A Meta leva algumas horas para medir; se já passou o prazo, ela pode estar fora do período dos Relatórios.</p>
+        : (
+          <div className="space-y-3">
+            <div className="rounded-ds-btn-lg bg-ds-warm p-4">
+              <div className="text-[11px] font-bold text-ds-ink-faint">Meta do planejamento: {post.planning.objective ? OBJECTIVE_LABELS[post.planning.objective] : "sem objetivo definido"}</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-ds-mono text-2xl font-bold text-ds-ink">{metricValue(metric?.value ?? null)}</span>
+                <span className="text-[13px] font-bold text-ds-ink-2">{metric?.label}</span>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-2 text-[13px] sm:grid-cols-3">
+              {([["Alcance", item.reach], ["Visualizações", item.views], ["Interações", item.totalInteractions], ...extra] as const).map(([label, value]) => (
+                <div key={label} className="rounded-ds-btn bg-ds-muted px-3 py-2"><dt className="text-[11px] font-bold text-ds-ink-faint">{label}</dt><dd className="font-ds-mono font-bold text-ds-ink">{metricValue(value)}</dd></div>
+              ))}
+              {rate !== null && <div className="rounded-ds-btn bg-ds-muted px-3 py-2"><dt className="text-[11px] font-bold text-ds-ink-faint">Taxa de interação</dt><dd className="font-ds-mono font-bold text-ds-ink">{rate.toLocaleString("pt-BR")}%</dd></div>}
+            </dl>
+          </div>
+        )}
+    </Block>
+  );
+}
+
+function PostDrawer({ post, others, onUpdate, onUpload, onAction, onOpenReports, performance }: {
   post: InstagramEditorialPost;
   others: InstagramEditorialPost[];
   onUpdate: EditorialPostsViewProps["onUpdate"];
   onUpload: EditorialPostsViewProps["onUpload"];
   onAction: EditorialPostsViewProps["onAction"];
   onOpenReports: () => void;
+  performance?: EditorialPostsViewProps["performance"];
 }) {
   const fromPost = (source: InstagramEditorialPost) => ({
     direction: source.direction,
@@ -564,6 +607,7 @@ function PostDrawer({ post, others, onUpdate, onUpload, onAction, onOpenReports 
           <div className="sm:col-span-2"><dt className="text-[11px] font-bold text-ds-ink-faint">Por que este formato</dt><dd className="whitespace-pre-wrap">{post.planning.formatRationale || "—"}</dd></div>
         </dl>
       </Block>
+      {post.status === "published" && <PerformanceBlock post={post} performance={performance} />}
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="ds-secondary" size="md" onClick={onOpenReports}>Ver desempenho nos Relatórios</Button>
         <ActionPanel key={`${post.id}-${post.contentHash}-result`} post={post} onAction={onAction} only="result" />
@@ -581,9 +625,10 @@ function PostDrawer({ post, others, onUpdate, onUpload, onAction, onOpenReports 
 }
 
 
-function CreatePostDialog({ onClose, onCreate }: {
+function CreatePostDialog({ onClose, onCreate, others }: {
   onClose: () => void;
   onCreate: EditorialPostsViewProps["onCreate"];
+  others: InstagramEditorialPost[];
 }) {
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<InstagramPostCreateInput["format"]>("feed_image");
@@ -592,7 +637,15 @@ function CreatePostDialog({ onClose, onCreate }: {
   const [direction, setDirection] = useState("");
   const [caption, setCaption] = useState("");
   const [manual, setManual] = useState(false);
+  const [designRationale, setDesignRationale] = useState("");
+  const [formatRationale, setFormatRationale] = useState("");
+  const [objective, setObjective] = useState<InstagramPostObjective | null>(null);
+  const [callToAction, setCallToAction] = useState("");
+  const [plannedAt, setPlannedAt] = useState("");
   const [busy, setBusy] = useState(false);
+  const plannedIso = fromBelemInput(plannedAt);
+  const warnings = planningWarnings({ postId: "", format, plannedAt: plannedIso, others });
+  const shortRationale = (value: string) => Boolean(value.trim()) && !rationaleValid(value);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -609,6 +662,7 @@ function CreatePostDialog({ onClose, onCreate }: {
       storyMentions: [],
       publicationMode: manual ? "manual" : "automatic",
       manualInstructions: manual ? "Publicar manualmente no Instagram e conferir as figurinhas interativas." : "",
+      planning: { designRationale, formatRationale, objective, callToAction, plannedAt: plannedIso },
     });
     setBusy(false);
     if (completed) onClose();
@@ -621,7 +675,7 @@ function CreatePostDialog({ onClose, onCreate }: {
       kicker="Sistema primeiro"
       title="Novo post Planejado"
       subtitle="Nasce como Planejado; a mídia e as aprovações vêm depois."
-      className="w-[520px]"
+      className="w-[560px]"
     >
       <form onSubmit={(event) => void submit(event)} className="flex flex-1 flex-col gap-5" noValidate>
         <Field label="Título" htmlFor="new-post-title" hint="Até 120 caracteres.">
@@ -650,6 +704,37 @@ function CreatePostDialog({ onClose, onCreate }: {
         <Field label="Legenda" htmlFor="new-post-caption" requirement="opcional">
           <textarea id="new-post-caption" value={caption} onChange={(event) => setCaption(event.target.value)} rows={5} className={textareaClass} />
         </Field>
+        <section className="space-y-3 rounded-ds-card border border-ds-divider bg-ds-muted/40 p-4" aria-labelledby="new-post-planning-title">
+          <div>
+            <h3 id="new-post-planning-title" className="text-[13px] font-extrabold text-ds-ink">Planejamento editorial</h3>
+            <p className="text-[11.5px] text-ds-ink-muted">Pode ficar para depois, mas é preciso preencher os dois motivos (mín. 20 caracteres) para marcar como Produzido.</p>
+          </div>
+          <Field label="Motivo da arte e do design" htmlFor="new-post-design-why" requirement="opcional" error={shortRationale(designRationale) ? "Explique um pouco mais." : null}>
+            <textarea id="new-post-design-why" value={designRationale} onChange={(event) => setDesignRationale(event.target.value)} rows={3} placeholder="Ex.: cores da campanha de outubro para reforçar o Dia das Crianças." className={textareaClass} />
+          </Field>
+          <Field label="Motivo do formato" htmlFor="new-post-format-why" requirement="opcional" error={shortRationale(formatRationale) ? "Explique um pouco mais." : null}>
+            <textarea id="new-post-format-why" value={formatRationale} onChange={(event) => setFormatRationale(event.target.value)} rows={3} placeholder="Ex.: Story, porque a oferta vale só hoje e precisa de urgência." className={textareaClass} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Data e hora alvo" htmlFor="new-post-planned-at" requirement="opcional">
+              <input id="new-post-planned-at" type="datetime-local" value={plannedAt} onChange={(event) => setPlannedAt(event.target.value)} className={fieldInputClass} />
+            </Field>
+            <Field label="Objetivo" htmlFor="new-post-objective" requirement="opcional">
+              <select id="new-post-objective" value={objective ?? ""} onChange={(event) => setObjective((event.target.value || null) as typeof objective)} className={selectClass}>
+                <option value="">Não definido</option>
+                {instagramPostObjectives.map((value) => <option key={value} value={value}>{OBJECTIVE_LABELS[value]}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Chamada para ação" htmlFor="new-post-cta" requirement="opcional">
+            <input id="new-post-cta" value={callToAction} maxLength={200} onChange={(event) => setCallToAction(event.target.value)} placeholder="Ex.: Peça no delivery" className={fieldInputClass} />
+          </Field>
+          {warnings.length > 0 && (
+            <ul className="space-y-1 text-[12px] font-semibold text-ds-warn" aria-label="Avisos de estratégia">
+              {warnings.map((warning) => <li key={warning.id}>{warning.message}</li>)}
+            </ul>
+          )}
+        </section>
         <PanelSwitchRow id="new-post-manual" label="Story com figurinha" description="Depende de figurinha interativa e será publicado manualmente, com lembrete." checked={manual} onChange={setManual} />
         <div className="mt-auto grid grid-cols-2 gap-2 border-t border-ds-divider pt-4">
           <Button type="button" variant="ds-secondary" size="md" disabled={busy} onClick={onClose}>Cancelar</Button>
@@ -774,7 +859,7 @@ export function EditorialPostsView(props: EditorialPostsViewProps) {
                 <Button type="button" variant="ds-secondary" size="xs" disabled={selectedPosition < 0 || selectedPosition >= visible.length - 1} onClick={() => stepTo(1)}>Próximo ›</Button>
               </div>
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_240px]">
-                <PostDrawer key={selected.id} post={selected} others={props.posts} onUpdate={props.onUpdate} onUpload={props.onUpload} onAction={props.onAction} onOpenReports={props.onOpenReports} />
+                <PostDrawer key={selected.id} post={selected} others={props.posts} onUpdate={props.onUpdate} onUpload={props.onUpload} onAction={props.onAction} onOpenReports={props.onOpenReports} performance={props.performance} />
                 <aside aria-label="Prévia no celular" className="order-first lg:order-none lg:sticky lg:top-0 lg:self-start">
                   <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Prévia · {formatLabels[selected.format]}</p>
                   <PostPhonePreview key={selected.id} post={selected} scale={0.8} />
@@ -784,7 +869,7 @@ export function EditorialPostsView(props: EditorialPostsViewProps) {
           ) : null}
         </SidePanel>
       </div>
-      {creating && <CreatePostDialog onClose={() => setCreating(false)} onCreate={props.onCreate} />}
+      {creating && <CreatePostDialog onClose={() => setCreating(false)} onCreate={props.onCreate} others={props.posts} />}
     </section>
   );
 }

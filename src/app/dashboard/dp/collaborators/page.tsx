@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { HeroChip } from '@/components/patterns/hero-chip';
+import { PageHero } from '@/components/patterns/page-hero';
 import {
   ArrowRight,
   Briefcase,
@@ -15,7 +17,6 @@ import {
   Search,
   SlidersHorizontal,
   UserPlus,
-  Users,
 } from 'lucide-react';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -118,29 +119,6 @@ function CollaboratorInfoTile({
         <p className={`text-[8px] font-black uppercase tracking-[.04em] ${toneClass.label}`}>{label}</p>
       </div>
     </div>
-  );
-}
-
-function HeaderMetric({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: 'active' | 'muted';
-}) {
-  return (
-    <span
-      className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold ${
-        tone === 'active'
-          ? 'border-[#c7ecd8] bg-[#eafaf2] text-[#008963]'
-          : 'border-[#e2e0da] bg-white text-[#8a8a94]'
-      }`}
-    >
-      <strong className={`text-xs font-black ${tone === 'active' ? '' : 'text-[#494952]'}`}>{value}</strong>
-      {label}
-    </span>
   );
 }
 
@@ -287,30 +265,17 @@ export default function DPCollaboratorsPage() {
 
   return (
     <div className="space-y-3">
-      <section className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#fde5f0] text-[#df2f78]">
-            <Users className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[9px] font-extrabold uppercase tracking-[.12em] text-[#df2f78]">Departamento pessoal</p>
-            <h1 className="text-lg font-black tracking-[-.02em] text-[#181820]">Colaboradores</h1>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <HeaderMetric label="ativos" value={visibleActiveCount} tone="active" />
-          {permissions.settings.manageUsers ? (
-            <Button
-              type="button"
-              onClick={() => setNewUserOpen(true)}
-              className="h-8 rounded-lg bg-[#df2f78] px-3 text-[11px] font-extrabold text-white shadow-[0_6px_14px_-8px_#df2f78] hover:bg-[#cc2069]"
-            >
-              <UserPlus className="mr-2 h-[17px] w-[17px]" />
-              Novo usuário
-            </Button>
-          ) : null}
-        </div>
-      </section>
+      <PageHero
+        kicker="Departamento pessoal"
+        title="Colaboradores"
+        actions={permissions.settings.manageUsers ? (
+          <Button type="button" variant="primary-page" size="md" onClick={() => setNewUserOpen(true)}>
+            <UserPlus className="mr-2 h-[17px] w-[17px]" />
+            Novo usuário
+          </Button>
+        ) : null}
+        chips={<HeroChip value={visibleActiveCount} label="ativos" tone="info" />}
+      />
 
       <div className="rounded-xl border border-[#e2e0da] bg-white p-2.5 shadow-[0_2px_8px_rgba(15,23,42,.05)]">
         <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.08em] text-[#9d9da9]">
