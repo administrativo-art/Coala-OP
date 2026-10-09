@@ -34,6 +34,21 @@ export function belemBillingWindow(now: Date) {
   };
 }
 
+export function googleBillingExportCoverage(usageDates: readonly string[], now: Date) {
+  const window = belemBillingWindow(now);
+  const [year, month, day] = window.today.split("-").map(Number);
+  const expectedThroughDate = dateOnly(year, month, day - 1);
+  const validDates = usageDates.filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)).sort();
+  const firstUsageDate = validDates[0] || null;
+  const lastUsageDate = validDates.at(-1) || null;
+  return {
+    status: lastUsageDate === null ? "empty" as const : lastUsageDate < expectedThroughDate ? "backfilling" as const : "current" as const,
+    firstUsageDate,
+    lastUsageDate,
+    expectedThroughDate,
+  };
+}
+
 export function openAiBillingWindow(now: Date) {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth() + 1;
