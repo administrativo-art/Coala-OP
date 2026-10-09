@@ -1,10 +1,25 @@
 "use client";
 
-import * as React from 'react';
-import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { LayoutGrid, List, Search, X } from 'lucide-react';
+/**
+ * Composição de Cadastros sobre o guia de design (docs/design, decisão 0005).
+ * Não há padrão visual próprio aqui: cada peça delega a `src/components/patterns/`,
+ * aos tokens `--ds-*`, ao `Button` e ao `StatusPill`. A API pública é a que as telas já usam.
+ */
 
+import * as React from 'react';
+import { LayoutGrid, List } from 'lucide-react';
+
+import { BulkBar as BulkBarPattern } from '@/components/patterns/bulk-bar';
+import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
+import { FilterChips } from '@/components/patterns/filter-chips';
+import { InlineConfirm } from '@/components/patterns/inline-confirm';
+import { LiftRow } from '@/components/patterns/lift-row';
+import { PanelField, SidePanel } from '@/components/patterns/side-panel';
+import { Segmented } from '@/components/patterns/segmented';
+import { SelectBox } from '@/components/patterns/select-box';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusPill } from '@/components/ui/status-pill';
 import { cn } from '@/lib/utils';
 import {
   selectionSummary,
@@ -12,6 +27,8 @@ import {
   type CadastrosStatus,
   type CadastrosView,
 } from './cadastros-utils';
+
+export { SelectBox };
 
 /** O que o espaço de trabalho passa a cada aba: o seletor de abas (parte do cabeçalho escuro) e a visualização. */
 export type CadastrosTabProps = {
@@ -45,14 +62,14 @@ export function CadastrosTabs({
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'flex flex-col gap-1.5 border-b-4 px-1 pb-4 pt-1.5 text-left transition-colors',
-              isActive ? 'border-[#e0457f] text-white' : 'border-transparent text-[#77768a] hover:text-[#c8c7d0]'
+              'flex flex-col gap-1.5 border-b-4 px-1 pb-4 pt-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
+              isActive ? 'border-ds-accent text-white' : 'border-transparent text-ds-indicator-zero hover:text-ds-on-dark-2'
             )}
           >
             <span
               className={cn(
-                'font-mono text-[44px] font-bold leading-none tracking-[-0.05em]',
-                isActive ? 'text-[#f08bb1]' : 'text-[#4b4a58]'
+                'font-ds-mono text-[44px] font-bold leading-none tracking-[-0.05em]',
+                isActive ? 'text-ds-accent-kicker' : 'text-ds-indicator-zero opacity-60'
               )}
             >
               {tab.count}
@@ -79,7 +96,8 @@ export function CadastrosHero({
   kicker: string;
   tabs: React.ReactNode;
   search: { value: string; placeholder: string; onChange: (value: string) => void };
-  status: {
+  /** Omitido nas telas sem situação ativo/inativo. */
+  status?: {
     value: CadastrosStatus;
     onChange: (value: CadastrosStatus) => void;
     activeCount: number;
@@ -87,37 +105,22 @@ export function CadastrosHero({
     inactiveLabel: string;
   };
   manage?: { label: string; onClick: () => void };
-  primary: { label: string; onClick: () => void };
+  /** Omitido quando a pessoa só pode consultar. */
+  primary?: { label: string; onClick: () => void };
   chips: CadastrosChip[];
   activeChip: string;
   onChip: (id: string) => void;
 }) {
+  const allChip = chips.find((chip) => chip.id === 'all');
+  const filterChips = chips.filter((chip) => chip.id !== 'all').map((chip) => ({ value: chip.id, label: chip.label, count: chip.count }));
   return (
-    <section className="flex flex-col gap-[18px] rounded-[28px] bg-[#15151c] px-[26px] pb-5 pt-[22px] text-[#f3f2ee] shadow-[0_24px_60px_rgba(21,21,28,0.18)]">
-      <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-[#f08bb1]">{kicker}</span>
+    <ControlPanel className="flex flex-col gap-[18px] px-[26px] pb-5 pt-[22px]">
+      <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</span>
       {tabs}
       <div className="flex flex-wrap items-center gap-2.5">
-        <label className="flex h-12 min-w-[260px] flex-1 items-center gap-3 rounded-[14px] border border-white/10 bg-white/[0.07] px-[18px]">
-          <Search className="h-[18px] w-[18px] shrink-0 text-[#8e8d99]" aria-hidden />
-          <input
-            value={search.value}
-            onChange={(event) => search.onChange(event.target.value)}
-            placeholder={search.placeholder}
-            aria-label={search.placeholder}
-            className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-none placeholder:text-[#8e8d99]"
-          />
-          {search.value ? (
-            <button
-              type="button"
-              onClick={() => search.onChange('')}
-              aria-label="Limpar busca"
-              className="text-[#8e8d99] hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          ) : null}
-        </label>
-        <div className="flex gap-0.5 rounded-[13px] bg-white/[0.07] p-1" role="group" aria-label="Situação">
+        <ControlSearch value={search.value} onChange={search.onChange} placeholder={search.placeholder} />
+        {status ? (
+        <div className="flex gap-0.5 rounded-ds-btn bg-white/[0.07] p-1" role="group" aria-label="Situação">
           {(
             [
               ['active', 'Ativos', status.activeCount],
@@ -130,57 +133,36 @@ export function CadastrosHero({
               aria-pressed={status.value === value}
               onClick={() => status.onChange(value)}
               className={cn(
-                'h-[42px] whitespace-nowrap rounded-[10px] px-4 text-[13px] font-bold transition-colors',
-                status.value === value ? 'bg-[#f3f2ee] text-[#15151c]' : 'text-[#a3a2ad] hover:text-white'
+                'h-[42px] whitespace-nowrap rounded-ds-md px-4 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
+                status.value === value ? 'bg-ds-on-dark text-ds-dark' : 'text-ds-on-dark-sub hover:text-white'
               )}
             >
               {label} <span className="font-semibold opacity-55">{count}</span>
             </button>
           ))}
         </div>
-        {manage ? (
-          <button
-            type="button"
-            onClick={manage.onClick}
-            className="h-12 whitespace-nowrap rounded-[14px] border border-white/15 px-[18px] text-[13.5px] font-bold text-[#f3f2ee] transition-colors hover:bg-white/10"
-          >
-            {manage.label}
-          </button>
         ) : null}
-        <button
-          type="button"
-          onClick={primary.onClick}
-          className="h-12 whitespace-nowrap rounded-[14px] bg-[#e0457f] px-[22px] text-sm font-extrabold text-white shadow-[0_8px_24px_rgba(224,69,127,0.35)] transition-colors hover:bg-[#c93a6f]"
-        >
-          + {primary.label}
-        </button>
+        {manage ? (
+          <Button type="button" variant="on-dark-secondary" size="xl" onClick={manage.onClick} className="whitespace-nowrap">
+            {manage.label}
+          </Button>
+        ) : null}
+        {primary ? (
+          <Button type="button" variant="primary-page" size="xl" onClick={primary.onClick} className="whitespace-nowrap">
+            + {primary.label}
+          </Button>
+        ) : null}
       </div>
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
-        {chips.map((chip) => {
-          const isActive = chip.id === activeChip;
-          return (
-            <button
-              key={chip.id}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => onChip(chip.id)}
-              title={chip.label}
-              className={cn(
-                'inline-flex h-[34px] max-w-[260px] shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-[12.5px] font-bold transition-colors',
-                isActive
-                  ? 'border-[#f3f2ee] bg-[#f3f2ee] text-[#15151c]'
-                  : 'border-white/[0.12] text-[#c8c7d0] hover:bg-white/10'
-              )}
-            >
-              <span className="truncate">{chip.label}</span>
-              <span className={cn('text-[11px] font-bold', isActive ? 'text-[#70757d]' : 'text-[#77768a]')}>
-                {chip.count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
+      {filterChips.length > 0 ? (
+        <FilterChips
+          chips={filterChips}
+          value={activeChip === 'all' ? null : activeChip}
+          onChange={(value) => onChip(value ?? 'all')}
+          allLabel={allChip?.label}
+          allCount={allChip?.count}
+        />
+      ) : null}
+    </ControlPanel>
   );
 }
 
@@ -205,79 +187,53 @@ export function ResultsBar({
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-baseline gap-2.5">
         <span className="text-[28px] font-extrabold tracking-[-0.03em]">{shown}</span>
-        <span className="text-[13px] text-[#70757d]">
+        <span className="text-[13px] text-ds-ink-faint">
           de {total} {noun}
         </span>
         {selectAll ? (
           <button
             type="button"
             onClick={selectAll.onClick}
-            className="ml-2.5 text-[12.5px] font-bold text-[#a6325b] hover:text-[#8e294d]"
+            className="ml-2.5 text-[12.5px] font-bold text-ds-accent-ink hover:text-ds-accent-ink-hover"
           >
             {selectAll.label}
           </button>
         ) : null}
       </div>
-      <div className="flex gap-0.5 rounded-[11px] bg-[#e6e3dc] p-[3px]" role="group" aria-label="Visualização">
-        {(
-          [
-            ['list', 'Lista', List],
-            ['grid', 'Grade', LayoutGrid],
-          ] as const
-        ).map(([value, label, Icon]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={view === value}
-            onClick={() => onView(value)}
-            className={cn(
-              'inline-flex h-9 items-center gap-1.5 rounded-[9px] px-[13px] text-[12.5px] font-bold transition-colors',
-              view === value ? 'bg-white text-[#1a1b1f] shadow-[0_1px_2px_rgba(0,0,0,0.08)]' : 'text-[#70757d]'
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-            {label}
-          </button>
-        ))}
-      </div>
+      <Segmented<CadastrosView>
+        aria-label="Visualização"
+        value={view}
+        onChange={onView}
+        options={[
+          {
+            value: 'list',
+            label: (
+              <span className="inline-flex items-center gap-1.5">
+                <List className="h-3.5 w-3.5" aria-hidden />
+                Lista
+              </span>
+            ),
+          },
+          {
+            value: 'grid',
+            label: (
+              <span className="inline-flex items-center gap-1.5">
+                <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
+                Grade
+              </span>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
 
 /* ───────────────────────── Lista ───────────────────────── */
 
-export function SelectBox({
-  checked,
-  onToggle,
-  label,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      className={cn(
-        'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[11px] font-extrabold text-white',
-        checked ? 'bg-[#a6325b]' : 'border-[1.5px] border-[#cfcbc2] bg-white'
-      )}
-    >
-      {checked ? '✓' : ''}
-    </button>
-  );
-}
-
 export function ListShell({ children, minWidth = 860 }: { children: React.ReactNode; minWidth?: number }) {
   return (
-    <section className="overflow-hidden rounded-[20px] border border-[#e3dfd6] bg-[#fffdf9]">
+    <section className="overflow-hidden rounded-ds-card-lg border border-ds-border bg-ds-warm">
       <div className="overflow-x-auto">
         <div style={{ minWidth }}>{children}</div>
       </div>
@@ -288,7 +244,7 @@ export function ListShell({ children, minWidth = 860 }: { children: React.ReactN
 export function ListHead({ template, children }: { template: string; children: React.ReactNode }) {
   return (
     <div
-      className="grid items-center gap-3.5 border-b border-[#ece8e0] px-5 py-2.5 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-[#8a8f99]"
+      className="grid items-center gap-3.5 border-b border-ds-divider px-5 py-2.5 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint"
       style={{ gridTemplateColumns: template }}
     >
       {children}
@@ -298,7 +254,6 @@ export function ListHead({ template, children }: { template: string; children: R
 
 export function ListRow({
   template,
-  isFirst,
   isOpen,
   isSelected,
   isMuted,
@@ -307,7 +262,8 @@ export function ListRow({
   children,
 }: {
   template: string;
-  isFirst: boolean;
+  /** Mantido por compatibilidade: a divisória agora é de `LiftRow`. */
+  isFirst?: boolean;
   isOpen: boolean;
   isSelected: boolean;
   isMuted: boolean;
@@ -316,44 +272,31 @@ export function ListRow({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <LiftRow
+      selected={isOpen}
       aria-label={label}
+      aria-pressed={undefined}
       onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
+      table
       className={cn(
-        'relative grid cursor-pointer items-center gap-3.5 px-5 py-[11px] outline-none transition-[transform,box-shadow,background-color] duration-150',
-        'hover:z-[2] hover:-translate-y-0.5 hover:scale-[1.004] hover:rounded-[14px] hover:bg-white hover:shadow-[0_10px_28px_rgba(21,21,28,0.12),0_2px_6px_rgba(21,21,28,0.06)]',
-        'focus-visible:ring-2 focus-visible:ring-[#a6325b]/50',
-        !isFirst && 'border-t border-[#f1eee8]',
-        isOpen ? 'bg-[#fbeef3] shadow-[inset_3px_0_0_#a6325b]' : isSelected ? 'bg-[#fdf6f8]' : 'bg-transparent',
+        'grid items-center gap-3.5 px-5 py-[11px] last:border-b-0',
+        isSelected && !isOpen && 'bg-ds-accent-soft/40',
         isMuted && 'opacity-60'
       )}
       style={{ gridTemplateColumns: template }}
     >
       {children}
-    </div>
+    </LiftRow>
   );
 }
 
 export function Chevron() {
-  return <span className="text-[13px] text-[#b5b2aa]">›</span>;
+  return <span className="text-[13px] text-ds-ink-faint">›</span>;
 }
 
+/** Situação somente leitura (docs/design/status.md): a troca acontece no painel ou no modal. */
 export function StatusDot({ isActive, activeLabel = 'Ativo', inactiveLabel = 'Inativo' }: { isActive: boolean; activeLabel?: string; inactiveLabel?: string }) {
-  return (
-    <span className="inline-flex items-center gap-[7px] text-[12.5px] text-[#4a4f57]">
-      <span className={cn('h-2 w-2 rounded-full', isActive ? 'bg-emerald-500' : 'bg-[#b5b2aa]')} />
-      {isActive ? activeLabel : inactiveLabel}
-    </span>
-  );
+  return <StatusPill variant={isActive ? 'ok' : 'neutral'}>{isActive ? activeLabel : inactiveLabel}</StatusPill>;
 }
 
 export function SoftPill({ children, isEmpty }: { children: React.ReactNode; isEmpty?: boolean }) {
@@ -361,7 +304,7 @@ export function SoftPill({ children, isEmpty }: { children: React.ReactNode; isE
     <span
       className={cn(
         'max-w-full self-start justify-self-start truncate whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold',
-        isEmpty ? 'border border-dashed border-[#d6d2c8] text-[#9a9ba1]' : 'bg-[#f4f2ed] text-[#4a4f57]'
+        isEmpty ? 'border border-dashed border-ds-border-input text-ds-ink-faint' : 'bg-ds-muted text-ds-ink-2'
       )}
     >
       {children}
@@ -370,7 +313,7 @@ export function SoftPill({ children, isEmpty }: { children: React.ReactNode; isE
 }
 
 export function Mono({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={cn('font-mono', className)}>{children}</span>;
+  return <span className={cn('font-ds-mono', className)}>{children}</span>;
 }
 
 export function ListSkeleton({ rows = 6 }: { rows?: number }) {
@@ -420,9 +363,9 @@ export function GridCard({
         }
       }}
       className={cn(
-        'flex cursor-pointer flex-col gap-3 rounded-[20px] bg-white p-[18px] outline-none transition-[transform,box-shadow] duration-150',
-        'hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(21,21,28,0.12)] focus-visible:ring-2 focus-visible:ring-[#a6325b]/50',
-        isOpen ? 'border-2 border-[#a6325b]' : isSelected ? 'border-2 border-[#f0a5c1]' : 'border border-[#e3dfd6]',
+        'flex cursor-pointer flex-col gap-3 rounded-ds-card-lg bg-ds-surface p-[18px] outline-none transition-[transform,box-shadow] duration-150 ease-ds-lift',
+        'hover:-translate-y-0.5 hover:shadow-ds-lift focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2 motion-reduce:hover:translate-y-0',
+        isOpen ? 'border-2 border-ds-accent-ink' : isSelected ? 'border-2 border-ds-accent/40' : 'border border-ds-border',
         isMuted && 'opacity-60'
       )}
       style={{ minHeight }}
@@ -433,20 +376,16 @@ export function GridCard({
 }
 
 export function CardFooterLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#9a9ba1]">{children}</span>;
+  return <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-faint">{children}</span>;
 }
 
 export function EmptyResults({ title, onClear }: { title: string; onClear: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 px-5 py-14 text-center">
+    <div className="m-4 flex flex-col items-center gap-2.5 rounded-ds-card border border-dashed border-ds-border-input px-5 py-12 text-center">
       <span className="text-sm font-bold">{title}</span>
-      <button
-        type="button"
-        onClick={onClear}
-        className="h-9 rounded-[10px] border border-[#e3dfd6] bg-white px-3.5 text-[12.5px] font-bold hover:bg-[#f6f4ef]"
-      >
+      <Button type="button" variant="ds-secondary" size="xs" onClick={onClear}>
         Limpar filtros
-      </button>
+      </Button>
     </div>
   );
 }
@@ -458,13 +397,14 @@ export type DrawerChip = { label: string; tone?: Tone };
 export type DrawerNotice = { kind: 'block' | 'confirm'; text: string; onConfirm?: () => void };
 export type DrawerAction = { label: string; onClick: () => void; isDanger?: boolean };
 
+/** `pink` e `violet` não têm variante em `StatusPill`; usam os tokens de marca e de modal. */
 const CHIP_TONES: Record<Tone, string> = {
-  neutral: 'bg-[#f4f2ed] text-[#4a4f57]',
-  pink: 'bg-[#fbe7ef] text-[#a6325b]',
-  off: 'bg-[#efede7] text-[#70757d]',
-  ok: 'bg-[#d1fae5] text-[#065f46]',
-  warn: 'bg-[#fef3c7] text-[#92400e]',
-  violet: 'bg-[#ede9fe] text-[#5b21b6]',
+  neutral: 'bg-ds-muted text-ds-ink-2',
+  off: 'bg-ds-neutral-bg text-ds-neutral',
+  pink: 'bg-ds-accent-soft text-ds-accent-ink',
+  ok: 'bg-ds-ok-bg text-ds-ok',
+  warn: 'bg-ds-warn-bg text-ds-warn',
+  violet: 'bg-ds-modal-soft text-ds-modal-ink',
 };
 
 /** Etiqueta pequena para dentro de linhas e cartões. */
@@ -508,160 +448,119 @@ export function DetailDrawer({
   isBusy?: boolean;
 }) {
   const isConfirming = notice?.kind === 'confirm';
+  const regularActions = actions.filter((action) => !action.isDanger);
+  const dangerActions = actions.filter((action) => action.isDanger);
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(24,20,14,0.18)] data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content
-          aria-describedby={undefined}
-          className="fixed bottom-3 right-3 top-3 z-50 flex w-[min(420px,calc(100vw-24px))] flex-col overflow-hidden rounded-[20px] border border-[#e3dfd6] bg-[#fffdf9] shadow-[-20px_0_60px_rgba(0,0,0,0.16)] outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right"
-        >
-          <div className="flex flex-col gap-2.5 bg-[#15151c] px-[22px] pb-[18px] pt-[22px] text-[#f3f2ee]">
-            <div className="flex items-center justify-between gap-2.5">
-              <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-[#8e8d99]">{kicker}</span>
-              <DialogPrimitive.Close
-                aria-label="Fechar painel"
-                className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white/10 text-[#f3f2ee] hover:bg-white/20"
-              >
-                <X className="h-4 w-4" />
-              </DialogPrimitive.Close>
-            </div>
-            <DialogPrimitive.Title className="m-0 break-words text-[30px] font-extrabold leading-[1.05] tracking-[-0.035em]">
-              {title}
-            </DialogPrimitive.Title>
-            <div className="flex flex-wrap gap-1.5">
-              {chips.map((chip) => (
-                <span
-                  key={chip.label}
-                  className={cn('whitespace-nowrap rounded-full px-[9px] py-0.5 text-[11.5px] font-semibold', CHIP_TONES[chip.tone ?? 'neutral'])}
-                >
-                  {chip.label}
-                </span>
-              ))}
-            </div>
+    <SidePanel
+      open={open}
+      onOpenChange={(next) => { if (!next) onClose(); }}
+      kicker={kicker}
+      title={title}
+      subtitle={
+        <span className="mt-1.5 flex flex-wrap gap-1.5">
+          {chips.map((chip) => (
+            <span
+              key={chip.label}
+              className={cn('inline-flex h-[21px] items-center whitespace-nowrap rounded-full px-[9px] text-[11.5px] font-bold', CHIP_TONES[chip.tone ?? 'neutral'])}
+            >
+              {chip.label}
+            </span>
+          ))}
+        </span>
+      }
+    >
+      {hero ? (
+        <div className="flex items-center gap-3.5 rounded-ds-card bg-ds-dark p-3.5 text-ds-on-dark">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-ds-btn-lg border border-white/20 bg-white/10 text-[28px] font-extrabold tracking-[-0.04em] text-ds-accent-kicker">
+            {hero.sig}
           </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">{hero.label}</span>
+            <span className="font-ds-mono text-[22px] font-bold tracking-[-0.02em]">{hero.value}</span>
+          </div>
+        </div>
+      ) : null}
 
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-[22px] py-4">
-            {hero ? (
-              <div className="flex items-center gap-3.5 rounded-2xl bg-[#15151c] p-3.5 text-[#f3f2ee]">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[14px] border border-[#b9b9ff]/30 bg-[#b9b9ff]/10 text-[28px] font-extrabold tracking-[-0.04em] text-[#b9b9ff]">
-                  {hero.sig}
-                </div>
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-[#8e8d99]">{hero.label}</span>
-                  <span className="font-mono text-[22px] font-bold tracking-[-0.02em]">{hero.value}</span>
-                </div>
-              </div>
-            ) : null}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+        {fields.map(([key, value]) => (
+          <PanelField key={key} label={key}>
+            <span className="break-words">{value}</span>
+          </PanelField>
+        ))}
+      </div>
 
-            <dl className="flex flex-col rounded-[14px] border border-[#ece8e0] bg-white">
-              {fields.map(([key, value], index) => (
-                <div
-                  key={key}
-                  className={cn('flex items-baseline justify-between gap-3.5 px-3.5 py-2.5', index > 0 && 'border-t border-[#f1eee8]')}
-                >
-                  <dt className="shrink-0 text-xs text-[#70757d]">{key}</dt>
-                  <dd className="m-0 break-words text-right text-[13px] font-semibold">{value}</dd>
-                </div>
-              ))}
-            </dl>
-
-            {list ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-[12.5px] font-extrabold">{list.title}</span>
-                  {list.more ? <span className="text-[11.5px] text-[#8a8f99]">{list.more}</span> : null}
-                </div>
-                <div className="flex flex-col rounded-[14px] border border-[#ece8e0] bg-white">
-                  {list.rows.map(([a, b], index) => (
-                    <div
-                      key={`${a}-${index}`}
-                      className={cn('flex items-baseline justify-between gap-3.5 px-3.5 py-2.5', index > 0 && 'border-t border-[#f1eee8]')}
-                    >
-                      <span className="min-w-0 truncate text-[12.5px] font-semibold">{a}</span>
-                      <span className="whitespace-nowrap text-xs text-[#70757d]">{b}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {notice ? (
+      {list ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between">
+            <span className="text-[12.5px] font-extrabold">{list.title}</span>
+            {list.more ? <span className="text-[11.5px] text-ds-ink-faint">{list.more}</span> : null}
+          </div>
+          <div className="flex flex-col rounded-ds-btn-lg border border-ds-border bg-ds-surface">
+            {list.rows.map(([a, b], index) => (
               <div
-                role="alert"
-                className={cn(
-                  'rounded-xl border px-3.5 py-[11px] text-[12.5px] leading-normal',
-                  notice.kind === 'confirm'
-                    ? 'border-[#f3c7d5] bg-[#fff1f4] text-[#9f1239]'
-                    : 'border-[#f5d9a3] bg-[#fff7e6] text-[#8a5a00]'
-                )}
+                key={`${a}-${index}`}
+                className={cn('flex items-baseline justify-between gap-3.5 px-3.5 py-2.5', index > 0 && 'border-t border-ds-divider')}
               >
-                {notice.text}
+                <span className="min-w-0 truncate text-[12.5px] font-semibold">{a}</span>
+                <span className="whitespace-nowrap text-xs text-ds-ink-faint">{b}</span>
               </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {notice?.kind === 'block' ? (
+        <div role="alert" className="rounded-ds-btn border border-ds-alert-border bg-ds-alert-bg px-3.5 py-[11px] text-[12.5px] leading-normal text-ds-alert-ink">
+          {notice.text}
+        </div>
+      ) : null}
+
+      {isConfirming ? (
+        <InlineConfirm
+          message={notice.text}
+          confirmLabel="Confirmar"
+          loadingLabel="Processando…"
+          loading={isBusy}
+          onConfirm={() => notice.onConfirm?.()}
+          onCancel={onCancelNotice}
+        />
+      ) : null}
+
+      <div className="mt-auto flex flex-col gap-3 border-t border-ds-divider pt-4">
+        {onFicha || onEdit ? (
+          <div className="grid grid-cols-2 gap-2">
+            {onFicha ? (
+              <Button type="button" variant="ds-secondary" size="md" onClick={onFicha}>
+                Ficha cadastral
+              </Button>
+            ) : null}
+            {onEdit ? (
+              <Button type="button" variant="primary-modal" size="md" onClick={onEdit} className={onFicha ? undefined : 'col-span-2'}>
+                Editar
+              </Button>
             ) : null}
           </div>
-
-          <div className="flex flex-col gap-2 border-t border-[#ece8e0] px-[22px] pb-[18px] pt-3.5">
-            <div className="flex gap-2">
-              {onFicha ? (
-                <button
-                  type="button"
-                  onClick={onFicha}
-                  className="flex h-[42px] flex-1 items-center justify-center rounded-xl border border-[#e3dfd6] bg-white text-[13px] font-bold text-[#1a1b1f] hover:bg-[#f6f4ef]"
-                >
-                  Ficha cadastral
-                </button>
-              ) : null}
-              {onEdit ? (
-                <button
-                  type="button"
-                  onClick={onEdit}
-                  className="flex h-[42px] flex-1 items-center justify-center rounded-xl bg-[#1a1b1f] text-[13px] font-bold text-white hover:bg-black"
-                >
-                  Editar
-                </button>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {isConfirming ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={notice?.onConfirm}
-                    className="h-[34px] rounded-[10px] border border-[#be123c] bg-[#be123c] px-3 text-[12.5px] font-bold text-white disabled:opacity-60"
-                  >
-                    {isBusy ? 'Processando…' : 'Confirmar'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={onCancelNotice}
-                    className="h-[34px] rounded-[10px] border border-[#e3dfd6] bg-white px-3 text-[12.5px] font-bold text-[#4a4f57] disabled:opacity-60"
-                  >
-                    Cancelar
-                  </button>
-                </>
-              ) : (
-                actions.map((action) => (
-                  <button
-                    key={action.label}
-                    type="button"
-                    onClick={action.onClick}
-                    className={cn(
-                      'h-[34px] rounded-[10px] border bg-white px-3 text-[12.5px] font-bold hover:bg-[#f6f4ef]',
-                      action.isDanger ? 'border-[#f3c7d5] text-[#be123c]' : 'border-[#e3dfd6] text-[#4a4f57]'
-                    )}
-                  >
-                    {action.label}
-                  </button>
-                ))
-              )}
-            </div>
+        ) : null}
+        {!isConfirming && regularActions.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {regularActions.map((action) => (
+              <Button key={action.label} type="button" variant="ds-secondary" size="md" onClick={action.onClick}>
+                {action.label}
+              </Button>
+            ))}
           </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+        ) : null}
+        {!isConfirming && dangerActions.length > 0 ? (
+          <div className="flex flex-wrap gap-3">
+            {dangerActions.map((action) => (
+              <Button key={action.label} type="button" variant="danger-link" size="xs" onClick={action.onClick}>
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </SidePanel>
   );
 }
 
@@ -676,34 +575,5 @@ export function BulkBar({
   actions: DrawerAction[];
   onClear: () => void;
 }) {
-  if (count <= 0) return null;
-  return (
-    <div
-      role="region"
-      aria-label="Ações em massa"
-      className="fixed bottom-6 left-1/2 z-40 flex max-w-[calc(100vw-24px)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-2xl bg-[#15151c] py-2 pl-[18px] pr-2 text-white shadow-[0_18px_50px_rgba(0,0,0,0.28)]"
-    >
-      <span className="mr-2 whitespace-nowrap text-[13px] font-bold">{selectionSummary(count)}</span>
-      {actions.map((action) => (
-        <button
-          key={action.label}
-          type="button"
-          onClick={action.onClick}
-          className={cn(
-            'h-9 whitespace-nowrap rounded-[10px] px-3.5 text-[12.5px] font-bold text-white',
-            action.isDanger ? 'bg-[#be123c] hover:bg-[#9f1239]' : 'bg-white/10 hover:bg-white/20'
-          )}
-        >
-          {action.label}
-        </button>
-      ))}
-      <button
-        type="button"
-        onClick={onClear}
-        className="h-9 rounded-[10px] px-2.5 text-[12.5px] font-semibold text-[#a3a2ad] hover:text-white"
-      >
-        Limpar
-      </button>
-    </div>
-  );
+  return <BulkBarPattern count={count} summary={selectionSummary(count)} actions={actions} onClear={onClear} />;
 }

@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDoc, deleteDoc, setDoc } from "firebase/firestore";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, Loader2, MoreHorizontal, PlusCircle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { auth } from "@/lib/firebase";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
@@ -14,84 +12,51 @@ import {
   type ResultCenterFormValues,
 } from "@/features/financial/lib/schemas";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
+import { CadastrosHero, Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton, SoftPill } from "@/components/cadastros/cadastros-ui";
+import { Field, fieldInputClass } from "@/components/patterns/field";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { errorMessageOf, PanelErrorNote, PanelFormFooter } from "@/components/patterns/panel-form";
+import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { matchesFinanceQuery } from "./settings-model";
 
 type ResultCenter = ResultCenterFormValues & { id: string };
 
+type PanelState = { mode: "view"; item: ResultCenter } | { mode: "edit"; item: ResultCenter } | { mode: "create" };
+
+const TEMPLATE = "minmax(220px,1fr) minmax(260px,1.4fr) minmax(200px,1fr) 16px";
+
 export default function ResultCentersManagement({ canManage = true }: { canManage?: boolean }) {
-  const { toast } = useToast();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const [resultCenters, setResultCenters] = useState<ResultCenter[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [editingResultCenter, setEditingResultCenter] = useState<ResultCenter | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [panel, setPanel] = useState<PanelState | null>(null);
 
   const refresh = useCallback(async () => {
     if (!auth.currentUser) {
-      setError(new Error("Usuário não autenticado."));
+      setLoadError("Usuário não autenticado.");
       setLoading(false);
       return;
     }
-
     setLoading(true);
-
     try {
       const token = await auth.currentUser.getIdToken();
       const response = await fetchWithTimeout("/api/financial/data?path=resultCenters", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
-
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || "Falha ao carregar os centros de resultado.");
-      }
-
+      if (!response.ok) throw new Error(payload?.error || "Falha ao carregar os centros de resultado.");
       setResultCenters((payload.docs ?? []) as ResultCenter[]);
-      setError(null);
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError
-          : new Error("Falha ao carregar os centros de resultado.")
-      );
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(errorMessageOf(error, "Falha ao carregar os centros de resultado."));
     } finally {
       setLoading(false);
     }
@@ -101,290 +66,266 @@ export default function ResultCentersManagement({ canManage = true }: { canManag
     void refresh();
   }, [refresh]);
 
-  const availableUnits = useMemo(
-    () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
-    [kiosks]
+  const units = useMemo(() => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")), [kiosks]);
+  const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
+
+  const all = useMemo(
+    () => [...(resultCenters ?? [])].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
+    [resultCenters]
   );
-  const unitNameById = useMemo(
-    () => Object.fromEntries(availableUnits.map((unit) => [unit.id, unit.name])),
-    [availableUnits]
+  const rows = useMemo(
+    () =>
+      all.filter((item) =>
+        matchesFinanceQuery(query, item.name, item.description, ...(item.unitIds ?? []).map((id) => unitNameById.get(id) ?? id))
+      ),
+    [all, query, unitNameById]
   );
 
-  const form = useForm<ResultCenterFormValues>({
-    resolver: zodResolver(resultCenterFormSchema),
-    defaultValues: { name: "", description: "", unitIds: [] },
-  });
-
-  function handleDialogOpen(resultCenter: ResultCenter | null = null) {
-    setEditingResultCenter(resultCenter);
-    form.reset(
-      resultCenter
-        ? {
-            name: resultCenter.name,
-            description: resultCenter.description ?? "",
-            unitIds: resultCenter.unitIds ?? [],
-          }
-        : { name: "", description: "", unitIds: [] }
-    );
-    setIsFormOpen(true);
+  async function save(values: ResultCenterFormValues, current: ResultCenter | null) {
+    const payload = { ...values, unitIds: Array.from(new Set(values.unitIds ?? [])) };
+    if (current) await setDoc(financialDoc("resultCenters", current.id), payload);
+    else await addDoc(financialCollection("resultCenters"), payload);
+    await refresh();
   }
 
-  async function onSubmit(values: ResultCenterFormValues) {
-    setIsSaving(true);
-    try {
-      const payload = {
-        ...values,
-        unitIds: Array.from(new Set(values.unitIds ?? [])),
-      };
-
-      if (editingResultCenter) {
-        await setDoc(financialDoc("resultCenters", editingResultCenter.id), payload);
-        toast({ title: "Centro de resultado atualizado!" });
-      } else {
-        await addDoc(financialCollection("resultCenters"), payload);
-        toast({ title: "Centro de resultado criado!" });
-      }
-      refresh();
-      setIsFormOpen(false);
-      setEditingResultCenter(null);
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao salvar o centro de resultado." });
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!deletingId) return;
-    try {
-      await deleteDoc(financialDoc("resultCenters", deletingId));
-      toast({ title: "Centro de resultado removido." });
-      refresh();
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao remover o centro de resultado." });
-    } finally {
-      setDeletingId(null);
-    }
+  async function remove(item: ResultCenter) {
+    await deleteDoc(financialDoc("resultCenters", item.id));
+    await refresh();
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle>Centros de resultado</CardTitle>
-            <CardDescription>Defina os centros usados no rateio e na análise por unidade de resultado.</CardDescription>
-          </div>
-          {canManage && (
-            <Button onClick={() => handleDialogOpen()}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Novo centro
-            </Button>
-          )}
+    <div className="space-y-5">
+      <CadastrosHero
+        kicker="Centros de resultado"
+        tabs={null}
+        search={{ value: query, placeholder: "Buscar centro ou unidade", onChange: setQuery }}
+        primary={canManage ? { label: "Novo centro", onClick: () => setPanel({ mode: "create" }) } : undefined}
+        chips={[]}
+        activeChip="all"
+        onChip={() => undefined}
+      />
+
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[28px] font-extrabold tracking-[-0.03em]">{rows.length}</span>
+        <span className="text-[13px] text-ds-ink-faint">de {all.length} centros</span>
+        <span className="text-[13px] text-ds-ink-muted">· Usados no rateio e na análise por unidade de resultado.</span>
+      </div>
+
+      {loadError ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-ds-card border border-ds-confirm-border bg-ds-confirm-bg px-5 py-4">
+          <p className="text-[13px] font-semibold text-ds-confirm-ink">{loadError}</p>
+          <Button type="button" variant="ds-secondary" size="md" onClick={() => void refresh()}>Tentar novamente</Button>
         </div>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div className="space-y-1">
-                <p className="font-medium">Falha ao carregar os centros de resultado.</p>
-                <p>{error.message}</p>
+      ) : null}
+
+      {loading && !resultCenters ? (
+        <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando centros de resultado">
+          <ListSkeleton rows={4} />
+        </div>
+      ) : (
+        <ListShell minWidth={760}>
+          <ListHead template={TEMPLATE}>
+            <span>Centro</span>
+            <span>Unidades vinculadas</span>
+            <span>Descrição</span>
+            <span />
+          </ListHead>
+          {rows.map((item) => (
+            <ListRow
+              key={item.id}
+              template={TEMPLATE}
+              isOpen={panel?.mode !== "create" && panel?.item.id === item.id}
+              isSelected={false}
+              isMuted={false}
+              onOpen={() => setPanel({ mode: "view", item })}
+              label={`Abrir ${item.name}`}
+            >
+              <span className="truncate text-[13.5px] font-bold">{item.name}</span>
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {item.unitIds?.length ? (
+                  item.unitIds.slice(0, 3).map((unitId) => <SoftPill key={unitId}>{unitNameById.get(unitId) ?? unitId}</SoftPill>)
+                ) : (
+                  <SoftPill isEmpty>Sem vínculo</SoftPill>
+                )}
+                {(item.unitIds?.length ?? 0) > 3 ? <SoftPill>+{(item.unitIds?.length ?? 0) - 3}</SoftPill> : null}
               </div>
-            </div>
-          </div>
-        )}
-        <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Unidades vinculadas</TableHead>
-              <TableHead>Descrição</TableHead>
-              {canManage && <TableHead className="w-16" />}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={canManage ? 4 : 3} className="h-24 text-center">
-                  <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                </TableCell>
-              </TableRow>
-            ) : !resultCenters?.length ? (
-              <TableRow>
-                <TableCell colSpan={canManage ? 4 : 3} className="h-24 text-center text-muted-foreground">
-                  Nenhum centro de resultado cadastrado.
-                </TableCell>
-              </TableRow>
+              <span className="truncate text-xs text-ds-ink-muted">{item.description || "—"}</span>
+              <Chevron />
+            </ListRow>
+          ))}
+          {rows.length === 0 && !loadError ? (
+            all.length === 0
+              ? <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum centro de resultado cadastrado.</p>
+              : <EmptyResults title="Nenhum centro encontrado com essa busca." onClear={() => setQuery("")} />
+          ) : null}
+        </ListShell>
+      )}
+
+      <CenterPanel
+        state={panel}
+        units={units}
+        unitsLoading={kiosksLoading}
+        unitNameById={unitNameById}
+        canManage={canManage}
+        onClose={() => setPanel(null)}
+        onMode={setPanel}
+        onSave={save}
+        onRemove={remove}
+      />
+    </div>
+  );
+}
+
+function CenterPanel({
+  state,
+  units,
+  unitsLoading,
+  unitNameById,
+  canManage,
+  onClose,
+  onMode,
+  onSave,
+  onRemove,
+}: {
+  state: PanelState | null;
+  units: Array<{ id: string; name: string }>;
+  unitsLoading: boolean;
+  unitNameById: Map<string, string>;
+  canManage: boolean;
+  onClose: () => void;
+  onMode: (state: PanelState) => void;
+  onSave: (values: ResultCenterFormValues, current: ResultCenter | null) => Promise<void>;
+  onRemove: (item: ResultCenter) => Promise<void>;
+}) {
+  const form = useForm<ResultCenterFormValues>({ resolver: zodResolver(resultCenterFormSchema), defaultValues: { name: "", description: "", unitIds: [] } });
+  const { register, control, handleSubmit, reset, formState: { errors, isSubmitting } } = form;
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const item = state && state.mode !== "create" ? state.item : null;
+  const editing = state?.mode === "edit" || state?.mode === "create";
+
+  useEffect(() => {
+    setSaveError(null);
+    setConfirmingDelete(false);
+    if (!state || state.mode === "view") return;
+    reset(
+      state.mode === "edit"
+        ? { name: state.item.name, description: state.item.description ?? "", unitIds: state.item.unitIds ?? [] }
+        : { name: "", description: "", unitIds: [] }
+    );
+  }, [state, reset]);
+
+  return (
+    <SidePanel
+      open={!!state}
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      kicker={state?.mode === "create" ? "Novo centro" : state?.mode === "edit" ? "Editar centro" : "Centro de resultado"}
+      title={state?.mode === "create" ? "Sem nome" : item?.name ?? ""}
+      subtitle="Distribui despesas e analisa o desempenho por unidade."
+    >
+      {state && !editing && item ? (
+        <>
+          <PanelSection title="Dados">
+            <PanelField label="Descrição">{item.description || "Sem descrição."}</PanelField>
+          </PanelSection>
+          <PanelSection title="Unidades vinculadas" aside={item.unitIds?.length ?? 0}>
+            {item.unitIds?.length ? (
+              <ul className="space-y-1.5">
+                {item.unitIds.map((unitId) => <li key={unitId} className="text-[13px] font-semibold">{unitNameById.get(unitId) ?? unitId}</li>)}
+              </ul>
             ) : (
-              resultCenters.map((resultCenter) => (
-                <TableRow key={resultCenter.id}>
-                  <TableCell className="font-medium">{resultCenter.name}</TableCell>
-                  <TableCell>
-                    {resultCenter.unitIds?.length ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {resultCenter.unitIds.map((unitId) => (
-                          <Badge key={unitId} variant="secondary">
-                            {unitNameById[unitId] ?? unitId}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Sem vínculo</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{resultCenter.description || "—"}</TableCell>
-                  {canManage && (
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
-                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => handleDialogOpen(resultCenter)}>Editar</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setDeletingId(resultCenter.id)}>Excluir</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
+              <p className="text-[13px] text-ds-ink-muted">Sem vínculo com unidade específica.</p>
             )}
-          </TableBody>
-        </Table>
-        </div>
-      </CardContent>
+          </PanelSection>
+          {canManage ? (
+            <div className="mt-auto space-y-3 border-t border-ds-divider pt-4">
+              {confirmingDelete ? (
+                <InlineConfirm
+                  message={`Excluir “${item.name}”? Confirme que ele não está em uso em despesas ativas.`}
+                  loading={deleting}
+                  onCancel={() => setConfirmingDelete(false)}
+                  onConfirm={async () => {
+                    setDeleting(true);
+                    setSaveError(null);
+                    try {
+                      await onRemove(item);
+                      onClose();
+                    } catch (error) {
+                      setConfirmingDelete(false);
+                      setSaveError(errorMessageOf(error, "Não foi possível excluir o centro de resultado."));
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="primary-modal" size="md" onClick={() => onMode({ mode: "edit", item })}>Editar centro</Button>
+                  <Button type="button" variant="danger-link" size="md" onClick={() => setConfirmingDelete(true)}>Excluir centro</Button>
+                </div>
+              )}
+              <PanelErrorNote message={saveError} />
+            </div>
+          ) : null}
+        </>
+      ) : null}
 
-      <Dialog
-        open={isFormOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsFormOpen(false);
-            setEditingResultCenter(null);
-          }
-        }}
-      >
-        <DialogContent onCloseAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>{editingResultCenter ? "Editar centro" : "Novo centro de resultado"}</DialogTitle>
-            <DialogDescription>Use centros de resultado para distribuir despesas e analisar desempenho.</DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Operação São Luís" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Contexto opcional" {...field} value={field.value ?? ""} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="unitIds"
-                render={({ field }) => {
-                  const selectedUnitIds = field.value ?? [];
-
-                  return (
-                    <FormItem>
-                      <FormLabel>Unidades vinculadas</FormLabel>
-                      <div className="space-y-3 rounded-lg border p-3">
-                        <p className="text-sm text-muted-foreground">
-                          Deixe sem marcar para usar o centro sem vínculo com unidade específica.
-                        </p>
-                        {kiosksLoading ? (
-                          <div className="flex h-16 items-center justify-center">
-                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : !availableUnits.length ? (
-                          <p className="text-sm text-muted-foreground">
-                            Nenhuma unidade cadastrada no OP.
-                          </p>
-                        ) : (
-                          <div className="grid gap-3 md:grid-cols-2">
-                            {availableUnits.map((unit) => {
-                              const checked = selectedUnitIds.includes(unit.id);
-                              return (
-                                <label
-                                  key={unit.id}
-                                  className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted/30"
-                                >
-                                  <Checkbox
-                                    checked={checked}
-                                    onCheckedChange={(nextChecked) => {
-                                      const nextIds = nextChecked
-                                        ? [...selectedUnitIds, unit.id]
-                                        : selectedUnitIds.filter((unitId) => unitId !== unit.id);
-                                      field.onChange(nextIds);
-                                    }}
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium leading-none">{unit.name}</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">{unit.id}</p>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir centro de resultado?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Essa ação remove o centro selecionado. Confirme se ele não está sendo usado em despesas ativas.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+      {state && editing ? (
+        <form
+          noValidate
+          className="flex flex-1 flex-col gap-5"
+          onSubmit={handleSubmit(async (values) => {
+            setSaveError(null);
+            try {
+              await onSave(values, item);
+              onClose();
+            } catch (error) {
+              setSaveError(errorMessageOf(error, "Não foi possível salvar o centro de resultado."));
+            }
+          })}
+        >
+          <Field label="Nome" htmlFor="center-name" error={errors.name?.message}>
+            <Input id="center-name" placeholder="Ex.: Operação São Luís" aria-invalid={!!errors.name} className={fieldInputClass} {...register("name")} />
+          </Field>
+          <Field label="Descrição" htmlFor="center-description" requirement="opcional" error={errors.description?.message}>
+            <Textarea id="center-description" rows={3} placeholder="Contexto opcional" className={cn(fieldInputClass, "h-auto py-2.5")} {...register("description")} />
+          </Field>
+          <Controller
+            control={control}
+            name="unitIds"
+            render={({ field }) => {
+              const selected = field.value ?? [];
+              return (
+                <Field label="Unidades vinculadas" requirement="opcional" hint="Deixe sem marcar para usar o centro sem vínculo com unidade específica." error={errors.unitIds?.message as string | undefined}>
+                  {unitsLoading ? (
+                    <p className="text-[13px] text-ds-ink-muted">Carregando unidades…</p>
+                  ) : units.length === 0 ? (
+                    <p className="text-[13px] text-ds-ink-muted">Nenhuma unidade cadastrada no OP.</p>
+                  ) : (
+                    <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-ds-btn-lg border border-ds-border bg-white p-2">
+                      {units.map((unit) => {
+                        const checked = selected.includes(unit.id);
+                        return (
+                          <label key={unit.id} className="flex cursor-pointer items-center gap-3 rounded-ds-btn px-2.5 py-2 hover:bg-ds-muted">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(next) => field.onChange(next ? [...selected, unit.id] : selected.filter((id) => id !== unit.id))}
+                            />
+                            <span className="text-[13px] font-semibold">{unit.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Field>
+              );
+            }}
+          />
+          <PanelErrorNote message={saveError} />
+          <PanelFormFooter submitting={isSubmitting} creating={state.mode === "create"} noun="centro" onCancel={() => (item ? onMode({ mode: "view", item }) : onClose())} />
+        </form>
+      ) : null}
+    </SidePanel>
   );
 }

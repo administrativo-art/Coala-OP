@@ -37,6 +37,27 @@ export const instagramPostPlacementSchema = z.discriminatedUnion("kind", [
   }).strict(),
 ]);
 
+export const instagramPostObjectives = ["awareness", "engagement", "sales", "relationship", "institutional"] as const;
+export type InstagramPostObjective = (typeof instagramPostObjectives)[number];
+
+/** Mínimo de caracteres de cada motivo para concluir o planejamento (marcar como Produzido). */
+export const INSTAGRAM_PLANNING_MIN_RATIONALE = 20;
+
+/**
+ * Planejamento editorial: o porquê da arte e do formato e a estratégia de publicação.
+ * Não entra no hash do conteúdo aprovado; alterar depois da aprovação apenas sinaliza a mudança.
+ * `plannedAt` é intenção; o agendamento real continua exigindo a autorização explícita.
+ */
+export const instagramPostPlanningSchema = z.object({
+  designRationale: cleanText.max(1_000),
+  formatRationale: cleanText.max(1_000),
+  objective: z.enum(instagramPostObjectives).nullable(),
+  callToAction: cleanText.max(200),
+  plannedAt: z.string().datetime({ offset: true }).nullable(),
+}).strict();
+
+export const instagramPostPlanningPatchSchema = instagramPostPlanningSchema.partial().strict();
+
 export const instagramPostCreateSchema = z.object({
   clientMutationId: z.string().uuid("Identificador idempotente inválido."),
   title: cleanText.min(1).max(120),
@@ -49,6 +70,7 @@ export const instagramPostCreateSchema = z.object({
   storyMentions: z.array(cleanText.regex(/^[A-Za-z0-9._]{1,30}$/)).max(20).default([]),
   publicationMode: z.enum(instagramPublicationModes).default("automatic"),
   manualInstructions: cleanText.max(2_000).default(""),
+  planning: instagramPostPlanningPatchSchema.optional(),
 }).strict();
 
 export const instagramPostUpdateSchema = z.object({
@@ -59,6 +81,7 @@ export const instagramPostUpdateSchema = z.object({
   storyMentions: z.array(cleanText.regex(/^[A-Za-z0-9._]{1,30}$/)).max(20).optional(),
   publicationMode: z.enum(instagramPublicationModes).optional(),
   manualInstructions: cleanText.max(2_000).optional(),
+  planning: instagramPostPlanningPatchSchema.optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "Informe ao menos uma alteração.");
 
 const explicitAuthorizationSchema = z.object({
@@ -97,6 +120,14 @@ export type InstagramEditorialPost = {
   storyMentions: string[];
   publicationMode: "automatic" | "manual";
   manualInstructions: string;
+  planning: {
+    designRationale: string;
+    formatRationale: string;
+    objective: InstagramPostObjective | null;
+    callToAction: string;
+    plannedAt: string | null;
+    updatedAt: string | null;
+  };
   media: Array<{
     id: string;
     kind: "image" | "video";

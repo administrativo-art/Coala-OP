@@ -17,6 +17,8 @@ export interface SidePanelProps {
   /** Números principais no topo escuro. */
   highlights?: React.ReactNode
   children: React.ReactNode
+  /** Cabeçalho baixo (sem subtítulo visível), para painéis com muito conteúdo que não deve rolar. */
+  compact?: boolean
   className?: string
 }
 
@@ -24,7 +26,7 @@ export interface SidePanelProps {
  * Painel lateral de 460px (docs/design/painel-lateral.md). Fecha por ×, véu ou Esc;
  * o Radix prende o foco e o devolve ao gatilho ao fechar.
  */
-export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlights, children, className }: SidePanelProps) {
+export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlights, children, compact, className }: SidePanelProps) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -37,13 +39,13 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
             className
           )}
         >
-          <header className="relative bg-ds-dark px-6 py-[22px] text-ds-on-dark">
+          <header className={cn("relative bg-ds-dark px-6 text-ds-on-dark", compact ? "py-3.5" : "py-[22px]")}>
             {kicker && (
               <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{kicker}</p>
             )}
-            <DialogPrimitive.Title className="mt-1 pr-8 text-xl font-extrabold">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Title className={cn("pr-8 font-extrabold", compact ? "mt-0.5 text-lg" : "mt-1 text-xl")}>{title}</DialogPrimitive.Title>
             {subtitle ? (
-              <DialogPrimitive.Description className="mt-0.5 text-[12.5px] text-ds-on-dark-sub">{subtitle}</DialogPrimitive.Description>
+              <DialogPrimitive.Description className={compact ? "sr-only" : "mt-0.5 text-[12.5px] text-ds-on-dark-sub"}>{subtitle}</DialogPrimitive.Description>
             ) : (
               <DialogPrimitive.Description className="sr-only">Detalhes do item</DialogPrimitive.Description>
             )}
@@ -55,7 +57,7 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
               <X aria-hidden="true" className="h-4 w-4" />
             </DialogPrimitive.Close>
           </header>
-          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">{children}</div>
+          <div className={cn("flex flex-1 flex-col overflow-y-auto px-6", compact ? "gap-3.5 py-4" : "gap-5 py-5")}>{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
@@ -69,5 +71,27 @@ export function PanelField({ label, children }: { label: string; children: React
       <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">{label}</p>
       <div className="mt-0.5 text-[13px] font-semibold text-ds-ink">{children}</div>
     </div>
+  )
+}
+
+/** Seção do corpo do painel: cartão com título em kicker e o conteúdo do assunto (docs/design/painel-lateral.md). */
+export function PanelSection({
+  title,
+  aside,
+  children,
+}: {
+  title: string
+  /** Contagem ou apoio à direita do título. */
+  aside?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section data-ui="panel-section" className="rounded-ds-btn-lg border border-ds-border bg-ds-surface">
+      <header className="flex items-baseline justify-between gap-3 border-b border-ds-divider px-4 py-2.5">
+        <h3 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">{title}</h3>
+        {aside ? <span className="text-[11.5px] text-ds-ink-faint">{aside}</span> : null}
+      </header>
+      <div className="space-y-3.5 px-4 py-3.5">{children}</div>
+    </section>
   )
 }

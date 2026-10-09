@@ -42,10 +42,10 @@ test("billing timestamp uses the app timezone and rejects invalid values", () =>
 test("OpenAI cards keep prepaid balance, official spend and internal ruler distinct", () => {
   const source = readFileSync("src/components/ai-management/ai-billing-settings.tsx", "utf8");
 
-  assert.match(source, /title="Saldo pré-pago"/);
-  assert.match(source, /title="Régua mensal interna"/);
-  assert.match(source, /title="Gasto oficial no mês"/);
-  assert.match(source, /title="Uso da régua"/);
+  assert.match(source, /(?:title|label)="Saldo pré-pago"/);
+  assert.match(source, /(?:title|label)="Régua mensal interna"/);
+  assert.match(source, /(?:title|label)="Gasto oficial no mês"/);
+  assert.match(source, /(?:title|label)="Uso da régua"/);
   assert.doesNotMatch(source, /title="Disponível no mês"/);
   assert.doesNotMatch(source, /Limite mensal menos o custo acumulado/);
 });

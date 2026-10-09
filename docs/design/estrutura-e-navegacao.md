@@ -27,6 +27,10 @@ Telas de lista usam uma casca escura com contexto, indicadores ou abas, busca, f
 
 O guia entrega `ControlPanel` e `ControlIndicator` isolados. `ControlIndicator` recebe `tone` semântico, nunca uma cor hexadecimal. Unificar esse componente com implementações operacionais requer uma migração separada.
 
+## Barra lateral e cabeçalho que encolhe
+
+A navegação lateral (Coala One e Coala Pulse) e o painel escuro que vira faixa ao rolar estão em [barra-lateral.md](barra-lateral.md) e [cabecalho-e-etapas.md](cabecalho-e-etapas.md). O layout do dashboard reserva 88px à esquerda (trilho de 76px + margem); a barra expandida flutua por cima.
+
 ## Hierarquia de ações
 
 - uma ação principal por área;

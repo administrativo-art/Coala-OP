@@ -16,6 +16,10 @@ Retrato do worktree `Coala-OP-design-guide`, branch `feat/design-guide-tokens-20
 
 `ControlPanel` e `WizardModal` são implementações isoladas do guia. Eles não significam que Cadastros, Estoque, Financeiro ou os modais reais já foram migrados.
 
+## Adoção posterior (08/10/2026, ainda sem commit)
+
+Barra lateral do Coala One e da Programação do Instagram no padrão flutuante e recolhida, painel escuro com chips que vira faixa ao rolar, painel de post em etapas com prévia no celular e a lista detalhada de posts. Detalhes em [barra-lateral.md](barra-lateral.md) e [cabecalho-e-etapas.md](cabecalho-e-etapas.md). Sem validação visual em navegador nem E2E executado; `validacao-visual.md` não foi preenchido para essas telas.
+
 ## Fora deste PR
 
 - alterar `PageContainer`, `PageHeader`, `BackButton`, `safeReturnTo` ou o histórico do Next;

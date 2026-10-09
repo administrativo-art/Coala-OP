@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { navigationActiveHref } from "@/lib/navigation-active-href";
 import { financialSidebarPath } from "@/features/financial/lib/reconciliation-navigation";
 import { cn } from "@/lib/utils";
-import { brand } from "@/config/brand";
+import { SystemBrand } from "@/components/patterns/system-brand";
+import { UserProfile } from "@/components/user-profile";
+import { useNavTrail } from "@/components/navigation/nav-trail";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
@@ -31,22 +33,26 @@ interface NavItem {
   children?: NavItem[];
 }
 
-interface SectionColor {
-  text: string;       // active text + trigger highlight
-  bg: string;         // active item background
-  border: string;     // active left border
-}
 
 interface NavSection {
   key: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   items: NavItem[];
-  color: SectionColor;
 }
 
 function flattenNavItem(item: NavItem): NavItem[] {
   return [item, ...(item.children ?? []).flatMap(flattenNavItem)];
+}
+
+/** Rótulos do caminho até o item ativo (grupo › subgrupo › item), ou null se nenhum está ativo. */
+function findTrail(items: NavItem[], isActive: (item: NavItem) => boolean): string[] | null {
+  for (const item of items) {
+    if (isActive(item)) return [item.label];
+    const below = findTrail(item.children ?? [], isActive);
+    if (below) return [item.label, ...below];
+  }
+  return null;
 }
 
 function hasActiveDescendant(item: NavItem, isActive: (item: NavItem) => boolean): boolean {
@@ -65,15 +71,6 @@ function findActiveParentHrefs(items: NavItem[], isActive: (item: NavItem) => bo
   return parents;
 }
 
-const SECTION_COLORS: Record<string, SectionColor> = {
-  ops:   { text: "#ea580c", bg: "#fff7ed", border: "#ea580c" }, // orange
-  com:   { text: "#7c3aed", bg: "#f5f3ff", border: "#7c3aed" }, // violet
-  fin:   { text: "#059669", bg: "#f0fdf4", border: "#059669" }, // emerald
-  dp:    { text: "#0284c7", bg: "#f0f9ff", border: "#0284c7" }, // sky
-  docs:  { text: "#0f766e", bg: "#f0fdfa", border: "#0f766e" }, // teal
-  midia: { text: "#db2777", bg: "#fdf2f8", border: "#db2777" }, // pink
-  cfg:   { text: "#64748b", bg: "#f8fafc", border: "#64748b" }, // slate
-};
 
 interface SidebarProps {
   open: boolean;
@@ -86,7 +83,11 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const { user, permissions, isDefaultAdmin } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
+  /* Recolhida por padrão; expande ao passar o cursor ou ao focar por teclado, flutuando sobre a tela. */
   const [hoverExpanded, setHoverExpanded] = useState(false);
+  const [keyboardFocus, setKeyboardFocus] = useState(false);
+  const { setTrail } = useNavTrail();
+  const closeTimer = useRef<number | null>(null);
 
   const navSections = useMemo((): NavSection[] => {
     const all: NavSection[] = [
@@ -94,7 +95,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "ops",
         label: "Operacional",
         icon: LayoutGrid,
-        color: SECTION_COLORS.ops,
         items: [
           { label: "Painel de Operações", href: "/dashboard/operations", icon: LayoutGrid, show: permissions.dashboard.operational },
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: pendingTaskCount > 0 ? { count: pendingTaskCount, variant: "warn" } : undefined },
@@ -109,7 +109,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             ],
           },
           {
-            label: "Gestão de Estoque", href: "/dashboard/stock", icon: Package, show: permissions.stock.view,
+            label: "Gestão de Estoque", href: "__group:stock", icon: Package, show: permissions.stock.view,
             children: [
               { label: "Controle de estoque", href: "/dashboard/inventory-control", icon: ClipboardCheck, show: permissions.stock.inventoryControl.view },
               { label: "Contagem de estoque", href: "/dashboard/stock/count", icon: ListOrdered, show: permissions.stock.stockCount.view },
@@ -144,7 +144,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "com",
         label: "Comercial",
         icon: Target,
-        color: SECTION_COLORS.com,
         items: [
           { label: "Ficha técnica", href: "/dashboard/commercial", icon: FileText, show: canViewTechnicalSheets(permissions) },
           {
@@ -168,7 +167,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "dp",
         label: "Pessoal",
         icon: Users,
-        color: SECTION_COLORS.dp,
         items: [
           { label: "Acompanhamento", href: "/dashboard/processes", icon: ListChecks, show: permissions.dp?.view },
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
@@ -213,7 +211,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "docs",
         label: "Documentos",
         icon: Files,
-        color: SECTION_COLORS.docs,
         items: [
           {
             label: "Central de documentos",
@@ -245,7 +242,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "midia",
         label: "Marketing",
         icon: MonitorPlay,
-        color: SECTION_COLORS.midia,
         items: [
           { label: "Coala Signage", href: "/dashboard/signage", icon: MonitorPlay, show: permissions.signage?.view || permissions.signage?.manage },
         ],
@@ -254,7 +250,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "fin",
         label: "Financeiro",
         icon: Wallet,
-        color: SECTION_COLORS.fin,
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
           {
@@ -298,7 +293,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         key: "cfg",
         label: "Configurações",
         icon: Settings,
-        color: SECTION_COLORS.cfg,
         items: [
           { label: "Configurações", href: "/dashboard/settings", icon: Settings, show: permissions.settings.view },
           { label: "Ajuda", href: "/dashboard/help", icon: HelpCircle, show: permissions.help.view },
@@ -409,370 +403,247 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const expanded = open || hoverExpanded;
+  // Publica o caminho da tela atual para a barra superior.
+  useEffect(() => {
+    for (const section of navSections) {
+      const below = findTrail(section.items, isItemActive);
+      if (below) {
+        setTrail([section.label, ...below]);
+        return;
+      }
+    }
+    setTrail([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHref, navSections, setTrail]);
+
+  const expanded = open || hoverExpanded || keyboardFocus;
+
+  function openRail() {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setHoverExpanded(true);
+  }
+
+  function closeRail() {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setHoverExpanded(false), 140);
+  }
+
+  const itemBase =
+    "group/item relative flex min-h-9 items-center gap-2.5 rounded-ds-btn px-2.5 py-1.5 text-[13px] font-semibold text-ds-on-dark-sub transition-[color,background,transform] duration-200 hover:translate-x-0.5 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:transition-none motion-reduce:hover:translate-x-0";
+  const itemActive = "bg-white/10 font-extrabold text-white";
+  const iconClass =
+    "shrink-0 transition-[transform,color] duration-300 ease-out group-hover/item:-rotate-6 group-hover/item:scale-125 group-hover/item:text-ds-accent-kicker motion-reduce:transition-none motion-reduce:group-hover/item:rotate-0 motion-reduce:group-hover/item:scale-100";
+
+  function activeBar() {
+    return <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-ds-accent" />;
+  }
+
+  /** Item de qualquer nível: link com ícone, ou grupo recolhível (abre/fecha com animação de altura). */
+  function renderItem(item: NavItem, depth: number): React.ReactNode {
+    const active = isItemActive(item);
+    const count = item.badge?.count ?? 0;
+    const children = item.children ?? [];
+    const Icon = item.icon;
+    const iconSize = depth === 0 ? "h-[18px] w-[18px]" : "h-4 w-4";
+    if (children.length === 0) {
+      return (
+        <Link key={item.href} href={item.href} onClick={() => onOpenChange(false)} className={cn(itemBase, active && itemActive)}>
+          {active && activeBar()}
+          <Icon className={cn(iconSize, iconClass)} />
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          {count > 0 && <span className="rounded-full bg-ds-accent px-2 py-0.5 font-ds-mono text-[10px] font-bold text-ds-dark">{count}</span>}
+        </Link>
+      );
+    }
+    const isOpen = openGroups.has(item.href);
+    const parentActive = active || hasActiveDescendant(item, isItemActive);
+    const isVirtualGroup = item.href.startsWith("__group:");
+    const label = depth === 0 && !isVirtualGroup ? (
+      <Link href={item.href} onClick={() => onOpenChange(false)} className="min-w-0 flex-1 truncate text-left">{item.label}</Link>
+    ) : (
+      <button type="button" onClick={() => toggleGroup(item.href)} className="min-w-0 flex-1 truncate text-left">{item.label}</button>
+    );
+    return (
+      <div key={item.href}>
+        <div className={cn(itemBase, "pr-1", parentActive && itemActive)}>
+          {parentActive && activeBar()}
+          <Icon className={cn(iconSize, iconClass)} />
+          {label}
+          <button
+            type="button"
+            onClick={() => toggleGroup(item.href)}
+            aria-expanded={isOpen}
+            aria-label={isOpen ? `Recolher ${item.label}` : `Expandir ${item.label}`}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-ds-sm text-ds-on-dark-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+          >
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none", isOpen && "rotate-180")} aria-hidden="true" />
+          </button>
+        </div>
+        <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+          <div className="overflow-hidden">
+            <div className="ml-4 mt-0.5 space-y-0.5 pb-0.5 pl-1">
+              {children.map((child) => renderItem(child, depth + 1))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const quickLink = (href: string, label: string, Icon: React.ComponentType<{ className?: string }>, current: boolean) => (
+    <Link
+      href={href}
+      onClick={() => onOpenChange(false)}
+      title={expanded ? undefined : label}
+      className={cn(
+        "group/quick relative flex items-center rounded-ds-btn-lg text-[13px] font-extrabold text-ds-on-dark-sub transition-[color,background,transform] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:transition-none",
+        expanded ? "h-10 gap-2.5 px-3 hover:translate-x-0.5 motion-reduce:hover:translate-x-0" : "mx-auto h-10 w-10 justify-center",
+        current && itemActive
+      )}
+    >
+      {current && <span aria-hidden="true" className={cn("absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent", expanded ? "-left-0" : "-left-1")} />}
+      <Icon className="h-[18px] w-[18px] shrink-0 transition-transform duration-300 group-hover/quick:-rotate-6 group-hover/quick:scale-110 motion-reduce:transition-none" />
+      {expanded ? <span className="truncate">{label}</span> : <span className="sr-only">{label}</span>}
+    </Link>
+  );
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Reserva do trilho fica no layout (lg:pl-[88px]); a barra expandida flutua por cima da tela. */}
       <div
         className={cn(
-          "fixed inset-0 z-40 transition-all duration-300 lg:hidden",
-          open ? "pointer-events-auto bg-black/40 backdrop-blur-sm" : "pointer-events-none bg-transparent"
+          "fixed inset-0 z-40 bg-[var(--ds-scrim)] transition-opacity duration-300 lg:hidden",
+          open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         )}
         onClick={() => onOpenChange(false)}
         aria-hidden
       />
 
-      {/* Sidebar */}
       <aside
-        onMouseEnter={() => setHoverExpanded(true)}
-        onMouseLeave={() => setHoverExpanded(false)}
+        aria-label="Navegação do Coala One"
+        data-collapsed={!expanded || undefined}
+        onMouseEnter={openRail}
+        onMouseLeave={closeRail}
+        onFocus={(event) => {
+          if (event.target instanceof HTMLElement && event.target.matches(":focus-visible")) setKeyboardFocus(true);
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setKeyboardFocus(false);
+        }}
         className={cn(
-          "fixed bottom-1.5 left-1.5 top-1.5 z-50 flex flex-col overflow-hidden border bg-white shadow-[0_14px_36px_rgba(15,23,42,0.10)] transition-all duration-300",
-          open
-            ? "translate-x-0 pointer-events-auto"
-            : "-translate-x-[130%] pointer-events-none lg:translate-x-0 lg:pointer-events-auto"
+          "fixed bottom-3 left-3 top-3 z-50 flex flex-col overflow-hidden rounded-ds-panel bg-ds-dark font-ds text-ds-on-dark ring-1 ring-white/10",
+          "transition-[width,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none",
+          expanded ? "w-[280px] shadow-ds-modal" : "w-[76px] shadow-ds-panel",
+          open ? "pointer-events-auto translate-x-0" : "pointer-events-none -translate-x-[130%] lg:pointer-events-auto lg:translate-x-0"
         )}
-        style={{ width: expanded ? 216 : 46, borderRadius: 12 }}
       >
-        {/* Logo area */}
-        <div className={cn("relative flex-shrink-0", expanded ? "px-3 pb-2 pt-3" : "px-1.5 pb-2 pt-4")}>
-          {expanded ? (
-            <div className="flex items-center gap-3">
-              <div className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg bg-white">
-                <img src={brand.logo} alt={brand.name} className="max-h-8 max-w-8 object-contain" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold tracking-normal text-slate-900">Coala Shakes</p>
-              </div>
-            </div>
-          ) : (
-            <div className="mx-auto grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-white" title={brand.name}>
-              <img src={brand.logo} alt={brand.name} className="max-h-6 max-w-6 object-contain" />
-            </div>
-          )}
+        <div className={cn("relative flex shrink-0 items-center justify-center", expanded ? "px-4 pb-2 pt-4" : "px-2 pb-2 pt-4")}>
+          <Link href="/dashboard" onClick={() => onOpenChange(false)} className="rounded-ds-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker" aria-label="Coala One, início">
+            <SystemBrand collapsed={!expanded} accent="One" animation="shimmer" />
+          </Link>
           <button
+            type="button"
             onClick={() => onOpenChange(false)}
-            className="absolute right-3 top-3 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-ds-md text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker lg:hidden"
             aria-label="Fechar menu"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        {expanded ? null : <div className="mx-2 h-px bg-slate-200" />}
-
-        <div className={cn("flex-shrink-0", expanded ? "px-2 pb-1" : "px-1.5 pb-1 pt-2")}>
-          <div className="space-y-1">
-            {permissions.dashboard?.view ? (
-              <Link
-                href="/dashboard"
-                onClick={() => onOpenChange(false)}
-                className={cn(
-                  "flex items-center transition-colors",
-                  expanded
-                    ? "h-9 gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 hover:bg-stone-50"
-                    : "mx-auto h-8 w-8 justify-center rounded-md text-slate-800 hover:bg-stone-50",
-                  pathname === "/dashboard"
-                    ? "border border-stone-200 bg-stone-50 text-slate-950"
-                    : ""
-                )}
-                title="Painel da gestão"
-              >
-                <LayoutDashboard className="h-4 w-4 flex-shrink-0 stroke-[2.2]" />
-                {expanded ? <span>Painel da gestão</span> : null}
-              </Link>
-            ) : null}
-
-            {(permissions.dashboard?.collaborator ?? permissions.dashboard?.view) ? (
-              <Link
-                href="/dashboard/collaborator"
-                onClick={() => onOpenChange(false)}
-                className={cn(
-                  "flex items-center transition-colors",
-                  expanded
-                    ? "h-9 gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 hover:bg-stone-50"
-                    : "mx-auto h-8 w-8 justify-center rounded-md text-slate-800 hover:bg-stone-50",
-                  pathname === "/dashboard/collaborator"
-                    ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
-                    : ""
-                )}
-                title="Painel do colaborador"
-              >
-                <ClipboardCheck className="h-4 w-4 flex-shrink-0 stroke-[2.2]" />
-                {expanded ? <span>Painel do colaborador</span> : null}
-              </Link>
-            ) : null}
-          </div>
+        <div className={cn("shrink-0 space-y-1", expanded ? "px-3 pb-1" : "px-2 pb-1 pt-1")}>
+          {permissions.dashboard?.view ? quickLink("/dashboard", "Painel da gestão", LayoutDashboard, pathname === "/dashboard") : null}
+          {(permissions.dashboard?.collaborator ?? permissions.dashboard?.view)
+            ? quickLink("/dashboard/collaborator", "Painel do colaborador", ClipboardCheck, pathname === "/dashboard/collaborator")
+            : null}
         </div>
 
-        {/* Accordion nav */}
-        <nav className={cn("flex-1 overflow-y-auto", expanded ? "px-2 py-1" : "px-1.5 py-1")}>
+        <div aria-hidden="true" className="mx-4 my-1 h-px shrink-0 bg-white/10" />
+
+        <nav className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", expanded ? "px-3 py-1" : "px-2 py-1")}>
           {expanded ? (
-            navSections.map(section => {
+            navSections.map((section) => {
               const isOpen = openSections.has(section.key);
-              const hasActive = section.items.some(isItemOrChildActive);
-              const SectionIcon = section.icon;
               const sectionBadgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
-
               return (
-                <div
-                  key={section.key}
-                  className={cn(
-                    "mb-1 rounded-xl border border-transparent transition-colors",
-                    (isOpen || hasActive) && "border-stone-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(section.key)}
-                    className={cn(
-                      "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 transition-colors hover:bg-stone-50",
-                      (isOpen || hasActive) && "text-slate-950 hover:bg-transparent"
-                    )}
-                  >
-                    <SectionIcon className="h-4.5 w-4.5 flex-shrink-0 stroke-[2.2]" />
-                    <span className="flex-1 text-left">{section.label}</span>
-                    {sectionBadgeCount > 0 ? (
-                      <span className="grid min-w-[26px] place-items-center rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">
-                        {sectionBadgeCount}
+                <section key={section.key} aria-labelledby={`nav-${section.key}`} className="mb-1">
+                  <h2 id={`nav-${section.key}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(section.key)}
+                      aria-expanded={isOpen}
+                      className="flex w-full items-center justify-between rounded-ds-sm px-2.5 py-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted transition-colors hover:text-ds-on-dark-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                    >
+                      <span>{section.label}</span>
+                      <span className="flex items-center gap-2">
+                        {sectionBadgeCount > 0 && <span className="rounded-full bg-ds-accent px-1.5 py-0.5 font-ds-mono text-[10px] font-bold normal-case tracking-normal text-ds-dark">{sectionBadgeCount}</span>}
+                        <ChevronDown className={cn("h-3 w-3 transition-transform duration-200 motion-reduce:transition-none", !isOpen && "-rotate-90")} aria-hidden="true" />
                       </span>
-                    ) : (
-                      <ChevronDown
-                        className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")}
-                      />
-                    )}
-                  </button>
-
-                  {isOpen && (
-                    <div className="mb-1.5 ml-4 mt-0.5 space-y-0 border-l border-stone-200 py-0.5 pl-2.5">
-                      {section.items.map(item => {
-                        const active = isItemActive(item);
-                        const count = item.badge?.count ?? 0;
-                        const hasChildren = !!item.children?.length;
-                        const groupOpen = openGroups.has(item.href);
-                        const childActive = item.children?.some(isItemActive) ?? false;
-                        const parentActive = active || childActive;
-                        const isVirtualGroup = item.href.startsWith("__group:");
-
-                        const dot = (on: boolean) => (
-                          <span
-                            className="h-2 w-2 flex-shrink-0 rounded-full transition-opacity"
-                            style={{ background: section.color.text, opacity: on ? 1 : 0.6 }}
-                          />
-                        );
-
-                        if (hasChildren) {
-                          return (
-                            <div key={item.href}>
-                              <div
-                                className={cn(
-                                  "relative flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                                  parentActive && "font-semibold text-slate-950 hover:text-slate-950"
-                                )}
-                              >
-                                {parentActive && (
-                                  <span
-                                    className="absolute -left-[21px] top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full"
-                                    style={{ background: section.color.text }}
-                                  />
-                                )}
-                                {dot(parentActive)}
-                                {isVirtualGroup ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleGroup(item.href)}
-                                    className="min-w-0 flex-1 truncate text-left"
-                                  >
-                                    {item.label}
-                                  </button>
-                                ) : (
-                                  <Link
-                                    href={item.href}
-                                    onClick={() => onOpenChange(false)}
-                                    className="min-w-0 flex-1 truncate text-left"
-                                  >
-                                    {item.label}
-                                  </Link>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleGroup(item.href)}
-                                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-stone-100 hover:text-slate-600"
-                                  aria-label={groupOpen ? `Recolher ${item.label}` : `Expandir ${item.label}`}
-                                >
-                                  <ChevronDown
-                                    className={cn("h-4 w-4 transition-transform duration-200", groupOpen && "rotate-180")}
-                                  />
-                                </button>
-                              </div>
-
-                              {groupOpen && (
-                                <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[19px]">
-                                  {item.children!.map(child => {
-                                    const cActive = isItemActive(child);
-                                    const cHasChildren = !!child.children?.length;
-                                    const cGroupOpen = openGroups.has(child.href);
-                                    const cChildActive = hasActiveDescendant(child, isItemActive);
-
-                                    if (cHasChildren) {
-                                      return (
-                                        <div key={child.href}>
-                                          <button
-                                            type="button"
-                                            onClick={() => toggleGroup(child.href)}
-                                            className={cn(
-                                              "relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                                              (cActive || cChildActive) && "font-semibold text-slate-950 hover:text-slate-950"
-                                            )}
-                                          >
-                                            {(cActive || cChildActive) && (
-                                              <span
-                                                className="absolute -left-[20px] top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full"
-                                                style={{ background: section.color.text }}
-                                              />
-                                            )}
-                                            <span
-                                              className="h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity"
-                                              style={{ background: section.color.text, opacity: (cActive || cChildActive) ? 1 : 0.45 }}
-                                            />
-                                            <span className="flex-1 truncate text-left">{child.label}</span>
-                                            <ChevronDown
-                                              className={cn("h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform duration-200", cGroupOpen && "rotate-180")}
-                                            />
-                                          </button>
-
-                                          {cGroupOpen && (
-                                            <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[17px]">
-                                              {child.children!.map(grandchild => {
-                                                const gActive = isItemActive(grandchild);
-                                                return (
-                                                  <Link
-                                                    key={grandchild.href}
-                                                    href={grandchild.href}
-                                                    onClick={() => onOpenChange(false)}
-                                                    className={cn(
-                                                      "relative flex min-h-6 items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                                                      gActive && "font-semibold text-slate-950 hover:text-slate-950"
-                                                    )}
-                                                  >
-                                                    {gActive && (
-                                                      <span
-                                                        className="absolute -left-[18px] top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
-                                                        style={{ background: section.color.text }}
-                                                      />
-                                                    )}
-                                                    <span
-                                                      className="h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity"
-                                                      style={{ background: section.color.text, opacity: gActive ? 1 : 0.4 }}
-                                                    />
-                                                    <span className="flex-1 truncate">{grandchild.label}</span>
-                                                  </Link>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    }
-
-                                    return (
-                                      <Link
-                                        key={child.href}
-                                        href={child.href}
-                                        onClick={() => onOpenChange(false)}
-                                        className={cn(
-                                          "relative flex min-h-6 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                                          cActive && "font-semibold text-slate-950 hover:text-slate-950"
-                                        )}
-                                      >
-                                        {cActive && (
-                                          <span
-                                            className="absolute -left-[20px] top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full"
-                                            style={{ background: section.color.text }}
-                                          />
-                                        )}
-                                        <span
-                                          className="h-1.5 w-1.5 flex-shrink-0 rounded-full transition-opacity"
-                                          style={{ background: section.color.text, opacity: cActive ? 1 : 0.45 }}
-                                        />
-                                        <span className="flex-1 truncate">{child.label}</span>
-                                      </Link>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => onOpenChange(false)}
-                            className={cn(
-                              "relative flex min-h-7 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                              active && "font-semibold text-slate-950 hover:text-slate-950"
-                            )}
-                          >
-                            {active && (
-                              <span
-                                className="absolute -left-[21px] top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full"
-                                style={{ background: section.color.text }}
-                              />
-                            )}
-                            {dot(active)}
-                            <span className="flex-1 truncate">{item.label}</span>
-                            {count > 0 && (
-                              <span className={cn("ml-auto text-[13px] font-medium tabular-nums", active ? "text-slate-500" : "text-slate-400")}>
-                                {count}
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
+                    </button>
+                  </h2>
+                  <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                    <div className="overflow-hidden">
+                      <div className="space-y-0.5 py-0.5">
+                        {section.items.map((item) => renderItem(item, 0))}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                </section>
               );
             })
           ) : (
             <div className="space-y-1">
-              {navSections.map((section) => {
-                const Icon = section.icon;
-                const active = section.items.some(isItemOrChildActive);
-                const badgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
-
-                return (
-                  <button
-                    key={section.key}
-                    type="button"
-                    onClick={() => {
-                      setOpenSections((prev) => {
-                        const next = new Set(prev);
-                        next.add(section.key);
-                        return next;
-                      });
-                      setHoverExpanded(true);
-                    }}
-                    className={cn(
-                      "relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-slate-800 transition-colors hover:bg-stone-50",
-                      active && "border border-stone-200 bg-stone-50 text-slate-950"
-                    )}
-                    title={section.label}
-                  >
-                    <Icon className="h-4 w-4 stroke-[2.2]" />
-                    {badgeCount > 0 && (
-                      <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    )}
-                  </button>
-                );
-              })}
+              {navSections.map((section, index) => (
+                <div key={section.key} className="space-y-1">
+                  {index > 0 && <div aria-hidden="true" className="mx-3 my-2 border-t border-white/10" />}
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = isItemOrChildActive(item);
+                    const hasChildren = (item.children?.length ?? 0) > 0;
+                    const virtual = item.href.startsWith("__group:");
+                    const railButton = cn(
+                      "group/item relative mx-auto flex h-10 w-10 items-center justify-center rounded-ds-btn-lg text-ds-on-dark-sub transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                      active && itemActive
+                    );
+                    const inner = (
+                      <>
+                        {active && <span aria-hidden="true" className="absolute -left-1 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent" />}
+                        <Icon className={cn("h-[18px] w-[18px]", iconClass)} />
+                        <span className="sr-only">{item.label}</span>
+                        {(item.badge?.count ?? 0) > 0 && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-ds-accent" />}
+                      </>
+                    );
+                    // Item sem submenu ou com destino próprio navega; grupo virtual abre a barra no próprio grupo.
+                    return hasChildren && virtual ? (
+                      <button
+                        key={item.href}
+                        type="button"
+                        title={item.label}
+                        onClick={() => {
+                          setOpenSections((prev) => new Set(prev).add(section.key));
+                          setOpenGroups((prev) => new Set(prev).add(item.href));
+                          openRail();
+                        }}
+                        className={railButton}
+                      >
+                        {inner}
+                      </button>
+                    ) : (
+                      <Link key={item.href} href={item.href} title={item.label} onClick={() => onOpenChange(false)} className={railButton}>
+                        {inner}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </nav>
 
+        <div className={cn("shrink-0 border-t border-white/10", expanded ? "p-3" : "p-2")}>
+          <UserProfile variant="card" collapsed={!expanded} />
+        </div>
       </aside>
     </>
   );
