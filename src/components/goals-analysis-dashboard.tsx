@@ -12,9 +12,10 @@ import { FilterChips } from '@/components/patterns/filter-chips';
 import { GoalsHistoryView, type GoalsHistoryStatus } from '@/components/goals-history-view';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DarkField, EmptyBox, PanelStat, SectionCard, attainmentTone, darkControlClass, fmtBRL, fmtPct, kickerClass } from '@/components/goals/goals-ui';
-import { type GoalPeriodDoc, type GoalType, type GoalPeriod } from '@/types';
+import { type EmployeeGoal, type GoalPeriodDoc, type GoalType, type GoalPeriod } from '@/types';
 import { getGoalAttainment } from '@/lib/goals-history';
-import { buildEmployeeEarnings, reachedTier, summarizePrizes } from '@/lib/goals-earnings';
+import { buildEmployeeEarnings, getPeriodBonus, reachedTier, summarizePrizes, type EmployeeEarningsRow } from '@/lib/goals-earnings';
+import { useKioskGroups } from '@/hooks/use-kiosk-groups';
 import { getUserDisplayName } from '@/lib/user-display';
 import { cn } from '@/lib/utils';
 
@@ -29,11 +30,19 @@ const periodLabels: Record<string, string> = { daily: 'Diária', weekly: 'Semana
 
 const roleLabels: Record<string, string> = { fixed: 'Colaborador', relief: 'Folguista', leader: 'Liderança' };
 
-/** Premiação apurada como % do faturamento dos mesmos períodos. */
-function prizeShareOf(items: GoalPeriodDoc[]) {
-  const apurated = items.filter(p => p.closureSnapshot?.bonus);
-  const revenue = apurated.reduce((sum, p) => sum + p.currentValue, 0);
-  return revenue > 0 ? (summarizePrizes(items).totalPrize / revenue) * 100 : null;
+/** Premiação (gravada ou calculada) como % do faturamento dos períodos que têm premiação. */
+function prizeShareOf(items: GoalPeriodDoc[], employeeGoals: EmployeeGoal[]) {
+  const prized = items.filter(p => getPeriodBonus(p, employeeGoals));
+  const revenue = prized.reduce((sum, p) => sum + p.currentValue, 0);
+  return revenue > 0 ? (summarizePrizes(items, employeeGoals).totalPrize / revenue) * 100 : null;
+}
+
+function premiumHint(t: { apuratedCount: number; calculatedCount: number; pendingCount: number }) {
+  const parts = [];
+  if (t.apuratedCount > 0) parts.push(`${t.apuratedCount} apurada(s) no encerramento`);
+  if (t.calculatedCount > 0) parts.push(`${t.calculatedCount} calculada(s) pela regra`);
+  if (t.pendingCount > 0) parts.push(`${t.pendingCount} sem como calcular`);
+  return parts.length ? parts.join(' · ') : 'nenhuma meta por faixas encerrada';
 }
 
 const tierMeta = [
@@ -44,24 +53,30 @@ const tierMeta = [
 ] as const;
 
 function TrendChart({ points }: { points: { key: string; pct: number }[] }) {
-  if (points.length < 2) return <p className="px-5 py-8 text-center text-[13px] font-semibold text-ds-ink-faint">São necessários pelo menos 2 meses encerrados para mostrar a tendência.</p>;
-  const w = 720, h = 200, padL = 36, padR = 12, padT = 12, padB = 26;
-  const max = Math.max(120, ...points.map(p => p.pct));
+  if (points.length < 2) return <p className="px-5 py-8 text-center text-[13px] font-semibold text-ds-ink-faint">São necessários pelo menos 2 meses com metas encerradas para mostrar a tendência.</p>;
+  const w = 720, h = 240, padL = 44, padR = 28, padT = 28, padB = 30;
+  const values = points.map(p => p.pct);
+  const min = Math.max(0, Math.floor((Math.min(...values, 100) - 10) / 10) * 10);
+  const max = Math.ceil((Math.max(...values, 100) + 10) / 10) * 10;
   const x = (i: number) => padL + (i * (w - padL - padR)) / (points.length - 1);
-  const y = (v: number) => padT + (1 - v / max) * (h - padT - padB);
+  const y = (v: number) => padT + (1 - (v - min) / (max - min)) * (h - padT - padB);
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.pct).toFixed(1)}`).join(' ');
+  const ticks = [min, 100, max].filter((v, i, all) => all.indexOf(v) === i);
   return (
     <figure className="px-3 py-4">
       <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Atingimento mensal da meta" className="h-auto w-full">
-        <line x1={padL} x2={w - padR} y1={y(100)} y2={y(100)} className="stroke-ds-ok" strokeDasharray="4 4" />
-        <text x={padL - 6} y={y(100) + 4} textAnchor="end" className="fill-ds-ink-muted text-[10px] font-bold">100%</text>
-        <line x1={padL} x2={w - padR} y1={y(0)} y2={y(0)} className="stroke-ds-border" />
+        {ticks.map(tick => (
+          <g key={tick}>
+            <line x1={padL} x2={w - padR} y1={y(tick)} y2={y(tick)} className={tick === 100 ? 'stroke-ds-ok' : 'stroke-ds-border'} strokeDasharray={tick === 100 ? '4 4' : undefined} />
+            <text x={padL - 8} y={y(tick) + 4} textAnchor="end" className={cn('text-[10.5px] font-bold', tick === 100 ? 'fill-ds-ok' : 'fill-ds-ink-muted')}>{tick}%</text>
+          </g>
+        ))}
         <path d={path} fill="none" className="stroke-ds-accent" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
           <g key={p.key}>
-            <circle cx={x(i)} cy={y(p.pct)} r={4} className={p.pct >= 100 ? 'fill-ds-ok' : 'fill-ds-accent'} />
-            <text x={x(i)} y={y(p.pct) - 9} textAnchor="middle" className="fill-ds-ink text-[10.5px] font-extrabold">{Math.round(p.pct)}%</text>
-            <text x={x(i)} y={h - 8} textAnchor="middle" className="fill-ds-ink-muted text-[10px] font-bold capitalize">{monthLabel(p.key)}</text>
+            <circle cx={x(i)} cy={y(p.pct)} r={4.5} className={p.pct >= 100 ? 'fill-ds-ok' : 'fill-ds-accent'} />
+            <text x={x(i)} y={y(p.pct) + (p.pct >= 100 ? -10 : 18)} textAnchor="middle" className="fill-ds-ink text-[11px] font-extrabold" paintOrder="stroke" stroke="var(--ds-surface)" strokeWidth={3}>{Math.round(p.pct)}%</text>
+            <text x={x(i)} y={h - 8} textAnchor="middle" className="fill-ds-ink-muted text-[10.5px] font-bold capitalize">{monthLabel(p.key)}</text>
           </g>
         ))}
       </svg>
@@ -80,7 +95,7 @@ function monthKeyOf(period: GoalPeriodDoc) {
 function monthLabel(key: string) {
   const [year, month] = key.split('-').map(Number);
   if (!year || !month) return key;
-  return format(new Date(year, month - 1, 1), 'MMM/yyyy', { locale: ptBR });
+  return format(new Date(year, month - 1, 1), "MMM/yy", { locale: ptBR });
 }
 
 export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab?: 'overview' | 'closures' }) {
@@ -91,6 +106,10 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
   const [tab, setTab] = useState<'overview' | 'closures'>(initialTab);
   const [filterStatus, setFilterStatus] = useState<GoalsHistoryStatus | null>(null);
   const [filterKioskId, setFilterKioskId] = useState('all');
+  const [filterGroupId, setFilterGroupId] = useState<string | null>(null);
+  const [perfView, setPerfView] = useState<'general' | 'group' | 'unit'>('general');
+  const [perfTarget, setPerfTarget] = useState('all');
+  const { groups: kioskGroups, groupOf, hasMultipleGroups } = useKioskGroups();
   const [filterType, setFilterType] = useState<GoalType | 'all'>('all');
   const [filterPeriod, setFilterPeriod] = useState<GoalPeriod | 'all'>('all');
   const [filterDateStart, setFilterDateStart] = useState('');
@@ -106,6 +125,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
       .filter(period => period.status === 'closed')
       .filter(period => {
         if (filterKioskId !== 'all' && period.kioskId !== filterKioskId) return false;
+        if (filterGroupId !== null && groupOf(period.kioskId).id !== filterGroupId) return false;
         const template = templateById.get(period.templateId);
         if (filterType !== 'all' && template?.type !== filterType) return false;
         if (filterPeriod !== 'all' && template?.period !== filterPeriod) return false;
@@ -115,16 +135,21 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
         } catch { /* período sem datas válidas não é filtrado por data */ }
         return true;
       });
-  }, [periods, templates, filterKioskId, filterType, filterPeriod, filterDateStart, filterDateEnd]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periods, templates, filterKioskId, filterGroupId, kioskGroups, filterType, filterPeriod, filterDateStart, filterDateEnd]);
 
   const totals = useMemo(() => {
     const target = closedPeriods.reduce((sum, p) => sum + p.targetValue, 0);
     const revenue = closedPeriods.reduce((sum, p) => sum + p.currentValue, 0);
-    const avg = closedPeriods.length ? closedPeriods.reduce((sum, p) => sum + getGoalAttainment(p), 0) / closedPeriods.length : 0;
-    const prizes = summarizePrizes(closedPeriods);
-    const apuratedRevenue = closedPeriods.filter(p => p.closureSnapshot?.bonus).reduce((sum, p) => sum + p.currentValue, 0);
-    return { prizeShare: apuratedRevenue > 0 ? (prizes.totalPrize / apuratedRevenue) * 100 : null, target, revenue, avg, hits: closedPeriods.filter(p => getGoalAttainment(p) >= 100).length, ...prizes };
-  }, [closedPeriods]);
+    return {
+      target,
+      revenue,
+      pct: target > 0 ? (revenue / target) * 100 : 0,
+      hits: closedPeriods.filter(p => getGoalAttainment(p) >= 100).length,
+      prizeShare: prizeShareOf(closedPeriods, employeeGoals),
+      ...summarizePrizes(closedPeriods, employeeGoals),
+    };
+  }, [closedPeriods, employeeGoals]);
 
   const monthly = useMemo(() => {
     const groups = new Map<string, GoalPeriodDoc[]>();
@@ -137,9 +162,9 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
       .map(([key, items]) => {
         const target = items.reduce((sum, p) => sum + p.targetValue, 0);
         const revenue = items.reduce((sum, p) => sum + p.currentValue, 0);
-        return { key, count: items.length, target, revenue, pct: target > 0 ? (revenue / target) * 100 : 0, prizeShare: prizeShareOf(items), ...summarizePrizes(items) };
+        return { key, count: items.length, target, revenue, pct: target > 0 ? (revenue / target) * 100 : 0, prizeShare: prizeShareOf(items, employeeGoals), ...summarizePrizes(items, employeeGoals) };
       });
-  }, [closedPeriods]);
+  }, [closedPeriods, employeeGoals]);
 
   const kioskRows = useMemo(() => {
     const groups = new Map<string, GoalPeriodDoc[]>();
@@ -153,26 +178,55 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
         best: Math.max(...items.map(getGoalAttainment)),
         hits: items.filter(p => getGoalAttainment(p) >= 100).length,
         tiers: items.reduce((acc, p) => { acc[reachedTier(p)] += 1; return acc; }, { below: 0, target: 0, up: 0, top: 0 }),
-        prizeShare: (() => {
-          const apurated = items.filter(p => p.closureSnapshot?.bonus);
-          const revenue = apurated.reduce((sum, p) => sum + p.currentValue, 0);
-          return revenue > 0 ? (summarizePrizes(items).totalPrize / revenue) * 100 : null;
-        })(),
-        ...summarizePrizes(items),
+        prizeShare: prizeShareOf(items, employeeGoals),
+        ...summarizePrizes(items, employeeGoals),
       }))
       .sort((a, b) => b.avg - a.avg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closedPeriods, kiosks]);
+  }, [closedPeriods, kiosks, employeeGoals]);
 
   const earnings = useMemo(() => buildEmployeeEarnings(closedPeriods, employeeGoals), [closedPeriods, employeeGoals]);
 
-  const scopedPeriods = useMemo(() => periods.filter(p => filterKioskId === 'all' || p.kioskId === filterKioskId), [periods, filterKioskId]);
+  /** Desempenho dos colaboradores em seções: geral, por grupo ou por unidade (com escolha opcional de um alvo). */
+  const performanceSections = useMemo(() => {
+    if (perfView === 'general') return [{ id: 'general', title: 'Todos os colaboradores', rows: earnings }];
+    const sections: { id: string; title: string; rows: EmployeeEarningsRow[] }[] = [];
+    if (perfView === 'group') {
+      for (const group of kioskGroups) {
+        if (perfTarget !== 'all' && perfTarget !== group.id) continue;
+        const rows = buildEmployeeEarnings(closedPeriods.filter(p => group.kioskIds.includes(p.kioskId)), employeeGoals);
+        if (rows.length > 0) sections.push({ id: group.id, title: group.name, rows });
+      }
+    } else {
+      const kioskIds = [...new Set(closedPeriods.map(p => p.kioskId))].sort((a, b) => getKioskName(a).localeCompare(getKioskName(b), 'pt-BR'));
+      for (const kioskId of kioskIds) {
+        if (perfTarget !== 'all' && perfTarget !== kioskId) continue;
+        const rows = buildEmployeeEarnings(closedPeriods.filter(p => p.kioskId === kioskId), employeeGoals);
+        if (rows.length > 0) sections.push({ id: kioskId, title: getKioskName(kioskId), rows });
+      }
+    }
+    return sections;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfView, perfTarget, earnings, kioskGroups, closedPeriods, employeeGoals, kiosks]);
+
+  const perfTargets = useMemo(() => {
+    if (perfView === 'group') return kioskGroups.map(group => ({ id: group.id, name: group.name }));
+    if (perfView === 'unit') return [...new Set(closedPeriods.map(p => p.kioskId))].map(id => ({ id, name: getKioskName(id) })).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfView, kioskGroups, closedPeriods, kiosks]);
+
+  const scopedPeriods = useMemo(
+    () => periods.filter(p => (filterKioskId === 'all' || p.kioskId === filterKioskId) && (filterGroupId === null || groupOf(p.kioskId).id === filterGroupId)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [periods, filterKioskId, filterGroupId, kioskGroups],
+  );
   const statusCounts = useMemo(() => ({
     active: scopedPeriods.filter(p => p.status === 'active').length,
     closed: scopedPeriods.filter(p => p.status === 'closed').length,
     cancelled: scopedPeriods.filter(p => p.status === 'cancelled').length,
   }), [scopedPeriods]);
-  const statusPrize = useMemo(() => summarizePrizes(scopedPeriods), [scopedPeriods]);
+  const statusPrize = useMemo(() => summarizePrizes(scopedPeriods, employeeGoals), [scopedPeriods, employeeGoals]);
 
   if (loading) return <Skeleton className="h-64 w-full" />;
 
@@ -183,7 +237,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
         <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
           <h1 className="text-2xl font-extrabold">Análise</h1>
           <p className="max-w-xl text-[13px] font-semibold text-ds-on-dark-sub">
-            {tab === 'overview' ? 'Tendência, faixas atingidas e desempenho dos períodos encerrados.' : 'Fechamentos mês a mês: o que foi pago a cada colaborador, com folha de premiação para exportar.'}
+            {tab === 'overview' ? 'Tendência, faixas atingidas e desempenho das metas encerradas. Cada meta é um quiosque em um mês.' : 'Fechamentos mês a mês: o que foi pago a cada colaborador, com folha de premiação para exportar.'}
           </p>
         </div>
 
@@ -208,11 +262,16 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
         {tab === 'overview' ? (
           <>
             <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-5">
-              <PanelStat label="Realizado" value={fmtBRL(totals.revenue)} hint={`de ${fmtBRL(totals.target)}`} />
-              <PanelStat label="Atingimento médio" value={fmtPct(totals.avg)} tone={totals.avg >= 100 ? 'text-ds-ok' : totals.avg >= 80 ? 'text-ds-warn' : 'text-ds-danger'} hint={`${closedPeriods.length} período(s)`} />
-              <PanelStat label="Metas batidas" value={`${totals.hits}/${closedPeriods.length}`} hint="períodos com 100% ou mais" />
-              <PanelStat label="Premiação apurada" value={fmtBRL(totals.totalPrize)} tone="text-ds-ok" hint={totals.pendingCount > 0 ? `${totals.pendingCount} período(s) sem apuração` : `${totals.apuratedCount} período(s) apurado(s)`} />
+              <PanelStat
+                label="Realizado"
+                value={fmtBRL(totals.revenue)}
+                tone={totals.pct >= 100 ? 'text-ds-ok' : totals.pct >= 80 ? 'text-ds-warn' : 'text-ds-danger'}
+                hint={`${fmtPct(totals.pct)} da meta de ${fmtBRL(totals.target)}`}
+              />
+              <PanelStat label="Metas batidas" value={`${totals.hits} de ${closedPeriods.length}`} hint="cada meta = um quiosque em um mês" />
+              <PanelStat label="Premiação" value={fmtBRL(totals.totalPrize)} tone="text-ds-ok" hint={premiumHint(totals)} />
               <PanelStat label="Premiação / faturamento" value={totals.prizeShare === null ? '—' : fmtPct(totals.prizeShare)} hint="custo da premiação sobre o realizado" />
+              <PanelStat label="Colaboradores" value={earnings.length} hint="com meta no filtro" />
             </div>
             <div className="mt-5 grid grid-cols-1 gap-3 border-t border-white/10 pt-5 sm:grid-cols-2 lg:grid-cols-4">
               <DarkField label="Tipo de meta">
@@ -240,33 +299,50 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
             <ControlIndicator value={statusCounts.active} label="Ativas" tone="info" active={filterStatus === 'active'} onClick={() => setFilterStatus(filterStatus === 'active' ? null : 'active')} />
             <ControlIndicator value={statusCounts.closed} label="Encerradas" tone="neutral" active={filterStatus === 'closed'} onClick={() => setFilterStatus(filterStatus === 'closed' ? null : 'closed')} />
             <ControlIndicator value={statusCounts.cancelled} label="Canceladas" tone="danger" active={filterStatus === 'cancelled'} onClick={() => setFilterStatus(filterStatus === 'cancelled' ? null : 'cancelled')} />
-            <PanelStat label="Premiação apurada" value={fmtBRL(statusPrize.totalPrize)} tone="text-ds-ok" hint={statusPrize.pendingCount > 0 ? `${statusPrize.pendingCount} período(s) sem apuração` : `${statusPrize.apuratedCount} período(s)`} />
+            <PanelStat label="Premiação" value={fmtBRL(statusPrize.totalPrize)} tone="text-ds-ok" hint={premiumHint(statusPrize)} />
           </div>
         )}
 
-        <FilterChips
-          className="mt-5"
-          value={filterKioskId === 'all' ? null : filterKioskId}
-          onChange={value => setFilterKioskId(value ?? 'all')}
-          allLabel="Todos os quiosques"
-          chips={kiosks.map(k => ({ value: k.id, label: k.name }))}
-        />
+        {hasMultipleGroups && (
+          <div className="mt-5">
+            <p className={cn(kickerClass, 'mb-2 text-ds-on-dark-muted')}>Grupo</p>
+            <FilterChips
+              value={filterGroupId}
+              onChange={value => {
+                setFilterGroupId(value);
+                const group = kioskGroups.find(item => item.id === value);
+                if (group && filterKioskId !== 'all' && !group.kioskIds.includes(filterKioskId)) setFilterKioskId('all');
+              }}
+              allLabel="Todos os grupos"
+              chips={kioskGroups.map(group => ({ value: group.id, label: group.name, count: group.kioskIds.length }))}
+            />
+          </div>
+        )}
+        <div className={hasMultipleGroups ? 'mt-4' : 'mt-5'}>
+          {hasMultipleGroups && <p className={cn(kickerClass, 'mb-2 text-ds-on-dark-muted')}>Unidade</p>}
+          <FilterChips
+            value={filterKioskId === 'all' ? null : filterKioskId}
+            onChange={value => setFilterKioskId(value ?? 'all')}
+            allLabel={filterGroupId ? 'Todas do grupo' : 'Todas as unidades'}
+            chips={kiosks.filter(k => filterGroupId === null || groupOf(k.id).id === filterGroupId).map(k => ({ value: k.id, label: k.name }))}
+          />
+        </div>
       </ControlPanel>
 
       {tab === 'closures' ? (
-        <GoalsHistoryView kioskId={filterKioskId === 'all' ? null : filterKioskId} status={filterStatus} />
+        <GoalsHistoryView kioskId={filterKioskId === 'all' ? null : filterKioskId} groupId={filterGroupId} status={filterStatus} />
       ) : closedPeriods.length === 0 ? (
-        <EmptyBox>Nenhum período encerrado encontrado para esses filtros.</EmptyBox>
+        <EmptyBox>Nenhuma meta encerrada encontrada para esses filtros.</EmptyBox>
       ) : (
         <>
-          <SectionCard title="Tendência do atingimento" subtitle="Faturamento realizado sobre a meta, mês a mês (últimos 12 meses). A linha tracejada é 100%.">
+          <SectionCard title="Tendência do atingimento" subtitle="Cada ponto é um mês com metas encerradas (até os últimos 12), somando todos os quiosques do filtro. A linha tracejada é 100% da meta.">
             <TrendChart points={monthly.slice(-12).map(row => ({ key: row.key, pct: row.pct }))} />
             <div className="overflow-x-auto border-t border-ds-divider">
               <table className="w-full min-w-[640px] text-left text-[13px]">
                 <thead>
                   <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
                     <th className="px-5 py-3 font-extrabold">Mês</th>
-                    <th className="px-3 py-3 text-right font-extrabold">Metas</th>
+                    <th className="px-3 py-3 text-right font-extrabold" title="Metas encerradas no mês (quiosque × mês)">Metas</th>
                     <th className="px-3 py-3 text-right font-extrabold">Alvo</th>
                     <th className="px-3 py-3 text-right font-extrabold">Realizado</th>
                     <th className="px-3 py-3 text-right font-extrabold">Atingimento</th>
@@ -294,13 +370,13 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
           <SectionCard title="Faixas atingidas por quiosque" subtitle="Em que faixa cada quiosque costuma parar. Se quase tudo fica em um extremo, a meta pode estar fácil ou difícil demais.">
             <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
               {kioskRows.map(item => {
-                const gap = item.avg - totals.avg;
+                const gap = item.avg - totals.pct;
                 return (
                   <div key={item.kioskId} className="rounded-ds-md border border-ds-border bg-ds-warm p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[14px] font-extrabold text-ds-ink">{item.name}</div>
-                        <div className="text-[12px] font-semibold text-ds-ink-muted">{item.count} período(s) · melhor {fmtPct(item.best, 0)}</div>
+                        <div className="text-[12px] font-semibold text-ds-ink-muted">{item.count} meta(s) encerrada(s) · melhor {fmtPct(item.best, 0)}</div>
                       </div>
                       <div className="text-right">
                         <div className={cn('text-[22px] font-extrabold leading-none', attainmentTone(item.avg))}>{fmtPct(item.avg, 0)}</div>
@@ -322,40 +398,87 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
             </div>
           </SectionCard>
 
-          <SectionCard title="Desempenho dos colaboradores" subtitle="Atingimento individual e tendência. Valores pagos ficam na aba Fechamentos." action={<span className="text-[12.5px] font-bold text-ds-ink-muted">{earnings.length} colaborador(es)</span>}>
-            {earnings.length === 0 ? (
+          <SectionCard
+            title="Desempenho dos colaboradores"
+            subtitle="Atingimento individual e tendência. Valores pagos ficam na aba Fechamentos."
+            action={(
+              <div className="flex flex-wrap items-center gap-2">
+                <div role="radiogroup" aria-label="Agrupar desempenho" className="inline-flex rounded-[11px] bg-ds-seg p-[3px]">
+                  {([['general', 'Geral'], ['group', 'Por grupo'], ['unit', 'Por unidade']] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={perfView === key}
+                      onClick={() => { setPerfView(key); setPerfTarget('all'); }}
+                      className={cn(
+                        'h-8 rounded-[9px] px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
+                        perfView === key ? 'bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-ds-ink-muted hover:text-ds-ink',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {perfView !== 'general' && (
+                  <select
+                    aria-label={perfView === 'group' ? 'Escolher grupo' : 'Escolher unidade'}
+                    value={perfTarget}
+                    onChange={event => setPerfTarget(event.target.value)}
+                    className="h-9 rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-bold text-ds-ink outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                  >
+                    <option value="all">{perfView === 'group' ? 'Todos os grupos' : 'Todas as unidades'}</option>
+                    {perfTargets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+          >
+            {performanceSections.length === 0 ? (
               <p className="px-5 py-8 text-center text-[13px] font-semibold text-ds-ink-faint">Nenhum colaborador vinculado aos períodos filtrados.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-left text-[13px]">
-                  <thead>
-                    <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
-                      <th className="px-5 py-3 font-extrabold">Colaborador</th>
-                      <th className="px-3 py-3 text-right font-extrabold">Metas</th>
-                      <th className="px-3 py-3 text-right font-extrabold">% médio</th>
-                      <th className="px-3 py-3 text-right font-extrabold">Melhor</th>
-                      <th className="px-5 py-3 text-right font-extrabold">Tendência</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...earnings].sort((a, b) => b.avgAttainment - a.avgAttainment).map(row => (
-                      <tr key={row.employeeId} className="border-t border-ds-divider">
-                        <td className="px-5 py-2.5">
-                          <div className="font-extrabold text-ds-ink">{getUserName(row.employeeId)}</div>
-                          <div className="text-[12px] font-semibold text-ds-ink-muted">{row.role ? roleLabels[row.role] : '—'} · {row.kioskIds.map(getKioskName).join(', ')}</div>
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.periodCount}</td>
-                        <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.avgAttainment))}>{fmtPct(row.avgAttainment)}</td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{fmtPct(row.bestAttainment, 0)}</td>
-                        <td className="px-5 py-2.5 text-right font-extrabold">
-                          {row.trend === null ? <span className="font-semibold text-ds-ink-faint" title="Precisa de pelo menos 4 metas">—</span> : (
-                            <span className={row.trend >= 0 ? 'text-ds-ok' : 'text-ds-danger'}>{row.trend >= 0 ? '▲' : '▼'} {Math.abs(row.trend).toFixed(1)} p.p.</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="divide-y divide-ds-divider">
+                {performanceSections.map(section => (
+                  <div key={section.id}>
+                    {perfView !== 'general' && (
+                      <div className="flex items-center justify-between bg-ds-warm px-5 py-2.5">
+                        <h3 className={cn(kickerClass, 'text-ds-accent-ink')}>{perfView === 'group' ? 'Grupo' : 'Unidade'} · {section.title}</h3>
+                        <span className="text-[12px] font-bold text-ds-ink-muted">{section.rows.length} colaborador(es)</span>
+                      </div>
+                    )}
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[680px] text-left text-[13px]">
+                        <thead>
+                          <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
+                            <th className="px-5 py-3 font-extrabold">Colaborador</th>
+                            <th className="px-3 py-3 text-right font-extrabold">Metas</th>
+                            <th className="px-3 py-3 text-right font-extrabold">% médio</th>
+                            <th className="px-3 py-3 text-right font-extrabold">Melhor</th>
+                            <th className="px-5 py-3 text-right font-extrabold">Tendência</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...section.rows].sort((a, b) => b.avgAttainment - a.avgAttainment).map(row => (
+                            <tr key={row.employeeId} className="border-t border-ds-divider">
+                              <td className="px-5 py-2.5">
+                                <div className="font-extrabold text-ds-ink">{getUserName(row.employeeId)}</div>
+                                <div className="text-[12px] font-semibold text-ds-ink-muted">{row.role ? roleLabels[row.role] : '—'} · {row.kioskIds.map(getKioskName).join(', ')}</div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.periodCount}</td>
+                              <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.avgAttainment))}>{fmtPct(row.avgAttainment)}</td>
+                              <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{fmtPct(row.bestAttainment, 0)}</td>
+                              <td className="px-5 py-2.5 text-right font-extrabold">
+                                {row.trend === null ? <span className="font-semibold text-ds-ink-faint" title="Precisa de pelo menos 4 metas">—</span> : (
+                                  <span className={row.trend >= 0 ? 'text-ds-ok' : 'text-ds-danger'}>{row.trend >= 0 ? '▲' : '▼'} {Math.abs(row.trend).toFixed(1)} p.p.</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </SectionCard>

@@ -1,4 +1,35 @@
-import type { EmployeeGoal, GoalParticipantRole, GoalPeriodDoc } from '@/types';
+import type { EmployeeGoal, GoalClosureBonusSnapshot, GoalParticipantRole, GoalPeriodDoc } from '@/types';
+import { buildGoalClosureBonusSnapshot } from '@/lib/goal-bonus-snapshot';
+import { getGoalPeriodResolvedDayCount } from '@/lib/goals-history';
+
+export interface PeriodBonus {
+  bonus: GoalClosureBonusSnapshot;
+  /** `true` quando não havia apuração gravada e o valor foi calculado agora pela regra do método. */
+  calculated: boolean;
+}
+
+/**
+ * Premiação de um período encerrado. Usa a apuração gravada no encerramento; se não houver
+ * (períodos antigos), calcula pela regra do método por faixas com os dados do período.
+ */
+export function getPeriodBonus(period: GoalPeriodDoc, employeeGoals: EmployeeGoal[]): PeriodBonus | null {
+  if (period.status !== 'closed') return null;
+  const recorded = period.closureSnapshot?.bonus;
+  if (recorded) return { bonus: recorded, calculated: false };
+  if (period.goalMethodSnapshot?.type !== 'tiered_unit_bonus') return null;
+  try {
+    const bonus = buildGoalClosureBonusSnapshot({
+      period,
+      employeeGoals: employeeGoals.filter(goal => goal.periodId === period.id),
+      periodDayCount: getGoalPeriodResolvedDayCount(period),
+      source: 'backfill',
+    });
+    return bonus ? { bonus, calculated: true } : null;
+  } catch {
+    // Método sem configuração de equipe/faixas utilizável: não há como calcular.
+    return null;
+  }
+}
 
 export interface EmployeeEarningsRow {
   employeeId: string;
@@ -8,8 +39,10 @@ export interface EmployeeEarningsRow {
   prizedPeriodCount: number;
   revenue: number;
   target: number;
-  /** Premiação recebida (apurada no encerramento). */
+  /** Premiação recebida (apurada no encerramento ou calculada pela regra quando não há apuração gravada). */
   prize: number;
+  /** Parte de `prize` que foi calculada agora, por não existir apuração gravada. */
+  prizeCalculated: number;
   /** Média simples do atingimento individual por período (%). */
   avgAttainment: number;
   bestAttainment: number;
@@ -29,6 +62,7 @@ export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: E
   const byEmployee = new Map<string, {
     perPeriod: Map<string, { revenue: number; target: number; endsAt: number }>;
     prize: number;
+    prizeCalculated: number;
     prizedPeriods: Set<string>;
     role: GoalParticipantRole | null;
     kioskIds: Set<string>;
@@ -39,7 +73,7 @@ export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: E
     if (!period) continue;
     let entry = byEmployee.get(goal.employeeId);
     if (!entry) {
-      entry = { perPeriod: new Map(), prize: 0, prizedPeriods: new Set(), role: null, kioskIds: new Set() };
+      entry = { perPeriod: new Map(), prize: 0, prizeCalculated: 0, prizedPeriods: new Set(), role: null, kioskIds: new Set() };
       byEmployee.set(goal.employeeId, entry);
     }
     const slot = entry.perPeriod.get(period.id) ?? { revenue: 0, target: 0, endsAt: period.endDate?.toDate?.()?.getTime?.() ?? 0 };
@@ -53,10 +87,12 @@ export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: E
   }
 
   for (const period of closed.values()) {
-    for (const participant of period.closureSnapshot?.bonus?.participants ?? []) {
+    const periodBonus = getPeriodBonus(period, employeeGoals);
+    for (const participant of periodBonus?.bonus.participants ?? []) {
       const entry = byEmployee.get(participant.employeeId);
       if (!entry) continue;
       entry.prize += participant.bonusAmount;
+      if (periodBonus?.calculated) entry.prizeCalculated += participant.bonusAmount;
       entry.prizedPeriods.add(period.id);
     }
   }
@@ -71,6 +107,7 @@ export function buildEmployeeEarnings(periods: GoalPeriodDoc[], employeeGoals: E
         revenue: [...entry.perPeriod.values()].reduce((sum, slot) => sum + slot.revenue, 0),
         target: [...entry.perPeriod.values()].reduce((sum, slot) => sum + slot.target, 0),
         prize: Math.round(entry.prize * 100) / 100,
+        prizeCalculated: Math.round(entry.prizeCalculated * 100) / 100,
         avgAttainment: attainments.length ? attainments.reduce((sum, value) => sum + value, 0) / attainments.length : 0,
         bestAttainment: attainments.length ? Math.max(...attainments) : 0,
         role: entry.role,
@@ -101,13 +138,27 @@ export function reachedTier(period: Pick<GoalPeriodDoc, 'currentValue' | 'target
   return 'below';
 }
 
-/** Totais de premiação de um conjunto de períodos (só encerrados com apuração gravada). */
-export function summarizePrizes(periods: GoalPeriodDoc[]) {
-  const tiered = periods.filter(period => period.status === 'closed' && period.goalMethodSnapshot?.type === 'tiered_unit_bonus');
-  const apurated = tiered.filter(period => period.closureSnapshot?.bonus);
+/** Totais de premiação dos períodos encerrados pelo método por faixas: gravados, calculados e sem como calcular. */
+export function summarizePrizes(periods: GoalPeriodDoc[], employeeGoals: EmployeeGoal[] = []) {
+  let recordedPrize = 0;
+  let calculatedPrize = 0;
+  let apuratedCount = 0;
+  let calculatedCount = 0;
+  let pendingCount = 0;
+  for (const period of periods) {
+    if (period.status !== 'closed' || period.goalMethodSnapshot?.type !== 'tiered_unit_bonus') continue;
+    const result = getPeriodBonus(period, employeeGoals);
+    if (!result) pendingCount += 1;
+    else if (result.calculated) { calculatedCount += 1; calculatedPrize += result.bonus.totalPrize; }
+    else { apuratedCount += 1; recordedPrize += result.bonus.totalPrize; }
+  }
+  const round = (value: number) => Math.round(value * 100) / 100;
   return {
-    totalPrize: Math.round(apurated.reduce((sum, period) => sum + (period.closureSnapshot?.bonus?.totalPrize ?? 0), 0) * 100) / 100,
-    apuratedCount: apurated.length,
-    pendingCount: tiered.length - apurated.length,
+    totalPrize: round(recordedPrize + calculatedPrize),
+    recordedPrize: round(recordedPrize),
+    calculatedPrize: round(calculatedPrize),
+    apuratedCount,
+    calculatedCount,
+    pendingCount,
   };
 }

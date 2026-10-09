@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { ControlPanel } from '@/components/patterns/control-panel';
 import { FilterChips } from '@/components/patterns/filter-chips';
 import { PanelStat } from '@/components/goals/goals-ui';
+import { useKioskGroups } from '@/hooks/use-kiosk-groups';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { db, functions } from '@/lib/firebase';
@@ -2600,6 +2601,8 @@ export function GoalsTrackingDashboard() {
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const { groups: kioskGroups, groupOf, hasMultipleGroups } = useKioskGroups();
   const usersById = useMemo(
     () => Object.fromEntries(users.map(collaborator => [collaborator.id, collaborator])),
     [users]
@@ -2826,9 +2829,11 @@ export function GoalsTrackingDashboard() {
     periods.filter(p => {
       if (p.status !== 'active') return false;
       if (selectedKioskId !== 'all' && p.kioskId !== selectedKioskId) return false;
+      if (selectedGroupId !== null && groupOf(p.kioskId).id !== selectedGroupId) return false;
       return Boolean(user) && canAccessUnit(user!, p.kioskId, { isDefaultAdmin });
     }),
-    [isDefaultAdmin, periods, selectedKioskId, user]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isDefaultAdmin, periods, selectedKioskId, selectedGroupId, user, kioskGroups]
   );
 
   useEffect(() => {
@@ -2919,7 +2924,7 @@ export function GoalsTrackingDashboard() {
   );
 
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
-  const isCardOpen = (id: string) => openCards[id] !== false; // default: open
+  const isCardOpen = (id: string) => openCards[id] === true; // default: recolhido
 
   if (loading) return <Skeleton className="h-64 w-full" />;
 
@@ -2948,14 +2953,34 @@ export function GoalsTrackingDashboard() {
           </div>
         )}
 
+        {hasMultipleGroups && (
+          <div className="mt-5">
+            <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Grupo</p>
+            <FilterChips
+              value={selectedGroupId}
+              onChange={value => {
+                setSelectedGroupId(value);
+                const group = kioskGroups.find(item => item.id === value);
+                if (group && selectedKioskId !== 'all' && !group.kioskIds.includes(selectedKioskId)) setSelectedKioskId('all');
+              }}
+              allLabel="Todos os grupos"
+              chips={kioskGroups.map(group => ({ value: group.id, label: group.name, count: group.kioskIds.length }))}
+            />
+          </div>
+        )}
+
         {availableKiosks.length > 1 && (
-          <FilterChips
-            className="mt-5"
-            value={selectedKioskId === 'all' ? null : selectedKioskId}
-            onChange={value => setSelectedKioskId(value ?? 'all')}
-            allLabel="Todas as unidades"
-            chips={availableKiosks.map(kiosk => ({ value: kiosk.id, label: kiosk.name }))}
-          />
+          <div className={hasMultipleGroups ? 'mt-4' : 'mt-5'}>
+            {hasMultipleGroups && <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Unidade</p>}
+            <FilterChips
+              value={selectedKioskId === 'all' ? null : selectedKioskId}
+              onChange={value => setSelectedKioskId(value ?? 'all')}
+              allLabel={selectedGroupId ? 'Todas do grupo' : 'Todas as unidades'}
+              chips={availableKiosks
+                .filter(kiosk => selectedGroupId === null || groupOf(kiosk.id).id === selectedGroupId)
+                .map(kiosk => ({ value: kiosk.id, label: kiosk.name }))}
+            />
+          </div>
         )}
       </ControlPanel>
 

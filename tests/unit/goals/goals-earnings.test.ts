@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildEmployeeEarnings, computeTrend, reachedTier, summarizePrizes } from '../../../src/lib/goals-earnings';
+import { DEFAULT_KIOSK_MEDIUM_GOAL_METHOD } from '../../../src/lib/goal-methods';
+import { buildEmployeeEarnings, computeTrend, getPeriodBonus, reachedTier, summarizePrizes } from '../../../src/lib/goals-earnings';
 import type { EmployeeGoal, GoalPeriodDoc } from '../../../src/types';
 
 function period(id: string, extra: Partial<GoalPeriodDoc> = {}) {
@@ -42,10 +43,35 @@ test('liderança prevalece como função do colaborador', () => {
   assert.equal(rows[0]!.role, 'leader');
 });
 
-test('summarizePrizes separa apurados de pendentes', () => {
+test('summarizePrizes separa gravados de pendentes', () => {
   const pending = period('p2', { goalMethodSnapshot: { type: 'tiered_unit_bonus' } } as unknown as Partial<GoalPeriodDoc>);
   const result = summarizePrizes([period('p1', bonus([], 160)), pending, period('p3')]);
-  assert.deepEqual(result, { totalPrize: 160, apuratedCount: 1, pendingCount: 1 });
+  assert.deepEqual(result, { totalPrize: 160, recordedPrize: 160, calculatedPrize: 0, apuratedCount: 1, calculatedCount: 0, pendingCount: 1 });
+});
+
+test('período encerrado sem apuração gravada é calculado pela regra do método', () => {
+  const legacy = period('p1', {
+    currentValue: 31261,
+    goalMethodSnapshot: DEFAULT_KIOSK_MEDIUM_GOAL_METHOD,
+    shifts: [{ id: 'period', label: 'Mensal', fraction: 1 }],
+    closureSnapshot: { periodDayCount: 31 },
+  } as unknown as Partial<GoalPeriodDoc>);
+  const goals = [goal('p1', 'lider', 0, 0, 'leader'), goal('p1', 'a', 10000, 10000, 'fixed'), goal('p1', 'b', 10000, 10000, 'fixed')]
+    .map(g => ({ ...g, scheduledTurnCount: g.employeeId === 'lider' ? 4 : 24 }) as EmployeeGoal);
+
+  const result = getPeriodBonus(legacy, goals);
+  assert.ok(result);
+  assert.equal(result.calculated, true);
+  assert.equal(result.bonus.totalPrize, 374.51);
+
+  const rows = buildEmployeeEarnings([legacy], goals);
+  assert.equal(rows.find(row => row.employeeId === 'a')!.prize, 140.44);
+  assert.equal(rows.find(row => row.employeeId === 'a')!.prizeCalculated, 140.44);
+
+  const totals = summarizePrizes([legacy], goals);
+  assert.equal(totals.calculatedCount, 1);
+  assert.equal(totals.calculatedPrize, 374.51);
+  assert.equal(totals.pendingCount, 0);
 });
 
 test('tendência compara as últimas 3 metas com as 3 anteriores', () => {

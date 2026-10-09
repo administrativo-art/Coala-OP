@@ -1,16 +1,13 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  CalendarRange,
   ChevronDown,
   Download,
   ChevronUp,
   RotateCcw,
-  Store,
-  Users,
   XCircle,
 } from 'lucide-react';
 
@@ -24,8 +21,9 @@ import { LiftRow } from '@/components/patterns/lift-row';
 import { SidePanel, PanelField } from '@/components/patterns/side-panel';
 import { StatusPill } from '@/components/ui/status-pill';
 import { EmptyBox, attainmentTone, fmtBRL, kickerClass } from '@/components/goals/goals-ui';
-import { buildEmployeeEarnings, summarizePrizes } from '@/lib/goals-earnings';
-import { buildEarningsCsv } from '@/lib/goals-earnings-csv';
+import { buildEmployeeEarnings, getPeriodBonus, summarizePrizes } from '@/lib/goals-earnings';
+import { useKioskGroups } from '@/hooks/use-kiosk-groups';
+import { buildEarningsCsv, type EarningsCsvEntry } from '@/lib/goals-earnings-csv';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -173,7 +171,9 @@ function PeriodCard({
     return key;
   }
 
-  const bonus = period.status === 'closed' ? period.closureSnapshot?.bonus : undefined;
+  const periodBonus = getPeriodBonus(period, employeeGoals);
+  const bonus = periodBonus?.bonus;
+  const bonusCalculated = periodBonus?.calculated ?? false;
   const isTieredClosed = period.status === 'closed' && period.goalMethodSnapshot?.type === 'tiered_unit_bonus';
   const prizeByEmployee = new Map((bonus?.participants ?? []).map(item => [item.employeeId, item]));
   const roleLabels: Record<string, string> = { fixed: 'Colaborador', relief: 'Folguista', leader: 'Liderança' };
@@ -212,7 +212,7 @@ function PeriodCard({
             <p className={cn(kickerClass, 'text-ds-ink-faint')}>Premiação</p>
             {isTieredClosed ? (
               bonus
-                ? <p className="text-[13px] font-extrabold text-ds-ok">R$ {fmt(bonus.totalPrize)}</p>
+                ? <p className="text-[13px] font-extrabold text-ds-ok">R$ {fmt(bonus.totalPrize)}{bonusCalculated && <span className="ml-1 text-[10.5px] font-bold text-ds-warn" title="Calculada pela regra do método; não havia apuração gravada">calc.</span>}</p>
                 : <StatusPill variant="warn">Sem apuração</StatusPill>
             ) : <p className="text-[13px] font-semibold text-ds-ink-faint">—</p>}
           </div>
@@ -256,7 +256,12 @@ function PeriodCard({
 
         {isTieredClosed && (
           <div>
-            <p className={cn(kickerClass, 'text-ds-ink-faint')}>Premiação apurada no encerramento</p>
+            <p className={cn(kickerClass, 'text-ds-ink-faint')}>{bonusCalculated ? 'Premiação calculada pela regra' : 'Premiação apurada no encerramento'}</p>
+            {bonusCalculated && (
+              <p className="mt-2 rounded-ds-md border border-ds-alert-border bg-ds-alert-bg p-3 text-[12.5px] font-semibold text-ds-alert-ink">
+                Este período foi encerrado antes da gravação da premiação. O valor abaixo foi calculado agora pela regra do método com a escala e o faturamento registrados; ele não está gravado no fechamento.
+              </p>
+            )}
             {bonus ? (
               <div className="mt-2 space-y-3 rounded-ds-card border border-ds-border bg-ds-surface p-4">
                 <div className="grid grid-cols-2 gap-3">
@@ -374,13 +379,14 @@ function PeriodCard({
 export type GoalsHistoryStatus = GoalPeriodDoc['status'];
 
 /** Fechamentos mês a mês. Os filtros de quiosque e status vêm da tela de Análise. */
-export function GoalsHistoryView({ kioskId, status }: { kioskId: string | null; status: GoalsHistoryStatus | null }) {
+export function GoalsHistoryView({ kioskId, groupId = null, status }: { kioskId: string | null; groupId?: string | null; status: GoalsHistoryStatus | null }) {
   const { periods, employeeGoals, loading, reopenPeriod } = useGoals();
   const { kiosks } = useKiosks();
   const { permissions, users } = useAuth();
   const { toast } = useToast();
 
   const filterKiosk = kioskId ?? 'all';
+  const { groups: kioskGroups, groupOf } = useKioskGroups();
   const filterStatus = status;
   const [reopening, setReopening] = useState<string | null>(null);
   const [closingPeriod, setClosingPeriod] = useState<GoalPeriodDoc | null>(null);
@@ -421,6 +427,7 @@ export function GoalsHistoryView({ kioskId, status }: { kioskId: string | null; 
 
     const filtered = sorted
       .filter(p => filterKiosk === 'all' || p.kioskId === filterKiosk)
+      .filter(p => groupId === null || groupOf(p.kioskId).id === groupId)
       .filter(p => filterStatus === null || p.status === filterStatus);
 
     const map = new Map<string, GoalPeriodDoc[]>();
@@ -431,10 +438,31 @@ export function GoalsHistoryView({ kioskId, status }: { kioskId: string | null; 
     }
 
     return [...map.entries()].sort(([a], [b]) => b.localeCompare(a));
-  }, [periods, filterKiosk, filterStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periods, filterKiosk, groupId, kioskGroups, filterStatus]);
 
-  function exportMonth(monthKey: string, rows: ReturnType<typeof buildEmployeeEarnings>) {
-    const csv = buildEarningsCsv(rows, { user: getUserName, kiosk: getKioskName });
+  /** Folha do mês organizada em grupo → unidade → colaboradores (um colaborador pode aparecer em mais de uma unidade). */
+  function payrollSections(monthPeriods: GoalPeriodDoc[]) {
+    const closed = monthPeriods.filter(p => p.status === 'closed');
+    return kioskGroups
+      .map(group => {
+        const units = group.kioskIds
+          .map(kioskId => ({
+            kioskId,
+            name: getKioskName(kioskId),
+            rows: buildEmployeeEarnings(closed.filter(p => p.kioskId === kioskId), employeeGoals),
+          }))
+          .filter(unit => unit.rows.length > 0)
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+          .map(unit => ({ ...unit, prize: unit.rows.reduce((sum, row) => sum + row.prize, 0) }));
+        return { id: group.id, name: group.name, units, prize: units.reduce((sum, unit) => sum + unit.prize, 0) };
+      })
+      .filter(group => group.units.length > 0);
+  }
+
+  function exportMonth(monthKey: string, sections: ReturnType<typeof payrollSections>) {
+    const entries: EarningsCsvEntry[] = sections.flatMap(group => group.units.flatMap(unit => unit.rows.map(row => ({ group: group.name, unit: unit.name, row }))));
+    const csv = buildEarningsCsv(entries, { user: getUserName });
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
@@ -455,8 +483,9 @@ export function GoalsHistoryView({ kioskId, status }: { kioskId: string | null; 
             {grouped.map(([monthKey, monthPeriods]) => {
               const isCollapsed = collapsedMonths.has(monthKey);
               const monthRevenue = monthPeriods.filter(p => p.status === 'closed').reduce((sum, p) => sum + p.currentValue, 0);
-              const monthPrize = summarizePrizes(monthPeriods);
-              const monthEarnings = buildEmployeeEarnings(monthPeriods, employeeGoals);
+              const monthPrize = summarizePrizes(monthPeriods, employeeGoals);
+              const payroll = payrollSections(monthPeriods);
+              const payrollPeople = payroll.reduce((sum, group) => sum + group.units.reduce((n, unit) => n + unit.rows.length, 0), 0);
               return (
                 <section key={monthKey} aria-label={toMonthLabel(monthKey)}>
                   <button
@@ -468,20 +497,20 @@ export function GoalsHistoryView({ kioskId, status }: { kioskId: string | null; 
                     <span className="text-[19px] font-extrabold capitalize text-ds-ink">{toMonthLabel(monthKey)}</span>
                     <span className="text-[12.5px] font-bold text-ds-ink-muted">{monthPeriods.length} meta(s)</span>
                     {monthRevenue > 0 && <span className="text-[12.5px] font-bold text-ds-ink-muted">Realizado {fmtBRL(monthRevenue)}</span>}
-                    {monthPrize.apuratedCount > 0 && <span className="text-[12.5px] font-extrabold text-ds-ok">Premiação {fmtBRL(monthPrize.totalPrize)}</span>}
+                    {(monthPrize.apuratedCount + monthPrize.calculatedCount) > 0 && <span className="text-[12.5px] font-extrabold text-ds-ok">Premiação {fmtBRL(monthPrize.totalPrize)}</span>}
                     <span className="ml-auto text-ds-ink-faint">{isCollapsed ? <ChevronDown aria-hidden="true" className="h-4 w-4" /> : <ChevronUp aria-hidden="true" className="h-4 w-4" />}</span>
                   </button>
 
                   {!isCollapsed && (
                     <div className="space-y-3">
-                      {monthEarnings.length > 0 && (
+                      {payroll.length > 0 && (
                         <div className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface">
                           <div className="flex items-center justify-between gap-3 border-b border-ds-divider px-4 py-3">
                             <div>
                               <h3 className="text-[13.5px] font-extrabold text-ds-ink">Folha de premiação do mês</h3>
-                              <span className="text-[12px] font-bold text-ds-ink-muted">{monthEarnings.length} pessoa(s)</span>
+                              <span className="text-[12px] font-bold text-ds-ink-muted">{payrollPeople} lançamento(s) · por grupo e unidade</span>
                             </div>
-                            <Button variant="ds-secondary" size="sm" onClick={() => exportMonth(monthKey, monthEarnings)}>
+                            <Button variant="ds-secondary" size="sm" onClick={() => exportMonth(monthKey, payroll)}>
                               <Download aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />Exportar CSV
                             </Button>
                           </div>
@@ -490,24 +519,38 @@ export function GoalsHistoryView({ kioskId, status }: { kioskId: string | null; 
                               <thead>
                                 <tr className={cn(kickerClass, 'text-ds-ink-faint')}>
                                   <th className="px-4 py-2.5 font-extrabold">Colaborador</th>
-                                  <th className="px-3 py-2.5 text-right font-extrabold">Metas</th>
                                   <th className="px-3 py-2.5 text-right font-extrabold">Faturamento</th>
                                   <th className="px-3 py-2.5 text-right font-extrabold">%</th>
                                   <th className="px-4 py-2.5 text-right font-extrabold">Premiação</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {monthEarnings.map(row => (
-                                  <tr key={row.employeeId} className="border-t border-ds-divider">
-                                    <td className="px-4 py-2.5">
-                                      <span className="font-extrabold text-ds-ink">{getUserName(row.employeeId)}</span>
-                                      <span className="ml-2 text-[12px] font-semibold text-ds-ink-muted">{row.kioskIds.map(getKioskName).join(', ')}</span>
-                                    </td>
-                                    <td className="px-3 py-2.5 text-right font-semibold text-ds-ink-2">{row.periodCount}</td>
-                                    <td className="px-3 py-2.5 text-right font-bold text-ds-ink">{fmtBRL(row.revenue)}</td>
-                                    <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.avgAttainment))}>{fmtPct(row.avgAttainment)}</td>
-                                    <td className="px-4 py-2.5 text-right font-extrabold text-ds-ok">{row.prize > 0 ? fmtBRL(row.prize) : <span className="font-semibold text-ds-ink-faint">—</span>}</td>
-                                  </tr>
+                                {payroll.map(group => (
+                                  <Fragment key={group.id}>
+                                    <tr className="border-t border-ds-divider bg-ds-muted">
+                                      <th colSpan={3} scope="colgroup" className={cn('px-4 py-2 text-left', kickerClass, 'text-ds-ink')}>Grupo · {group.name}</th>
+                                      <td className="px-4 py-2 text-right font-extrabold text-ds-ok">R$ {fmt(group.prize)}</td>
+                                    </tr>
+                                    {group.units.map(unit => (
+                                      <Fragment key={unit.kioskId}>
+                                        <tr className="border-t border-ds-divider bg-ds-warm">
+                                          <th colSpan={3} scope="colgroup" className="px-4 py-1.5 pl-6 text-left text-[12.5px] font-extrabold text-ds-accent-ink">{unit.name}</th>
+                                          <td className="px-4 py-1.5 text-right text-[12.5px] font-extrabold text-ds-ink-2">R$ {fmt(unit.prize)}</td>
+                                        </tr>
+                                        {unit.rows.map(row => (
+                                          <tr key={row.employeeId} className="border-t border-ds-divider">
+                                            <td className="px-4 py-2.5 pl-8 font-extrabold text-ds-ink">{getUserName(row.employeeId)}</td>
+                                            <td className="px-3 py-2.5 text-right font-bold text-ds-ink">{fmtBRL(row.revenue)}</td>
+                                            <td className={cn('px-3 py-2.5 text-right font-extrabold', attainmentTone(row.avgAttainment))}>{fmtPct(row.avgAttainment)}</td>
+                                            <td className="px-4 py-2.5 text-right font-extrabold text-ds-ok">
+                                              {row.prize > 0 ? fmtBRL(row.prize) : <span className="font-semibold text-ds-ink-faint">—</span>}
+                                              {row.prizeCalculated > 0 && <span className="ml-1 text-[10.5px] font-bold text-ds-warn" title="Calculada pela regra do método; não havia apuração gravada">calc.</span>}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </Fragment>
+                                    ))}
+                                  </Fragment>
                                 ))}
                               </tbody>
                             </table>
