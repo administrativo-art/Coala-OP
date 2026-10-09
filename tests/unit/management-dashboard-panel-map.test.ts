@@ -29,7 +29,7 @@ test("mapa mostra um bloco por widget, com nome e tamanho", () => {
   const { layout, html } = render();
   for (const placement of layout.widgets) assert.ok(html.includes(`Mover `), "cada bloco tem alça de arraste");
   assert.equal((html.match(/Mover /g) ?? []).length, layout.widgets.length);
-  assert.ok(html.includes("Metas e faturamento"));
+  assert.ok(html.includes("Faturamento e metas"));
   assert.ok(html.includes("grid-cols-12"));
   assert.match(html, /grid-column:span 6 \/ span 6/);
 });

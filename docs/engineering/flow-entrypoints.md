@@ -1078,7 +1078,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx).
 
-Arquivos locais percorridos: 61.
+Arquivos locais percorridos: 63.
 
 Chamadas candidatas encontradas:
 
@@ -1126,21 +1126,16 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dashboard.collaborator` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `dashboard.operational` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `dashboard.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
-- `dp.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `financial.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
-- `goals.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
-- `pricing.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `reposition.prepareDispatch` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `reposition.receive` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `reposition.view` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
-- `settings.viewAiCosts` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `stock.analysis.restock` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `stock.audit.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 - `stock.returns.updateStatus` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.approve` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.perform` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
-- `stock.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 
 ## `pricing`
 
