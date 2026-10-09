@@ -849,7 +849,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 68.
+Arquivos locais percorridos: 71.
 
 Chamadas candidatas encontradas:
 
@@ -1181,7 +1181,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/purchasing/costs/page.tsx`](../../src/app/dashboard/purchasing/costs/page.tsx), [`src/app/dashboard/purchasing/orders/[orderId]/page.tsx`](../../src/app/dashboard/purchasing/orders/%5BorderId%5D/page.tsx), [`src/app/dashboard/purchasing/orders/[orderId]/receipt/page.tsx`](../../src/app/dashboard/purchasing/orders/%5BorderId%5D/receipt/page.tsx), [`src/app/dashboard/purchasing/orders/page.tsx`](../../src/app/dashboard/purchasing/orders/page.tsx), [`src/app/dashboard/purchasing/quotations/[quotationId]/confirm-purchase/page.tsx`](../../src/app/dashboard/purchasing/quotations/%5BquotationId%5D/confirm-purchase/page.tsx), [`src/app/dashboard/purchasing/quotations/[quotationId]/page.tsx`](../../src/app/dashboard/purchasing/quotations/%5BquotationId%5D/page.tsx), [`src/app/dashboard/purchasing/quotations/compare/page.tsx`](../../src/app/dashboard/purchasing/quotations/compare/page.tsx), [`src/app/dashboard/purchasing/quotations/page.tsx`](../../src/app/dashboard/purchasing/quotations/page.tsx), [`src/app/dashboard/purchasing/receipts/page.tsx`](../../src/app/dashboard/purchasing/receipts/page.tsx), [`src/app/dashboard/stock/purchasing/history/page.tsx`](../../src/app/dashboard/stock/purchasing/history/page.tsx), [`src/app/dashboard/stock/purchasing/sessions/[sessionId]/page.tsx`](../../src/app/dashboard/stock/purchasing/sessions/%5BsessionId%5D/page.tsx).
 
-Arquivos locais percorridos: 91.
+Arquivos locais percorridos: 94.
 
 Chamadas candidatas encontradas:
 
@@ -1845,7 +1845,7 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Páginas: [`src/app/dashboard/stock/returns/page.tsx`](../../src/app/dashboard/stock/returns/page.tsx).
 
-Arquivos locais percorridos: 32.
+Arquivos locais percorridos: 33.
 
 Chamadas candidatas encontradas:
 
@@ -1966,7 +1966,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/stock/uniforms/page.tsx`](../../src/app/dashboard/stock/uniforms/page.tsx).
 
-Arquivos locais percorridos: 34.
+Arquivos locais percorridos: 35.
 
 Chamadas candidatas encontradas:
 
