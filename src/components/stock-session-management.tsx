@@ -617,7 +617,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   };
 
   const handleExport = () => {
-    alert('Função de exportação a ser implementada.');
+    toast({ title: 'Exportação indisponível', description: 'A função de exportação ainda será implementada.' });
   };
 
   if (activeSession) {

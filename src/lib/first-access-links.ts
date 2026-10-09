@@ -1,9 +1,10 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { maybeAdvanceAfterFirstAccess } from "@/lib/hr/onboarding-access-provisioning";
+import { reportSystemError } from "@/lib/observability/reporter";
 import {
   replaceOnboardingIntegrationAlert,
   resolvedPdvOnboardingAlert,
@@ -12,6 +13,7 @@ import { createPdvLegalUser } from "@/lib/integrations/pdv-legal-admin";
 
 const FIRST_ACCESS_COLLECTION = "firstAccessLinks";
 const FIRST_ACCESS_TTL_DAYS = 2;
+const FIRST_ACCESS_CONSUMPTION_LEASE_MS = 5 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -29,6 +31,31 @@ function hashToken(token: string) {
 
 function makeToken() {
   return randomBytes(32).toString("base64url");
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function firstAccessFailure(
+  token: Record<string, unknown>,
+  user: Record<string, unknown>,
+  now: number,
+) {
+  const expiresAt = typeof token.expiresAt === "string" ? token.expiresAt : null;
+  if (typeof token.userId !== "string" || !token.userId) return "invalid" as const;
+  if (typeof token.usedAt === "string" && token.usedAt) return "used" as const;
+  if (typeof token.revokedAt === "string" && token.revokedAt) return "revoked" as const;
+  if (!expiresAt || new Date(expiresAt).getTime() <= now) return "expired" as const;
+  if (user.isActive === false) return "inactive" as const;
+  const consumption = recordValue(token.consumption);
+  const leaseExpiresAt = typeof consumption.leaseExpiresAt === "string"
+    ? new Date(consumption.leaseExpiresAt).getTime()
+    : 0;
+  if (consumption.state === "reserved" && leaseExpiresAt > now) return "in_progress" as const;
+  return null;
 }
 
 function buildUrl(baseUrl: string, token: string) {
@@ -131,20 +158,15 @@ export async function getFirstAccessLinkStatus(token: string) {
   }
 
   const data = snap.data() ?? {};
-  const expiresAt = typeof data.expiresAt === "string" ? data.expiresAt : null;
-  const usedAt = typeof data.usedAt === "string" ? data.usedAt : null;
-  const revokedAt = typeof data.revokedAt === "string" ? data.revokedAt : null;
   const userId = typeof data.userId === "string" ? data.userId : "";
   const onboardingId = typeof data.onboardingId === "string" ? data.onboardingId : null;
-  const expired = !expiresAt || new Date(expiresAt).getTime() <= Date.now();
-
   if (!userId) return { ok: false as const, reason: "invalid" as const };
-  if (usedAt) return { ok: false as const, reason: "used" as const };
-  if (revokedAt) return { ok: false as const, reason: "revoked" as const };
-  if (expired) return { ok: false as const, reason: "expired" as const };
-
   const userSnap = await dbAdmin.collection("users").doc(userId).get();
+  if (!userSnap.exists) return { ok: false as const, reason: "invalid" as const };
   const user = userSnap.data() ?? {};
+  const failure = firstAccessFailure(data, user, Date.now());
+  if (failure) return { ok: false as const, reason: failure };
+  const expiresAt = data.expiresAt as string;
   const onboardingSnap = onboardingId
     ? await hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).get()
     : null;
@@ -167,6 +189,90 @@ export async function getFirstAccessLinkStatus(token: string) {
       filialName: typeof pdvAccess.filialName === "string" ? pdvAccess.filialName : null,
     },
   };
+}
+
+async function reserveFirstAccessLink(token: string) {
+  const tokenHash = hashToken(token);
+  const tokenRef = dbAdmin.collection(FIRST_ACCESS_COLLECTION).doc(tokenHash);
+  const attemptId = randomUUID();
+  const reservedAt = nowIso();
+  const leaseExpiresAt = new Date(Date.now() + FIRST_ACCESS_CONSUMPTION_LEASE_MS).toISOString();
+
+  return dbAdmin.runTransaction(async (transaction) => {
+    const tokenSnap = await transaction.get(tokenRef);
+    if (!tokenSnap.exists) return { ok: false as const, reason: "not_found" as const };
+    const tokenData = tokenSnap.data() ?? {};
+    const userId = typeof tokenData.userId === "string" ? tokenData.userId : "";
+    if (!userId) return { ok: false as const, reason: "invalid" as const };
+    const userRef = dbAdmin.collection("users").doc(userId);
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists) return { ok: false as const, reason: "invalid" as const };
+    const userData = userSnap.data() ?? {};
+    const failure = firstAccessFailure(tokenData, userData, Date.now());
+    if (failure) return { ok: false as const, reason: failure };
+
+    transaction.set(tokenRef, {
+      consumption: { state: "reserved", attemptId, reservedAt, leaseExpiresAt },
+    }, { merge: true });
+    return {
+      ok: true as const,
+      attemptId,
+      tokenRef,
+      userRef,
+      userId,
+      onboardingId: typeof tokenData.onboardingId === "string" ? tokenData.onboardingId : null,
+      expiresAt: tokenData.expiresAt as string,
+      email: typeof userData.email === "string" ? userData.email : null,
+      username: typeof userData.username === "string" ? userData.username : null,
+    };
+  });
+}
+
+async function releaseFirstAccessReservation(
+  tokenRef: FirebaseFirestore.DocumentReference,
+  attemptId: string,
+) {
+  await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(tokenRef);
+    const consumption = recordValue(snapshot.data()?.consumption);
+    if (consumption.attemptId !== attemptId || snapshot.get("usedAt")) return;
+    transaction.set(tokenRef, { consumption: FieldValue.delete() }, { merge: true });
+  });
+}
+
+async function finalizeFirstAccessReservation(
+  reservation: Extract<Awaited<ReturnType<typeof reserveFirstAccessLink>>, { ok: true }>,
+) {
+  const usedAt = nowIso();
+  await dbAdmin.runTransaction(async (transaction) => {
+    const [tokenSnap, userSnap] = await Promise.all([
+      transaction.get(reservation.tokenRef),
+      transaction.get(reservation.userRef),
+    ]);
+    const consumption = recordValue(tokenSnap.data()?.consumption);
+    if (consumption.attemptId !== reservation.attemptId || consumption.state !== "reserved") {
+      throw new Error("Reserva do primeiro acesso não pertence a esta operação.");
+    }
+    if (!userSnap.exists || userSnap.get("isActive") === false) {
+      throw new Error("Conta inativa durante o primeiro acesso.");
+    }
+    transaction.set(reservation.tokenRef, {
+      usedAt,
+      consumedByAttemptId: reservation.attemptId,
+      consumption: FieldValue.delete(),
+    }, { merge: true });
+    transaction.set(reservation.userRef, {
+      mustChangePassword: false,
+      passwordChangedAt: FieldValue.serverTimestamp(),
+      firstAccess: {
+        status: "used",
+        usedAt,
+        expiresAt: reservation.expiresAt,
+      },
+      updatedAt: usedAt,
+    }, { merge: true });
+  });
+  return usedAt;
 }
 
 export async function provisionPdvFirstAccess(token: string, password: string) {
@@ -236,52 +342,43 @@ export async function provisionPdvFirstAccess(token: string, password: string) {
 }
 
 export async function consumeFirstAccessLink(token: string, password: string) {
-  const status = await getFirstAccessLinkStatus(token);
-  if (!status.ok) return status;
+  const reservation = await reserveFirstAccessLink(token);
+  if (!reservation.ok) return reservation;
 
-  const tokenHash = hashToken(token);
-  const tokenRef = dbAdmin.collection(FIRST_ACCESS_COLLECTION).doc(tokenHash);
-  const tokenSnap = await tokenRef.get();
-  const tokenData = tokenSnap.data() ?? {};
-  const onboardingId = typeof tokenData.onboardingId === "string" ? tokenData.onboardingId : null;
-  const usedAt = nowIso();
+  try {
+    await authAdmin.updateUser(reservation.userId, { password });
+  } catch (error) {
+    await releaseFirstAccessReservation(reservation.tokenRef, reservation.attemptId).catch(() => undefined);
+    throw error;
+  }
 
-  await authAdmin.updateUser(status.userId, {
-    password,
-    disabled: false,
-  });
-
-  await Promise.all([
-    tokenRef.set({ usedAt }, { merge: true }),
-    dbAdmin.collection("users").doc(status.userId).set({
-      mustChangePassword: false,
-      passwordChangedAt: FieldValue.serverTimestamp(),
-      firstAccess: {
-        status: "used",
-        usedAt,
-        expiresAt: status.expiresAt,
-      },
-      updatedAt: usedAt,
-    }, { merge: true }),
-    onboardingId
-      ? hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).set({
-          firstAccess: {
-            status: "used",
-            usedAt,
-            expiresAt: status.expiresAt,
-          },
-          updatedAt: usedAt,
-        }, { merge: true })
-      : Promise.resolve(),
-  ]);
-
-  if (onboardingId) {
-    await maybeAdvanceAfterFirstAccess(onboardingId);
+  const usedAt = await finalizeFirstAccessReservation(reservation);
+  if (reservation.onboardingId) {
+    try {
+      await hrDbAdmin.collection("onboardingProcesses").doc(reservation.onboardingId).set({
+        firstAccess: {
+          status: "used",
+          usedAt,
+          expiresAt: reservation.expiresAt,
+        },
+        updatedAt: usedAt,
+      }, { merge: true });
+      await maybeAdvanceAfterFirstAccess(reservation.onboardingId);
+    } catch (error) {
+      reportSystemError({
+        error,
+        code: "FIRST_ACCESS_ONBOARDING_PROJECTION_FAILED",
+        kind: "UNEXPECTED_APPLICATION",
+        source: "first-access",
+        operation: "project-onboarding-after-consumption",
+        routeOrJob: "/api/auth/first-access/[token]",
+      });
+    }
   }
 
   return {
     ok: true as const,
-    email: status.email,
-    username: status.username,
+    email: reservation.email,
+    username: reservation.username,
   };
 }

@@ -8,6 +8,7 @@ import { useProducts } from '@/hooks/use-products';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { usePredefinedLists } from '@/hooks/use-predefined-lists';
 import { useBaseProducts } from '@/hooks/use-base-products';
+import { useToast } from '@/hooks/use-toast';
 import { type Product } from '@/types';
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ export function ItemManagement() {
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { lists, loading: listsLoading } = usePredefinedLists();
+  const { toast } = useToast();
 
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -76,7 +78,11 @@ export function ItemManagement() {
     if (usedInLists.length > 0) messages.push(`está nas listas predefinidas: ${usedInLists.map(l => `"${l.name}"`).join(', ')}`);
 
     if (messages.length > 0) {
-      alert(`Não é possível excluir o insumo: este insumo não pode ser excluído pois ${messages.join(' e ')}.`);
+      toast({
+        variant: 'destructive',
+        title: 'Não é possível excluir o insumo',
+        description: `Este insumo não pode ser excluído pois ${messages.join(' e ')}.`,
+      });
       return;
     }
     setProductsToDelete([product]);

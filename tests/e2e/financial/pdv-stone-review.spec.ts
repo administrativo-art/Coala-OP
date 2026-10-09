@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { E2E_USER } from "../support/global-setup";
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
+import { latestPublishedDate } from "../../../src/features/financial/receivables/period-review";
 
 test("PDV × Stone API enforces admin, bounded input, official unit mapping and stored filial", async ({ request }) => {
   assertFirestoreEmulatorSafety({ projectId: "demo-coala-e2e" });
@@ -88,8 +89,7 @@ test("calendar presents monthly cards, late reopening and a larger month view", 
     ?? initializeApp({ projectId: "demo-coala-e2e" }, "pdv-stone-calendar-e2e");
   const financial = getFirestore(app, "coala-financeiro");
   const mappingId = "pdv-calendar-e2e-map", kioskId = "pdv-calendar-e2e-unit", stoneCode = "9876543210999";
-  const publishedThrough = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit" })
-    .format(new Date(Date.now() - 86_400_000));
+  const publishedThrough = latestPublishedDate(new Date());
   const previous = new Date(`${publishedThrough}T12:00:00.000Z`);
   previous.setUTCDate(previous.getUTCDate() - 1);
   const reopenedDate = previous.toISOString().slice(0, 10);

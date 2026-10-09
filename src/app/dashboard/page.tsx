@@ -1,32 +1,19 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import type { ElementType, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { addDays, endOfMonth, endOfWeek, format, isBefore, startOfDay, startOfWeek } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import {
-  AlertTriangle,
-  ArrowRight,
-  Briefcase,
   Calendar,
-  CalendarDays,
-  CircleDollarSign,
-  Boxes,
-  Cpu,
-  ListTodo,
   Target,
-  TrendingUp,
-  UsersRound,
-  Wallet,
-  Workflow,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { GoalsProvider } from "@/components/goals-provider"
 import { useDP } from "@/components/dp-context"
 import { GlassCard } from "@/components/ui/glass-card"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useGoals } from "@/contexts/goals-context"
@@ -44,8 +31,16 @@ import { useAllTasks } from "@/hooks/use-all-tasks"
 import { financialCollection } from "@/features/financial/lib/repositories"
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection"
 import { formatCurrency, toDate } from "@/features/financial/lib/utils"
-import { ManagementDashboardBuilder, ManagementWidgetFrame } from "@/features/management-dashboard/builder-context"
-import type { ManagementWidgetId } from "@/features/management-dashboard/types"
+import { ManagementDashboardBuilder } from "@/features/management-dashboard/builder-context"
+import { GoalsWidget } from "@/features/management-dashboard/widgets/goals-widget"
+import { HubWidget, type HubAttention, type HubKpi, type HubLink } from "@/features/management-dashboard/widgets/hub-widget"
+import { widgetIcons } from "@/features/management-dashboard/widgets/icons"
+import { PaymentsWidget, type PaymentRow } from "@/features/management-dashboard/widgets/payments-widget"
+import { RestockWidget, type RestockItem } from "@/features/management-dashboard/widgets/restock-widget"
+import { SalesWidget } from "@/features/management-dashboard/widgets/sales-widget"
+import { ScheduleWidget, type ScheduleDay } from "@/features/management-dashboard/widgets/schedule-widget"
+import { TasksWidget, type TaskItem } from "@/features/management-dashboard/widgets/tasks-widget"
+import { VacationsWidget, type VacationItem } from "@/features/management-dashboard/widgets/vacations-widget"
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions"
 import { cn } from "@/lib/utils"
 import type { DPSchedule, DPShift, GoalPeriodDoc, Kiosk, SalesReport, User } from "@/types"
@@ -72,50 +67,6 @@ function getKioskName(kiosks: Kiosk[], kioskId: string) {
   return kiosks.find((kiosk) => kiosk.id === kioskId)?.name ?? kioskId
 }
 
-function DashboardCard({
-  widgetId,
-  title,
-  description,
-  href,
-  icon: Icon,
-  className,
-  hideDetailsLink,
-  children,
-}: {
-  widgetId: ManagementWidgetId
-  title: string
-  description: string
-  href: string
-  icon: ElementType
-  className?: string
-  hideDetailsLink?: boolean
-  children: ReactNode
-}) {
-  return (
-    <ManagementWidgetFrame id={widgetId} className={className}>
-    <Card className="h-full overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface shadow-ds-lift">
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 px-5 pb-2 pt-4">
-        <div>
-          <CardTitle className="text-[15px] font-extrabold tracking-tight text-ds-ink">{title}</CardTitle>
-          <CardDescription className="mt-1 max-w-[360px] text-xs leading-snug text-ds-ink-faint">{description}</CardDescription>
-        </div>
-        <div className="rounded-ds-sm bg-ds-accent-soft p-2 text-ds-accent-ink">
-          <Icon className="h-4 w-4" />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4 p-5">
-        {children}
-        {!hideDetailsLink ? (
-          <Link href={href} className="inline-flex items-center gap-2 px-1 text-xs font-extrabold text-ds-accent-ink hover:text-ds-accent-ink-hover">
-            Ver detalhes <ArrowRight className="h-4 w-4" />
-          </Link>
-        ) : null}
-      </CardContent>
-    </Card>
-    </ManagementWidgetFrame>
-  )
-}
-
 function EmptyState({ children }: { children: ReactNode }) {
   return <p className="rounded-ds-btn border border-dashed border-ds-border px-3 py-4 text-xs text-ds-ink-faint">{children}</p>
 }
@@ -127,20 +78,6 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
       <p className="mt-0.5 text-xl font-extrabold tracking-tight text-ds-ink">{value}</p>
       {detail ? <p className="mt-0.5 text-[11px] font-medium text-ds-ink-faint">{detail}</p> : null}
     </div>
-  )
-}
-
-function ModuleShortcutCard({ widgetId, title, description, href, icon, links }: { widgetId: ManagementWidgetId; title: string; description: string; href: string; icon: ElementType; links: Array<{ label: string; href: string }> }) {
-  return (
-    <DashboardCard widgetId={widgetId} title={title} description={description} href={href} icon={icon}>
-      <div className="grid gap-2">
-        {links.map((link) => (
-          <Link key={link.href} href={link.href} className="flex items-center justify-between rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2.5 text-xs font-bold text-ds-ink hover:bg-ds-muted">
-            {link.label}<ArrowRight className="h-3.5 w-3.5 text-ds-ink-faint" />
-          </Link>
-        ))}
-      </div>
-    </DashboardCard>
   )
 }
 
@@ -308,7 +245,6 @@ function ManagementDashboard() {
   )
 
   const approvalTasks = pendingNewTasks.filter((task) => task.status === "awaiting_approval")
-  const visiblePendingTasks = pendingNewTasks.slice(0, 3)
 
   const salesFilteredByUnit = useMemo(
     () => salesReports.filter((report) => selectedSalesKioskId === "all" || report.kioskId === selectedSalesKioskId),
@@ -460,7 +396,6 @@ function ManagementDashboard() {
   }, [previousReports, sameElapsedCurrentReports, sameElapsedPreviousReports, visibleSalesReports])
 
   const bestSellers = allBestSellers.slice(0, 5)
-  const maxBestSellerQuantity = Math.max(...bestSellers.map((item) => item.quantity), 1)
   const maxAllBestSellerQuantity = Math.max(...allBestSellers.map((item) => item.quantity), 1)
 
   const currentSchedules = useMemo(
@@ -553,6 +488,198 @@ function ManagementDashboard() {
     [financialSummary]
   )
 
+  const daysInMonth = monthEnd.getDate()
+  const monthProgress = today.getDate() / daysInMonth
+  const monthLabel = format(today, "MMMM 'de' yyyy", { locale: ptBR })
+  const dayDiff = (date: Date) => Math.round((startOfDay(date).getTime() - today.getTime()) / 86_400_000)
+
+  const toTaskItem = (task: (typeof pendingNewTasks)[number]): TaskItem => {
+    const dueDate = task.dueDate ? startOfDay(new Date(task.dueDate)) : null
+    return {
+      id: task.id,
+      title: task.title,
+      statusLabel: getTaskStatusLabel(task.status),
+      dueLabel: dueDate ? format(dueDate, "dd/MM") : "sem prazo",
+      overdue: !!dueDate && isBefore(dueDate, today),
+    }
+  }
+  const dueTime = (task: (typeof pendingNewTasks)[number]) => (task.dueDate ? new Date(task.dueDate).getTime() : Number.POSITIVE_INFINITY)
+  const taskItems = [...pendingNewTasks].sort((a, b) => dueTime(a) - dueTime(b)).map(toTaskItem)
+  const approvalTaskItems = approvalTasks.map(toTaskItem)
+  const overdueTaskItems = overdueTasks.map(toTaskItem)
+
+  const restockItems: RestockItem[] = criticalRestockItems.map(({ base, current, minimum, minimumLabel, leadTime, ruptureDate, orderLimitDate }) => ({
+    id: base.id,
+    name: base.name,
+    current,
+    minimumLabel: minimum === null ? minimumLabel : numberFormatter.format(minimum),
+    leadTime,
+    daysUntilRupture: ruptureDate ? Math.max(0, dayDiff(ruptureDate)) : null,
+    ruptureLabel: ruptureDate ? format(ruptureDate, "dd/MM") : "sem consumo médio",
+    orderLimitLabel: orderLimitDate ? format(orderLimitDate, "dd/MM") : "sem data",
+    coverage: minimum && minimum > 0 ? Math.min(1, current / minimum) : null,
+  }))
+  const restockUnavailable = !cdKiosk
+    ? "Centro de distribuição não identificado nos quiosques."
+    : policyEnabled === null && policyError
+      ? "Política de reposição indisponível. Mínimos não verificados."
+      : null
+
+  const salesTotalQuantity = allBestSellers.reduce((sum, item) => sum + item.quantity, 0)
+
+  const scheduleDays: ScheduleDay[] = weekDates.map((date) => {
+    const dateKey = format(date, "yyyy-MM-dd")
+    return {
+      key: dateKey,
+      weekday: format(date, "EEE", { locale: ptBR }),
+      dateLabel: format(date, "dd/MM"),
+      isToday: dateKey === format(today, "yyyy-MM-dd"),
+      shifts: weekShifts
+        .filter((shift) => shift.date === dateKey && shift.type !== "day_off")
+        .map((shift) => {
+          const name = getShiftUserName(selectedWeeklySchedule, shift, users)
+          return { id: shift.id, name, time: getShiftLabel(shift), initials: getInitials(name) }
+        }),
+    }
+  })
+  const scheduleEmptyMessage =
+    schedulesLoading && currentSchedules.length === 0
+      ? "Carregando escalas..."
+      : currentSchedules.length === 0
+        ? `Nenhuma escala encontrada para ${format(today, "MMMM/yyyy", { locale: ptBR })}.`
+        : weeklyScheduleLoading
+          ? "Carregando turnos da semana..."
+          : weekShifts.length === 0
+            ? "Nenhum turno cadastrado para esta semana."
+            : null
+  const scheduleUnitLabel = selectedWeeklySchedule
+    ? units.find((unit) => unit.id === selectedWeeklySchedule.unitId)?.name ?? selectedWeeklySchedule.name ?? ""
+    : ""
+
+  const vacationItems: VacationItem[] = upcomingVacations.map(({ vacation, start }) => {
+    const name = userNameById.get(vacation.userId) ?? vacation.userId
+    const end = vacation.endDate ? new Date(`${vacation.endDate}T12:00:00`) : null
+    const endDay = end ? (isSameOrAfter(end, monthEnd) ? daysInMonth : end.getDate()) : start.getDate()
+    return {
+      id: vacation.id,
+      name,
+      initials: getInitials(name),
+      rangeLabel: `${format(start, "dd/MM")} a ${end ? format(end, "dd/MM") : "sem fim"}`,
+      status: vacation.status,
+      statusLabel: getVacationStatusLabel(vacation.status),
+      startDay: start.getDate(),
+      endDay: Math.max(endDay, start.getDate()),
+    }
+  })
+
+  const paymentRows: PaymentRow[] = visiblePaymentDetails.map((expense) => {
+    const due = toDate(expense.dueDate)
+    const diff = due ? dayDiff(due) : 0
+    const overdue = !!due && diff < 0
+    return {
+      id: expense.id,
+      description: expense.description || expense.supplier || "Pagamento sem descrição",
+      dueDay: due ? format(due, "dd") : "--",
+      dueLabel: due ? format(due, "MMM", { locale: ptBR }) : "",
+      value: formatCurrency(Number(expense.totalValue || 0)),
+      overdue,
+      daysLabel: !due ? "sem vencimento" : overdue ? `Venceu há ${Math.abs(diff)} dia(s)` : diff === 0 ? "Vence hoje" : `Vence em ${diff} dia(s)`,
+    }
+  })
+
+  const pendingVacationCount = upcomingVacations.filter(({ vacation }) => vacation.status === "PENDING").length
+  const hubLink = (label: string, description: string, href: string, icon: HubLink["icon"], tone: HubLink["tone"], badge?: number | null): HubLink => ({ label, description, href, icon, tone, badge })
+  const financeHub = {
+    links: [
+      hubLink("Despesas", "Lançar e acompanhar vencimentos", "/dashboard/financial/expenses", widgetIcons.expenses, "danger", financialSummary.overdue.length + financialSummary.upcoming.length),
+      hubLink("Fluxo de caixa", "Entradas, saídas e recebíveis", "/dashboard/financial/cash-flow", widgetIcons.cash, "ok"),
+      hubLink("Conciliação", "Vendas, recebimentos e extratos", "/dashboard/financial/sales-reconciliation", widgetIcons.reconciliation, "warn"),
+      hubLink("DRE", "Resultado por centro", "/dashboard/financial/dre", widgetIcons.income, "info"),
+      hubLink("Fechamento de caixa", "Conferência diária", "/dashboard/financial/cash-closures", widgetIcons.wallet, "accent"),
+      hubLink("Depósitos", "Contagem e envio ao banco", "/dashboard/financial/cash-deposits", widgetIcons.financeHub, "ok"),
+      hubLink("Extratos", "Importar e auditar contas", "/dashboard/financial/reconciliation/bank-statements", widgetIcons.statements, "accent"),
+      hubLink("Faturas de cartão", "Cartões corporativos", "/dashboard/financial/reconciliation/card-statements", widgetIcons.payments, "info"),
+    ],
+    kpis: [
+      { label: "Vencidos", value: formatCurrency(financialSummary.overdueTotal), note: `${financialSummary.overdue.length} pagamento(s)`, tone: financialSummary.overdue.length > 0 ? "danger" : "muted", icon: widgetIcons.alerts },
+      { label: "A vencer no mês", value: formatCurrency(financialSummary.upcomingTotal), note: `${financialSummary.upcoming.length} pagamento(s)`, tone: "warn", icon: widgetIcons.workday },
+      { label: "Em aberto", value: formatCurrency(financialSummary.overdueTotal + financialSummary.upcomingTotal), icon: widgetIcons.wallet },
+    ] satisfies HubKpi[],
+    attention: [
+      ...(financialSummary.overdue.length > 0 ? [{ title: "Pagamentos vencidos", text: `${financialSummary.overdue.length} · ${formatCurrency(financialSummary.overdueTotal)}`, href: "/dashboard/financial/expenses", tone: "danger", icon: widgetIcons.alerts } satisfies HubAttention] : []),
+      ...(financialSummary.upcoming.length > 0 ? [{ title: "Vencem neste mês", text: `${financialSummary.upcoming.length} · ${formatCurrency(financialSummary.upcomingTotal)}`, href: "/dashboard/financial/expenses", tone: "warn", icon: widgetIcons.workday } satisfies HubAttention] : []),
+    ],
+    status: expensesLoading ? null : financialSummary.overdue.length > 0 ? { tone: "danger" as const, label: `${financialSummary.overdue.length} vencido(s)` } : { tone: "ok" as const, label: "Sem vencidos" },
+  }
+  const canSeeRestock = permissions.dashboard.operational && permissions.stock.analysis.restock
+  const stockHub = {
+    links: [
+      hubLink("Estoque", "Saldos, lotes e mínimos", "/dashboard/stock/inventory-control", widgetIcons.inventory, "warn", canSeeRestock ? restockItems.length : null),
+      hubLink("Compras", "Pedidos e recebimentos", "/dashboard/purchasing", widgetIcons.purchasing, "info"),
+      hubLink("Contagem", "Sessões e divergências", "/dashboard/stock/count", widgetIcons.counting, "ok"),
+      hubLink("Movimentações", "Entradas, saídas e transferências", "/dashboard/stock/analysis/movement-analysis", widgetIcons.movements, "accent"),
+      hubLink("Análises", "Reposição, consumo e vendas", "/dashboard/stock/analysis", widgetIcons.analysis, "info"),
+      hubLink("Avarias", "Devoluções e perdas", "/dashboard/stock/returns", widgetIcons.returns, "danger"),
+      hubLink("Uniformes", "Controle de uniformes", "/dashboard/stock/uniforms", widgetIcons.collaborators, "neutral"),
+      hubLink("Reposição", "Itens abaixo do mínimo", "/dashboard/stock/analysis/restock", widgetIcons.restock, "warn"),
+    ],
+    kpis: [
+      { label: "Itens críticos", value: canSeeRestock ? String(restockItems.length) : "—", note: "no CD", tone: restockItems.length > 0 ? "warn" : "muted", icon: widgetIcons.restock },
+      { label: "Ruptura hoje", value: canSeeRestock ? String(restockItems.filter((item) => item.daysUntilRupture === 0).length) : "—", tone: "danger", icon: widgetIcons.alerts },
+    ] satisfies HubKpi[],
+    attention: canSeeRestock && restockItems.length > 0
+      ? [{ title: `${restockItems.length} item(ns) no mínimo`, text: "Veja a reposição crítica do CD", href: "/dashboard/stock/analysis/restock", tone: "warn", icon: widgetIcons.restock } satisfies HubAttention]
+      : [],
+    status: canSeeRestock ? (restockItems.length > 0 ? { tone: "warn" as const, label: `${restockItems.length} abaixo do mínimo` } : { tone: "ok" as const, label: "Estoque em dia" }) : null,
+  }
+  const peopleHub = {
+    links: [
+      hubLink("Colaboradores", "Cadastro e contratos", "/dashboard/dp/collaborators", widgetIcons.collaborators, "info"),
+      hubLink("Escalas", "Turnos e folgas", "/dashboard/dp/schedules", widgetIcons.schedules, "accent"),
+      hubLink("Férias", "Planejamento e aprovações", "/dashboard/dp/ferias", widgetIcons.vacation, "warn", pendingVacationCount),
+      hubLink("Documentos", "Modelos e assinaturas", "/dashboard/documents", widgetIcons.documents, "danger"),
+      hubLink("Vagas", "Recrutamento e integração", "/dashboard/hr/recruitment", widgetIcons.admissions, "ok"),
+      hubLink("Desligamentos", "Processo e provisões", "/dashboard/dp/terminations", widgetIcons.termination, "neutral"),
+      hubLink("Organograma", "Estrutura da equipe", "/dashboard/hr/org-chart", widgetIcons.places, "info"),
+      hubLink("Painel DP", "Visão geral do departamento", "/dashboard/dp", widgetIcons.peopleHub, "accent"),
+    ],
+    kpis: [
+      { label: "Ausências no mês", value: String(upcomingVacations.length), icon: widgetIcons.absences, tone: "info" },
+      { label: "Férias pendentes", value: String(pendingVacationCount), tone: pendingVacationCount > 0 ? "warn" : "muted", icon: widgetIcons.workday },
+      { label: "Escalas do mês", value: String(currentSchedules.length), icon: widgetIcons.schedules },
+    ] satisfies HubKpi[],
+    attention: pendingVacationCount > 0
+      ? [{ title: "Férias aguardando aprovação", text: `${pendingVacationCount} solicitação(ões)`, href: "/dashboard/dp/ferias", tone: "warn", icon: widgetIcons.vacation } satisfies HubAttention]
+      : [],
+    status: pendingVacationCount > 0 ? { tone: "warn" as const, label: `${pendingVacationCount} aprovação(ões)` } : null,
+  }
+  const operationsHub = {
+    links: [
+      hubLink("Tarefas", "Demandas e prazos", "/dashboard/tasks", widgetIcons.tasks, "info", pendingTaskCount),
+      hubLink("Formulários", "Modelos e respostas", "/dashboard/forms", widgetIcons.forms, "accent"),
+      hubLink("Processos", "Fluxos com etapas", "/dashboard/processes", widgetIcons.processes, "danger"),
+      hubLink("Meus formulários", "O que falta responder", "/dashboard/forms/mine", widgetIcons.checklists, "ok"),
+      hubLink("Painel de operações", "Rotina das unidades", "/dashboard/operations", widgetIcons.operationsHub, "warn"),
+    ],
+    kpis: [
+      { label: "Pendentes", value: String(pendingTaskCount), icon: widgetIcons.tasks, tone: "info" },
+      { label: "Vencidas", value: String(overdueTasks.length), tone: overdueTasks.length > 0 ? "danger" : "muted", icon: widgetIcons.alerts },
+      { label: "Aprovações", value: String(approvalTasks.length), tone: approvalTasks.length > 0 ? "warn" : "muted", icon: widgetIcons.processes },
+    ] satisfies HubKpi[],
+    attention: [
+      ...(overdueTasks.length > 0 ? [{ title: "Tarefas vencidas", text: `${overdueTasks.length} com prazo anterior a hoje`, href: "/dashboard/tasks", tone: "danger", icon: widgetIcons.alerts } satisfies HubAttention] : []),
+      ...(approvalTasks.length > 0 ? [{ title: "Aprovações pendentes", text: `${approvalTasks.length} aguardando você`, href: "/dashboard/tasks", tone: "warn", icon: widgetIcons.processes } satisfies HubAttention] : []),
+    ],
+    status: overdueTasks.length > 0 ? { tone: "danger" as const, label: `${overdueTasks.length} vencida(s)` } : pendingTaskCount > 0 ? { tone: "info" as const, label: `${pendingTaskCount} pendente(s)` } : null,
+  }
+  const aiHub = {
+    links: [
+      hubLink("Créditos GPT", "Saldo e consumo da OpenAI", "/dashboard/settings", widgetIcons.gpt, "accent"),
+      hubLink("Google Cloud", "Custo e franquia", "/dashboard/settings", widgetIcons.cloud, "info"),
+      hubLink("Alertas", "Limites e avisos de consumo", "/dashboard/settings", widgetIcons.alerts, "warn"),
+    ],
+  }
+
   if (!canViewManagementDashboard) {
     if (canViewCollaboratorDashboard) {
       return null
@@ -593,389 +720,111 @@ function ManagementDashboard() {
       <ManagementDashboardBuilder firebaseUser={firebaseUser} userId={firebaseUser?.uid ?? user?.id ?? ""} userName={user?.username ?? "Usuário"} permissions={permissions}>
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-6 xl:grid-cols-12">
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
-          <DashboardCard widgetId="goals-revenue" title="Metas e faturamento" description="Meta geral, projeção e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} hideDetailsLink>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={`${visibleSalesReports.length} relatório(s) em ${formatSalesPeriod(visibleSalesReports)}`} />
-              <Metric
-                label="Meta geral atual"
-                value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))}
-                detail={goalsLoading ? "Carregando metas..." : `${currentGoals.length} meta(s) ativa(s)`}
-              />
-              <Metric
-                label="Projetado"
-                value={compactCurrency(projectedRevenue.value)}
-                detail={projectedRevenue.detail}
-              />
-            </div>
-            {goalRows.length === 0 ? (
-              <EmptyState>Nenhuma meta ativa para hoje.</EmptyState>
-            ) : (
-              <div className="space-y-3">
-                {goalRows.slice(0, 5).map((goal) => (
-                  <div key={goal.kioskId} className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <span className="truncate font-bold text-ds-ink">{goal.name}</span>
-                      <span className="whitespace-nowrap font-semibold text-ds-ink-muted">
-                        {formatCurrency(goal.current)} / {formatCurrency(goal.target)}
-                      </span>
-                      <span className={cn("w-10 text-right text-xs font-black", goal.progress >= 0.8 ? "text-ds-ink" : "text-ds-warn")}>
-                        {Math.round(goal.progress * 100)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-ds-muted">
-                      <div
-                        className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-ds-accent" : "bg-ds-warn")}
-                        style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setGoalsModalOpen(true)}>
-              Ver detalhes <ArrowRight className="h-4 w-4" />
-            </button>
-          </DashboardCard>
+          <GoalsWidget
+            revenue={currentRevenue}
+            targetTotal={currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0)}
+            projected={projectedRevenue}
+            rows={goalRows}
+            goalCount={currentGoals.length}
+            loading={goalsLoading}
+            monthProgress={monthProgress}
+            monthLabel={monthLabel}
+            formatMoney={formatCurrency}
+            formatCompact={compactCurrency}
+            onDetails={() => setGoalsModalOpen(true)}
+          />
         )}
 
-        <DashboardCard
-          widgetId="pending-tasks"
-          title="Tarefas pendentes"
-          description="Demandas em aberto, aprovações e recebimentos."
-          href="/dashboard/tasks"
-          icon={ListTodo}
-          className="order-1"
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric
-              label="Pendentes"
-              value={tasksLoading ? "..." : numberFormatter.format(pendingTaskCount)}
-              detail={`${taskNotifications.length} tarefa(s), ${pendingReceipts.length} recebimento(s)`}
-            />
-            <Metric
-              label="Vencidas"
-              value={tasksLoading ? "..." : numberFormatter.format(overdueTasks.length)}
-              detail="Com prazo anterior a hoje"
-            />
-            <Metric
-              label="Aprovações"
-              value={tasksLoading ? "..." : numberFormatter.format(approvalTasks.length)}
-              detail={`${dueTodayTasks.length} vencendo hoje`}
-            />
-          </div>
-          {tasksLoading ? (
-            <EmptyState>Carregando tarefas...</EmptyState>
-          ) : pendingTaskCount === 0 ? (
-            <EmptyState>Nenhuma tarefa pendente no momento.</EmptyState>
-          ) : visiblePendingTasks.length === 0 ? (
-            <EmptyState>{pendingTaskCount} demanda(s) pendente(s) em fluxos operacionais.</EmptyState>
-          ) : (
-            <div className="space-y-3">
-              {visiblePendingTasks.map((task) => {
-                const dueDate = task.dueDate ? startOfDay(new Date(task.dueDate)) : null
-                const isOverdue = !!dueDate && isBefore(dueDate, today)
-                return (
-                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-ds-divider bg-ds-surface p-3 text-xs shadow-sm">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-ds-ink">{task.title}</p>
-                      <p className="mt-0.5 text-xs font-semibold text-ds-ink-faint">{getTaskStatusLabel(task.status)}</p>
-                    </div>
-                    <span
-                      className={cn(
-                        "whitespace-nowrap rounded-full px-3 py-1 text-xs font-black",
-                        isOverdue ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-accent-soft text-ds-accent-ink"
-                      )}
-                    >
-                      {dueDate ? format(dueDate, "dd/MM") : "sem prazo"}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </DashboardCard>
+        <TasksWidget
+          loading={tasksLoading}
+          pendingCount={pendingTaskCount}
+          overdueCount={overdueTasks.length}
+          approvalCount={approvalTasks.length}
+          dueTodayCount={dueTodayTasks.length}
+          taskCount={taskNotifications.length}
+          receiptCount={pendingReceipts.length}
+          pending={taskItems.slice(0, 4)}
+          approvals={approvalTaskItems.slice(0, 3)}
+          overdue={overdueTaskItems.slice(0, 3)}
+        />
 
         {permissions.dashboard.operational && (
-          <DashboardCard
-            widgetId="critical-restock"
-            title="Reposição crítica do CD"
-            description="Itens no mínimo, priorizando lead time."
-            href="/dashboard/stock/analysis/restock"
-            icon={AlertTriangle}
-            className="order-3"
-            hideDetailsLink
-          >
-            {!cdKiosk ? (
-              <EmptyState>Centro de distribuição não identificado nos quiosques.</EmptyState>
-            ) : policyEnabled === null && policyError ? (
-              <EmptyState>Política de reposição indisponível. Mínimos não verificados.</EmptyState>
-            ) : criticalRestockItems.length === 0 ? (
-              <EmptyState>Nenhum item crítico encontrado para {cdKiosk.name}.</EmptyState>
-            ) : (
-              <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
-                {criticalRestockItems.map(({ base, current, minimum, minimumLabel, leadTime, ruptureDate, orderLimitDate }) => (
-                  <div key={base.id} className="flex items-start justify-between gap-3 rounded-lg border border-ds-danger bg-ds-danger-bg p-3 text-xs">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-ds-ink">{base.name}</p>
-                      <p className="mt-1 text-xs font-semibold text-ds-ink-faint">Atual {numberFormatter.format(current)} · mín. {minimum === null ? minimumLabel : numberFormatter.format(minimum)}</p>
-                      <p className="mt-1 text-xs font-semibold text-ds-ink-faint">
-                        Ruptura: <span className={cn(!ruptureDate && "text-ds-ink-faint", ruptureDate && isSameOrBefore(ruptureDate, today) && "text-ds-accent-ink")}>
-                          {ruptureDate ? format(ruptureDate, "dd/MM/yyyy") : "sem consumo médio"}
-                        </span>{" "}
-                        · pedido até{" "}
-                        {orderLimitDate ? format(orderLimitDate, "dd/MM/yyyy") : "sem data"}
-                      </p>
-                    </div>
-                    <span className="whitespace-nowrap rounded-full bg-ds-accent-soft px-2.5 py-1 text-xs font-black text-ds-accent-ink">
-                      {leadTime ? `${leadTime}d` : "sem dia(s)"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </DashboardCard>
+          <RestockWidget unitName={cdKiosk?.name ?? null} unavailableReason={restockUnavailable} items={restockItems} />
         )}
 
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
-          <DashboardCard
-            widgetId="best-sellers"
-            title="Mercadorias mais vendidas"
-            description="Mês corrente, mês anterior e mesmo período."
-            href="/dashboard/stock/analysis/sales"
-            icon={TrendingUp}
-            className="order-4"
-            hideDetailsLink
-          >
-            <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
-              <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
-                <SelectValue placeholder="Filtrar unidade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as unidades</SelectItem>
-                {kiosks
-                  .filter((kiosk) => !/centro|distribui|matriz/i.test(kiosk.name))
-                  .map((kiosk) => (
-                    <SelectItem key={kiosk.id} value={kiosk.id}>
-                      {kiosk.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {bestSellers.length === 0 ? (
-              <EmptyState>Nenhuma venda consolidada para exibir.</EmptyState>
-            ) : (
-              <>
-                <div className="space-y-3">
-                  {bestSellers.map((item, index) => {
-                    const delta = item.quantity - item.previous
-                    const sameElapsedDelta = item.sameElapsedCurrent - item.sameElapsedPrevious
-                    return (
-                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg border border-ds-divider bg-ds-surface p-3 shadow-sm">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <span
-                            className={cn(
-                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black",
-                              index === 0 && "bg-ds-warn-bg text-ds-warn",
-                              index === 1 && "bg-ds-neutral-bg text-ds-neutral",
-                              index === 2 && "bg-ds-accent-soft text-ds-accent-ink",
-                              index > 2 && "bg-ds-muted text-ds-ink-faint"
-                            )}
-                          >
-                            {index + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-black text-ds-ink">{item.name}</p>
-                            <div className="mt-1.5 h-1.5 max-w-[180px] overflow-hidden rounded-full bg-ds-muted">
-                              <div
-                                className="h-full rounded-full bg-ds-accent"
-                                style={{ width: `${Math.max(12, Math.round((item.quantity / maxBestSellerQuantity) * 100))}%` }}
-                              />
-                            </div>
-                            <p className="mt-1 text-xs font-semibold text-ds-ink-faint">
-                              mês ant. {numberFormatter.format(item.previous)} · período {numberFormatter.format(item.sameElapsedCurrent)} vs {numberFormatter.format(item.sameElapsedPrevious)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-base font-black text-ds-ink">{numberFormatter.format(item.quantity)}</p>
-                          <p className={cn("text-xs font-bold", delta >= 0 ? "text-ds-ok" : "text-ds-danger")}>
-                            {delta >= 0 ? "+" : ""}{numberFormatter.format(delta)}
-                          </p>
-                          <p className={cn("text-xs font-bold", sameElapsedDelta >= 0 ? "text-ds-ok" : "text-ds-danger")}>
-                            per. {sameElapsedDelta >= 0 ? "+" : ""}{numberFormatter.format(sameElapsedDelta)}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
-            {bestSellers.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setSalesModalOpen(true)}>
-                Ver lista completa <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : null}
-          </DashboardCard>
-        )}
-
-        {permissions.dp?.view && (
-          <DashboardCard widgetId="weekly-schedule" title="Escala da semana" description="Selecione a unidade para ver os turnos desta semana." href="/dashboard/dp/schedules" icon={Briefcase} hideDetailsLink>
-            {currentSchedules.length > 0 ? (
-              <Select value={selectedWeeklySchedule ? selectedWeeklySchedule.unitId ?? selectedWeeklySchedule.id : ""} onValueChange={setSelectedScheduleUnitId}>
+          <SalesWidget
+            items={allBestSellers.slice(0, 8)}
+            totalQuantity={salesTotalQuantity}
+            periodLabel={formatSalesPeriod(visibleSalesReports)}
+            onDetails={() => setSalesModalOpen(true)}
+            unitFilter={
+              <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
                 <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
-                  <SelectValue placeholder="Selecionar unidade" />
+                  <SelectValue placeholder="Filtrar unidade" />
                 </SelectTrigger>
                 <SelectContent>
-                  {currentSchedules.map((schedule) => (
-                    <SelectItem key={schedule.id} value={schedule.unitId ?? schedule.id}>
-                      {units.find((unit) => unit.id === schedule.unitId)?.name ?? schedule.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">Todas as unidades</SelectItem>
+                  {kiosks
+                    .filter((kiosk) => !/centro|distribui|matriz/i.test(kiosk.name))
+                    .map((kiosk) => (
+                      <SelectItem key={kiosk.id} value={kiosk.id}>
+                        {kiosk.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
-            ) : null}
-            {schedulesLoading && currentSchedules.length === 0 ? (
-              <EmptyState>Carregando escalas...</EmptyState>
-            ) : currentSchedules.length === 0 ? (
-              <EmptyState>Nenhuma escala encontrada para {format(today, "MMMM/yyyy", { locale: ptBR })}.</EmptyState>
-            ) : weeklyScheduleLoading ? (
-              <EmptyState>Carregando turnos da semana...</EmptyState>
-            ) : weekShifts.length === 0 ? (
-              <EmptyState>Nenhum turno cadastrado para esta semana.</EmptyState>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-                {weekDates.map((date) => {
-                  const dateKey = format(date, "yyyy-MM-dd")
-                  const dayShifts = weekShifts.filter((shift) => shift.date === dateKey).slice(0, 3)
-                  const isToday = dateKey === format(today, "yyyy-MM-dd")
-                  return (
-                    <div
-                      key={dateKey}
-                      className={cn(
-                        "min-h-[96px] rounded-lg border bg-ds-surface p-2.5 text-center shadow-sm",
-                        isToday ? "border-ds-accent bg-ds-accent-soft/40" : "border-ds-divider"
-                      )}
-                    >
-                      <p className={cn("text-xs font-black uppercase", isToday ? "text-ds-accent-ink" : "text-ds-ink-faint")}>
-                        {format(date, "EEE", { locale: ptBR })}
-                      </p>
-                      <p className={cn("text-xs font-bold", isToday ? "text-ds-accent-ink" : "text-ds-ink-faint")}>{format(date, "dd/MM")}</p>
-                      {dayShifts.length === 0 ? (
-                        <p className="mt-3 rounded-md bg-ds-muted px-2 py-2 text-xs font-bold text-ds-ink-faint">FOLGA</p>
-                      ) : (
-                        <div className="mt-2 space-y-1.5">
-                          {dayShifts.map((shift) => (
-                            <div key={shift.id} className="rounded-md bg-ds-muted px-2 py-1.5">
-                              <p className="truncate text-xs font-black text-ds-ink-2">{getShiftUserName(selectedWeeklySchedule, shift, users)}</p>
-                              <p className="text-[10px] font-semibold text-ds-ink-faint">{getShiftLabel(shift)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            {currentSchedules.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setScheduleModalOpen(true)}>
-                Ver escala do mês <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : null}
-          </DashboardCard>
+            }
+          />
         )}
 
         {permissions.dp?.view && (
-          <DashboardCard widgetId="vacation-calendar" title="Calendário de ausências" description="Férias previstas até o fim do mês." href="/dashboard/dp/ferias" icon={CalendarDays} hideDetailsLink>
-            {vacationsLoading && upcomingVacations.length === 0 ? (
-              <EmptyState>Carregando férias...</EmptyState>
-            ) : upcomingVacations.length === 0 ? (
-              <EmptyState>Nenhuma ausência de férias prevista no mês corrente.</EmptyState>
-            ) : (
-              <div className="space-y-3">
-                {upcomingVacations.map(({ vacation, start }, index) => {
-                  const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
-                  return (
-                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-lg border border-ds-divider bg-ds-surface p-3 text-xs shadow-sm">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div
-                          className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black text-white",
-                            index % 3 === 0 && "bg-ds-info",
-                            index % 3 === 1 && "bg-ds-neutral",
-                            index % 3 === 2 && "bg-ds-accent"
-                          )}
-                        >
-                          {getInitials(employeeName)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-ds-ink">{employeeName}</p>
-                          <p className="text-xs font-semibold text-ds-ink-faint">
-                            {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          "rounded-lg border px-2.5 py-1 text-xs font-bold",
-                          vacation.status === "APPROVED" && "border-ds-ok bg-ds-ok-bg text-ds-ok",
-                          vacation.status === "PLANNED" && "border-ds-info bg-ds-info-bg text-ds-info",
-                          vacation.status === "PENDING" && "border-ds-warn bg-ds-warn-bg text-ds-warn"
-                        )}
-                      >
-                        {getVacationStatusLabel(vacation.status)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setVacationsModalOpen(true)}>
-              Ver detalhes <ArrowRight className="h-4 w-4" />
-            </button>
-          </DashboardCard>
+          <ScheduleWidget
+            days={scheduleDays}
+            emptyMessage={scheduleEmptyMessage}
+            unitLabel={scheduleUnitLabel}
+            onMonth={() => setScheduleModalOpen(true)}
+            unitFilter={
+              currentSchedules.length > 0 ? (
+                <Select value={selectedWeeklySchedule ? selectedWeeklySchedule.unitId ?? selectedWeeklySchedule.id : ""} onValueChange={setSelectedScheduleUnitId}>
+                  <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
+                    <SelectValue placeholder="Selecionar unidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentSchedules.map((schedule) => (
+                      <SelectItem key={schedule.id} value={schedule.unitId ?? schedule.id}>
+                        {units.find((unit) => unit.id === schedule.unitId)?.name ?? schedule.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null
+            }
+          />
+        )}
+
+        {permissions.dp?.view && (
+          <VacationsWidget loading={vacationsLoading} items={vacationItems} monthLabel={monthLabel} monthDays={daysInMonth} todayDay={today.getDate()} onDetails={() => setVacationsModalOpen(true)} />
         )}
 
         {permissions.financial?.view && (
-          <DashboardCard
-            widgetId="pending-payments"
-            title="Pagamentos vencidos e a vencer"
-            description="Todos os vencidos e próximos do mês corrente."
-            href="/dashboard/financial/expenses"
-            icon={CircleDollarSign}
-            className="order-6"
-            hideDetailsLink
-          >
-            {expensesLoading ? (
-              <EmptyState>Carregando pagamentos...</EmptyState>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-ds-danger bg-ds-danger-bg p-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-ds-accent-ink">Vencidos</p>
-                  <p className="mt-1 text-xl font-black text-ds-danger">{formatCurrency(financialSummary.overdueTotal)}</p>
-                  <p className="mt-1 text-xs font-semibold text-ds-accent-ink">{financialSummary.overdue.length} pagamento(s)</p>
-                </div>
-                <div className="rounded-lg border border-ds-divider bg-ds-surface p-3 shadow-sm">
-                  <p className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">A vencer no mês</p>
-                  <p className="mt-1 text-xl font-black text-ds-ink">{formatCurrency(financialSummary.upcomingTotal)}</p>
-                  <p className="mt-1 text-xs font-semibold text-ds-ink-faint">{financialSummary.upcoming.length} pagamento(s)</p>
-                </div>
-              </div>
-            )}
-            {!expensesLoading ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-ds-accent-ink" onClick={() => setPaymentsModalOpen(true)}>
-                Detalhar pagamentos <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : null}
-          </DashboardCard>
+          <PaymentsWidget
+            loading={expensesLoading}
+            overdueTotal={financialSummary.overdueTotal}
+            upcomingTotal={financialSummary.upcomingTotal}
+            overdueCount={financialSummary.overdue.length}
+            upcomingCount={financialSummary.upcoming.length}
+            rows={paymentRows}
+            formatMoney={formatCurrency}
+            onDetails={() => setPaymentsModalOpen(true)}
+          />
         )}
 
-        {permissions.financial?.view && <ModuleShortcutCard widgetId="financial-shortcuts" title="Central financeira" description="Acesso rápido aos principais fluxos financeiros." href="/dashboard/financial" icon={Wallet} links={[{ label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow" }, { label: "Despesas", href: "/dashboard/financial/expenses" }, { label: "Conciliação", href: "/dashboard/financial/sales-reconciliation" }]} />}
-        {permissions.stock.view && <ModuleShortcutCard widgetId="stock-shortcuts" title="Central de estoque" description="Controle, compras e análises do estoque." href="/dashboard/stock" icon={Boxes} links={[{ label: "Controle de estoque", href: "/dashboard/stock/inventory-control" }, { label: "Compras", href: "/dashboard/stock/purchasing" }, { label: "Análises", href: "/dashboard/stock/analysis" }]} />}
-        {permissions.dp.view && <ModuleShortcutCard widgetId="people-shortcuts" title="Central de pessoas" description="Equipe, escalas, férias e documentos." href="/dashboard/dp" icon={UsersRound} links={[{ label: "Colaboradores", href: "/dashboard/dp/collaborators" }, { label: "Escalas", href: "/dashboard/dp/schedules" }, { label: "Férias", href: "/dashboard/dp/ferias" }]} />}
-        {permissions.dashboard.operational && <ModuleShortcutCard widgetId="operations-shortcuts" title="Central de operações" description="Tarefas, formulários e rotinas operacionais." href="/dashboard/operations" icon={Workflow} links={[{ label: "Tarefas", href: "/dashboard/tasks" }, { label: "Formulários", href: "/dashboard/forms" }, { label: "Operações", href: "/dashboard/operations" }]} />}
-        {permissions.settings.viewAiCosts && <ModuleShortcutCard widgetId="ai-costs-shortcuts" title="IA e infraestrutura" description="Custos, limites e alertas dos serviços." href="/dashboard/settings" icon={Cpu} links={[{ label: "Créditos GPT", href: "/dashboard/settings" }, { label: "Custo Google Cloud", href: "/dashboard/settings" }, { label: "Alertas", href: "/dashboard/settings" }]} />}
+        {permissions.financial?.view && <HubWidget widgetId="financial-shortcuts" title="Central financeira" compactTitle="Financeiro" subtitle="Caixa, despesas e DRE" href="/dashboard/financial" icon={widgetIcons.financeHub} tone="ok" {...financeHub} />}
+        {permissions.stock.view && <HubWidget widgetId="stock-shortcuts" title="Central de estoque" compactTitle="Estoque" subtitle="Controle, compras e análises" href="/dashboard/stock" icon={widgetIcons.stockHub} tone="warn" {...stockHub} />}
+        {permissions.dp.view && <HubWidget widgetId="people-shortcuts" title="Central de pessoas" compactTitle="Pessoas" subtitle="Equipe, escalas, férias e documentos" href="/dashboard/dp" icon={widgetIcons.peopleHub} tone="info" {...peopleHub} />}
+        {permissions.dashboard.operational && <HubWidget widgetId="operations-shortcuts" title="Central de operações" compactTitle="Operações" subtitle="Tarefas, formulários e rotinas" href="/dashboard/operations" icon={widgetIcons.operationsHub} tone="accent" {...operationsHub} />}
+        {permissions.settings.viewAiCosts && <HubWidget widgetId="ai-costs-shortcuts" title="IA e infraestrutura" compactTitle="IA e infra" subtitle="Custos, limites e alertas dos serviços" href="/dashboard/settings" icon={widgetIcons.aiHub} tone="neutral" {...aiHub} />}
       </div>
       </ManagementDashboardBuilder>
 

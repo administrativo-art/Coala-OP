@@ -9,6 +9,7 @@
 - Ao criar, mover, renomear ou remover página do dashboard, regenere `docs/engineering/route-inventory.md` com `python3 scripts/generate-route-inventory.py` e `docs/engineering/flow-entrypoints.md` com `python3 scripts/generate-flow-entrypoints.py`; atualize `docs/engineering/flow-matrix.csv`, índice e entrada principal afetados. Para páginas fora do dashboard ou rotas de API, regenere `docs/engineering/surface-inventory.md` com `python3 scripts/generate-surface-inventory.py`; atualize também `docs/engineering/external-page-map.md` para páginas externas e revise manualmente os guias e contratos afetados. Antes de concluir, execute os geradores com `--check`, `python3 scripts/check-flow-matrix.py` e `python3 scripts/check-engineering-docs.py`. Os verificadores não comprovam comportamento.
 - Ao alterar um fluxo, contrato de dados, permissão ou integração, atualize no mesmo trabalho o guia de fluxo e as referências de impacto afetados. Registre qualquer trecho ainda não confirmado como lacuna; não mantenha descrição antiga como se estivesse verificada. Consulte `docs/engineering/system-map-execution.md` para o critério de cobertura.
 - Ao criar/remover/mover API, página externa ou export de Cloud Functions, revise `docs/engineering/surface-flow-matrix.csv` antes de regenerar o inventário. Para jobs, gatilhos e webhooks, atualize `runtime-surfaces.md` e os consumidores afetados; para entradas compartilhadas, `access-and-privacy.md`. `generate-surface-inventory.py --check` também exige classificação dessas superfícies. Não marcar associação estrutural como autorização ou execução verificada.
+- Toda rota nova em `src/app/api/**/route.*` e todo arquivo de rota existente alterado devem exportar cada método HTTP diretamente por `secureRoute`, com contrato e enforcer compatíveis, ou registrar uma exceção temporária delimitada em `config/security-contract-exceptions.json`. O baseline legado é dívida congelada, não aprovação, e não deve ser regenerado para fazer uma mudança passar. Execute `npm run check:security-contracts` e siga `docs/engineering/security-contract.md`.
 
 ## Departamento de Desenvolvimento e Tecnologia
 
@@ -56,9 +57,18 @@
 - Depois de merge, rollout ou encerramento de um worktree temporário, confira `git worktree list` e o espaço livre. Para registros órfãos, use `git worktree prune --dry-run --verbose` e valide os caminhos antes de executar o prune; não faça exclusão automática em massa.
 - Ao publicar uma atualização destas instruções, confirme em quais branches ela foi integrada. Worktrees antigos e sessões já abertas não são atualizados automaticamente: antes de retomar um chamado, confira a versão aplicável, preserve alterações locais e leia as regras atualizadas. Não sobrescreva `AGENTS.md` modificado de outra tarefa nem declare que a publicação, sozinha, atualizou todas as sessões.
 
+## Design de interface
+
+- Ao criar ou alterar UI, leia `docs/design/README.md` e o arquivo do padrão que a tela usa (botões, listas, painel lateral, modais, feedback). O guia vivo está em `/dashboard/design`.
+- Use os tokens `--ds-*` / classes `ds-*` e os componentes de `src/components/patterns/` (`LiftRow`, `SidePanel`, `WizardModal`, `InlineConfirm`, `Segmented`, `FilterChips`, `ControlPanel`), as variantes de `Button` e o `StatusPill`. Não use hex solto em `className` (o lint avisa).
+- Nunca use `alert()` ou `confirm()` (o lint bloqueia): erro em texto junto do campo e confirmação destrutiva inline com `InlineConfirm`.
+- Uma ação principal por área; rótulos no formato verbo + objeto. Percorra o checklist de `.github/pull_request_template.md` antes de concluir.
+- Decisões de design em aberto ficam em `docs/design/decisoes/`; não escolha por conta própria um ponto listado ali como "em aberto".
+
 ## Padrão de construção de módulos
 
 - Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.
+- Contratos de segurança declaram garantias, não algoritmos. Um enforcer customizado pode substituir o padrão e acrescentar controles superiores, desde que satisfaça todas as garantias mínimas declaradas e tenha testes comportamentais do fluxo.
 - Escritas que dependem de leitura prévia, alteram documentos correlacionados, executam transições de estado, recalculam agregados ou precisam manter auditoria atomicamente consistente devem usar transação no mesmo banco.
 - Escritas simples, independentes e idempotentes podem usar `set`, `update` ou batch, conforme a garantia necessária. Não use transação apenas por simetria.
 - Quando auditoria fizer parte da mesma unidade de consistência e estiver no mesmo banco, grave-a na mesma transação.
