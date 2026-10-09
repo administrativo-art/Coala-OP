@@ -564,6 +564,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             navSections.map((section) => {
               const isOpen = openSections.has(section.key);
               const sectionBadgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
+              const sectionActive = section.items.some(isItemOrChildActive);
+              const SectionIcon = section.icon;
               return (
                 <section key={section.key} aria-labelledby={`nav-${section.key}`} className="mb-1">
                   <h2 id={`nav-${section.key}`}>
@@ -571,12 +573,19 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       type="button"
                       onClick={() => toggleSection(section.key)}
                       aria-expanded={isOpen}
-                      className="group/section mt-2 flex w-full items-center justify-between rounded-ds-sm border-l-2 border-ds-accent bg-white/[0.05] px-2.5 py-2 text-[12px] font-extrabold uppercase tracking-[0.14em] text-ds-on-dark transition-colors hover:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                      className={cn(
+                        "group/section relative mt-1 flex w-full items-center gap-2.5 rounded-ds-btn px-2.5 py-2 text-left text-[12.5px] font-bold tracking-[0.02em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                        isOpen || sectionActive
+                          ? "bg-white/[0.06] text-ds-on-dark"
+                          : "text-ds-on-dark-2 hover:bg-white/[0.04] hover:text-ds-on-dark"
+                      )}
                     >
-                      <span>{section.label}</span>
+                      {(isOpen || sectionActive) && <span aria-hidden="true" className="absolute -left-1 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent" />}
+                      <SectionIcon aria-hidden="true" className={cn("h-[18px] w-[18px] shrink-0", sectionActive ? "text-ds-accent-kicker" : "text-ds-on-dark-muted group-hover/section:text-ds-on-dark-2")} />
+                      <span className="flex-1">{section.label}</span>
                       <span className="flex items-center gap-2">
                         {sectionBadgeCount > 0 && <span className="rounded-full bg-ds-accent px-1.5 py-0.5 font-ds-mono text-[10px] font-bold normal-case tracking-normal text-ds-dark">{sectionBadgeCount}</span>}
-                        <ChevronDown className={cn("h-4 w-4 text-ds-on-dark-2 transition-transform duration-200 motion-reduce:transition-none", !isOpen && "-rotate-90")} aria-hidden="true" />
+                        <ChevronDown className={cn("h-3.5 w-3.5 text-ds-on-dark-muted transition-transform duration-200 motion-reduce:transition-none", !isOpen && "-rotate-90")} aria-hidden="true" />
                       </span>
                     </button>
                   </h2>
