@@ -3,19 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { RefreshCcw, Search, ShieldCheck } from "lucide-react";
 
+import { Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton } from "@/components/cadastros/cadastros-ui";
+import { ControlIndicator, ControlPanel, ControlSearch } from "@/components/patterns/control-panel";
+import { FilterChips } from "@/components/patterns/filter-chips";
+import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import { fetchAuditLogs } from "@/features/audit/client";
 import type { AuditLogEntry } from "@/features/audit/types";
 import { useAuth } from "@/hooks/use-auth";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const MODULE_LABELS: Record<string, string> = {
-  "settings.users": "Usuarios",
+  "settings.users": "Usuários",
   "settings.profiles": "Perfis",
   "dp.collaborators": "Colaboradores",
   "dp.schedules": "Escalas",
@@ -28,23 +28,23 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  user_created: "Usuario criado",
-  user_updated: "Usuario atualizado",
-  user_deleted: "Usuario excluido",
+  user_created: "Usuário criado",
+  user_updated: "Usuário atualizado",
+  user_deleted: "Usuário excluído",
   profile_created: "Perfil criado",
   profile_updated: "Perfil atualizado",
-  profile_deleted: "Perfil excluido",
+  profile_deleted: "Perfil excluído",
   profile_duplicated: "Perfil duplicado",
-  password_reset_email_sent: "Redefinicao de senha",
+  password_reset_email_sent: "Redefinição de senha",
   invite_resent: "Convite reenviado",
   collaborator_profile_viewed: "Perfil visualizado",
-  schedule_export_created: "Exportacao de escala",
+  schedule_export_created: "Exportação de escala",
   candidate_created: "Candidato criado",
   candidate_updated: "Candidato atualizado",
-  candidate_deleted: "Candidato excluido",
+  candidate_deleted: "Candidato excluído",
   opening_created: "Vaga criada",
   opening_updated: "Vaga atualizada",
-  opening_deleted: "Vaga excluida",
+  opening_deleted: "Vaga excluída",
   privacy_request_created: "Pedido LGPD criado",
   privacy_request_updated: "Pedido LGPD atualizado",
   security_incident_created: "Incidente criado",
@@ -54,6 +54,27 @@ const ACTION_LABELS: Record<string, string> = {
   cli_session_failed: "Sessão de CLI encerrada com erro",
   cli_operation_recorded: "Operação registrada pela CLI",
 };
+
+/** Filtros por módulo consultados no servidor. */
+const MODULE_CHIPS = [
+  { value: "settings.users", label: "Usuários" },
+  { value: "settings.profiles", label: "Perfis" },
+  { value: "dp.collaborators", label: "Colaboradores" },
+  { value: "dp.schedules", label: "Escalas" },
+  { value: "recruitment", label: "Recrutamento" },
+  { value: "privacy", label: "Privacidade" },
+  { value: "system.cli", label: "Operações por CLI" },
+  { value: "tasks", label: "Tarefas" },
+];
+
+const ROW_TEMPLATE = "150px minmax(160px,1fr) minmax(210px,1.2fr) minmax(160px,1fr) 120px 16px";
+const LOG_LIMIT = 120;
+
+type FocusFilter = "all" | "users" | "password" | "views";
+
+const isPasswordEvent = (log: AuditLogEntry) => log.action === "password_reset_email_sent" || log.action === "invite_resent";
+const isUserEvent = (log: AuditLogEntry) => log.module === "settings.users";
+const isSensitiveView = (log: AuditLogEntry) => log.action === "collaborator_profile_viewed";
 
 function formatDate(value: string | null) {
   if (!value) return "-";
@@ -73,8 +94,12 @@ export function InternalAuditPanel() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [moduleFilter, setModuleFilter] = useState("all");
+  const [searchText, setSearchText] = useState("");
+  // A busca consulta o servidor: só vale ao confirmar (Enter) e não a cada tecla.
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState<string | null>(null);
+  const [focus, setFocus] = useState<FocusFilter>("all");
+  const [openLogId, setOpenLogId] = useState<string | null>(null);
 
   const loadLogs = useCallback(async () => {
     if (!firebaseUser) return;
@@ -82,9 +107,9 @@ export function InternalAuditPanel() {
     setError(null);
     try {
       const payload = await fetchAuditLogs(firebaseUser, {
-        search,
-        module: moduleFilter === "all" ? undefined : moduleFilter,
-        limit: 120,
+        search: appliedSearch,
+        module: moduleFilter ?? undefined,
+        limit: LOG_LIMIT,
       });
       setLogs(payload.logs);
     } catch (err) {
@@ -92,131 +117,143 @@ export function InternalAuditPanel() {
     } finally {
       setLoading(false);
     }
-  }, [firebaseUser, moduleFilter, search]);
+  }, [firebaseUser, moduleFilter, appliedSearch]);
 
   useEffect(() => {
     void loadLogs();
   }, [loadLogs]);
 
-  const stats = useMemo(() => {
-    const passwordEvents = logs.filter((log) => log.action === "password_reset_email_sent" || log.action === "invite_resent").length;
-    const userEvents = logs.filter((log) => log.module === "settings.users").length;
-    const views = logs.filter((log) => log.action === "collaborator_profile_viewed").length;
-    return [
-      { label: "Eventos listados", value: logs.length },
-      { label: "Usuarios", value: userEvents },
-      { label: "Senha e convites", value: passwordEvents },
-      { label: "Visualizacoes sensiveis", value: views },
-    ];
-  }, [logs]);
+  const visibleLogs = useMemo(() => {
+    if (focus === "users") return logs.filter(isUserEvent);
+    if (focus === "password") return logs.filter(isPasswordEvent);
+    if (focus === "views") return logs.filter(isSensitiveView);
+    return logs;
+  }, [logs, focus]);
+
+  const indicators: Array<{ id: FocusFilter; label: string; value: number; tone: "info" | "warning" | "danger" | "neutral" }> = [
+    { id: "all", label: "Eventos listados", value: logs.length, tone: "neutral" },
+    { id: "users", label: "Usuários", value: logs.filter(isUserEvent).length, tone: "info" },
+    { id: "password", label: "Senha e convites", value: logs.filter(isPasswordEvent).length, tone: "warning" },
+    { id: "views", label: "Visualizações sensíveis", value: logs.filter(isSensitiveView).length, tone: "danger" },
+  ];
+
+  const openLog = openLogId ? logs.find((log) => log.id === openLogId) ?? null : null;
 
   return (
-    <div className="space-y-4">
-      <Card className="rounded-2xl border-slate-200 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-pink-100 text-pink-600">
-                <ShieldCheck className="h-4 w-4" />
-              </span>
-              <div>
-                <h2 className="text-lg font-black text-slate-950">Auditoria interna</h2>
-                <p className="text-sm font-medium text-slate-500">
-                  Registro de acessos e alteracoes relevantes para LGPD, seguranca e governanca.
-                </p>
-              </div>
-            </div>
+    <div className="space-y-5">
+      <ControlPanel className="flex flex-col gap-5 px-[26px] pb-5 pt-[22px]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-2xl">
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Auditoria interna</p>
+            <p className="mt-1.5 text-[13.5px] text-ds-on-dark-2">
+              Registro de acessos e alterações relevantes para LGPD, segurança e governança.
+            </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => void loadLogs()} disabled={loading}>
-            <RefreshCcw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <Button type="button" variant="on-dark-secondary" size="md" loading={loading} loadingLabel="Atualizando…" onClick={() => void loadLogs()}>
             Atualizar
           </Button>
         </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-[11px] font-black uppercase text-slate-500">{stat.label}</p>
-              <p className="mt-2 text-3xl font-black text-slate-950">{stat.value}</p>
-            </div>
+        <div className="grid grid-cols-2 gap-1 border-b border-white/10 lg:grid-cols-4">
+          {indicators.map((item) => (
+            <ControlIndicator
+              key={item.id}
+              value={item.value}
+              label={item.label}
+              tone={item.tone}
+              active={focus === item.id && item.id !== "all"}
+              onClick={() => setFocus((current) => (current === item.id ? "all" : item.id))}
+            />
           ))}
         </div>
-      </Card>
-
-      <Card className="rounded-2xl border-slate-200 p-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void loadLogs();
-              }}
-              placeholder="Buscar por usuario, acao, IP ou destino..."
-              className="h-10 rounded-xl border-slate-100 bg-slate-50 pl-10"
-            />
-          </div>
-          <Select value={moduleFilter} onValueChange={setModuleFilter}>
-            <SelectTrigger className="h-10 rounded-xl border-slate-100 bg-slate-50 md:w-[220px]">
-              <SelectValue placeholder="Modulo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os modulos</SelectItem>
-              <SelectItem value="settings.users">Usuarios</SelectItem>
-              <SelectItem value="settings.profiles">Perfis</SelectItem>
-              <SelectItem value="dp.collaborators">Colaboradores</SelectItem>
-              <SelectItem value="dp.schedules">Escalas</SelectItem>
-              <SelectItem value="recruitment">Recrutamento</SelectItem>
-              <SelectItem value="privacy">Privacidade</SelectItem>
-              <SelectItem value="system.cli">Operações por CLI</SelectItem>
-              <SelectItem value="tasks">Tarefas</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button type="button" onClick={() => void loadLogs()} className="h-10 rounded-xl bg-slate-950 text-white">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <ControlSearch
+            value={searchText}
+            onChange={(value) => {
+              setSearchText(value);
+              if (value === "") setAppliedSearch("");
+            }}
+            onSubmit={() => setAppliedSearch(searchText.trim())}
+            placeholder="Buscar por usuário, ação, IP ou destino e pressionar Enter"
+          />
+          <Button type="button" variant="on-dark-secondary" size="xl" onClick={() => setAppliedSearch(searchText.trim())}>
             Filtrar
           </Button>
         </div>
-      </Card>
+        <FilterChips chips={MODULE_CHIPS} value={moduleFilter} onChange={setModuleFilter} allLabel="Todos os módulos" />
+      </ControlPanel>
 
       {error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">{error}</div>
+        <p role="alert" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[13px] font-semibold text-ds-confirm-ink">{error}</p>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[180px_1fr_1fr_1fr_120px] gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 text-[11px] font-black uppercase text-slate-500">
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[28px] font-extrabold tracking-[-0.03em]">{visibleLogs.length}</span>
+        <span className="text-[13px] text-ds-ink-faint">
+          {focus === "all" ? "eventos" : `de ${logs.length} eventos`}
+          {logs.length >= LOG_LIMIT ? ` · mostrando os ${LOG_LIMIT} mais recentes; refine a busca para ver outros` : ""}
+        </span>
+      </div>
+
+      <ListShell minWidth={900}>
+        <ListHead template={ROW_TEMPLATE}>
           <span>Data</span>
           <span>Ator</span>
-          <span>Acao</span>
+          <span>Ação</span>
           <span>Destino</span>
           <span>IP</span>
-        </div>
-        {loading && logs.length === 0 ? (
-          <div className="p-8 text-center text-sm font-semibold text-slate-500">Carregando eventos...</div>
-        ) : logs.length === 0 ? (
-          <div className="p-8 text-center text-sm font-semibold text-slate-500">Nenhum evento encontrado.</div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {logs.map((log) => (
-              <div key={log.id} className="grid grid-cols-[180px_1fr_1fr_1fr_120px] gap-3 px-4 py-3 text-sm">
-                <span className="font-semibold text-slate-500">{formatDate(log.timestamp)}</span>
-                <div className="min-w-0">
-                  <p className="truncate font-black text-slate-950">{log.username ?? "Sistema"}</p>
-                  <p className="truncate text-xs font-medium text-slate-400">{log.user_id ?? "-"}</p>
-                </div>
-                <div className="min-w-0">
-                  <Badge variant="outline" className="mb-1 border-pink-200 bg-pink-50 text-pink-600">
-                    {MODULE_LABELS[log.module] ?? log.module}
-                  </Badge>
-                  <p className="truncate text-xs font-black text-slate-700">{ACTION_LABELS[log.action] ?? log.action}</p>
-                </div>
-                <span className="truncate font-semibold text-slate-700">{getTarget(log.metadata)}</span>
-                <span className="truncate text-xs font-semibold text-slate-500">{log.ip_address ?? "-"}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          <span />
+        </ListHead>
+        {loading && logs.length === 0 ? <ListSkeleton rows={6} /> : null}
+        {visibleLogs.map((log) => (
+          <ListRow
+            key={log.id}
+            template={ROW_TEMPLATE}
+            isOpen={openLogId === log.id}
+            isSelected={false}
+            isMuted={false}
+            onOpen={() => setOpenLogId(log.id)}
+            label={`Abrir evento de ${formatDate(log.timestamp)}`}
+          >
+            <span className="text-xs font-semibold text-ds-ink-muted">{formatDate(log.timestamp)}</span>
+            <div className="min-w-0">
+              <p className="truncate text-[13.5px] font-bold">{log.username ?? "Sistema"}</p>
+              <p className="truncate text-xs text-ds-ink-faint">{log.user_id ?? "-"}</p>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <StatusPill variant="neutral">{MODULE_LABELS[log.module] ?? log.module}</StatusPill>
+              <p className="truncate text-xs font-bold text-ds-ink-2">{ACTION_LABELS[log.action] ?? log.action}</p>
+            </div>
+            <span className="truncate text-[13px] font-semibold">{getTarget(log.metadata)}</span>
+            <span className="truncate font-ds-mono text-xs text-ds-ink-muted">{log.ip_address ?? "-"}</span>
+            <Chevron />
+          </ListRow>
+        ))}
+        {!loading && visibleLogs.length === 0 ? (
+          <EmptyResults
+            title="Nenhum evento encontrado com esses filtros."
+            onClear={() => { setSearchText(""); setAppliedSearch(""); setModuleFilter(null); setFocus("all"); }}
+          />
+        ) : null}
+      </ListShell>
+
+      <SidePanel
+        open={!!openLog}
+        onOpenChange={(open) => { if (!open) setOpenLogId(null); }}
+        kicker={openLog ? (MODULE_LABELS[openLog.module] ?? openLog.module) : "Evento"}
+        title={openLog ? (ACTION_LABELS[openLog.action] ?? openLog.action) : ""}
+        subtitle={openLog ? formatDate(openLog.timestamp) : undefined}
+      >
+        {openLog ? (
+          <PanelSection title="Registro">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+              <PanelField label="Ator">{openLog.username ?? "Sistema"}</PanelField>
+              <PanelField label="ID do usuário"><span className="break-all font-ds-mono text-xs">{openLog.user_id ?? "-"}</span></PanelField>
+              <PanelField label="Destino">{getTarget(openLog.metadata)}</PanelField>
+              <PanelField label="IP"><span className="font-ds-mono text-xs">{openLog.ip_address ?? "-"}</span></PanelField>
+            </div>
+          </PanelSection>
+        ) : null}
+      </SidePanel>
     </div>
   );
 }

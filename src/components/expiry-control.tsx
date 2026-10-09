@@ -145,9 +145,15 @@ function summarizeGroup(baseGroup: GroupedByBaseProduct) {
 type ExpiryControlProps = {
   onOpenHistory?: () => void;
   onOpenConsumption?: () => void;
+  /** Ações que antes ficavam no botão flutuante; agora moram no menu "Ações" do painel. */
+  onOpenWriteDown?: () => void;
+  onOpenTransfer?: () => void;
+  onOpenLabels?: () => void;
+  /** Voltar e título da tela, dentro do painel escuro (uma só massa escura por tela). */
+  heading?: React.ReactNode;
 };
 
-function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryControlProps) {
+function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDown, onOpenTransfer, onOpenLabels, heading }: ExpiryControlProps) {
   const { user, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
@@ -764,6 +770,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
       <div className="mx-auto flex h-full w-full flex-col animate-in fade-in zoom-in-95">
         <div className="mx-auto w-full max-w-[1520px] px-4 pb-0 pt-3 sm:px-6">
           <div className="flex flex-col gap-[18px] rounded-[28px] bg-[#15151c] px-[26px] pb-5 pt-[22px] text-[#f3f2ee] shadow-[0_24px_60px_rgba(21,21,28,.18)]">
+            {heading}
             <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#f08bb1]">Estoque · {kioskLabel}</span>
 
             <div className="grid grid-cols-2 gap-1 border-b border-white/10 md:grid-cols-5">
@@ -846,9 +853,13 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
                   <button type="button" className={DARK_CONTROL}>Ações ▾</button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[220px] rounded-[14px] border-[#e3dfd6] bg-white p-1.5 shadow-[0_18px_44px_rgba(0,0,0,.24)]">
+                  {onOpenWriteDown && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenWriteDown}>Realizar baixa</DropdownMenuItem>}
+                  {onOpenTransfer && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenTransfer}>Realizar transferência</DropdownMenuItem>}
+                  {(onOpenWriteDown || onOpenTransfer) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
                   {onOpenHistory && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenHistory}>Consultar histórico</DropdownMenuItem>}
                   {onOpenConsumption && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenConsumption}>Consumo por período</DropdownMenuItem>}
-                  {(onOpenHistory || onOpenConsumption) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
+                  {onOpenLabels && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenLabels}>Configurar etiquetas</DropdownMenuItem>}
+                  {(onOpenHistory || onOpenConsumption || onOpenLabels) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
                   <DropdownMenuItem className={MENU_ITEM} onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
                   <DropdownMenuItem className={MENU_ITEM} disabled={groupedData.length === 0} onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
                 </DropdownMenuContent>
