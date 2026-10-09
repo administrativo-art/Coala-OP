@@ -19,7 +19,7 @@ test("protege a listagem, as gavetas e o retrocesso de pedido", async ({ page })
     await expect(page.getByText("Fornecedor E2E Confirmado", { exact: true })).toBeVisible();
     await expect(page.getByText(/Itens: Escada 2 Degraus Alumínio/)).toBeVisible();
 
-    await page.getByRole("button", { name: /A receber\s+1/ }).click();
+    await page.getByRole("button", { name: /1\s+A receber/ }).click();
     await expect(page.getByText("Fornecedor E2E Confirmado", { exact: true })).toBeVisible();
     await expect(page.getByText("Fornecedor E2E Emitido", { exact: true })).toBeHidden();
   });
@@ -54,7 +54,7 @@ test("protege a listagem, as gavetas e o retrocesso de pedido", async ({ page })
     await expect(page.getByRole("button", { name: "Confirmar pedido" })).toBeVisible();
 
     await page.goto("/dashboard/purchasing/orders");
-    await page.getByRole("button", { name: /Emitido\s+2/ }).click();
+    await page.getByRole("button", { name: /2\s+Emitido/ }).click();
     await expect(page.getByText("Fornecedor E2E Confirmado", { exact: true })).toBeVisible();
   });
 });
