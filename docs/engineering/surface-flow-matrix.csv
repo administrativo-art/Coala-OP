@@ -339,9 +339,18 @@ api,src/app/api/settings/public-bio/media/[id]/route.ts,,docs/engineering/flows/
 api,src/app/api/settings/public-bio/media/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/settings/public-bio/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/asset/[...assetPath]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/app/downloads/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/heartbeat/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/[mediaId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/folders/[folderId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/folders/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/import/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/pair/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/public/[kioskId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/publish/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/screens/[screenId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/screens/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/slides/[slideId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/slides/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/upload/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -444,6 +453,7 @@ page,src/app/login/page.tsx,,docs/engineering/access-and-privacy.md,Entrada exte
 page,src/app/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/patrimonio/[code]/page.tsx,,docs/engineering/flows/assets.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/player/page.tsx,,docs/engineering/flows/signage.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
+page,src/app/app/page.tsx,,docs/engineering/flows/signage.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/primeiro-acesso/[token]/page.tsx,,docs/engineering/flows/onboarding-activation.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/tv/[kioskId]/page.tsx,,docs/engineering/flows/signage.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/[slug]/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.

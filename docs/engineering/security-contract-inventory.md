@@ -2,9 +2,9 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **401**
-- Totalmente contratados: **24**
-- Legados congelados: **377**
+- Arquivos de rota: **410**
+- Totalmente contratados: **38**
+- Legados congelados: **372**
 - Exceções temporárias: **0**
 - Violações: **0**
 
@@ -362,12 +362,21 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/settings/public-bio` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/route.ts](../../src/app/api/settings/public-bio/route.ts) |
 | `/api/settings/public-bio/media` | POST | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/media/route.ts](../../src/app/api/settings/public-bio/media/route.ts) |
 | `/api/settings/public-bio/media/[id]` | GET | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/media/[id]/route.ts](../../src/app/api/settings/public-bio/media/[id]/route.ts) |
+| `/api/signage/app/downloads` | POST ✓ | `CONTRACTED` | [src/app/api/signage/app/downloads/route.ts](../../src/app/api/signage/app/downloads/route.ts) |
 | `/api/signage/asset/[...assetPath]` | GET | `LEGACY_BASELINE` | [src/app/api/signage/asset/[...assetPath]/route.ts](../../src/app/api/signage/asset/[...assetPath]/route.ts) |
-| `/api/signage/heartbeat` | GET, POST | `LEGACY_BASELINE` | [src/app/api/signage/heartbeat/route.ts](../../src/app/api/signage/heartbeat/route.ts) |
-| `/api/signage/public/[kioskId]` | GET | `LEGACY_BASELINE` | [src/app/api/signage/public/[kioskId]/route.ts](../../src/app/api/signage/public/[kioskId]/route.ts) |
-| `/api/signage/publish` | POST | `LEGACY_BASELINE` | [src/app/api/signage/publish/route.ts](../../src/app/api/signage/publish/route.ts) |
-| `/api/signage/slides` | GET, POST | `LEGACY_BASELINE` | [src/app/api/signage/slides/route.ts](../../src/app/api/signage/slides/route.ts) |
-| `/api/signage/slides/[slideId]` | DELETE, PUT | `LEGACY_BASELINE` | [src/app/api/signage/slides/[slideId]/route.ts](../../src/app/api/signage/slides/[slideId]/route.ts) |
+| `/api/signage/heartbeat` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/signage/heartbeat/route.ts](../../src/app/api/signage/heartbeat/route.ts) |
+| `/api/signage/media` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/signage/media/route.ts](../../src/app/api/signage/media/route.ts) |
+| `/api/signage/media/[mediaId]` | DELETE ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/signage/media/[mediaId]/route.ts](../../src/app/api/signage/media/[mediaId]/route.ts) |
+| `/api/signage/media/folders` | POST ✓ | `CONTRACTED` | [src/app/api/signage/media/folders/route.ts](../../src/app/api/signage/media/folders/route.ts) |
+| `/api/signage/media/folders/[folderId]` | DELETE ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/signage/media/folders/[folderId]/route.ts](../../src/app/api/signage/media/folders/[folderId]/route.ts) |
+| `/api/signage/media/import` | POST ✓ | `CONTRACTED` | [src/app/api/signage/media/import/route.ts](../../src/app/api/signage/media/import/route.ts) |
+| `/api/signage/pair` | POST ✓ | `CONTRACTED` | [src/app/api/signage/pair/route.ts](../../src/app/api/signage/pair/route.ts) |
+| `/api/signage/public/[kioskId]` | GET ✓ | `CONTRACTED` | [src/app/api/signage/public/[kioskId]/route.ts](../../src/app/api/signage/public/[kioskId]/route.ts) |
+| `/api/signage/publish` | POST ✓ | `CONTRACTED` | [src/app/api/signage/publish/route.ts](../../src/app/api/signage/publish/route.ts) |
+| `/api/signage/screens` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/signage/screens/route.ts](../../src/app/api/signage/screens/route.ts) |
+| `/api/signage/screens/[screenId]` | DELETE ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/signage/screens/[screenId]/route.ts](../../src/app/api/signage/screens/[screenId]/route.ts) |
+| `/api/signage/slides` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/signage/slides/route.ts](../../src/app/api/signage/slides/route.ts) |
+| `/api/signage/slides/[slideId]` | DELETE ✓, PUT ✓ | `CONTRACTED` | [src/app/api/signage/slides/[slideId]/route.ts](../../src/app/api/signage/slides/[slideId]/route.ts) |
 | `/api/signage/upload` | POST | `LEGACY_BASELINE` | [src/app/api/signage/upload/route.ts](../../src/app/api/signage/upload/route.ts) |
 | `/api/stock/count-sessions` | GET | `LEGACY_BASELINE` | [src/app/api/stock/count-sessions/route.ts](../../src/app/api/stock/count-sessions/route.ts) |
 | `/api/stock/item-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/stock/item-requests/route.ts](../../src/app/api/stock/item-requests/route.ts) |

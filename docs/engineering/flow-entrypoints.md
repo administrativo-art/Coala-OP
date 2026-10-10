@@ -1666,15 +1666,21 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/signage/page.tsx`](../../src/app/dashboard/signage/page.tsx).
 
-Arquivos locais percorridos: 18.
+Arquivos locais percorridos: 25.
 
 Chamadas candidatas encontradas:
 
 - `/api/signage/heartbeat` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/heartbeat/route.ts`](../../src/app/api/signage/heartbeat/route.ts)
+- `/api/signage/media` — interface [`src/components/signage/signage-media-library.tsx`](../../src/components/signage/signage-media-library.tsx); rota candidata [`src/app/api/signage/media/route.ts`](../../src/app/api/signage/media/route.ts)
+- `/api/signage/media/` — interface [`src/components/signage/signage-media-library.tsx`](../../src/components/signage/signage-media-library.tsx); rota candidata [`src/app/api/signage/media/[mediaId]/route.ts`](../../src/app/api/signage/media/%5BmediaId%5D/route.ts)
+- `/api/signage/media/folders` — interface [`src/components/signage/signage-media-library.tsx`](../../src/components/signage/signage-media-library.tsx); rota candidata [`src/app/api/signage/media/folders/route.ts`](../../src/app/api/signage/media/folders/route.ts)
+- `/api/signage/media/folders/` — interface [`src/components/signage/signage-media-library.tsx`](../../src/components/signage/signage-media-library.tsx); rota candidata [`src/app/api/signage/media/folders/[folderId]/route.ts`](../../src/app/api/signage/media/folders/%5BfolderId%5D/route.ts)
+- `/api/signage/media/import` — interface [`src/components/signage/signage-media-library.tsx`](../../src/components/signage/signage-media-library.tsx); rota candidata [`src/app/api/signage/media/import/route.ts`](../../src/app/api/signage/media/import/route.ts)
 - `/api/signage/publish` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/publish/route.ts`](../../src/app/api/signage/publish/route.ts)
+- `/api/signage/screens` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/screens/route.ts`](../../src/app/api/signage/screens/route.ts)
+- `/api/signage/screens/` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/screens/[screenId]/route.ts`](../../src/app/api/signage/screens/%5BscreenId%5D/route.ts)
 - `/api/signage/slides` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/slides/route.ts`](../../src/app/api/signage/slides/route.ts)
 - `/api/signage/slides/` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/slides/[slideId]/route.ts`](../../src/app/api/signage/slides/%5BslideId%5D/route.ts)
-- `/api/signage/upload` — interface [`src/components/signage/signage-admin.tsx`](../../src/components/signage/signage-admin.tsx); rota candidata [`src/app/api/signage/upload/route.ts`](../../src/app/api/signage/upload/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
