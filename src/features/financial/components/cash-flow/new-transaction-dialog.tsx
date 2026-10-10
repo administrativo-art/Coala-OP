@@ -263,23 +263,23 @@ export function NewTransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto rounded-ds-modal border-ds-border bg-ds-surface font-ds shadow-ds-modal">
         <DialogHeader>
-          <DialogTitle>Novo lançamento financeiro</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-xl font-extrabold text-ds-ink">Novo lançamento financeiro</DialogTitle>
+          <DialogDescription className="text-[13px] text-ds-ink-muted">
             Registre receitas, transferências internas ou ajustes de saldo no banco dedicado do módulo financeiro.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="revenue">
+          <TabsList className="grid h-auto w-full grid-cols-3 rounded-ds-btn bg-ds-seg p-1">
+            <TabsTrigger value="revenue" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-sm">
               <TrendingUp className="mr-2 h-4 w-4" /> Receita
             </TabsTrigger>
-            <TabsTrigger value="transfer">
+            <TabsTrigger value="transfer" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-sm">
               <ArrowLeftRight className="mr-2 h-4 w-4" /> Transferência
             </TabsTrigger>
-            <TabsTrigger value="adjustment">
+            <TabsTrigger value="adjustment" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-sm">
               <SlidersHorizontal className="mr-2 h-4 w-4" /> Ajuste
             </TabsTrigger>
           </TabsList>
@@ -458,10 +458,10 @@ export function NewTransactionDialog({
                 />
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  <Button type="button" variant="ds-secondary" size="md" onClick={() => onOpenChange(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={isSaving}>
+                  <Button type="submit" variant="primary-modal" size="md" disabled={isSaving}>
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Salvar receita
                   </Button>
@@ -621,10 +621,10 @@ export function NewTransactionDialog({
                 />
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  <Button type="button" variant="ds-secondary" size="md" onClick={() => onOpenChange(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={isSaving}>
+                  <Button type="submit" variant="primary-modal" size="md" disabled={isSaving}>
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Salvar transferência
                   </Button>
@@ -754,10 +754,10 @@ export function NewTransactionDialog({
                 />
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  <Button type="button" variant="ds-secondary" size="md" onClick={() => onOpenChange(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={isSaving}>
+                  <Button type="submit" variant="primary-modal" size="md" disabled={isSaving}>
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Salvar ajuste
                   </Button>

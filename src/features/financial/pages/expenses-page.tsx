@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { SourceSettlementNotice } from "@/features/financial/components/expenses/source-settlement-notice";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   deleteDoc,
   limit as firestoreLimit,
@@ -17,21 +17,16 @@ import {
   ArrowDown,
   ArrowUp,
   BarChart3,
-  CalendarDays,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
   CreditCard,
-  FilePlus2,
+  Ellipsis,
   FileUp,
   Inbox,
-  Menu,
-  MoreHorizontal,
-  Pencil,
+  Link2,
+  Plus,
   RotateCcw,
-  Search,
-  Trash2,
+  ScanSearch,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import { PayExpenseDialog } from "@/features/financial/components/pay-expense-dialog";
 import {
@@ -43,6 +38,20 @@ import {
   PurchaseOrderItemsLink,
 } from "@/features/financial/components/expenses/expense-expanded-details";
 import { KpiFlowStrip } from "@/features/financial/components/expenses/kpi-flow-strip";
+import {
+  CardStatementListRow,
+  DueWeekHeader,
+  EXPENSE_LIST_COLUMNS,
+  ExpenseListRow,
+  ExpenseStatusPill,
+} from "@/features/financial/components/expenses/expense-list-rows";
+import { ControlSearch } from "@/components/patterns/control-panel";
+import { FilterChips } from "@/components/patterns/filter-chips";
+import { HeroChip } from "@/components/patterns/hero-chip";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { PageHero } from "@/components/patterns/page-hero";
+import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
+import { StatusPill } from "@/components/ui/status-pill";
 import { ExpenseCompetencePicker } from "@/features/financial/components/expenses/expense-competence-picker";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -97,16 +106,6 @@ import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -114,7 +113,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -141,6 +139,32 @@ const STATUS_LABELS: Record<string, string> = {
   reconciled: "Previsão conciliada",
 };
 
+const STATUS_FILTER_LABELS: Record<string, string> = {
+  pending: "Em aberto",
+  pending_audit: "Compras pendentes de auditoria",
+  draft: "Rascunhos",
+  overdue: "Vencidos",
+  paid: "Pagos",
+  payment_found_pending_document: "Pagamento confirmado · conferir despesa",
+  provisioned: "Provisionados",
+  reconciled: "Com previsão conciliada",
+  cancelled: "Cancelados",
+};
+
+const ORIGIN_FILTER_LABELS: Record<string, string> = {
+  purchasing: "Origem: Compras",
+  manual: "Demais despesas",
+};
+
+const PAYMENT_FILTER_LABELS: Record<string, string> = {
+  credit_card: "Cartão de crédito",
+  debit_card: "Cartão de débito",
+  pix: "PIX",
+  transfer: "Transferência",
+  cash: "Dinheiro",
+  unassigned: "Não informado",
+};
+
 function unmatchedCardStatementRecordLabel(expense: any) {
   if (expense.status === "cancelled") return "Cancelado";
   if (expense.provisionType === "forecast" && (expense.status === "reconciled" || expense.replacedByExpenseId)) {
@@ -149,46 +173,6 @@ function unmatchedCardStatementRecordLabel(expense: any) {
   if (expense.cardStatementRevisionStatus === "removed") return "Removido da versão ativa";
   return "Requer conciliação";
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
-  pending_audit: "border-violet-200 bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800",
-  paid: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
-  payment_found_pending_document: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  reported_paid: "border-sky-300 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800",
-  partially_paid: "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
-  paid_divergent: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
-  cancelled: "border-zinc-300 bg-zinc-50 text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400 dark:border-zinc-800",
-  overdue: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
-  pending: "border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
-  due_soon: "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
-  provisioned: "border-cyan-300 bg-cyan-50 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300 dark:border-cyan-800",
-  reconciled: "border-slate-300 bg-slate-50 text-slate-500 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
-};
-
-const STATUS_ACCENT_COLORS: Record<string, string> = {
-  draft: "bg-slate-400",
-  pending_audit: "bg-violet-500",
-  paid: "bg-emerald-500",
-  payment_found_pending_document: "bg-emerald-500",
-  reported_paid: "bg-sky-500",
-  partially_paid: "bg-amber-500",
-  paid_divergent: "bg-rose-500",
-  cancelled: "bg-zinc-300",
-  overdue: "bg-rose-500",
-  pending: "bg-blue-500",
-  due_soon: "bg-amber-500",
-  provisioned: "bg-cyan-500",
-  reconciled: "bg-slate-400",
-};
-
-const UNIT_COLOR_STYLES: Array<{ match: string; dot: string; active: string; soft: string }> = [
-  { match: "iguatemi", dot: "bg-indigo-500", active: "border-indigo-500 bg-indigo-50 text-indigo-700", soft: "border-indigo-200 hover:border-indigo-300" },
-  { match: "higien", dot: "bg-orange-400", active: "border-orange-500 bg-orange-50 text-orange-700", soft: "border-orange-200 hover:border-orange-300" },
-  { match: "jk", dot: "bg-emerald-500", active: "border-emerald-500 bg-emerald-50 text-emerald-700", soft: "border-emerald-200 hover:border-emerald-300" },
-  { match: "morumbi", dot: "bg-violet-500", active: "border-violet-500 bg-violet-50 text-violet-700", soft: "border-violet-200 hover:border-violet-300" },
-  { match: "matriz", dot: "bg-sky-500", active: "border-sky-500 bg-sky-50 text-sky-700", soft: "border-sky-200 hover:border-sky-300" },
-];
 
 function InstallmentScheduleTooltip({
   installments,
@@ -240,15 +224,6 @@ function InstallmentScheduleTooltip({
       </Tooltip>
     </TooltipProvider>
   );
-}
-
-function getUnitColorStyle(unitName: string) {
-  const normalized = unitName.toLowerCase();
-  return UNIT_COLOR_STYLES.find((style) => normalized.includes(style.match)) ?? {
-    dot: "bg-primary/70",
-    active: "border-primary bg-primary/10 text-primary",
-    soft: "border-border/70 hover:border-primary/40",
-  };
 }
 
 function getExpenseUnitLabel(expense: any, resultCenterNameById: ResultCenterNameMap) {
@@ -442,6 +417,7 @@ export function ExpensesPage() {
   });
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(searchParams.get("expense"));
   const [expandedCardStatementKey, setExpandedCardStatementKey] = useState<string | null>(null);
@@ -929,14 +905,17 @@ export function ExpensesPage() {
       return;
     }
 
+    setDeleting(true);
     try {
       await deleteDoc(financialDoc("expenses", deleteTarget.id));
       refreshExpenses();
+      setExpandedExpenseId(null);
       toast({ title: "Despesa excluída." });
     } catch (error: any) {
       console.error("Erro ao excluir despesa:", error);
       toast({ variant: "destructive", title: "Erro ao excluir a despesa.", description: error.message || "Tente novamente mais tarde." });
     } finally {
+      setDeleting(false);
       setDeleteTarget(null);
     }
   }
@@ -998,27 +977,207 @@ export function ExpensesPage() {
   auditReturnParams.set("status", "pending_audit");
   const expensesAuditReturnHref = `${FINANCIAL_ROUTES.expenses}?${auditReturnParams}`;
 
-  return (
-    <PageContainer variant="wide" surface className="space-y-6 pb-10">
-      <PageHeader
-        title="Despesas"
-        description="Painel consolidado de despesas, contas a pagar e histórico de liquidações."
-        actions={<>
-          {permissions.financial?.expenses?.create && (
-            <Button size="sm" asChild className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]">
-              <Link href={FINANCIAL_ROUTES.newExpense}>
-                <FilePlus2 className="mr-2 h-4 w-4" /> Novo lançamento
+  const activeFilterPills: Array<{ key: string; label: string; onClear: () => void }> = [];
+  if (search.trim()) activeFilterPills.push({ key: "search", label: `Busca: ${search.trim()}`, onClear: () => setSearch("") });
+  if (statusFilter !== "all") activeFilterPills.push({ key: "status", label: STATUS_FILTER_LABELS[statusFilter] ?? statusFilter, onClear: () => setStatusFilter("all") });
+  if (originFilter !== "all") activeFilterPills.push({ key: "origin", label: ORIGIN_FILTER_LABELS[originFilter] ?? originFilter, onClear: () => setOriginFilter("all") });
+  if (paymentTypeFilter !== "all") activeFilterPills.push({ key: "payment", label: PAYMENT_FILTER_LABELS[paymentTypeFilter] ?? paymentTypeFilter, onClear: () => setPaymentTypeFilter("all") });
+  if (activeCompetenceLabel) activeFilterPills.push({ key: "competence", label: `Competência ${activeCompetenceLabel}`, onClear: () => setCompetenceMonth("all") });
+  else if (dateFrom || dateTo) activeFilterPills.push({ key: "period", label: `Vencimento: ${activePeriodLabel}`, onClear: () => { setPeriodPreset("custom"); setDateFrom(""); setDateTo(""); } });
+  if (accountPlanFilter !== "all") activeFilterPills.push({ key: "plan", label: accountPlanOptions.find((option) => option.value === accountPlanFilter)?.label ?? accountPlanFilter, onClear: () => setAccountPlanFilter("all") });
+  if (unitFilter !== "all") activeFilterPills.push({ key: "unit", label: unitFilter, onClear: () => setUnitFilter("all") });
+  const hasActiveFilters = activeFilterPills.length > 0;
+  const selectedExpense = expandedExpenseId ? filtered.find((expense) => expense.id === expandedExpenseId) ?? null : null;
+  const selectedStatement = expandedCardStatementKey
+    ? filteredDisplayEntries.find((entry) => entry.kind === "card_statement" && entry.statement.key === expandedCardStatementKey)
+    : null;
+  const darkControl = "h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker";
+
+  function renderExpensePanel(expense: any) {
+    const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
+    const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
+    const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
+    const relatedPurchaseExpense = expense.relatedPurchaseExpenseId
+      ? expenseById.get(String(expense.relatedPurchaseExpenseId))
+      : null;
+    const statusLabel = expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey;
+    return (
+      <SidePanel
+        open
+        onOpenChange={(open) => {
+          if (!open) {
+            setExpandedExpenseId(null);
+            setDeleteTarget(null);
+          }
+        }}
+        kicker={expense.originModule === "purchasing" ? "Despesa · Compras" : "Despesa"}
+        title={expense.description || "Despesa sem descrição"}
+        subtitle={expense.supplier || "Favorecido não informado"}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <ExpenseStatusPill statusKey={statusKey} label={statusLabel} />
+          {expense.originModule === "purchasing" && expense.purchaseOrderId ? (
+            <PurchaseOrderItemsLink
+              orderId={expense.purchaseOrderId}
+              href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(expensesAuditReturnHref)}`}
+              label="Abrir pedido"
+            />
+          ) : null}
+          {relatedPurchaseExpense ? (
+            <Button variant="ds-secondary" size="xs" asChild>
+              <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
+                {expense.purchaseExpenseRole === "freight" ? "Ver mercadoria" : "Ver frete separado"}
               </Link>
             </Button>
-          )}
+          ) : null}
+        </div>
+        {expenseAwaitingConfirmation(expense) ? (
+          <p className="rounded-ds-btn bg-ds-ok-bg p-3 text-[13px] font-semibold text-ds-ok">
+            Pagamento confirmado no extrato. A despesa ainda precisa de conferência; esse valor já pago não é uma cobrança vencida.
+          </p>
+        ) : null}
+        {expense.sourceSettlement ? <SourceSettlementNotice source={expense.sourceSettlement} cancelled={expense.status === "cancelled"} /> : null}
+        {deleteTarget?.id === expense.id ? (
+          <InlineConfirm
+            message={`Excluir a despesa “${expense.description}”? Esta ação não pode ser desfeita.`}
+            loading={deleting}
+            onConfirm={() => void handleDelete()}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        ) : null}
+        <ExpenseExpandedDetails
+          stacked
+          expense={expense}
+          relatedPurchaseExpense={relatedPurchaseExpense}
+          accountPlanMap={accountPlanMap}
+          resultCenterNameById={resultCenterNameById}
+          canViewPersonnelCosts={canViewPersonnelCosts}
+          canViewExpenses={canViewExpenses}
+          canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration && !expense.sourceSettlement}
+          canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0}
+          canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration && !expense.sourceSettlement}
+          finalizingAudit={finalizingAuditId === expense.id}
+          onFinalizeAudit={() => void handleFinalizeAudit(expense)}
+          onPay={() => setPayTarget({ ...expense, accountPlanName: planName, resultCenter: primaryUnit })}
+          onDelete={() => setDeleteTarget(expense)}
+        />
+      </SidePanel>
+    );
+  }
+
+  function renderStatementPanel(statement: any) {
+    const unmatchedActiveCount = statement.unmatchedExpenses.filter(cardExpenseIsActiveStatementLine).length;
+    const statementHref = `${FINANCIAL_ROUTES.cardStatements}?month=${encodeURIComponent(statement.monthKey)}&accountId=${encodeURIComponent(statement.accountId)}&paymentMethodId=${encodeURIComponent(statement.paymentMethodId)}`;
+    const AUDIT_VARIANT: Record<string, { label: string; variant: "ok" | "neutral" | "info" | "warn" }> = {
+      reconciled: { label: "Conferida", variant: "ok" },
+      historical: { label: "Histórico", variant: "neutral" },
+      audited: { label: "Auditada", variant: "info" },
+      pending: { label: "Pendente", variant: "warn" },
+    };
+    return (
+      <SidePanel
+        open
+        onOpenChange={(open) => { if (!open) setExpandedCardStatementKey(null); }}
+        kicker="Fatura de cartão"
+        title={statement.title}
+        subtitle={`${statement.lineCount} ${statement.lineCount === 1 ? "lançamento" : "lançamentos"} · ${statement.dueDate ? `vence ${format(statement.dueDate, "dd/MM/yyyy")}` : "sem vencimento"}`}
+        highlights={<span className="font-mono">{formatCurrency(statement.totalValue)}</span>}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <ExpenseStatusPill statusKey={statement.status} label={STATUS_LABELS[statement.status] ?? statement.status} />
+          {canAccessAudits ? (
+            <Button variant="ds-secondary" size="xs" asChild>
+              <Link href={statementHref}>
+                <ScanSearch aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" /> Abrir auditoria do cartão
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-ds-ink-muted">
+          A fatura é a obrigação de pagamento; cada compra permanece como despesa individual na DRE.
+        </p>
+        <PanelSection title="Lançamentos oficiais" aside={`${statement.lines.length}`}>
+          <ul className="-my-1 divide-y divide-ds-divider">
+            {statement.lines.map((line: any) => {
+              const expense = line.expense;
+              const issues = cardExpenseAuditIssues(expense);
+              const audit = AUDIT_VARIANT[line.auditStatus] ?? AUDIT_VARIANT.pending;
+              const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
+                || expense.accountPlanName || expense.accountId || expense.accountPlan || "Pendente";
+              const matchedExisting = Boolean(expense.reconciledProvisionId || expense.cardStatementRegisteredValue != null);
+              const chargeDate = toDate(expense.cardChargeDate);
+              return (
+                <li key={line.lineId} className="py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-bold leading-5 text-ds-ink">{expense.description || "Compra sem descrição"}</p>
+                      <p className="text-xs text-ds-ink-faint">{expense.supplier || "Favorecido pendente"}</p>
+                    </div>
+                    <p className="shrink-0 font-mono text-[13px] font-extrabold text-ds-ink">{formatCurrency(line.amount)}</p>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ds-ink-muted">
+                    <span className="font-mono">{chargeDate ? format(chargeDate, "dd/MM/yyyy") : "—"}</span>
+                    <span className={cn(planName === "Pendente" && "font-bold text-ds-warn")}>{planName}</span>
+                    <span>{getExpenseUnitLabel(expense, resultCenterNameById)}</span>
+                    {line.installmentNumber ? <span>Parcela {line.installmentNumber}</span> : null}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <StatusPill variant={audit.variant} title={issues.length ? `Revisar: ${issues.join(", ")}` : undefined}>{audit.label}</StatusPill>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-ds-info">
+                      <Link2 aria-hidden="true" className="h-3 w-3" />
+                      {matchedExisting ? "Correspondência encontrada" : "Importada da fatura"}
+                    </span>
+                  </div>
+                  <UberRecognitionStatus record={expense} compact />
+                </li>
+              );
+            })}
+          </ul>
+          {statement.creditTotal > 0 ? (
+            <div className="flex items-center justify-between gap-3 rounded-ds-btn bg-ds-ok-bg px-3 py-2 text-xs font-bold text-ds-ok">
+              <span>Créditos e estornos</span>
+              <span className="font-mono">− {formatCurrency(statement.creditTotal)}</span>
+            </div>
+          ) : null}
+        </PanelSection>
+        {statement.unmatchedExpenses.length > 0 ? (
+          <PanelSection title="Fora da composição oficial" aside={`${statement.unmatchedExpenses.length}`}>
+            <p className="text-xs text-ds-ink-muted">
+              {unmatchedActiveCount > 0
+                ? `${unmatchedActiveCount} registro${unmatchedActiveCount === 1 ? " precisa" : "s precisam"} de conciliação. Nenhum deles altera o total oficial.`
+                : "São cancelamentos ou previsões já conciliadas. Permanecem visíveis para rastreabilidade, sem alterar o total oficial."}
+            </p>
+            <ul className="space-y-1.5">
+              {statement.unmatchedExpenses.map((expense: any) => (
+                <li key={`unmatched-${expense.id}`} className="flex items-start justify-between gap-3 text-xs">
+                  <span className="min-w-0 truncate">
+                    {expense.description || "Registro sem descrição"} · {unmatchedCardStatementRecordLabel(expense)}
+                  </span>
+                  <span className="shrink-0 font-mono">{formatCurrency(Number(expense.totalValue) || 0)}</span>
+                </li>
+              ))}
+            </ul>
+          </PanelSection>
+        ) : null}
+      </SidePanel>
+    );
+  }
+
+  return (
+    <PageContainer variant="wide" className="space-y-5 pb-10">
+      <PageHero
+        kicker="Financeiro"
+        title="Despesas"
+        subtitle={activePeriodLabel}
+        actions={<>
           {(canViewInbox || permissions.financial?.paymentRequests?.view || canViewBudgetComparison(permissions, isDefaultAdmin) || canImportAudits) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 rounded-[11px] bg-white px-[14px] text-[13px] font-extrabold">
-                  <Menu className="mr-2 h-4 w-4" /> Ações
+                <Button variant="on-dark-secondary" size="md">
+                  <Ellipsis aria-hidden="true" className="mr-2 h-4 w-4" /> Ações
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-60">
                 {canViewInbox && (
                   <DropdownMenuItem asChild>
                     <Link href={FINANCIAL_ROUTES.inbox}>
@@ -1048,8 +1207,111 @@ export function ExpensesPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          {permissions.financial?.expenses?.create && (
+            <Button variant="primary-page" size="md" asChild>
+              <Link href={FINANCIAL_ROUTES.newExpense}>
+                <Plus aria-hidden="true" className="mr-2 h-4 w-4" /> Novo lançamento
+              </Link>
+            </Button>
+          )}
         </>}
-      />
+        chips={<>
+          <HeroChip value={scopedDisplayEntryCount} label="Todas" active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+          <HeroChip value={formatCurrency(kpis.overdue)} label="Vencido" tone="danger" active={statusFilter === "overdue"} onClick={() => setStatusFilter("overdue")} />
+          <HeroChip value={formatCurrency(kpis.dueSoon)} label="Vence em 7 dias" tone="warning" />
+          <HeroChip value={formatCurrency(kpis.open)} label={`Em aberto · ${openDisplayEntryCount}`} tone="info" active={statusFilter === "pending"} onClick={() => setStatusFilter("pending")} />
+          <HeroChip value={pendingAuditCount} label="Pendentes de auditoria" tone="warning" active={statusFilter === "pending_audit"} onClick={() => setStatusFilter("pending_audit")} />
+          <HeroChip value={formatCurrency(kpis.paid)} label="Pago" active={statusFilter === "paid"} onClick={() => setStatusFilter("paid")} />
+        </>}
+      >
+        <div data-testid="expense-filter-bar" className="flex flex-wrap items-center gap-2">
+          <ControlSearch
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar descrição, fornecedor, alias ou identificador..."
+          />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger aria-label="Status" className={cn(darkControl, "w-[170px]")}>
+              <SelectValue placeholder="Filtrar por status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os status</SelectItem>
+              {Object.entries(STATUS_FILTER_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={originFilter} onValueChange={setOriginFilter}>
+            <SelectTrigger aria-label="Origem" className={cn(darkControl, "w-[150px]")}>
+              <SelectValue placeholder="Filtrar por origem" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as origens</SelectItem>
+              {Object.entries(ORIGIN_FILTER_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
+            <SelectTrigger aria-label="Forma de pagamento" className={cn(darkControl, "w-[170px]")}>
+              <SelectValue placeholder="Forma de pagamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os pagamentos</SelectItem>
+              {Object.entries(PAYMENT_FILTER_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <ExpenseCompetencePicker
+            value={competenceMonth}
+            options={competenceOptions}
+            onValueChange={(value) => {
+              setCompetenceMonth(value);
+              if (value !== "all") {
+                setPeriodPreset("custom");
+                setDateFrom("");
+                setDateTo("");
+              }
+            }}
+            className={cn(darkControl, "w-[210px] [&_svg]:text-ds-on-dark-muted", activeCompetenceLabel && "border-ds-accent bg-white/10")}
+          />
+          <ExpensePeriodFilter
+            className={cn(darkControl, "w-[220px] [&_svg]:text-ds-on-dark-muted")}
+            preset={periodPreset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onApply={(period) => {
+              setPeriodPreset(period.preset);
+              setDateFrom(period.dateFrom);
+              setDateTo(period.dateTo);
+              if (period.dateFrom || period.dateTo) setCompetenceMonth("all");
+            }}
+          />
+          <Select value={accountPlanFilter} onValueChange={setAccountPlanFilter}>
+            <SelectTrigger aria-label="Plano de contas" data-testid="expense-account-plan-filter" className={cn(darkControl, "w-[190px]")}>
+              <SelectValue placeholder="Plano de contas" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[360px]">
+              <SelectItem value="all">Todos os planos</SelectItem>
+              {accountPlanOptions.map((accountPlan) => (
+                <SelectItem key={accountPlan.value} value={accountPlan.value} title={accountPlan.label}>
+                  {accountPlan.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Apropriação na DRE</span>
+          <FilterChips
+            value={unitFilter === "all" ? null : unitFilter}
+            onChange={(value) => setUnitFilter(value ?? "all")}
+            allCount={scopedDisplayEntryCount}
+            chips={units.map((unit) => ({ value: unit.name, label: unit.name, count: unitCounts.get(unit.name) || 0 }))}
+          />
+        </div>
+      </PageHero>
 
       <KpiFlowStrip
         kpis={kpis}
@@ -1060,879 +1322,184 @@ export function ExpensesPage() {
         periodLabel={activePeriodLabel}
       />
 
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Apropriação na DRE</p>
-        <div className="flex flex-wrap gap-2">
+      {searchParams.get("expense") && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-ds-btn border border-ds-border bg-ds-surface p-3 text-sm">
+          <span>Despesa selecionada na comparação de orçamento.</span>
+          <Button variant="ds-secondary" size="xs" asChild>
+            <Link href={`${FINANCIAL_ROUTES.budgetComparison}?month=${competenceMonth}`}>Voltar à comparação</Link>
+          </Button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+        <span className="text-[13px] font-bold text-ds-ink">
+          {filteredDisplayEntries.length} {filteredDisplayEntries.length === 1 ? "obrigação" : "obrigações"}
+        </span>
+        <span data-testid="expense-competence-total" className="font-mono text-[13px] font-extrabold text-ds-accent-ink">
+          Total: {formatCurrency(filteredTotalValue)}
+        </span>
+        {activeFilterPills.map((pill) => (
+          <span
+            key={pill.key}
+            data-testid={pill.key === "competence" ? "active-expense-competence" : undefined}
+            className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-ds-border bg-ds-surface pl-3 pr-1.5 text-xs font-bold text-ds-ink"
+          >
+            {pill.label}
+            <button
+              type="button"
+              onClick={pill.onClear}
+              aria-label={`Remover filtro ${pill.label}`}
+              className="grid h-4 w-4 place-items-center rounded-full text-ds-ink-faint hover:bg-ds-neutral-bg hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+            >
+              <X aria-hidden="true" className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        {hasActiveFilters ? (
           <button
             type="button"
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-              unitFilter === "all"
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border/70 bg-background hover:border-primary/40"
-            )}
-            onClick={() => setUnitFilter("all")}
+            onClick={clearExpenseFilters}
+            className="inline-flex h-[26px] items-center gap-1 rounded-full px-2 text-xs font-bold text-ds-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
           >
-            Todas
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px]",
-                unitFilter === "all" ? "bg-white/20 text-primary-foreground" : "bg-muted text-muted-foreground"
-              )}
-            >
-              {scopedDisplayEntryCount}
-            </span>
+            <RotateCcw aria-hidden="true" className="h-3 w-3" /> Limpar filtros
           </button>
-          {units.map((unit) => {
-            const unitStyle = getUnitColorStyle(unit.name);
-            return (
-              <button
-                key={unit.id}
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  unitFilter === unit.name
-                    ? unitStyle.active
-                    : cn("bg-background", unitStyle.soft)
-                )}
-                onClick={() => setUnitFilter(unit.name)}
-              >
-                <span className={cn("h-2 w-2 rounded-full", unitStyle.dot)} />
-                {unit.name}
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  {unitCounts.get(unit.name) || 0}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        ) : null}
       </div>
 
-      {searchParams.get("expense") && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><span>Despesa selecionada na comparação de orçamento.</span><Button variant="outline" size="sm" asChild><Link href={`${FINANCIAL_ROUTES.budgetComparison}?month=${competenceMonth}`}>Voltar à comparação</Link></Button></div>}
-      <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
-        <CardHeader className="border-b bg-muted/20 px-4 py-3">
-          <div data-testid="expense-filter-bar" className="grid grid-cols-2 items-center gap-2 md:grid-cols-[minmax(170px,1.7fr)_minmax(0,.8fr)_minmax(0,.85fr)_minmax(0,.95fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,.85fr)_auto]">
-            <div className="relative col-span-2 min-w-0 md:col-span-1">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar descrição, fornecedor, alias ou identificador..."
-                className="h-8 rounded-lg border-border/70 bg-background pl-9 text-xs"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+      <div className="rounded-[18px] border border-ds-border bg-ds-surface">
+        <div
+          className={cn("hidden items-center gap-x-4 border-b border-ds-divider px-[18px] py-3 md:grid", EXPENSE_LIST_COLUMNS)}
+        >
+          <span className={LIST_KICKER}>Descrição</span>
+          <span className={LIST_KICKER}>Fornecedor e plano</span>
+          <span className={LIST_KICKER}>Centro de referência</span>
+          <SortHeader label="Vencimento" active={expenseSort.key === "dueDate"} direction={expenseSort.direction} onClick={() => toggleExpenseSort("dueDate")} />
+          <SortHeader label="Valor" align="right" active={expenseSort.key === "value"} direction={expenseSort.direction} onClick={() => toggleExpenseSort("value")} />
+          <span className={cn(LIST_KICKER, "text-center")}>Status</span>
+          <span />
+        </div>
+        <div className="flex items-center gap-4 border-b border-ds-divider px-[18px] py-2.5 md:hidden">
+          <span className={LIST_KICKER}>Ordenar</span>
+          <SortHeader label="Vencimento" active={expenseSort.key === "dueDate"} direction={expenseSort.direction} onClick={() => toggleExpenseSort("dueDate")} />
+          <SortHeader label="Valor" active={expenseSort.key === "value"} direction={expenseSort.direction} onClick={() => toggleExpenseSort("value")} />
+        </div>
+
+        {loading || resultCentersLoading ? (
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-14 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : filteredDisplayEntries.length === 0 ? (
+          <div className="m-4 rounded-[18px] border border-dashed border-ds-border px-6 py-14 text-center text-sm text-ds-ink-muted">
+            {hasActiveFilters ? "Nenhuma despesa encontrada para estes filtros." : "Nenhuma despesa encontrada."}
+          </div>
+        ) : (
+          expenseListRows.map((row) => {
+            if (row.kind === "week") {
+              return (
+                <DueWeekHeader
+                  key={`week-${row.group.key}`}
+                  collapsed={collapsedDueWeeks.has(row.group.key)}
+                  weekNumber={row.group.weekNumber}
+                  label={row.group.label}
+                  count={row.group.expenses.length}
+                  total={row.group.totalValue}
+                  onToggle={() => toggleDueWeek(row.group.key)}
+                />
+              );
+            }
+            if (row.dueWeekKey && collapsedDueWeeks.has(row.dueWeekKey)) return null;
+            const today = startOfDay(new Date());
+
+            if (row.kind === "card_statement") {
+              const statement = row.statement;
+              const statementUnits = Array.from(new Set(
+                statement.expenses
+                  .map((expense) => getExpenseUnitLabel(expense, resultCenterNameById))
+                  .filter((unit) => unit && unit !== "—")
+              ));
+              const unitLabel = statementUnits.length === 0
+                ? "Classificação pendente"
+                : statementUnits.length === 1
+                  ? statementUnits[0]
+                  : `${statementUnits.length} unidades`;
+              const auditSummary = statement.auditCounts.pending > 0
+                ? `${statement.auditCounts.pending} pendente${statement.auditCounts.pending === 1 ? "" : "s"} de auditoria`
+                : statement.auditCounts.historical > 0
+                  ? `${statement.auditCounts.historical} histórica${statement.auditCounts.historical === 1 ? "" : "s"} · fora do início da DRE`
+                  : statement.auditCounts.reconciled === statement.lineCount
+                    ? `${statement.lineCount} conferida${statement.lineCount === 1 ? "" : "s"}`
+                    : `${statement.auditCounts.audited} auditada${statement.auditCounts.audited === 1 ? "" : "s"} · ${statement.auditCounts.reconciled} conferida${statement.auditCounts.reconciled === 1 ? "" : "s"}`;
+              const unmatchedActiveCount = statement.unmatchedExpenses.filter(cardExpenseIsActiveStatementLine).length;
+              return (
+                <CardStatementListRow
+                  key={`card-statement-${statement.key}`}
+                  title={statement.title}
+                  selected={expandedCardStatementKey === statement.key}
+                  onOpen={() => setExpandedCardStatementKey(statement.key)}
+                  lineCount={statement.lineCount}
+                  auditSummary={auditSummary}
+                  auditPending={statement.auditCounts.pending > 0}
+                  unmatchedSummary={statement.unmatchedExpenses.length > 0 ? `${statement.unmatchedExpenses.length} fora da composição oficial` : null}
+                  unmatchedActive={unmatchedActiveCount > 0}
+                  unitLabel={unitLabel}
+                  due={statement.dueDate}
+                  showDueHint={Boolean(statement.dueDate) && statement.status !== "paid"}
+                  totalValue={statement.totalValue}
+                  statusKey={statement.status}
+                  statusLabel={STATUS_LABELS[statement.status] ?? statement.status}
+                />
+              );
+            }
+
+            const expense = row.expense;
+            const due = toDate(expense.dueDate);
+            const statusKey = getExpenseStatusKey(expense, today);
+            const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
+            const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
+              ? expense.installmentSchedule
+              : expense.installments || [];
+            const installmentNumber = Number(expense.installmentNumber) || Number(expense.installments?.[0]?.number) || 1;
+            const installmentTotal = Number(expense.installmentTotal) || Math.max(
+              installmentSchedule.length || 1,
+              ...installmentSchedule.map((installment: any) => Number(installment?.number) || 0)
+            );
+            return (
+              <ExpenseListRow
+                key={expense.id}
+                expense={expense}
+                statusKey={statusKey}
+                statusLabel={expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey}
+                selected={expandedExpenseId === expense.id}
+                onOpen={() => setExpandedExpenseId(expense.id)}
+                due={due}
+                showDueHint={Boolean(due) && !expenseAwaitingConfirmation(expense) && !["paid", "reconciled", "cancelled"].includes(expense.status)}
+                planName={planName}
+                unitLabel={getExpenseUnitLabel(expense, resultCenterNameById)}
+                installmentNode={installmentSchedule.length > 1 ? (
+                  <div className="inline-flex rounded-full bg-ds-neutral-bg px-2 py-0.5 text-[11px] font-bold text-ds-neutral">
+                    <InstallmentScheduleTooltip
+                      installments={installmentSchedule}
+                      label={`${installmentNumber}/${installmentTotal}`}
+                      totalInstallments={installmentTotal}
+                    />
+                  </div>
+                ) : null}
+                paymentMethodLabel={expense.plannedPaymentMethodType
+                  ? expense.plannedPaymentMethodLabel ||
+                    PLANNED_PAYMENT_METHOD_LABELS[expense.plannedPaymentMethodType as PlannedPaymentMethodType]
+                  : null}
+                uberNode={<UberRecognitionStatus record={expense} compact />}
               />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
-                <SelectValue placeholder="Filtrar por status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
-                <SelectItem value="pending">Em aberto</SelectItem>
-                <SelectItem value="pending_audit">Compras pendentes de auditoria</SelectItem>
-                <SelectItem value="draft">Rascunhos</SelectItem>
-                <SelectItem value="overdue">Vencidos</SelectItem>
-                <SelectItem value="paid">Pagos</SelectItem>
-                <SelectItem value="payment_found_pending_document">Pagamento confirmado · conferir despesa</SelectItem>
-                <SelectItem value="provisioned">Provisionados</SelectItem>
-                <SelectItem value="reconciled">Com previsão conciliada</SelectItem>
-                <SelectItem value="cancelled">Cancelados</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={originFilter} onValueChange={setOriginFilter}>
-              <SelectTrigger className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
-                <SelectValue placeholder="Filtrar por origem" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as origens</SelectItem>
-                <SelectItem value="purchasing">Origem: Compras</SelectItem>
-                <SelectItem value="manual">Demais despesas</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
-              <SelectTrigger className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
-                <SelectValue placeholder="Forma de pagamento" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os pagamentos</SelectItem>
-                <SelectItem value="credit_card">Cartão de crédito</SelectItem>
-                <SelectItem value="debit_card">Cartão de débito</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="transfer">Transferência</SelectItem>
-                <SelectItem value="cash">Dinheiro</SelectItem>
-                <SelectItem value="unassigned">Não informado</SelectItem>
-              </SelectContent>
-            </Select>
-            <ExpenseCompetencePicker
-              value={competenceMonth}
-              options={competenceOptions}
-              onValueChange={(value) => {
-                setCompetenceMonth(value);
-                if (value !== "all") {
-                  setPeriodPreset("custom");
-                  setDateFrom("");
-                  setDateTo("");
-                }
-              }}
-              className={cn(
-                activeCompetenceLabel && "border-primary/60 bg-primary/[0.06] text-primary ring-1 ring-primary/15"
-              )}
-            />
-            <ExpensePeriodFilter
-              preset={periodPreset}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onApply={(period) => {
-                setPeriodPreset(period.preset);
-                setDateFrom(period.dateFrom);
-                setDateTo(period.dateTo);
-                if (period.dateFrom || period.dateTo) setCompetenceMonth("all");
-              }}
-            />
-            <Select value={accountPlanFilter} onValueChange={setAccountPlanFilter}>
-              <SelectTrigger data-testid="expense-account-plan-filter" className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
-                <SelectValue placeholder="Plano de contas" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[360px]">
-                <SelectItem value="all">Todos os planos</SelectItem>
-                {accountPlanOptions.map((accountPlan) => (
-                  <SelectItem key={accountPlan.value} value={accountPlan.value} title={accountPlan.label}>
-                    {accountPlan.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={clearExpenseFilters}
-              className="h-8 rounded-lg bg-background px-2.5 text-xs font-semibold"
-            >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              Limpar filtros
-            </Button>
-          </div>
-          {activeCompetenceLabel ? (
-            <div
-              data-testid="active-expense-competence"
-              className="mt-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.045] px-2.5 py-1.5"
-            >
-              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary/75">
-                Competência
-              </span>
-              <span className="text-xs font-semibold text-foreground">{activeCompetenceLabel}</span>
-              <span className="h-3.5 w-px bg-primary/15" />
-              <span className="text-[10.5px] text-muted-foreground">
-                {filteredDisplayEntries.length} {filteredDisplayEntries.length === 1 ? "obrigação" : "obrigações"}
-              </span>
-              <span className="h-3.5 w-px bg-primary/15" />
-              <span data-testid="expense-competence-total" className="whitespace-nowrap font-mono text-xs font-semibold text-foreground">Total: {formatCurrency(filteredTotalValue)}</span>
-            </div>
-          ) : null}
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="px-4 py-3 font-medium">Descrição</th>
-                  <th className="px-4 py-3 font-medium">Fornecedor</th>
-                  <th className="px-4 py-3 font-medium">Centro de referência</th>
-                  <th
-                    className="px-4 py-3 font-medium"
-                    aria-sort={expenseSort.key === "dueDate" ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"}
-                  >
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => toggleExpenseSort("dueDate")}
-                    >
-                      Vencimento
-                      {expenseSort.key === "dueDate"
-                        ? expenseSort.direction === "asc"
-                          ? <ArrowUp className="h-3.5 w-3.5" />
-                          : <ArrowDown className="h-3.5 w-3.5" />
-                        : null}
-                    </button>
-                  </th>
-                  <th
-                    className="px-4 py-3 text-right font-medium"
-                    aria-sort={expenseSort.key === "value" ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"}
-                  >
-                    <button
-                      type="button"
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => toggleExpenseSort("value")}
-                    >
-                      Valor
-                      {expenseSort.key === "value"
-                        ? expenseSort.direction === "asc"
-                          ? <ArrowUp className="h-3.5 w-3.5" />
-                          : <ArrowDown className="h-3.5 w-3.5" />
-                        : null}
-                    </button>
-                  </th>
-                  <th className="w-[160px] px-4 py-3 text-center font-medium">Status</th>
-                  <th className="w-[52px] px-4 py-3 text-right font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {loading || resultCentersLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <tr key={index} className="border-b">
-                      <td colSpan={7} className="p-4">
-                        <Skeleton className="h-10 w-full" />
-                      </td>
-                    </tr>
-                  ))
-                ) : filteredDisplayEntries.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-16 text-center text-muted-foreground">
-                      Nenhuma despesa encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  expenseListRows.map((row) => {
-                    if (row.kind === "week") {
-                      const isCollapsed = collapsedDueWeeks.has(row.group.key);
-                      return (
-                        <tr key={`week-${row.group.key}`} className="border-b border-primary/10 bg-primary/[0.035]">
-                          <td colSpan={7} className="p-0">
-                            <button
-                              type="button"
-                              className="grid w-full min-w-[760px] grid-cols-[16px_16px_210px_160px_120px_minmax(160px,1fr)] items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
-                              aria-expanded={!isCollapsed}
-                              aria-label={`${isCollapsed ? "Expandir" : "Recolher"} ${row.group.weekNumber ? `semana ${row.group.weekNumber}` : "grupo sem vencimento"} · ${row.group.label}`}
-                              onClick={() => toggleDueWeek(row.group.key)}
-                            >
-                              <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-primary transition-transform", !isCollapsed && "rotate-90")} />
-                              <CalendarDays className="h-3.5 w-3.5 text-primary" />
-                              <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/75">
-                                {row.group.weekNumber ? `Semana ${row.group.weekNumber} · vencimento` : "Sem vencimento"}
-                              </span>
-                              <span className="whitespace-nowrap text-xs font-semibold text-foreground">{row.group.label}</span>
-                              <span className="whitespace-nowrap text-[10.5px] text-muted-foreground">
-                                {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
-                              </span>
-                              <span className="whitespace-nowrap border-l border-primary/15 pl-3 font-mono text-xs font-semibold text-foreground">Total: {formatCurrency(row.group.totalValue)}</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    if (row.dueWeekKey && collapsedDueWeeks.has(row.dueWeekKey)) return null;
-                    if (row.kind === "card_statement") {
-                      const statement = row.statement;
-                      const due = statement.dueDate;
-                      const isExpanded = expandedCardStatementKey === statement.key;
-                      const statementUnits = Array.from(new Set(
-                        statement.expenses
-                          .map((expense) => getExpenseUnitLabel(expense, resultCenterNameById))
-                          .filter((unit) => unit && unit !== "—")
-                      ));
-                      const unitLabel = statementUnits.length === 0
-                        ? "Classificação pendente"
-                        : statementUnits.length === 1
-                          ? statementUnits[0]
-                          : `${statementUnits.length} unidades`;
-                      const auditSummary = statement.auditCounts.pending > 0
-                        ? `${statement.auditCounts.pending} pendente${statement.auditCounts.pending === 1 ? "" : "s"} de auditoria`
-                        : statement.auditCounts.historical > 0
-                          ? `${statement.auditCounts.historical} histórica${statement.auditCounts.historical === 1 ? "" : "s"} · fora do início da DRE`
-                        : statement.auditCounts.reconciled === statement.lineCount
-                          ? `${statement.lineCount} conferida${statement.lineCount === 1 ? "" : "s"}`
-                          : `${statement.auditCounts.audited} auditada${statement.auditCounts.audited === 1 ? "" : "s"} · ${statement.auditCounts.reconciled} conferida${statement.auditCounts.reconciled === 1 ? "" : "s"}`;
-                      const unmatchedActiveCount = statement.unmatchedExpenses.filter(cardExpenseIsActiveStatementLine).length;
-                      const statementHref = `${FINANCIAL_ROUTES.cardStatements}?month=${encodeURIComponent(statement.monthKey)}&accountId=${encodeURIComponent(statement.accountId)}&paymentMethodId=${encodeURIComponent(statement.paymentMethodId)}`;
+            );
+          })
+        )}
+      </div>
 
-                      return (
-                        <Fragment key={`card-statement-${statement.key}`}>
-                          <tr
-                            className={cn("border-b cursor-pointer bg-sky-50/25 transition-colors hover:bg-sky-50/50", isExpanded && "bg-sky-50/50")}
-                            onClick={() => setExpandedCardStatementKey((current) => current === statement.key ? null : statement.key)}
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex items-start gap-3">
-                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
-                                  <CreditCard className="h-4 w-4" />
-                                </span>
-                                <div className="min-w-0 space-y-1">
-                                  <p className="line-clamp-2 font-semibold leading-5">{statement.title}</p>
-                                  <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
-                                    Fatura de cartão
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <p>{statement.lineCount} {statement.lineCount === 1 ? "lançamento" : "lançamentos"}</p>
-                              <p className={cn("mt-1 text-xs", statement.auditCounts.pending > 0 ? "text-amber-700" : "text-muted-foreground")}>
-                                {auditSummary}
-                              </p>
-                              {statement.unmatchedExpenses.length > 0 ? (
-                                <p className={cn("mt-1 text-xs", unmatchedActiveCount > 0 ? "text-amber-700" : "text-muted-foreground")}>
-                                  {statement.unmatchedExpenses.length} fora da composição oficial
-                                </p>
-                              ) : null}
-                            </td>
-                            <td className="px-4 py-3">
-                              <p className="line-clamp-2 leading-5">{unitLabel}</p>
-                            </td>
-                            <td className="px-4 py-3">
-                              <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
-                              {due && statement.status !== "paid" ? (
-                                <p className={cn("mt-1 text-xs", due < startOfDay(new Date()) ? "text-rose-600" : "text-muted-foreground")}>
-                                  {due < startOfDay(new Date())
-                                    ? `${Math.abs(Math.round((startOfDay(new Date()).getTime() - due.getTime()) / 86400000))}d atraso`
-                                    : `em ${Math.round((due.getTime() - startOfDay(new Date()).getTime()) / 86400000)}d`}
-                                </p>
-                              ) : null}
-                            </td>
-                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatCurrency(statement.totalValue)}</td>
-                            <td className="w-[160px] px-4 py-3 text-center">
-                              <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statement.status])}>
-                                {STATUS_LABELS[statement.status]}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {isExpanded ? <ChevronUp className="ml-auto h-4 w-4 text-muted-foreground" /> : <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />}
-                            </td>
-                          </tr>
-                          {isExpanded ? (
-                            <tr className="border-b bg-sky-50/15">
-                              <td colSpan={7} className="px-4 pb-4 pt-2">
-                                <div className="overflow-hidden rounded-xl border bg-background">
-                                  <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/25 px-4 py-3">
-                                    <div>
-                                      <p className="text-sm font-semibold">Lançamentos oficiais desta fatura</p>
-                                      <p className="mt-0.5 text-xs text-muted-foreground">
-                                        A fatura é a obrigação de pagamento; cada compra permanece como despesa individual na DRE.
-                                      </p>
-                                    </div>
-                                    {canAccessAudits ? (
-                                      <Button asChild variant="outline" size="sm" className="h-8 rounded-lg text-xs">
-                                        <Link href={statementHref} onClick={(event) => event.stopPropagation()}>
-                                          Abrir auditoria do cartão
-                                        </Link>
-                                      </Button>
-                                    ) : null}
-                                  </div>
-                                  <div className="overflow-x-auto">
-                                    <table className="min-w-[920px] w-full text-left text-xs">
-                                      <thead className="border-b bg-muted/10 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                        <tr>
-                                          <th className="px-3 py-2.5 font-semibold">Compra</th>
-                                          <th className="px-3 py-2.5 font-semibold">Data</th>
-                                          <th className="px-3 py-2.5 font-semibold">Plano de contas</th>
-                                          <th className="px-3 py-2.5 font-semibold">Centro de referência</th>
-                                          <th className="px-3 py-2.5 text-right font-semibold">Valor</th>
-                                          <th className="px-3 py-2.5 text-center font-semibold">Auditoria</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y">
-                                        {statement.lines.map((line) => {
-                                          const expense = line.expense;
-                                          const issues = cardExpenseAuditIssues(expense);
-                                          const auditStatus = line.auditStatus;
-                                          const auditMeta = auditStatus === "reconciled"
-                                            ? { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
-                                            : auditStatus === "historical"
-                                              ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
-                                            : auditStatus === "audited"
-                                              ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
-                                              : { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" };
-                                          const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
-                                            || expense.accountPlanName || expense.accountId || expense.accountPlan || "Pendente";
-                                          const matchedExisting = Boolean(expense.reconciledProvisionId || expense.cardStatementRegisteredValue != null);
-                                          const chargeDate = toDate(expense.cardChargeDate);
-                                          return (
-                                            <tr key={line.lineId} className="align-top hover:bg-muted/15">
-                                              <td className="px-3 py-3">
-                                                <p className="max-w-[300px] font-medium">{expense.description || "Compra sem descrição"}</p>
-                                                <p className="mt-0.5 text-[10.5px] text-muted-foreground">{expense.supplier || "Favorecido pendente"}</p>
-                                                {line.installmentNumber ? (
-                                                  <p className="mt-1 text-[9.5px] text-muted-foreground">Parcela {line.installmentNumber}</p>
-                                                ) : null}
-                                                <p className="mt-1 text-[9.5px] font-medium text-sky-700">
-                                                  {matchedExisting ? "Correspondência encontrada" : "Importada da fatura"}
-                                                </p>
-                                                <UberRecognitionStatus record={expense} compact />
-                                              </td>
-                                              <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
-                                                {chargeDate ? format(chargeDate, "dd/MM/yyyy") : "—"}
-                                              </td>
-                                              <td className={cn("px-3 py-3", planName === "Pendente" && "text-amber-700")}>{planName}</td>
-                                              <td className="px-3 py-3">{getExpenseUnitLabel(expense, resultCenterNameById)}</td>
-                                              <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-semibold">{formatCurrency(line.amount)}</td>
-                                              <td className="px-3 py-3 text-center">
-                                                <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-medium", auditMeta.className)} title={issues.length ? `Revisar: ${issues.join(", ")}` : undefined}>
-                                                  {auditMeta.label}
-                                                </span>
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                      {statement.creditTotal > 0 ? (
-                                        <tfoot className="border-t bg-emerald-50/60">
-                                          <tr>
-                                            <td colSpan={4} className="px-3 py-2.5 text-right font-medium text-emerald-700">Créditos e estornos</td>
-                                            <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold text-emerald-700">− {formatCurrency(statement.creditTotal)}</td>
-                                            <td />
-                                          </tr>
-                                        </tfoot>
-                                      ) : null}
-                                    </table>
-                                  </div>
-                                  {statement.unmatchedExpenses.length > 0 ? (
-                                    <div className={cn("border-t px-4 py-3", unmatchedActiveCount > 0 ? "border-amber-200 bg-amber-50/70" : "bg-muted/20")}>
-                                      <p className="text-xs font-semibold">
-                                        {statement.unmatchedExpenses.length} registro{statement.unmatchedExpenses.length === 1 ? "" : "s"} fora da composição oficial
-                                      </p>
-                                      <p className="mt-1 text-[11px] text-muted-foreground">
-                                        {unmatchedActiveCount > 0
-                                          ? `${unmatchedActiveCount} registro${unmatchedActiveCount === 1 ? " precisa" : "s precisam"} de conciliação. Nenhum deles altera o total oficial.`
-                                          : "São cancelamentos ou previsões já conciliadas. Permanecem visíveis para rastreabilidade, sem alterar o total oficial."}
-                                      </p>
-                                      <div className="mt-2 space-y-1.5">
-                                        {statement.unmatchedExpenses.map((expense) => (
-                                          <div key={`unmatched-${expense.id}`} className="flex items-start justify-between gap-3 text-[11px]">
-                                            <span className="min-w-0 truncate">
-                                              {expense.description || "Registro sem descrição"} · {unmatchedCardStatementRecordLabel(expense)}
-                                            </span>
-                                            <span className="shrink-0 font-mono">{formatCurrency(Number(expense.totalValue) || 0)}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    }
-                    const expense = row.expense;
-                    const due = toDate(expense.dueDate);
-                    const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
-                    const isExpanded = expandedExpenseId === expense.id;
-                    const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
-                    const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
-                    const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
-                      ? expense.installmentSchedule
-                      : expense.installments || [];
-                    const installmentNumber = Number(expense.installmentNumber) || Number(expense.installments?.[0]?.number) || 1;
-                    const installmentTotal = Number(expense.installmentTotal) || Math.max(
-                      installmentSchedule.length || 1,
-                      ...installmentSchedule.map((installment: any) => Number(installment?.number) || 0)
-                    );
-                    const installmentLabel = `${installmentNumber}/${installmentTotal}`;
-                    const relatedPurchaseExpense = expense.relatedPurchaseExpenseId
-                      ? expenseById.get(String(expense.relatedPurchaseExpenseId))
-                      : null;
+      {selectedExpense ? renderExpensePanel(selectedExpense) : null}
+      {selectedStatement && selectedStatement.kind === "card_statement" ? renderStatementPanel(selectedStatement.statement) : null}
 
-                    return (
-                      <Fragment key={expense.id}>
-                        <tr
-                          className={cn("border-b cursor-pointer transition-colors hover:bg-muted/20", isExpanded && "bg-muted/20")}
-                          onClick={() => setExpandedExpenseId((current) => (current === expense.id ? null : expense.id))}
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-start gap-3">
-                              <span className={cn("mt-1 h-7 w-1 shrink-0 rounded-full", STATUS_ACCENT_COLORS[statusKey] || "bg-border")} />
-                              <div className="min-w-0 space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="line-clamp-2 min-w-0 font-medium leading-5">{expense.description}</p>
-                                  {installmentSchedule.length > 1 && (
-                                    <div className="inline-flex rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                      <InstallmentScheduleTooltip
-                                        installments={installmentSchedule}
-                                        label={installmentLabel}
-                                        totalInstallments={installmentTotal}
-                                      />
-                                    </div>
-                                  )}
-                                  {expense.originModule === "purchasing" && (
-                                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
-                                      Compras
-                                    </span>
-                                  )}
-                                  {expense.plannedPaymentMethodType && (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
-                                      {expense.plannedPaymentMethodType === "credit_card" && <CreditCard className="h-3 w-3" />}
-                                      {expense.plannedPaymentMethodLabel ||
-                                        PLANNED_PAYMENT_METHOD_LABELS[expense.plannedPaymentMethodType as PlannedPaymentMethodType]}
-                                    </span>
-                                  )}
-                                </div>
-                                <UberRecognitionStatus record={expense} compact />
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="space-y-1">
-                              <p>{expense.supplier || "—"}</p>
-                              <p className="text-xs text-muted-foreground">{planName}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="line-clamp-2 break-words leading-5">{primaryUnit}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="space-y-1 text-center md:text-left">
-                              <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
-                              {due && !expenseAwaitingConfirmation(expense) && !["paid", "reconciled", "cancelled"].includes(expense.status) ? (
-                                <p className={cn("text-xs", due < startOfDay(new Date()) ? "text-rose-600" : "text-muted-foreground")}>
-                                  {due < startOfDay(new Date())
-                                    ? `${Math.abs(Math.round((startOfDay(new Date()).getTime() - due.getTime()) / 86400000))}d atraso`
-                                    : `em ${Math.round((due.getTime() - startOfDay(new Date()).getTime()) / 86400000)}d`}
-                                </p>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono">{formatCurrency(expense.totalValue || 0)}</td>
-                          <td className="w-[160px] px-4 py-3 text-center">
-                            <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
-                              {expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {permissions.financial?.expenses?.edit && !expense.budgetMigration && !expense.sourceSettlement && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  asChild
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`} title="Editar despesa">
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    <span className="sr-only">Editar despesa</span>
-                                  </Link>
-                                </Button>
-                              )}
-                              {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                            </div>
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr className="border-b bg-[#fdfcfa] dark:bg-muted/10">
-                            <td colSpan={7} className="px-[18px] pb-4 pt-1">
-                              <ExpenseExpandedDetails
-                                expense={expense}
-                                relatedPurchaseExpense={relatedPurchaseExpense}
-                                accountPlanMap={accountPlanMap}
-                                resultCenterNameById={resultCenterNameById}
-                                canViewPersonnelCosts={canViewPersonnelCosts}
-                                canViewExpenses={canViewExpenses}
-                                canEdit={permissions.financial?.expenses?.edit === true && !expense.budgetMigration && !expense.sourceSettlement}
-                                canPay={permissions.financial?.expenses?.pay === true && !expense.budgetMigration && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0}
-                                canDelete={permissions.financial?.expenses?.delete === true && !expense.budgetMigration && !expense.sourceSettlement}
-                                finalizingAudit={finalizingAuditId === expense.id}
-                                onFinalizeAudit={() => void handleFinalizeAudit(expense)}
-                                onPay={() => setPayTarget({
-                                  ...expense,
-                                  accountPlanName: planName,
-                                  resultCenter: primaryUnit,
-                                })}
-                                onDelete={() => setDeleteTarget(expense)}
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="md:hidden">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-2 border-b bg-muted/20 px-4 py-2">
-              <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Descrição</span>
-              <span className="text-right text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Valor</span>
-              <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Status</span>
-            </div>
-            {loading || resultCentersLoading ? (
-              <div className="space-y-3 p-4">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Skeleton key={index} className="h-24 w-full rounded-xl" />
-                ))}
-              </div>
-            ) : filteredDisplayEntries.length === 0 ? (
-              <div className="py-16 text-center text-sm text-muted-foreground">Nenhuma despesa encontrada.</div>
-            ) : (
-              <div className="flex flex-col">
-                {expenseListRows.map((row) => {
-                  if (row.kind === "week") {
-                    const isCollapsed = collapsedDueWeeks.has(row.group.key);
-                    return (
-                      <button
-                        key={`mobile-week-${row.group.key}`}
-                        type="button"
-                        className="w-full border-b border-primary/10 bg-primary/[0.04] px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.065] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
-                        aria-expanded={!isCollapsed}
-                        aria-label={`${isCollapsed ? "Expandir" : "Recolher"} ${row.group.weekNumber ? `semana ${row.group.weekNumber}` : "grupo sem vencimento"} · ${row.group.label}`}
-                        onClick={() => toggleDueWeek(row.group.key)}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary/75">
-                              <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", !isCollapsed && "rotate-90")} />
-                              <CalendarDays className="h-3.5 w-3.5" />
-                              {row.group.weekNumber ? `Semana ${row.group.weekNumber} · vencimento` : "Sem vencimento"}
-                            </p>
-                            <p className="mt-1 text-xs font-semibold text-foreground">{row.group.label}</p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="font-mono text-xs font-semibold">Total: {formatCurrency(row.group.totalValue)}</p>
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">
-                              {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  }
-                  if (row.dueWeekKey && collapsedDueWeeks.has(row.dueWeekKey)) return null;
-                  if (row.kind === "card_statement") {
-                    const statement = row.statement;
-                    const isExpanded = expandedCardStatementKey === statement.key;
-                    const pendingAudit = statement.auditCounts.pending;
-                    const historicalCount = statement.auditCounts.historical;
-                    const unmatchedActiveCount = statement.unmatchedExpenses.filter(cardExpenseIsActiveStatementLine).length;
-                    return (
-                      <div key={`mobile-card-statement-${statement.key}`} className="border-b border-sky-100 bg-sky-50/20">
-                        <button
-                          type="button"
-                          className="w-full px-4 py-3 text-left"
-                          onClick={() => setExpandedCardStatementKey((current) => current === statement.key ? null : statement.key)}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex min-w-0 items-start gap-2.5">
-                              <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
-                                <CreditCard className="h-3.5 w-3.5" />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold leading-5">{statement.title}</p>
-                                <p className={cn("mt-1 text-[10.5px]", pendingAudit > 0 ? "text-amber-700" : "text-muted-foreground")}>
-                                  {statement.lineCount} {statement.lineCount === 1 ? "lançamento" : "lançamentos"}
-                                  {pendingAudit > 0
-                                    ? ` · ${pendingAudit} pendente${pendingAudit === 1 ? "" : "s"} de auditoria`
-                                    : historicalCount > 0
-                                      ? " · histórico anterior à DRE"
-                                      : " · auditoria concluída"}
-                                </p>
-                                {statement.unmatchedExpenses.length > 0 ? (
-                                  <p className={cn("mt-1 text-[10px]", unmatchedActiveCount > 0 ? "text-amber-700" : "text-muted-foreground")}>
-                                    {statement.unmatchedExpenses.length} fora da composição oficial
-                                  </p>
-                                ) : null}
-                              </div>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className="font-mono text-sm font-semibold">{formatCurrency(statement.totalValue)}</p>
-                              <span className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px]", STATUS_COLORS[statement.status])}>
-                                {STATUS_LABELS[statement.status]}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="mt-2 flex items-center justify-between text-[10.5px] text-muted-foreground">
-                            <span>{statement.dueDate ? `Venc. ${format(statement.dueDate, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
-                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </div>
-                        </button>
-                        {isExpanded ? (
-                          <div className="border-t bg-background px-3 py-2">
-                            <div className="divide-y rounded-lg border">
-                              {statement.lines.map((line) => {
-                                const expense = line.expense;
-                                const auditLabel = line.auditStatus === "reconciled"
-                                  ? "Conferida"
-                                  : line.auditStatus === "historical"
-                                    ? "Histórico"
-                                    : line.auditStatus === "audited" ? "Auditada" : "Pendente";
-                                return (
-                                  <div key={line.lineId} className="px-3 py-2.5">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="text-xs font-medium leading-4">{expense.description || "Compra sem descrição"}</p>
-                                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                          {toDate(expense.cardChargeDate) ? format(toDate(expense.cardChargeDate)!, "dd/MM/yyyy") : "Data pendente"}
-                                          {` · ${auditLabel}`}
-                                          {line.installmentNumber ? ` · parcela ${line.installmentNumber}` : ""}
-                                        </p>
-                                        <UberRecognitionStatus record={expense} compact />
-                                      </div>
-                                      <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(line.amount)}</p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {statement.creditTotal > 0 ? (
-                                <div className="flex items-center justify-between gap-3 bg-emerald-50/60 px-3 py-2.5 text-[10px] font-medium text-emerald-700">
-                                  <span>Créditos e estornos</span>
-                                  <span className="font-mono font-semibold">− {formatCurrency(statement.creditTotal)}</span>
-                                </div>
-                              ) : null}
-                            </div>
-                            {statement.unmatchedExpenses.length > 0 ? (
-                              <div className={cn("mt-2 rounded-lg border px-3 py-2.5", unmatchedActiveCount > 0 ? "border-amber-200 bg-amber-50/70" : "bg-muted/20")}>
-                                <p className="text-[11px] font-semibold">Registros fora da composição oficial</p>
-                                <p className="mt-1 text-[10px] text-muted-foreground">
-                                  {unmatchedActiveCount > 0
-                                    ? `${unmatchedActiveCount} precisa${unmatchedActiveCount === 1 ? "" : "m"} de conciliação.`
-                                    : "Cancelados ou conciliados, mantidos somente para rastreabilidade."}
-                                </p>
-                                <div className="mt-2 space-y-1">
-                                  {statement.unmatchedExpenses.map((expense) => (
-                                    <div key={`mobile-unmatched-${expense.id}`} className="flex items-start justify-between gap-2 text-[10px]">
-                                      <span className="min-w-0 truncate">
-                                        {expense.description || "Registro sem descrição"} · {unmatchedCardStatementRecordLabel(expense)}
-                                      </span>
-                                      <span className="shrink-0 font-mono">{formatCurrency(Number(expense.totalValue) || 0)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  }
-                  const expense = row.expense;
-                  const due = toDate(expense.dueDate);
-                  const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
-                  const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
-                  const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
-                  const personAllocations = canViewPersonnelCosts
-                    ? expensePersonAllocations(expense, accountPlanMap)
-                    : [];
-                  const personAllocationPeopleCount = personAllocationDistinctPeopleCount(personAllocations);
-                  const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
-                  const relatedPurchaseExpense = expense.relatedPurchaseExpenseId
-                    ? expenseById.get(String(expense.relatedPurchaseExpenseId))
-                    : null;
-
-                  return (
-                    <div key={expense.id} className="border-b border-border/50 px-4 py-3 last:border-b-0 hover:bg-muted/10">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 flex-1 text-sm font-medium leading-5">{expense.description}</p>
-                        <p className={cn("shrink-0 text-sm font-medium", statusKey === "cancelled" && "text-red-700")}>
-                          {formatCurrency(expense.totalValue || 0)}
-                        </p>
-                      </div>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                        <span>{expense.supplier || "—"}</span>
-                        <span className="text-border">·</span>
-                        <span>{primaryUnit}</span>
-                        <span className="text-border">·</span>
-                        <span>{planName}</span>
-                        {accountingAllocations.length > 1 && <span>· {accountingAllocations.length} apropriações</span>}
-                        {personAllocationPeopleCount > 1 && <span>· {personAllocationPeopleCount} pessoas</span>}
-                        <span className="text-border">·</span>
-                        <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
-                      </div>
-                      <UberRecognitionStatus record={expense} compact />
-                      {expenseAwaitingConfirmation(expense) && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">Pagamento confirmado no extrato. A despesa ainda precisa de conferência; esse valor já pago não é uma cobrança vencida.</p>}
-                      {expense.sourceSettlement && <SourceSettlementNotice source={expense.sourceSettlement} cancelled={expense.status === "cancelled"} />}
-
-                      {expense.originModule === "purchasing" && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
-                            Compras
-                          </span>
-                          {expense.purchaseOrderId && (
-                            <PurchaseOrderItemsLink
-                              orderId={expense.purchaseOrderId}
-                              href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(expensesAuditReturnHref)}`}
-                              label="Abrir pedido"
-                            />
-                          )}
-                          {relatedPurchaseExpense && (
-                            <Button variant="outline" size="sm" className="h-7 text-[10px]" asChild>
-                              <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
-                                {expense.purchaseExpenseRole === "freight" ? "Ver mercadoria" : "Ver frete separado"}
-                              </Link>
-                            </Button>
-                          )}
-                          <span className={cn("text-[11px]", statusKey === "pending_audit" ? "text-amber-700" : "text-muted-foreground")}>
-                            {statusKey === "cancelled"
-                              ? "Cancelado junto com o pedido."
-                              : "Revise parcelamento, conta e liquidação."}
-                          </span>
-                        </div>
-                      )}
-
-                      {expense.notes && expense.originModule !== "purchasing" && (
-                        <p className="mt-2 text-[11px] text-muted-foreground">{expense.notes}</p>
-                      )}
-
-                      <div className="mt-3 flex items-center justify-end gap-2">
-                        <span className={cn("rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statusKey] || "border-border text-foreground")}>
-                          {expense.budgetMigration ? "Transferida para orçamento" : STATUS_LABELS[statusKey] || statusKey}
-                        </span>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-7 w-7 rounded-lg border-border/70">
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                              <span className="sr-only">Ações</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
-                            {permissions.financial?.expenses?.edit &&
-                              expense.originModule === "purchasing" &&
-                              expense.originStatus === "pending_audit" && (
-                                <DropdownMenuItem
-                                  disabled={finalizingAuditId === expense.id}
-                                  onClick={() => void handleFinalizeAudit(expense)}
-                                >
-                                  Finalizar auditoria
-                                </DropdownMenuItem>
-                              )}
-                            {permissions.financial?.expenses?.pay && !expense.sourceSettlement && expenseCashForecastAmount(expense) > 0 && ["pending", "partially_paid"].includes(expense.status) && (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  setPayTarget({
-                                    ...expense,
-                                    accountPlanName: planName,
-                                    resultCenter: primaryUnit,
-                                  })
-                                }
-                              >
-                                Registrar pagamento
-                              </DropdownMenuItem>
-                            )}
-                            {permissions.financial?.expenses?.edit && !expense.budgetMigration && !expense.sourceSettlement && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
-                                  {expense.status === "draft" ? "Continuar rascunho" : "Editar"}
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
-                            {permissions.financial?.expenses?.delete && !expense.budgetMigration && !expense.sourceSettlement && expense.originModule !== "purchasing" && (
-                              <DropdownMenuItem onClick={() => setDeleteTarget(expense)}>
-                                <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent className="max-w-4xl overflow-hidden rounded-3xl p-0">
           <DialogHeader className="px-6 pt-6">
@@ -1953,21 +1520,43 @@ export function ExpensesPage() {
       </Dialog>
 
       <PayExpenseDialog expense={payTarget} open={!!payTarget} onOpenChange={(open) => !open && setPayTarget(null)} />
-
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir despesa?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Essa ação remove a despesa <strong>{deleteTarget?.description}</strong> do banco financeiro.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </PageContainer>
+  );
+}
+
+const LIST_KICKER = "text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint";
+
+function SortHeader({
+  label,
+  active,
+  direction,
+  align,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  direction: ExpenseSortDirection;
+  align?: "right";
+  onClick: () => void;
+}) {
+  const Arrow = direction === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <span
+      className={cn(align === "right" && "text-right")}
+      aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          LIST_KICKER,
+          "inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+          active && "text-ds-accent-ink",
+        )}
+      >
+        {label}
+        {active ? <Arrow aria-hidden="true" className="h-3 w-3" /> : null}
+      </button>
+    </span>
   );
 }

@@ -8,6 +8,7 @@ import { Loader2, LockKeyhole, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PageHero } from "@/components/patterns/page-hero";
 import { PageContainer } from "@/components/layout/page-container";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
@@ -90,36 +91,33 @@ export function CashCountingSessionNewPage() {
       { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" },
       { label: "Nova sessão" },
     ]} />
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-2xl font-bold tracking-tight">Abrir sessão de contagem</h1><p className="mt-1.5 text-sm text-muted-foreground">Selecione as unidades. A data de cada malote será informada durante a contagem.</p></div>
-    </div>
-
-    <Card className="overflow-hidden rounded-[18px] border-stone-200 bg-[#fffefb]">
-      <CardHeader className="border-b border-stone-100 bg-[#faf8f4]"><CardTitle className="text-lg">Unidades da sessão</CardTitle><p className="text-sm text-zinc-500">Uma unidade fica indisponível para outras sessões até esta contagem ser finalizada.</p></CardHeader>
+<PageHero kicker="Financeiro · Fechamento do caixa" title="Abrir sessão de contagem" subtitle="Selecione as unidades. A data de cada malote será informada durante a contagem." />
+    <Card className="overflow-hidden rounded-[18px] border-ds-border bg-ds-warm">
+      <CardHeader className="border-b border-ds-border bg-[#faf8f4]"><CardTitle className="text-lg">Unidades da sessão</CardTitle><p className="text-sm text-ds-ink-muted">Uma unidade fica indisponível para outras sessões até esta contagem ser finalizada.</p></CardHeader>
       <CardContent className="pt-6">{loading ? <div className="flex h-32 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> : <div className="grid gap-3 sm:grid-cols-2">{units.map((unit) => {
         const lockedBy = lockByUnitId.get(unit.id);
         const checked = selectedUnits.includes(unit.id);
         const disabled = !!lockedBy;
         return <label key={unit.id} className={cn(
           "flex min-h-20 items-center gap-3 rounded-xl border p-3.5 transition-all motion-reduce:transform-none motion-reduce:transition-none",
-          disabled ? "cursor-not-allowed border-stone-200 bg-stone-50 opacity-70" : "cursor-pointer border-stone-200 hover:-translate-y-0.5 hover:border-pink-300 hover:shadow-sm",
-          checked && "border-pink-500 bg-pink-50 ring-2 ring-pink-100",
+          disabled ? "cursor-not-allowed border-ds-border bg-ds-muted opacity-70" : "cursor-pointer border-ds-border hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-sm",
+          checked && "border-ds-accent-soft bg-ds-accent-soft ring-2 ring-ds-accent",
         )}>
           <Checkbox checked={checked} disabled={disabled} onCheckedChange={(next) => setSelectedUnits((current) => next ? [...current, unit.id] : current.filter((id) => id !== unit.id))} />
-          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", disabled ? "bg-stone-200 text-zinc-500" : "bg-pink-100 text-pink-600")}>{disabled ? <LockKeyhole className="h-4 w-4" /> : <Store className="h-4 w-4" />}</span>
-          <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{unit.name}</strong><span className="mt-0.5 block text-xs text-zinc-400">{disabled ? `Em contagem por ${lockedBy.openedByName}` : `Filial PDV ${unit.pdvFilialId ?? "não configurada"}`}</span></span>
+          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", disabled ? "bg-ds-muted text-ds-ink-muted" : "bg-ds-accent-soft text-ds-accent-ink")}>{disabled ? <LockKeyhole className="h-4 w-4" /> : <Store className="h-4 w-4" />}</span>
+          <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{unit.name}</strong><span className="mt-0.5 block text-xs text-ds-ink-faint">{disabled ? `Em contagem por ${lockedBy.openedByName}` : `Filial PDV ${unit.pdvFilialId ?? "não configurada"}`}</span></span>
         </label>;
       })}</div>}</CardContent>
     </Card>
 
-    <div className="flex items-center gap-3 rounded-[18px] border border-stone-200 bg-[#fffefb] px-5 py-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-black text-blue-700">{countingUserInitials || "U"}</span>
-      <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[.1em] text-zinc-400">Contagem realizada por</span><strong className="mt-1 block truncate text-sm font-extrabold">{countingUserName}</strong><span className="mt-0.5 block text-xs font-semibold text-zinc-400">Financeiro</span></span>
+    <div className="flex items-center gap-3 rounded-[18px] border border-ds-border bg-ds-warm px-5 py-4">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ds-info-bg text-sm font-black text-ds-info">{countingUserInitials || "U"}</span>
+      <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[.1em] text-ds-ink-faint">Contagem realizada por</span><strong className="mt-1 block truncate text-sm font-extrabold">{countingUserName}</strong><span className="mt-0.5 block text-xs font-semibold text-ds-ink-faint">Financeiro</span></span>
     </div>
 
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[#1d1d26] px-5 py-4 text-white">
-      <span><span className="block text-xs text-zinc-400">Unidades selecionadas</span><strong className="text-lg">{selectedUnits.length}</strong></span>
-      <Button className="h-11 rounded-xl bg-pink-600 px-6 font-bold text-white hover:bg-pink-700" disabled={working || selectedUnits.length === 0} onClick={() => void createSession()}>{working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Abrir sessão</Button>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-ds-dark px-5 py-4 text-white">
+      <span><span className="block text-xs text-ds-ink-faint">Unidades selecionadas</span><strong className="text-lg">{selectedUnits.length}</strong></span>
+      <Button className="h-11 rounded-xl bg-ds-accent px-6 font-bold text-white hover:bg-ds-accent-hover" disabled={working || selectedUnits.length === 0} onClick={() => void createSession()}>{working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Abrir sessão</Button>
     </div>
   </PageContainer>;
 }

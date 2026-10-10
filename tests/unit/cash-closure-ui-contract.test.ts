@@ -60,7 +60,7 @@ test("modal de contagem respeita a viewport e o fluxo interno usa o retorno can�
   assert.match(countingDialogSource, /max-w-\[min\(1080px,calc\(100vw-2rem\)\)\]/);
   assert.match(countingDialogSource, /lg:grid-cols-3/);
   assert.match(countingDialogSource, /overflow-x-auto/);
-  assert.match(cashControlNavigationSource, /<PageHeader/);
+  assert.match(cashControlNavigationSource, /<BackButton/);
   assert.match(cashControlNavigationSource, /fallbackHref/);
   assert.doesNotMatch(cashControlNavigationSource, /Depósitos|Coala · Financeiro/);
 });

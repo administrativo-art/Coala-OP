@@ -7,16 +7,17 @@ const expensesPageSource = readFileSync(
   "utf8",
 );
 
-test("semanas de vencimento podem ser recolhidas no desktop e no mobile", () => {
+const weekHeaderSource = readFileSync(
+  "src/features/financial/components/expenses/expense-list-rows.tsx",
+  "utf8",
+);
+
+test("semanas de vencimento podem ser recolhidas em qualquer largura", () => {
   assert.match(expensesPageSource, /collapsedDueWeeks/);
   assert.match(expensesPageSource, /dueWeekKey: group\.key/);
   assert.match(expensesPageSource, /collapsedDueWeeks\.has\(row\.dueWeekKey\)/);
-  assert.equal(
-    [...expensesPageSource.matchAll(/aria-expanded=\{!isCollapsed\}/g)].length,
-    2,
-  );
-  assert.equal(
-    [...expensesPageSource.matchAll(/onClick=\{\(\) => toggleDueWeek\(row\.group\.key\)\}/g)].length,
-    2,
-  );
+  // Um único cabeçalho responsivo atende desktop e mobile.
+  assert.equal([...expensesPageSource.matchAll(/<DueWeekHeader/g)].length, 1);
+  assert.match(expensesPageSource, /onToggle=\{\(\) => toggleDueWeek\(row\.group\.key\)\}/);
+  assert.match(weekHeaderSource, /aria-expanded=\{!collapsed\}/);
 });

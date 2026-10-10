@@ -72,7 +72,7 @@ function MapBlock({ placement, selected, recent, locked, onSelect, onResize, onR
   const [open, setOpen] = useState(false);
   const sortable = useSortable({ id: placement.instanceId });
   const definition = MANAGEMENT_WIDGET_BY_ID.get(placement.widgetId);
-  const Icon = moduleIcon[placement.widgetId];
+  const Icon = (moduleIcon as Record<string, typeof widgetIcons.goals>)[placement.widgetId] ?? widgetIcons.templates;
   const { w, h } = placement.layouts.desktop;
   return (
     <div

@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { PageHero } from "@/components/patterns/page-hero"
 import { GoalsProvider } from "@/components/goals-provider"
 import { useDP } from "@/components/dp-context"
 import { GlassCard } from "@/components/ui/glass-card"
@@ -722,22 +723,12 @@ function ManagementDashboard() {
 
   return (
     <div className="w-full space-y-3 pb-8 font-ds">
-      <div className="flex flex-col justify-between gap-3 pb-1 md:flex-row md:items-end">
-        <div className="min-w-0">
-          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-ds-border bg-ds-accent-soft px-2.5 py-1 text-[11px] font-extrabold text-ds-accent-ink">
-            <Target className="h-3 w-3" />
-            Painel da gestão
-          </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Painel da gestão</h1>
-          <p className="mt-1 max-w-2xl text-sm font-medium text-ds-ink-muted">
-            Olá, {user?.username}. Organize os indicadores e atalhos mais importantes para sua rotina.
-          </p>
-        </div>
-        <div className="hidden items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 py-2 text-xs font-semibold text-ds-ink-muted shadow-sm sm:flex">
-          <Calendar className="h-4 w-4 text-ds-ink-faint" />
-          {format(today, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-        </div>
-      </div>
+      <PageHero
+        kicker="Gestão"
+        title="Painel da gestão"
+        subtitle={`Olá, ${user?.username}. Organize os indicadores e atalhos mais importantes para sua rotina.`}
+        actions={<span className="hidden items-center gap-2 rounded-ds-btn border border-white/[.14] px-3 py-2 text-xs font-bold text-ds-on-dark-2 sm:inline-flex"><Calendar className="h-4 w-4" />{format(today, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>}
+      />
 
       <ManagementDashboardBuilder firebaseUser={firebaseUser} userId={firebaseUser?.uid ?? user?.id ?? ""} userName={user?.username ?? "Usuário"} permissions={permissions}>
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-6 xl:grid-cols-12">

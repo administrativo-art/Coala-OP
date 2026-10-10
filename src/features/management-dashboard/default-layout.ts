@@ -1,5 +1,23 @@
 import { MANAGEMENT_WIDGET_BY_ID } from "./catalog";
-import type { DashboardWidgetPlacement, ManagementDashboardLayout, ManagementWidgetId } from "./types";
+import type { DashboardScope, DashboardWidgetPlacement, ManagementDashboardLayout, ManagementWidgetId } from "./types";
+
+const FINANCIAL_DEFAULT_WIDGETS: ManagementWidgetId[] = [
+  "fin-summary",
+  "fin-overdue",
+  "fin-due-week",
+  "fin-pending-audit",
+  "fin-competence",
+  "fin-cash-month",
+  "fin-forecast",
+  "fin-top-categories",
+  "fin-top-suppliers",
+  "fin-units",
+  "fin-bank-accounts",
+  "fin-payables-hub",
+  "fin-reconciliation-hub",
+  "fin-cash-control-hub",
+  "fin-planning-hub",
+];
 
 const DEFAULT_WIDGETS: ManagementWidgetId[] = [
   "goals-revenue",
@@ -16,11 +34,11 @@ const DEFAULT_WIDGETS: ManagementWidgetId[] = [
   "ai-costs-shortcuts",
 ];
 
-export function createDefaultManagementLayout(ownerId: string, ownerName: string, workspaceId = "coala-one"): ManagementDashboardLayout {
+export function createDefaultManagementLayout(ownerId: string, ownerName: string, workspaceId = "coala-one", scope: DashboardScope = "management"): ManagementDashboardLayout {
   const now = new Date().toISOString();
   let desktopX = 0;
   let desktopY = 0;
-  const widgets: DashboardWidgetPlacement[] = DEFAULT_WIDGETS.map((widgetId, index) => {
+  const widgets: DashboardWidgetPlacement[] = (scope === "financial" ? FINANCIAL_DEFAULT_WIDGETS : DEFAULT_WIDGETS).map((widgetId, index) => {
     const definition = MANAGEMENT_WIDGET_BY_ID.get(widgetId);
     if (!definition) throw new Error(`Widget desconhecido: ${widgetId}`);
     const layouts = structuredClone(definition.defaultLayouts);
@@ -42,11 +60,12 @@ export function createDefaultManagementLayout(ownerId: string, ownerName: string
   return {
     id: "personal",
     name: "Meu painel",
-    description: "Visão personalizada da gestão.",
+    description: scope === "financial" ? "Visão personalizada do financeiro." : "Visão personalizada da gestão.",
     visibility: "personal",
     ownerId,
     ownerName,
     workspaceId,
+    scope,
     targetProfileIds: [],
     lockedWidgetIds: [],
     widgets,

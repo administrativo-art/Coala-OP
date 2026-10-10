@@ -99,9 +99,9 @@ function differenceLabel(value: number | null) {
 }
 
 function differenceClass(value: number | null) {
-  if (value === null) return "bg-stone-100 text-zinc-500";
-  if (value === 0) return "bg-emerald-50 text-emerald-700";
-  return value > 0 ? "bg-blue-50 text-blue-700" : "bg-rose-50 text-rose-700";
+  if (value === null) return "bg-ds-muted text-ds-ink-muted";
+  if (value === 0) return "bg-ds-ok-bg text-ds-ok";
+  return value > 0 ? "bg-ds-info-bg text-ds-info" : "bg-ds-danger-bg text-ds-danger";
 }
 
 export function CashCountingDialog({ open, session, unit, editable, onClose, onSessionChanged }: Props) {
@@ -397,19 +397,19 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     : null;
 
   return <Dialog open={open} onOpenChange={(next) => { if (!next) void requestClose(); }}>
-    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] min-w-0 max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-2xl bg-[#f4f2ec] p-0 sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[min(1080px,calc(100vw-2rem))] sm:p-0">
+    <DialogContent hideClose className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] min-w-0 max-w-[1080px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-ds-modal bg-ds-muted p-0 font-ds sm:h-[min(860px,calc(100dvh-2rem))] sm:max-w-[min(1080px,calc(100vw-2rem))] sm:p-0">
       <DialogHeader className="min-w-0 space-y-0 rounded-t-2xl bg-transparent px-6 pb-3 pt-6 text-left sm:px-10 sm:pb-4 sm:pt-8">
         <div className="flex items-start justify-between gap-4 pr-1">
           <div className="min-w-0"><DialogTitle className="text-lg font-bold tracking-tight">Contar malote</DialogTitle><DialogDescription className="sr-only">Contagem do malote da unidade {unit.name}.</DialogDescription></div>
           <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-full" aria-label="Fechar contagem" disabled={changingDate} onClick={() => void requestClose()}><X className="h-4 w-4" /></Button>
         </div>
-        <div className="mt-6 min-w-0 rounded-xl border border-stone-200 bg-transparent p-4 sm:mt-8 sm:p-5">
+        <div className="mt-6 min-w-0 rounded-xl border border-ds-border bg-transparent p-4 sm:mt-8 sm:p-5">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-foreground">Passo a passo da contagem</p>
           <ol className="grid min-w-0 grid-flow-col auto-cols-[minmax(168px,1fr)] gap-2 overflow-x-auto pb-1 lg:grid-flow-row lg:grid-cols-3 lg:overflow-visible lg:pb-0" aria-label="Etapas para contar e finalizar o malote">
             {COUNTING_GUIDE_STEPS.map((step, index) => {
               const finalStep = index === COUNTING_GUIDE_STEPS.length - 1;
-              return <li key={step.title} className={cn("flex min-w-0 items-start gap-3 rounded-lg border bg-[#fffefb] p-4", finalStep ? "border-emerald-200" : "border-stone-200")}>
-                <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black text-white", finalStep ? "bg-emerald-700" : "bg-zinc-900")}>{index + 1}</span>
+              return <li key={step.title} className={cn("flex min-w-0 items-start gap-3 rounded-lg border bg-ds-warm p-4", finalStep ? "border-ds-border" : "border-ds-border")}>
+                <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black text-white", finalStep ? "bg-ds-ok" : "bg-ds-neutral")}>{index + 1}</span>
                 <span className="min-w-0"><strong className="block text-xs font-bold leading-4">{step.title}</strong><span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{step.description}</span></span>
               </li>;
             })}
@@ -419,25 +419,25 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="grid gap-3 bg-transparent px-6 py-3 sm:grid-cols-[minmax(260px,360px)_1fr] sm:items-center sm:px-10">
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-ds-border bg-white p-4 shadow-sm">
             <label><span className="mb-2 block text-[11px] font-bold uppercase tracking-[.1em] text-muted-foreground">Data impressa no malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
           </div>
-          <div className="flex min-h-8 items-center gap-2 text-xs text-zinc-500 sm:justify-end">
+          <div className="flex min-h-8 items-center gap-2 text-xs text-ds-ink-muted sm:justify-end">
             {changingDate && <><Loader2 className="h-4 w-4 animate-spin" />Abrindo a data…</>}
-            {saveState === "dirty" && <><AlertTriangle className="h-4 w-4 text-amber-600" />Alterações pendentes</>}
+            {saveState === "dirty" && <><AlertTriangle className="h-4 w-4 text-ds-warn" />Alterações pendentes</>}
             {saveState === "saving" && <><Loader2 className="h-4 w-4 animate-spin" />Salvando automaticamente…</>}
-            {saveState === "saved" && <><Check className="h-4 w-4 text-emerald-600" />Salvo{savedTime ? ` às ${savedTime}` : ""}</>}
-            {saveState === "error" && <><AlertTriangle className="h-4 w-4 text-rose-600" />Falha ao salvar; o modal permanecerá aberto</>}
+            {saveState === "saved" && <><Check className="h-4 w-4 text-ds-ok" />Salvo{savedTime ? ` às ${savedTime}` : ""}</>}
+            {saveState === "error" && <><AlertTriangle className="h-4 w-4 text-ds-danger" />Falha ao salvar; o modal permanecerá aberto</>}
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-10 sm:py-8">
           {data && !loading && !loadError && <div className="mb-4"><CashWithdrawalsPanel key={data.closure.id} data={data} editable={editable && !working} /></div>}
-          {!date ? <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-stone-300 bg-stone-50 text-center"><div><Save className="mx-auto h-9 w-9 text-zinc-300" /><p className="mt-3 font-bold">Informe a data impressa no malote</p><p className="mt-1 text-sm text-zinc-500">Ao voltar, esta será a última data aberta da sessão.</p></div></div>
+          {!date ? <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-ds-border bg-ds-muted text-center"><div><Save className="mx-auto h-9 w-9 text-ds-ink-faint" /><p className="mt-3 font-bold">Informe a data impressa no malote</p><p className="mt-1 text-sm text-ds-ink-muted">Ao voltar, esta será a última data aberta da sessão.</p></div></div>
             : loading ? <div className="grid min-h-72 place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
-            : loadError ? <div className="grid min-h-72 place-items-center rounded-2xl border border-rose-200 bg-rose-50/30 text-center"><div><AlertTriangle className="mx-auto h-8 w-8 text-rose-500" /><p className="mt-3 font-bold">Não foi possível carregar esta data</p><p className="mt-1 text-sm text-zinc-500">O rascunho local foi preservado. Tente carregar novamente.</p><Button variant="outline" className="mt-4 bg-white" onClick={() => void loadClosure(date)}><RefreshCw className="mr-2 h-4 w-4" />Tentar novamente</Button></div></div>
-            : missing ? <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-stone-300 text-center"><div><p className="font-bold">Fechamento ainda não sincronizado</p><p className="mt-1 text-sm text-zinc-500">Não há dados do PDV para {date.split("-").reverse().join("/")}.</p>{editable && permissions.financial?.cashClosures?.resync && <Button className="mt-4" onClick={() => void syncClosure()} disabled={working === "sync"}>{working === "sync" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Sincronizar PDV</Button>}</div></div>
-            : groups.length === 0 ? <div className="rounded-2xl border border-stone-200 p-8 text-center text-sm text-zinc-500">Nenhum operador encontrado nesta data.</div>
+            : loadError ? <div className="grid min-h-72 place-items-center rounded-2xl border border-ds-confirm-border bg-ds-danger-bg text-center"><div><AlertTriangle className="mx-auto h-8 w-8 text-ds-danger" /><p className="mt-3 font-bold">Não foi possível carregar esta data</p><p className="mt-1 text-sm text-ds-ink-muted">O rascunho local foi preservado. Tente carregar novamente.</p><Button variant="ds-secondary" size="md" className="mt-4" onClick={() => void loadClosure(date)}><RefreshCw className="mr-2 h-4 w-4" />Tentar novamente</Button></div></div>
+            : missing ? <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-ds-border text-center"><div><p className="font-bold">Fechamento ainda não sincronizado</p><p className="mt-1 text-sm text-ds-ink-muted">Não há dados do PDV para {date.split("-").reverse().join("/")}.</p>{editable && permissions.financial?.cashClosures?.resync && <Button variant="primary-modal" size="md" className="mt-4" onClick={() => void syncClosure()} disabled={working === "sync"}>{working === "sync" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Sincronizar PDV</Button>}</div></div>
+            : groups.length === 0 ? <div className="rounded-2xl border border-ds-border p-8 text-center text-sm text-ds-ink-muted">Nenhum operador encontrado nesta data.</div>
             : <div className="space-y-4">{groups.map((group) => {
               const operatorFinalized = group.operator?.status === "approved";
               const incomplete = group.lines.some((line) => line.reportedCents === null || line.countedCents === null);
@@ -447,11 +447,11 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
               const canEditReported = editable && !!permissions.financial?.cashClosures?.edit && !operatorFinalized;
               const canEditCounted = editable && !!permissions.financial?.cashClosures?.approve && !operatorFinalized;
               const collapsed = collapsedOperators.has(group.operatorId);
-              return <Card key={group.operatorId} className={cn("overflow-hidden rounded-2xl border-stone-200 transition-colors", operatorFinalized && "border-emerald-200 bg-emerald-50/20")}>
-                <CardHeader className="border-b border-stone-100 px-4 py-3 sm:px-5">
+              return <Card key={group.operatorId} className={cn("overflow-hidden rounded-2xl border-ds-border transition-colors", operatorFinalized && "border-ds-border bg-ds-ok-bg")}>
+                <CardHeader className="border-b border-ds-border px-4 py-3 sm:px-5">
                   <button type="button" className="flex w-full items-center justify-between gap-3 text-left" onClick={() => setCollapsedOperators((current) => { const next = new Set(current); if (next.has(group.operatorId)) next.delete(group.operatorId); else next.add(group.operatorId); return next; })} aria-expanded={!collapsed}>
-                    <span className="flex min-w-0 items-center gap-2.5"><ChevronDown className={cn("h-4 w-4 shrink-0 text-zinc-400 transition-transform", collapsed && "-rotate-90")} /><span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-black", operatorFinalized ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-pink-700")}>{group.name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span className="min-w-0"><CardTitle className="truncate text-base">{group.name}</CardTitle><p className={cn("mt-1 text-xs", operatorFinalized ? "text-emerald-700" : "text-zinc-400")}>{operatorFinalized ? "Operador finalizado" : `${group.lines.length} canais do fechamento`}</p></span></span>
-                    <span className="flex shrink-0 items-center gap-2">{operatorFinalized && <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Finalizado</Badge>}</span>
+                    <span className="flex min-w-0 items-center gap-2.5"><ChevronDown className={cn("h-4 w-4 shrink-0 text-ds-ink-faint transition-transform", collapsed && "-rotate-90")} /><span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-black", operatorFinalized ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-accent-soft text-ds-accent-ink")}>{group.name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span className="min-w-0"><CardTitle className="truncate text-base">{group.name}</CardTitle><p className={cn("mt-1 text-xs", operatorFinalized ? "text-ds-ok" : "text-ds-ink-faint")}>{operatorFinalized ? "Operador finalizado" : `${group.lines.length} canais do fechamento`}</p></span></span>
+                    <span className="flex shrink-0 items-center gap-2">{operatorFinalized && <Badge className="bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Finalizado</Badge>}</span>
                   </button>
                 </CardHeader>
                 {!collapsed && <>
@@ -460,19 +460,19 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
                     const automatic = isPdvAutoCountedChannel(line.channel);
                     const reportedShortage = (line.reportedDifferenceCents ?? 0) < 0;
                     const financeShortage = (line.differenceCents ?? 0) < 0;
-                    return <div key={line.id} className={cn("space-y-3 rounded-xl border border-stone-200 p-3 sm:p-4", (reportedShortage || financeShortage) && "border-rose-200 bg-rose-50/20")}>
-                      <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{line.channelLabel}</strong>{automatic && <Badge variant="outline" className="border-stone-200 bg-stone-50 text-zinc-500"><LockKeyhole className="mr-1.5 h-3 w-3" />Conferido pelo PDV</Badge>}</div>
+                    return <div key={line.id} className={cn("space-y-3 rounded-xl border border-ds-border p-3 sm:p-4", (reportedShortage || financeShortage) && "border-ds-confirm-border bg-ds-danger-bg")}>
+                      <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">{line.channelLabel}</strong>{automatic && <Badge variant="outline" className="border-ds-border bg-ds-muted text-ds-ink-muted"><LockKeyhole className="mr-1.5 h-3 w-3" />Conferido pelo PDV</Badge>}</div>
                       <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
-                        <div className="min-w-0 rounded-xl bg-stone-50 p-3 sm:p-4">
-                          <span className="block text-xs font-semibold text-zinc-500">PDV · esperado</span>
+                        <div className="min-w-0 rounded-xl bg-ds-muted p-3 sm:p-4">
+                          <span className="block text-xs font-semibold text-ds-ink-muted">PDV · esperado</span>
                           <strong className="mt-1 block font-mono text-lg tabular-nums">{formatBRL(line.expectedCents)}</strong>
                         </div>
-                        <div className="min-w-0 rounded-xl bg-stone-50 p-3 sm:p-4">
-                          <span className="block text-xs font-semibold text-zinc-500">Caixa · informado</span>
+                        <div className="min-w-0 rounded-xl bg-ds-muted p-3 sm:p-4">
+                          <span className="block text-xs font-semibold text-ds-ink-muted">Caixa · informado</span>
                           <CentsInput value={line.reportedCents} onChange={(value) => updateClosureLine(line.id, { reportedCents: value })} disabled={!canEditReported || automatic} ariaLabel={`Valor informado pelo Caixa em ${line.channelLabel} para ${group.name}`} className={cn("mt-1 h-10 bg-white font-mono", !canEditReported && "border-transparent bg-transparent px-0 shadow-none")} />
                         </div>
-                        <div className="min-w-0 rounded-xl border border-pink-200 bg-pink-50/40 p-3 sm:p-4">
-                          <span className="block text-xs font-semibold text-pink-800">Financeiro · contado agora</span>
+                        <div className="min-w-0 rounded-xl border border-ds-accent-soft bg-ds-accent-soft p-3 sm:p-4">
+                          <span className="block text-xs font-semibold text-ds-accent-ink">Financeiro · contado agora</span>
                           <CentsInput value={line.countedCents} onChange={(value) => updateClosureLine(line.id, { countedCents: value })} disabled={!canEditCounted || automatic} ariaLabel={`Valor contado agora em ${line.channelLabel} para ${group.name}`} className={cn("mt-1 h-10 bg-white font-mono", !canEditCounted && "border-transparent bg-transparent px-0 shadow-none")} />
                         </div>
                       </div>
@@ -481,17 +481,17 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
                         <div className={cn("rounded-lg px-3 py-2", differenceClass(line.conferenceDifferenceCents))}>Financeiro × Caixa: {differenceLabel(line.conferenceDifferenceCents)}</div>
                         <div className={cn("rounded-lg px-3 py-2", differenceClass(line.differenceCents))}>Financeiro × PDV: {differenceLabel(line.differenceCents)}</div>
                       </div>
-                      {(reportedShortage || line.reportedNote) && <label className="block"><span className="mb-1.5 block text-xs font-bold text-zinc-600">Justificativa do Caixa</span><Textarea value={line.reportedNote ?? ""} onChange={(event) => updateClosureLine(line.id, { reportedNote: event.target.value })} disabled={!canEditReported || automatic} placeholder="Obrigatória quando o Caixa informou falta em relação ao PDV" className="min-h-16 resize-y bg-white" /></label>}
-                      {(financeShortage || line.note) && <label className="block"><span className="mb-1.5 block text-xs font-bold text-zinc-600">Justificativa do Financeiro</span><Textarea value={line.note ?? ""} onChange={(event) => updateClosureLine(line.id, { note: event.target.value })} disabled={!canEditCounted || automatic} placeholder="Obrigatória quando a conferência encontrou falta em relação ao PDV" className="min-h-16 resize-y bg-white" /></label>}
+                      {(reportedShortage || line.reportedNote) && <label className="block"><span className="mb-1.5 block text-xs font-bold text-ds-ink-muted">Justificativa do Caixa</span><Textarea value={line.reportedNote ?? ""} onChange={(event) => updateClosureLine(line.id, { reportedNote: event.target.value })} disabled={!canEditReported || automatic} placeholder="Obrigatória quando o Caixa informou falta em relação ao PDV" className="min-h-16 resize-y bg-white" /></label>}
+                      {(financeShortage || line.note) && <label className="block"><span className="mb-1.5 block text-xs font-bold text-ds-ink-muted">Justificativa do Financeiro</span><Textarea value={line.note ?? ""} onChange={(event) => updateClosureLine(line.id, { note: event.target.value })} disabled={!canEditCounted || automatic} placeholder="Obrigatória quando a conferência encontrou falta em relação ao PDV" className="min-h-16 resize-y bg-white" /></label>}
                     </div>;
                   })}</div>
-                  {!operatorFinalized && incomplete && <p className="text-xs font-medium text-amber-700">Preencha todos os canais manuais do Caixa e do Financeiro. Campos em branco permanecem como rascunho; R$ 0,00 pode ser finalizado normalmente.</p>}
-                  {!operatorFinalized && missingReportedNote && <p className="text-xs font-medium text-rose-700">O Caixa precisa justificar cada falta em relação ao PDV antes da finalização.</p>}
-                  {!operatorFinalized && missingFinanceNote && <p className="text-xs font-medium text-rose-700">Justifique cada falta confirmada pelo Financeiro antes da finalização.</p>}
+                  {!operatorFinalized && incomplete && <p className="text-xs font-medium text-ds-warn">Preencha todos os canais manuais do Caixa e do Financeiro. Campos em branco permanecem como rascunho; R$ 0,00 pode ser finalizado normalmente.</p>}
+                  {!operatorFinalized && missingReportedNote && <p className="text-xs font-medium text-ds-danger">O Caixa precisa justificar cada falta em relação ao PDV antes da finalização.</p>}
+                  {!operatorFinalized && missingFinanceNote && <p className="text-xs font-medium text-ds-danger">Justifique cada falta confirmada pelo Financeiro antes da finalização.</p>}
                 </CardContent>
-                {!operatorFinalized && <CardFooter className="flex-col items-stretch gap-3 border-t border-stone-100 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                  <p className="text-xs text-zinc-500">Revise os valores e as justificativas antes de finalizar.</p>
-                  <Button className="w-full bg-emerald-700 font-bold hover:bg-emerald-800 sm:w-auto" disabled={!editable || !!working || !group.operator || incomplete || missingNote} onClick={() => group.operator && void finalizeOperator(group.operator)}>
+                {!operatorFinalized && <CardFooter className="flex-col items-stretch gap-3 border-t border-ds-border bg-ds-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                  <p className="text-xs text-ds-ink-muted">Revise os valores e as justificativas antes de finalizar.</p>
+                  <Button variant="primary-modal" size="md" className="w-full sm:w-auto" disabled={!editable || !!working || !group.operator || incomplete || missingNote} onClick={() => group.operator && void finalizeOperator(group.operator)}>
                     {working === `finalize:${group.operatorId}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                     Finalizar operador
                   </Button>

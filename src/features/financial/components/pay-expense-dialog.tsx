@@ -265,19 +265,19 @@ export function PayExpenseDialog({
       }}
     >
       <DialogContent
-        className="h-[80vh] max-h-[640px] overflow-hidden p-0"
+        className="h-[80vh] max-h-[640px] overflow-hidden rounded-ds-modal border-0 bg-ds-input p-0 shadow-ds-modal"
         style={{
           width: "min(820px, calc(100vw - 64px))",
           maxWidth: "calc(100vw - 64px)",
         }}
       >
-        <DialogHeader className="border-b px-6 py-3 text-left">
+        <DialogHeader className="border-b border-ds-border-footer px-6 py-3 text-left">
           <div className="pr-10">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Registrar pagamento</p>
-            <DialogTitle className="mt-1.5 text-[1.35rem] leading-tight sm:text-[1.65rem]">{
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">Registrar pagamento</p>
+            <DialogTitle className="mt-1.5 text-[1.35rem] font-extrabold leading-tight tracking-[-0.02em] text-ds-ink sm:text-[1.65rem]">{
               expense.description
             }</DialogTitle>
-            <DialogDescription className="mt-1.5 text-sm">
+            <DialogDescription className="mt-1.5 text-sm text-ds-ink-muted">
               {expenseContext || formatCurrency(baseValue)}
             </DialogDescription>
           </div>
@@ -294,12 +294,12 @@ export function PayExpenseDialog({
                       <div className={cn(
                         "rounded-2xl border p-3 text-sm",
                         provisionConsultation.status === "already_reconciled"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          ? "border-ds-ok-bg bg-ds-ok-bg text-ds-ok"
                           : provisionConsultation.status === "matched"
-                          ? "border-amber-200 bg-amber-50 text-amber-900"
+                          ? "border-ds-warn-bg bg-ds-warn-bg text-ds-warn"
                           : provisionConsultation.status === "ambiguous"
-                          ? "border-rose-200 bg-rose-50 text-rose-800"
-                          : "border-slate-200 bg-slate-50 text-slate-700",
+                          ? "border-ds-danger-bg bg-ds-danger-bg text-ds-danger"
+                          : "border-ds-border bg-ds-neutral-bg text-ds-neutral",
                       )}>
                         <div className="flex items-start gap-2">
                           {provisionConsultation.status === "already_reconciled"
@@ -365,7 +365,7 @@ export function PayExpenseDialog({
                         <FormItem>
                           <FormLabel>Juros</FormLabel>
                           <FormControl>
-                            <Input type="number" min="0" step="0.01" className="h-9 rounded-xl" {...field} />
+                            <Input type="number" min="0" step="0.01" className="h-10 rounded-ds-md border-ds-border-input bg-ds-input" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -378,7 +378,7 @@ export function PayExpenseDialog({
                         <FormItem>
                           <FormLabel>Multa</FormLabel>
                           <FormControl>
-                            <Input type="number" min="0" step="0.01" className="h-9 rounded-xl" {...field} />
+                            <Input type="number" min="0" step="0.01" className="h-10 rounded-ds-md border-ds-border-input bg-ds-input" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -517,7 +517,7 @@ export function PayExpenseDialog({
                                   <FormItem className="flex-1">
                                     <FormLabel>Valor</FormLabel>
                                     <FormControl>
-                                      <Input type="number" min="0" step="0.01" className="h-9 rounded-xl" {...amountField} />
+                                      <Input type="number" min="0" step="0.01" className="h-10 rounded-ds-md border-ds-border-input bg-ds-input" {...amountField} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -558,7 +558,7 @@ export function PayExpenseDialog({
                 </div>
                 </div>
 
-                <div className="border-t bg-muted/20 px-3 py-3 md:border-l md:border-t-0">
+                <div className="border-t border-ds-border-footer bg-ds-surface px-3 py-3 md:border-l md:border-t-0">
                   <div className="min-w-0 overflow-hidden rounded-[20px] border border-border/60 bg-background/60 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Resumo</p>
                   <div className="mt-2.5 space-y-2 text-sm">
@@ -589,10 +589,10 @@ export function PayExpenseDialog({
                     className={cn(
                       "mt-4 rounded-2xl px-4 py-3 text-sm",
                       isOver
-                        ? "bg-rose-500/10 text-rose-600"
+                        ? "bg-ds-danger-bg text-ds-danger"
                         : Math.abs(remaining) < 0.01
-                        ? "bg-emerald-500/10 text-emerald-700"
-                        : "bg-amber-500/10 text-amber-700"
+                        ? "bg-ds-ok-bg text-ds-ok"
+                        : "bg-ds-warn-bg text-ds-warn"
                     )}
                   >
                     <div className="flex min-w-0 items-center justify-between gap-3">
@@ -604,19 +604,19 @@ export function PayExpenseDialog({
                     </div>
                   </div>
 
-                  <div className="mt-3 rounded-2xl border border-border/70 bg-background p-3">
+                  <div className="mt-3 rounded-ds-btn-lg border border-ds-border bg-ds-surface p-3">
                     <p className="font-medium">Após confirmar:</p>
                     <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-emerald-600" />
+                        <Check aria-hidden="true" className="h-4 w-4 text-ds-ok" />
                         Obrigação liquidada gerencialmente
                       </div>
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-emerald-600" />
+                        <Check aria-hidden="true" className="h-4 w-4 text-ds-ok" />
                         Saída informada no fluxo de caixa
                       </div>
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-emerald-600" />
+                        <Check aria-hidden="true" className="h-4 w-4 text-ds-ok" />
                         Confirmação bancária aguardará o extrato
                       </div>
                     </div>
@@ -626,13 +626,13 @@ export function PayExpenseDialog({
             </div>
             </div>
 
-            <DialogFooter className="border-t px-4 py-2.5 sm:justify-between">
-              <Button type="button" variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>
+            <DialogFooter className="border-t border-ds-border-footer bg-ds-input px-4 py-3 sm:justify-between">
+              <Button type="button" variant="ds-ghost" size="md" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
               <div className="flex flex-wrap gap-2">
-                {expense.generatedReceiptId && expense.beneficiaryReference && permissions.financial?.paymentRequests?.create ? <Button type="button" variant="secondary" className="rounded-xl" disabled={isSaving || !!expense.paymentRequestId} onClick={() => void requestInterPayment()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix via Banco Inter</Button> : null}
-                <Button type="submit" className="rounded-xl" disabled={isSaving || isOver || totalPaid <= 0 || !!expense.generatedReceiptId} title={expense.generatedReceiptId ? 'Recibos gerados pelo Coala são baixados somente após confirmação bancária.' : undefined}>
+                {expense.generatedReceiptId && expense.beneficiaryReference && permissions.financial?.paymentRequests?.create ? <Button type="button" variant="ds-secondary" size="md" disabled={isSaving || !!expense.paymentRequestId} onClick={() => void requestInterPayment()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix via Banco Inter</Button> : null}
+                <Button type="submit" variant="primary-modal" size="md" disabled={isSaving || isOver || totalPaid <= 0 || !!expense.generatedReceiptId} title={expense.generatedReceiptId ? 'Recibos gerados pelo Coala são baixados somente após confirmação bancária.' : undefined}>
                   {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Confirmar pagamento manual
                 </Button>

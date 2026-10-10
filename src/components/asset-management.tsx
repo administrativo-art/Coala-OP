@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Box, Briefcase, Check, ChevronRight, ChevronsUpDown, Coins, FileText, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Search, Table2, Tags, Upload, Wrench } from 'lucide-react';
+import { Check, ChevronRight, ChevronsUpDown, FileText, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Table2, Tags, TriangleAlert, Upload } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
 import { useAssets } from '@/hooks/use-assets';
@@ -27,6 +27,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { BarcodeScannerModal } from '@/components/barcode-scanner-modal';
+import { fieldInputClass } from '@/components/patterns/field';
+import { HeroChip } from '@/components/patterns/hero-chip';
+import { LiftRow } from '@/components/patterns/lift-row';
+import { PageHero } from '@/components/patterns/page-hero';
+import { ControlSearch } from '@/components/patterns/control-panel';
+import { Segmented } from '@/components/patterns/segmented';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { Skeleton } from '@/components/ui/skeleton';
+import { WizardModal, type WizardStep } from '@/components/patterns/wizard-modal';
 import { cn } from '@/lib/utils';
 
 const assetSchema = z.object({
@@ -123,12 +132,12 @@ const MOVEMENT_LABEL: Record<AssetMovement['type'], string> = {
   COMPONENTE: 'Componente / peça',
 };
 
-const ASSET_STEPS: { id: AssetStep; label: string }[] = [
-  { id: 'identification', label: '1. Identificação' },
-  { id: 'location', label: '2. Localização' },
-  { id: 'acquisition', label: '3. Aquisição' },
-  { id: 'condition', label: '4. Estado' },
-  { id: 'history', label: '5. Histórico' },
+const ASSET_STEPS: { id: AssetStep; label: string; description: string }[] = [
+  { id: 'identification', label: 'Identificação', description: 'Nome, placa, status e dados do equipamento.' },
+  { id: 'location', label: 'Localização', description: 'Onde está, quem responde e a movimentação entre unidades.' },
+  { id: 'acquisition', label: 'Aquisição', description: 'Compra, nota fiscal, garantia e classificação contábil.' },
+  { id: 'condition', label: 'Estado', description: 'Condição de uso e observações gerais.' },
+  { id: 'history', label: 'Histórico', description: 'Linha do tempo de movimentações e alterações.' },
 ];
 
 function assetQrPayload(asset: Asset) {
@@ -192,29 +201,18 @@ async function uploadAssetFile(file: File, assetId: string, kind: 'image' | 'fis
 }
 
 const FORM_PAYMENTS = ['PIX', 'Boleto', 'Cartão de crédito', 'Transferência / TED', 'Dinheiro', 'Cartão BNDES'];
-const FORM_INPUT = 'h-9 w-full rounded-lg border bg-card px-3 text-[13px] outline-none transition focus:ring-2 focus:ring-indigo-500';
+const FORM_INPUT = fieldInputClass;
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="mb-1 flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-      {children}{required && <span className="text-rose-500">*</span>}
+    <label className="mb-1.5 flex items-center gap-1 text-xs font-bold text-ds-ink-2">
+      {children}{required && <span className="text-ds-danger">*</span>}
     </label>
   );
 }
 
-function FormBlock({ n, title, hint, children }: { n: string; title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2.5">
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-900 text-[11px] font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">{n}</span>
-        <div>
-          <h3 className="text-[13.5px] font-semibold leading-tight">{title}</h3>
-          {hint && <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>}
-        </div>
-      </div>
-      {children}
-    </section>
-  );
+function FormBlock({ children }: { n?: string; title?: string; hint?: string; children: React.ReactNode }) {
+  return <section className="space-y-4">{children}</section>;
 }
 
 function CategoryChips({ value, onChange, categories }: { value?: string; onChange: (v: string) => void; categories: AssetCategory[] }) {
@@ -312,10 +310,39 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const filledCount = (['code', 'name', 'subcategory', 'currentKioskId', 'brand', 'model', 'serialNumber', 'purchaseValue', 'supplierName'] as const)
     .filter((k) => String((v as Record<string, unknown>)[k] ?? '').trim()).length;
   const ok = Boolean(v.code?.trim()) && Boolean(v.name?.trim()) && Boolean(v.currentKioskId);
+  const [step, setStep] = useState(0);
+  const [highestStep, setHighestStep] = useState(0);
+  const formSteps: WizardStep[] = [
+    { id: 'identification', label: 'Identificação', description: 'Aparece na etiqueta e na busca.', summary: v.name?.trim() || undefined },
+    { id: 'acquisition', label: 'Compra e origem', description: 'Dados de aquisição para depreciação e garantia.', summary: v.supplierName?.trim() || undefined },
+    { id: 'location', label: 'Local e situação', description: 'A unidade é obrigatória.', summary: unitName || undefined },
+  ];
+
+  function validateStep(index: number) {
+    if (index === 0) {
+      const missing = !v.name?.trim() || !v.code?.trim();
+      if (missing) void form.trigger(['name', 'code']);
+      return !missing;
+    }
+    if (index === 2) {
+      const missing = !v.currentKioskId;
+      if (missing) void form.trigger(['currentKioskId']);
+      return !missing;
+    }
+    return true;
+  }
+
+  function closeModal(next: boolean) {
+    if (next) return onOpenChange(true);
+    resetAll();
+    onOpenChange(false);
+  }
 
   function resetAll() {
     form.reset();
     setStatus('ativo');
+    setStep(0);
+    setHighestStep(0);
   }
 
   async function handleCreateImageFile(file: File | null) {
@@ -366,20 +393,58 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] !max-w-[980px] overflow-hidden p-0">
-        <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-3.5 space-y-0">
-          <div className="text-left">
-            <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Cadastro · formulário único</p>
-            <DialogTitle className="text-[15px] font-bold tracking-tight">Novo patrimônio</DialogTitle>
-            <DialogDescription className="sr-only">Cadastre o item, vincule uma unidade e prepare o QR Code.</DialogDescription>
-          </div>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="grid min-h-0 grid-cols-1 lg:grid-cols-[1fr_300px]">
-            {/* FORM */}
-            <ScrollArea className="max-h-[min(740px,80vh)]">
-              <div className="space-y-6 px-6 py-5">
+    <>
+      <Form {...form}>
+        <WizardModal
+          open={open}
+          onOpenChange={closeModal}
+          mode="new"
+          stepper="sidebar"
+          saveMode="final"
+          sidebarWidth={360}
+          height={800}
+          steps={formSteps}
+          stepIndex={step}
+          highestStep={highestStep}
+          onStepChange={setStep}
+          onValidateStep={(index) => {
+            const valid = validateStep(index);
+            if (valid) setHighestStep((current) => Math.max(current, index + 1));
+            return valid;
+          }}
+          submitLabel="Cadastrar patrimônio"
+          onSubmit={() => void form.handleSubmit(onSubmit)()}
+          submitting={submitting}
+          dirty={form.formState.isDirty}
+          title="Novo patrimônio"
+          description="Cadastre o item, vincule uma unidade e prepare o QR Code."
+          sidebar={
+            <div className="space-y-5">
+              <div>
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Cadastro · Patrimônio</p>
+                <h2 className="mt-2 break-words text-[26px] font-extrabold leading-tight tracking-[-0.03em]">{v.name?.trim() || 'Novo patrimônio'}</h2>
+                <p className="mt-1 font-mono text-[13px] text-ds-on-dark-sub">{normalizeAssetCodeInput(v.code ?? '') || 'Informe a placa'}</p>
+              </div>
+              <div className="rounded-ds-btn-lg bg-white/[.06] p-4">
+                <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Prévia da etiqueta</p>
+                <LabelPreview code={v.code} name={v.name} brand={v.brand} model={v.model} unitName={unitName} category={v.subcategory} />
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">
+                  <span>Preenchimento</span>
+                  <span>{filledCount} de 9</span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-ds-accent transition-all" style={{ width: `${Math.round((filledCount / 9) * 100)}%` }} />
+                </div>
+                {!ok && <p className="mt-2 text-[12px] text-ds-on-dark-2">Faltam código da placa, nome e unidade.</p>}
+              </div>
+              <Button type="button" variant="on-dark-secondary" size="xs" onClick={resetAll}>Limpar formulário</Button>
+            </div>
+          }
+        >
+          <form onSubmit={(event) => { event.preventDefault(); }} className="space-y-6">
+                {step === 0 && (
                 <FormBlock n="1" title="Identificação" hint="Aparece na etiqueta e na busca.">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-[140px_1fr]">
                     <FormField control={form.control} name="imageUrl" render={({ field }) => (
@@ -468,7 +533,8 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     )} />
                   </div>
                 </FormBlock>
-
+                )}
+                {step === 1 && (
                 <FormBlock n="2" title="Compra | Origem" hint="Dados de aquisição para depreciação e garantia.">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <FormField control={form.control} name="purchaseDate" render={({ field }) => (
@@ -499,7 +565,8 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     )} />
                   </div>
                 </FormBlock>
-
+                )}
+                {step === 2 && (
                 <FormBlock n="3" title="Local | Situação" hint="A unidade é obrigatória.">
                   <FormField control={form.control} name="currentKioskId" render={({ field }) => (
                     <FormItem>
@@ -533,45 +600,16 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <StatusPicker value={status} onChange={setStatus} />
                   </div>
                 </FormBlock>
-              </div>
-            </ScrollArea>
-
-            {/* RAIL */}
-            <div className="flex flex-col gap-4 border-t bg-muted/30 px-4 py-5 lg:border-l lg:border-t-0">
-              <div>
-                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Prévia da etiqueta</p>
-                <LabelPreview code={v.code} name={v.name} brand={v.brand} model={v.model} unitName={unitName} category={v.subcategory} />
-              </div>
-              <div className="rounded-xl border bg-card p-3">
-                <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Preenchimento</p>
-                <div className="space-y-1.5">
-                  {([['Identificação', Boolean(v.name && v.subcategory)], ['Aquisição', Boolean(v.purchaseValue || v.supplierName)], ['Localização', Boolean(v.currentKioskId)]] as const).map(([l, done]) => (
-                    <div key={l} className="flex items-center gap-2 text-[12px]">
-                      <span className={cn('grid h-4 w-4 place-items-center rounded-full', done ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground')}>{done ? <Check className="h-2.5 w-2.5" /> : null}</span>
-                      <span className={done ? 'font-medium text-foreground/80' : 'text-muted-foreground'}>{l}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${Math.round((filledCount / 9) * 100)}%` }} />
-                </div>
-                <div className="mt-1.5 text-[10.5px] text-muted-foreground">{filledCount} de 9 campos preenchidos</div>
-              </div>
-              <div className="mt-auto space-y-1.5">
-                {!ok && <p className="text-[11px] text-rose-600">Faltam código da placa, nome e unidade.</p>}
-                <Button type="submit" disabled={!ok || submitting} className="w-full bg-indigo-600 text-white hover:bg-indigo-700"><Check className="mr-2 h-4 w-4" />{submitting ? 'Cadastrando…' : 'Cadastrar patrimônio'}</Button>
-                <Button type="button" variant="ghost" className="w-full" onClick={resetAll}>Limpar</Button>
-              </div>
-            </div>
+                )}
           </form>
-        </Form>
-        <BarcodeScannerModal
-          open={scannerOpen}
-          onOpenChange={setScannerOpen}
-          onScanSuccess={handlePlateScan}
-        />
-      </DialogContent>
-    </Dialog>
+        </WizardModal>
+      </Form>
+      <BarcodeScannerModal
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScanSuccess={handlePlateScan}
+      />
+    </>
   );
 }
 
@@ -598,17 +636,22 @@ function AssetCategoryDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid gap-3">
-            <Input placeholder="Ex: Máquinas, Equipamentos, Mobiliário" value={name} onChange={(e) => setName(e.target.value)} />
-            <Textarea placeholder="Descrição opcional" value={description} onChange={(e) => setDescription(e.target.value)} />
-            <Button type="button" onClick={handleSubmit} disabled={!name.trim()}>Adicionar categoria</Button>
+            <input aria-label="Nome da categoria" className={fieldInputClass} placeholder="Ex: Máquinas, Equipamentos, Mobiliário" value={name} onChange={(e) => setName(e.target.value)} />
+            <Textarea className="rounded-ds-md border-ds-border-input bg-ds-input text-[13px]" placeholder="Descrição opcional" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <Button type="button" variant="primary-modal" size="md" onClick={handleSubmit} disabled={!name.trim()}>
+              <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Adicionar categoria
+            </Button>
           </div>
-          <div className="rounded-md border">
+          <div className="rounded-ds-btn-lg border border-ds-border">
             {categories.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">Nenhuma categoria cadastrada.</p>
+              <p className="p-4 text-sm text-ds-ink-muted">Nenhuma categoria cadastrada.</p>
             ) : categories.map((category) => (
-              <div key={category.id} className="border-b p-3 last:border-b-0">
-                <p className="text-sm font-medium">{category.name}</p>
-                {category.description ? <p className="text-xs text-muted-foreground">{category.description}</p> : null}
+              <div key={category.id} className="flex items-start gap-2.5 border-b border-ds-divider p-3 last:border-b-0">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: categoryColor(category.name).color }} />
+                <div className="min-w-0">
+                  <p className="text-[13.5px] font-bold text-ds-ink">{category.name}</p>
+                  {category.description ? <p className="text-xs text-ds-ink-muted">{category.description}</p> : null}
+                </div>
               </div>
             ))}
           </div>
@@ -981,54 +1024,83 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     toast({ title: 'Placa identificada', description: code });
   }
 
+  const detailSteps: WizardStep[] = ASSET_STEPS.map((step) => ({
+    ...step,
+    hidden: step.id === 'history' && !permissions.assets?.viewHistory,
+  }));
+
   return (
-    <Dialog open={!!asset} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-2rem)] !max-w-[1120px] flex-col overflow-hidden p-0">
-        {asset && (
-          <>
-            <DialogHeader className="shrink-0 space-y-0">
-              <DialogTitle className="sr-only">{asset.code} · {asset.name}</DialogTitle>
-              <DialogDescription className="sr-only">{asset.currentKioskName || asset.currentKioskId} · {STATUS_LABEL[asset.status]}</DialogDescription>
-              <div className="relative shrink-0" style={{ background: categoryColor(asset.subcategory || asset.category).soft }}>
-                <div className="relative h-28 overflow-hidden sm:h-32">
-                  <AssetThumb asset={asset} className="h-full w-full" />
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(0,0,0,0) 35%,rgba(0,0,0,.62) 100%)' }} />
+    <>
+      {asset && (
+        <Form {...form}>
+          <WizardModal
+            open
+            onOpenChange={(next) => { if (!next) onOpenChange(false); }}
+            mode="edit"
+            stepper="sidebar"
+            saveMode="final"
+            sidebarWidth={360}
+            height={820}
+            steps={detailSteps}
+            stepIndex={Math.max(detailSteps.findIndex((step) => step.id === assetStep), 0)}
+            onStepChange={(index) => setAssetStep(detailSteps[index].id as AssetStep)}
+            onSubmit={() => void form.handleSubmit(handleSave)()}
+            submitLabel="Salvar alterações"
+            submitting={saving}
+            dirty={form.formState.isDirty}
+            title={`${asset.code} · ${asset.name}`}
+            description={`${asset.currentKioskName || asset.currentKioskId} · ${STATUS_LABEL[asset.status]}`}
+            headerActions={
+              <Button type="submit" form="asset-edit-form" variant="primary-modal" size="xs" loading={saving} loadingLabel="Salvando…" disabled={!permissions.assets?.edit || uploadingImage}>
+                Salvar alterações
+              </Button>
+            }
+            sidebar={
+              <div className="space-y-5">
+                <div className="overflow-hidden rounded-ds-btn-lg">
+                  <AssetThumb asset={asset} className="aspect-[4/3] w-full" fit="contain" />
                 </div>
-                <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-md bg-white/90 px-2 py-1 font-mono text-[11px] font-bold text-zinc-900 ring-1 ring-zinc-200 backdrop-blur">{asset.code}</span>
+                <div>
+                  <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">
+                    {asset.subcategory || asset.category || 'Patrimônio'}
+                  </p>
+                  <h2 className="mt-2 break-words text-[24px] font-extrabold leading-tight tracking-[-0.03em]">{form.watch('name') || asset.name}</h2>
+                  <p className="mt-1 text-[13px] text-ds-on-dark-sub">{[asset.brand, asset.model].filter(Boolean).join(' · ') || '—'}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <AssetStatusChip status={form.watch('status')} />
                     <AssetPlateBadge asset={asset} />
                   </div>
                 </div>
-                <div className="absolute inset-x-0 bottom-0 p-4 text-left text-white">
-                  <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider drop-shadow">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(asset.subcategory || asset.category).color }} />
-                    {asset.subcategory || asset.category || 'Patrimônio'}
-                    {(asset.brand || asset.model) && <><span className="opacity-50">·</span>{[asset.brand, asset.model].filter(Boolean).join(' · ')}</>}
+                <div className="rounded-ds-btn-lg bg-white/[.06] p-4 text-center">
+                  <div className="mx-auto grid h-32 w-32 place-items-center overflow-hidden rounded-lg bg-white p-2">
+                    {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="h-full w-full object-contain" /> : <QrCode className="h-20 w-20 text-zinc-400" />}
                   </div>
-                  <div className="mt-1 flex items-end justify-between gap-3">
-                    <h2 className="text-[19px] font-bold leading-tight tracking-tight drop-shadow">{asset.name}</h2>
-                    <AssetStatusChip status={asset.status} variant="solid" />
-                  </div>
+                  <p className="mt-2 font-mono text-[15px] font-bold">{asset.code}</p>
+                  <Button type="button" variant="on-dark-secondary" size="xs" className="mt-3 w-full" onClick={handlePrintLabel} disabled={!permissions.assets?.printLabels}>
+                    <Printer className="mr-2 h-4 w-4" />Imprimir etiqueta
+                  </Button>
                 </div>
-              </div>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave)} className="grid min-h-0 flex-1 gap-0 xl:grid-cols-[minmax(640px,1fr)_360px]">
-                <div className="min-h-0 min-w-0 space-y-4 overflow-y-auto px-6 py-5">
-                  <div className="flex flex-wrap gap-1.5 rounded-xl border bg-card p-1.5">
-                    {ASSET_STEPS.map((step) => (
-                      <button
-                        key={step.id}
-                        type="button"
-                        onClick={() => setAssetStep(step.id)}
-                        className={cn('h-8 rounded-lg px-3 text-[12.5px] font-semibold transition',
-                          assetStep === step.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}
-                      >
-                        {step.label}
-                      </button>
-                    ))}
+                <dl className="space-y-3 text-[12.5px]">
+                  <div>
+                    <dt className="flex items-center gap-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted"><MapPin className="h-3 w-3" />Unidade atual</dt>
+                    <dd className="mt-0.5 font-semibold">{asset.currentKioskName || asset.currentKioskId}</dd>
                   </div>
+                  <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Origem</dt><dd className="mt-0.5 font-semibold">{asset.sourceType === 'purchase_receipt' ? 'Recebimento de compra' : 'Cadastro manual'}</dd></div>
+                  {asset.supplierName ? <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Fornecedor</dt><dd className="mt-0.5 font-semibold">{asset.supplierName}</dd></div> : null}
+                  {asset.purchaseValue ? <div><dt className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Valor de aquisição</dt><dd className="mt-0.5 font-mono font-semibold">{formatCurrency(asset.purchaseValue)}</dd></div> : null}
+                </dl>
+              </div>
+            }
+          >
+            <form
+              id="asset-edit-form"
+              onSubmit={form.handleSubmit(handleSave)}
+              onKeyDown={(event) => {
+                // Enter num campo de texto não pode salvar e fechar o modal no meio das etapas.
+                if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault();
+              }}
+              className="space-y-4"
+            >
 
                   {assetStep !== 'history' ? (
                     <>
@@ -1391,11 +1463,6 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   </>
                   ) : null}
 
-                  {assetStep !== 'history' ? (
-                    <div className="flex flex-wrap gap-2 border-t pt-4">
-                      <Button type="submit" className="bg-indigo-600 text-white hover:bg-indigo-700" disabled={!permissions.assets?.edit || saving || uploadingImage}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
-                    </div>
-                  ) : null}
 
                   {assetStep === 'location' ? (
                     <div className="space-y-4">
@@ -1505,41 +1572,18 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   ) : null}
                     </>
                   ) : null}
-                </div>
-                <div className="min-h-0 overflow-y-auto border-t bg-muted/30 p-5 xl:border-l xl:border-t-0">
-                  <div className="rounded-xl border bg-card p-4 text-center">
-                    <div className="mx-auto grid h-32 w-32 place-items-center overflow-hidden rounded-lg border bg-white p-2">
-                      {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="h-full w-full object-contain" /> : <QrCode className="h-20 w-20 text-muted-foreground" />}
-                    </div>
-                    <p className="mt-2 font-mono text-[15px] font-bold">{asset.code}</p>
-                    <p className="truncate text-xs text-muted-foreground">{form.watch('name')}</p>
-                    <div className="mt-2 flex justify-center"><AssetStatusChip status={form.watch('status')} /></div>
-                    <Button type="button" variant="outline" size="sm" className="mt-3 w-full" onClick={handlePrintLabel} disabled={!permissions.assets?.printLabels}>
-                      <Printer className="mr-2 h-4 w-4" />Imprimir etiqueta
-                    </Button>
-                  </div>
-                  <dl className="mt-4 space-y-2.5 text-[12px]">
-                    <div>
-                      <dt className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><MapPin className="h-3 w-3" />Unidade atual</dt>
-                      <dd className="mt-0.5 font-medium">{asset.currentKioskName || asset.currentKioskId}</dd>
-                      <dd className="text-[10px] text-muted-foreground">Onde o patrimônio está hoje</dd>
-                    </div>
-                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Origem</dt><dd className="mt-0.5 font-medium">{asset.sourceType === 'purchase_receipt' ? 'Recebimento de compra' : 'Cadastro manual'}</dd></div>
-                    {asset.supplierName ? <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Fornecedor</dt><dd className="mt-0.5 font-medium">{asset.supplierName}</dd></div> : null}
-                    {asset.purchaseValue ? <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Valor de aquisição</dt><dd className="mt-0.5 font-mono font-semibold">{formatCurrency(asset.purchaseValue)}</dd></div> : null}
-                  </dl>
-                </div>
-              </form>
-            </Form>
-            <BarcodeScannerModal
-              open={plateScannerOpen}
-              onOpenChange={setPlateScannerOpen}
-              onScanSuccess={handleEditPlateScan}
-            />
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+            </form>
+          </WizardModal>
+        </Form>
+      )}
+      {asset && (
+        <BarcodeScannerModal
+          open={plateScannerOpen}
+          onOpenChange={setPlateScannerOpen}
+          onScanSuccess={handleEditPlateScan}
+        />
+      )}
+    </>
   );
 }
 
@@ -1754,6 +1798,16 @@ function AssetThumb({ asset, className, fit = 'cover' }: { asset: Asset; classNa
   );
 }
 
+const ASSET_STATUS_PILL: Record<AssetStatus, StatusPillVariant> = {
+  ativo: 'ok',
+  em_manutencao: 'warn',
+  fora_de_uso: 'neutral',
+  extraviado: 'danger',
+  vendido: 'info',
+  descartado: 'neutral',
+  baixado: 'danger',
+};
+
 function AssetStatusChip({ status, variant = 'chip' }: { status: AssetStatus; variant?: 'chip' | 'solid' | 'dot' }) {
   const meta = ASSET_STATUS_META[status];
   if (variant === 'dot') {
@@ -1762,11 +1816,7 @@ function AssetStatusChip({ status, variant = 'chip' }: { status: AssetStatus; va
   if (variant === 'solid') {
     return <span className={cn('inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider', meta.solid)}>{meta.short}</span>;
   }
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset', meta.chip)}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', meta.dot)} />{meta.label}
-    </span>
-  );
+  return <StatusPill variant={ASSET_STATUS_PILL[status]}>{meta.label}</StatusPill>;
 }
 
 function AssetCardHero({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) => void }) {
@@ -1807,121 +1857,84 @@ function AssetCardHero({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset)
   );
 }
 
-function AssetListRow({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) => void }) {
+function AssetListRow({ asset, onOpen, selected }: { asset: Asset; onOpen: (asset: Asset) => void; selected?: boolean }) {
   const cat = categoryColor(asset.subcategory || asset.category);
   return (
-    <button
-      type="button"
+    <LiftRow
+      selected={selected}
       onClick={() => onOpen(asset)}
-      className="group grid w-full grid-cols-[56px_minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_120px_140px_44px] items-center gap-4 border-b px-4 py-2.5 text-left transition last:border-b-0 hover:bg-muted/40"
+      aria-label={`Abrir patrimônio ${asset.code} ${asset.name}`}
+      className="group grid w-full grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 md:grid-cols-[56px_minmax(0,2.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_132px_24px_20px]"
     >
-      <AssetThumb asset={asset} className="h-14 w-14 rounded-lg" />
+      <AssetThumb asset={asset} className="h-14 w-14 rounded-ds-md" />
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10.5px] font-bold text-muted-foreground">{asset.code}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] font-extrabold text-ds-ink-muted">{asset.code}</span>
           <AssetPlateBadge asset={asset} />
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: cat.color }}>{asset.subcategory || asset.category || 'Patrimônio'}</span>
+          <span className="text-[10.5px] font-extrabold uppercase tracking-[0.12em]" style={{ color: cat.color }}>{asset.subcategory || asset.category || 'Patrimônio'}</span>
         </div>
-        <div className="truncate text-[13.5px] font-semibold">{asset.name}</div>
-        <div className="truncate text-[11.5px] text-muted-foreground">{[asset.brand, asset.model].filter(Boolean).join(' · ')}{asset.serialNumber ? <> · <span className="font-mono">{asset.serialNumber}</span></> : null}</div>
+        <div className="truncate text-[13.5px] font-bold text-ds-ink">{asset.name}</div>
+        <div className="truncate text-xs text-ds-ink-faint">{[asset.brand, asset.model].filter(Boolean).join(' · ')}{asset.serialNumber ? <> · <span className="font-mono">{asset.serialNumber}</span></> : null}</div>
       </div>
-      <div>
-        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground/70">Unidade</div>
-        <div className="truncate text-[12.5px] font-medium">{asset.currentKioskName || asset.currentKioskId}</div>
+      <div className="md:hidden"><AssetStatusChip status={asset.status} /></div>
+      <div className="col-span-3 min-w-0 md:col-span-1">
+        <div className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Unidade</div>
+        <div className="flex items-center gap-1 truncate text-[12.5px] font-semibold text-ds-ink"><MapPin aria-hidden="true" className="h-3 w-3 shrink-0 text-ds-ink-faint" />{asset.currentKioskName || asset.currentKioskId}</div>
       </div>
-      <div>
-        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground/70">Compra</div>
-        <div className="text-[12.5px] font-medium">{fmtDateShort(asset.purchaseDate)}</div>
-        <div className="text-[10.5px] text-muted-foreground/70">{ageLabel(asset.purchaseDate)}</div>
+      <div className="col-span-3 md:col-span-1">
+        <div className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Compra</div>
+        <div className="text-[12.5px] font-semibold text-ds-ink">{fmtDateShort(asset.purchaseDate)}</div>
+        <div className="text-xs text-ds-ink-faint">{ageLabel(asset.purchaseDate)}</div>
       </div>
-      <AssetStatusChip status={asset.status} />
-      <span className="text-muted-foreground"><QrCode className="h-5 w-5" /></span>
-      <span className="text-muted-foreground transition group-hover:text-foreground"><ChevronRight className="h-4 w-4" /></span>
-    </button>
+      <div className="hidden md:block"><AssetStatusChip status={asset.status} /></div>
+      <QrCode aria-hidden="true" className="hidden h-5 w-5 text-ds-ink-faint md:block" />
+      <ChevronRight aria-hidden="true" className="hidden h-4 w-4 text-ds-ink-faint transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-ds-accent-ink motion-reduce:transition-none md:block" />
+    </LiftRow>
   );
 }
 
-function AssetTableView({ assets, onOpen }: { assets: Asset[]; onOpen: (asset: Asset) => void }) {
+const ASSET_TABLE_COLUMNS = 'grid-cols-[40px_110px_minmax(160px,1.4fr)_minmax(110px,.9fr)_minmax(130px,1fr)_100px_minmax(100px,.9fr)_130px_100px_92px_20px]';
+
+function AssetTableView({ assets, onOpen, selectedId }: { assets: Asset[]; onOpen: (asset: Asset) => void; selectedId?: string }) {
+  const kicker = 'text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint';
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12.5px]">
-        <thead>
-          <tr className="border-b text-left text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <th className="w-10 px-4 py-2.5" />
-            <th className="px-4 py-2.5">Código</th>
-            <th className="px-4 py-2.5">Patrimônio</th>
-            <th className="px-4 py-2.5">Categoria</th>
-            <th className="px-4 py-2.5">Marca / Modelo</th>
-            <th className="px-4 py-2.5">Nº série</th>
-            <th className="px-4 py-2.5">Unidade</th>
-            <th className="px-4 py-2.5">Status</th>
-            <th className="px-4 py-2.5 text-right">Valor</th>
-            <th className="px-4 py-2.5">Compra</th>
-            <th className="w-12 px-4 py-2.5 text-right">QR</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assets.map((a) => {
-            const cat = categoryColor(a.subcategory || a.category);
-            return (
-              <tr key={a.id} onClick={() => onOpen(a)} className="group cursor-pointer border-b last:border-0 hover:bg-muted/40">
-                <td className="px-4 py-2"><AssetThumb asset={a} className="h-10 w-10 rounded-md" /></td>
-                <td className="px-4 py-2">
-                  <div className="font-mono text-[11.5px] font-semibold text-foreground/80">{a.code}</div>
-                  <div className="mt-1"><AssetPlateBadge asset={a} /></div>
-                </td>
-                <td className="px-4 py-2"><div className="font-semibold">{a.name}</div></td>
-                <td className="px-4 py-2"><span className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: cat.color }}><span className="h-1.5 w-1.5 rounded-full" style={{ background: cat.color }} />{a.subcategory || a.category || 'Patrimônio'}</span></td>
-                <td className="px-4 py-2 text-foreground/80">{a.brand}{a.model ? <> · <span className="text-muted-foreground">{a.model}</span></> : null}</td>
-                <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">{a.serialNumber || '—'}</td>
-                <td className="px-4 py-2 text-foreground/80">{a.currentKioskName || a.currentKioskId}</td>
-                <td className="px-4 py-2"><AssetStatusChip status={a.status} /></td>
-                <td className="px-4 py-2 text-right font-mono font-semibold text-foreground/80">{formatCurrency(a.purchaseValue)}</td>
-                <td className="px-4 py-2 text-muted-foreground">{fmtDateShort(a.purchaseDate)}</td>
-                <td className="px-4 py-2 text-right text-muted-foreground"><QrCode className="ml-auto h-4 w-4" /></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function AssetKpi({ label, value, sub, tone, icon: Icon, active, onClick }: {
-  label: string; value: React.ReactNode; sub?: string; tone: 'zinc' | 'emerald' | 'amber' | 'red' | 'indigo';
-  icon?: React.ComponentType<{ className?: string }>; active?: boolean; onClick?: () => void;
-}) {
-  const bar = { zinc: 'bg-zinc-400', emerald: 'bg-emerald-500', amber: 'bg-amber-500', red: 'bg-rose-500', indigo: 'bg-indigo-500' }[tone];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className={cn('group relative flex items-center gap-3 rounded-xl px-3.5 py-3 text-left ring-1 transition disabled:cursor-default',
-        active ? 'bg-muted/60 ring-foreground' : 'bg-card ring-border enabled:hover:ring-zinc-300')}
-    >
-      <span className={cn('h-10 w-1.5 rounded', bar)} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">{Icon && <Icon className="h-3 w-3 text-muted-foreground" />}<span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span></div>
-        <div className="mt-0.5 flex items-baseline gap-2"><span className="font-mono text-lg font-bold tabular-nums">{value}</span>{sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}</div>
+      <div className="min-w-[1180px]">
+        <div className={cn('grid items-center gap-x-3 border-b border-ds-divider px-[18px] py-3', ASSET_TABLE_COLUMNS)}>
+          <span /><span className={kicker}>Código</span><span className={kicker}>Patrimônio</span><span className={kicker}>Categoria</span>
+          <span className={kicker}>Marca / Modelo</span><span className={kicker}>Nº série</span><span className={kicker}>Unidade</span>
+          <span className={kicker}>Status</span><span className={cn(kicker, 'text-right')}>Valor</span><span className={kicker}>Compra</span><span />
+        </div>
+        {assets.map((a) => {
+          const cat = categoryColor(a.subcategory || a.category);
+          return (
+            <LiftRow
+              key={a.id}
+              table
+              selected={selectedId === a.id}
+              onClick={() => onOpen(a)}
+              aria-label={`Abrir patrimônio ${a.code} ${a.name}`}
+              className={cn('group grid items-center gap-x-3 text-[12.5px]', ASSET_TABLE_COLUMNS)}
+            >
+              <AssetThumb asset={a} className="h-10 w-10 rounded-ds-sm" />
+              <div className="min-w-0">
+                <div className="font-mono text-[11.5px] font-extrabold text-ds-ink-muted">{a.code}</div>
+                <div className="mt-1"><AssetPlateBadge asset={a} /></div>
+              </div>
+              <div className="min-w-0 truncate font-bold text-ds-ink">{a.name}</div>
+              <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-[11.5px] font-bold" style={{ color: cat.color }}><span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: cat.color }} />{a.subcategory || a.category || 'Patrimônio'}</span>
+              <div className="min-w-0 truncate text-ds-ink">{a.brand}{a.model ? <> · <span className="text-ds-ink-faint">{a.model}</span></> : null}</div>
+              <div className="truncate font-mono text-[11px] text-ds-ink-faint">{a.serialNumber || '—'}</div>
+              <div className="min-w-0 truncate text-ds-ink">{a.currentKioskName || a.currentKioskId}</div>
+              <div><AssetStatusChip status={a.status} /></div>
+              <div className="text-right font-mono font-bold text-ds-ink">{formatCurrency(a.purchaseValue)}</div>
+              <div className="text-ds-ink-faint">{fmtDateShort(a.purchaseDate)}</div>
+              <ChevronRight aria-hidden="true" className="h-4 w-4 text-ds-ink-faint transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-ds-accent-ink motion-reduce:transition-none" />
+            </LiftRow>
+          );
+        })}
       </div>
-    </button>
-  );
-}
-
-function FilterPill({ label, active, onClick, count, tone }: { label: string; active: boolean; onClick: () => void; count?: number; tone?: AssetStatus }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn('inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition',
-        active ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'bg-card text-foreground/70 ring-1 ring-border hover:ring-zinc-300')}
-    >
-      {tone && <span className={cn('h-1.5 w-1.5 rounded-full', ASSET_STATUS_META[tone]?.dot)} />}
-      {label}
-      {count != null && <span className={cn('rounded-full px-1.5 text-[10px] font-semibold', active ? 'bg-white/20' : 'bg-muted text-muted-foreground')}>{count}</span>}
-    </button>
+    </div>
   );
 }
 
@@ -1967,8 +1980,9 @@ function AssetCodeReaderDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Código do patrimônio</label>
-              <Input
+              <label htmlFor="asset-code-reader" className="block text-xs font-bold text-ds-ink-2">Código do patrimônio</label>
+              <input
+                id="asset-code-reader"
                 autoFocus
                 value={rawCode}
                 onChange={(event) => setRawCode(event.target.value)}
@@ -1976,23 +1990,23 @@ function AssetCodeReaderDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   if (event.key === 'Enter') openAsset();
                 }}
                 placeholder="Ex: PAT-000123 ou 123"
-                className="font-mono uppercase"
+                className={cn(fieldInputClass, 'font-mono uppercase')}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ds-ink-muted">
                 Normalizado: <span className="font-mono font-semibold text-foreground">{normalizedCode || '—'}</span>
               </p>
             </div>
 
-            <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <div className="rounded-ds-btn border border-ds-border bg-ds-muted p-3 text-xs text-ds-ink-muted">
               Esta versão de teste não faz OCR de texto impresso pela câmera. A câmera lê QR/barcode; para texto PAT impresso, use o campo acima ou um leitor físico que envie o código como teclado.
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
+              <Button type="button" variant="ds-secondary" size="md" onClick={() => setScannerOpen(true)}>
                 <QrCode className="mr-2 h-4 w-4" />
                 Escanear QR/barcode
               </Button>
-              <Button type="button" onClick={() => openAsset()} disabled={!normalizedCode}>
+              <Button type="button" variant="primary-modal" size="md" onClick={() => openAsset()} disabled={!normalizedCode}>
                 Abrir consulta
               </Button>
             </div>
@@ -2084,85 +2098,66 @@ export function AssetManagement() {
     { id: 'table', icon: Table2, label: 'Tabela' },
   ];
 
+  const darkSelect = 'h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker';
+  const allStatusActive = statusFilter === 'todos' && plateFilter === 'todos';
+
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Briefcase className="h-3.5 w-3.5" /> Coala <span className="text-muted-foreground/40">/</span>
-            <span className="text-foreground/80">Patrimônio</span>
-          </div>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight">Patrimônio</h1>
-          <p className="text-sm text-muted-foreground">Máquinas, equipamentos e mobiliário rastreados por código interno e QR Code.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button variant="outline" size="sm" onClick={() => setShowCodeReader(true)}>
-            <QrCode className="mr-2 h-4 w-4" />
-            Ler código
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowCategories(true)} disabled={!permissions.assets?.create && !permissions.assets?.edit}><Tags className="mr-2 h-4 w-4" />Categorias</Button>
-          <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700" onClick={() => setShowNew(true)} disabled={!permissions.assets?.create}><Plus className="mr-2 h-4 w-4" />Novo patrimônio</Button>
-        </div>
-      </div>
-
-      {/* KPIs — clicáveis (filtram por status) */}
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-6">
-        <AssetKpi label="Total" value={summary.total} sub="no parque" tone="indigo" icon={Box} active={statusFilter === 'todos' && plateFilter === 'todos'} onClick={() => { setStatusFilter('todos'); setPlateFilter('todos'); }} />
-        <AssetKpi label="Ativos" value={summary.active} sub="em operação" tone="emerald" icon={Box} active={statusFilter === 'ativo'} onClick={() => setStatusFilter('ativo')} />
-        <AssetKpi label="Em manutenção" value={summary.maintenance} sub="aguardando OS" tone="amber" icon={Wrench} active={statusFilter === 'em_manutencao'} onClick={() => setStatusFilter('em_manutencao')} />
-        <AssetKpi label="Baixados" value={summary.retired} sub="último ano" tone="red" icon={History} active={statusFilter === 'baixado'} onClick={() => setStatusFilter('baixado')} />
-        <AssetKpi label="Placas pendentes" value={summary.pendingPlates} sub="sanear urgente" tone="amber" icon={QrCode} active={plateFilter === 'pendentes'} onClick={() => setPlateFilter(plateFilter === 'pendentes' ? 'todos' : 'pendentes')} />
-        <AssetKpi label="Valor patrimonial" value={formatCurrency(summary.totalValue)} sub="aquisição" tone="zinc" icon={Coins} />
-      </div>
-
-      {summary.pendingPlates > 0 ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold">Existem {summary.pendingPlates} patrimônio(s) com placa pendente.</p>
-            <p className="text-xs text-amber-800">Eles podem ter sido criados no recebimento de compra e precisam ser saneados com a placa física.</p>
-          </div>
-          <Button type="button" variant="outline" className="border-amber-300 bg-white text-amber-900 hover:bg-amber-100" onClick={() => setPlateFilter('pendentes')}>
-            Ver pendências
-          </Button>
-        </div>
-      ) : null}
-
-      {/* Filtros + view toggle */}
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-3">
+      <PageHero
+        kicker="Financeiro"
+        title="Patrimônio"
+        subtitle="Máquinas, equipamentos e mobiliário rastreados por código interno e QR Code."
+        actions={(
+          <>
+            <Button variant="on-dark-secondary" size="md" onClick={() => setShowCodeReader(true)}>
+              <QrCode aria-hidden="true" className="mr-2 h-4 w-4" />
+              Ler código
+            </Button>
+            <Button variant="on-dark-secondary" size="md" onClick={() => setShowCategories(true)} disabled={!permissions.assets?.create && !permissions.assets?.edit}>
+              <Tags aria-hidden="true" className="mr-2 h-4 w-4" />Categorias
+            </Button>
+            <Button variant="primary-page" size="md" onClick={() => setShowNew(true)} disabled={!permissions.assets?.create}>
+              <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Novo patrimônio
+            </Button>
+          </>
+        )}
+        chips={(
+          <>
+            <HeroChip value={summary.total} label="Total" active={allStatusActive} onClick={() => { setStatusFilter('todos'); setPlateFilter('todos'); }} />
+            <HeroChip value={summary.active} label="Ativos" active={statusFilter === 'ativo'} onClick={() => setStatusFilter('ativo')} />
+            <HeroChip value={summary.maintenance} label="Em manutenção" tone="warning" active={statusFilter === 'em_manutencao'} onClick={() => setStatusFilter('em_manutencao')} />
+            <HeroChip value={summary.foraDeUso} label="Fora de uso" active={statusFilter === 'fora_de_uso'} onClick={() => setStatusFilter('fora_de_uso')} />
+            <HeroChip value={summary.retired} label="Baixados" tone="danger" active={statusFilter === 'baixado'} onClick={() => setStatusFilter('baixado')} />
+            <HeroChip value={summary.pendingPlates} label="Placas pendentes" tone="warning" active={plateFilter === 'pendentes'} onClick={() => setPlateFilter(plateFilter === 'pendentes' ? 'todos' : 'pendentes')} />
+            <HeroChip value={formatCurrency(summary.totalValue)} label="Valor patrimonial" tone="info" />
+          </>
+        )}
+      >
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[240px] flex-1 md:max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por código, série, nome…"
-              className="h-9 w-full rounded-lg border bg-muted/40 pl-9 pr-3 text-[13px] outline-none transition focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+          <ControlSearch value={search} onChange={setSearch} placeholder="Buscar por código, série, nome…" />
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-9 w-full md:w-[170px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Categoria" className={cn(darkSelect, 'w-[170px]')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas categorias</SelectItem>
               {categories.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="h-9 w-full md:w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Unidade" className={cn(darkSelect, 'w-[160px]')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas unidades</SelectItem>
               {units.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={brandFilter} onValueChange={setBrandFilter}>
-            <SelectTrigger className="h-9 w-full md:w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Marca" className={cn(darkSelect, 'w-[150px]')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas marcas</SelectItem>
               {brands.map((brand) => <SelectItem key={brand} value={brand}>{brand}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={periodFilter} onValueChange={(value) => setPeriodFilter(value as typeof periodFilter)}>
-            <SelectTrigger className="h-9 w-full md:w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Período de compra" className={cn(darkSelect, 'w-[170px]')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Qualquer período</SelectItem>
               <SelectItem value="this_year">Comprado este ano</SelectItem>
@@ -2170,53 +2165,54 @@ export function AssetManagement() {
               <SelectItem value="older">Anteriores</SelectItem>
             </SelectContent>
           </Select>
-
-          <span className="ml-auto inline-flex rounded-lg border bg-muted/40 p-0.5">
-            {viewOptions.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setView(o.id)}
-                className={cn('inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] font-semibold transition',
-                  view === o.id ? 'bg-card text-foreground shadow-sm ring-1 ring-border' : 'text-muted-foreground hover:text-foreground')}
-              >
-                <o.icon className="h-3 w-3" />{o.label}
-              </button>
-            ))}
-          </span>
         </div>
+      </PageHero>
 
-        {/* Status pill row */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <FilterPill label="Todos" active={statusFilter === 'todos' && plateFilter === 'todos'} onClick={() => { setStatusFilter('todos'); setPlateFilter('todos'); }} count={summary.total} />
-          <FilterPill label="Ativos" active={statusFilter === 'ativo'} onClick={() => setStatusFilter('ativo')} count={summary.active} tone="ativo" />
-          <FilterPill label="Em manutenção" active={statusFilter === 'em_manutencao'} onClick={() => setStatusFilter('em_manutencao')} count={summary.maintenance} tone="em_manutencao" />
-          <FilterPill label="Fora de uso" active={statusFilter === 'fora_de_uso'} onClick={() => setStatusFilter('fora_de_uso')} count={summary.foraDeUso} tone="fora_de_uso" />
-          <FilterPill label="Baixados" active={statusFilter === 'baixado'} onClick={() => setStatusFilter('baixado')} count={summary.retired} tone="baixado" />
-          <FilterPill label="Placas pendentes" active={plateFilter === 'pendentes'} onClick={() => setPlateFilter(plateFilter === 'pendentes' ? 'todos' : 'pendentes')} count={summary.pendingPlates} tone="em_manutencao" />
-          <span className="mx-1 h-5 w-px bg-border" />
-          <span className="self-center text-[11.5px] text-muted-foreground">
-            <span className="font-semibold text-foreground/80">{filtered.length}</span> de {summary.total} patrimônios
-          </span>
+      {summary.pendingPlates > 0 ? (
+        <div className="flex flex-col gap-2 rounded-ds-btn border border-ds-border bg-ds-warn-bg px-4 py-3 text-ds-warn sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="text-sm font-bold">Existem {summary.pendingPlates} patrimônio(s) com placa pendente.</p>
+              <p className="text-xs">Eles podem ter sido criados no recebimento de compra e precisam ser saneados com a placa física.</p>
+            </div>
+          </div>
+          <Button type="button" variant="ds-secondary" size="xs" onClick={() => setPlateFilter('pendentes')}>
+            Ver pendências
+          </Button>
         </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13px] text-ds-ink-muted" aria-live="polite">
+          <span className="font-extrabold text-ds-ink">{filtered.length}</span> de {summary.total} patrimônios
+        </span>
+        <Segmented
+          aria-label="Visualização"
+          value={view}
+          onChange={setView}
+          options={viewOptions.map((o) => ({ value: o.id, label: <span className="inline-flex items-center gap-1.5"><o.icon className="h-3.5 w-3.5" />{o.label}</span> }))}
+        />
       </div>
 
       {/* Body */}
       {loading ? (
-        <div className="rounded-xl border p-6 text-sm text-muted-foreground">Carregando patrimônio...</div>
+        <div className="space-y-3 rounded-[18px] border border-ds-border bg-ds-surface p-4">
+          {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-14 w-full rounded-xl" />)}
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border p-16 text-center text-sm text-muted-foreground">Nenhum patrimônio encontrado.</div>
+        <div className="rounded-[18px] border border-dashed border-ds-border px-6 py-16 text-center text-sm text-ds-ink-muted">Nenhum patrimônio encontrado.</div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((asset) => <AssetCardHero key={asset.id} asset={asset} onOpen={setSelected} />)}
         </div>
       ) : view === 'list' ? (
-        <div className="overflow-hidden rounded-xl border bg-card">
-          {filtered.map((asset) => <AssetListRow key={asset.id} asset={asset} onOpen={setSelected} />)}
+        <div className="rounded-[18px] border border-ds-border bg-ds-surface">
+          {filtered.map((asset) => <AssetListRow key={asset.id} asset={asset} onOpen={setSelected} selected={selected?.id === asset.id} />)}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <AssetTableView assets={filtered} onOpen={setSelected} />
+        <div className="rounded-[18px] border border-ds-border bg-ds-surface">
+          <AssetTableView assets={filtered} onOpen={setSelected} selectedId={selected?.id} />
         </div>
       )}
 
