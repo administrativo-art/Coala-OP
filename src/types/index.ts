@@ -3352,7 +3352,44 @@ export interface GoalMethodConfig {
 
 export type GoalMethodSnapshot = Omit<GoalMethodConfig, 'createdAt' | 'updatedAt'>
 
+export interface GoalClosureBonusTier {
+  tierId: string
+  label: string
+  fixedBonusAmount: number
+  excessAmount: number
+  variableBonusAmount: number
+  totalBonusAmount: number
+}
+
+export interface GoalClosureBonusParticipant {
+  employeeId: string
+  role: GoalParticipantRole
+  scheduledTurns: number
+  bonusAmount: number
+}
+
+/** Premiação apurada no encerramento da meta (método por faixas). Fica congelada para auditoria. */
+export interface GoalClosureBonusSnapshot {
+  version: 1
+  source: 'closure' | 'backfill'
+  methodId: string
+  methodName: string
+  revenue: number
+  highestTierId: string | null
+  highestTierLabel: string | null
+  tiers: GoalClosureBonusTier[]
+  fixedTotal: number
+  variableTotal: number
+  totalTeamBonus: number
+  leadershipBonus: number
+  totalPrize: number
+  totalPeriodTurns: number
+  participants: GoalClosureBonusParticipant[]
+  capturedAt?: Timestamp
+}
+
 export interface GoalClosureSnapshot {
+  bonus?: GoalClosureBonusSnapshot
   distributionMode: GoalDistributionMode
   periodDateKeys: string[]
   periodDayCount: number

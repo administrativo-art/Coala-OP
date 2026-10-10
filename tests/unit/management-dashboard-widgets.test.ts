@@ -99,6 +99,30 @@ test("estados vazios não quebram nenhum tamanho", () => {
     const html = render(createElement(RestockWidget, { unitName: null, unavailableReason: "Política indisponível.", items: [] }), density);
     assert.ok(html.includes("Política indisponível."));
     const goals = render(createElement(GoalsWidget, { revenue: 0, targetTotal: 0, projected: { value: 0, detail: "" }, rows: [], goalCount: 0, loading: false, monthProgress: 0, monthLabel: "", formatMoney: money, formatCompact: money, onDetails: noop }), density);
-    assert.ok(goals.includes("Nenhuma meta ativa"));
+    assert.ok(goals.includes("Nenhuma meta neste mês"));
   }
+});
+
+function permissionsWith(granted: Record<string, boolean>) {
+  const build = (path: string): unknown => new Proxy({}, {
+    get: (_target, key) => {
+      if (typeof key !== "string") return undefined;
+      const next = path ? `${path}.${key}` : key;
+      return next in granted ? granted[next] : build(next);
+    },
+  });
+  return build("") as never;
+}
+
+test("cada widget só aparece para quem tem o módulo de origem", async () => {
+  const { MANAGEMENT_WIDGET_CATALOG } = await import("../../src/features/management-dashboard/catalog");
+  const visibleFor = (granted: Record<string, boolean>) =>
+    MANAGEMENT_WIDGET_CATALOG.filter((widget) => widget.canView(permissionsWith(granted))).map((widget) => widget.id);
+
+  // Sem nenhuma permissão, nenhum widget; o proxy "vazio" é truthy, então fixamos os módulos como falsos.
+  const none = Object.fromEntries(["financial.view", "stock.view", "stock.analysis.restock", "stock.analysis.consumption", "dp.view", "dp.schedules.view", "dp.vacation.viewAll", "goals.view", "tasks.view", "dashboard.operational", "settings.viewAiCosts"].map((key) => [key, false]));
+  assert.deepEqual(visibleFor(none), []);
+  assert.deepEqual(visibleFor({ ...none, "financial.view": true }).sort(), ["financial-shortcuts", "pending-payments"]);
+  assert.deepEqual(visibleFor({ ...none, "goals.view": true }), ["goals-revenue"]);
+  assert.deepEqual(visibleFor({ ...none, "stock.analysis.consumption": true }), ["best-sellers"]);
 });

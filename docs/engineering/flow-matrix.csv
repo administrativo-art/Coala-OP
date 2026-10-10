@@ -78,7 +78,7 @@ src/app/dashboard/forms/models/[modelId]/page.tsx,active,forms,
 src/app/dashboard/forms/models/new/page.tsx,active,forms,
 src/app/dashboard/forms/page.tsx,active,forms,
 src/app/dashboard/goals/analysis/page.tsx,active,goals,
-src/app/dashboard/goals/history/page.tsx,active,goals,
+src/app/dashboard/goals/history/page.tsx,redirect,goals,/dashboard/goals/analysis?tab=closures
 src/app/dashboard/goals/page.tsx,redirect,goals,/dashboard/goals/tracking
 src/app/dashboard/goals/registration/page.tsx,active,goals,
 src/app/dashboard/goals/tracking/page.tsx,active,goals,
@@ -101,7 +101,7 @@ src/app/dashboard/page.tsx,active,platform-home,
 src/app/dashboard/predefined/page.tsx,inactive,,
 src/app/dashboard/pricing/competitors/page.tsx,redirect,pricing,/dashboard/pricing/price-comparison
 src/app/dashboard/pricing/cost-analysis/page.tsx,active,pricing,
-src/app/dashboard/pricing/page.tsx,navigation,pricing,
+src/app/dashboard/pricing/page.tsx,redirect,pricing,/dashboard/pricing/cost-analysis
 src/app/dashboard/pricing/price-comparison/page.tsx,active,pricing,
 src/app/dashboard/processes/page.tsx,active,termination,
 src/app/dashboard/purchasing/costs/page.tsx,active,purchasing,
