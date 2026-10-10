@@ -7,9 +7,9 @@ import { Avatar } from "./Avatar";
 import { loadOfflineQueue } from "./offline-queue";
 import { uploadProfilePhoto, type AppModules, type AppProfile } from "./profile";
 import { contentColumn } from "./theme";
-import { AppButton, Brand, FadeIn, GoalsIcon, Pill, PurchaseArt, ScheduleIcon, StockIcon, TruckIcon, ui } from "./ui";
+import { AppButton, Brand, FadeIn, GoalsIcon, Pill, PurchaseArt, ScheduleIcon, SignageIcon, StockIcon, TruckIcon, ui } from "./ui";
 
-export type AppModule = "local-purchase" | "stock-count" | "reposition-receipt" | "goals" | "schedule";
+export type AppModule = "local-purchase" | "stock-count" | "reposition-receipt" | "goals" | "schedule" | "signage";
 
 function greeting(name: string) {
   const hour = new Date().getHours();
@@ -23,6 +23,7 @@ const SMALL: Array<{ id: AppModule; module: keyof AppModules; title: string; hin
   { id: "reposition-receipt", module: "repositionReceipt", title: "Recebimento", hint: "O que chegou da reposição", icon: <TruckIcon /> },
   { id: "goals", module: "goals", title: "Metas", hint: "O que falta e o placar da equipe", icon: <GoalsIcon /> },
   { id: "schedule", module: "schedule", title: "Escala", hint: "Quem trabalha e suas folgas", icon: <ScheduleIcon /> },
+  { id: "signage", module: "signage", title: "Signage", hint: "Adicionar tela na unidade", icon: <SignageIcon /> },
 ];
 
 /** Tela de entrada: saudação no cabeçalho escuro e um cartão por função liberada no perfil da pessoa. */

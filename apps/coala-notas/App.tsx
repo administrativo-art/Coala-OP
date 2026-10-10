@@ -11,6 +11,7 @@ import { ActivityIndicator, AppState, BackHandler, Image, Pressable, RefreshCont
 import { recordPasswordLogin } from "./src/biometric-unlock";
 import { CountScreen } from "./src/CountScreen";
 import { HomeScreen, type AppModule } from "./src/HomeScreen";
+import { SignageScreen } from "./src/SignageScreen";
 import { LockScreen, LoginScreen } from "./src/AuthScreens";
 import { auth } from "./src/firebase";
 import { GoalsScreen } from "./src/GoalsScreen";
@@ -315,6 +316,7 @@ function AppContent() {
     : previewMode === "capture" ? <UploadScreen user={{} as User} mode="real" />
     : loading ? <View style={styles.loading}><ActivityIndicator color={ui.pink} size="large" /><Text style={styles.loadingText}>Abrindo o Coala One…</Text></View>
     : !simulation && !user ? <LoginScreen onSimulate={() => setSimulation(true)} />
+    : module === "signage" ? <SignageScreen user={user ?? undefined} simulation={simulation} onBack={() => setModule(null)} />
     : module === "schedule" ? <ScheduleScreen user={user ?? undefined} simulation={simulation} onBack={() => setModule(null)} />
     : module === "goals" ? <GoalsScreen user={user ?? undefined} simulation={simulation} onBack={() => setModule(null)} />
     : module === "reposition-receipt" ? <ReceiveScreen user={user ?? undefined} simulation={simulation} onBack={() => setModule(null)} />

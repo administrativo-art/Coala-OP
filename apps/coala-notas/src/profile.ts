@@ -6,7 +6,7 @@ import { authenticatedJson } from "./upload";
 
 export type AppProfile = { name: string; email: string | null; role: string | null; avatarUrl: string | null };
 /** Módulos que o perfil de permissões da pessoa libera no aplicativo. */
-export type AppModules = { localPurchase: boolean; stockCount: boolean; repositionReceipt: boolean; goals: boolean; schedule: boolean };
+export type AppModules = { localPurchase: boolean; stockCount: boolean; repositionReceipt: boolean; goals: boolean; schedule: boolean; signage: boolean };
 
 export function loadAppProfile(user: User) {
   return authenticatedJson<{ profile: AppProfile; modules: AppModules }>(user, "/api/mobile/profile");

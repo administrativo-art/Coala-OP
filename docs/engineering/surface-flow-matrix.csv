@@ -477,4 +477,6 @@ api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em 
 api,src/app/api/dp/mobile-schedule/route.ts,,docs/engineering/flows/collaborator-schedule.md,Escala publicada das unidades do proprio usuario para o aplicativo; mesma regra do portal do colaborador; GET sem escrita.
 api,src/app/api/mobile/profile/route.ts,,docs/engineering/access-and-privacy.md,Cartao do proprio usuario (nome cargo foto) e modulos do aplicativo liberados pelo perfil; GET sem escrita.
 api,src/app/api/mobile/profile/photo/route.ts,,docs/engineering/access-and-privacy.md,Troca da propria foto de perfil pelo aplicativo no mesmo caminho e campo do perfil web; imagem validada por conteudo.
-page,src/app/app/coala-one/page.tsx,,docs/engineering/flows/purchasing-order-receipt.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
+api,src/app/api/signage/mobile/route.ts,,docs/engineering/flows/signage.md,Unidades e telas do escopo do usuario para o modulo Signage do aplicativo; exige app.signage.manage; GET sem escrita e sem codigo de acesso.
+api,src/app/api/signage/mobile/screens/route.ts,,docs/engineering/flows/signage.md,Liga o monitor do QR code lido a uma tela nova ou existente da unidade; exige app.signage.manage e unidade no escopo; grava em dois bancos.
+api,src/app/api/signage/pair/qr/route.ts,,docs/engineering/flows/signage.md,QR code de pareamento em SVG para o app do monitor; publica e limitada por IP; nao le nem grava.

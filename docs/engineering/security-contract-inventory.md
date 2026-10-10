@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **410**
-- Totalmente contratados: **38**
+- Arquivos de rota: **413**
+- Totalmente contratados: **41**
 - Legados congelados: **372**
 - Exceções temporárias: **0**
 - Violações: **0**
@@ -370,7 +370,10 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/signage/media/folders` | POST ✓ | `CONTRACTED` | [src/app/api/signage/media/folders/route.ts](../../src/app/api/signage/media/folders/route.ts) |
 | `/api/signage/media/folders/[folderId]` | DELETE ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/signage/media/folders/[folderId]/route.ts](../../src/app/api/signage/media/folders/[folderId]/route.ts) |
 | `/api/signage/media/import` | POST ✓ | `CONTRACTED` | [src/app/api/signage/media/import/route.ts](../../src/app/api/signage/media/import/route.ts) |
+| `/api/signage/mobile` | GET ✓ | `CONTRACTED` | [src/app/api/signage/mobile/route.ts](../../src/app/api/signage/mobile/route.ts) |
+| `/api/signage/mobile/screens` | POST ✓ | `CONTRACTED` | [src/app/api/signage/mobile/screens/route.ts](../../src/app/api/signage/mobile/screens/route.ts) |
 | `/api/signage/pair` | POST ✓ | `CONTRACTED` | [src/app/api/signage/pair/route.ts](../../src/app/api/signage/pair/route.ts) |
+| `/api/signage/pair/qr` | GET ✓ | `CONTRACTED` | [src/app/api/signage/pair/qr/route.ts](../../src/app/api/signage/pair/qr/route.ts) |
 | `/api/signage/public/[kioskId]` | GET ✓ | `CONTRACTED` | [src/app/api/signage/public/[kioskId]/route.ts](../../src/app/api/signage/public/[kioskId]/route.ts) |
 | `/api/signage/publish` | POST ✓ | `CONTRACTED` | [src/app/api/signage/publish/route.ts](../../src/app/api/signage/publish/route.ts) |
 | `/api/signage/screens` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/signage/screens/route.ts](../../src/app/api/signage/screens/route.ts) |

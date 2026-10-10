@@ -1,6 +1,6 @@
 /*
  * Coala Signage para monitores Samsung (Tizen/SSSP).
- * Pareia a tela pelo código de acesso, baixa a playlist publicada e as mídias para o disco
+ * Mostra um QR code para ser lido no aplicativo Coala One, baixa a playlist publicada e as mídias para o disco
  * e segue tocando sem internet. A cada minuto avisa o Coala que está no ar e, na resposta,
  * descobre se há publicação nova.
  */
@@ -12,6 +12,7 @@
   var CONFIG = root.COALA_SIGNAGE_CONFIG || { server: '', version: 'dev' };
 
   var SCREEN_KEY = 'coala-signage:screen';
+  var PAIR_CODE_KEY = 'coala-signage:pair-code';
   var PLAYLIST_KEY = 'coala-signage:playlist';
   var NEXT_PLAYLIST_KEY = 'coala-signage:playlist-next';
   var SYNC_MS = 60000;
@@ -44,8 +45,9 @@
   var failuresBySlide = {};
 
   var pairingCode = '';
-  var pairingFocus = { row: 0, col: 0 };
-  var pairingBusy = false;
+  var pairingTimer = null;
+  var pairingStartedAt = 0;
+  var pairingQrLoaded = false;
   var infoFocus = 0;
   var infoConfirming = false;
   var infoTimer = null;
@@ -400,8 +402,21 @@
   // ---------- telas de apoio ----------
 
   function showMessage(title, text) {
+    el.message.classList.remove('validation');
+    el.messageNote.hidden = true;
     el.messageTitle.textContent = title;
     el.messageText.textContent = text;
+    el.message.hidden = false;
+  }
+
+  /** Tela conectada e ainda sem mídia: mostra de qual tela e unidade é este monitor, para conferir a instalação. */
+  function showValidation() {
+    var position = settings.orientation === 'portrait' ? 'vertical' : settings.orientation === 'landscape' ? 'horizontal' : '';
+    el.message.classList.add('validation');
+    el.messageTitle.textContent = (settings.screenName || 'Tela').toUpperCase();
+    el.messageText.textContent = settings.kioskName ? 'UNIDADE ' + settings.kioskName.toUpperCase() : '';
+    el.messageNote.textContent = 'Tela conectada' + (position ? ' · posição ' + position : '') + '. Publique as mídias em Coala Signage.';
+    el.messageNote.hidden = false;
     el.message.hidden = false;
   }
 
@@ -416,14 +431,12 @@
     }
     var target = playlist || nextPlaylist;
     if (!target) {
-      showMessage(
-        lastContactAt ? 'Nada publicado para esta tela' : 'Conectando ao Coala',
-        lastContactAt ? 'Monte a playlist em Coala Signage e publique.' : (lastError || 'Aguarde um instante.')
-      );
+      if (lastContactAt) showValidation();
+      else showMessage('Conectando ao Coala', lastError || 'Aguarde um instante.');
       return;
     }
     if (!target.slides.length) {
-      showMessage('Playlist vazia', 'Adicione slides em Coala Signage e publique.');
+      showValidation();
       return;
     }
     var scheduled = target.slides.filter(function (slide) { return Core.isScheduleActive(slide, new Date()); });
@@ -500,6 +513,8 @@
     writeJson(SCREEN_KEY, null);
     writeJson(PLAYLIST_KEY, null);
     writeJson(NEXT_PLAYLIST_KEY, null);
+    // Código novo a cada troca: o anterior continua sendo o da tela que este monitor deixou.
+    writeJson(PAIR_CODE_KEY, null);
     Media.clear();
     openPairing();
   }
@@ -519,118 +534,95 @@
 
   // ---------- pareamento ----------
 
-  function keypadRows() {
-    var rows = [];
-    for (var i = 0; i < Core.CODE_ALPHABET.length; i += 8) {
-      rows.push(Core.CODE_ALPHABET.substr(i, 8).split('').map(function (char) { return { label: char, char: char }; }));
-    }
-    rows.push([{ label: 'Apagar', action: 'erase' }, { label: 'Conectar', action: 'submit' }]);
-    return rows;
-  }
-
   function setPairingStatus(text, neutral) {
     el.pairingStatus.textContent = text || '';
     el.pairingStatus.classList.toggle('neutral', Boolean(neutral));
   }
 
-  function renderPairing() {
-    var boxes = el.codeBoxes.children;
-    for (var i = 0; i < boxes.length; i += 1) {
-      boxes[i].textContent = pairingCode.charAt(i);
-      boxes[i].classList.toggle('filled', i < pairingCode.length);
-    }
-    var buttons = el.keypad.children;
-    for (var j = 0; j < buttons.length; j += 1) {
-      var button = buttons[j];
-      button.classList.toggle('focused', Number(button.getAttribute('data-row')) === pairingFocus.row && Number(button.getAttribute('data-col')) === pairingFocus.col);
+  function randomByte() {
+    try {
+      var bytes = new Uint8Array(1);
+      root.crypto.getRandomValues(bytes);
+      return bytes[0];
+    } catch (error) {
+      return Math.floor(Math.random() * 256);
     }
   }
 
-  function submitPairing() {
-    if (pairingBusy) return;
-    if (!Core.isCompleteCode(pairingCode)) {
-      setPairingStatus('O código tem ' + Core.CODE_LENGTH + ' caracteres.');
-      return;
-    }
-    pairingBusy = true;
-    setPairingStatus('Conectando…', true);
-    post('/api/signage/pair', { code: pairingCode }).then(function (result) {
-      pairingBusy = false;
+  function schedulePairingPoll() {
+    if (pairingTimer) clearTimeout(pairingTimer);
+    pairingTimer = setTimeout(pollPairing, Core.pairingPollDelayMs(Date.now() - pairingStartedAt));
+  }
+
+  // O QR code vem pronto do Coala; o código que ele carrega foi sorteado aqui e ainda não é de tela nenhuma.
+  function loadPairingQr() {
+    pairingQrLoaded = false;
+    el.pairingQr.hidden = true;
+    setPairingStatus('Carregando o QR code…', true);
+    el.pairingQr.src = CONFIG.server + '/api/signage/pair/qr?code=' + encodeURIComponent(pairingCode) + '&t=' + Date.now();
+  }
+
+  /** Pergunta ao Coala se alguém já leu o QR code; quando leu, o código passa a ser o desta tela. */
+  function pollPairing() {
+    pairingTimer = null;
+    if (el.pairing.hidden || !pairingCode) return;
+    var code = pairingCode;
+    post('/api/signage/pair', { code: code }).then(function (result) {
+      if (el.pairing.hidden || code !== pairingCode) return;
+      if (!pairingQrLoaded) loadPairingQr();
       if (!result || !result.found) {
-        setPairingStatus('Código não encontrado. Confira em Coala Signage, no card “Conectar a tela”.');
+        schedulePairingPoll();
         return;
       }
-      settings = { screenId: result.screenId, token: pairingCode, screenName: result.screenName || '', kioskName: result.kioskName || '' };
+      settings = {
+        screenId: result.screenId,
+        token: code,
+        screenName: result.screenName || '',
+        kioskName: result.kioskName || '',
+        orientation: result.orientation || '',
+      };
       writeJson(SCREEN_KEY, settings);
+      writeJson(PAIR_CODE_KEY, null);
+      pairingCode = '';
       el.pairing.hidden = true;
-      showMessage('Tela conectada', [settings.kioskName, settings.screenName].filter(Boolean).join(' · '));
+      renderIdle();
       syncCycle();
     }, function (error) {
-      pairingBusy = false;
-      setPairingStatus(error && error.status === 429
-        ? 'Muitas tentativas. Aguarde um minuto e tente de novo.'
-        : 'Sem contato com o Coala. Confira a internet do monitor.');
+      if (el.pairing.hidden || code !== pairingCode) return;
+      // 429 é só o freio do servidor (vários monitores na mesma rede): a próxima consulta resolve.
+      if (!(error && error.status === 429)) {
+        setPairingStatus('Sem contato com o Coala. Confira a internet do monitor.');
+        pairingQrLoaded = false;
+      }
+      schedulePairingPoll();
     });
-  }
-
-  function pressPairingKey(key) {
-    if (pairingBusy) return;
-    if (key.char) {
-      pairingCode = Core.normalizeCode(pairingCode + key.char);
-      setPairingStatus('');
-      // Código completo: o foco vai para "Conectar".
-      if (pairingCode.length === Core.CODE_LENGTH) pairingFocus = { row: keypadRows().length - 1, col: 1 };
-    } else if (key.action === 'erase') {
-      pairingCode = pairingCode.slice(0, -1);
-      setPairingStatus('');
-    } else if (key.action === 'submit') {
-      submitPairing();
-    }
-    renderPairing();
-  }
-
-  function movePairingFocus(dRow, dCol) {
-    var rows = keypadRows();
-    var last = rows.length - 1;
-    var row = Math.min(Math.max(pairingFocus.row + dRow, 0), last);
-    var col = pairingFocus.col;
-    // A última linha tem dois botões largos, cada um sob quatro teclas.
-    if (row === last && pairingFocus.row !== last) col = col < 4 ? 0 : 1;
-    else if (row !== last && pairingFocus.row === last) col = col === 0 ? 1 : 5;
-    col = Math.min(Math.max(col + dCol, 0), rows[row].length - 1);
-    pairingFocus = { row: row, col: col };
-    renderPairing();
   }
 
   function buildPairing() {
-    for (var i = 0; i < Core.CODE_LENGTH; i += 1) el.codeBoxes.appendChild(document.createElement('span'));
-    keypadRows().forEach(function (row, rowIndex) {
-      row.forEach(function (key, colIndex) {
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.tabIndex = -1;
-        button.textContent = key.label;
-        button.setAttribute('data-row', String(rowIndex));
-        button.setAttribute('data-col', String(colIndex));
-        if (key.action) button.className = 'wide';
-        button.onclick = function () {
-          pairingFocus = { row: rowIndex, col: colIndex };
-          pressPairingKey(key);
-        };
-        el.keypad.appendChild(button);
-      });
-    });
+    el.pairingQr.onload = function () {
+      pairingQrLoaded = true;
+      el.pairingQr.hidden = false;
+      setPairingStatus('Aguardando a leitura do QR code…', true);
+    };
+    el.pairingQr.onerror = function () {
+      pairingQrLoaded = false;
+      el.pairingQr.hidden = true;
+      setPairingStatus('Sem contato com o Coala. Confira a internet do monitor.');
+    };
     el.pairingVersion.textContent = 'versão ' + CONFIG.version;
   }
 
   function openPairing() {
-    pairingCode = '';
-    pairingFocus = { row: 0, col: 0 };
-    pairingBusy = false;
-    setPairingStatus('');
+    var saved = readJson(PAIR_CODE_KEY);
+    // O código sobrevive a um desligamento: QR code lido com o monitor reiniciando ainda conecta.
+    pairingCode = typeof saved === 'string' && Core.isCompleteCode(saved) ? saved : Core.generateCode(randomByte);
+    writeJson(PAIR_CODE_KEY, pairingCode);
+    pairingStartedAt = Date.now();
+    el.pairingCode.textContent = 'Código ' + pairingCode.slice(0, 4) + ' ' + pairingCode.slice(4);
     el.message.hidden = true;
     el.pairing.hidden = false;
-    renderPairing();
+    loadPairingQr();
+    schedulePairingPoll();
   }
 
   // ---------- controle remoto e teclado ----------
@@ -639,14 +631,9 @@
     var code = event.keyCode;
 
     if (!el.pairing.hidden) {
-      if (code === KEY.LEFT) movePairingFocus(0, -1);
-      else if (code === KEY.RIGHT) movePairingFocus(0, 1);
-      else if (code === KEY.UP) movePairingFocus(-1, 0);
-      else if (code === KEY.DOWN) movePairingFocus(1, 0);
-      else if (code === KEY.ENTER) pressPairingKey(keypadRows()[pairingFocus.row][pairingFocus.col]);
-      else if (code === KEY.BACKSPACE || code === KEY.BACK) pressPairingKey({ action: 'erase' });
-      else if (event.key && event.key.length === 1 && Core.normalizeCode(event.key)) pressPairingKey({ char: Core.normalizeCode(event.key) });
-      else return;
+      // Não há o que digitar: OK tenta de novo quando o QR code não carregou; Voltar não fecha o app.
+      if (code === KEY.ENTER && !pairingQrLoaded) loadPairingQr();
+      else if (code !== KEY.BACK) return;
       event.preventDefault();
       return;
     }
@@ -692,11 +679,12 @@
       message: document.getElementById('message'),
       messageTitle: document.getElementById('message-title'),
       messageText: document.getElementById('message-text'),
+      messageNote: document.getElementById('message-note'),
       pairing: document.getElementById('pairing'),
       pairingStatus: document.getElementById('pairing-status'),
       pairingVersion: document.getElementById('pairing-version'),
-      codeBoxes: document.getElementById('code-boxes'),
-      keypad: document.getElementById('keypad'),
+      pairingQr: document.getElementById('pairing-qr'),
+      pairingCode: document.getElementById('pairing-code'),
       info: document.getElementById('info'),
       infoTitle: document.getElementById('info-title'),
       infoLines: document.getElementById('info-lines'),

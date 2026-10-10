@@ -51,6 +51,7 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
       repositionReceipt: admin || app?.reposition?.receive === true,
       goals: admin || app?.goals?.view === true,
       schedule: admin || app?.schedule?.view === true,
+      signage: admin || app?.signage?.manage === true,
     },
   }, { headers: { "Cache-Control": "private, no-store" } });
 });

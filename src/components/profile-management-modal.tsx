@@ -476,6 +476,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                               {renderPermissionSwitch("permissions.app.goals.view" as any, "Ver metas", "Permite ver as metas em andamento das unidades do usuário, o resultado de cada colega da unidade e a previsão de prêmio por pessoa.")}
                               <h3 className="pt-4 text-lg font-semibold">Escala</h3>
                               {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
+                              <h3 className="pt-4 text-lg font-semibold">Signage</h3>
+                              {renderPermissionSwitch("permissions.app.signage.manage" as any, "Adicionar telas", "Permite cadastrar telas do Coala Signage nas unidades do usuário, lendo com o celular o QR code que o monitor mostra. As mídias continuam sendo montadas no sistema.")}
                             </div>
                             <div className={permissionScope === 'system' ? '' : 'hidden'}>
                             <Accordion

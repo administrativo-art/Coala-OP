@@ -103,7 +103,8 @@ export function SignageAppInstall() {
                   Informe o endereço de instalação:
                   <span className="mt-1 block break-all font-ds-mono text-[12.5px] font-bold text-ds-ink">{launcherUrl}</span>
                 </>,
-                'O monitor baixa e abre o app sozinho, sem login. Digite o código de acesso que aparece em Coala Signage, no card “Conectar a tela”.',
+                'O monitor baixa e abre o app sozinho, sem login, e mostra um QR code.',
+                'No aplicativo Coala One, abra Signage, toque em “Adicionar tela” e leia o QR code do monitor.',
               ]}
             />
             <div className="mt-auto pt-6">
@@ -122,7 +123,7 @@ export function SignageAppInstall() {
               items={[
                 'Abra esta página no navegador do aparelho e baixe o instalador.',
                 'Abra o arquivo baixado e permita a instalação de apps desta fonte.',
-                'Abra o Coala Mobile no aparelho.',
+                'Abra o Coala One no aparelho e entre com o seu usuário do sistema.',
               ]}
             />
             <div className="mt-auto pt-6">

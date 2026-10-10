@@ -11,6 +11,9 @@
 
   var CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   var CODE_LENGTH = 8;
+  var PAIRING_FAST_POLL_MS = 15000;
+  var PAIRING_SLOW_POLL_MS = 60000;
+  var PAIRING_FAST_WINDOW_MS = 20 * 60000;
   var MIN_SLIDE_MS = 3000;
   var DEFAULT_SLIDE_MS = 10000;
   var FILE_PREFIX = 'cs-';
@@ -84,6 +87,19 @@
 
   function isCompleteCode(code) {
     return normalizeCode(code) === code && code.length === CODE_LENGTH;
+  }
+
+  /** Código de pareamento sorteado pelo monitor; `randomByte` devolve um inteiro de 0 a 255 por chamada. */
+  function generateCode(randomByte) {
+    var result = '';
+    // O alfabeto tem 32 letras: os 5 bits baixos de cada byte sorteiam uma delas sem viés.
+    for (var i = 0; i < CODE_LENGTH; i += 1) result += CODE_ALPHABET.charAt(randomByte() & 31);
+    return result;
+  }
+
+  /** Intervalo entre as consultas do pareamento: rápido enquanto alguém instala, lento em monitor esquecido ligado. */
+  function pairingPollDelayMs(elapsedMs) {
+    return elapsedMs < PAIRING_FAST_WINDOW_MS ? PAIRING_FAST_POLL_MS : PAIRING_SLOW_POLL_MS;
   }
 
   function slideNeedsMedia(slide) {
@@ -179,11 +195,13 @@
     getNextSlide: getNextSlide,
     getPlayableSlides: getPlayableSlides,
     getSlideDurationMs: getSlideDurationMs,
+    generateCode: generateCode,
     isCompleteCode: isCompleteCode,
     isNewerPublication: isNewerPublication,
     isScheduleActive: isScheduleActive,
     msUntilHour: msUntilHour,
     normalizeCode: normalizeCode,
+    pairingPollDelayMs: pairingPollDelayMs,
     planMediaSync: planMediaSync,
     resolveActiveSlide: resolveActiveSlide,
     slideNeedsMedia: slideNeedsMedia,

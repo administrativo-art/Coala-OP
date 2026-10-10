@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **410 rotas de API** e **23 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **413 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -10,7 +10,6 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | --- | --- | --- |
 | `/` | [src/app/page.tsx](../../src/app/page.tsx) | [recruitment](flows/recruitment.md) |
 | `/app` | [src/app/app/page.tsx](../../src/app/app/page.tsx) | [signage](flows/signage.md) |
-| `/app/coala-one` | [src/app/app/coala-one/page.tsx](../../src/app/app/coala-one/page.tsx) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/aso/candidato/[token]` | [src/app/aso/candidato/[token]/page.tsx](../../src/app/aso/candidato/%5Btoken%5D/page.tsx) | [onboarding-aso](flows/onboarding-aso.md) |
 | `/aso/clinica/[token]` | [src/app/aso/clinica/[token]/page.tsx](../../src/app/aso/clinica/%5Btoken%5D/page.tsx) | [onboarding-aso](flows/onboarding-aso.md) |
 | `/catalogo` | [src/app/catalogo/page.tsx](../../src/app/catalogo/page.tsx) | [catalog](flows/catalog.md) |
@@ -394,7 +393,10 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/signage/media/folders` | POST | [src/app/api/signage/media/folders/route.ts](../../src/app/api/signage/media/folders/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/media/folders/[folderId]` | PATCH, DELETE | [src/app/api/signage/media/folders/[folderId]/route.ts](../../src/app/api/signage/media/folders/%5BfolderId%5D/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/media/import` | POST | [src/app/api/signage/media/import/route.ts](../../src/app/api/signage/media/import/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/mobile` | GET | [src/app/api/signage/mobile/route.ts](../../src/app/api/signage/mobile/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/mobile/screens` | POST | [src/app/api/signage/mobile/screens/route.ts](../../src/app/api/signage/mobile/screens/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/pair` | POST | [src/app/api/signage/pair/route.ts](../../src/app/api/signage/pair/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/pair/qr` | GET | [src/app/api/signage/pair/qr/route.ts](../../src/app/api/signage/pair/qr/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/public/[kioskId]` | GET | [src/app/api/signage/public/[kioskId]/route.ts](../../src/app/api/signage/public/%5BkioskId%5D/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/publish` | POST | [src/app/api/signage/publish/route.ts](../../src/app/api/signage/publish/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/screens` | GET, POST | [src/app/api/signage/screens/route.ts](../../src/app/api/signage/screens/route.ts) | [signage](flows/signage.md) |

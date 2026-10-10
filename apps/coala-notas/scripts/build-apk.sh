@@ -11,7 +11,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROPS="${COALA_ONE_KEYSTORE_PROPERTIES:-$HOME/.coala-one/keystore.properties}"
-OUT="${1:-$APP_DIR/../../public/app/CoalaOne.apk}"
+OUT="${1:-$APP_DIR/../../public/app/CoalaMobile.apk}"
 
 [ -f "$PROPS" ] || { echo "Chave de assinatura não encontrada em $PROPS." >&2; exit 1; }
 prop() { grep "^$1=" "$PROPS" | cut -d= -f2-; }

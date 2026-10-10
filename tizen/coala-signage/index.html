@@ -16,15 +16,16 @@
     <div class="brand"><span class="brand-logo"><img src="logo.png" alt="Coala Shakes"></span><span class="brand-divider"></span><span class="brand-name">Coala Signage</span></div>
     <h1 id="message-title"></h1>
     <p id="message-text"></p>
+    <p id="message-note" class="note" hidden></p>
   </section>
 
   <section id="pairing" class="screen" hidden>
     <div class="brand"><span class="brand-logo"><img src="logo.png" alt="Coala Shakes"></span><span class="brand-divider"></span><span class="brand-name">Coala Signage</span></div>
     <h1>Conectar esta tela</h1>
-    <p class="hint">Digite o código de acesso que aparece em Coala Signage, no card “Conectar a tela”.</p>
-    <div id="code-boxes" class="code-boxes"></div>
+    <p class="hint">No aplicativo Coala One, abra Signage, toque em “Adicionar tela” e leia este QR code.</p>
+    <div class="qr-frame"><img id="pairing-qr" alt="QR code desta tela" hidden></div>
+    <p id="pairing-code" class="pair-code"></p>
     <p id="pairing-status" class="status" role="status"></p>
-    <div id="keypad" class="keypad"></div>
     <p id="pairing-version" class="version"></p>
   </section>
 

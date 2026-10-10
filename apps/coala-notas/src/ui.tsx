@@ -172,6 +172,13 @@ export function GoalsIcon() {
   return <View style={styles.bars}><GrowBar height={10} delay={0} color={ui.pink} /><GrowBar height={16} delay={200} color={ui.pink} /><GrowBar height={22} delay={400} color={ui.accent} /></View>;
 }
 
+/** Monitor com a mídia "passando": o ícone do Signage. */
+export function SignageIcon() {
+  const value = useLoop(2800);
+  return <View><Svg width={26} height={26} viewBox="0 0 24 24" {...stroke(ui.accent)}><Rect x={2} y={4} width={20} height={13} rx={2} /><Path d="M8 21h8" /><Path d="M12 17v4" /></Svg>
+    <Animated.View style={[styles.signagePulse, { opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }) }]} /></View>;
+}
+
 export function ScheduleIcon() {
   const value = useLoop(3000);
   return <View><Svg width={26} height={26} viewBox="0 0 24 24" {...stroke(ui.info)}><Rect x={3} y={4} width={18} height={18} rx={3} /><Path d="M16 2v4" /><Path d="M8 2v4" /><Path d="M3 10h18" /></Svg>
@@ -204,6 +211,7 @@ const styles = StyleSheet.create({
   scan: { position: "absolute", left: -6, right: -6, top: 12, height: 2, borderRadius: 2, backgroundColor: ui.accent },
   receiptCheck: { position: "absolute", right: -10, top: -10, width: 22, height: 22, borderRadius: 11, backgroundColor: ui.ok, alignItems: "center", justifyContent: "center" }, receiptCheckText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   bars: { flexDirection: "row", alignItems: "flex-end", gap: 3, height: 24 }, hop: { position: "absolute", left: 14, top: 14, width: 6, height: 6, borderRadius: 2, backgroundColor: ui.accent },
+  signagePulse: { position: "absolute", left: 7, top: 8, width: 12, height: 5, borderRadius: 2, backgroundColor: ui.pink },
 });
 
 export { colors };

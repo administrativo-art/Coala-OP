@@ -145,28 +145,49 @@ h2 {
   color: #b8c4d9;
 }
 
-.code-boxes {
+.qr-frame {
   display: flex;
+  width: 30vh;
+  height: 30vh;
   margin-top: 4vh;
-}
-
-.code-boxes span {
-  display: flex;
-  width: 4.6vw;
-  height: 5.6vw;
-  margin: 0 0.4vw;
   align-items: center;
   justify-content: center;
-  border: 0.15vw solid #33415c;
-  border-radius: 0.6vw;
-  background: #111a2e;
-  font-family: "Courier New", monospace;
-  font-size: 3vw;
-  font-weight: 700;
+  border-radius: 1.2vw;
+  background: #fff;
 }
 
-.code-boxes span.filled {
-  border-color: #6ea8ff;
+.qr-frame img {
+  width: 100%;
+  height: 100%;
+  border-radius: 1.2vw;
+}
+
+.pair-code {
+  margin: 2vh 0 0;
+  font-family: "Courier New", monospace;
+  font-size: 1.3vw;
+  letter-spacing: 0.2vw;
+  color: #8fa3c4;
+}
+
+#message.validation h1 {
+  font-size: 11vw;
+  line-height: 1;
+  letter-spacing: 0.3vw;
+}
+
+#message.validation #message-text {
+  max-width: 90vw;
+  margin-top: 3vh;
+  font-size: 4vw;
+  font-weight: 800;
+  color: #fff;
+}
+
+.note {
+  margin: 5vh 0 0;
+  font-size: 1.45vw;
+  color: #b8c4d9;
 }
 
 .status {
@@ -181,13 +202,6 @@ h2 {
   color: #b8c4d9;
 }
 
-.keypad {
-  display: grid;
-  grid-template-columns: repeat(8, 5vw);
-  grid-gap: 0.6vw;
-}
-
-.keypad button,
 .actions button {
   height: 4.4vw;
   border: 0.15vw solid #33415c;
@@ -200,12 +214,6 @@ h2 {
   outline: none;
 }
 
-.keypad button.wide {
-  grid-column: span 4;
-  font-size: 1.45vw;
-}
-
-.keypad button.focused,
 .actions button.focused {
   border-color: #fff;
   background: #2f6fed;

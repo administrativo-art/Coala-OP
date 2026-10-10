@@ -818,6 +818,10 @@ export type PermissionSet = {
       /** Ver a escala publicada das unidades em que a pessoa está lotada, com todos da equipe. */
       view: boolean;
     };
+    signage: {
+      /** Adicionar telas do Coala Signage às unidades do usuário, lendo o QR code do monitor. */
+      manage: boolean;
+    };
   };
   // Conceptual groupers — granular fields defined in Plano Técnico de Formulários
   hr: {
@@ -2059,6 +2063,8 @@ export type SignageScreen = {
   kioskName: string;
   name: string;
   deviceToken?: string;
+  /** Posição física da tela, informada ao cadastrá-la; orienta o formato das artes. Ausente em telas antigas. */
+  orientation?: 'landscape' | 'portrait';
   /** Tela padrão da unidade: existe sem cadastro e não pode ser excluída. */
   isDefault: boolean;
 };
@@ -2993,7 +2999,7 @@ export const defaultGuestPermissions: PermissionSet = {
       manageFinancialLink: false,
       manageBaseItems: false,
     },
-    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false } },
+    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false }, signage: { manage: false } },
     hr: {
       view: false,
       employees: { view: false, manage: false },
@@ -3105,7 +3111,7 @@ export const defaultAdminPermissions: PermissionSet = {
       manageFinancialLink: true,
       manageBaseItems: true,
     },
-    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true } },
+    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true }, signage: { manage: true } },
     hr: {
       view: true,
       employees: { view: true, manage: true },
