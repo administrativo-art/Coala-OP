@@ -7,8 +7,8 @@ import { AlertTriangle, Expand, Loader2, Wifi, WifiOff } from 'lucide-react';
 
 import { fetchWithTimeout } from '@/lib/fetch-utils';
 import { signageDb } from '@/lib/firebase-signage';
-import { getPublishedTimestamp, isSlideScheduleActive, PLAYER_DAILY_RELOAD_HOUR, PLAYER_HEARTBEAT_MS, PLAYER_WATCHDOG_MS, SIGNAGE_FETCH_TIMEOUT_MS } from '@/lib/signage';
-import { type PublishedPlayerDocument, type PublishedPlayerSlide } from '@/types';
+import { getNextSlide, getPublishedTimestamp, isSlideScheduleActive, PLAYER_DAILY_RELOAD_HOUR, PLAYER_HEARTBEAT_MS, PLAYER_WATCHDOG_MS, resolveActiveSlide, SIGNAGE_FETCH_TIMEOUT_MS } from '@/lib/signage';
+import { type PublishedPlayerDocument } from '@/types';
 
 const cacheKeyPrefix = 'coala-signage-player:';
 
@@ -22,7 +22,7 @@ export function SignagePlayer() {
   const deviceToken = searchParams.get('token')?.trim() ?? '';
   const isDebug = searchParams.get('debug') === '1';
   const [published, setPublished] = useState<PublishedPlayerDocument | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [position, setPosition] = useState<{ version: string | null; slideId: string | null }>({ version: null, slideId: null });
   const [booting, setBooting] = useState(true);
   const [status, setStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,8 @@ export function SignagePlayer() {
         return current;
       }
 
-      localStorage.setItem(getCacheKey(nextValue.kioskId), JSON.stringify(nextValue));
+      // O parâmetro `kiosk` da URL é o id da tela; `nextValue.kioskId` é a unidade dona dela.
+      localStorage.setItem(getCacheKey(kioskId), JSON.stringify(nextValue));
       return nextValue;
     });
 
@@ -60,7 +61,7 @@ export function SignagePlayer() {
     try {
       await fetchWithTimeout('/api/signage/heartbeat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(deviceToken ? { 'X-Device-Token': deviceToken } : {}) },
         body: JSON.stringify({
           kioskId: targetKioskId,
           currentSlideId,
@@ -162,7 +163,7 @@ export function SignagePlayer() {
   }, [kioskId]);
 
   const allSlides = published?.slides ?? [];
-  const [scheduleTick, setScheduleTick] = useState(0);
+  const [, setScheduleTick] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => setScheduleTick((t) => t + 1), 60_000);
@@ -170,32 +171,36 @@ export function SignagePlayer() {
   }, []);
 
   // Re-evaluated every minute and on new publications
-  const slides = allSlides.filter(isSlideScheduleActive);
-  const activeSlide = slides[activeIndex % Math.max(slides.length, 1)] ?? null;
+  const slides = allSlides.filter((slide) => isSlideScheduleActive(slide));
+  // A posição vale só para a publicação em que foi marcada: uma nova publicação recomeça do primeiro
+  // slide, e o relógio do agendamento não mexe nela.
+  const publishedVersion = published?.updatedAt ?? null;
+  const activeSlide = resolveActiveSlide(slides, position.version === publishedVersion ? position.slideId : null);
+  const activeId = activeSlide?.id ?? null;
+  const activeDurationMs = activeSlide?.durationMs;
+  const slidesRef = useRef(slides);
 
   useEffect(() => {
-    setActiveIndex(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [published?.updatedAt, allSlides.length, scheduleTick]);
+    slidesRef.current = slides;
+  });
 
   useEffect(() => {
     if (rotationTimeoutRef.current) clearTimeout(rotationTimeoutRef.current);
-    if (!slides.length) return;
+    if (!activeId) return;
 
-    const duration = Math.max(activeSlide?.durationMs ?? 10000, 3000);
+    const duration = Math.max(activeDurationMs ?? 10000, 3000);
     rotationTimeoutRef.current = setTimeout(() => {
-      setActiveIndex(prev => (prev + 1) % slides.length);
+      setPosition({ version: publishedVersion, slideId: getNextSlide(slidesRef.current, activeId)?.id ?? null });
     }, duration);
 
     return () => {
       if (rotationTimeoutRef.current) clearTimeout(rotationTimeoutRef.current);
     };
-  }, [activeSlide?.id, activeSlide?.durationMs, slides.length]);
+  }, [activeId, activeDurationMs, publishedVersion, slides.length]);
 
   useEffect(() => {
-    if (!slides.length) return;
-    const nextSlide = slides[(activeIndex + 1) % slides.length];
-    if (!nextSlide) return;
+    const nextSlide = getNextSlide(slidesRef.current, activeId);
+    if (!nextSlide || nextSlide.id === activeId) return;
 
     if (nextSlide.type === 'image' && nextSlide.assetUrl) {
       const img = new Image();
@@ -207,7 +212,7 @@ export function SignagePlayer() {
       video.preload = 'auto';
       video.src = nextSlide.assetUrl;
     }
-  }, [activeIndex, slides]);
+  }, [activeId, slides.length]);
 
   useEffect(() => {
     if (dailyReloadTimeoutRef.current) clearTimeout(dailyReloadTimeoutRef.current);

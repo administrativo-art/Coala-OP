@@ -1987,7 +1987,12 @@ export type SignageSlide = {
   type: SignageSlideType;
   durationMs: number;
   order: number;
+  /** Unidades donas das telas em `screenIds`; derivado no servidor para o filtro de acesso. */
   kioskIds: string[];
+  /** Telas que exibem o slide. A tela padrão de uma unidade tem o mesmo id da unidade. */
+  screenIds: string[];
+  /** Posição por tela; sem entrada, vale `order`. */
+  orderByScreen?: Record<string, number>;
   isActive: boolean;
   assetUrl?: string;
   assetPath?: string;
@@ -2020,9 +2025,38 @@ export type PublishedPlayerSlide = {
   schedule?: SignageSchedule;
 };
 
+export type SignageScreen = {
+  id: string;
+  kioskId: string;
+  kioskName: string;
+  name: string;
+  deviceToken?: string;
+  /** Tela padrão da unidade: existe sem cadastro e não pode ser excluída. */
+  isDefault: boolean;
+};
+
+export type SignageMediaItem = {
+  id: string;
+  fileName: string;
+  kind: 'image' | 'video';
+  contentType: string;
+  sizeBytes: number;
+  assetPath: string;
+  assetUrl: string;
+  folderId: string | null;
+  createdAt: string;
+};
+
+export type SignageMediaFolder = {
+  id: string;
+  name: string;
+};
+
 export type PublishedPlayerDocument = {
   kioskId: string;
   kioskName?: string;
+  screenId?: string;
+  screenName?: string;
   updatedAt: string;
   generatedBy: {
     userId: string;
@@ -2033,11 +2067,14 @@ export type PublishedPlayerDocument = {
 
 export type PlayerHeartbeat = {
   kioskId: string;
+  screenId?: string;
   kioskName?: string;
   lastSeenAt: string;
-  status: 'cache' | 'realtime';
+  /** `app`: app instalado no monitor, que toca do disco e consulta o Coala a cada minuto. */
+  status: 'cache' | 'realtime' | 'app';
   currentSlideId?: string;
   updatedAt?: string;
+  appVersion?: string;
 };
 
 export type NutritionalNutrient = {
