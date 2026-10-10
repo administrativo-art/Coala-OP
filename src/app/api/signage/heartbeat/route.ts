@@ -1,51 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { type z } from 'zod';
 
-import { type Kiosk, type PlayerHeartbeat } from '@/types';
-import { dbAdmin } from '@/lib/firebase-admin';
 import { signageDbAdmin } from '@/lib/firebase-signage-admin';
-import { assertSignageAccess } from '@/lib/signage-auth';
-import { stripUndefined } from '@/lib/signage';
+import { AppError } from '@/lib/observability/app-error';
+import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { secureRoute } from '@/lib/security/secure-route.server';
+import { signageHeartbeatSchema, stripUndefined } from '@/lib/signage';
+import { type SignageAccess } from '@/lib/signage-auth';
+import { authenticateSignage, canAccessSignageKiosk, requirePlayerScreen, SIGNAGE_PLAYER_CORS_HEADERS, type StaticRouteContext } from '@/lib/signage-server';
+import { type PlayerHeartbeat, type SignageScreen } from '@/types';
 
-export async function GET(req: NextRequest) {
-  try {
-    const access = await assertSignageAccess(req, 'view');
-    const snapshot = await signageDbAdmin.collection('playerHeartbeats').get();
-    const heartbeats = snapshot.docs
-      .map(doc => ({ kioskId: doc.id, ...doc.data() } as PlayerHeartbeat))
-      .filter((heartbeat) => access.allUnits || access.allowedKioskIds.includes(heartbeat.kioskId));
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-    return NextResponse.json({ heartbeats });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Falha ao carregar heartbeats.' },
-      { status: 403 }
-    );
-  }
-}
+type HeartbeatInput = z.infer<typeof signageHeartbeatSchema>;
 
-export async function POST(req: NextRequest) {
-  const payload = await req.json();
-  const kioskId = typeof payload.kioskId === 'string' ? payload.kioskId.trim() : '';
+const listContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'signage.heartbeat.list',
+  version: 1,
+  surface: { method: 'GET', path: '/api/signage/heartbeat' },
+  exposure: 'authenticated',
+  identity: { kind: 'active-user' },
+  authorization: { kind: 'permission', action: 'signage.view' },
+  resourceScope: { kind: 'unit' },
+  input: { kind: 'none' },
+  effects: { mode: 'read', audit: 'none' },
+  errorExposure: 'sanitized',
+});
 
-  if (!kioskId) {
-    return NextResponse.json({ error: 'kioskId é obrigatório.' }, { status: 400 });
-  }
+// O player não tem login: a tela é reconhecida pelo id e, quando há um configurado, pelo código de acesso.
+const reportContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'signage.heartbeat.report',
+  version: 1,
+  surface: { method: 'POST', path: '/api/signage/heartbeat' },
+  exposure: 'public',
+  identity: { kind: 'none' },
+  authorization: { kind: 'custom', strategy: 'signage.device-token-when-configured' },
+  resourceScope: { kind: 'custom', strategy: 'signage.screen' },
+  input: { kind: 'schema', schema: 'signage.heartbeat.input', unknownFields: 'strip' },
+  effects: { mode: 'write', audit: 'none' },
+  errorExposure: 'sanitized',
+});
 
-  const kioskSnap = await dbAdmin.collection('kiosks').doc(kioskId).get();
-  if (!kioskSnap.exists) {
-    return NextResponse.json({ error: 'Quiosque inválido.' }, { status: 404 });
-  }
+const listEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, SignageAccess, undefined, SignageAccess>(listContract, {
+  authenticate: ({ request }) => authenticateSignage(request, 'view'),
+  loadResource: ({ actor }) => actor,
+  authorize: () => undefined,
+  // Listagem: o escopo é aplicado como filtro no handler.
+  assertScope: () => undefined,
+});
 
-  const kiosk = { id: kioskSnap.id, ...kioskSnap.data() } as Kiosk;
+const reportEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, undefined, HeartbeatInput, SignageScreen>(reportContract, {
+  async parseInput({ request }) {
+    const parsed = signageHeartbeatSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new AppError({ code: 'SIGNAGE_HEARTBEAT_INPUT_INVALID', kind: 'VALIDATION', safeMessage: 'Tela não informada.' });
+    }
+    return parsed.data;
+  },
+  // `requirePlayerScreen` confere a existência da tela e o código de acesso.
+  loadResource: ({ request, input }) => requirePlayerScreen((input.screenId ?? input.kioskId) as string, request.headers.get('x-device-token') ?? input.token ?? null),
+  authorize: () => undefined,
+  assertScope: () => undefined,
+});
+
+export const GET = secureRoute({ contract: listContract, enforcer: listEnforcer }, async ({ security }) => {
+  // Um documento por tela; a coleção cresce com o número de TVs.
+  const snapshot = await signageDbAdmin.collection('playerHeartbeats').get();
+  const heartbeats = snapshot.docs
+    .map((doc) => ({ ...doc.data(), screenId: doc.id } as PlayerHeartbeat))
+    .filter((heartbeat) => canAccessSignageKiosk(security.resource, heartbeat.kioskId ?? heartbeat.screenId ?? ''));
+
+  return NextResponse.json({ heartbeats });
+});
+
+export const POST = secureRoute({ contract: reportContract, enforcer: reportEnforcer }, async ({ security }) => {
+  const { input, resource: screen } = security;
   const heartbeat = stripUndefined({
-    kioskId,
-    kioskName: kiosk.name,
+    kioskId: screen.kioskId,
+    kioskName: screen.kioskName,
+    screenId: screen.id,
     lastSeenAt: new Date().toISOString(),
-    status: payload.status === 'realtime' ? 'realtime' : 'cache',
-    currentSlideId: typeof payload.currentSlideId === 'string' ? payload.currentSlideId : undefined,
-    updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : undefined,
+    status: input.status ?? 'cache',
+    currentSlideId: input.currentSlideId,
+    updatedAt: input.updatedAt,
+    appVersion: input.appVersion,
   });
 
-  await signageDbAdmin.collection('playerHeartbeats').doc(kioskId).set(heartbeat, { merge: true });
-  return NextResponse.json({ success: true });
-}
+  // A resposta leva a data da publicação vigente: o app do monitor só busca a playlist quando ela muda.
+  const [, publishedSnap] = await Promise.all([
+    signageDbAdmin.collection('playerHeartbeats').doc(screen.id).set(heartbeat, { merge: true }),
+    signageDbAdmin.collection('publishedPlayers').doc(screen.id).get(),
+  ]);
+  const publishedAt = publishedSnap.data()?.updatedAt;
+  return NextResponse.json(
+    { success: true, publishedAt: typeof publishedAt === 'string' ? publishedAt : null },
+    { headers: SIGNAGE_PLAYER_CORS_HEADERS },
+  );
+});
