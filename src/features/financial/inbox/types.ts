@@ -1,3 +1,5 @@
+import type { MobilePurchaseAnalysis } from "./mobile-upload";
+
 export type FinancialInboxStatus =
   | "pending_review"
   | "document_pending"
@@ -181,6 +183,7 @@ export type FinancialInboxDocumentHints = {
   supplierName: string | null;
   supplierTaxId: string | null;
   competence: string | null;
+  documentDate?: string | null;
   dueDate: string | null;
   amountCents: number | null;
   barcode: string | null;
@@ -189,6 +192,13 @@ export type FinancialInboxDocumentHints = {
   serviceType: FinancialInboxServiceType | null;
   serviceNumbers: string[];
   fiscalIdentity?: FinancialInboxFiscalIdentity | null;
+  purchaseItems?: Array<{
+    description: string;
+    quantity: number | null;
+    unit: string | null;
+    unitPriceCents: number | null;
+    totalCents: number | null;
+  }>;
   confidence: "high" | "medium" | "low";
 };
 
@@ -315,9 +325,14 @@ export type FinancialInboxBankState =
 export type FinancialInboxMessage = {
   id: string;
   workspaceId: string;
-  provider: "resend";
+  provider: "resend" | "mobile";
   providerEmailId: string;
   providerEventId: string;
+  submittedBy?: {
+    userId: string;
+    username: string;
+    email: string | null;
+  } | null;
   messageId: string | null;
   status: FinancialInboxStatus;
   from: string;
@@ -331,6 +346,8 @@ export type FinancialInboxMessage = {
   textContent: string;
   classification: FinancialInboxClassification;
   attachments: FinancialInboxAttachment[];
+  mobilePurchaseFundingSource?: "cash_withdrawal" | "company_payment";
+  mobilePurchaseAnalysis?: MobilePurchaseAnalysis | null;
   rawStoragePath: string | null;
   rawSha256: string | null;
   archiveWarnings: string[];

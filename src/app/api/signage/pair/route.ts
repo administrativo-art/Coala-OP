@@ -18,7 +18,8 @@ type PairInput = z.infer<typeof signagePairSchema>;
 // Freio contra adivinhação do código (32^8 combinações). Vale por instância do servidor.
 const limiter = createInMemoryRateLimiter({ limit: 10, windowMs: 60_000 });
 
-// O app do monitor não tem login: quem digita o código de acesso da tela recebe o id dela.
+// O app do monitor não tem login: ele consulta o código que sorteou e, depois que o aplicativo
+// Coala One liga esse código a uma tela, recebe o id dela.
 const contract = defineSecurityContract({
   schemaVersion: 1,
   id: 'signage.player.pair',
@@ -63,7 +64,7 @@ export const POST = secureRoute({ contract, enforcer }, async ({ security }) => 
   // Código desconhecido responde 200: o app distingue "não encontrado" de "sem internet" pelo corpo.
   return NextResponse.json(
     screen
-      ? { found: true, screenId: screen.id, screenName: screen.name, kioskName: screen.kioskName }
+      ? { found: true, screenId: screen.id, screenName: screen.name, kioskName: screen.kioskName, orientation: screen.orientation ?? null }
       : { found: false },
     { headers: SIGNAGE_PLAYER_CORS_HEADERS },
   );

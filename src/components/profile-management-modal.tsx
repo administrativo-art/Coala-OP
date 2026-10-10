@@ -20,6 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Segmented } from '@/components/patterns/segmented';
 import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -385,6 +386,9 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
   const dpCollaboratorsOwnOnlyWatch = form.watch('permissions.dp.collaborators.ownProfileOnly' as any);
+  // Every profile carries two lists: what it may do in the web system and what it may do in the Android app.
+  const [permissionScope, setPermissionScope] = useState<'system' | 'app'>('system');
+  const appLocalPurchaseWatch = form.watch('permissions.app.localPurchase.register' as any);
   const purchasingModuleViewWatch = form.watch('permissions.purchasing.view' as any);
   const formalizationViewWatch = form.watch('permissions.hr.formalization.view' as any);
   const formalizationCompanyDocumentsViewWatch = form.watch('permissions.hr.formalization.companyDocuments.view' as any);
@@ -453,6 +457,29 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </FormItem>
                             )}
                             />
+                            <Segmented
+                              aria-label="Lista de permissões"
+                              value={permissionScope}
+                              onChange={setPermissionScope}
+                              options={[{ value: 'system', label: 'Coala One · Sistema' }, { value: 'app', label: 'Coala One · APP' }]}
+                            />
+                            {/* The app list stays mounted but hidden with the system list so neither loses edits when switching. */}
+                            <div className={permissionScope === 'app' ? 'space-y-2' : 'hidden'}>
+                              <p className="text-sm text-muted-foreground">Permissões do aplicativo Android. São independentes das do sistema: liberar uma função no sistema não a libera no aplicativo.</p>
+                              <h3 className="pt-2 text-lg font-semibold">Compra local</h3>
+                              {renderPermissionSwitch("permissions.app.localPurchase.register" as any, "Registrar compra local", "Permite fotografar a nota e o comprovante, revisar e registrar uma compra recebida na unidade, e vinculá-la à sangria do caixa.")}
+                              {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, os itens ficam como consumo direto.", !appLocalPurchaseWatch, true)}
+                              <h3 className="pt-4 text-lg font-semibold">Estoque</h3>
+                              {renderPermissionSwitch("permissions.app.stockCount.perform" as any, "Contar estoque", "Permite iniciar, salvar e concluir a contagem de estoque das unidades do usuário pelo aplicativo.")}
+                              {renderPermissionSwitch("permissions.app.reposition.receive" as any, "Recebimento", "Permite conferir e registrar o recebimento das reposições enviadas para as unidades do usuário. As demais etapas da reposição continuam só no sistema.")}
+                              <h3 className="pt-4 text-lg font-semibold">Metas</h3>
+                              {renderPermissionSwitch("permissions.app.goals.view" as any, "Ver metas", "Permite ver as metas em andamento das unidades do usuário, o resultado de cada colega da unidade e a previsão de prêmio por pessoa.")}
+                              <h3 className="pt-4 text-lg font-semibold">Escala</h3>
+                              {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
+                              <h3 className="pt-4 text-lg font-semibold">Signage</h3>
+                              {renderPermissionSwitch("permissions.app.signage.manage" as any, "Adicionar telas", "Permite cadastrar telas do Coala Signage nas unidades do usuário, lendo com o celular o QR code que o monitor mostra. As mídias continuam sendo montadas no sistema.")}
+                            </div>
+                            <div className={permissionScope === 'system' ? '' : 'hidden'}>
                             <Accordion
                               type="multiple"
                               defaultValue={[
@@ -984,6 +1011,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                             </AccordionItem>
 
                             </Accordion>
+                            </div>
                         </div>
                     </ScrollArea>
                 </div>

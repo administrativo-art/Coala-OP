@@ -81,4 +81,5 @@ test("provisão convertida sai da lista operacional, continua consultável em ca
   assert.equal(showExpenseInOperationalList(migrated, "all"), false);
   assert.equal(showExpenseInOperationalList(migrated, "cancelled"), true);
   assert.equal(showExpenseInOperationalList({ status: "pending" }, "all"), true);
+  assert.equal(showExpenseInOperationalList({ status: "pending", hiddenFromExpensePanel: true }, "all"), false);
 });

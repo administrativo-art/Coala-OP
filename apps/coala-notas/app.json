@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Coala One",
+    "slug": "coala-notas",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.coalaone.notas",
+      "versionCode": 1,
+      "allowBackup": false,
+      "permissions": [
+        "CAMERA"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#17171A"
+      }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O Coala One usa a câmera para fotografar notas, a foto de perfil e ler o QR code das telas.",
+          "photosPermission": "O Coala One acessa os arquivos escolhidos para enviar notas de compras.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "O Coala One usa o reconhecimento facial para desbloquear o aplicativo."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O Coala One usa a câmera para fotografar notas e ler o QR code das telas do Signage.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "extra": {
+      "purpose": "Registro de compras locais recebidas e conciliação com sangrias no Coala One"
+    }
+  }
+}

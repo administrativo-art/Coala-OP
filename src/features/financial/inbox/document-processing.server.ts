@@ -48,6 +48,9 @@ async function processAttachment(
     contentType: attachment.contentType,
     subject: message.subject,
     senderDomain: message.senderDomain,
+    model: message.provider === "mobile"
+      ? process.env.OPENAI_MOBILE_RECEIPT_MODEL?.trim() || "gpt-5-mini"
+      : undefined,
   });
   const extractedAt = new Date().toISOString();
   let extractedTextStoragePath: string | null = null;

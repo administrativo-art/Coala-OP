@@ -10,9 +10,9 @@ export const financialInboxDocumentExtractionPrompt = defineAiPrompt<FinancialIn
   id: "financial.inbox-document-extraction",
   module: "financial",
   name: "Extração de documentos da caixa de cobranças",
-  description: "Extrai evidências estruturadas de boletos, faturas, contas e guias recebidas por e-mail.",
-  version: "financial-inbox-document-v3",
-  schemaVersion: "financial-inbox-document-extraction-v3",
+  description: "Extrai evidências estruturadas de boletos, faturas, notas, contas e guias recebidas por e-mail ou aplicativo.",
+  version: "financial-inbox-document-v4",
+  schemaVersion: "financial-inbox-document-extraction-v4",
   status: "active",
   risk: "high",
   outputMode: "structured",
@@ -25,7 +25,7 @@ REGRAS
 - Não invente nem complete números ausentes.
 - Não escolha plano de contas, centro de resultado, despesa de destino ou decisão bancária.
 - amountCents deve conter o valor total cobrado em centavos, como inteiro.
-- dueDate usa YYYY-MM-DD e competence usa YYYY-MM.
+- documentDate é a data comprovada de emissão/compra e dueDate é o vencimento; ambas usam YYYY-MM-DD. competence usa YYYY-MM.
 - barcode contém somente os 44, 46, 47 ou 48 dígitos da linha digitável/código de barras.
 - O remetente ou escritório que encaminhou o e-mail não é necessariamente o beneficiário da cobrança.
 - supplierName é sempre o beneficiário/fornecedor comprovado no documento. Em guias fiscais, é o órgão ou ente arrecadador (por exemplo, Receita Federal, SEFAZ ou Município), nunca o escritório contábil nem o contribuinte.
@@ -36,6 +36,7 @@ REGRAS
 - Para telefonia, use serviceType mobile ou landline; para banda larga use internet.
 - Se o documento consolidar várias linhas, retorne todas as linhas comprovadas.
 - Para guia fiscal, preencha fiscalIdentity. Use null para documentos não fiscais.
+- Para nota ou cupom de compra, preencha purchaseItems com todas as linhas legíveis. Preserve descrição, quantidade, unidade, preço unitário e total em centavos; use null somente no campo que não estiver comprovado. Para outros documentos, use lista vazia.
 - fiscalIdentity.documentKind distingue DAS, DARF, DCTFWeb, DARE, FGTS e guia municipal; use other somente se a guia fiscal não couber nessas opções.
 - fiscalIdentity.collectorName é o órgão/ente arrecadador; taxpayerName e taxpayerTaxId identificam o contribuinte; taxpayerRegistration é a inscrição estadual/municipal quando houver.
 - fiscalIdentity.documentNumber é o identificador da própria guia. revenueCodes e revenueDescriptions reproduzem a composição/denominação comprovada, sem resumir tributos diferentes como se fossem o mesmo.
