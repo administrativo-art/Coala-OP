@@ -22,7 +22,7 @@ const contract = defineSecurityContract({
   surface: { method: "POST", path: "/api/purchasing/local-purchases/reverse" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "purchasing.revertPurchaseStage" },
+  authorization: { kind: "permission", action: "purchasing.revert-purchase-stage" },
   resourceScope: { kind: "workspace" },
   input: { kind: "schema", schema: "purchasing.local-purchase.reverse", unknownFields: "reject" },
   effects: { mode: "write", audit: "server-authoritative" },

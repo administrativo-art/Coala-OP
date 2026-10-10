@@ -20,7 +20,7 @@ const contract = defineSecurityContract({
   surface: { method: "GET", path: "/api/purchasing/local-purchases/withdrawals" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "app.localPurchase.register" },
+  authorization: { kind: "permission", action: "app.local-purchase.register" },
   resourceScope: { kind: "workspace" },
   input: { kind: "none" },
   effects: { mode: "read", audit: "none" },

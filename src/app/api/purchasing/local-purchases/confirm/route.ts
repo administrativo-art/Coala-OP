@@ -21,7 +21,7 @@ const contract = defineSecurityContract({
   surface: { method: "POST", path: "/api/purchasing/local-purchases/confirm" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "app.localPurchase.register" },
+  authorization: { kind: "permission", action: "app.local-purchase.register" },
   resourceScope: { kind: "unit" },
   input: { kind: "schema", schema: "purchasing.local-purchase.confirm", unknownFields: "reject" },
   effects: { mode: "write", audit: "server-authoritative" },

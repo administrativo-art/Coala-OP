@@ -21,7 +21,7 @@ const contract = defineSecurityContract({
   surface: { method: "POST", path: "/api/stock/mobile-count/save" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "app.stockCount.perform" },
+  authorization: { kind: "permission", action: "app.stock-count.perform" },
   resourceScope: { kind: "workspace" },
   input: { kind: "schema", schema: "stock.mobile-count.save", unknownFields: "reject" },
   effects: { mode: "write", audit: "server-authoritative" },

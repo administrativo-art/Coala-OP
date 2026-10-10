@@ -54,7 +54,7 @@ test("a local purchase only matches a withdrawal from the same unit, day and exa
 
 test("confirmation route declares authenticated permission, unit scope and replay protection", () => {
   const route = readFileSync("src/app/api/purchasing/local-purchases/confirm/route.ts", "utf8");
-  assert.match(route, /action: "app\.localPurchase\.register"/);
+  assert.match(route, /action: "app\.local-purchase\.register"/);
   assert.match(route, /resourceScope: \{ kind: "unit" \}/);
   assert.match(route, /additionalGuarantees: \["replay-protected"\]/);
   assert.match(route, /export const POST = secureRoute/);
@@ -120,7 +120,7 @@ test("pre-linking revalidates the sangria in the PDV and allows one purchase per
   assert.match(server, /WITHDRAWAL_ALREADY_LINKED/);
   assert.match(server, /transaction\.create\(withdrawalLinkRef/);
   const route = readFileSync("src/app/api/purchasing/local-purchases/withdrawals/route.ts", "utf8");
-  assert.match(route, /action: "app\.localPurchase\.register"/);
+  assert.match(route, /action: "app\.local-purchase\.register"/);
   assert.match(route, /export const GET = secureRoute/);
 });
 
@@ -181,5 +181,5 @@ test("automatic reconciliation can only confirm the link the operator made in th
   const purchase = readFileSync("src/features/purchasing/local-purchase.server.ts", "utf8");
   assert.match(purchase, /autoLinkAppPreLinks\(cashClosureId\(unitId, withdrawalDate\), actor\)/);
   assert.match(purchase, /LINK_UNAVAILABLE/);
-  assert.match(readFileSync("src/app/api/purchasing/local-purchases/link-withdrawal/route.ts", "utf8"), /action: "app\.localPurchase\.register"/);
+  assert.match(readFileSync("src/app/api/purchasing/local-purchases/link-withdrawal/route.ts", "utf8"), /action: "app\.local-purchase\.register"/);
 });

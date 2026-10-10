@@ -52,6 +52,6 @@ test("reversal checks permission, unit scope and reverses stock before the finan
   assert.match(server, /type: "ENTRADA_ESTORNO"/);
   assert.match(server, /if \(!entry\.exists \|\| entry\.get\("reversedAt"\)\) return;/);
   const route = readFileSync("src/app/api/purchasing/local-purchases/reverse/route.ts", "utf8");
-  assert.match(route, /action: "purchasing\.revertPurchaseStage"/);
+  assert.match(route, /action: "purchasing\.revert-purchase-stage"/);
   assert.match(route, /export const POST = secureRoute/);
 });

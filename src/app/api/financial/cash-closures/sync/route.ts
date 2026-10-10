@@ -22,7 +22,7 @@ const contract = defineSecurityContract({
   surface: { method: "POST", path: "/api/financial/cash-closures/sync" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "financial.cashClosures.resync" },
+  authorization: { kind: "permission", action: "financial.cash-closures.resync" },
   resourceScope: { kind: "unit" },
   // Unknown fields are dropped by the schema, as before this route had a contract.
   input: { kind: "schema", schema: "financial.cash-closure.sync", unknownFields: "strip" },

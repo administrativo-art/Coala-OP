@@ -101,7 +101,7 @@ test("count routes use the app permission, the owner check and the shared finali
   assert.match(server, /imageUrl: safeAvatarUrl\(snapshot\.get\("imageUrl"\)\)/);
   for (const route of ["route.ts", "start/route.ts", "save/route.ts"]) {
     const source = readFileSync(`src/app/api/stock/mobile-count/${route}`, "utf8");
-    assert.match(source, /action: "app\.stockCount\.perform"/);
+    assert.match(source, /action: "app\.stock-count\.perform"/);
     assert.match(source, /assertCanPerformMobileCount\(actor\)/);
     assert.match(source, /secureRoute\(\{ contract, enforcer \}/);
   }

@@ -49,7 +49,7 @@ const contract = defineSecurityContract({
   surface: { method: "POST", path: "/api/financial/inbox/mobile-upload" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "app.localPurchase.register" },
+  authorization: { kind: "permission", action: "app.local-purchase.register" },
   resourceScope: { kind: "workspace" },
   input: { kind: "schema", schema: "financial.inbox.mobile-upload-form", unknownFields: "reject" },
   effects: { mode: "external", audit: "server-authoritative" },

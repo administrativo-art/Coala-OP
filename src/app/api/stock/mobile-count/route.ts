@@ -20,7 +20,7 @@ const contract = defineSecurityContract({
   surface: { method: "GET", path: "/api/stock/mobile-count" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "app.stockCount.perform" },
+  authorization: { kind: "permission", action: "app.stock-count.perform" },
   resourceScope: { kind: "workspace" },
   input: { kind: "none" },
   effects: { mode: "read", audit: "none" },

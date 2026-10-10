@@ -22,7 +22,7 @@ const contract = defineSecurityContract({
   surface: { method: "POST", path: "/api/purchasing/local-purchases/link-withdrawal" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
-  authorization: { kind: "permission", action: "app.localPurchase.register" },
+  authorization: { kind: "permission", action: "app.local-purchase.register" },
   resourceScope: { kind: "workspace" },
   input: { kind: "schema", schema: "purchasing.local-purchase.link-withdrawal", unknownFields: "reject" },
   effects: { mode: "write", audit: "server-authoritative" },
