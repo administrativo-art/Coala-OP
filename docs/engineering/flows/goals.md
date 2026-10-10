@@ -19,3 +19,12 @@ As regras de `goalTemplates`, `goalPeriods`, `employeeGoals` em [Firestore](../.
 ## Evidências da etapa 2
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.
+
+
+## Metas no aplicativo (2026-10-09)
+
+O módulo "Metas" de `apps/coala-notas` é somente leitura. Permissão própria da lista do aplicativo, `app.goals.view`; `goals.view` do sistema não a concede. `GET /api/goals/mobile` lista as unidades do usuário; com `?kioskId=` revalida o acesso à unidade e lê `goalPeriods` com `kioskId` e `status == "active"` (até 10), os `employeeGoals` de cada período (até 200) e os nomes em `users`. Quem atua em mais de uma unidade troca de unidade na tela; cada unidade é uma consulta separada, feita ao abrir, ao trocar e ao puxar para atualizar, sem listener nem polling.
+
+O cálculo fica em [`mobile-goals.ts`](../../../src/features/goals/mobile-goals.ts): resumo (níveis Meta/UP/TOP, percentual, projeção e necessário por dia), dias do período até hoje, placar por pessoa e previsão de prêmio do método por faixas, com o mesmo rateio do encerramento (fixos, folguista por turnos cobertos, liderança). A resposta identifica colegas só pelo nome. Decisões do programador: todos da unidade veem o placar e o prêmio previsto de cada pessoa; só metas em andamento.
+
+Os dias seguem a definição do período, como no painel web: `calendar_days` usa os dias corridos; `scheduled_days` usa as datas em que um participante da meta tem turno de trabalho nas escalas daquela unidade (`loadScheduledGoalDateKeys`, mesma derivação de `loadGoalDistributionSnapshot`, com unidade casada por `matchDPUnitForKiosk`), com o mesmo recuo para dias corridos quando não há turnos. Dia fora da distribuição aparece com o faturamento, sem comparação com a meta diária. O dia de referência é o de `America/Belem`. Custo adicional só para metas por escala: `dp_units` (cache de 10 minutos), as escalas do mês e os turnos dos participantes. O rateio por pessoa foi reescrito a partir de `buildGoalClosureBonusSnapshot`, que existe na `main` mas não nesta branch; ao atualizar a branch, trocar pelo helper compartilhado para não manter duas implementações. Lacunas: sem E2E, sem teste em aparelho e sem comparação com números reais do painel.

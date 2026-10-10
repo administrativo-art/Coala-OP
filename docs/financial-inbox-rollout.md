@@ -16,6 +16,7 @@
 - `RESEND_WEBHOOK_SECRET`: segredo já utilizado para verificar a assinatura Svix.
 - `OPENAI_API_KEY`: habilita a leitura visual de imagens e PDFs sem camada textual. Sem a chave, esses documentos permanecem como `OCR pendente`.
 - `OPENAI_FINANCIAL_INBOX_DOCUMENT_MODEL`: modelo opcional da extração visual; quando ausente, reutiliza `OPENAI_FINANCIAL_DOCUMENT_MODEL`.
+- `OPENAI_MOBILE_RECEIPT_MODEL`: modelo da extração de notas enviadas pelo aplicativo; quando ausente, usa `gpt-5-mini` para esta tarefa estruturada de menor custo.
 - `FINANCIAL_INBOX_DOCUMENT_DOMAINS`: lista opcional, separada por vírgulas, de domínios documentais adicionais aprovados. Subdomínios do mesmo domínio-base do remetente já são aceitos e não precisam entrar na lista.
 
 O endereço técnico nunca deve ser o alias público do Google, evitando ciclos de encaminhamento.

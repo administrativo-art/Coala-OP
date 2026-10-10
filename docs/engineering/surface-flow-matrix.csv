@@ -450,3 +450,21 @@ page,src/app/vagas/[slug]/page.tsx,,docs/engineering/flows/recruitment.md,Entrad
 page,src/app/vagas/banco-de-talentos/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/onboarding/[token]/page.tsx,,docs/engineering/flows/onboarding-public-documents.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
+api,src/app/api/financial/inbox/mobile-upload/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Envio de nota e comprovante pelo aplicativo com analise unica de IA; idempotente por submissionId; nao registra compra.
+api,src/app/api/mobile/app-attestation/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Troca de token Play Integrity por passe HMAC do proprio usuario; desligado por padrao; nao validado ponta a ponta.
+api,src/app/api/purchasing/local-purchases/confirm/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Confirma compra local revisada; cria despesa e pre-vinculo de sangria e dispara entrada de estoque idempotente em outro banco.
+api,src/app/api/purchasing/local-purchases/context/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Cadastros para a revisao no aplicativo; unidades do usuario e produtos de estoque so com permissao propria; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/list/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Compras locais para a lista geral de compras; leitura limitada e escopo de unidade; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/reverse/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Estorno completo com motivo; desfaz estoque e despesa e libera a sangria; bloqueia se pago ou vinculado no fechamento.
+api,src/app/api/purchasing/local-purchases/withdrawals/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Sangrias do PDV sem nota lidas ao vivo com cache curto; so unidades do usuario; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/link-withdrawal/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Liga a uma sangria do PDV uma compra em dinheiro ja registrada; revalida no PDV e tenta a conciliacao automatica.
+api,src/app/api/stock/mobile-count/route.ts,,docs/engineering/flows/stock-count.md,Unidades e contagens abertas do proprio operador para o aplicativo; GET sem escrita.
+api,src/app/api/stock/mobile-count/start/route.ts,,docs/engineering/flows/stock-count.md,Abre a contagem da unidade com itens montados no servidor ou devolve a ja aberta pelo operador.
+api,src/app/api/stock/mobile-count/save/route.ts,,docs/engineering/flows/stock-count.md,Salva rascunho ou conclui pela mesma transacao de finalizacao do web; so o dono da sessao.
+api,src/app/api/stock/mobile-reposition/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Reposicoes aguardando recebimento nas unidades de destino do usuario; GET sem escrita.
+api,src/app/api/stock/mobile-reposition/receive/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Registra o recebimento pelo aplicativo na unidade de destino; nao movimenta estoque.
+api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em andamento das unidades do usuario para o aplicativo com placar e previsao de premio; GET sem escrita.
+api,src/app/api/dp/mobile-schedule/route.ts,,docs/engineering/flows/collaborator-schedule.md,Escala publicada das unidades do proprio usuario para o aplicativo; mesma regra do portal do colaborador; GET sem escrita.
+api,src/app/api/mobile/profile/route.ts,,docs/engineering/access-and-privacy.md,Cartao do proprio usuario (nome cargo foto) e modulos do aplicativo liberados pelo perfil; GET sem escrita.
+api,src/app/api/mobile/profile/photo/route.ts,,docs/engineering/access-and-privacy.md,Troca da propria foto de perfil pelo aplicativo no mesmo caminho e campo do perfil web; imagem validada por conteudo.
+page,src/app/app/coala-one/page.tsx,,docs/engineering/flows/purchasing-order-receipt.md,Entrada externa classificada no external-page-map; publicidade nao presumida.

@@ -5,6 +5,7 @@ Este mapa manual liga as **21 páginas** do [inventário gerado](surface-invento
 | Página | Caminho de investigação | Papel observado / limite |
 | --- | --- | --- |
 | [`/`](../../src/app/page.tsx) | [Recrutamento](flows/recruitment.md), [página inicial](flows/platform-home.md) | `RootHostSwitch` ou página de vagas conforme host; verificar resolução de host. |
+| [`/app/coala-one`](../../src/app/app/coala-one/page.tsx) | [Compra local pelo aplicativo](flows/purchasing-order-receipt.md) | Instalador do aplicativo Coala One (Android). Exige login no cliente; não lê dados nem registra download; o arquivo em `public/app/` é público por endereço direto. |
 | [`/aso/candidato/[token]`](../../src/app/aso/candidato/%5Btoken%5D/page.tsx) | [ASO de integração](flows/onboarding-aso.md) | Consulta e upload por token via `/api/hr/aso/candidate/[token]`. |
 | [`/aso/clinica/[token]`](../../src/app/aso/clinica/%5Btoken%5D/page.tsx) | [ASO de integração](flows/onboarding-aso.md) | Agendamento por clínica via `/api/hr/aso/clinic/[token]`. |
 | [`/catalogo`](../../src/app/catalogo/page.tsx) | [Catálogo](flows/catalog.md) | `CatalogoView`; conferir acesso à API. |

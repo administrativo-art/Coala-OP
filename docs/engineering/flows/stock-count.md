@@ -12,6 +12,10 @@ O cliente salva e conclui a sessão pela [rota coringa de cadastro](../../../src
 
 Após salvar ou concluir, [`syncStockCountTaskSafely`](../../../src/features/stock-count/lib/task-sync.ts) atualiza/cria tarefa associada à sessão. A [tarefa](tasks.md) de origem `stock_count_approval` não pode ser concluída manualmente na tela de tarefas; a contagem é a fonte do estado.
 
+## Contagem pelo aplicativo (2026-10-09)
+
+O módulo "Contagem de estoque" de `apps/coala-notas` usa rotas próprias, com contrato de segurança, e não a rota coringa de cadastro. Permissão própria da lista do aplicativo, `app.stockCount.perform`: poder contar no sistema web não libera a contagem no aplicativo, nem o contrário. `GET /api/stock/mobile-count` devolve as unidades do usuário e as contagens abertas por ele (consulta por dono + status, até 25). `POST /api/stock/mobile-count/start` monta os itens **no servidor** (lotes da unidade com saldo, até 1.500 lidos; mesmas exclusões, agrupamento e unidade de contagem do web) e cria a sessão em `stockAuditSessions` com `source: coala-notas-android`; se o operador já tem contagem aberta na unidade, devolve essa. `POST /api/stock/mobile-count/save` recebe, por lote, uma saída com **um** motivo (padrão `SAIDA_CONSUMO`; "Outros" exige descrição) e uma entrada (`ENTRADA_CORRECAO`); recusa lote fora da sessão, lote repetido e saldo final negativo; com `complete: false` grava o rascunho e, com `true`, chama `completeStockCountSession`, a mesma transação do web. A tarefa associada é sincronizada como no web. Cada item devolvido traz a foto (`imageUrl`, só `https`) e a instrução de contagem do cadastro do produto, lidas na hora, como a contagem web exibe a foto. O aplicativo guarda o que foi digitado em arquivo local a cada alteração e o reaplica ao reabrir a sessão; concluir exige conexão. Custo: uma leitura dos lotes da unidade por contagem iniciada, mais um `getAll` dos produtos distintos; não há polling. Lacunas: sem E2E, sem teste em aparelho; a sessão criada pelo aplicativo também aparece e pode ser continuada no web pelo mesmo usuário, o que não foi exercitado.
+
 ## Dados, permissão e impacto
 
 | Local | Efeito observado |

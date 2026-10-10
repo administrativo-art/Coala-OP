@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **384 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **401 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -9,6 +9,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | Caminho | Arquivo | Guia |
 | --- | --- | --- |
 | `/` | [src/app/page.tsx](../../src/app/page.tsx) | [recruitment](flows/recruitment.md) |
+| `/app/coala-one` | [src/app/app/coala-one/page.tsx](../../src/app/app/coala-one/page.tsx) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/aso/candidato/[token]` | [src/app/aso/candidato/[token]/page.tsx](../../src/app/aso/candidato/%5Btoken%5D/page.tsx) | [onboarding-aso](flows/onboarding-aso.md) |
 | `/aso/clinica/[token]` | [src/app/aso/clinica/[token]/page.tsx](../../src/app/aso/clinica/%5Btoken%5D/page.tsx) | [onboarding-aso](flows/onboarding-aso.md) |
 | `/catalogo` | [src/app/catalogo/page.tsx](../../src/app/catalogo/page.tsx) | [catalog](flows/catalog.md) |
@@ -86,6 +87,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/documents/templates/[id]/text` | GET | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/%5Bid%5D/text/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/documents/templates/[id]/workflow` | PATCH | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/%5Bid%5D/workflow/route.ts) | [document-templates](flows/document-templates.md) |
 | `/api/dp/bootstrap` | GET | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) | [dp-overview](flows/dp-overview.md) |
+| `/api/dp/mobile-schedule` | GET | [src/app/api/dp/mobile-schedule/route.ts](../../src/app/api/dp/mobile-schedule/route.ts) | [collaborator-schedule](flows/collaborator-schedule.md) |
 | `/api/dp/natasha/availability` | GET | [src/app/api/dp/natasha/availability/route.ts](../../src/app/api/dp/natasha/availability/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/natasha/shift-definitions` | GET | [src/app/api/dp/natasha/shift-definitions/route.ts](../../src/app/api/dp/natasha/shift-definitions/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/natasha/team` | GET | [src/app/api/dp/natasha/team/route.ts](../../src/app/api/dp/natasha/team/route.ts) | [dp-schedules](flows/dp-schedules.md) |
@@ -183,6 +185,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/inbox/[id]/payment` | POST | [src/app/api/financial/inbox/[id]/payment/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/payment/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/[id]/restore` | POST | [src/app/api/financial/inbox/[id]/restore/route.ts](../../src/app/api/financial/inbox/%5Bid%5D/restore/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/inbox/bulk-review` | POST | [src/app/api/financial/inbox/bulk-review/route.ts](../../src/app/api/financial/inbox/bulk-review/route.ts) | [financial-inbox](flows/financial-inbox.md) |
+| `/api/financial/inbox/mobile-upload` | POST | [src/app/api/financial/inbox/mobile-upload/route.ts](../../src/app/api/financial/inbox/mobile-upload/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/financial/inbox/settings` | GET, PUT | [src/app/api/financial/inbox/settings/route.ts](../../src/app/api/financial/inbox/settings/route.ts) | [financial-inbox](flows/financial-inbox.md) |
 | `/api/financial/management-analysis` | POST | [src/app/api/financial/management-analysis/route.ts](../../src/app/api/financial/management-analysis/route.ts) | [financial-overview](flows/financial-overview.md) |
 | `/api/financial/payment-requests` | GET, POST | [src/app/api/financial/payment-requests/route.ts](../../src/app/api/financial/payment-requests/route.ts) | [payment-requests](flows/payment-requests.md) |
@@ -245,6 +248,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/forms/types` | GET, POST | [src/app/api/forms/types/route.ts](../../src/app/api/forms/types/route.ts) | [forms](flows/forms.md) |
 | `/api/forms/types/[typeId]` | GET, PATCH | [src/app/api/forms/types/[typeId]/route.ts](../../src/app/api/forms/types/%5BtypeId%5D/route.ts) | [forms](flows/forms.md) |
 | `/api/forms/upload` | POST, PATCH | [src/app/api/forms/upload/route.ts](../../src/app/api/forms/upload/route.ts) | [forms](flows/forms.md) |
+| `/api/goals/mobile` | GET | [src/app/api/goals/mobile/route.ts](../../src/app/api/goals/mobile/route.ts) | [goals](flows/goals.md) |
 | `/api/hr/accountant/[token]` | GET, POST | [src/app/api/hr/accountant/[token]/route.ts](../../src/app/api/hr/accountant/%5Btoken%5D/route.ts) | [onboarding-accountant](flows/onboarding-accountant.md) |
 | `/api/hr/apply` | POST | [src/app/api/hr/apply/route.ts](../../src/app/api/hr/apply/route.ts) | [recruitment](flows/recruitment.md) |
 | `/api/hr/aso-clinics` | GET, POST | [src/app/api/hr/aso-clinics/route.ts](../../src/app/api/hr/aso-clinics/route.ts) | [onboarding-aso](flows/onboarding-aso.md) |
@@ -345,6 +349,9 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/stone-sales-review/reconcile` | POST | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/mercadorias` | GET | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) | [registry](flows/registry.md) |
 | `/api/mercadorias/export` | GET | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) | [registry](flows/registry.md) |
+| `/api/mobile/app-attestation` | POST | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/mobile/profile` | GET | [src/app/api/mobile/profile/route.ts](../../src/app/api/mobile/profile/route.ts) | [access-and-privacy](access-and-privacy.md) |
+| `/api/mobile/profile/photo` | POST | [src/app/api/mobile/profile/photo/route.ts](../../src/app/api/mobile/profile/photo/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/observability/client-errors` | POST | [src/app/api/observability/client-errors/route.ts](../../src/app/api/observability/client-errors/route.ts) | [observability](observability.md) |
 | `/api/privacy/incidents` | GET, POST | [src/app/api/privacy/incidents/route.ts](../../src/app/api/privacy/incidents/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/privacy/incidents/[id]` | PATCH | [src/app/api/privacy/incidents/[id]/route.ts](../../src/app/api/privacy/incidents/%5Bid%5D/route.ts) | [access-and-privacy](access-and-privacy.md) |
@@ -361,6 +368,12 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/public/bio/analytics` | POST | [src/app/api/public/bio/analytics/route.ts](../../src/app/api/public/bio/analytics/route.ts) | [instagram-publishing](flows/instagram-publishing.md) |
 | `/api/public/bio/media/[id]` | GET | [src/app/api/public/bio/media/[id]/route.ts](../../src/app/api/public/bio/media/%5Bid%5D/route.ts) | [settings](flows/settings.md) |
 | `/api/purchasing/[...path]` | GET, POST, PATCH, DELETE | [src/app/api/purchasing/[...path]/route.ts](../../src/app/api/purchasing/%5B...path%5D/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/local-purchases/confirm` | POST | [src/app/api/purchasing/local-purchases/confirm/route.ts](../../src/app/api/purchasing/local-purchases/confirm/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/local-purchases/context` | GET | [src/app/api/purchasing/local-purchases/context/route.ts](../../src/app/api/purchasing/local-purchases/context/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/local-purchases/link-withdrawal` | POST | [src/app/api/purchasing/local-purchases/link-withdrawal/route.ts](../../src/app/api/purchasing/local-purchases/link-withdrawal/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/local-purchases/list` | GET | [src/app/api/purchasing/local-purchases/list/route.ts](../../src/app/api/purchasing/local-purchases/list/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/local-purchases/reverse` | POST | [src/app/api/purchasing/local-purchases/reverse/route.ts](../../src/app/api/purchasing/local-purchases/reverse/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
+| `/api/purchasing/local-purchases/withdrawals` | GET | [src/app/api/purchasing/local-purchases/withdrawals/route.ts](../../src/app/api/purchasing/local-purchases/withdrawals/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/purchasing/pending-by-destination` | GET | [src/app/api/purchasing/pending-by-destination/route.ts](../../src/app/api/purchasing/pending-by-destination/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/purchasing/pending-by-destination/ignore` | POST | [src/app/api/purchasing/pending-by-destination/ignore/route.ts](../../src/app/api/purchasing/pending-by-destination/ignore/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
 | `/api/registry/[...path]` | GET, POST, PATCH, DELETE | [src/app/api/registry/[...path]/route.ts](../../src/app/api/registry/%5B...path%5D/route.ts) | [registry](flows/registry.md) |
@@ -382,6 +395,11 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/stock/count-sessions` | GET | [src/app/api/stock/count-sessions/route.ts](../../src/app/api/stock/count-sessions/route.ts) | [stock-count](flows/stock-count.md) |
 | `/api/stock/item-requests` | GET, POST | [src/app/api/stock/item-requests/route.ts](../../src/app/api/stock/item-requests/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/item-requests/[requestId]` | PATCH, DELETE | [src/app/api/stock/item-requests/[requestId]/route.ts](../../src/app/api/stock/item-requests/%5BrequestId%5D/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
+| `/api/stock/mobile-count` | GET | [src/app/api/stock/mobile-count/route.ts](../../src/app/api/stock/mobile-count/route.ts) | [stock-count](flows/stock-count.md) |
+| `/api/stock/mobile-count/save` | POST | [src/app/api/stock/mobile-count/save/route.ts](../../src/app/api/stock/mobile-count/save/route.ts) | [stock-count](flows/stock-count.md) |
+| `/api/stock/mobile-count/start` | POST | [src/app/api/stock/mobile-count/start/route.ts](../../src/app/api/stock/mobile-count/start/route.ts) | [stock-count](flows/stock-count.md) |
+| `/api/stock/mobile-reposition` | GET | [src/app/api/stock/mobile-reposition/route.ts](../../src/app/api/stock/mobile-reposition/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
+| `/api/stock/mobile-reposition/receive` | POST | [src/app/api/stock/mobile-reposition/receive/route.ts](../../src/app/api/stock/mobile-reposition/receive/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/movement-history` | GET | [src/app/api/stock/movement-history/route.ts](../../src/app/api/stock/movement-history/route.ts) | [stock-control](flows/stock-control.md) |
 | `/api/stock/replenishment-policy` | GET | [src/app/api/stock/replenishment-policy/route.ts](../../src/app/api/stock/replenishment-policy/route.ts) | [stock-analysis](flows/stock-analysis.md) |
 | `/api/stock/reposition-activities` | GET, POST | [src/app/api/stock/reposition-activities/route.ts](../../src/app/api/stock/reposition-activities/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
