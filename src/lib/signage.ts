@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { type Kiosk, type PublishedPlayerDocument, type PublishedPlayerSlide, type SignageSchedule, type SignageSlide } from '@/types';
+import { type PublishedPlayerDocument, type PublishedPlayerSlide, type SignageSchedule, type SignageScreen, type SignageSlide } from '@/types';
 
 export const SIGNAGE_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 export const SIGNAGE_VIDEO_MAX_BYTES = 30 * 1024 * 1024;
@@ -13,30 +13,54 @@ export const PLAYER_HEARTBEAT_MS = 60 * 1000;
 export const PLAYER_HEARTBEAT_STALE_MS = 2 * PLAYER_HEARTBEAT_MS + 30 * 1000;
 export const SIGNAGE_FETCH_TIMEOUT_MS = 30 * 1000;
 export const SIGNAGE_STORAGE_BUCKET = 'smart-converter-752gf.firebasestorage.app';
+/**
+ * Aplicativos do Coala, servidos de `public/app/` e listados em `/app`. São dois produtos:
+ * o Coala Signage APP (vai nas telas) e o Coala Mobile APP (smartphones e tablets Android).
+ * `packagePath: null` é instalador que ainda não existe: a página mostra o botão desativado.
+ */
+export const COALA_APP_INSTALLERS: {
+  signage: { launcherPath: string; packagePath: string };
+  mobile: { packagePath: string | null };
+} = {
+  signage: { launcherPath: '/app', packagePath: '/app/CoalaSignage.wgt' },
+  mobile: { packagePath: null },
+};
+/** Registro de quem abriu a página de aplicativos e de quem baixou cada um. */
+export const signageAppDownloadSchema = z.object({
+  platform: z.enum(['signage', 'mobile', 'page']),
+  event: z.enum(['view', 'download']),
+}).strict();
+export const SIGNAGE_DEFAULT_SCREEN_NAME = 'Tela 1';
+export const SIGNAGE_MAX_SCREENS_PER_KIOSK = 12;
+export const SIGNAGE_DEVICE_TOKEN_PATTERN = /^[A-HJ-NP-Z2-9]{8}$/;
 
 const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+const signageIdSchema = z.string().trim().min(1).max(160).refine((value) => !value.includes('/'), 'Identificador inválido.');
 
 export const signageScheduleSchema = z.object({
   startTime: z.string().regex(timeRegex).optional(),
   endTime: z.string().regex(timeRegex).optional(),
   startDate: z.string().regex(dateRegex).optional(),
   endDate: z.string().regex(dateRegex).optional(),
-}).optional();
+}).strict().optional();
 
 export const signageSlideSchema = z.object({
   title: z.string().trim().min(2).max(120),
   type: z.enum(['image', 'video', 'text']),
   durationMs: z.number().int().min(SIGNAGE_MIN_DURATION_MS).max(SIGNAGE_VIDEO_MAX_DURATION_MS),
   order: z.number().int().min(0).max(9999),
-  kioskIds: z.array(z.string().trim().min(1)).min(1),
+  screenIds: z.array(signageIdSchema).min(1).max(200),
+  orderByScreen: z.record(signageIdSchema, z.number().int().min(0).max(9999)).optional(),
   isActive: z.boolean(),
-  assetPath: z.string().trim().optional(),
+  // A mídia só pode apontar para a pasta do signage: o servidor apaga o arquivo quando o slide o abandona.
+  assetPath: z.string().trim().max(400).regex(/^signage\/[^/]+$/, 'Mídia inválida.').optional(),
   assetKind: z.enum(['image', 'video']).optional(),
   text: z.string().trim().max(1200).optional(),
   background: z.string().trim().max(32).optional(),
   schedule: signageScheduleSchema,
-}).superRefine((value, ctx) => {
+}).strict().superRefine((value, ctx) => {
   if (value.type === 'text' && !value.text) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Slides de texto precisam de conteúdo.', path: ['text'] });
   }
@@ -64,6 +88,50 @@ export const signageSlideSchema = z.object({
 
 export type SignageSlideInput = z.infer<typeof signageSlideSchema>;
 
+export const signagePublishSchema = z.object({
+  screenIds: z.array(signageIdSchema).min(1).max(200),
+}).strict();
+
+export const signageScreenCreateSchema = z.object({
+  kioskId: signageIdSchema,
+  name: z.string().trim().min(1).max(60),
+}).strict();
+
+export const signageScreenUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  token: z.enum(['rotate', 'clear']).optional(),
+}).strict().refine((value) => value.name !== undefined || value.token !== undefined, 'Nada para alterar.');
+
+export const SIGNAGE_MEDIA_LIST_LIMIT = 300;
+export const SIGNAGE_MEDIA_FOLDER_MAX = 50;
+
+export const signageMediaUpdateSchema = z.object({
+  fileName: z.string().trim().min(1).max(120).optional(),
+  // `null` devolve a mídia para "Sem pasta".
+  folderId: signageIdSchema.nullable().optional(),
+}).strict().refine((value) => value.fileName !== undefined || value.folderId !== undefined, 'Nada para alterar.');
+
+export const signageMediaFolderSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+}).strict();
+
+export const signageHeartbeatSchema = z.object({
+  // `kioskId` é o nome histórico do parâmetro do player; hoje carrega o id da tela.
+  kioskId: signageIdSchema.optional(),
+  screenId: signageIdSchema.optional(),
+  currentSlideId: z.string().trim().max(160).optional(),
+  updatedAt: z.string().trim().max(40).optional(),
+  status: z.enum(['cache', 'realtime', 'app']).optional(),
+  // O app do monitor manda o código no corpo para o POST seguir como requisição simples (sem preflight).
+  token: z.string().trim().max(40).optional(),
+  appVersion: z.string().trim().max(20).optional(),
+}).refine((value) => Boolean(value.screenId ?? value.kioskId), 'Tela não informada.');
+
+/** Pareamento do app do monitor: o código de acesso da tela, como aparece no editor. */
+export const signagePairSchema = z.object({
+  code: z.string().trim().toUpperCase().regex(SIGNAGE_DEVICE_TOKEN_PATTERN),
+}).strict();
+
 export function stripUndefined<T extends Record<string, unknown>>(value: T) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
 }
@@ -78,17 +146,59 @@ export function getPublishedTimestamp(input?: { updatedAt?: string } | null) {
   return input?.updatedAt ? Date.parse(input.updatedAt) || 0 : 0;
 }
 
-export function sanitizeKioskIds(input: string[], allowedKioskIds: string[], isAdmin: boolean) {
-  const unique = Array.from(new Set(input.filter(Boolean)));
-  return isAdmin ? unique : unique.filter(kioskId => allowedKioskIds.includes(kioskId));
+/** Telas que exibem o slide; slides anteriores às telas só têm `kioskIds`, que são as telas padrão. */
+export function getSlideScreenIds(slide: { screenIds?: string[]; kioskIds?: string[] }): string[] {
+  return slide.screenIds?.length ? slide.screenIds : slide.kioskIds ?? [];
 }
 
-export function isSlideScheduleActive(slide: { schedule?: SignageSchedule }): boolean {
+export function getSlideOrder(slide: { order: number; orderByScreen?: Record<string, number> }, screenId: string): number {
+  return slide.orderByScreen?.[screenId] ?? slide.order;
+}
+
+/** Slides de uma tela, na sequência dela. */
+export function getScreenSlides<T extends Pick<SignageSlide, 'title' | 'order' | 'orderByScreen'> & { screenIds?: string[]; kioskIds?: string[] }>(
+  slides: T[],
+  screenId: string
+): T[] {
+  return slides
+    .filter((slide) => getSlideScreenIds(slide).includes(screenId))
+    .sort((a, b) => getSlideOrder(a, screenId) - getSlideOrder(b, screenId) || a.title.localeCompare(b.title));
+}
+
+/**
+ * Telas finais de um slide editado: as pedidas mais as que já estavam e quem edita não enxerga.
+ * `forbidden` lista telas novas fora do escopo de quem edita; o servidor recusa o pedido.
+ */
+export function mergeSlideScreenIds(input: {
+  requested: string[];
+  current: string[];
+  canAccess: (screenId: string) => boolean;
+}): { screenIds: string[]; forbidden: string[] } {
+  const requested = Array.from(new Set(input.requested));
+  const preserved = input.current.filter((screenId) => !input.canAccess(screenId));
+  const forbidden = requested.filter((screenId) => !input.canAccess(screenId) && !input.current.includes(screenId));
+  return { screenIds: Array.from(new Set([...requested, ...preserved])), forbidden };
+}
+
+/** Mantém só as posições de telas que continuam exibindo o slide. */
+export function pruneOrderByScreen(orderByScreen: Record<string, number> | undefined, screenIds: string[]) {
+  const entries = Object.entries(orderByScreen ?? {}).filter(([screenId]) => screenIds.includes(screenId));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+/** Data local "YYYY-MM-DD"; o agendamento é digitado no horário da unidade, não em UTC. */
+export function getLocalDateKey(now: Date) {
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function isSlideScheduleActive(slide: { schedule?: SignageSchedule }, now: Date = new Date()): boolean {
   const s = slide.schedule;
   if (!s) return true;
 
-  const now = new Date();
-  const currentDate = now.toISOString().slice(0, 10);
+  const currentDate = getLocalDateKey(now);
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const currentTime = `${hh}:${mm}`;
@@ -112,32 +222,92 @@ export function isSlideScheduleActive(slide: { schedule?: SignageSchedule }): bo
   return true;
 }
 
-export function buildPublishedPlayerDocument(
-  kiosk: Kiosk,
-  slides: SignageSlide[],
-  actor: { userId: string; username: string }
-): PublishedPlayerDocument {
-  const publishedSlides: PublishedPlayerSlide[] = slides
-    .filter(slide => slide.isActive && slide.kioskIds.includes(kiosk.id))
-    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
-    .map((slide) => stripUndefined({
+/**
+ * Slide em exibição: o mesmo de antes enquanto ele continuar na lista; senão, o primeiro.
+ * A posição é guardada pelo id para que reavaliar o agendamento não reinicie a playlist.
+ */
+export function resolveActiveSlide<T extends { id: string }>(slides: T[], activeSlideId: string | null): T | null {
+  if (!slides.length) return null;
+  return slides.find(slide => slide.id === activeSlideId) ?? slides[0];
+}
+
+/** Próximo slide da rotação, voltando ao início depois do último. */
+export function getNextSlide<T extends { id: string }>(slides: T[], activeSlideId: string | null): T | null {
+  if (!slides.length) return null;
+  const currentIndex = slides.findIndex(slide => slide.id === activeSlideId);
+  return slides[(currentIndex + 1) % slides.length];
+}
+
+export function formatSignageDuration(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/** Slides que entram na publicação de uma tela, na ordem em que ela exibe. */
+export function buildPublishedSlides(screenId: string, slides: SignageSlide[]): PublishedPlayerSlide[] {
+  return getScreenSlides(slides.filter((slide) => slide.isActive), screenId)
+    .map((slide, index) => stripUndefined({
       id: slide.id,
       title: slide.title,
       type: slide.type,
       durationMs: slide.durationMs,
-      order: slide.order,
+      order: index,
       assetUrl: getSignageAssetUrl(slide.assetPath),
       assetKind: slide.assetKind,
       text: slide.text,
       background: slide.background,
       schedule: slide.schedule,
     }));
+}
 
+function publishedSlideSignature(slide: PublishedPlayerSlide) {
+  return JSON.stringify([
+    slide.id,
+    slide.title,
+    slide.type,
+    slide.durationMs,
+    slide.assetUrl ?? null,
+    slide.text ?? null,
+    slide.background ?? null,
+    slide.schedule?.startTime ?? null,
+    slide.schedule?.endTime ?? null,
+    slide.schedule?.startDate ?? null,
+    slide.schedule?.endDate ?? null,
+  ]);
+}
+
+export type SignagePublicationState = 'never' | 'outdated' | 'current';
+
+/**
+ * Compara o que a tela recebeu na última publicação com o que o editor tem agora.
+ * `order` fica fora da assinatura: só a sequência resultante importa para a tela.
+ */
+export function getPublicationState(
+  screenId: string,
+  slides: SignageSlide[],
+  published: Pick<PublishedPlayerDocument, 'slides'> | null | undefined
+): SignagePublicationState {
+  if (!published) return 'never';
+  const expected = buildPublishedSlides(screenId, slides).map(publishedSlideSignature);
+  const current = (published.slides ?? []).map(publishedSlideSignature);
+  if (expected.length !== current.length) return 'outdated';
+  return expected.every((signature, index) => signature === current[index]) ? 'current' : 'outdated';
+}
+
+export function buildPublishedPlayerDocument(
+  screen: SignageScreen,
+  slides: SignageSlide[],
+  actor: { userId: string; username: string }
+): PublishedPlayerDocument {
   return {
-    kioskId: kiosk.id,
-    kioskName: kiosk.name,
+    kioskId: screen.kioskId,
+    kioskName: screen.kioskName,
+    screenId: screen.id,
+    screenName: screen.name,
     updatedAt: new Date().toISOString(),
     generatedBy: actor,
-    slides: publishedSlides,
+    slides: buildPublishedSlides(screen.id, slides),
   };
 }

@@ -20,6 +20,7 @@ Este mapa manual liga as **21 páginas** do [inventário gerado](surface-invento
 | [`/patrimonio/[code]`](../../src/app/patrimonio/%5Bcode%5D/page.tsx) | [Patrimônio](flows/assets.md) | Consulta pública por código e histórico via Admin SDK nesta base; login/permissão aprovados ainda não implementados. Ver [patrimônio](flows/assets.md). |
 | [`/player`](../../src/app/player/page.tsx) | [Sinalização](flows/signage.md) | Player de sinalização. |
 | [`/primeiro-acesso/[token]`](../../src/app/primeiro-acesso/%5Btoken%5D/page.tsx) | [Ativação da integração](flows/onboarding-activation.md) | Primeiro acesso via token. |
+| [`/app`](../../src/app/app/page.tsx) | [Sinalização](flows/signage.md) | Aplicativos do Coala: Coala Signage APP (telas) e Coala Mobile APP (smartphones e tablets Android). Exige login no cliente e registra acesso e download por usuário; os arquivos em `public/app/` continuam públicos por endereço direto. |
 | [`/tv/[kioskId]`](../../src/app/tv/%5BkioskId%5D/page.tsx) | [Sinalização](flows/signage.md) | Redireciona ao player com quiosque. |
 | [`/vagas`](../../src/app/vagas/page.tsx) | [Recrutamento](flows/recruitment.md) | Listagem pública de vagas. |
 | [`/vagas/[slug]`](../../src/app/vagas/%5Bslug%5D/page.tsx) | [Recrutamento](flows/recruitment.md) | Detalhe e candidatura. |
