@@ -97,6 +97,7 @@ import type {
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { getUserDisplayName } from "@/lib/user-display";
 import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/patterns/page-hero";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -4084,28 +4085,24 @@ export function FinancialImportPage({
   return (
     <div className={cn("mx-auto w-full max-w-[1460px] space-y-4", embedded && "max-w-none")}>
       {!embedded || (showImportControls && !uploadOnly) ? (
-        <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 px-5 py-4 shadow-sm backdrop-blur">
-          {!embedded ? <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Financeiro / Importações</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Importar extrato bancário</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API.
-            </p>
-          </div> : null}
-          <div className="flex flex-wrap items-end gap-2">
-            {canImportAudits ? (
-              <Button
-                size="sm"
-                className="h-9 rounded-xl"
-                onClick={() => setImportDialogOpen(true)}
-                disabled={isProcessing}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Importar extrato
-              </Button>
-            ) : null}
-          </div>
+        !embedded ? <PageHero
+          kicker="Financeiro · Importações"
+          title="Importar extrato bancário"
+          subtitle="Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API."
+          actions={canImportAudits ? (
+            <Button variant="primary-page" size="md" onClick={() => setImportDialogOpen(true)} disabled={isProcessing}>
+              <Upload className="mr-2 h-4 w-4" />
+              Importar extrato
+            </Button>
+          ) : null}
+        /> : canImportAudits ? (
+        <div className="flex justify-end">
+          <Button variant="primary-page" size="md" onClick={() => setImportDialogOpen(true)} disabled={isProcessing}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar extrato
+          </Button>
         </div>
+        ) : null
       ) : null}
 
       <input

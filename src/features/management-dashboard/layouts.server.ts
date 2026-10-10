@@ -5,10 +5,13 @@ import type { ServerUserContext } from "@/lib/auth-server";
 
 import { createDefaultManagementLayout } from "./default-layout";
 import { MAX_USER_DASHBOARDS, dashboardLayoutInputSchema } from "./layout-policy";
-import type { DashboardLayoutsPayload, ManagementDashboardLayout } from "./types";
+import type { DashboardLayoutsPayload, DashboardScope, ManagementDashboardLayout } from "./types";
 
 const COLLECTION = "managementDashboardLayouts";
 const PREFERENCES = "managementDashboardPreferences";
+const ACTIVE_FIELD: Record<DashboardScope, string> = { management: "activeLayoutId", financial: "activeFinancialLayoutId" };
+
+const scopeOf = (layout: { scope?: DashboardScope }): DashboardScope => layout.scope ?? "management";
 
 export class ManagementDashboardError extends Error {
   constructor(readonly reason: "forbidden" | "conflict" | "limit" | "not-found") {
@@ -39,7 +42,7 @@ function canReadLayout(actor: ServerUserContext, layout: ManagementDashboardLayo
   return layout.visibility === "template" && (layout.targetProfileIds.length === 0 || (!!actor.profileId && layout.targetProfileIds.includes(actor.profileId)));
 }
 
-export async function listManagementLayouts(actor: ServerUserContext): Promise<DashboardLayoutsPayload> {
+export async function listManagementLayouts(actor: ServerUserContext, scope: DashboardScope = "management"): Promise<DashboardLayoutsPayload> {
   const [owned, published, preferences] = await Promise.all([
     dbAdmin.collection(COLLECTION).where("workspaceId", "==", actor.workspace_id).where("ownerId", "==", actor.decoded.uid).limit(MAX_USER_DASHBOARDS).get(),
     dbAdmin.collection(COLLECTION).where("workspaceId", "==", actor.workspace_id).where("published", "==", true).limit(MAX_USER_DASHBOARDS).get(),
@@ -48,13 +51,13 @@ export async function listManagementLayouts(actor: ServerUserContext): Promise<D
   const unique = new Map<string, ManagementDashboardLayout>();
   for (const snapshot of [...owned.docs, ...published.docs]) {
     const layout = serializeLayout(snapshot.id, snapshot.data());
-    if (canReadLayout(actor, layout)) unique.set(layout.id, layout);
+    if (scopeOf(layout) === scope && canReadLayout(actor, layout)) unique.set(layout.id, layout);
   }
   if (unique.size === 0) {
-    const fallback = createDefaultManagementLayout(actor.decoded.uid, actor.userDoc.username ?? actor.decoded.email ?? "Usuário", actor.workspace_id);
+    const fallback = createDefaultManagementLayout(actor.decoded.uid, actor.userDoc.username ?? actor.decoded.email ?? "Usuário", actor.workspace_id, scope);
     unique.set(fallback.id, fallback);
   }
-  const preferred = typeof preferences.get("activeLayoutId") === "string" ? preferences.get("activeLayoutId") : null;
+  const preferred = typeof preferences.get(ACTIVE_FIELD[scope]) === "string" ? preferences.get(ACTIVE_FIELD[scope]) : null;
   return {
     layouts: [...unique.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     activeLayoutId: preferred && unique.has(preferred) ? preferred : unique.keys().next().value ?? null,
@@ -109,7 +112,7 @@ export async function saveManagementLayout(actor: ServerUserContext, rawInput: u
       updatedBy: actor.decoded.uid,
     });
   });
-  await dbAdmin.collection(PREFERENCES).doc(actor.decoded.uid).set({ activeLayoutId: id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await dbAdmin.collection(PREFERENCES).doc(actor.decoded.uid).set({ [ACTIVE_FIELD[input.scope]]: id, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   const saved = await ref.get();
   return serializeLayout(saved.id, saved.data() ?? {});
 }
@@ -119,7 +122,7 @@ export async function setActiveManagementLayout(actor: ServerUserContext, layout
   if (!snapshot.exists) throw new ManagementDashboardError("not-found");
   const layout = serializeLayout(snapshot.id, snapshot.data() ?? {});
   if (!canReadLayout(actor, layout)) throw new ManagementDashboardError("forbidden");
-  await dbAdmin.collection(PREFERENCES).doc(actor.decoded.uid).set({ activeLayoutId: layoutId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await dbAdmin.collection(PREFERENCES).doc(actor.decoded.uid).set({ [ACTIVE_FIELD[scopeOf(layout)]]: layoutId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
 export async function deleteManagementLayout(actor: ServerUserContext, layoutId: string) {

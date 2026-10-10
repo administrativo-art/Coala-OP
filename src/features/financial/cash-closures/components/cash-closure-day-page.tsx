@@ -31,6 +31,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHero } from "@/components/patterns/page-hero";
+import { StatusPill } from "@/components/ui/status-pill";
 import { PageContainer } from "@/components/layout/page-container";
 import {
   Dialog,
@@ -86,10 +88,10 @@ const DEPOSIT_STATUS_LABEL: Record<CashClosure["cashDeposit"]["status"], string>
 };
 
 function resultText(differenceCents: number | null) {
-  if (differenceCents === null) return { label: "Não informado", className: "text-zinc-500" };
-  if (differenceCents === 0) return { label: "OK", className: "text-emerald-700" };
-  if (differenceCents < 0) return { label: `Falta ${formatBRL(Math.abs(differenceCents))}`, className: "text-rose-700" };
-  return { label: `Sobra ${formatBRL(differenceCents)}`, className: "text-blue-700" };
+  if (differenceCents === null) return { label: "Não informado", className: "text-ds-ink-muted" };
+  if (differenceCents === 0) return { label: "OK", className: "text-ds-ok" };
+  if (differenceCents < 0) return { label: `Falta ${formatBRL(Math.abs(differenceCents))}`, className: "text-ds-danger" };
+  return { label: `Sobra ${formatBRL(differenceCents)}`, className: "text-ds-info" };
 }
 
 function channelName(line: CashClosureLine) {
@@ -121,9 +123,9 @@ function differenceLabel(value: number | null) {
 }
 
 function ChannelIcon({ line }: { line: CashClosureLine }) {
-  if (line.channel === "cash") return <Banknote className="h-[19px] w-[19px] text-emerald-600" />;
-  if (line.channel === "pix") return <span className="grid h-[18px] w-[18px] rotate-45 place-items-center rounded-[3px] border-2 border-emerald-600"><span className="h-1.5 w-1.5 rounded-[2px] border border-emerald-600" /></span>;
-  return <CreditCard className="h-[19px] w-[19px] text-indigo-500" />;
+  if (line.channel === "cash") return <Banknote className="h-[19px] w-[19px] text-ds-ok" />;
+  if (line.channel === "pix") return <span className="grid h-[18px] w-[18px] rotate-45 place-items-center rounded-[3px] border-2 border-ds-ok"><span className="h-1.5 w-1.5 rounded-[2px] border border-ds-ok" /></span>;
+  return <CreditCard className="h-[19px] w-[19px] text-ds-info" />;
 }
 
 export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
@@ -539,8 +541,8 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
   if (!data) {
     return <PageContainer variant="wide" surface className="space-y-4 pb-10">
       <div className="flex flex-wrap gap-2">
-        <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
-        <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void goToNextDay()} disabled={nextDayIsFuture || !!working} title={nextDayIsFuture ? "O próximo dia ainda não está disponível." : undefined}>{working === "next-day" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Próximo dia{working !== "next-day" && <ArrowRight className="ml-2 h-4 w-4" />}</Button>
+        <Button asChild variant="outline" className="h-10 rounded-xl border-ds-border font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
+        <Button variant="outline" className="h-10 rounded-xl border-ds-border font-bold" onClick={() => void goToNextDay()} disabled={nextDayIsFuture || !!working} title={nextDayIsFuture ? "O próximo dia ainda não está disponível." : undefined}>{working === "next-day" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Próximo dia{working !== "next-day" && <ArrowRight className="ml-2 h-4 w-4" />}</Button>
       </div>
       <Card><CardContent className="flex min-h-64 flex-col items-center justify-center gap-4 p-10 text-center">
         <CircleDollarSign className="h-10 w-10 text-muted-foreground" />
@@ -552,41 +554,39 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
 
   return <PageContainer variant="wide" surface className="space-y-4 pb-10">
     <CashControlNavigation crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: data.closure.kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel, href: monthHref }, { label: date.split("-").reverse().join("/") }]} />
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <div className="flex flex-wrap items-center gap-2.5"><h1 className="text-2xl font-bold tracking-tight">{data.closure.kioskName}</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11.5px] font-bold", data.closure.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ["pending_review", "reopened"].includes(data.closure.status) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-100 text-zinc-500")}>{STATUS_LABEL[data.closure.status]}</Badge></div>
-        <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">
-          Fechamento de {date.split("-").reverse().join("/")} · {groups.length} {groups.length === 1 ? "operador" : "operadores"} · {data.lines.length} {data.lines.length === 1 ? "lançamento" : "lançamentos"}
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
-        <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void goToNextDay()} disabled={nextDayIsFuture || !!working} title={nextDayIsFuture ? "O próximo dia ainda não está disponível." : undefined}>{working === "next-day" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Próximo dia{working !== "next-day" && <ArrowRight className="ml-2 h-4 w-4" />}</Button>
-        {permissions.financial.cashClosures.resync && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
-        {editable && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void save().catch(() => undefined)} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
-        {data.closure.status === "approved" && legacySharedBatchItemIds.size > 0 && permissions.financial.cashClosures.reopen && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => setReasonAction({ operatorName: "todo o dia" })}><RotateCcw className="mr-2 h-4 w-4" />Reabrir dia legado</Button>}
-      </div>
-    </div>
+    <PageHero
+      kicker="Financeiro · Fechamento do caixa"
+      title={data.closure.kioskName}
+      subtitle={`Fechamento de ${date.split("-").reverse().join("/")} · ${groups.length} ${groups.length === 1 ? "operador" : "operadores"} · ${data.lines.length} ${data.lines.length === 1 ? "lançamento" : "lançamentos"}`}
+      chips={<StatusPill variant={data.closure.status === "approved" ? "ok" : ["pending_review", "reopened"].includes(data.closure.status) ? "warn" : "neutral"}>{STATUS_LABEL[data.closure.status]}</StatusPill>}
+      actions={<>
+        <Button asChild variant="on-dark-secondary" size="md"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
+        <Button variant="on-dark-secondary" size="md" onClick={() => void goToNextDay()} disabled={nextDayIsFuture || !!working} title={nextDayIsFuture ? "O próximo dia ainda não está disponível." : undefined}>{working === "next-day" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Próximo dia{working !== "next-day" && <ArrowRight className="ml-2 h-4 w-4" />}</Button>
+        {permissions.financial.cashClosures.resync && <Button variant="on-dark-secondary" size="md" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
+        {editable && <Button variant="on-dark-secondary" size="md" onClick={() => void save().catch(() => undefined)} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
+        {data.closure.status === "approved" && legacySharedBatchItemIds.size > 0 && permissions.financial.cashClosures.reopen && <Button variant="on-dark-secondary" size="md" onClick={() => setReasonAction({ operatorName: "todo o dia" })}><RotateCcw className="mr-2 h-4 w-4" />Reabrir dia legado</Button>}
+      </>}
+    />
 
     <CashFlowStepper current={flowStepper.current} completedThrough={flowStepper.completedThrough} />
 
     <div className="flex min-h-6 items-center gap-2 text-xs text-muted-foreground">
-      {saveState === "dirty" && <><AlertTriangle className="h-3.5 w-3.5 text-amber-600" />Alterações pendentes</>}
+      {saveState === "dirty" && <><AlertTriangle className="h-3.5 w-3.5 text-ds-warn" />Alterações pendentes</>}
       {saveState === "saving" && <><Loader2 className="h-3.5 w-3.5 animate-spin" />Salvando automaticamente</>}
-      {saveState === "saved" && <><Check className="h-3.5 w-3.5 text-emerald-600" />Salvo automaticamente</>}
-      {saveState === "error" && <><AlertTriangle className="h-3.5 w-3.5 text-rose-600" />Falha ao salvar; não feche a página</>}
-      {data.closure.pdvChangedAfterApproval && <span className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700">O PDV mudou após a aprovação</span>}
+      {saveState === "saved" && <><Check className="h-3.5 w-3.5 text-ds-ok" />Salvo automaticamente</>}
+      {saveState === "error" && <><AlertTriangle className="h-3.5 w-3.5 text-ds-danger" />Falha ao salvar; não feche a página</>}
+      {data.closure.pdvChangedAfterApproval && <span className="rounded bg-ds-danger-bg px-2 py-1 font-semibold text-ds-danger">O PDV mudou após a aprovação</span>}
     </div>
 
-    <div className="flex items-center gap-2.5 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-[12.5px] text-zinc-500">
-      <LockKeyhole className="h-4 w-4 shrink-0 text-zinc-400" />
-      <span><strong className="text-zinc-900">Pix e cartões são conferidos automaticamente pelo PDV</strong> e ficam travados. No <strong className="text-zinc-900">dinheiro</strong>, Caixa e Financeiro informam contagens independentes.</span>
+    <div className="flex items-center gap-2.5 rounded-xl border border-ds-border bg-white px-4 py-2.5 text-[12.5px] text-ds-ink-muted">
+      <LockKeyhole className="h-4 w-4 shrink-0 text-ds-ink-faint" />
+      <span><strong className="text-ds-ink-2">Pix e cartões são conferidos automaticamente pelo PDV</strong> e ficam travados. No <strong className="text-ds-ink-2">dinheiro</strong>, Caixa e Financeiro informam contagens independentes.</span>
     </div>
-    {!countingSessionId && data.closure.status !== "approved" && <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900"><span>O acesso direto permite informar os valores do Caixa, mas a conferência do Financeiro e a finalização só ficam disponíveis dentro de uma sessão de contagem.</span><Button asChild size="sm" variant="outline" className="shrink-0 border-amber-300 bg-white"><Link href="/dashboard/financial/cash-closures/sessions/new">Abrir sessão</Link></Button></div>}
+    {!countingSessionId && data.closure.status !== "approved" && <div className="flex items-center justify-between gap-3 rounded-xl border border-ds-alert-border bg-ds-warn-bg px-4 py-3 text-[12.5px] text-ds-alert-ink"><span>O acesso direto permite informar os valores do Caixa, mas a conferência do Financeiro e a finalização só ficam disponíveis dentro de uma sessão de contagem.</span><Button asChild size="sm" variant="outline" className="shrink-0 border-ds-alert-border bg-white"><Link href="/dashboard/financial/cash-closures/sessions/new">Abrir sessão</Link></Button></div>}
 
-    {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
+    {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-ds-alert-border bg-ds-warn-bg px-4 py-3 text-[13px] text-ds-alert-ink"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
     <CashWithdrawalsPanel key={data.closure.id} data={data} editable={!working} />
-    {data.closure.finalizedOperatorCount > 0 && <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
+    {data.closure.finalizedOperatorCount > 0 && <Card className="rounded-2xl border-ds-border shadow-[0_2px_10px_rgba(15,23,42,.04)]">
       <CardHeader className="pb-3"><CardTitle className="text-base">{countingSessionIds.length > 0 ? "Sessão da contagem" : "Referência do depósito"}</CardTitle></CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -612,64 +612,64 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
       const operatorFinalized = group.operator?.status === "approved";
       const groupCashierEditable = cashierEditable && !operatorFinalized;
       const groupFinanceEditable = financeEditable && !operatorFinalized;
-      return <Card key={group.key} className="overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]">
-        <CardHeader className="border-b border-stone-100 px-5 py-4">
+      return <Card key={group.key} className="overflow-hidden rounded-[18px] border-ds-border shadow-[0_2px_10px_rgba(15,23,42,.05)]">
+        <CardHeader className="border-b border-ds-border px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3"><Avatar className="h-[38px] w-[38px]"><AvatarImage src={operatorAvatars[group.lines[0].operatorId]} alt={group.name} className="object-cover" /><AvatarFallback className="bg-pink-100 text-xs font-black text-pink-600">{initials}</AvatarFallback></Avatar><div><CardTitle className="text-[15px] font-bold">{group.name}</CardTitle>{interval && <p className="mt-0.5 text-[11.5px] font-semibold text-zinc-400">{interval}</p>}</div></div>
+            <div className="flex items-center gap-3"><Avatar className="h-[38px] w-[38px]"><AvatarImage src={operatorAvatars[group.lines[0].operatorId]} alt={group.name} className="object-cover" /><AvatarFallback className="bg-ds-accent-soft text-xs font-black text-ds-accent-ink">{initials}</AvatarFallback></Avatar><div><CardTitle className="text-[15px] font-bold">{group.name}</CardTitle>{interval && <p className="mt-0.5 text-[11.5px] font-semibold text-ds-ink-faint">{interval}</p>}</div></div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="inline-flex h-7 items-center rounded-full bg-stone-100 px-3 font-mono text-[11.5px] font-bold text-zinc-600"><span className="mr-1.5 font-sans font-semibold text-zinc-400">PDV</span>{formatBRL(expected)}</span>
-              <span className={cn("inline-flex h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", operatorFinalized ? "bg-emerald-50 text-emerald-700" : groupResult?.className ?? "text-zinc-500", !operatorFinalized && (!groupResult ? "bg-stone-100" : difference === 0 ? "bg-emerald-50" : difference > 0 ? "bg-blue-50" : "bg-rose-50"))}>{operatorFinalized ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Contagem finalizada</> : !groupResult ? "Aguardando Financeiro" : difference === 0 ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Tudo confere</> : groupResult.label}</span>
-              {groupFinanceEditable && countingSessionId && <Button size="sm" className="h-8 rounded-lg bg-emerald-700 font-bold hover:bg-emerald-800" data-operator-id={operatorId} data-operator-name={group.name} onClick={handleFinalizeOperator} disabled={!!working}>{working === `finalize:${operatorId}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}Finalizar operador</Button>}
+              <span className="inline-flex h-7 items-center rounded-full bg-ds-muted px-3 font-mono text-[11.5px] font-bold text-ds-ink-muted"><span className="mr-1.5 font-sans font-semibold text-ds-ink-faint">PDV</span>{formatBRL(expected)}</span>
+              <span className={cn("inline-flex h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", operatorFinalized ? "bg-ds-ok-bg text-ds-ok" : groupResult?.className ?? "text-ds-ink-muted", !operatorFinalized && (!groupResult ? "bg-ds-muted" : difference === 0 ? "bg-ds-ok-bg" : difference > 0 ? "bg-ds-info-bg" : "bg-ds-danger-bg"))}>{operatorFinalized ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Contagem finalizada</> : !groupResult ? "Aguardando Financeiro" : difference === 0 ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Tudo confere</> : groupResult.label}</span>
+              {groupFinanceEditable && countingSessionId && <Button size="sm" className="h-8 rounded-lg bg-ds-ok font-bold hover:bg-ds-ok" data-operator-id={operatorId} data-operator-name={group.name} onClick={handleFinalizeOperator} disabled={!!working}>{working === `finalize:${operatorId}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}Finalizar operador</Button>}
               {operatorFinalized && !legacySharedBatchItemIds.has(group.operator?.cashDeposit.batchItemId ?? "") && permissions.financial.cashClosures.reopen && <Button size="sm" variant="outline" className="h-8 rounded-lg font-bold" onClick={() => setReasonAction({ operatorId, operatorName: group.name })} disabled={!!working}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Reabrir operador</Button>}
-              {group.operator?.cashDeposit.manualSplitRequired && permissions.financial?.cashDeposits?.adjust && <Button size="sm" variant="outline" className="h-8 rounded-lg border-amber-300 bg-amber-50 font-bold text-amber-900" onClick={() => void splitOversizedDeposit(group.operator!.operatorId, group.operator!.cashDeposit.eligibleCents)} disabled={!!working}>{working === "split-deposit" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}Dividir depósito</Button>}
+              {group.operator?.cashDeposit.manualSplitRequired && permissions.financial?.cashDeposits?.adjust && <Button size="sm" variant="outline" className="h-8 rounded-lg border-ds-alert-border bg-ds-warn-bg font-bold text-ds-alert-ink" onClick={() => void splitOversizedDeposit(group.operator!.operatorId, group.operator!.cashDeposit.eligibleCents)} disabled={!!working}>{working === "split-deposit" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}Dividir depósito</Button>}
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-0 !p-0">
-          <div className="hidden grid-cols-[14px_minmax(170px,1.5fr)_150px_150px_150px_minmax(150px,190px)] gap-3 border-b border-stone-100 bg-stone-50/80 px-5 py-2.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400 lg:grid"><span /><span className="pl-[29px]">Canal</span><span className="text-right">PDV · esperado</span><span className="text-center">Caixa · contado</span><span className="text-center">Financeiro · conferido</span><span>Resultado</span></div>
+          <div className="hidden grid-cols-[14px_minmax(170px,1.5fr)_150px_150px_150px_minmax(150px,190px)] gap-3 border-b border-ds-border bg-ds-muted px-5 py-2.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-ds-ink-faint lg:grid"><span /><span className="pl-[29px]">Canal</span><span className="text-right">PDV · esperado</span><span className="text-center">Caixa · contado</span><span className="text-center">Financeiro · conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
             const result = resultText(line.differenceCents);
             const hasReportedDifference = (line.reportedDifferenceCents ?? 0) < 0;
             const hasFinanceDifference = line.countedCents !== null && (line.differenceCents ?? 0) < 0;
             const automatic = isPdvAutoCountedChannel(line.channel);
             const complete = line.reportedCents !== null && line.countedCents !== null;
-            return <div key={line.id} className={cn("grid gap-3 border-b border-stone-100 px-5 py-3.5 last:border-b-0 lg:grid-cols-[14px_minmax(170px,1.5fr)_150px_150px_150px_minmax(150px,190px)] lg:items-center", (hasReportedDifference || hasFinanceDifference || line.expectedAdjustmentNeedsReview) && "bg-rose-50/35")}>
-              <span className={cn("hidden h-[34px] w-[5px] rounded-full lg:block", complete && line.differenceCents === 0 ? "bg-emerald-500" : complete ? "bg-rose-500" : "bg-amber-400")} />
-              <div className="flex items-center gap-2.5 font-semibold"><ChannelIcon line={line} /><span>{channelName(line)}{line.channel === "cash" && <span className="mt-0.5 block text-[10.5px] font-medium text-zinc-400">{formatBRL(line.metadata.grossCashCents ?? line.calculatedExpectedCents)} recebido − {formatBRL(line.metadata.changeCents ?? 0)} troco + {formatBRL(line.metadata.supplyCents ?? 0)} suprimentos − {formatBRL(line.metadata.withdrawalCents ?? 0)} sangrias</span>}</span>{line.channel === "cash" && <Popover><PopoverTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7"><Info className="h-4 w-4" /><span className="sr-only">Ver composição do dinheiro</span></Button></PopoverTrigger><PopoverContent align="start" className="w-80 space-y-2 text-sm"><p className="font-semibold">Composição do dinheiro</p><div className="flex justify-between"><span>Recebido</span><strong>{formatBRL(line.metadata.grossCashCents ?? line.calculatedExpectedCents)}</strong></div><div className="flex justify-between"><span>Troco</span><strong>- {formatBRL(line.metadata.changeCents ?? 0)}</strong></div><div className="flex justify-between"><span>Suprimentos</span><strong>+ {formatBRL(line.metadata.supplyCents ?? 0)}</strong></div><div className="flex justify-between"><span>Sangrias</span><strong>- {formatBRL(line.metadata.withdrawalCents ?? 0)}</strong></div><div className="flex justify-between border-t pt-2"><span>Calculado pelo sistema</span><strong>{formatBRL(line.calculatedExpectedCents)}</strong></div>{line.expectedAdjustedAt && <><div className="flex justify-between"><span>Ajuste manual</span><strong>{formatBRL(line.expectedAdjustmentCents)}</strong></div><p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900">{line.expectedAdjustmentReason}</p></>}<div className="flex justify-between border-t pt-2"><span>Esperado efetivo</span><strong>{formatBRL(line.expectedCents)}</strong></div></PopoverContent></Popover>}</div>
-              <div className="flex items-center justify-end gap-1.5"><div className="text-right font-mono text-sm">{formatBRL(line.expectedCents)}</div>{line.expectedAdjustedAt && <Badge variant="outline" className={cn("h-5 rounded-full px-1.5 text-[9px]", line.expectedAdjustmentNeedsReview ? "border-rose-300 bg-rose-50 text-rose-700" : "border-amber-300 bg-amber-50 text-amber-800")}>{line.expectedAdjustmentNeedsReview ? "Revisar" : "Ajustado"}</Badge>}{expectedEditable && !operatorFinalized && <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openExpectedAdjustment(line)}><Pencil className="h-3.5 w-3.5" /><span className="sr-only">Corrigir esperado de {channelName(line)}</span></Button>}</div>
-              <div className="relative"><CentsInput value={line.reportedCents} onChange={(value) => updateLine(line.id, { reportedCents: value })} disabled={!groupCashierEditable || automatic} ariaLabel={`Valor informado pelo Caixa em ${channelName(line)} para ${group.name}`} className={cn("h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]", automatic && "border-dashed bg-stone-100 pr-8 text-zinc-500", groupCashierEditable && !automatic && "border-pink-500 bg-white ring-2 ring-pink-100")} />{automatic && <LockKeyhole className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />}</div>
-              <div className="relative"><CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!groupFinanceEditable || automatic} ariaLabel={`Valor conferido pelo Financeiro em ${channelName(line)} para ${group.name}`} className={cn("h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]", automatic && "border-dashed bg-stone-100 pr-8 text-zinc-500", groupFinanceEditable && !automatic && "border-pink-500 bg-white ring-2 ring-pink-100")} />{automatic && <LockKeyhole className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />}</div>
-              <div><strong className={cn("inline-flex min-h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", line.reportedCents === null || line.countedCents === null ? "bg-stone-100 text-zinc-500" : line.differenceCents === 0 ? "bg-emerald-50 text-emerald-700" : (line.differenceCents ?? 0) > 0 ? "bg-blue-50 text-blue-700" : "bg-rose-50 text-rose-700")}>{line.reportedCents === null ? "Caixa não informou" : line.countedCents === null ? "Aguardando Financeiro" : automatic ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Conferido</> : result.label}</strong>{hasReportedDifference && <p className="mt-1 text-[10.5px] text-zinc-500">Caixa × PDV: {differenceLabel(line.reportedDifferenceCents)}</p>}{line.conferenceDifferenceCents !== null && line.conferenceDifferenceCents !== 0 && <p className="text-[10.5px] text-zinc-500">Financeiro × Caixa: {differenceLabel(line.conferenceDifferenceCents)}</p>}</div>
-              {hasReportedDifference && <div className="lg:col-span-6 lg:pl-[29px]"><Textarea value={line.reportedNote ?? ""} onChange={(event) => updateLine(line.id, { reportedNote: event.target.value })} disabled={!groupCashierEditable} placeholder="Justificativa obrigatória do Caixa para a falta em relação ao PDV" className="min-h-[52px] border-rose-200 bg-rose-50/40 text-[12.5px]" /></div>}
-              {hasFinanceDifference && <div className="lg:col-span-6 lg:pl-[29px]"><Textarea value={line.note ?? ""} onChange={(event) => updateLine(line.id, { note: event.target.value })} disabled={!groupFinanceEditable} placeholder="Parecer obrigatório do Financeiro sobre a falta apurada" className="min-h-[52px] border-rose-200 bg-rose-50/40 text-[12.5px]" /></div>}
+            return <div key={line.id} className={cn("grid gap-3 border-b border-ds-border px-5 py-3.5 last:border-b-0 lg:grid-cols-[14px_minmax(170px,1.5fr)_150px_150px_150px_minmax(150px,190px)] lg:items-center", (hasReportedDifference || hasFinanceDifference || line.expectedAdjustmentNeedsReview) && "bg-ds-danger-bg")}>
+              <span className={cn("hidden h-[34px] w-[5px] rounded-full lg:block", complete && line.differenceCents === 0 ? "bg-ds-ok" : complete ? "bg-ds-danger" : "bg-ds-warn")} />
+              <div className="flex items-center gap-2.5 font-semibold"><ChannelIcon line={line} /><span>{channelName(line)}{line.channel === "cash" && <span className="mt-0.5 block text-[10.5px] font-medium text-ds-ink-faint">{formatBRL(line.metadata.grossCashCents ?? line.calculatedExpectedCents)} recebido − {formatBRL(line.metadata.changeCents ?? 0)} troco + {formatBRL(line.metadata.supplyCents ?? 0)} suprimentos − {formatBRL(line.metadata.withdrawalCents ?? 0)} sangrias</span>}</span>{line.channel === "cash" && <Popover><PopoverTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7"><Info className="h-4 w-4" /><span className="sr-only">Ver composição do dinheiro</span></Button></PopoverTrigger><PopoverContent align="start" className="w-80 space-y-2 text-sm"><p className="font-semibold">Composição do dinheiro</p><div className="flex justify-between"><span>Recebido</span><strong>{formatBRL(line.metadata.grossCashCents ?? line.calculatedExpectedCents)}</strong></div><div className="flex justify-between"><span>Troco</span><strong>- {formatBRL(line.metadata.changeCents ?? 0)}</strong></div><div className="flex justify-between"><span>Suprimentos</span><strong>+ {formatBRL(line.metadata.supplyCents ?? 0)}</strong></div><div className="flex justify-between"><span>Sangrias</span><strong>- {formatBRL(line.metadata.withdrawalCents ?? 0)}</strong></div><div className="flex justify-between border-t pt-2"><span>Calculado pelo sistema</span><strong>{formatBRL(line.calculatedExpectedCents)}</strong></div>{line.expectedAdjustedAt && <><div className="flex justify-between"><span>Ajuste manual</span><strong>{formatBRL(line.expectedAdjustmentCents)}</strong></div><p className="rounded-md bg-ds-warn-bg p-2 text-xs text-ds-alert-ink">{line.expectedAdjustmentReason}</p></>}<div className="flex justify-between border-t pt-2"><span>Esperado efetivo</span><strong>{formatBRL(line.expectedCents)}</strong></div></PopoverContent></Popover>}</div>
+              <div className="flex items-center justify-end gap-1.5"><div className="text-right font-mono text-sm">{formatBRL(line.expectedCents)}</div>{line.expectedAdjustedAt && <Badge variant="outline" className={cn("h-5 rounded-full px-1.5 text-[9px]", line.expectedAdjustmentNeedsReview ? "border-ds-confirm-border bg-ds-danger-bg text-ds-danger" : "border-ds-alert-border bg-ds-warn-bg text-ds-alert-ink")}>{line.expectedAdjustmentNeedsReview ? "Revisar" : "Ajustado"}</Badge>}{expectedEditable && !operatorFinalized && <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openExpectedAdjustment(line)}><Pencil className="h-3.5 w-3.5" /><span className="sr-only">Corrigir esperado de {channelName(line)}</span></Button>}</div>
+              <div className="relative"><CentsInput value={line.reportedCents} onChange={(value) => updateLine(line.id, { reportedCents: value })} disabled={!groupCashierEditable || automatic} ariaLabel={`Valor informado pelo Caixa em ${channelName(line)} para ${group.name}`} className={cn("h-9 rounded-[10px] border-ds-border bg-ds-muted font-mono text-[13px]", automatic && "border-dashed bg-ds-muted pr-8 text-ds-ink-muted", groupCashierEditable && !automatic && "border-ds-accent-soft bg-white ring-2 ring-ds-accent")} />{automatic && <LockKeyhole className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-ds-ink-faint" />}</div>
+              <div className="relative"><CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!groupFinanceEditable || automatic} ariaLabel={`Valor conferido pelo Financeiro em ${channelName(line)} para ${group.name}`} className={cn("h-9 rounded-[10px] border-ds-border bg-ds-muted font-mono text-[13px]", automatic && "border-dashed bg-ds-muted pr-8 text-ds-ink-muted", groupFinanceEditable && !automatic && "border-ds-accent-soft bg-white ring-2 ring-ds-accent")} />{automatic && <LockKeyhole className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-ds-ink-faint" />}</div>
+              <div><strong className={cn("inline-flex min-h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", line.reportedCents === null || line.countedCents === null ? "bg-ds-muted text-ds-ink-muted" : line.differenceCents === 0 ? "bg-ds-ok-bg text-ds-ok" : (line.differenceCents ?? 0) > 0 ? "bg-ds-info-bg text-ds-info" : "bg-ds-danger-bg text-ds-danger")}>{line.reportedCents === null ? "Caixa não informou" : line.countedCents === null ? "Aguardando Financeiro" : automatic ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Conferido</> : result.label}</strong>{hasReportedDifference && <p className="mt-1 text-[10.5px] text-ds-ink-muted">Caixa × PDV: {differenceLabel(line.reportedDifferenceCents)}</p>}{line.conferenceDifferenceCents !== null && line.conferenceDifferenceCents !== 0 && <p className="text-[10.5px] text-ds-ink-muted">Financeiro × Caixa: {differenceLabel(line.conferenceDifferenceCents)}</p>}</div>
+              {hasReportedDifference && <div className="lg:col-span-6 lg:pl-[29px]"><Textarea value={line.reportedNote ?? ""} onChange={(event) => updateLine(line.id, { reportedNote: event.target.value })} disabled={!groupCashierEditable} placeholder="Justificativa obrigatória do Caixa para a falta em relação ao PDV" className="min-h-[52px] border-ds-confirm-border bg-ds-danger-bg text-[12.5px]" /></div>}
+              {hasFinanceDifference && <div className="lg:col-span-6 lg:pl-[29px]"><Textarea value={line.note ?? ""} onChange={(event) => updateLine(line.id, { note: event.target.value })} disabled={!groupFinanceEditable} placeholder="Parecer obrigatório do Financeiro sobre a falta apurada" className="min-h-[52px] border-ds-confirm-border bg-ds-danger-bg text-[12.5px]" /></div>}
             </div>;
           })}
         </CardContent>
       </Card>;
     })}
 
-    {requiresSeniorApproval && <div className="flex items-start gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] leading-5 text-rose-900"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" /><span><strong>Finalização sênior necessária.</strong> Uma diferença entre PDV, Caixa e Financeiro ultrapassa {formatBRL(seniorDivergenceCents)}; a finalização exige também permissão de reabertura.</span></div>}
+    {requiresSeniorApproval && <div className="flex items-start gap-3 rounded-[14px] border border-ds-confirm-border bg-ds-danger-bg px-4 py-3 text-[13px] leading-5 text-ds-confirm-ink"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" /><span><strong>Finalização sênior necessária.</strong> Uma diferença entre PDV, Caixa e Financeiro ultrapassa {formatBRL(seniorDivergenceCents)}; a finalização exige também permissão de reabertura.</span></div>}
 
-    <Card className="overflow-hidden border-0 bg-zinc-900 text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-stretch !p-0 sm:grid-cols-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_.9fr_.9fr]">
+    <Card className="overflow-hidden border-0 bg-ds-neutral text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-stretch !p-0 sm:grid-cols-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_.9fr_.9fr]">
       <SummaryMetric label="Total PDV" value={formatBRL(liveSummary.expected)} prominent />
       <SummaryMetric label="Informado Caixa" value={liveSummary.unreported > 0 ? "—" : formatBRL(liveSummary.reported)} />
       <SummaryMetric label="Conferido Financeiro" value={liveSummary.pending > 0 ? "—" : formatBRL(liveSummary.counted)} />
-      <SummaryMetric label="Diferença final" value={liveSummary.pending ? "—" : differenceLabel(liveSummary.difference)} valueClass={liveSummary.pending ? "text-zinc-500" : resultText(liveSummary.difference).className} />
-      <SummaryMetric label="A informar Caixa" value={String(liveSummary.unreported)} valueClass={liveSummary.unreported ? "text-amber-300" : "text-emerald-300"} />
-      <SummaryMetric label="A conferir Financeiro" value={String(liveSummary.pending)} valueClass={liveSummary.pending ? "text-amber-300" : "text-emerald-300"} />
+      <SummaryMetric label="Diferença final" value={liveSummary.pending ? "—" : differenceLabel(liveSummary.difference)} valueClass={liveSummary.pending ? "text-ds-ink-muted" : resultText(liveSummary.difference).className} />
+      <SummaryMetric label="A informar Caixa" value={String(liveSummary.unreported)} valueClass={liveSummary.unreported ? "text-ds-warn" : "text-ds-ok"} />
+      <SummaryMetric label="A conferir Financeiro" value={String(liveSummary.pending)} valueClass={liveSummary.pending ? "text-ds-warn" : "text-ds-ok"} />
     </CardContent></Card>
 
     <Dialog open={expectedLine !== null} onOpenChange={(open) => { if (!open) { setExpectedLineId(null); setExpectedReason(""); } }}>
       <DialogContent className="rounded-[20px] sm:max-w-[500px]">
         <DialogHeader><DialogTitle>Corrigir esperado do PDV</DialogTitle><DialogDescription>O valor corrigido passa a ser usado nas comparações. A composição importada permanece preservada para auditoria.</DialogDescription></DialogHeader>
         {expectedLine && <div className="space-y-4">
-          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm">
+          <div className="rounded-xl border border-ds-border bg-ds-muted p-3 text-sm">
             <div className="flex justify-between"><span>Calculado pelo sistema</span><strong>{formatBRL(expectedLine.calculatedExpectedCents)}</strong></div>
             {expectedLine.expectedAdjustedAt && <div className="mt-1 flex justify-between"><span>Ajuste atual</span><strong>{formatBRL(expectedLine.expectedAdjustmentCents)}</strong></div>}
           </div>
-          <div><p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-500">Novo esperado</p><CentsInput value={expectedCorrectionCents} onChange={setExpectedCorrectionCents} ariaLabel={`Novo esperado para ${channelName(expectedLine)}`} /></div>
-          <div><p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-500">Justificativa</p><Textarea value={expectedReason} onChange={(event) => setExpectedReason(event.target.value)} placeholder="Explique a divergência identificada na base do PDV" /></div>
-          {expectedLine.expectedAdjustmentNeedsReview && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">A composição do PDV mudou após o ajuste. Confirme novamente o valor corrigido ou restaure o cálculo atualizado.</div>}
+          <div><p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ds-ink-muted">Novo esperado</p><CentsInput value={expectedCorrectionCents} onChange={setExpectedCorrectionCents} ariaLabel={`Novo esperado para ${channelName(expectedLine)}`} /></div>
+          <div><p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ds-ink-muted">Justificativa</p><Textarea value={expectedReason} onChange={(event) => setExpectedReason(event.target.value)} placeholder="Explique a divergência identificada na base do PDV" /></div>
+          {expectedLine.expectedAdjustmentNeedsReview && <div className="rounded-lg border border-ds-confirm-border bg-ds-danger-bg p-3 text-xs text-ds-confirm-ink">A composição do PDV mudou após o ajuste. Confirme novamente o valor corrigido ou restaure o cálculo atualizado.</div>}
         </div>}
         <DialogFooter className="gap-2 sm:justify-between">
           <div>{expectedLine?.expectedAdjustedAt && <Button variant="outline" onClick={() => void restoreExpectedCalculation()} disabled={expectedReason.trim().length < 3 || !!working}>Restaurar cálculo do PDV</Button>}</div>
@@ -689,5 +689,5 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
 }
 
 function SummaryMetric({ label, value, valueClass, prominent = false }: { label: string; value: string; valueClass?: string; prominent?: boolean }) {
-  return <div className="flex min-w-0 flex-col justify-center border-zinc-700/70 px-5 py-4 text-left sm:border-l sm:first:border-l-0"><p className="text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-500">{label}</p><p className={cn("mt-1 whitespace-nowrap font-mono text-[16px] font-extrabold", prominent && "text-xl", valueClass)}>{value}</p></div>;
+  return <div className="flex min-w-0 flex-col justify-center border-ds-border px-5 py-4 text-left sm:border-l sm:first:border-l-0"><p className="text-[9.5px] font-extrabold uppercase tracking-[.06em] text-ds-ink-muted">{label}</p><p className={cn("mt-1 whitespace-nowrap font-mono text-[16px] font-extrabold", prominent && "text-xl", valueClass)}>{value}</p></div>;
 }
