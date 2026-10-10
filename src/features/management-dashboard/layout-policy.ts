@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MANAGEMENT_WIDGET_IDS, type DashboardBreakpoint, type DashboardWidgetPlacement, type ManagementDashboardLayout } from "./types";
+import { ALL_WIDGET_IDS, type DashboardBreakpoint, type DashboardWidgetPlacement, type ManagementDashboardLayout } from "./types";
 
 export const DASHBOARD_COLUMNS: Record<DashboardBreakpoint, number> = { desktop: 12, tablet: 6, mobile: 1 };
 export const MAX_DASHBOARD_WIDGETS = 30;
@@ -15,7 +15,7 @@ const rectSchema = z.object({
 
 export const widgetPlacementSchema = z.object({
   instanceId: z.string().trim().min(3).max(100).regex(/^[a-zA-Z0-9_-]+$/),
-  widgetId: z.enum(MANAGEMENT_WIDGET_IDS),
+  widgetId: z.enum(ALL_WIDGET_IDS),
   layouts: z.object({ desktop: rectSchema, tablet: rectSchema, mobile: rectSchema }).strict(),
   config: z.object({
     title: z.string().trim().max(80).optional(),
@@ -30,6 +30,7 @@ export const dashboardLayoutInputSchema = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(240).default(""),
   visibility: z.enum(["personal", "shared", "template"]),
+  scope: z.enum(["management", "financial"]).default("management"),
   targetProfileIds: z.array(z.string().trim().min(1).max(160)).max(30).default([]),
   lockedWidgetIds: z.array(z.string().trim().min(1).max(100)).max(MAX_DASHBOARD_WIDGETS).default([]),
   widgets: z.array(widgetPlacementSchema).min(1).max(MAX_DASHBOARD_WIDGETS),

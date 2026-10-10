@@ -52,7 +52,7 @@ function wrapError(error: unknown): never {
 
 const getContract = contract("GET", "read", "none");
 const getEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext>(getContract, { authenticate: ({ request }) => authenticate(request), authorize: ({ actor }) => authorize(actor) });
-export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => NextResponse.json(await listManagementLayouts(security.actor), { headers: { "Cache-Control": "private, no-store" } }));
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security, request }) => NextResponse.json(await listManagementLayouts(security.actor, request.nextUrl.searchParams.get("scope") === "financial" ? "financial" : "management"), { headers: { "Cache-Control": "private, no-store" } }));
 
 const putContract = contract("PUT", "write", "layout");
 const putEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext, z.infer<typeof dashboardLayoutInputSchema>>(putContract, {

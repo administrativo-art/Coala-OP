@@ -13,7 +13,30 @@ export const MANAGEMENT_WIDGET_IDS = [
   "ai-costs-shortcuts",
 ] as const;
 
-export type ManagementWidgetId = (typeof MANAGEMENT_WIDGET_IDS)[number];
+export const FINANCIAL_WIDGET_IDS = [
+  "fin-summary",
+  "fin-overdue",
+  "fin-due-week",
+  "fin-pending-audit",
+  "fin-competence",
+  "fin-cash-month",
+  "fin-forecast",
+  "fin-top-categories",
+  "fin-top-suppliers",
+  "fin-units",
+  "fin-bank-accounts",
+  "fin-payables-hub",
+  "fin-reconciliation-hub",
+  "fin-cash-control-hub",
+  "fin-planning-hub",
+] as const;
+
+export const ALL_WIDGET_IDS = [...MANAGEMENT_WIDGET_IDS, ...FINANCIAL_WIDGET_IDS] as const;
+
+export type ManagementWidgetId = (typeof ALL_WIDGET_IDS)[number];
+export type FinancialWidgetId = (typeof FINANCIAL_WIDGET_IDS)[number];
+/** Cada painel pertence a uma área: o da gestão (início) ou o do financeiro. */
+export type DashboardScope = "management" | "financial";
 export type DashboardBreakpoint = "desktop" | "tablet" | "mobile";
 export type DashboardVisibility = "personal" | "shared" | "template";
 
@@ -43,6 +66,8 @@ export type ManagementDashboardLayout = {
   ownerId: string;
   ownerName: string;
   workspaceId: string;
+  /** Ausente nos painéis antigos, que são todos da gestão. */
+  scope?: DashboardScope;
   targetProfileIds: string[];
   lockedWidgetIds: string[];
   widgets: DashboardWidgetPlacement[];

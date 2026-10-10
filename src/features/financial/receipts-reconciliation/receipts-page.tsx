@@ -7,7 +7,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/layout/page-header";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroBackButton } from "@/components/patterns/hero-back-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AcquirerFeesPanel } from "../acquirer-fees/fees-panel";
@@ -63,14 +64,14 @@ export function StoneReceiptsPage() {
   const onMappingChange = (mappingId: string) => { const next = mappings.find(item => item.id === mappingId); setSelected(mappingId); setCode(next?.stoneCodes[0] ?? ""); };
 
   return <PageContainer variant="wide" surface className="space-y-6 py-6">
-    <PageHeader title="Conciliação de recebimentos" description="Agenda, parcelas pagas, taxas retidas e confirmação do crédito bancário em fluxos separados." back={{ fallbackHref: "/dashboard/financial", parentLabel: "Financeiro" }} />
-    <div role="note" className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><span>Um pagamento informado pela Stone ainda não comprova o crédito no banco. Taxas só aparecem quando a retenção é explícita; valores ausentes permanecem desconhecidos.</span><Badge variant="outline" className="border-amber-300 bg-white text-amber-950">Não abre contestação na Stone</Badge></div>
+    <PageHero kicker="Financeiro · Conciliação" title="Conciliação de recebimentos" subtitle="Agenda, parcelas pagas, taxas retidas e confirmação do crédito bancário em fluxos separados." actions={<HeroBackButton fallbackHref="/dashboard/financial" parentLabel="Financeiro" />} />
+    <div role="note" className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-ds-alert-border bg-ds-warn-bg p-4 text-sm text-ds-alert-ink"><span>Um pagamento informado pela Stone ainda não comprova o crédito no banco. Taxas só aparecem quando a retenção é explícita; valores ausentes permanecem desconhecidos.</span><Badge variant="outline" className="border-ds-alert-border bg-white text-ds-alert-ink">Não abre contestação na Stone</Badge></div>
     <StoneScopeSelector mappings={mappings} mappingId={selected} stoneCode={code} busy={busy} loaded={loaded} error={error} cursor={cursor} onMappingChange={onMappingChange} onStoneCodeChange={setCode} onRefresh={() => void load()} onLoadMore={cursor ? () => void load(cursor) : undefined} />
     {mapping && code ? <>
       <StoneReceiptFlowNavigation current={tab} mappingId={mapping.id} stoneCode={code} />
-      {tab === "fees" ? <section className="space-y-4" aria-label="Taxas praticadas"><Card className="rounded-2xl border-[#e6e3dc] bg-[#faf9f6]"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Percent className="h-4 w-4 text-[#bd185c]" />Taxas praticadas, com contrato separado</CardTitle><CardDescription>A Taxa praticada usa apenas retenção explícita da Stone. A Taxa contratada ainda exige uma fonte oficial versionada por modalidade e vigência; por isso esta tela não aponta cobrança a maior.</CardDescription></CardHeader></Card><AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} /></section> : null}
+      {tab === "fees" ? <section className="space-y-4" aria-label="Taxas praticadas"><Card className="rounded-2xl border-ds-border bg-ds-input"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Percent className="h-4 w-4 text-ds-accent-ink" />Taxas praticadas, com contrato separado</CardTitle><CardDescription>A Taxa praticada usa apenas retenção explícita da Stone. A Taxa contratada ainda exige uma fonte oficial versionada por modalidade e vigência; por isso esta tela não aponta cobrança a maior.</CardDescription></CardHeader></Card><AcquirerFeesPanel key={`fees:${mapping.id}:${code}`} kioskId={mapping.kioskId} mappingId={mapping.id} stoneCode={code} /></section> : null}
       {tab === "credit" ? <StoneBankReceiptReconciliation key={`bank-receipts:${mapping.id}:${code}`} mapping={mapping} stoneCode={code} /> : null}
-    </> : <div className="rounded-2xl border border-dashed border-[#d8d3c8] px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-[#bd185c]" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro, depois a conta e o StoneCode</p><p className="mt-1 text-sm text-muted-foreground">O mesmo vínculo será preservado entre as quatro etapas de recebimentos.</p></div>}
+    </> : <div className="rounded-2xl border border-dashed border-ds-border-input px-6 py-12 text-center"><Landmark className="mx-auto h-8 w-8 text-ds-accent-ink" aria-hidden="true" /><p className="mt-3 font-bold">Selecione a unidade primeiro, depois a conta e o StoneCode</p><p className="mt-1 text-sm text-muted-foreground">O mesmo vínculo será preservado entre as quatro etapas de recebimentos.</p></div>}
     <p className="text-sm text-muted-foreground">A exportação de evidências fica prevista para a próxima etapa. Este módulo não abre contestação na Stone.</p>
   </PageContainer>;
 }

@@ -23,6 +23,8 @@ import { expenseAccountAllocations } from "@/features/financial/lib/expense-acco
 import { allowedBudgetCenters, type BudgetCenterOption } from "@/features/financial/components/settings/budget-ui-model";
 import { resolveUnitAccess } from "@/lib/unit-access";
 import { expenseCashForecastAmount } from "@/features/financial/lib/expense-display-state";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroChip } from "@/components/patterns/hero-chip";
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,13 +69,13 @@ function Kpi({ label, value, detail, tone, icon: Icon }: {
   icon: typeof Wallet;
 }) {
   const toneClass = {
-    neutral: "border-slate-200 bg-white text-slate-950",
-    positive: "border-emerald-200 bg-emerald-50/60 text-emerald-700",
-    negative: "border-rose-200 bg-rose-50/60 text-rose-700",
-    warning: "border-amber-200 bg-amber-50/60 text-amber-700",
+    neutral: "border-ds-border bg-white text-ds-ink-2",
+    positive: "border-ds-border bg-ds-ok-bg text-ds-ok",
+    negative: "border-ds-confirm-border bg-ds-danger-bg text-ds-danger",
+    warning: "border-ds-alert-border bg-ds-warn-bg text-ds-warn",
   }[tone];
   return (
-    <Card className={cn("rounded-2xl shadow-sm", toneClass)}>
+    <Card className={cn("rounded-ds-card shadow-none", toneClass)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</CardTitle>
         <Icon className="h-4 w-4" />
@@ -369,39 +371,46 @@ export function CashFlowPage() {
 
   return (
     <PageContainer variant="compact" surface className="space-y-6 pb-10">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Fluxo de caixa</h1>
-          <p className="text-muted-foreground">Visão global do realizado, das contas a pagar e do saldo projetado.</p>
-        </div>
+      <PageHero
+        kicker="Financeiro"
+        title="Fluxo de caixa"
+        subtitle="Visão global do realizado, das contas a pagar e do saldo projetado."
+        actions={<>
+          <Button variant="on-dark-secondary" size="md" onClick={exportCsv} disabled={filteredMovements.length === 0}>
+            <Download className="mr-2 h-4 w-4" /> Exportar CSV
+          </Button>
+          {permissions.financial?.cashFlow?.create && <Button variant="primary-page" size="md" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button>}
+        </>}
+        chips={<>
+          <HeroChip value={formatCurrency(totals.realizedBalance)} label="Saldo realizado" />
+          <HeroChip value={formatCurrency(totals.accountsPayable)} label="A pagar" tone="warning" />
+          <HeroChip value={formatCurrency(totals.projectedBalance)} label="Projetado" tone={totals.projectedBalance >= 0 ? "info" : "danger"} />
+        </>}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-44"><Wallet className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Conta" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><Wallet className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as contas</SelectItem>
               {accounts.filter((account) => account.active).map((account) => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-44"><CalendarRange className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Período" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><CalendarRange className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
             <SelectContent>{PERIOD_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
           </Select>
-          <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44" value={endingMonth} onChange={(event) => {
+          <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap text-[13px] font-bold text-ds-on-dark-2">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker [color-scheme:dark]" value={endingMonth} onChange={(event) => {
             if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setEndingMonth(event.target.value);
           }} /></div>
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={filteredMovements.length === 0}>
-            <Download className="mr-2 h-4 w-4" /> Exportar CSV
-          </Button>
-          {permissions.financial?.cashFlow?.create && <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button>}
         </div>
-      </div>
+      </PageHero>
 
-      {(budgetError || !budgetScopeReady || budgetLoading) && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{budgetError || (budgetLoading ? "Atualizando planejamento…" : "Selecione abaixo um centro autorizado para incluir o planejamento por orçamento.")} O saldo projetado fica incompleto até essa conferência.</p>}
-      {budgetProjections.conflictCount > 0 && <p className="text-sm text-amber-700">Há {budgetProjections.conflictCount} linha(s) com provisão antiga. Mantivemos a fonte antiga e suspendemos a nova projeção para evitar duplicidade. A conversão depende de prévia e confirmação.</p>}
-      {budgetProjections.issueCount > 0 && <p className="text-sm text-amber-700">Há classificações ou coberturas a conferir nos orçamentos.</p>}
-      {(budgetProjections.projectIssues ?? []).map((issue, index) => <p key={`${index}:${issue}`} role="status" className="text-sm text-amber-700">{issue}</p>)}
-      {!!budgetProjections.projectIssues?.length && <p className="text-sm text-amber-700">O planejamento dos projetos precisa de conferência; o saldo projetado pode estar incompleto.</p>}
-      {projectForecastSelection.conflictCount > 0 && <p role="status" className="text-sm text-amber-700">Há {projectForecastSelection.conflictCount} projeto(s) com provisões avulsas nas mesmas contas e intervalo. Mantivemos as provisões e suspendemos a previsão desses projetos para evitar duplicidade. Confira os vínculos antes de usar o saldo projetado.</p>}
+      {(budgetError || !budgetScopeReady || budgetLoading) && <p role="status" className="rounded-xl border border-ds-alert-border bg-ds-warn-bg p-3 text-sm text-ds-alert-ink">{budgetError || (budgetLoading ? "Atualizando planejamento…" : "Selecione abaixo um centro autorizado para incluir o planejamento por orçamento.")} O saldo projetado fica incompleto até essa conferência.</p>}
+      {budgetProjections.conflictCount > 0 && <p className="text-sm text-ds-warn">Há {budgetProjections.conflictCount} linha(s) com provisão antiga. Mantivemos a fonte antiga e suspendemos a nova projeção para evitar duplicidade. A conversão depende de prévia e confirmação.</p>}
+      {budgetProjections.issueCount > 0 && <p className="text-sm text-ds-warn">Há classificações ou coberturas a conferir nos orçamentos.</p>}
+      {(budgetProjections.projectIssues ?? []).map((issue, index) => <p key={`${index}:${issue}`} role="status" className="text-sm text-ds-warn">{issue}</p>)}
+      {!!budgetProjections.projectIssues?.length && <p className="text-sm text-ds-warn">O planejamento dos projetos precisa de conferência; o saldo projetado pode estar incompleto.</p>}
+      {projectForecastSelection.conflictCount > 0 && <p role="status" className="text-sm text-ds-warn">Há {projectForecastSelection.conflictCount} projeto(s) com provisões avulsas nas mesmas contas e intervalo. Mantivemos as provisões e suspendemos a previsão desses projetos para evitar duplicidade. Confira os vínculos antes de usar o saldo projetado.</p>}
       {(budgetProjections.projectProjections?.length ?? 0) > 0 && <p className="text-sm text-muted-foreground">O planejamento inclui o saldo ainda esperado dos projetos, sem criar contas a pagar. Disponível em “Todas as contas” e “Todos os centros”. Envelopes mensais nas mesmas contas não são somados à simulação para evitar sobreposição.</p>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Kpi label="Saldo realizado" value={totals.realizedBalance} detail="Entradas menos saídas realizadas" tone="neutral" icon={Wallet} />
@@ -412,7 +421,7 @@ export function CashFlowPage() {
         <Kpi label="Saldo projetado" value={totals.projectedBalance} detail={includeBudgetScenario ? "Inclui simulação dos orçamentos" : "Saldo realizado menos previsões"} tone={totals.projectedBalance >= 0 ? "positive" : "negative"} icon={Wallet} />
       </div>
 
-      <Card className="rounded-2xl">
+      <Card className="rounded-ds-card border-ds-border shadow-none">
         <CardHeader>
           <CardTitle>Realizado × previsto</CardTitle>
           <CardDescription>Entradas, saídas, compromissos futuros e evolução acumulada no mesmo gráfico.</CardDescription>
@@ -427,10 +436,10 @@ export function CashFlowPage() {
                   <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 1000)}k`} />
                   <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   <Legend />
-                  <Bar dataKey="income" name="Entradas realizadas" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="outcome" name="Saídas realizadas" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="forecast" name="Saídas previstas" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="balance" name="Saldo projetado acumulado" stroke="#6366f1" strokeWidth={3} dot={{ r: 3 }} />
+                  <Bar dataKey="income" name="Entradas realizadas" fill="var(--ds-ok)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="outcome" name="Saídas realizadas" fill="var(--ds-danger)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="forecast" name="Saídas previstas" fill="var(--ds-warn)" radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="balance" name="Saldo projetado acumulado" stroke="var(--ds-modal-accent)" strokeWidth={3} dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -438,7 +447,7 @@ export function CashFlowPage() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl">
+      <Card className="rounded-ds-card border-ds-border shadow-none">
         <CardHeader>
           <CardTitle>Despesas provisionadas × pagas</CardTitle>
           <CardDescription>
@@ -455,8 +464,8 @@ export function CashFlowPage() {
                   <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 1000)}k`} />
                   <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   <Legend />
-                  <Bar dataKey="provisioned" name="Provisionado" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="paid" name="Pago" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="provisioned" name="Provisionado" fill="var(--ds-warn)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="paid" name="Pago" fill="var(--ds-ok)" radius={[4, 4, 0, 0]} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -464,7 +473,7 @@ export function CashFlowPage() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border-[#e2ded4] shadow-sm">
+      <Card className="rounded-ds-card border-ds-border shadow-none">
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div><CardTitle>Orçamento da categoria</CardTitle><CardDescription>Limite do mês por competência. A linha tracejada é a referência fixa; a linha sólida mostra o disponível após as despesas.</CardDescription></div>
           <div className="flex w-full gap-2 sm:w-auto">
@@ -486,7 +495,7 @@ export function CashFlowPage() {
             <Checkbox checked={includeBudgetScenario} onCheckedChange={(checked) => setIncludeBudgetScenario(checked === true)} disabled={accountFilter !== "all"} />
             <span><strong>Simular envelopes sem composição pessoal</strong><span className="block text-xs text-muted-foreground">Inclui o saldo livre dos demais envelopes no último dia do mês. Orçamentos por colaborador já entram pela compra ainda prevista e sua data, sem nova soma aqui. As despesas mantêm suas datas. Disponível apenas em “Todas as contas”.</span></span>
           </label>
-          {budgetError ? <p className="text-sm text-amber-700">{budgetError}</p> : !selectedBudget
+          {budgetError ? <p className="text-sm text-ds-warn">{budgetError}</p> : !selectedBudget
             ? <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhum orçamento ativo para {budgetMonth}.</p>
             : <><div className="mb-5 grid gap-3 sm:grid-cols-3">
                 {[["Orçado", selectedBudget.budgetedAmountCents], ["Comprometido", selectedBudget.consumedAmountCents], ["Disponível", selectedBudget.balanceAmountCents]].map(([label, cents]) =>
@@ -497,14 +506,14 @@ export function CashFlowPage() {
                 <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 100000)}k`} />
                 <Tooltip formatter={(value: number) => formatCurrency(value / 100)} />
                 <Legend />
-                <Line type="linear" dataKey="plannedBalanceCents" name="Referência planejada" stroke="#94a3b8" strokeDasharray="5 5" strokeWidth={2} dot={false} />
-                <Line type="stepAfter" dataKey="actualBalanceCents" name="Disponível após despesas" stroke="#2563eb" strokeWidth={3} dot={false} connectNulls={false} />
+                <Line type="linear" dataKey="plannedBalanceCents" name="Referência planejada" stroke="var(--ds-ink-faint)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                <Line type="stepAfter" dataKey="actualBalanceCents" name="Disponível após despesas" stroke="var(--ds-info)" strokeWidth={3} dot={false} connectNulls={false} />
               </ComposedChart></ResponsiveContainer></div>
               <p className="mt-3 text-xs text-muted-foreground">Este saldo é do orçamento da categoria. Ele não representa o saldo bancário.</p></>}
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl">
+      <Card className="rounded-ds-card border-ds-border shadow-none">
         <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <CardTitle>Movimentações</CardTitle>
@@ -543,8 +552,8 @@ export function CashFlowPage() {
                       {movement.dueDate ? ` · Venc. ${format(movement.dueDate, "dd/MM/yyyy")}` : ""}
                     </p>
                   </div>
-                  <Badge variant="outline" className={cn("w-fit", movement.status === "realized" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>{movement.status === "realized" ? "Realizado" : "Previsto"}</Badge>
-                  <span className={cn("text-right font-mono text-sm font-bold", movement.direction === "in" ? "text-emerald-600" : "text-rose-600")}>{movement.direction === "in" ? "+" : "-"}{formatCurrency(movement.amount)}</span>
+                  <Badge variant="outline" className={cn("w-fit", movement.status === "realized" ? "border-ds-border bg-ds-ok-bg text-ds-ok" : "border-ds-alert-border bg-ds-warn-bg text-ds-warn")}>{movement.status === "realized" ? "Realizado" : "Previsto"}</Badge>
+                  <span className={cn("text-right font-mono text-sm font-bold", movement.direction === "in" ? "text-ds-ok" : "text-ds-danger")}>{movement.direction === "in" ? "+" : "-"}{formatCurrency(movement.amount)}</span>
                 </div>
               ))}
             </div>
