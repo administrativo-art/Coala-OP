@@ -1,0 +1,33 @@
+/** Largura máxima do conteúdo: em tablet as telas ficam numa coluna central em vez de esticar de ponta a ponta. */
+export const contentColumn = { width: "100%", maxWidth: 600, alignSelf: "center" } as const;
+
+export const colors = {
+  page: "#F0EEE9",
+  topbar: "#F3F1EC",
+  surface: "#FFFFFF",
+  surfaceWarm: "#FFFDF9",
+  input: "#FAF9F6",
+  mutedSurface: "#F6F4EF",
+  dark: "#15151C",
+  darkHover: "#2A2A35",
+  border: "#E3DFD6",
+  borderInput: "#DCD9D1",
+  ink: "#1A1B1F",
+  inkMuted: "#5F646C",
+  inkFaint: "#6E737A",
+  accent: "#D13670",
+  accentHover: "#B8325F",
+  accentInk: "#A6325B",
+  accentSoft: "#FBE7EF",
+  ok: "#147337",
+  okBg: "#E8F5EE",
+  warning: "#C2410C",
+  warningBg: "#FFF1E6",
+  alertInk: "#6B4500",
+  alertBg: "#FFF7E6",
+  alertBorder: "#F5D9A3",
+  danger: "#BE123C",
+  dangerBg: "#FFE4E8",
+  info: "#1D4ED8",
+  infoBg: "#EEF3FE",
+};

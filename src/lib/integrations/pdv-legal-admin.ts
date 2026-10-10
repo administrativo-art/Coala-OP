@@ -113,6 +113,15 @@ export async function fetchPdvLegalCashMovementSources(accessToken: string, date
   return { withdrawals, supplies, paymentMethods };
 }
 
+/** Leitura leve para listas ao vivo: só as sangrias do dia, sem suprimentos. */
+export async function fetchPdvLegalWithdrawals(accessToken: string, date: string) {
+  return pdvGetWithAccessToken(`/sangriasuprimento/getSangria/${encodeURIComponent(date)}`, accessToken);
+}
+
+export async function fetchPdvLegalPaymentMethods(accessToken: string) {
+  return pdvGetWithAccessToken("/formapagamentopdv/get", accessToken);
+}
+
 export async function fetchPdvLegalProfiles(): Promise<PdvLegalProfile[]> {
   const rows = responseRows(await pdvGet('/usuariopdv/perfil/get'));
   return rows.flatMap(value => {

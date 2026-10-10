@@ -8,7 +8,9 @@ import {
   fetchPdvLegalUsers,
   getAccessToken,
 } from "@/lib/integrations/pdv-legal-admin";
+import type { ServerUserContext } from "@/lib/auth-server";
 import { buildCashClosureFromPdv } from "./build-cash-closure";
+import { autoLinkAppPreLinks } from "./withdrawal-classification.server";
 import { parsePdvCashMovements } from "./pdv-cash-movements";
 import { recordCashClosureSyncError, upsertClosureFromPdv } from "./repository.server";
 import type { CashClosureActor } from "./types";
@@ -38,6 +40,8 @@ export async function syncCashClosure(input: {
   kioskId: string;
   date: string;
   actor: CashClosureActor;
+  /** Quando presente, as notas vinculadas no aplicativo são conciliadas assim que o dia é sincronizado. */
+  context?: ServerUserContext;
 }) {
   const kiosk = await resolveKiosk(input.kioskId);
   try {
@@ -62,7 +66,10 @@ export async function syncCashClosure(input: {
       operatorNameById,
       cashMovements,
     });
-    return upsertClosureFromPdv(built, input.actor);
+    const result = await upsertClosureFromPdv(built, input.actor);
+    // Best effort: a sangria that cannot be reconciled automatically stays open for the finance panel.
+    if (input.context) await autoLinkAppPreLinks(result.closure.id, input.context).catch(() => undefined);
+    return result;
   } catch (error) {
     await recordCashClosureSyncError({
       workspaceId: input.workspaceId,

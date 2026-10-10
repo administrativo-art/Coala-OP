@@ -21,14 +21,15 @@ const EXTRACTION_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
-    "documentText", "supplierName", "supplierTaxId", "competence", "dueDate", "amountCents",
-    "barcode", "customerAccount", "contractNumber", "serviceType", "serviceNumbers", "fiscalIdentity", "confidence",
+    "documentText", "supplierName", "supplierTaxId", "competence", "documentDate", "dueDate", "amountCents",
+    "barcode", "customerAccount", "contractNumber", "serviceType", "serviceNumbers", "fiscalIdentity", "purchaseItems", "confidence",
   ],
   properties: {
     documentText: { type: ["string", "null"] },
     supplierName: { type: ["string", "null"] },
     supplierTaxId: { type: ["string", "null"] },
     competence: { type: ["string", "null"] },
+    documentDate: { type: ["string", "null"] },
     dueDate: { type: ["string", "null"] },
     amountCents: { type: ["integer", "null"] },
     barcode: { type: ["string", "null"] },
@@ -65,6 +66,22 @@ const EXTRACTION_SCHEMA = {
               amountCents: { type: ["integer", "null"] },
             },
           },
+        },
+      },
+    },
+    purchaseItems: {
+      type: "array",
+      maxItems: 100,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["description", "quantity", "unit", "unitPriceCents", "totalCents"],
+        properties: {
+          description: { type: "string" },
+          quantity: { type: ["number", "null"] },
+          unit: { type: ["string", "null"] },
+          unitPriceCents: { type: ["integer", "null"] },
+          totalCents: { type: ["integer", "null"] },
         },
       },
     },
@@ -162,11 +179,27 @@ function outputText(payload: any) {
 function normalizeAiHints(value: unknown): FinancialInboxDocumentHints {
   const raw = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const amount = Number(raw.amountCents);
+  const purchaseItems = (Array.isArray(raw.purchaseItems) ? raw.purchaseItems : []).flatMap((entry) => {
+    const item = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : null;
+    const description = shortString(item?.description, 180);
+    if (!item || !description) return [];
+    const quantity = Number(item.quantity);
+    const unitPriceCents = Number(item.unitPriceCents);
+    const totalCents = Number(item.totalCents);
+    return [{
+      description,
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null,
+      unit: shortString(item.unit, 30),
+      unitPriceCents: Number.isInteger(unitPriceCents) && unitPriceCents >= 0 ? unitPriceCents : null,
+      totalCents: Number.isInteger(totalCents) && totalCents >= 0 ? totalCents : null,
+    }];
+  }).slice(0, 100);
   return {
     documentText: shortString(raw.documentText, 12_000),
     supplierName: shortString(raw.supplierName),
     supplierTaxId: taxId(raw.supplierTaxId),
     competence: competence(raw.competence),
+    documentDate: date(raw.documentDate),
     dueDate: date(raw.dueDate),
     amountCents: Number.isInteger(amount) && amount > 0 ? amount : null,
     barcode: normalizePaymentBarcode(String(raw.barcode ?? "")),
@@ -177,6 +210,7 @@ function normalizeAiHints(value: unknown): FinancialInboxDocumentHints {
       .map(normalizeBrazilianServiceNumber)
       .filter((entry): entry is string => Boolean(entry)))].slice(0, 20),
     fiscalIdentity: normalizeFiscalIdentity(raw.fiscalIdentity),
+    purchaseItems,
     confidence: raw.confidence === "high" || raw.confidence === "medium" ? raw.confidence : "low",
   };
 }
@@ -211,6 +245,7 @@ async function extractWithAi(params: {
   subject: string;
   senderDomain: string | null;
   deterministicText: string;
+  model?: string;
 }) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return null;
@@ -236,7 +271,7 @@ async function extractWithAi(params: {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.OPENAI_FINANCIAL_INBOX_DOCUMENT_MODEL || process.env.OPENAI_FINANCIAL_DOCUMENT_MODEL || "gpt-5.6-terra",
+        model: params.model || process.env.OPENAI_FINANCIAL_INBOX_DOCUMENT_MODEL || process.env.OPENAI_FINANCIAL_DOCUMENT_MODEL || "gpt-5.6-terra",
         store: false,
         input: [{ role: "user", content }],
         max_output_tokens: 5000,
@@ -281,6 +316,7 @@ export async function extractFinancialDocument(params: {
   contentType: string;
   subject: string;
   senderDomain: string | null;
+  model?: string;
 }): Promise<FinancialDocumentExtraction> {
   try {
     const deterministic = await extractDeterministicFinancialDocumentText(params);

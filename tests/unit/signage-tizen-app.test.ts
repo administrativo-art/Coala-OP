@@ -6,6 +6,11 @@ import test from "node:test";
 
 import {
   getNextSlide,
+  nextSignageScreenName,
+  parseSignagePairingCode,
+  planNewSignageScreen,
+  signageMobileScreenSchema,
+  signagePairingUrl,
   isSlideScheduleActive,
   resolveActiveSlide,
   SIGNAGE_DEVICE_TOKEN_PATTERN,
@@ -23,6 +28,8 @@ type Manifest = Record<string, { uri: string }>;
 type Core = {
   CODE_ALPHABET: string;
   CODE_LENGTH: number;
+  generateCode(randomByte: () => number): string;
+  pairingPollDelayMs(elapsedMs: number): number;
   absoluteUrl(server: string, assetUrl: string): string;
   getAssetFileName(assetUrl: string): string;
   getNextSlide<T extends { id: string }>(slides: T[], id: string | null): T | null;
@@ -103,6 +110,71 @@ test("app do monitor: código de pareamento no mesmo formato do servidor", () =>
   assert.equal(signagePairSchema.parse({ code: " abcdefgh " }).code, "ABCDEFGH");
   assert.equal(signagePairSchema.safeParse({ code: "ABCDEFG1" }).success, false);
   assert.equal(signagePairSchema.safeParse({ code: "ABCDEFGH", screenId: "x" }).success, false);
+});
+
+test("app do monitor: sorteia o código do QR code no formato do servidor", () => {
+  let next = 0;
+  const sequential = core.generateCode(() => next++);
+  assert.equal(sequential, core.CODE_ALPHABET.slice(0, 8));
+  for (const byte of [0, 31, 32, 200, 255]) {
+    assert.ok(SIGNAGE_DEVICE_TOKEN_PATTERN.test(core.generateCode(() => byte)), String(byte));
+  }
+  // O QR code leva o endereço da página de aplicativos; o aplicativo tira dele só o código.
+  const url = signagePairingUrl(`${SERVER}/`, sequential);
+  assert.equal(url, `${SERVER}/app?tela=${sequential}`);
+  assert.equal(parseSignagePairingCode(url), sequential);
+  assert.equal(parseSignagePairingCode(`${url}&x=1`), sequential);
+  assert.equal(parseSignagePairingCode(url.toLowerCase()), sequential);
+  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=ABCDEFG1`), null);
+  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=ABCDEFGHJ`), null);
+  assert.equal(parseSignagePairingCode("https://exemplo.com/outro-qr"), null);
+  // Consulta rápida enquanto alguém instala; lenta em monitor esquecido na tela de pareamento.
+  assert.equal(core.pairingPollDelayMs(0), 15_000);
+  assert.equal(core.pairingPollDelayMs(19 * 60_000), 15_000);
+  assert.equal(core.pairingPollDelayMs(20 * 60_000), 60_000);
+});
+
+test("telas pelo aplicativo: numeração automática e entrada validada", () => {
+  assert.equal(nextSignageScreenName([]), "Tela 1");
+  assert.equal(nextSignageScreenName(["Tela 1", "tela 2 "]), "Tela 3");
+  assert.equal(nextSignageScreenName(["Tela 1", "Tela 3", "Balcão"]), "Tela 2");
+  // Unidade sem monitor: a primeira tela é a padrão, mesmo renomeada.
+  assert.deepEqual(planNewSignageScreen([{ name: "Tela 1", isDefault: true }]), { name: "Tela 1", usesDefault: true, full: false });
+  assert.deepEqual(planNewSignageScreen([{ name: "Balcão", isDefault: true }]), { name: "Balcão", usesDefault: true, full: false });
+  assert.deepEqual(
+    planNewSignageScreen([{ name: "Tela 1", isDefault: true, deviceToken: "ABCDEFGH" }, { name: "Tela 2", isDefault: false }]),
+    { name: "Tela 3", usesDefault: false, full: false },
+  );
+  const twelve = Array.from({ length: 12 }, (_, index) => ({ name: `Tela ${index + 1}`, isDefault: index === 0, deviceToken: "ABCDEFGH" }));
+  assert.equal(planNewSignageScreen(twelve).full, true);
+
+  const input = { kioskId: "k1", orientation: "portrait", code: "abcdefgh" };
+  assert.deepEqual(signageMobileScreenSchema.parse(input), { kioskId: "k1", orientation: "portrait", code: "ABCDEFGH" });
+  assert.equal(signageMobileScreenSchema.safeParse({ ...input, screenId: "s1" }).success, true);
+  assert.equal(signageMobileScreenSchema.safeParse({ ...input, orientation: "diagonal" }).success, false);
+  assert.equal(signageMobileScreenSchema.safeParse({ ...input, code: "ABCDEFG1" }).success, false);
+  assert.equal(signageMobileScreenSchema.safeParse({ ...input, name: "Tela 9" }).success, false);
+});
+
+test("telas pelo aplicativo: rotas sob contrato, permissão do aplicativo e unidade no servidor", async () => {
+  const [units, add, qr, rules] = await Promise.all([
+    readFile("src/app/api/signage/mobile/route.ts", "utf8"),
+    readFile("src/app/api/signage/mobile/screens/route.ts", "utf8"),
+    readFile("src/app/api/signage/pair/qr/route.ts", "utf8"),
+    readFile("src/features/signage/mobile-screen.server.ts", "utf8"),
+  ]);
+  for (const source of [units, add, qr]) assert.match(source, /secureRoute\(\{ contract, enforcer \}/);
+  for (const source of [units, add]) {
+    assert.match(source, /assertMobileAppAttested\(/);
+    assert.match(source, /assertCanManageMobileSignage\(/);
+  }
+  assert.match(add, /canAccessUnit\(/);
+  // A permissão é a da lista do aplicativo; o código lido não pode ser o de outra tela.
+  assert.match(rules, /permissions\.app\?\.signage\?\.manage !== true/);
+  assert.match(rules, /if \(await codeInUse\(code\)\) failure\('CODE_IN_USE'/);
+  assert.match(rules, /screen\.kioskId !== kioskId/);
+  assert.match(qr, /limiter\.check\(/);
+  assert.match(qr, /SIGNAGE_DEVICE_TOKEN_PATTERN\.test\(code\)/);
 });
 
 test("app do monitor: o que baixar e o que apagar", () => {
