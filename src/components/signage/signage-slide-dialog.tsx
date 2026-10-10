@@ -93,6 +93,12 @@ function maxDurationMs(type: SignageSlideType) {
 function getVideoDurationMs(file: File) {
   return new Promise<number>((resolve, reject) => {
     const url = URL.createObjectURL(file);
+    // Só endereços `blob:` do próprio navegador chegam ao elemento de vídeo.
+    if (!url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+      reject(new Error('Não foi possível ler a duração do vídeo.'));
+      return;
+    }
     const video = document.createElement('video');
 
     video.preload = 'metadata';
