@@ -1,283 +1,189 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, Clock, Copy, Eye, GripVertical, ImageIcon, KeyRound, Loader2, MonitorPlay, Pencil, Plus, Save, Trash2, UploadCloud, VideoIcon, Type, RefreshCw, ShieldAlert, X } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { Check, Copy, Eye, GripVertical, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import { fetchWithTimeout } from '@/lib/fetch-utils';
+import { fieldInputClass } from '@/components/patterns/field';
+import { FilterChips } from '@/components/patterns/filter-chips';
+import { HeroChip } from '@/components/patterns/hero-chip';
+import { InlineConfirm } from '@/components/patterns/inline-confirm';
+import { PageHero } from '@/components/patterns/page-hero';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatusPill } from '@/components/ui/status-pill';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
+import { useKioskGroups } from '@/hooks/use-kiosk-groups';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useToast } from '@/hooks/use-toast';
-import { type Kiosk, type PlayerHeartbeat, type SignageSlide, type SignageSlideType } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
+import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
+import { signageDb } from '@/lib/firebase-signage';
 import {
+  formatSignageDuration,
+  getPublicationState,
+  getScreenSlides,
+  getSlideOrder,
   isSlideScheduleActive,
-  PLAYER_HEARTBEAT_STALE_MS,
   SIGNAGE_FETCH_TIMEOUT_MS,
-  SIGNAGE_IMAGE_TEXT_MAX_DURATION_MS,
-  SIGNAGE_VIDEO_MAX_DURATION_MS,
+  type SignagePublicationState,
 } from '@/lib/signage';
 import { canAccessUnit } from '@/lib/unit-access';
+import { cn } from '@/lib/utils';
+import { type Kiosk, type PlayerHeartbeat, type PublishedPlayerDocument, type SignageMediaItem, type SignageScreen, type SignageSlide } from '@/types';
 
-type SlideFormState = {
-  title: string;
-  type: SignageSlideType;
-  durationMs: number;
-  order: number;
-  kioskIds: string[];
-  isActive: boolean;
-  assetUrl?: string;
-  assetPath?: string;
-  assetKind?: 'image' | 'video';
-  text?: string;
-  background?: string;
-  scheduleEnabled: boolean;
-  scheduleTimeEnabled: boolean;
-  scheduleStartTime: string;
-  scheduleEndTime: string;
-  scheduleDateEnabled: boolean;
-  scheduleStartDate: string;
-  scheduleEndDate: string;
+import {
+  DEFAULT_TEXT_BACKGROUND,
+  describeSchedule,
+  formatRelativeTime,
+  getPlayerHealth,
+  getScreenLabel,
+  LiveDot,
+  type ScreenOption,
+  SLIDE_TYPE_LABEL,
+  SlideThumb,
+  toSlidePayload,
+} from './signage-admin-shared';
+import { SignageCopyDialog } from './signage-copy-dialog';
+import { SignageMediaLibrary } from './signage-media-library';
+import { SignageSlideDialog, type SignageApiRequest } from './signage-slide-dialog';
+
+const HEALTH_REFRESH_MS = 30_000;
+const SLIDE_ROW_GRID = 'grid grid-cols-[20px_20px_72px_minmax(0,1fr)_auto] items-center gap-3 px-[18px] py-3 sm:grid-cols-[20px_20px_72px_minmax(0,1fr)_auto_auto]';
+
+type SlideRowProps = {
+  slide: SignageSlide;
+  /** Posição na sequência exibida; slides pausados não têm. */
+  position?: number;
+  otherScreensCount: number;
+  canManage: boolean;
+  onEdit: (slide: SignageSlide) => void;
+  onAskRemove: (slide: SignageSlide) => void;
+  onToggleActive: (slide: SignageSlide, isActive: boolean) => void;
+  onPreview: (slide: SignageSlide) => void;
+  dragHandle?: React.ReactNode;
 };
 
-type DurationUnit = 'seconds' | 'minutes';
-
-function getDurationParts(durationMs: number) {
-  if (durationMs % 60000 === 0) {
-    return { value: durationMs / 60000, unit: 'minutes' as DurationUnit };
-  }
-
-  return { value: Math.max(1, Math.round(durationMs / 1000)), unit: 'seconds' as DurationUnit };
-}
-
-function formatDuration(durationMs: number) {
-  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-function getMaxDurationValue(type: SignageSlideType, unit: DurationUnit) {
-  const durationMs = type === 'video' ? SIGNAGE_VIDEO_MAX_DURATION_MS : SIGNAGE_IMAGE_TEXT_MAX_DURATION_MS;
-  return unit === 'minutes' ? durationMs / 60000 : durationMs / 1000;
-}
-
-function toDurationMs(value: number, unit: DurationUnit) {
-  return unit === 'minutes' ? value * 60000 : value * 1000;
-}
-
-function getVideoDurationMs(file: File) {
-  return new Promise<number>((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement('video');
-
-    video.preload = 'metadata';
-    video.onloadedmetadata = () => {
-      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
-      URL.revokeObjectURL(url);
-      resolve(Math.max(3000, Math.round(durationSeconds * 1000)));
-    };
-    video.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Não foi possível ler a duração do vídeo.'));
-    };
-    video.src = url;
-  });
-}
-
-const defaultFormState: SlideFormState = {
-  title: '',
-  type: 'image',
-  durationMs: 10000,
-  order: 0,
-  kioskIds: [],
-  isActive: true,
-  assetUrl: '',
-  assetPath: '',
-  assetKind: 'image',
-  text: '',
-  background: '#0f172a',
-  scheduleEnabled: false,
-  scheduleTimeEnabled: false,
-  scheduleStartTime: '08:00',
-  scheduleEndTime: '18:00',
-  scheduleDateEnabled: false,
-  scheduleStartDate: '',
-  scheduleEndDate: '',
-};
-
-function getTypeIcon(type: SignageSlideType) {
-  if (type === 'video') return <VideoIcon className="h-4 w-4" />;
-  if (type === 'text') return <Type className="h-4 w-4" />;
-  return <ImageIcon className="h-4 w-4" />;
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const ms = Date.now() - Date.parse(dateStr);
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return 'agora mesmo';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `há ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `há ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `há ${days}d`;
-}
-
-function StatusDot({ label, variant }: { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }) {
-  const dotClass = {
-    default: 'bg-success shadow-[0_0_0_3px_hsl(var(--success)/0.2)]',
-    secondary: 'bg-warning shadow-[0_0_0_3px_hsl(var(--warning)/0.2)]',
-    destructive: 'bg-destructive shadow-[0_0_0_3px_hsl(var(--destructive)/0.2)]',
-    outline: 'bg-muted-foreground/40',
-  }[variant] ?? 'bg-muted-foreground/40';
+function SlideRowContent({ slide, position, otherScreensCount, canManage, onEdit, onAskRemove, onToggleActive, onPreview, dragHandle }: SlideRowProps) {
+  const schedule = describeSchedule(slide.schedule);
+  const outsideSchedule = slide.isActive && slide.schedule ? !isSlideScheduleActive(slide) : false;
+  const meta = [
+    SLIDE_TYPE_LABEL[slide.type],
+    formatSignageDuration(slide.durationMs),
+    schedule,
+    otherScreensCount > 0 ? `também em ${otherScreensCount} ${otherScreensCount === 1 ? 'tela' : 'telas'}` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-      <span className={`h-2 w-2 flex-shrink-0 rounded-full ${dotClass}`} />
-      {label}
-    </span>
+    <>
+      <div>{dragHandle}</div>
+      <span className="text-center font-ds-mono text-[13px] font-bold tabular-nums text-ds-ink-muted" aria-label={position ? `Posição ${position}` : 'Fora da sequência'}>
+        {position ?? '–'}
+      </span>
+      <SlideThumb slide={slide} />
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-[13.5px] font-bold text-ds-ink">{slide.title}</p>
+          {outsideSchedule && <StatusPill variant="neutral">Fora do horário</StatusPill>}
+        </div>
+        <p className="mt-0.5 truncate text-xs text-ds-ink-muted">{meta}</p>
+      </div>
+      <div className="hidden sm:block">
+        {canManage ? (
+          <Switch
+            checked={slide.isActive}
+            aria-label={slide.isActive ? `Pausar ${slide.title}` : `Ativar ${slide.title}`}
+            onCheckedChange={(checked) => onToggleActive(slide, checked)}
+          />
+        ) : (
+          <StatusPill variant={slide.isActive ? 'ok' : 'neutral'}>{slide.isActive ? 'Ativo' : 'Pausado'}</StatusPill>
+        )}
+      </div>
+      <div className="flex justify-end gap-1">
+        <Button type="button" size="icon" variant="ds-ghost" className="h-8 w-8" aria-label={`Visualizar ${slide.title}`} onClick={() => onPreview(slide)}>
+          <Eye aria-hidden="true" className="h-4 w-4" />
+        </Button>
+        {canManage && (
+          <>
+            <Button type="button" size="icon" variant="ds-ghost" className="h-8 w-8" aria-label={`Editar ${slide.title}`} onClick={() => onEdit(slide)}>
+              <Pencil aria-hidden="true" className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="icon" variant="ds-ghost" className="h-8 w-8 hover:text-ds-danger" aria-label={`Remover ${slide.title}`} onClick={() => onAskRemove(slide)}>
+              <Trash2 aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
-type SortableSlideRowProps = {
-  slide: SignageSlide;
-  position: number;
-  kioskMap: Map<string, Kiosk>;
-  canManage: boolean;
-  onEdit: (slide: SignageSlide) => void;
-  onDelete: (slide: SignageSlide) => void;
-  onToggleActive: (slide: SignageSlide, isActive: boolean) => void;
-  onPreview: (slide: SignageSlide) => void;
-};
-
-const SLIDE_ROW_GRID = 'grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_96px] items-center gap-3 border-b px-4 py-2.5 last:border-b-0';
-
-function SortableSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive, onPreview }: SortableSlideRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id });
-  const scheduleActive = slide.schedule ? isSlideScheduleActive(slide) : null;
+function SortableSlideRow(props: SlideRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.slide.id });
 
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
-      className={SLIDE_ROW_GRID}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(SLIDE_ROW_GRID, 'bg-ds-surface', isDragging && 'relative z-[2] rounded-ds-btn shadow-ds-lift')}
     >
-      <div>
-        {canManage && (
+      <SlideRowContent
+        {...props}
+        dragHandle={props.canManage ? (
           <button
+            type="button"
             {...attributes}
             {...listeners}
-            className="cursor-grab touch-none p-0.5 text-muted-foreground hover:text-foreground active:cursor-grabbing"
-            aria-label="Reordenar"
+            className="cursor-grab touch-none rounded-ds-sm p-0.5 text-ds-ink-faint hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
+            aria-label={`Reordenar ${props.slide.title}`}
           >
-            <GripVertical className="h-4 w-4" />
+            <GripVertical aria-hidden="true" className="h-4 w-4" />
           </button>
-        )}
-      </div>
-      <div>
-        <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
-          {slide.title}
-          {scheduleActive !== null && (
-            <span title={scheduleActive ? 'Agendado — ativo agora' : 'Agendado — fora do horário'}>
-              <Clock className={`h-3 w-3 ${scheduleActive ? 'text-success' : 'text-muted-foreground'}`} />
-            </span>
-          )}
-        </div>
-        <div className="text-[11px] text-muted-foreground">Posição {position + 1}</div>
-      </div>
-      <div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-          {getTypeIcon(slide.type)}
-          {slide.type}
-        </span>
-      </div>
-      <div className="text-[13px] text-muted-foreground">{formatDuration(slide.durationMs)}</div>
-      <div>
-        {canManage ? (
-          <Switch checked={slide.isActive} onCheckedChange={(checked) => onToggleActive(slide, checked)} />
-        ) : (
-          <Badge variant="default">Ativo</Badge>
-        )}
-      </div>
-      <div className="flex justify-end gap-1">
-        <Button size="icon" variant="ghost" className="h-7 w-7" title="Visualizar" onClick={() => onPreview(slide)}>
-          <Eye className="h-3.5 w-3.5" />
-        </Button>
-        {canManage && (
-          <>
-            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onEdit(slide)}>
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onDelete(slide)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </>
-        )}
-      </div>
+        ) : null}
+      />
     </div>
   );
 }
 
-function StaticSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdit, onDelete, onToggleActive, onPreview }: SortableSlideRowProps) {
+function PublicationSummary({ state, published, heartbeat }: {
+  state: SignagePublicationState | 'unknown';
+  published: PublishedPlayerDocument | null | undefined;
+  heartbeat: PlayerHeartbeat | undefined;
+}) {
+  if (state === 'unknown') return <p className="text-[13px] text-ds-ink-muted">Verificando a última publicação…</p>;
+  if (state === 'never' || !published) {
+    return <p className="text-[13px] text-ds-ink-muted">Esta tela ainda não foi publicada. A TV só mostra o conteúdo depois da primeira publicação.</p>;
+  }
+
+  const playerOnline = getPlayerHealth(heartbeat).online;
+  const playerHasVersion = heartbeat?.updatedAt === published.updatedAt;
+
   return (
-    <div className={`${SLIDE_ROW_GRID} opacity-60`}>
-      <div />
-      <div>
-        <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
-          {slide.title}
-          {slide.schedule && (
-            <span title="Agendado">
-              <Clock className="h-3 w-3 text-muted-foreground" />
-            </span>
-          )}
+    <div className="space-y-2">
+      {state === 'outdated' ? (
+        <div className="rounded-ds-btn-lg border border-ds-alert-border bg-ds-alert-bg px-3 py-2.5 text-ds-alert-ink">
+          <p className="text-[13px] font-extrabold">Há alterações não publicadas</p>
+          <p className="mt-0.5 text-[12.5px]">A tela continua com a versão anterior até você publicar.</p>
         </div>
-        <div className="text-[11px] text-muted-foreground">Posição {position + 1}</div>
-      </div>
-      <div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-          {getTypeIcon(slide.type)}
-          {slide.type}
-        </span>
-      </div>
-      <div className="text-[13px] text-muted-foreground">{formatDuration(slide.durationMs)}</div>
-      <div>
-        {canManage ? (
-          <Switch checked={slide.isActive} onCheckedChange={(checked) => onToggleActive(slide, checked)} />
-        ) : (
-          <Badge variant="outline">Pausado</Badge>
-        )}
-      </div>
-      <div className="flex justify-end gap-1">
-        <Button size="icon" variant="ghost" className="h-7 w-7" title="Visualizar" onClick={() => onPreview(slide)}>
-          <Eye className="h-3.5 w-3.5" />
-        </Button>
-        {canManage && (
-          <>
-            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onEdit(slide)}>
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => onDelete(slide)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </>
-        )}
-      </div>
+      ) : (
+        <StatusPill variant="ok">Publicação em dia</StatusPill>
+      )}
+      <p className="text-xs text-ds-ink-muted">
+        Última publicação {formatRelativeTime(published.updatedAt)}
+        {published.generatedBy?.username ? ` por ${published.generatedBy.username}` : ''}
+        {' · '}{published.slides?.length ?? 0} {published.slides?.length === 1 ? 'slide' : 'slides'}
+      </p>
+      {playerOnline && (
+        <p className="text-xs text-ds-ink-muted">
+          {playerHasVersion ? 'A tela já exibe essa publicação.' : 'A tela ainda não confirmou essa publicação.'}
+        </p>
+      )}
     </div>
   );
 }
@@ -287,144 +193,142 @@ export function SignageAdmin() {
   const { toast } = useToast();
   const { user, firebaseUser, isAuthenticated, loading: authLoading, permissions, isDefaultAdmin } = useAuth();
   const { kiosks, loading: kiosksLoading, updateKiosk } = useKiosks();
+  const { groups: kioskGroups, groupOf } = useKioskGroups();
   const [slides, setSlides] = useState<SignageSlide[]>([]);
-  const [playerHealth, setPlayerHealth] = useState<Record<string, PlayerHeartbeat>>({});
+  const [screens, setScreens] = useState<SignageScreen[]>([]);
   const [loadingSlides, setLoadingSlides] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [updatingKioskId, setUpdatingKioskId] = useState<string | null>(null);
-  const [publishingKioskIds, setPublishingKioskIds] = useState<string[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [unitsDialogOpen, setUnitsDialogOpen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewingSlide, setPreviewingSlide] = useState<SignageSlide | null>(null);
-  const [editingSlide, setEditingSlide] = useState<SignageSlide | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [playerHealth, setPlayerHealth] = useState<Record<string, PlayerHeartbeat>>({});
+  const [publishedByScreen, setPublishedByScreen] = useState<Record<string, PublishedPlayerDocument | null>>({});
   const [selectedKioskId, setSelectedKioskId] = useState<string | null>(null);
-  const [form, setForm] = useState<SlideFormState>(defaultFormState);
-  const durationParts = getDurationParts(form.durationMs);
+  const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [slideDialog, setSlideDialog] = useState<{ open: boolean; slide: SignageSlide | null }>({ open: false, slide: null });
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  // `pick` presente: a biblioteca foi aberta pelo slide, para escolher uma mídia.
+  const [library, setLibrary] = useState<{ open: boolean; pick?: { kind: 'image' | 'video'; onPick: (item: SignageMediaItem) => void } }>({ open: false });
+  const [unitsDialogOpen, setUnitsDialogOpen] = useState(false);
+  const [previewingSlide, setPreviewingSlide] = useState<SignageSlide | null>(null);
+  const [removingSlideId, setRemovingSlideId] = useState<string | null>(null);
+  const [removeLoading, setRemoveLoading] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [publishingScreenIds, setPublishingScreenIds] = useState<string[]>([]);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [updatingKioskId, setUpdatingKioskId] = useState<string | null>(null);
+  const [unitsError, setUnitsError] = useState<string | null>(null);
+  const [screenForm, setScreenForm] = useState<{ mode: 'add' | 'rename'; name: string } | null>(null);
+  const [screenAction, setScreenAction] = useState<'saving' | 'deleting' | 'token' | null>(null);
+  const [screenError, setScreenError] = useState<string | null>(null);
+  const [confirmNewToken, setConfirmNewToken] = useState(false);
+  const [confirmDeleteScreen, setConfirmDeleteScreen] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
+  const newTokenButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteScreenButtonRef = useRef<HTMLButtonElement>(null);
 
   const canManage = (permissions.signage?.manage ?? false) || permissions.settings.manageUsers;
   const canView = canManage || permissions.signage?.view === true;
+
+  const request = useCallback<SignageApiRequest>(<T,>(input: string, init: Parameters<SignageApiRequest>[1] = {}) => {
+    const { timeoutMs = SIGNAGE_FETCH_TIMEOUT_MS, ...rest } = init;
+    return authenticatedApiRequest<T>(input, {
+      ...rest,
+      signal: AbortSignal.timeout(timeoutMs),
+      getIdToken: async () => firebaseUser?.getIdToken(),
+    });
+  }, [firebaseUser]);
+
   const allowedKiosks = useMemo(() => {
     if (!user) return [];
     return kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }));
   }, [isDefaultAdmin, kiosks, user]);
 
-  const kioskStatuses = useMemo(() => {
-    return allowedKiosks.map((kiosk) => {
-      const heartbeat = playerHealth[kiosk.id];
-      const age = heartbeat ? Date.now() - Date.parse(heartbeat.lastSeenAt) : Number.POSITIVE_INFINITY;
-      const health = !heartbeat
-        ? { label: 'Sem sinal', variant: 'outline' as const }
-        : Number.isNaN(age) || age > PLAYER_HEARTBEAT_STALE_MS
-          ? { label: 'Offline', variant: 'destructive' as const }
-          : {
-              label: heartbeat.status === 'realtime' ? 'Tempo real' : 'Cache local',
-              variant: heartbeat.status === 'realtime' ? 'default' as const : 'secondary' as const,
-            };
+  const enabledKiosks = useMemo(() => allowedKiosks.filter((kiosk) => kiosk.signageEnabled !== false), [allowedKiosks]);
 
-      return {
-        kiosk,
-        signageEnabled: kiosk.signageEnabled !== false,
-        slideCount: slides.filter((slide) => slide.kioskIds.includes(kiosk.id)).length,
-        activeSlideCount: slides.filter((slide) => slide.isActive && slide.kioskIds.includes(kiosk.id)).length,
-        health,
-        lastSeenAt: heartbeat?.lastSeenAt ?? null,
-      };
-    });
-  }, [allowedKiosks, playerHealth, slides]);
+  // Telas das unidades com signage; a padrão de cada unidade vem primeiro.
+  const enabledScreens = useMemo(() => {
+    const enabledIds = new Set(enabledKiosks.map((kiosk) => kiosk.id));
+    return screens
+      .filter((screen) => enabledIds.has(screen.kioskId))
+      .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name, 'pt-BR'));
+  }, [enabledKiosks, screens]);
+  const enabledScreenIdsKey = enabledScreens.map((screen) => screen.id).join(',');
 
-  const enabledKiosks = useMemo(
-    () => kioskStatuses.filter(({ signageEnabled }) => signageEnabled).map(({ kiosk }) => kiosk),
-    [kioskStatuses]
+  const screenStatuses = useMemo(() => enabledScreens.map((screen) => {
+    const screenSlides = getScreenSlides(slides, screen.id);
+    const activeSlides = screenSlides.filter((slide) => slide.isActive);
+    const published = publishedByScreen[screen.id];
+    const publication: SignagePublicationState | 'unknown' =
+      published === undefined || loadingSlides ? 'unknown' : getPublicationState(screen.id, slides, published);
+
+    return {
+      screen,
+      slideCount: screenSlides.length,
+      activeSlideCount: activeSlides.length,
+      cycleMs: activeSlides.reduce((total, slide) => total + slide.durationMs, 0),
+      health: getPlayerHealth(playerHealth[screen.id]),
+      lastSeenAt: playerHealth[screen.id]?.lastSeenAt ?? null,
+      publication,
+    };
+  }), [enabledScreens, loadingSlides, playerHealth, publishedByScreen, slides]);
+
+  const kioskStatuses = useMemo(() => allowedKiosks.map((kiosk) => {
+    const unitScreens = screenStatuses.filter(({ screen }) => screen.kioskId === kiosk.id);
+    return {
+      kiosk,
+      signageEnabled: kiosk.signageEnabled !== false,
+      screens: unitScreens,
+      onlineCount: unitScreens.filter(({ health }) => health.online).length,
+      slideCount: unitScreens.reduce((total, status) => total + status.slideCount, 0),
+      activeSlideCount: unitScreens.reduce((total, status) => total + status.activeSlideCount, 0),
+      pendingPublication: unitScreens.some(({ publication }) => publication === 'outdated' || publication === 'never'),
+    };
+  }), [allowedKiosks, screenStatuses]);
+
+  const enabledStatuses = kioskStatuses.filter(({ signageEnabled }) => signageEnabled);
+  // Grupos de unidades do DP, contando só as unidades com tela; o filtro some quando há um grupo só.
+  const groupChips = kioskGroups
+    .map((group) => ({ value: group.id, label: group.name, count: enabledKiosks.filter((kiosk) => groupOf(kiosk.id).id === group.id).length }))
+    .filter((chip) => chip.count > 0);
+  const activeGroupId = groupChips.length > 1 && groupChips.some((chip) => chip.value === selectedGroupId) ? selectedGroupId : null;
+  const visibleStatuses = activeGroupId ? enabledStatuses.filter(({ kiosk }) => groupOf(kiosk.id).id === activeGroupId) : enabledStatuses;
+  const visibleKioskIdsKey = visibleStatuses.map(({ kiosk }) => kiosk.id).join(',');
+  const visibleScreenStatuses = visibleStatuses.flatMap((status) => status.screens);
+  const onlineScreensCount = visibleScreenStatuses.filter(({ health }) => health.online).length;
+  const offlineScreensCount = visibleScreenStatuses.length - onlineScreensCount;
+  const pendingPublicationCount = visibleScreenStatuses.filter(({ publication }) => publication === 'outdated' || publication === 'never').length;
+  const totalActiveSlides = slides.filter((slide) => slide.isActive).length;
+
+  const selectedKiosk = enabledKiosks.find((kiosk) => kiosk.id === selectedKioskId) ?? null;
+  const unitScreenStatuses = screenStatuses.filter(({ screen }) => screen.kioskId === selectedKioskId);
+  const unitScreenIdsKey = unitScreenStatuses.map(({ screen }) => screen.id).join(',');
+  const selectedStatus = unitScreenStatuses.find(({ screen }) => screen.id === selectedScreenId) ?? null;
+  const selectedScreen = selectedStatus?.screen ?? null;
+
+  const screensPerKiosk = useMemo(() => {
+    const counts = new Map<string, number>();
+    enabledScreens.forEach((screen) => counts.set(screen.kioskId, (counts.get(screen.kioskId) ?? 0) + 1));
+    return counts;
+  }, [enabledScreens]);
+  const screenOptions: ScreenOption[] = useMemo(
+    () => enabledScreens
+      .map((screen) => ({ id: screen.id, label: getScreenLabel(screen, screensPerKiosk.get(screen.kioskId) ?? 1) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
+    [enabledScreens, screensPerKiosk]
   );
+  const nextOrderByScreen = useMemo(() => Object.fromEntries(enabledScreens.map((screen) => [
+    screen.id,
+    getScreenSlides(slides, screen.id).reduce((max, slide) => Math.max(max, getSlideOrder(slide, screen.id) + 1), 0),
+  ])), [enabledScreens, slides]);
 
-  useEffect(() => {
-    if (enabledKiosks.length === 0) {
-      setSelectedKioskId(null);
-      return;
-    }
-
-    if (selectedKioskId && !enabledKiosks.some((kiosk) => kiosk.id === selectedKioskId)) {
-      setSelectedKioskId(null);
-    }
-  }, [enabledKiosks, selectedKioskId]);
-
-  const selectedKiosk = useMemo(
-    () => allowedKiosks.find((kiosk) => kiosk.id === selectedKioskId) ?? null,
-    [allowedKiosks, selectedKioskId]
-  );
-
-  const selectedKioskStatus = useMemo(
-    () => kioskStatuses.find(({ kiosk }) => kiosk.id === selectedKioskId) ?? null,
-    [kioskStatuses, selectedKioskId]
-  );
-
-  const visibleSlides = useMemo(() => {
-    const filtered = selectedKioskId
-      ? slides.filter((slide) => slide.kioskIds.includes(selectedKioskId))
-      : slides;
-    return [...filtered].sort((a, b) => a.order - b.order);
-  }, [selectedKioskId, slides]);
+  const visibleSlides = useMemo(() => (selectedScreenId ? getScreenSlides(slides, selectedScreenId) : []), [selectedScreenId, slides]);
+  const activeVisibleSlides = visibleSlides.filter((slide) => slide.isActive);
+  const pausedVisibleSlides = visibleSlides.filter((slide) => !slide.isActive);
+  const copyTargets = screenOptions.filter((option) => option.id !== selectedScreenId);
+  const unitHasManyScreens = unitScreenStatuses.length > 1;
 
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  async function handleReorder(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = visibleSlides.findIndex((s) => s.id === active.id);
-    const newIndex = visibleSlides.findIndex((s) => s.id === over.id);
-    const reordered = arrayMove(visibleSlides, oldIndex, newIndex).map((slide, i) => ({ ...slide, order: i }));
-
-    setSlides((prev) => {
-      const map = new Map(reordered.map((s) => [s.id, s]));
-      return prev.map((s) => map.get(s.id) ?? s);
-    });
-
-    try {
-      await Promise.all(
-        reordered.map((slide) =>
-          authedFetch(`/api/signage/slides/${slide.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: slide.title,
-              type: slide.type,
-              durationMs: slide.durationMs,
-              order: slide.order,
-              kioskIds: slide.kioskIds,
-              isActive: slide.isActive,
-              assetPath: slide.assetPath,
-              assetKind: slide.assetKind,
-              text: slide.text,
-              background: slide.background,
-            }),
-          })
-        )
-      );
-    } catch {
-      toast({ title: 'Falha ao salvar ordem', variant: 'destructive' });
-      await loadSlides();
-    }
-  }
-
-  const onlineUnitsCount = useMemo(
-    () => kioskStatuses.filter(({ signageEnabled, health }) => signageEnabled && health.label !== 'Offline' && health.label !== 'Sem sinal').length,
-    [kioskStatuses]
-  );
-
-  const offlineUnitsCount = useMemo(
-    () => kioskStatuses.filter(({ signageEnabled, health }) => signageEnabled && (health.label === 'Offline' || health.label === 'Sem sinal')).length,
-    [kioskStatuses]
-  );
-
-  const totalActiveSlides = useMemo(
-    () => slides.filter((slide) => slide.isActive).length,
-    [slides]
   );
 
   useEffect(() => {
@@ -433,349 +337,277 @@ export function SignageAdmin() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  async function authedFetch(input: RequestInfo, init?: RequestInit) {
-    const token = await firebaseUser?.getIdToken();
-    if (!token) {
-      throw new Error('Sessão não encontrada.');
-    }
-    return fetchWithTimeout(input, {
-      ...init,
-      headers: {
-        ...(init?.headers ?? {}),
-        Authorization: `Bearer ${token}`,
-      },
-    }, SIGNAGE_FETCH_TIMEOUT_MS);
-  }
+  // Abre direto na primeira unidade visível; troca quando a selecionada sai do filtro ou perde o signage.
+  useEffect(() => {
+    const ids = visibleKioskIdsKey ? visibleKioskIdsKey.split(',') : [];
+    setSelectedKioskId((current) => (current && ids.includes(current) ? current : ids[0] ?? null));
+  }, [visibleKioskIdsKey]);
 
-  async function loadSlides() {
+  // Dentro da unidade, mantém a tela escolhida enquanto ela existir; senão vai para a primeira.
+  useEffect(() => {
+    const ids = unitScreenIdsKey ? unitScreenIdsKey.split(',') : [];
+    setSelectedScreenId((current) => (current && ids.includes(current) ? current : ids[0] ?? null));
+  }, [unitScreenIdsKey]);
+
+  useEffect(() => {
+    setRemovingSlideId(null);
+    setRemoveError(null);
+    setPublishError(null);
+    setScreenForm(null);
+    setScreenError(null);
+    setConfirmNewToken(false);
+    setConfirmDeleteScreen(false);
+    setUrlCopied(false);
+  }, [selectedScreenId]);
+
+  const loadSlides = useCallback(async () => {
     if (!firebaseUser || !canView) {
       setLoadingSlides(false);
       return;
     }
 
     try {
-      setLoadingSlides(true);
-      const response = await authedFetch('/api/signage/slides');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Falha ao carregar slides.');
-      setSlides(data.slides);
+      setLoadError(null);
+      const [slidesData, screensData] = await Promise.all([
+        request<{ slides: SignageSlide[] }>('/api/signage/slides', { fallbackError: 'Falha ao carregar os slides.' }),
+        request<{ screens: SignageScreen[] }>('/api/signage/screens', { fallbackError: 'Falha ao carregar as telas.' }),
+      ]);
+      setSlides(slidesData.slides);
+      setScreens(screensData.screens);
     } catch (error) {
-      toast({
-        title: 'Falha ao carregar signage',
-        description: error instanceof Error ? error.message : 'Erro inesperado.',
-        variant: 'destructive',
-      });
+      setLoadError(error instanceof Error ? error.message : 'Falha ao carregar os slides.');
     } finally {
       setLoadingSlides(false);
     }
-  }
+  }, [canView, firebaseUser, request]);
 
-  async function loadPlayerHealth() {
+  const loadPlayerHealth = useCallback(async () => {
     if (!firebaseUser || !canView) return;
 
     try {
-      const response = await authedFetch('/api/signage/heartbeat');
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Falha ao carregar heartbeat dos players.');
-      setPlayerHealth(
-        Object.fromEntries((data.heartbeats as PlayerHeartbeat[]).map((heartbeat) => [heartbeat.kioskId, heartbeat]))
-      );
+      const data = await request<{ heartbeats: PlayerHeartbeat[] }>('/api/signage/heartbeat');
+      setPlayerHealth(Object.fromEntries(data.heartbeats.map((heartbeat) => [heartbeat.screenId ?? heartbeat.kioskId, heartbeat])));
     } catch {
       // keep health as best-effort; do not block admin usage
     }
-  }
+  }, [canView, firebaseUser, request]);
+
+  // Uma leitura por tela, ao abrir e depois de publicar; não há polling.
+  const loadPublished = useCallback(async (screenIds: string[]) => {
+    const entries = await Promise.all(screenIds.map(async (screenId) => {
+      try {
+        const snapshot = await getDoc(doc(signageDb, 'publishedPlayers', screenId));
+        return [screenId, snapshot.exists() ? (snapshot.data() as PublishedPlayerDocument) : null] as const;
+      } catch {
+        return null;
+      }
+    }));
+    const loaded = entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    if (loaded.length) setPublishedByScreen((prev) => ({ ...prev, ...Object.fromEntries(loaded) }));
+  }, []);
 
   useEffect(() => {
     void loadSlides();
     void loadPlayerHealth();
-  }, [firebaseUser, canView]);
+  }, [loadPlayerHealth, loadSlides]);
 
   useEffect(() => {
     if (!firebaseUser || !canView) return;
     const interval = setInterval(() => {
       void loadPlayerHealth();
-    }, 30000);
+    }, HEALTH_REFRESH_MS);
 
     return () => clearInterval(interval);
-  }, [firebaseUser, canView]);
+  }, [canView, firebaseUser, loadPlayerHealth]);
 
-  function openCreateDialog() {
-    setEditingSlide(null);
-    setForm({
-      ...defaultFormState,
-      kioskIds: selectedKioskId
-        ? [selectedKioskId]
-        : enabledKiosks.slice(0, 1).map((kiosk) => kiosk.id),
-    });
-    setDialogOpen(true);
+  useEffect(() => {
+    if (!canView || !enabledScreenIdsKey) return;
+    void loadPublished(enabledScreenIdsKey.split(','));
+  }, [canView, enabledScreenIdsKey, loadPublished]);
+
+  async function handleRefresh() {
+    setLoadingSlides(true);
+    await Promise.all([loadSlides(), loadPlayerHealth(), loadPublished(enabledScreens.map((screen) => screen.id))]);
   }
 
-  function openEditDialog(slide: SignageSlide) {
-    setEditingSlide(slide);
-    setForm({
-      title: slide.title,
-      type: slide.type,
-      durationMs: slide.durationMs,
-      order: slide.order,
-      kioskIds: slide.kioskIds,
-      isActive: slide.isActive,
-      assetUrl: slide.assetUrl,
-      assetPath: slide.assetPath,
-      assetKind: slide.assetKind,
-      text: slide.text,
-      background: slide.background ?? '#0f172a',
-      scheduleEnabled: !!slide.schedule,
-      scheduleTimeEnabled: !!(slide.schedule?.startTime || slide.schedule?.endTime),
-      scheduleStartTime: slide.schedule?.startTime ?? '08:00',
-      scheduleEndTime: slide.schedule?.endTime ?? '18:00',
-      scheduleDateEnabled: !!(slide.schedule?.startDate || slide.schedule?.endDate),
-      scheduleStartDate: slide.schedule?.startDate ?? '',
-      scheduleEndDate: slide.schedule?.endDate ?? '',
-    });
-    setDialogOpen(true);
-  }
+  async function handleReorder(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!selectedScreenId || !over || active.id === over.id) return;
 
-  async function handleUpload(file: File) {
-    setUploadProgress(15);
-    const token = await firebaseUser?.getIdToken();
-    if (!token) throw new Error('Sessão não encontrada.');
+    const oldIndex = activeVisibleSlides.findIndex((slide) => slide.id === active.id);
+    const newIndex = activeVisibleSlides.findIndex((slide) => slide.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
 
-    const detectedVideoDurationMs =
-      file.type.startsWith('video/') ? await getVideoDurationMs(file).catch(() => null) : null;
+    // A posição é desta tela; as outras telas que exibem o slide não mudam.
+    const changed = [...arrayMove(activeVisibleSlides, oldIndex, newIndex), ...pausedVisibleSlides]
+      .map((slide, index) => ({ slide, index }))
+      .filter(({ slide, index }) => slide.orderByScreen?.[selectedScreenId] !== index)
+      .map(({ slide, index }) => ({ ...slide, orderByScreen: { ...slide.orderByScreen, [selectedScreenId]: index } }));
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const nextById = new Map(changed.map((slide) => [slide.id, slide]));
+    setSlides((prev) => prev.map((slide) => nextById.get(slide.id) ?? slide));
 
-    const response = await fetchWithTimeout('/api/signage/upload', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    }, SIGNAGE_FETCH_TIMEOUT_MS);
-    setUploadProgress(80);
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error ?? 'Falha no upload.');
-    }
-    setUploadProgress(100);
-    setTimeout(() => setUploadProgress(null), 400);
-    setForm(prev => ({
-      ...prev,
-      assetUrl: data.assetUrl,
-      assetPath: data.assetPath,
-      assetKind: data.assetKind,
-      durationMs: data.assetKind === 'video' && detectedVideoDurationMs ? detectedVideoDurationMs : prev.durationMs,
-    }));
-    toast({
-      title: 'Arquivo enviado',
-      description: data.assetKind === 'video' && detectedVideoDurationMs
-        ? 'A mídia foi enviada e a duração do slide foi ajustada automaticamente.'
-        : 'A mídia já está pronta para publicação.',
-    });
-  }
-
-  async function handleSave() {
     try {
-      setSaving(true);
-      const schedule = form.scheduleEnabled
-        ? Object.fromEntries(Object.entries({
-            startTime: form.scheduleTimeEnabled ? form.scheduleStartTime || undefined : undefined,
-            endTime: form.scheduleTimeEnabled ? form.scheduleEndTime || undefined : undefined,
-            startDate: form.scheduleDateEnabled ? form.scheduleStartDate || undefined : undefined,
-            endDate: form.scheduleDateEnabled ? form.scheduleEndDate || undefined : undefined,
-          }).filter(([, v]) => v !== undefined))
-        : undefined;
-
-      const payload = {
-        ...form,
-        durationMs: Number(form.durationMs),
-        order: Number(form.order),
-        schedule,
-      };
-
-      const response = await authedFetch(
-        editingSlide ? `/api/signage/slides/${editingSlide.id}` : '/api/signage/slides',
-        {
-          method: editingSlide ? 'PUT' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Falha ao salvar slide.');
-
-      toast({
-        title: editingSlide ? 'Slide atualizado' : 'Slide criado',
-        description: 'As alterações foram salvas no signage.',
-      });
-      setDialogOpen(false);
-      setEditingSlide(null);
-      setForm(defaultFormState);
-      await loadSlides();
+      await Promise.all(changed.map((slide) => request(`/api/signage/slides/${slide.id}`, {
+        method: 'PUT',
+        json: toSlidePayload(slide),
+        fallbackError: 'Falha ao salvar a ordem.',
+      })));
     } catch (error) {
       toast({
-        title: 'Não foi possível salvar',
+        title: 'A nova ordem não foi salva',
         description: error instanceof Error ? error.message : 'Erro inesperado.',
         variant: 'destructive',
       });
-    } finally {
-      setSaving(false);
+      await loadSlides();
     }
   }
 
   async function handleToggleActive(slide: SignageSlide, isActive: boolean) {
+    setSlides((prev) => prev.map((item) => item.id === slide.id ? { ...item, isActive } : item));
     try {
-      const response = await authedFetch(`/api/signage/slides/${slide.id}`, {
+      await request(`/api/signage/slides/${slide.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: slide.title,
-          type: slide.type,
-          durationMs: slide.durationMs,
-          order: slide.order,
-          kioskIds: slide.kioskIds,
-          isActive,
-          assetPath: slide.assetPath,
-          assetKind: slide.assetKind,
-          text: slide.text,
-          background: slide.background,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Falha ao atualizar status do slide.');
-      setSlides(prev => prev.map(item => item.id === slide.id ? { ...item, isActive } : item));
-      toast({
-        title: isActive ? 'Slide ativado' : 'Slide pausado',
-        description: 'O status do slide foi atualizado.',
+        json: toSlidePayload(slide, { isActive }),
+        fallbackError: 'Falha ao atualizar o slide.',
       });
     } catch (error) {
+      setSlides((prev) => prev.map((item) => item.id === slide.id ? { ...item, isActive: slide.isActive } : item));
       toast({
-        title: 'Falha ao atualizar status',
+        title: isActive ? 'O slide não foi ativado' : 'O slide não foi pausado',
         description: error instanceof Error ? error.message : 'Erro inesperado.',
         variant: 'destructive',
       });
     }
   }
 
-  async function handleDelete(slide: SignageSlide) {
-    if (!window.confirm(`Excluir o slide "${slide.title}"?`)) return;
+  // Slide exibido em mais de uma tela só sai desta; o último vínculo exclui o slide e a mídia.
+  async function handleRemove(slide: SignageSlide) {
+    if (!selectedScreenId) return;
+    const remainingScreenIds = slide.screenIds.filter((screenId) => screenId !== selectedScreenId);
+
     try {
-      const response = await authedFetch(`/api/signage/slides/${slide.id}`, { method: 'DELETE' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Falha ao excluir slide.');
-      toast({ title: 'Slide removido', description: 'O slide foi excluído do signage.' });
+      setRemoveLoading(true);
+      setRemoveError(null);
+      if (remainingScreenIds.length) {
+        await request(`/api/signage/slides/${slide.id}`, {
+          method: 'PUT',
+          json: toSlidePayload(slide, { screenIds: remainingScreenIds }),
+          fallbackError: 'Falha ao remover o slide desta tela.',
+        });
+      } else {
+        await request(`/api/signage/slides/${slide.id}`, { method: 'DELETE', fallbackError: 'Falha ao excluir o slide.' });
+      }
+      setRemovingSlideId(null);
       await loadSlides();
     } catch (error) {
-      toast({
-        title: 'Falha ao excluir',
-        description: error instanceof Error ? error.message : 'Erro inesperado.',
-        variant: 'destructive',
-      });
-    }
-  }
-
-  async function publishForKiosks(kioskIds: string[]) {
-    try {
-      setPublishingKioskIds(kioskIds);
-      const response = await authedFetch('/api/signage/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kioskIds }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Falha ao publicar signage.');
-      toast({
-        title: 'Publicação concluída',
-        description: `Quiosques publicados: ${data.publishedKioskIds.join(', ')}.`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Falha ao publicar',
-        description: error instanceof Error ? error.message : 'Erro inesperado.',
-        variant: 'destructive',
-      });
+      setRemoveError(error instanceof Error ? error.message : 'Falha ao remover o slide.');
     } finally {
-      setPublishingKioskIds([]);
+      setRemoveLoading(false);
     }
   }
 
-  async function handleToggleSignage(kioskId: string, checked: boolean) {
-    const kiosk = kiosks.find((item) => item.id === kioskId);
-    if (!kiosk) return;
-
+  async function publishScreens(screenIds: string[]) {
     try {
-      setUpdatingKioskId(kioskId);
-      await updateKiosk({
-        ...kiosk,
-        signageEnabled: checked,
+      setPublishError(null);
+      setPublishingScreenIds(screenIds);
+      const data = await request<{ publishedScreenIds: string[] }>('/api/signage/publish', {
+        method: 'POST',
+        json: { screenIds },
+        fallbackError: 'Falha ao publicar.',
       });
-      toast({
-        title: checked ? 'Signage ativado' : 'Signage desativado',
-        description: `${kiosk.name} foi ${checked ? 'incluido' : 'removido'} do painel de TVs.`,
-      });
+      await loadPublished(data.publishedScreenIds);
     } catch (error) {
-      toast({
-        title: 'Falha ao atualizar unidade',
-        description: error instanceof Error ? error.message : 'Erro inesperado.',
-        variant: 'destructive',
-      });
+      setPublishError(error instanceof Error ? error.message : 'Falha ao publicar.');
+    } finally {
+      setPublishingScreenIds([]);
+    }
+  }
+
+  async function handleToggleSignage(kiosk: Kiosk, checked: boolean) {
+    try {
+      setUnitsError(null);
+      setUpdatingKioskId(kiosk.id);
+      await updateKiosk({ ...kiosk, signageEnabled: checked });
+    } catch (error) {
+      setUnitsError(error instanceof Error ? error.message : `Não foi possível atualizar ${kiosk.name}.`);
     } finally {
       setUpdatingKioskId(null);
     }
   }
 
-  function generateDeviceToken(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  }
+  async function handleSaveScreen() {
+    if (!screenForm || !selectedKiosk) return;
+    const name = screenForm.name.trim();
+    if (!name) {
+      setScreenError('Dê um nome para a tela, como "Vitrine" ou "Balcão".');
+      return;
+    }
 
-  async function handleSetToken(kioskId: string) {
-    const kiosk = kiosks.find((k) => k.id === kioskId);
-    if (!kiosk) return;
-    const token = generateDeviceToken();
     try {
-      await updateKiosk({ ...kiosk, deviceToken: token });
-      toast({ title: 'Código gerado', description: `Código de acesso definido para ${kiosk.name}.` });
-    } catch {
-      toast({ title: 'Falha ao salvar código', variant: 'destructive' });
+      setScreenError(null);
+      setScreenAction('saving');
+      if (screenForm.mode === 'add') {
+        const data = await request<{ screen: SignageScreen }>('/api/signage/screens', {
+          method: 'POST',
+          json: { kioskId: selectedKiosk.id, name },
+          fallbackError: 'Falha ao adicionar a tela.',
+        });
+        setScreens((prev) => [...prev, data.screen]);
+        setSelectedScreenId(data.screen.id);
+      } else if (selectedScreen) {
+        const data = await request<{ screen: SignageScreen }>(`/api/signage/screens/${selectedScreen.id}`, {
+          method: 'PATCH',
+          json: { name },
+          fallbackError: 'Falha ao renomear a tela.',
+        });
+        setScreens((prev) => prev.map((screen) => screen.id === data.screen.id ? data.screen : screen));
+      }
+      setScreenForm(null);
+    } catch (error) {
+      setScreenError(error instanceof Error ? error.message : 'Falha ao salvar a tela.');
+    } finally {
+      setScreenAction(null);
     }
   }
 
-  async function handleClearToken(kioskId: string) {
-    const kiosk = kiosks.find((k) => k.id === kioskId);
-    if (!kiosk) return;
+  async function handleScreenToken(screen: SignageScreen, token: 'rotate' | 'clear') {
     try {
-      await updateKiosk({ ...kiosk, deviceToken: undefined });
-      toast({ title: 'Código removido', description: `${kiosk.name} voltou a ser de acesso livre.` });
-    } catch {
-      toast({ title: 'Falha ao remover código', variant: 'destructive' });
-    }
-  }
-
-  const kioskMap = useMemo(() => new Map(kiosks.map(kiosk => [kiosk.id, kiosk])), [kiosks]);
-  const kioskSlideCount = useMemo(() => {
-    const counts = new Map<string, number>();
-    slides.forEach((slide) => {
-      slide.kioskIds.forEach((kioskId) => {
-        counts.set(kioskId, (counts.get(kioskId) ?? 0) + 1);
+      setScreenError(null);
+      setScreenAction('token');
+      const data = await request<{ screen: SignageScreen }>(`/api/signage/screens/${screen.id}`, {
+        method: 'PATCH',
+        json: { token },
+        fallbackError: 'Falha ao salvar o código de acesso.',
       });
-    });
-    return counts;
-  }, [slides]);
+      setScreens((prev) => prev.map((item) => item.id === data.screen.id ? data.screen : item));
+      setConfirmNewToken(false);
+    } catch (error) {
+      setScreenError(error instanceof Error ? error.message : 'Falha ao salvar o código de acesso.');
+    } finally {
+      setScreenAction(null);
+    }
+  }
 
-  const activeVisibleSlides = useMemo(() => visibleSlides.filter(s => s.isActive), [visibleSlides]);
-  const inactiveVisibleSlides = useMemo(() => visibleSlides.filter(s => !s.isActive), [visibleSlides]);
+  async function handleDeleteScreen(screen: SignageScreen) {
+    try {
+      setScreenError(null);
+      setScreenAction('deleting');
+      await request(`/api/signage/screens/${screen.id}`, { method: 'DELETE', fallbackError: 'Falha ao excluir a tela.' });
+      setConfirmDeleteScreen(false);
+      await loadSlides();
+    } catch (error) {
+      setScreenError(error instanceof Error ? error.message : 'Falha ao excluir a tela.');
+    } finally {
+      setScreenAction(null);
+    }
+  }
 
   if (authLoading || kiosksLoading) {
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-96 w-full" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-36 w-full rounded-ds-panel" />
+        <Skeleton className="h-96 w-full rounded-ds-card" />
       </div>
     );
   }
@@ -784,734 +616,575 @@ export function SignageAdmin() {
 
   if (!canView) {
     return (
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center justify-center p-6">
-        <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
-          <AlertTitle>Acesso bloqueado</AlertTitle>
-          <AlertDescription>
-            Seu perfil não tem permissão para acessar o Coala Signage.
-          </AlertDescription>
-        </Alert>
+      <div className="rounded-ds-card border border-ds-border bg-ds-surface p-8 text-center font-ds">
+        <p className="text-[15px] font-extrabold text-ds-ink">Acesso bloqueado</p>
+        <p className="mt-1 text-[13px] text-ds-ink-muted">Seu perfil não tem permissão para acessar o Coala Signage.</p>
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col gap-6">
+  const tvPath = selectedScreen ? `/tv/${selectedScreen.id}${selectedScreen.deviceToken ? `?token=${selectedScreen.deviceToken}` : ''}` : '';
+  const tvUrl = typeof window !== 'undefined' ? `${window.location.origin}${tvPath}` : tvPath;
+  // Pasta com o `sssp_config.xml` e o `.wgt` gerados por `scripts/build-signage-tizen-app.mjs`.
+  const signageAppUrl = typeof window !== 'undefined' ? `${window.location.origin}/app` : '/app';
+  const publishingAll = publishingScreenIds.length > 1;
+  const removingSlide = visibleSlides.find((slide) => slide.id === removingSlideId) ?? null;
+  const publishIsPrimary = selectedStatus?.publication === 'outdated' || selectedStatus?.publication === 'never';
+  const selectedScreenLabel = selectedScreen && selectedKiosk
+    ? (unitHasManyScreens ? `${selectedKiosk.name} · ${selectedScreen.name}` : selectedKiosk.name)
+    : '';
+  const exclusiveSlideCount = visibleSlides.filter((slide) => slide.screenIds.length === 1).length;
 
-        {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              <MonitorPlay className="h-3.5 w-3.5" />
-              Coala Signage
-            </div>
-            <p className="text-xl font-medium text-foreground">Painel de unidades</p>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">Gerencie a programação e monitore o status das TVs.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => router.back()}>
-              <ArrowLeft className="h-4 w-4" />
-              Voltar
+  const rowProps = (slide: SignageSlide, position?: number) => ({
+    slide,
+    position,
+    otherScreensCount: slide.screenIds.filter((screenId) => screenId !== selectedScreenId).length,
+    canManage,
+    onEdit: (target: SignageSlide) => setSlideDialog({ open: true, slide: target }),
+    onAskRemove: (target: SignageSlide) => { setRemoveError(null); setRemovingSlideId(target.id); },
+    onToggleActive: (target: SignageSlide, checked: boolean) => void handleToggleActive(target, checked),
+    onPreview: setPreviewingSlide,
+  });
+
+  const removeConfirm = removingSlide && selectedScreen ? (
+    <div className="space-y-1.5 px-[18px] pb-3">
+      <InlineConfirm
+        message={removingSlide.screenIds.length > 1
+          ? `Remover "${removingSlide.title}" de ${selectedScreenLabel}? Ele continua nas outras telas.`
+          : `Excluir "${removingSlide.title}"? O slide e a mídia são apagados e isso não pode ser desfeito.`}
+        confirmLabel={removingSlide.screenIds.length > 1 ? 'Remover' : 'Excluir'}
+        loadingLabel={removingSlide.screenIds.length > 1 ? 'Removendo…' : 'Excluindo…'}
+        loading={removeLoading}
+        onConfirm={() => void handleRemove(removingSlide)}
+        onCancel={() => setRemovingSlideId(null)}
+      />
+      {removeError && <p role="alert" className="text-xs font-semibold text-ds-danger">{removeError}</p>}
+    </div>
+  ) : null;
+
+  return (
+    <div className="flex flex-col gap-6 font-ds">
+      <PageHero
+        kicker="Marketing"
+        title="Coala Signage"
+        subtitle="Monte a playlist de cada tela e publique quando estiver pronta."
+        actions={
+          <>
+            <Button type="button" variant="on-dark-secondary" size="sm" onClick={() => void handleRefresh()}>
+              <RefreshCw aria-hidden="true" className="h-4 w-4" />
+              Atualizar dados
+            </Button>
+            <Button type="button" variant="on-dark-secondary" size="sm" onClick={() => setLibrary({ open: true })}>
+              Biblioteca
             </Button>
             {canManage && (
-              <Button variant="outline" size="sm" onClick={() => setUnitsDialogOpen(true)}>
-                <Building2 className="h-4 w-4" />
+              <Button type="button" variant="on-dark-secondary" size="sm" onClick={() => { setUnitsError(null); setUnitsDialogOpen(true); }}>
                 Gerenciar unidades
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => void loadSlides()}>
-              <RefreshCw className="h-4 w-4" />
-              Atualizar
-            </Button>
-            {process.env.NODE_ENV === 'development' && enabledKiosks.length > 1 && (
+            {canManage && visibleScreenStatuses.length > 1 && (
               <Button
+                type="button"
+                variant="on-dark-secondary"
                 size="sm"
-                variant="outline"
-                className="border-amber-300 text-amber-700 hover:bg-amber-50"
-                disabled={!canManage || publishingKioskIds.length > 0}
-                onClick={() => void publishForKiosks(enabledKiosks.map(kiosk => kiosk.id))}
+                loading={publishingAll}
+                loadingLabel="Publicando…"
+                disabled={publishingScreenIds.length > 0}
+                onClick={() => void publishScreens(visibleScreenStatuses.map(({ screen }) => screen.id))}
               >
-                {publishingKioskIds.length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Publicar todas [DEV]
+                {activeGroupId ? 'Publicar o grupo' : 'Publicar todas'}
+              </Button>
+            )}
+          </>
+        }
+        chips={
+          <>
+            <HeroChip value={visibleScreenStatuses.length} label={visibleScreenStatuses.length === 1 ? 'tela' : 'telas'} />
+            <HeroChip value={onlineScreensCount} label="no ar" tone="info" />
+            <HeroChip value={offlineScreensCount} label="sem resposta" tone="danger" />
+            <HeroChip value={pendingPublicationCount} label="aguardando publicação" tone="warning" />
+            <HeroChip value={totalActiveSlides} label="slides ativos" />
+          </>
+        }
+      >
+        {groupChips.length > 1 && (
+          <div>
+            <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Grupo</p>
+            <FilterChips value={activeGroupId} onChange={setSelectedGroupId} allLabel="Todos os grupos" allCount={enabledKiosks.length} chips={groupChips} />
+          </div>
+        )}
+      </PageHero>
+
+      {loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-ds-btn-lg border border-ds-confirm-border bg-ds-confirm-bg px-4 py-3">
+          <p className="text-[13px] font-semibold text-ds-confirm-ink">{loadError}</p>
+          <Button type="button" variant="ds-secondary" size="xs" onClick={() => void handleRefresh()}>Tentar de novo</Button>
+        </div>
+      )}
+
+      {enabledKiosks.length === 0 ? (
+        <div className="rounded-ds-card border border-ds-border bg-ds-surface p-8 text-center">
+          <p className="text-[15px] font-extrabold text-ds-ink">Nenhuma unidade com tela</p>
+          <p className="mt-1 text-[13px] text-ds-ink-muted">Ative o signage nas unidades que têm TV para começar a montar as playlists.</p>
+          {canManage && (
+            <Button type="button" variant="primary-page" size="md" className="mt-4" onClick={() => setUnitsDialogOpen(true)}>
+              Ativar unidades
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div role="group" aria-label="Unidades com tela" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {visibleStatuses.map(({ kiosk, screens: unitScreens, onlineCount, slideCount, activeSlideCount, pendingPublication }) => {
+            const isSelected = kiosk.id === selectedKioskId;
+            const single = unitScreens.length === 1 ? unitScreens[0] : null;
+            const unitVariant = single
+              ? single.health.variant
+              : onlineCount === unitScreens.length ? 'ok' : onlineCount > 0 ? 'warn' : unitScreens.some(({ lastSeenAt }) => lastSeenAt) ? 'danger' : 'neutral';
+            const unitLabel = single ? single.health.label : `${onlineCount} de ${unitScreens.length} no ar`;
+            return (
+              <button
+                key={kiosk.id}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => setSelectedKioskId(kiosk.id)}
+                className={cn(
+                  'rounded-ds-card border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                  isSelected ? 'border-ds-accent-ink bg-ds-accent-row shadow-[inset_3px_0_0_var(--ds-accent-ink)]' : 'border-ds-border bg-ds-surface hover:bg-ds-muted',
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 truncate text-[15px] font-extrabold text-ds-ink">{kiosk.name}</p>
+                  <StatusPill variant={unitVariant} className="gap-1.5"><LiveDot variant={unitVariant} />{unitLabel}</StatusPill>
+                </div>
+                <p className="mt-2 text-[13px] font-semibold text-ds-ink-2">
+                  {single
+                    ? (slideCount === 0
+                      ? 'Sem slides'
+                      : `${activeSlideCount} de ${slideCount} ${slideCount === 1 ? 'slide ativo' : 'slides ativos'} · ciclo de ${formatSignageDuration(single.cycleMs)}`)
+                    : `${unitScreens.length} telas · ${activeSlideCount} ${activeSlideCount === 1 ? 'slide ativo' : 'slides ativos'}`}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {pendingPublication && <StatusPill variant="warn">Publicação pendente</StatusPill>}
+                  {single && (
+                    <span className="text-xs text-ds-ink-muted">
+                      {single.lastSeenAt ? `Último sinal ${formatRelativeTime(single.lastSeenAt)}` : 'A tela ainda não se conectou'}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedKiosk && (unitHasManyScreens || canManage) && unitScreenStatuses.length > 0 && (
+        <section aria-label={`Telas de ${selectedKiosk.name}`} className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="mr-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Telas de {selectedKiosk.name}</h2>
+            {unitScreenStatuses.map(({ screen, health }) => {
+              const active = screen.id === selectedScreenId;
+              return (
+                <button
+                  key={screen.id}
+                  type="button"
+                  aria-pressed={active}
+                  title={health.label}
+                  onClick={() => setSelectedScreenId(screen.id)}
+                  className={cn(
+                    'inline-flex h-9 items-center gap-2 rounded-ds-pill border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                    active ? 'border-ds-accent-ink bg-ds-accent-soft text-ds-accent-ink' : 'border-ds-border-input bg-ds-surface text-ds-ink-2 hover:bg-ds-muted',
+                  )}
+                >
+                  <LiveDot variant={health.variant} />
+                  {screen.name}
+                  <span className="sr-only">, {health.label}</span>
+                </button>
+              );
+            })}
+            {canManage && screenForm?.mode !== 'add' && (
+              <Button type="button" variant="ds-link" size="xs" onClick={() => { setScreenError(null); setScreenForm({ mode: 'add', name: '' }); }}>
+                <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+                Adicionar tela
               </Button>
             )}
           </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-xl bg-muted p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Com signage</p>
-            <p className="mt-1.5 text-[26px] font-medium tabular-nums">{enabledKiosks.length}</p>
-          </div>
-          <div className="rounded-xl bg-muted p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Online</p>
-            <p className="mt-1.5 text-[26px] font-medium tabular-nums text-success">{onlineUnitsCount}</p>
-          </div>
-          <div className="rounded-xl bg-muted p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sem resposta</p>
-            <p className="mt-1.5 text-[26px] font-medium tabular-nums text-destructive">{offlineUnitsCount}</p>
-          </div>
-          <div className="rounded-xl bg-muted p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Slides ativos</p>
-            <p className="mt-1.5 text-[26px] font-medium tabular-nums">{totalActiveSlides}</p>
-          </div>
-        </div>
-
-        {/* Units */}
-        <div>
-          <p className="mb-3 text-[13px] font-medium text-foreground">Unidades</p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {kioskStatuses
-              .filter(({ signageEnabled }) => signageEnabled)
-              .map(({ kiosk, slideCount, activeSlideCount, health, lastSeenAt }) => {
-                const isSelected = kiosk.id === selectedKioskId;
-                const badgeClass = health.variant === 'default'
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : health.variant === 'destructive'
-                    ? 'bg-red-50 text-red-800 border-red-200'
-                    : 'bg-amber-50 text-amber-800 border-amber-200';
-                const dotClass = health.variant === 'default' ? 'bg-emerald-500' : health.variant === 'destructive' ? 'bg-red-500' : 'bg-amber-500';
-
-                return (
-                  <div
-                    key={kiosk.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedKioskId(kiosk.id)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKioskId(kiosk.id); } }}
-                    className={`cursor-pointer rounded-xl border p-4 text-left transition-all focus:outline-none focus:ring-2 focus:ring-ring ${
-                      isSelected ? 'border-[1.5px] border-primary bg-primary/5' : 'border-border bg-card hover:border-border/80'
-                    }`}
-                  >
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[13px] font-medium text-foreground">{kiosk.name}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">{kiosk.id}</p>
-                      </div>
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
-                        {health.label}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg bg-muted p-2.5">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Slides</p>
-                        <p className="mt-0.5 text-lg font-medium">{slideCount}</p>
-                      </div>
-                      <div className="rounded-lg bg-muted p-2.5">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ativos</p>
-                        <p className="mt-0.5 text-lg font-medium">{activeSlideCount}</p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-[11px] text-muted-foreground">
-                      {lastSeenAt ? `Último sinal ${formatRelativeTime(lastSeenAt)}` : 'A TV desta unidade ainda não enviou status.'}
-                    </p>
-                  </div>
-                );
-              })}
-
-            {enabledKiosks.length === 0 && (
-              <Alert className="md:col-span-2 xl:col-span-3">
-                <MonitorPlay className="h-4 w-4" />
-                <AlertTitle>Nenhuma unidade ativa</AlertTitle>
-                <AlertDescription>Abra "Gerenciar unidades" para ativar as unidades que possuem tela.</AlertDescription>
-              </Alert>
-            )}
-          </div>
-        </div>
-
-        {/* Slides + sidebar */}
-        {selectedKiosk && selectedKioskStatus ? (
-          <div className="grid gap-4 lg:grid-cols-[1fr_200px]">
-
-            {/* Slides panel */}
-            <div className="overflow-hidden rounded-xl border bg-card">
-              <div className="flex items-center justify-between gap-4 border-b px-4 py-3.5">
-                <div>
-                  <p className="text-[14px] font-medium text-foreground">Slides — {selectedKiosk.name}</p>
-                  <p className="mt-0.5 text-[12px] text-muted-foreground">Reordene arrastando. A ordem é salva automaticamente.</p>
-                </div>
-                {canManage && (
-                  <Button size="sm" onClick={openCreateDialog}>
-                    <Plus className="h-4 w-4" />
-                    Novo slide
-                  </Button>
-                )}
+          {screenForm?.mode === 'add' && (
+            <form className="mt-3 flex flex-wrap items-start gap-2" onSubmit={(event) => { event.preventDefault(); void handleSaveScreen(); }}>
+              <div className="min-w-[220px] flex-1 sm:max-w-xs">
+                <input
+                  autoFocus
+                  aria-label="Nome da nova tela"
+                  placeholder="Nome da tela, como Vitrine ou Balcão"
+                  maxLength={60}
+                  value={screenForm.name}
+                  aria-invalid={Boolean(screenError)}
+                  onChange={(event) => { setScreenError(null); setScreenForm({ mode: 'add', name: event.target.value }); }}
+                  className={fieldInputClass}
+                />
+                {screenError && <p role="alert" className="mt-1.5 text-xs font-semibold text-ds-danger">{screenError}</p>}
               </div>
+              <Button type="submit" variant="primary-modal" size="sm" loading={screenAction === 'saving'}>Adicionar tela</Button>
+              <Button type="button" variant="ds-ghost" size="sm" onClick={() => { setScreenForm(null); setScreenError(null); }}>Cancelar</Button>
+            </form>
+          )}
+        </section>
+      )}
 
-              {loadingSlides ? (
-                <div className="p-4">
-                  <Skeleton className="h-56 w-full" />
+      {selectedKiosk && selectedScreen && selectedStatus && (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <section aria-label={`Playlist de ${selectedScreenLabel}`} className="rounded-ds-card border border-ds-border bg-ds-surface">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ds-divider px-[18px] py-4">
+              <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h2 className="truncate text-[17px] font-extrabold text-ds-ink">Playlist de {selectedScreenLabel}</h2>
+                  <StatusPill variant={selectedStatus.health.variant} className="gap-1.5">
+                    <LiveDot variant={selectedStatus.health.variant} />
+                    {selectedStatus.health.label}
+                  </StatusPill>
                 </div>
-              ) : visibleSlides.length === 0 ? (
-                <div className="p-4">
-                  <Alert>
-                    <MonitorPlay className="h-4 w-4" />
-                    <AlertTitle>Nenhum slide nesta unidade</AlertTitle>
-                    <AlertDescription>Crie o primeiro slide desta unidade para começar a programar o conteúdo da TV.</AlertDescription>
-                  </Alert>
-                </div>
-              ) : (
-                <>
-                  {/* Header row */}
-                  <div className="grid grid-cols-[20px_minmax(0,1fr)_72px_72px_52px_96px] items-center gap-3 border-b px-4 py-2">
-                    <span />
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Slide</span>
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tipo</span>
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Duração</span>
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</span>
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Ações</span>
-                  </div>
-
-                  {/* Active slides with drag & drop */}
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleReorder(e)}>
-                    <SortableContext items={activeVisibleSlides.map(s => s.id)} strategy={verticalListSortingStrategy}>
-                      {activeVisibleSlides.map((slide) => (
-                        <SortableSlideRow
-                          key={slide.id}
-                          slide={slide}
-                          position={visibleSlides.indexOf(slide)}
-                          kioskMap={kioskMap}
-                          canManage={canManage}
-                          onEdit={openEditDialog}
-                          onDelete={(s) => void handleDelete(s)}
-                          onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
-                          onPreview={setPreviewingSlide}
-                        />
-                      ))}
-                    </SortableContext>
-                  </DndContext>
-
-                  {/* Inactive slides */}
-                  {inactiveVisibleSlides.length > 0 && (
-                    <>
-                      <div className="border-t border-dashed px-4 py-2">
-                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pausados</span>
-                      </div>
-                      {inactiveVisibleSlides.map((slide) => (
-                        <StaticSlideRow
-                          key={slide.id}
-                          slide={slide}
-                          position={visibleSlides.indexOf(slide)}
-                          kioskMap={kioskMap}
-                          canManage={canManage}
-                          onEdit={openEditDialog}
-                          onDelete={(s) => void handleDelete(s)}
-                          onToggleActive={(s, checked) => void handleToggleActive(s, checked)}
-                          onPreview={setPreviewingSlide}
-                        />
-                      ))}
-                    </>
-                  )}
-                </>
+                <p className="mt-0.5 text-xs text-ds-ink-muted">
+                  {activeVisibleSlides.length > 0
+                    ? `${activeVisibleSlides.length} ${activeVisibleSlides.length === 1 ? 'slide' : 'slides'} em sequência · a tela repete a cada ${formatSignageDuration(selectedStatus.cycleMs)}`
+                    : 'Nenhum slide ativo nesta tela'}
+                </p>
+              </div>
+              {canManage && (
+                <Button type="button" variant="primary-page" size="sm" onClick={() => setSlideDialog({ open: true, slide: null })}>
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  Adicionar slide
+                </Button>
               )}
             </div>
 
-            {/* Right sidebar */}
-            <div className="flex flex-col gap-3">
-              {/* Publish */}
-              <div className="rounded-xl border bg-card p-4">
-                <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Publicação</p>
-                <p className="text-[14px] font-medium text-foreground">{selectedKiosk.name}</p>
-                <p className="mt-0.5 text-[12px] text-muted-foreground">{kioskSlideCount.get(selectedKiosk.id) ?? 0} slide(s) vinculado(s)</p>
-                <div className="my-3 flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full ${selectedKioskStatus.health.variant === 'default' ? 'bg-emerald-500' : selectedKioskStatus.health.variant === 'destructive' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                  <span className="text-[12px] text-muted-foreground">{selectedKioskStatus.health.label}</span>
-                </div>
+            {loadingSlides ? (
+              <div className="space-y-2 p-[18px]">
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+                <Skeleton className="h-14 w-full" />
+              </div>
+            ) : visibleSlides.length === 0 ? (
+              <div className="px-[18px] py-10 text-center">
+                <p className="text-[14px] font-bold text-ds-ink">Esta tela ainda não tem slides</p>
+                <p className="mx-auto mt-1 max-w-md text-[13px] text-ds-ink-muted">
+                  {canManage
+                    ? 'Adicione o primeiro slide ou abra uma tela que já tem conteúdo e use "Copiar playlist" para trazer os slides para cá.'
+                    : 'Quando alguém montar a playlist desta tela, ela aparece aqui.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleReorder(event)}>
+                  <SortableContext items={activeVisibleSlides.map((slide) => slide.id)} strategy={verticalListSortingStrategy}>
+                    {activeVisibleSlides.map((slide, index) => (
+                      <div key={slide.id} className="border-b border-ds-divider last:border-b-0">
+                        <SortableSlideRow {...rowProps(slide, index + 1)} />
+                        {removingSlideId === slide.id && removeConfirm}
+                      </div>
+                    ))}
+                  </SortableContext>
+                </DndContext>
+
+                {pausedVisibleSlides.length > 0 && (
+                  <>
+                    <p className="border-y border-dashed border-ds-border bg-ds-muted px-[18px] py-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">
+                      Pausados · fora da tela
+                    </p>
+                    {pausedVisibleSlides.map((slide) => (
+                      <div key={slide.id} className="border-b border-ds-divider last:border-b-0">
+                        <div className={cn(SLIDE_ROW_GRID, 'opacity-70')}>
+                          <SlideRowContent {...rowProps(slide)} />
+                        </div>
+                        {removingSlideId === slide.id && removeConfirm}
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {canManage && activeVisibleSlides.length > 1 && (
+                  <p className="border-t border-ds-divider px-[18px] py-2.5 text-xs text-ds-ink-muted">
+                    Arraste pela alça para mudar a ordem. A sequência é salva na hora e vale só para esta tela.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+
+          <aside className="flex flex-col gap-4">
+            <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4">
+              <h3 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Publicação</h3>
+              <div className="mt-3">
+                <PublicationSummary state={selectedStatus.publication} published={publishedByScreen[selectedScreen.id]} heartbeat={playerHealth[selectedScreen.id]} />
+              </div>
+              {canManage && (
                 <Button
-                  className="w-full"
-                  size="sm"
-                  onClick={() => void publishForKiosks([selectedKiosk.id])}
-                  disabled={!canManage || publishingKioskIds.includes(selectedKiosk.id)}
+                  type="button"
+                  variant={publishIsPrimary ? 'primary-page' : 'ds-secondary'}
+                  size="md"
+                  className="mt-4 w-full"
+                  loading={publishingScreenIds.includes(selectedScreen.id)}
+                  loadingLabel="Publicando…"
+                  disabled={publishingScreenIds.length > 0}
+                  onClick={() => void publishScreens([selectedScreen.id])}
                 >
-                  {publishingKioskIds.includes(selectedKiosk.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Publicar unidade
+                  {publishIsPrimary ? 'Publicar na tela' : 'Publicar de novo'}
+                </Button>
+              )}
+              {publishError && <p role="alert" className="mt-2 text-xs font-semibold text-ds-danger">{publishError}</p>}
+            </section>
+
+            {canManage && copyTargets.length > 0 && (
+              <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4">
+                <h3 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Replicar</h3>
+                <p className="mt-3 text-[13px] text-ds-ink-muted">Leve os slides de uma tela para outras sem cadastrar tudo de novo. Você escolhe a origem e os destinos.</p>
+                <Button
+                  type="button"
+                  variant="ds-secondary"
+                  size="md"
+                  className="mt-3 w-full"
+                  onClick={() => setCopyDialogOpen(true)}
+                >
+                  <Copy aria-hidden="true" className="h-4 w-4" />
+                  Copiar playlist
+                </Button>
+              </section>
+            )}
+
+            <section className="rounded-ds-card border border-ds-border bg-ds-surface p-4">
+              <h3 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Conectar a tela</h3>
+
+              <p className="mt-3 text-xs font-bold text-ds-ink-2">Nome da tela</p>
+              {screenForm?.mode === 'rename' ? (
+                <form className="mt-1.5 space-y-2" onSubmit={(event) => { event.preventDefault(); void handleSaveScreen(); }}>
+                  <input
+                    autoFocus
+                    aria-label="Nome da tela"
+                    maxLength={60}
+                    value={screenForm.name}
+                    onChange={(event) => { setScreenError(null); setScreenForm({ mode: 'rename', name: event.target.value }); }}
+                    className={fieldInputClass}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" variant="primary-modal" size="xs" loading={screenAction === 'saving'}>Salvar nome</Button>
+                    <Button type="button" variant="ds-ghost" size="xs" onClick={() => { setScreenForm(null); setScreenError(null); }}>Cancelar</Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-[13.5px] font-bold text-ds-ink">{selectedScreen.name}</p>
+                  {canManage && (
+                    <Button type="button" variant="ds-link" size="xs" className="h-auto p-0" onClick={() => { setScreenError(null); setScreenForm({ mode: 'rename', name: selectedScreen.name }); }}>
+                      Renomear
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              <p className="mt-4 text-xs font-bold text-ds-ink-2">Endereço do player</p>
+              <div className="mt-1.5 flex items-start gap-2">
+                <a
+                  href={tvPath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 break-all font-ds-mono text-[11.5px] text-ds-accent-ink underline underline-offset-2 hover:text-ds-accent-ink-hover"
+                >
+                  {tvUrl}
+                </a>
+                <Button
+                  type="button"
+                  variant="ds-secondary"
+                  size="xs"
+                  className="shrink-0"
+                  onClick={() => void navigator.clipboard.writeText(tvUrl).then(() => setUrlCopied(true)).catch(() => setUrlCopied(false))}
+                >
+                  {urlCopied ? <Check aria-hidden="true" className="h-3.5 w-3.5" /> : <Copy aria-hidden="true" className="h-3.5 w-3.5" />}
+                  {urlCopied ? 'Copiado' : 'Copiar'}
                 </Button>
               </div>
 
-              {/* Access code + URL */}
-              <div className="rounded-xl bg-muted p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    <KeyRound className="mr-1 inline-block h-3 w-3" />
-                    Código de acesso
-                  </p>
-                  {canManage && (
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-6 w-6" title="Gerar novo código" onClick={() => void handleSetToken(selectedKiosk.id)}>
-                        <RefreshCw className="h-3 w-3" />
+              <p className="mt-4 text-xs font-bold text-ds-ink-2">Código de acesso</p>
+              {selectedScreen.deviceToken ? (
+                <p className="mt-1 font-ds-mono text-[17px] font-bold tracking-[0.18em] text-ds-ink">{selectedScreen.deviceToken}</p>
+              ) : (
+                <p className="mt-1 text-[13px] text-ds-ink-muted">Sem código: qualquer pessoa com o endereço abre o player.</p>
+              )}
+              {canManage && (
+                confirmNewToken ? (
+                  <InlineConfirm
+                    className="mt-3 flex-col items-stretch"
+                    message="Gerar um novo código? A TV conectada com o código atual para de atualizar até receber o novo endereço."
+                    confirmLabel="Gerar código"
+                    loadingLabel="Gerando…"
+                    loading={screenAction === 'token'}
+                    returnFocusRef={newTokenButtonRef}
+                    onConfirm={() => void handleScreenToken(selectedScreen, 'rotate')}
+                    onCancel={() => setConfirmNewToken(false)}
+                  />
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      ref={newTokenButtonRef}
+                      type="button"
+                      variant="ds-secondary"
+                      size="xs"
+                      disabled={screenAction === 'token'}
+                      onClick={() => {
+                        if (selectedScreen.deviceToken) setConfirmNewToken(true);
+                        else void handleScreenToken(selectedScreen, 'rotate');
+                      }}
+                    >
+                      {selectedScreen.deviceToken ? 'Gerar novo código' : 'Proteger com código'}
+                    </Button>
+                    {selectedScreen.deviceToken && (
+                      <Button type="button" variant="ds-ghost" size="xs" disabled={screenAction === 'token'} onClick={() => void handleScreenToken(selectedScreen, 'clear')}>
+                        Remover código
                       </Button>
-                      {selectedKiosk.deviceToken && (
-                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" title="Remover código" onClick={() => void handleClearToken(selectedKiosk.id)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
+                    )}
+                  </div>
+                )
+              )}
+
+              <div className="mt-4 border-t border-ds-divider pt-3">
+                <p className="text-xs font-bold text-ds-ink-2">App da tela</p>
+                <p className="mt-1 text-xs text-ds-ink-muted">
+                  No monitor Samsung, abra URL Launcher e informe o endereço abaixo. O app instala, pede o código de acesso desta tela e passa a tocar mesmo sem internet.
+                </p>
+                <p className="mt-1.5 break-all font-ds-mono text-[11.5px] text-ds-ink">{signageAppUrl}</p>
+                <a
+                  href="/app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1.5 inline-block text-xs font-bold text-ds-accent-ink underline-offset-2 hover:text-ds-accent-ink-hover hover:underline"
+                >
+                  Abrir a página de aplicativos
+                </a>
+                {!selectedScreen.deviceToken && (
+                  <p className="mt-1.5 text-xs font-semibold text-ds-warn">Esta tela ainda não tem código de acesso; o app precisa de um para conectar.</p>
+                )}
+              </div>
+
+              {canManage && !selectedScreen.isDefault && (
+                <div className="mt-4 border-t border-ds-divider pt-3">
+                  {confirmDeleteScreen ? (
+                    <InlineConfirm
+                      className="flex-col items-stretch"
+                      message={exclusiveSlideCount > 0
+                        ? `Excluir a tela ${selectedScreen.name}? ${exclusiveSlideCount} ${exclusiveSlideCount === 1 ? 'slide que só existe nela é apagado' : 'slides que só existem nela são apagados'} e isso não pode ser desfeito.`
+                        : `Excluir a tela ${selectedScreen.name}? Os slides dela continuam nas outras telas.`}
+                      confirmLabel="Excluir tela"
+                      loading={screenAction === 'deleting'}
+                      returnFocusRef={deleteScreenButtonRef}
+                      onConfirm={() => void handleDeleteScreen(selectedScreen)}
+                      onCancel={() => setConfirmDeleteScreen(false)}
+                    />
+                  ) : (
+                    <Button ref={deleteScreenButtonRef} type="button" variant="danger-link" size="xs" className="h-auto p-0" onClick={() => { setScreenError(null); setConfirmDeleteScreen(true); }}>
+                      Excluir tela
+                    </Button>
                   )}
                 </div>
-                {selectedKiosk.deviceToken ? (
-                  <span className="font-mono text-base font-bold tracking-widest text-foreground">{selectedKiosk.deviceToken}</span>
-                ) : (
-                  <span className="text-[12px] italic text-muted-foreground">Sem código — acesso livre</span>
-                )}
+              )}
+              {screenError && screenForm?.mode !== 'add' && <p role="alert" className="mt-2 text-xs font-semibold text-ds-danger">{screenError}</p>}
+            </section>
+          </aside>
+        </div>
+      )}
 
-                <p className="mb-1.5 mt-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">TV URL</p>
-                {(() => {
-                  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-                  const token = selectedKiosk.deviceToken;
-                  const href = `/tv/${selectedKiosk.id}${token ? `?token=${token}` : ''}`;
-                  const fullUrl = `${origin}${href}`;
-                  return (
-                    <div className="flex items-start gap-1">
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="break-all font-mono text-[11px] text-primary underline underline-offset-2"
-                      >
-                        {fullUrl}
-                      </a>
-                      <button
-                        type="button"
-                        title="Copiar URL"
-                        className="mt-0.5 flex-shrink-0 rounded p-0.5 hover:bg-accent"
-                        onClick={() => void navigator.clipboard.writeText(fullUrl).then(() => toast({ title: 'URL copiada' }))}
-                      >
-                        <Copy className="h-3 w-3 text-muted-foreground" />
-                      </button>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex min-h-52 items-center justify-center rounded-xl border bg-card p-6">
-            <Alert className="max-w-2xl">
-              <MonitorPlay className="h-4 w-4" />
-              <AlertTitle>Escolha uma unidade para continuar</AlertTitle>
-              <AlertDescription>Clique em uma unidade acima para abrir seus slides e opções de publicação.</AlertDescription>
-            </Alert>
-          </div>
-        )}
-
-      {/* Quick preview modal */}
       <Dialog open={!!previewingSlide} onOpenChange={(open) => { if (!open) setPreviewingSlide(null); }}>
-        <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0 bg-slate-950 text-white">
-          <div className="flex items-center justify-between gap-3 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/60">
-                {previewingSlide && getTypeIcon(previewingSlide.type)}
-                {previewingSlide?.type}
-              </span>
-              <DialogTitle className="text-sm font-medium text-white">{previewingSlide?.title}</DialogTitle>
-            </div>
-            <span className="text-[12px] text-white/40">{previewingSlide ? formatDuration(previewingSlide.durationMs) : ''}</span>
+        <DialogContent flush className="max-w-4xl gap-0 overflow-hidden rounded-ds-modal border-0 bg-ds-dark font-ds text-ds-on-dark shadow-ds-modal sm:max-w-4xl sm:rounded-ds-modal [&>button]:text-ds-on-dark">
+          <div className="flex items-center justify-between gap-3 px-5 py-4 pr-12">
+            <DialogTitle className="min-w-0 truncate text-sm font-bold text-ds-on-dark">{previewingSlide?.title}</DialogTitle>
+            <span className="shrink-0 text-xs text-ds-on-dark-2">
+              {previewingSlide ? `${SLIDE_TYPE_LABEL[previewingSlide.type]} · ${formatSignageDuration(previewingSlide.durationMs)}` : ''}
+            </span>
           </div>
-          <DialogDescription className="sr-only">Preview do slide {previewingSlide?.title}</DialogDescription>
+          <DialogDescription className="sr-only">Prévia do slide em proporção de tela 16:9</DialogDescription>
           <div
-            className="mx-5 mb-5 overflow-hidden rounded-xl"
-            style={{ aspectRatio: '16/9', background: previewingSlide?.type === 'text' ? (previewingSlide.background || '#0f172a') : '#020617' }}
+            className="aspect-video w-full overflow-hidden bg-black"
+            style={previewingSlide?.type === 'text' ? { background: previewingSlide.background || DEFAULT_TEXT_BACKGROUND } : undefined}
           >
             {previewingSlide?.type === 'text' ? (
               <div className="flex h-full items-center justify-center p-10 text-center">
-                <p className="font-semibold leading-tight text-white" style={{ fontSize: 'clamp(1.5rem, 5vw, 3.5rem)' }}>
-                  {previewingSlide.text}
-                </p>
+                <p className="font-semibold leading-tight text-white" style={{ fontSize: 'clamp(1.5rem, 5vw, 3.5rem)' }}>{previewingSlide.text}</p>
               </div>
             ) : previewingSlide?.assetUrl ? (
               previewingSlide.type === 'image' ? (
+                // eslint-disable-next-line @next/next/no-img-element -- mídia servida pela rota de assets do signage
                 <img src={previewingSlide.assetUrl} alt={previewingSlide.title} className="h-full w-full object-contain" />
               ) : (
                 <video src={previewingSlide.assetUrl} className="h-full w-full object-contain" autoPlay muted loop playsInline controls />
               )
             ) : (
-              <div className="flex h-full items-center justify-center text-white/30 text-sm">Nenhuma mídia carregada</div>
+              <div className="flex h-full items-center justify-center text-sm text-ds-on-dark-2">Nenhuma mídia carregada</div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-[660px]">
-          {/* Header */}
-          <div className="flex items-start justify-between border-b px-6 py-5">
-            <div>
-              <DialogTitle className="text-base font-medium">{editingSlide ? 'Editar slide' : 'Novo slide'}</DialogTitle>
-              <DialogDescription className="mt-0.5 text-[13px]">Configure, vincule e publique o conteúdo.</DialogDescription>
-            </div>
-          </div>
+      <SignageSlideDialog
+        open={slideDialog.open}
+        onOpenChange={(open) => setSlideDialog((prev) => ({ ...prev, open }))}
+        slide={slideDialog.slide}
+        defaultScreenIds={selectedScreenId ? [selectedScreenId] : []}
+        nextOrderByScreen={nextOrderByScreen}
+        screens={screenOptions}
+        onOpenLibrary={(kind, onPick) => setLibrary({ open: true, pick: { kind, onPick } })}
+        request={request}
+        onSaved={loadSlides}
+      />
 
-          {/* Body */}
-          <div className="grid max-h-[calc(92vh-130px)] grid-cols-2 divide-x overflow-y-auto">
-            {/* Left column */}
-            <div className="space-y-4 p-6">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Título</label>
-                <Input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} />
-              </div>
+      <SignageMediaLibrary
+        open={library.open}
+        onOpenChange={(open) => setLibrary((prev) => ({ ...prev, open }))}
+        request={request}
+        canManage={canManage}
+        slides={slides}
+        pick={library.pick}
+      />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tipo</label>
-                  <Select value={form.type} onValueChange={(value: SignageSlideType) => setForm(prev => ({
-                    ...prev,
-                    type: value,
-                    assetKind: value === 'video' ? 'video' : value === 'image' ? 'image' : undefined,
-                    assetUrl: value === 'text' ? '' : prev.assetUrl,
-                    assetPath: value === 'text' ? '' : prev.assetPath,
-                  }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="image">Imagem</SelectItem>
-                      <SelectItem value="video">Vídeo</SelectItem>
-                      <SelectItem value="text">Texto</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Duração</label>
-                  <div className="flex gap-1.5">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={getMaxDurationValue(form.type, durationParts.unit)}
-                      value={durationParts.value}
-                      onChange={e => {
-                        const nextValue = Math.max(1, Number(e.target.value) || 1);
-                        setForm(prev => ({ ...prev, durationMs: toDurationMs(nextValue, durationParts.unit) }));
-                      }}
-                      className="w-16"
-                    />
-                    <Select
-                      value={durationParts.unit}
-                      onValueChange={(value: DurationUnit) => {
-                        setForm(prev => ({ ...prev, durationMs: toDurationMs(getDurationParts(prev.durationMs).value, value) }));
-                      }}
-                    >
-                      <SelectTrigger className="flex-1 text-[13px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="seconds">seg</SelectItem>
-                        <SelectItem value="minutes">min</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {form.type === 'text' ? (
-                <>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Texto</label>
-                    <Textarea
-                      rows={3}
-                      value={form.text ?? ''}
-                      onChange={e => setForm(prev => ({ ...prev, text: e.target.value }))}
-                      placeholder="Mensagem que a TV vai exibir."
-                      className="resize-none"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Cor de fundo</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={form.background ?? '#0f172a'}
-                        onChange={e => setForm(prev => ({ ...prev, background: e.target.value }))}
-                        className="h-8 w-8 cursor-pointer rounded-md border bg-transparent p-0.5"
-                      />
-                      <Input
-                        value={form.background ?? '#0f172a'}
-                        onChange={e => setForm(prev => ({ ...prev, background: e.target.value }))}
-                        className="font-mono text-[13px]"
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-2 rounded-lg border border-dashed p-4">
-                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Mídia <span className="normal-case font-normal text-muted-foreground/70">— imagens até 2 MB, vídeos até 30 MB</span>
-                  </label>
-                  <Input
-                    type="file"
-                    accept={form.type === 'video' ? 'video/mp4,video/*' : 'image/webp,image/jpeg,image/png,image/*'}
-                    onChange={async (event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        await handleUpload(file);
-                      } catch (error) {
-                        setUploadProgress(null);
-                        toast({ title: 'Falha no upload', description: error instanceof Error ? error.message : 'Erro inesperado.', variant: 'destructive' });
-                      } finally {
-                        event.target.value = '';
-                      }
-                    }}
-                  />
-                  {uploadProgress !== null && <Progress value={uploadProgress} />}
-                  {form.assetUrl && (
-                    <div className="flex items-center gap-2 text-[13px] text-success">
-                      <UploadCloud className="h-4 w-4" />
-                      Arquivo enviado com sucesso
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Schedule */}
-              <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2.5">
-                <div>
-                  <p className="text-[13px] font-medium">Agendamento</p>
-                  <p className="text-[12px] text-muted-foreground">Controlar quando este slide aparece</p>
-                </div>
-                <Switch
-                  checked={form.scheduleEnabled}
-                  onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleEnabled: checked }))}
-                />
-              </div>
-
-              {form.scheduleEnabled && (
-                <div className="space-y-3 rounded-lg border p-3">
-                  <label className="flex cursor-pointer items-center gap-2.5">
-                    <Checkbox
-                      checked={form.scheduleTimeEnabled}
-                      onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleTimeEnabled: !!checked }))}
-                    />
-                    <span className="text-[13px] font-medium">Limitar por horário</span>
-                  </label>
-                  {form.scheduleTimeEnabled && (
-                    <div className="space-y-1 pl-6">
-                      <div className="flex items-center gap-2">
-                        <Input type="time" value={form.scheduleStartTime} onChange={e => setForm(prev => ({ ...prev, scheduleStartTime: e.target.value }))} />
-                        <span className="flex-shrink-0 text-[13px] text-muted-foreground">até</span>
-                        <Input type="time" value={form.scheduleEndTime} onChange={e => setForm(prev => ({ ...prev, scheduleEndTime: e.target.value }))} />
-                      </div>
-                      {form.scheduleEndTime && form.scheduleStartTime && form.scheduleEndTime < form.scheduleStartTime && (
-                        <p className="text-[11px] text-muted-foreground">Intervalo noturno — vai até {form.scheduleEndTime} do dia seguinte.</p>
-                      )}
-                    </div>
-                  )}
-                  <label className="flex cursor-pointer items-center gap-2.5">
-                    <Checkbox
-                      checked={form.scheduleDateEnabled}
-                      onCheckedChange={(checked) => setForm(prev => ({ ...prev, scheduleDateEnabled: !!checked }))}
-                    />
-                    <span className="text-[13px] font-medium">Limitar por período</span>
-                  </label>
-                  {form.scheduleDateEnabled && (
-                    <div className="flex gap-2 pl-6">
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[11px] text-muted-foreground">De</label>
-                        <Input type="date" value={form.scheduleStartDate} onChange={e => setForm(prev => ({ ...prev, scheduleStartDate: e.target.value }))} />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[11px] text-muted-foreground">Até</label>
-                        <Input type="date" value={form.scheduleEndDate} onChange={e => setForm(prev => ({ ...prev, scheduleEndDate: e.target.value }))} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Right column */}
-            <div className="flex flex-col gap-4 p-6">
-              {/* Preview */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Preview</label>
-                <button
-                  type="button"
-                  onClick={() => form.assetUrl && setPreviewOpen(true)}
-                  className="relative block w-full overflow-hidden rounded-lg"
-                  style={{ aspectRatio: '16/9', background: form.type === 'text' ? (form.background || '#0f172a') : '#0f172a' }}
-                >
-                  <span className="absolute left-3 top-3 text-[9px] font-medium uppercase tracking-widest text-white/40">
-                    {form.type === 'video' ? 'Vídeo' : form.type === 'image' ? 'Imagem' : 'Texto'}
-                  </span>
-                  {form.type === 'text' ? (
-                    <span className="absolute bottom-3 left-3 right-3 text-[18px] font-medium leading-tight text-white">
-                      {form.text || 'Seu texto aqui'}
-                    </span>
-                  ) : form.assetUrl ? (
-                    form.type === 'image' ? (
-                      <img src={form.assetUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <video src={form.assetUrl} className="h-full w-full object-cover" muted loop playsInline autoPlay />
-                    )
-                  ) : (
-                    <span className="absolute inset-0 flex items-center justify-center text-[13px] text-white/30">
-                      Envie uma mídia para visualizar
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Kiosques — only show picker when multiple kiosks exist */}
-              {allowedKiosks.length > 1 ? (
-                <div className="space-y-2">
-                  <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Quiosques</label>
-                  <div className="flex flex-col gap-1.5">
-                    {allowedKiosks.map((kiosk) => {
-                      const checked = form.kioskIds.includes(kiosk.id);
-                      const signageEnabled = kiosk.signageEnabled !== false;
-                      return (
-                        <button
-                          key={kiosk.id}
-                          type="button"
-                          disabled={!signageEnabled}
-                          onClick={() => {
-                            if (!signageEnabled) return;
-                            setForm(prev => ({
-                              ...prev,
-                              kioskIds: checked
-                                ? prev.kioskIds.filter(id => id !== kiosk.id)
-                                : [...prev.kioskIds, kiosk.id],
-                            }));
-                          }}
-                          className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
-                            checked
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border bg-background hover:bg-muted/50'
-                          } ${!signageEnabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                        >
-                          <div className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border ${checked ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
-                            {checked && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
-                          </div>
-                          <div>
-                            <p className={`text-[13px] font-medium ${checked ? 'text-primary' : 'text-foreground'}`}>{kiosk.name}</p>
-                            <p className={`text-[11px] ${checked ? 'text-primary/70' : 'text-muted-foreground'}`}>
-                              {kiosk.id}{!signageEnabled ? ' · signage desativado' : ''}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg bg-muted px-3 py-2.5 text-[13px] text-muted-foreground">
-                  Unidade: <span className="font-medium text-foreground">{allowedKiosks[0]?.name ?? '—'}</span>
-                </div>
-              )}
-
-              {/* Ordem */}
-              <div className="mt-auto flex items-center gap-2 rounded-lg bg-muted px-3 py-2">
-                <span className="text-[12px] text-muted-foreground">Posição</span>
-                <span className="font-mono text-[13px] font-medium tabular-nums">{form.order + 1}</span>
-                <span className="text-[11px] text-muted-foreground/70">Ajuste pela lista com drag & drop</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex justify-end gap-2 border-t px-6 py-3.5">
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button size="sm" onClick={() => void handleSave()} disabled={saving || !canManage}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salvar slide
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {selectedScreen && (
+        <SignageCopyDialog
+          open={copyDialogOpen}
+          onOpenChange={setCopyDialogOpen}
+          screens={screenOptions}
+          initialSourceId={selectedScreen.id}
+          allSlides={slides}
+          nextOrderByScreen={nextOrderByScreen}
+          request={request}
+          onCopied={loadSlides}
+        />
+      )}
 
       <Dialog open={unitsDialogOpen} onOpenChange={setUnitsDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Gerenciar unidades com signage</DialogTitle>
-            <DialogDescription>
-              Ative somente as unidades que realmente possuem TV. So unidades ativas aparecem no painel principal.
+        <DialogContent flush className="max-h-[calc(100vh-48px)] gap-0 overflow-hidden rounded-ds-modal border-0 bg-ds-input font-ds shadow-ds-modal sm:max-w-[520px] sm:rounded-ds-modal">
+          <div className="border-b border-ds-border-footer px-7 pb-[18px] pt-6 pr-12">
+            <DialogTitle className="text-[21px] font-extrabold tracking-[-0.02em] text-ds-ink">Unidades com tela</DialogTitle>
+            <DialogDescription className="mt-0.5 text-[13px] text-ds-ink-muted">
+              Ative só as unidades que têm TV. As demais ficam fora do painel e das publicações.
             </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            {kioskStatuses.map(({ kiosk, signageEnabled, slideCount, activeSlideCount, health, lastSeenAt }) => {
-              const isUpdating = updatingKioskId === kiosk.id;
-
-              return (
-                <div key={kiosk.id} className="rounded-xl border p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="font-medium">{kiosk.name}</div>
-                      <div className="text-xs text-muted-foreground">{kiosk.id}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isUpdating && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                      <Switch
-                        checked={signageEnabled}
-                        disabled={!canManage || isUpdating}
-                        onCheckedChange={(checked) => void handleToggleSignage(kiosk.id, checked)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-4">
-                    <span className={`text-sm font-medium ${signageEnabled ? 'text-success' : 'text-muted-foreground'}`}>
-                      {signageEnabled ? 'Signage ativo' : 'Signage desativado'}
-                    </span>
-                    <StatusDot variant={health.variant} label={health.label} />
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-lg bg-muted p-3 text-sm">
-                      <div className="text-xs text-muted-foreground">Slides</div>
-                      <div className="mt-1 font-semibold">{slideCount}</div>
-                    </div>
-                    <div className="rounded-lg bg-muted p-3 text-sm">
-                      <div className="text-xs text-muted-foreground">Ativos</div>
-                      <div className="mt-1 font-semibold">{activeSlideCount}</div>
-                    </div>
-                    <div className="rounded-lg bg-muted p-3 text-sm">
-                      <div className="text-xs text-muted-foreground">Último sinal</div>
-                      <div className="mt-1 font-semibold">
-                        {lastSeenAt ? formatRelativeTime(lastSeenAt) : 'Sem sinal'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-5xl bg-slate-950 p-3 text-white">
-          <DialogHeader className="px-3 pt-2">
-            <DialogTitle className="text-white">Preview ampliado</DialogTitle>
-            <DialogDescription className="text-slate-300">
-              {form.title || 'Slide sem titulo'}
-            </DialogDescription>
-          </DialogHeader>
-          <div
-            className="aspect-video overflow-hidden rounded-2xl border border-white/10"
-            style={{ background: form.type === 'text' ? (form.background || '#0f172a') : '#020617' }}
-          >
-            {form.type === 'text' ? (
-              <div className="flex h-full items-center justify-center p-12 text-center text-4xl font-semibold text-white">
-                {form.text || 'Seu texto aparecera aqui'}
-              </div>
-            ) : form.assetUrl ? (
-              form.type === 'image' ? (
-                <img src={form.assetUrl} alt="" className="h-full w-full object-contain" />
-              ) : (
-                <video
-                  src={form.assetUrl}
-                  className="h-full w-full object-contain"
-                  muted
-                  loop
-                  playsInline
-                  autoPlay
-                  controls
+          <div className="max-h-[60vh] overflow-y-auto px-7 py-2">
+            {kioskStatuses.map(({ kiosk, signageEnabled, screens: unitScreens, onlineCount, slideCount }) => (
+              <label key={kiosk.id} className="flex cursor-pointer items-center justify-between gap-4 border-b border-ds-divider py-3 last:border-b-0">
+                <span className="min-w-0">
+                  <span className="block truncate text-[13.5px] font-bold text-ds-ink">{kiosk.name}</span>
+                  {signageEnabled && (
+                    <span className="mt-0.5 block text-xs text-ds-ink-muted">
+                      {unitScreens.length} {unitScreens.length === 1 ? 'tela' : 'telas'} · {onlineCount} no ar · {slideCount} {slideCount === 1 ? 'slide' : 'slides'}
+                    </span>
+                  )}
+                </span>
+                <Switch
+                  checked={signageEnabled}
+                  disabled={!canManage || updatingKioskId === kiosk.id}
+                  aria-label={signageEnabled ? `Desativar signage de ${kiosk.name}` : `Ativar signage de ${kiosk.name}`}
+                  onCheckedChange={(checked) => void handleToggleSignage(kiosk, checked)}
                 />
-              )
-            ) : (
-              <div className="flex h-full items-center justify-center text-slate-400">
-                Nenhuma midia carregada.
-              </div>
-            )}
+              </label>
+            ))}
+          </div>
+          {unitsError && <p role="alert" className="px-7 pb-2 text-xs font-semibold text-ds-danger">{unitsError}</p>}
+          <div className="flex justify-end border-t border-ds-border-footer bg-ds-surface px-7 py-4">
+            <Button type="button" variant="primary-modal" size="md" onClick={() => setUnitsDialogOpen(false)}>Concluir</Button>
           </div>
         </DialogContent>
       </Dialog>

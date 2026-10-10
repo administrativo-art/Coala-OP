@@ -1,93 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { type SignageSlide } from '@/types';
 import { signageDbAdmin } from '@/lib/firebase-signage-admin';
-import { assertSignageAccess } from '@/lib/signage-auth';
-import { getSignageAssetUrl, sanitizeKioskIds, signageSlideSchema, stripUndefined } from '@/lib/signage';
+import { AppError } from '@/lib/observability/app-error';
+import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { secureRoute } from '@/lib/security/secure-route.server';
+import { pruneOrderByScreen, signageSlideSchema, stripUndefined, type SignageSlideInput } from '@/lib/signage';
+import { type SignageAccess } from '@/lib/signage-auth';
+import {
+  assertSignageKioskAccess,
+  authenticateSignage,
+  canAccessSignageKiosk,
+  normalizeSignageSlide,
+  requireSignageScreens,
+  type StaticRouteContext,
+} from '@/lib/signage-server';
+import { type SignageScreen } from '@/types';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-function normalizeSlide(id: string, data: FirebaseFirestore.DocumentData): SignageSlide {
-  return {
-    id,
-    title: data.title,
-    type: data.type,
-    durationMs: data.durationMs,
-    order: data.order,
-    kioskIds: data.kioskIds ?? [],
-    isActive: data.isActive === true,
-    assetUrl: getSignageAssetUrl(data.assetPath),
-    assetPath: data.assetPath,
-    assetKind: data.assetKind,
-    text: data.text,
-    background: data.background,
-    schedule: data.schedule,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-    createdBy: data.createdBy,
-    updatedBy: data.updatedBy,
-  };
-}
+const listContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'signage.slide.list',
+  version: 1,
+  surface: { method: 'GET', path: '/api/signage/slides' },
+  exposure: 'authenticated',
+  identity: { kind: 'active-user' },
+  authorization: { kind: 'permission', action: 'signage.view' },
+  resourceScope: { kind: 'unit' },
+  input: { kind: 'none' },
+  effects: { mode: 'read', audit: 'none' },
+  errorExposure: 'sanitized',
+});
 
-export async function GET(req: NextRequest) {
-  try {
-    const access = await assertSignageAccess(req, 'view');
-    const snapshot = await signageDbAdmin.collection('slides').orderBy('order', 'asc').get();
+const createContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'signage.slide.create',
+  version: 1,
+  surface: { method: 'POST', path: '/api/signage/slides' },
+  exposure: 'authenticated',
+  identity: { kind: 'active-user' },
+  authorization: { kind: 'permission', action: 'signage.manage' },
+  resourceScope: { kind: 'unit' },
+  input: { kind: 'schema', schema: 'signage.slide.input', unknownFields: 'reject' },
+  effects: { mode: 'write', audit: 'server-authoritative' },
+  errorExposure: 'sanitized',
+});
 
-    const slides = snapshot.docs
-      .map(doc => normalizeSlide(doc.id, doc.data()))
-      .filter(slide => access.allUnits || slide.kioskIds.some(kioskId => access.allowedKioskIds.includes(kioskId)));
+// A permissão é conferida em `authenticateSignage`; `authorize` existe para o contrato exigir a etapa.
+const listEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, SignageAccess, undefined, SignageAccess>(listContract, {
+  authenticate: ({ request }) => authenticateSignage(request, 'view'),
+  loadResource: ({ actor }) => actor,
+  authorize: () => undefined,
+  // Listagem: o escopo é aplicado como filtro no handler.
+  assertScope: () => undefined,
+});
 
-    return NextResponse.json({ slides });
-  } catch (error) {
-    console.error('[signage/slides][GET]', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Falha ao carregar slides.' },
-      { status: 403 }
-    );
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const access = await assertSignageAccess(req, 'manage');
-    const payload = await req.json();
-    const normalizedPayload = {
-      ...payload,
-      assetPath: payload.assetPath || undefined,
-      assetKind: payload.assetKind || undefined,
-      text: payload.text || undefined,
-      background: payload.background || undefined,
-    };
-    const parsed = signageSlideSchema.parse({
-      ...normalizedPayload,
-      durationMs: Number(normalizedPayload.durationMs),
-      order: Number(normalizedPayload.order),
-      isActive: normalizedPayload.isActive === true,
-    });
-
-    const kioskIds = sanitizeKioskIds(parsed.kioskIds, access.allowedKioskIds, access.allUnits);
-    if (!kioskIds.length) {
-      return NextResponse.json({ error: 'Selecione ao menos um quiosque permitido.' }, { status: 400 });
+const createEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, SignageAccess, SignageSlideInput, SignageScreen[]>(createContract, {
+  authenticate: ({ request }) => authenticateSignage(request, 'manage'),
+  async parseInput({ request }) {
+    const parsed = signageSlideSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new AppError({ code: 'SIGNAGE_SLIDE_INPUT_INVALID', kind: 'VALIDATION', safeMessage: parsed.error.issues[0]?.message ?? 'Dados do slide inválidos.' });
     }
+    return parsed.data;
+  },
+  loadResource: ({ input }) => requireSignageScreens(input.screenIds),
+  authorize: () => undefined,
+  assertScope: ({ actor, resource }) => assertSignageKioskAccess(actor, resource.map((screen) => screen.kioskId)),
+});
 
-    const now = new Date().toISOString();
-    const actor = { userId: access.user.id, username: access.user.username };
-    const slideData = stripUndefined({
-      ...parsed,
-      kioskIds,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: actor,
-      updatedBy: actor,
-    });
+export const GET = secureRoute({ contract: listContract, enforcer: listEnforcer }, async ({ security }) => {
+  // Coleção inteira, como antes das telas: slides antigos não têm `screenIds` para filtrar na consulta.
+  const snapshot = await signageDbAdmin.collection('slides').orderBy('order', 'asc').get();
+  const slides = snapshot.docs
+    .map((doc) => normalizeSignageSlide(doc.id, doc.data()))
+    .filter((slide) => slide.kioskIds.some((kioskId) => canAccessSignageKiosk(security.resource, kioskId)));
 
-    const ref = await signageDbAdmin.collection('slides').add(slideData);
-    return NextResponse.json({ slide: normalizeSlide(ref.id, slideData) }, { status: 201 });
-  } catch (error) {
-    console.error('[signage/slides][POST]', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Falha ao criar slide.' },
-      { status: 400 }
-    );
-  }
-}
+  return NextResponse.json({ slides });
+});
+
+export const POST = secureRoute({ contract: createContract, enforcer: createEnforcer }, async ({ security }) => {
+  const { actor, input, resource: screens } = security;
+  const screenIds = screens.map((screen) => screen.id);
+  const now = new Date().toISOString();
+  const author = { userId: actor.user.id, username: actor.user.username };
+  const slideData = stripUndefined({
+    ...input,
+    screenIds,
+    kioskIds: Array.from(new Set(screens.map((screen) => screen.kioskId))),
+    orderByScreen: pruneOrderByScreen(input.orderByScreen, screenIds),
+    createdAt: now,
+    updatedAt: now,
+    createdBy: author,
+    updatedBy: author,
+  });
+
+  const ref = await signageDbAdmin.collection('slides').add(slideData);
+  return NextResponse.json({ slide: normalizeSignageSlide(ref.id, slideData) }, { status: 201 });
+});

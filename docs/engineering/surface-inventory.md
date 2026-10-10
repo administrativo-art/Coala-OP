@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **384 rotas de API** e **21 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **393 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -9,6 +9,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | Caminho | Arquivo | Guia |
 | --- | --- | --- |
 | `/` | [src/app/page.tsx](../../src/app/page.tsx) | [recruitment](flows/recruitment.md) |
+| `/app` | [src/app/app/page.tsx](../../src/app/app/page.tsx) | [signage](flows/signage.md) |
 | `/aso/candidato/[token]` | [src/app/aso/candidato/[token]/page.tsx](../../src/app/aso/candidato/%5Btoken%5D/page.tsx) | [onboarding-aso](flows/onboarding-aso.md) |
 | `/aso/clinica/[token]` | [src/app/aso/clinica/[token]/page.tsx](../../src/app/aso/clinica/%5Btoken%5D/page.tsx) | [onboarding-aso](flows/onboarding-aso.md) |
 | `/catalogo` | [src/app/catalogo/page.tsx](../../src/app/catalogo/page.tsx) | [catalog](flows/catalog.md) |
@@ -372,10 +373,19 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/settings/public-bio` | GET, PUT | [src/app/api/settings/public-bio/route.ts](../../src/app/api/settings/public-bio/route.ts) | [settings](flows/settings.md) |
 | `/api/settings/public-bio/media` | POST | [src/app/api/settings/public-bio/media/route.ts](../../src/app/api/settings/public-bio/media/route.ts) | [settings](flows/settings.md) |
 | `/api/settings/public-bio/media/[id]` | GET | [src/app/api/settings/public-bio/media/[id]/route.ts](../../src/app/api/settings/public-bio/media/%5Bid%5D/route.ts) | [settings](flows/settings.md) |
+| `/api/signage/app/downloads` | POST | [src/app/api/signage/app/downloads/route.ts](../../src/app/api/signage/app/downloads/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/asset/[...assetPath]` | GET | [src/app/api/signage/asset/[...assetPath]/route.ts](../../src/app/api/signage/asset/%5B...assetPath%5D/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/heartbeat` | GET, POST | [src/app/api/signage/heartbeat/route.ts](../../src/app/api/signage/heartbeat/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/media` | GET, POST | [src/app/api/signage/media/route.ts](../../src/app/api/signage/media/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/media/[mediaId]` | PATCH, DELETE | [src/app/api/signage/media/[mediaId]/route.ts](../../src/app/api/signage/media/%5BmediaId%5D/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/media/folders` | POST | [src/app/api/signage/media/folders/route.ts](../../src/app/api/signage/media/folders/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/media/folders/[folderId]` | PATCH, DELETE | [src/app/api/signage/media/folders/[folderId]/route.ts](../../src/app/api/signage/media/folders/%5BfolderId%5D/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/media/import` | POST | [src/app/api/signage/media/import/route.ts](../../src/app/api/signage/media/import/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/pair` | POST | [src/app/api/signage/pair/route.ts](../../src/app/api/signage/pair/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/public/[kioskId]` | GET | [src/app/api/signage/public/[kioskId]/route.ts](../../src/app/api/signage/public/%5BkioskId%5D/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/publish` | POST | [src/app/api/signage/publish/route.ts](../../src/app/api/signage/publish/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/screens` | GET, POST | [src/app/api/signage/screens/route.ts](../../src/app/api/signage/screens/route.ts) | [signage](flows/signage.md) |
+| `/api/signage/screens/[screenId]` | PATCH, DELETE | [src/app/api/signage/screens/[screenId]/route.ts](../../src/app/api/signage/screens/%5BscreenId%5D/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/slides` | GET, POST | [src/app/api/signage/slides/route.ts](../../src/app/api/signage/slides/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/slides/[slideId]` | PUT, DELETE | [src/app/api/signage/slides/[slideId]/route.ts](../../src/app/api/signage/slides/%5BslideId%5D/route.ts) | [signage](flows/signage.md) |
 | `/api/signage/upload` | POST | [src/app/api/signage/upload/route.ts](../../src/app/api/signage/upload/route.ts) | [signage](flows/signage.md) |
