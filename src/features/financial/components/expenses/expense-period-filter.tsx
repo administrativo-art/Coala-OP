@@ -67,7 +67,9 @@ export function ExpensePeriodFilter({
   dateFrom,
   dateTo,
   onApply,
+  className,
 }: {
+  className?: string;
   preset: ExpensePeriodPreset;
   dateFrom: string;
   dateTo: string;
@@ -125,7 +127,8 @@ export function ExpensePeriodFilter({
           variant="outline"
         className={cn(
             "h-8 w-full min-w-0 justify-between rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] font-medium sm:text-xs",
-            open && "border-primary"
+            open && "border-primary",
+            className
           )}
         >
           <span className="truncate">Vencimento: {label}</span>

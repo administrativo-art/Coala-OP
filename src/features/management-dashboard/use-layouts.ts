@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 
 import { createDefaultManagementLayout } from "./default-layout";
-import type { DashboardLayoutsPayload, ManagementDashboardLayout } from "./types";
+import type { DashboardLayoutsPayload, DashboardScope, ManagementDashboardLayout } from "./types";
 
-async function request<T>(firebaseUser: FirebaseUser, method: string, body?: unknown): Promise<T> {
+async function request<T>(firebaseUser: FirebaseUser, method: string, body?: unknown, scope?: DashboardScope): Promise<T> {
   const token = await firebaseUser.getIdToken();
-  const response = await fetch("/api/dashboard/layouts", {
+  const response = await fetch(scope === "financial" && method === "GET" ? "/api/dashboard/layouts?scope=financial" : "/api/dashboard/layouts", {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -18,8 +18,8 @@ async function request<T>(firebaseUser: FirebaseUser, method: string, body?: unk
   if (!response.ok) throw new Error(payload?.error?.message ?? payload?.error ?? "Não foi possível atualizar o painel.");
   return payload as T;
 }
-export function useManagementDashboardLayouts(firebaseUser: FirebaseUser | null, userId: string, userName: string) {
-  const fallback = useMemo(() => createDefaultManagementLayout(userId || "local", userName || "Usuário"), [userId, userName]);
+export function useManagementDashboardLayouts(firebaseUser: FirebaseUser | null, userId: string, userName: string, scope: DashboardScope = "management") {
+  const fallback = useMemo(() => createDefaultManagementLayout(userId || "local", userName || "Usuário", undefined, scope), [userId, userName, scope]);
   const [payload, setPayload] = useState<DashboardLayoutsPayload>({ layouts: [fallback], activeLayoutId: fallback.id, canManageTemplates: false });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,10 +28,10 @@ export function useManagementDashboardLayouts(firebaseUser: FirebaseUser | null,
   const load = useCallback(async () => {
     if (!firebaseUser) { setLoading(false); return; }
     setLoading(true);
-    try { setPayload(await request<DashboardLayoutsPayload>(firebaseUser, "GET")); setError(null); }
+    try { setPayload(await request<DashboardLayoutsPayload>(firebaseUser, "GET", undefined, scope)); setError(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível carregar seus painéis."); }
     finally { setLoading(false); }
-  }, [firebaseUser]);
+  }, [firebaseUser, scope]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -46,6 +46,7 @@ export function useManagementDashboardLayouts(firebaseUser: FirebaseUser | null,
         name: layout.name,
         description: layout.description,
         visibility: layout.visibility,
+        scope: layout.scope ?? scope,
         targetProfileIds: layout.targetProfileIds,
         lockedWidgetIds: layout.lockedWidgetIds,
         widgets: layout.widgets,

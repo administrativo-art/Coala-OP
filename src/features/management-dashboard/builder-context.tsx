@@ -13,12 +13,12 @@ import { SidePanel, PanelSection } from "@/components/patterns/side-panel";
 import { cn } from "@/lib/utils";
 import type { PermissionSet } from "@/types";
 
-import { MANAGEMENT_WIDGET_CATALOG, MANAGEMENT_WIDGET_BY_ID } from "./catalog";
+import { WIDGET_CATALOG_BY_SCOPE, MANAGEMENT_WIDGET_BY_ID } from "./catalog";
 import { createDefaultManagementLayout } from "./default-layout";
 import { cloneLayout } from "./layout-policy";
 import { PanelMap } from "./panel-map";
 import { useManagementDashboardLayouts } from "./use-layouts";
-import type { ManagementDashboardLayout, ManagementWidgetId } from "./types";
+import type { DashboardScope, ManagementDashboardLayout, ManagementWidgetId } from "./types";
 
 type BuilderState = { layout: ManagementDashboardLayout; editing: boolean; selectedId: string | null; select: (id: string | null) => void; openSettings: () => void };
 const BuilderContext = createContext<BuilderState | null>(null);
@@ -26,8 +26,8 @@ const BuilderContext = createContext<BuilderState | null>(null);
 const desktopSpan: Record<number, string> = { 1: "xl:col-span-1", 2: "xl:col-span-2", 3: "xl:col-span-3", 4: "xl:col-span-4", 5: "xl:col-span-5", 6: "xl:col-span-6", 7: "xl:col-span-7", 8: "xl:col-span-8", 9: "xl:col-span-9", 10: "xl:col-span-10", 11: "xl:col-span-11", 12: "xl:col-span-12" };
 const tabletSpan: Record<number, string> = { 1: "md:col-span-1", 2: "md:col-span-2", 3: "md:col-span-3", 4: "md:col-span-4", 5: "md:col-span-5", 6: "md:col-span-6" };
 
-export function ManagementDashboardBuilder({ firebaseUser, userId, userName, permissions, children }: { firebaseUser: import("firebase/auth").User | null; userId: string; userName: string; permissions: PermissionSet; children: ReactNode }) {
-  const store = useManagementDashboardLayouts(firebaseUser, userId, userName);
+export function ManagementDashboardBuilder({ firebaseUser, userId, userName, permissions, scope = "management", children }: { firebaseUser: import("firebase/auth").User | null; userId: string; userName: string; permissions: PermissionSet; scope?: DashboardScope; children: ReactNode }) {
+  const store = useManagementDashboardLayouts(firebaseUser, userId, userName, scope);
   const [draft, setDraft] = useState<ManagementDashboardLayout | null>(null);
   const [editing, setEditing] = useState(false);
   const [panel, setPanel] = useState<"catalog" | "settings" | "map" | null>(null);
@@ -40,7 +40,7 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
   const [, forceHistoryRender] = useState(0);
   const layout = draft ?? store.activeLayout;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-  const visibleCatalog = MANAGEMENT_WIDGET_CATALOG.filter((definition) => definition.canView(permissions));
+  const visibleCatalog = WIDGET_CATALOG_BY_SCOPE[scope].filter((definition) => definition.canView(permissions));
 
   function resetHistory() { history.current = []; future.current = []; forceHistoryRender((value) => value + 1); }
   function updateDraft(next: ManagementDashboardLayout) {
@@ -102,7 +102,7 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
     if (widgetId) document.querySelector(`[data-widget-id="${widgetId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   function renamePanel(name: string) { if (draft) updateDraft({ ...draft, name }); }
-  function createPanel() { const next = createDefaultManagementLayout(userId, userName); next.id = `layout_${crypto.randomUUID().replaceAll("-", "")}`; next.name = "Novo painel"; setDraft(next); resetHistory(); setEditing(true); }
+  function createPanel() { const next = createDefaultManagementLayout(userId, userName, undefined, scope); next.id = `layout_${crypto.randomUUID().replaceAll("-", "")}`; next.name = "Novo painel"; setDraft(next); resetHistory(); setEditing(true); }
   function duplicatePanel() { const next = cloneLayout(store.activeLayout, userId, userName); setDraft(next); resetHistory(); setEditing(true); setSavedMessage(false); }
   async function deletePanel() {
     if (store.activeLayout.ownerId !== userId || store.activeLayout.id === "personal") return;

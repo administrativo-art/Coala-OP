@@ -62,6 +62,8 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type { FinancialInboxBillingIdentity } from "@/features/financial/inbox/types";
 import { Badge } from "@/components/ui/badge";
+import { WizardModal, type WizardStep } from "@/components/patterns/wizard-modal";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -155,6 +157,14 @@ const ACCOUNT_GROUP_LABELS: Record<string, string> = {
 };
 
 const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "estoque", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "patrimonial", "investimentos", "nao_operacional", "ir_csll", "receita", "outros"];
+
+const STEP_DESCRIPTIONS: Record<string, string> = {
+  identification: "Quem cobra, do que se trata e quanto.",
+  classification: "Plano de contas, centro de resultado e rateio.",
+  individualization: "Vincule cada parte do título ao colaborador, contrato e centro responsáveis pelo valor.",
+  schedule: "Quando pagar e como dividir.",
+  review: "Confira antes de salvar.",
+};
 
 function SectionHeading({
   icon,
@@ -405,7 +415,7 @@ function QuickAddEntityDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm rounded-ds-modal">
         <DialogHeader>
           <DialogTitle>Adicionar fornecedor</DialogTitle>
         </DialogHeader>
@@ -434,8 +444,8 @@ function QuickAddEntityDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
+          <Button variant="ds-ghost" size="md" type="button" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="primary-modal" size="md" type="button" onClick={() => void handleSave()} disabled={saving || !name.trim()}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Salvar
           </Button>
@@ -2186,6 +2196,13 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const drawerTitle = editId ? "Editar despesa" : "Lançar nova despesa";
   const drawerSubtitle = "Provisione um compromisso financeiro do plano de contas.";
 
+  const wizardSteps: WizardStep[] = steps.map((step) => ({
+    id: step.id,
+    label: step.label,
+    description: STEP_DESCRIPTIONS[step.id],
+  }));
+  const previewStatusLabel = editId ? "Em aberto" : "Rascunho";
+
   return (
     <Form {...form}>
       <form
@@ -2193,75 +2210,105 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           event.preventDefault();
           void handleFinalizeClick();
         }}
-        className="min-h-[calc(100vh-5rem)]"
       >
-        <div className="min-h-[calc(100vh-5rem)] py-2">
-          <div className="mx-auto flex w-full max-w-[1480px] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-sm">
-            <div className="flex min-w-0 flex-1 flex-col border-r">
-              <div className="border-b px-6 py-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Despesas / {editId ? "Editar" : "Lançar nova"}</p>
-                    <h1 className="mt-2 text-[2rem] font-semibold leading-none">{drawerTitle}</h1>
-                    <p className="text-sm text-muted-foreground">{drawerSubtitle}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px]">Rascunho · auto-save</Badge>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full"
-                      onClick={() => leaveExpenseForm()}
-                    >
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Fechar</span>
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-2">
-                  {steps.map((step, index) => {
-                    const isActive = currentStep === step.id;
-                    const isDone = activeStepIndex > index;
-
-                    return (
-                      <button
-                        key={step.id}
-                        type="button"
-                        onClick={() => setCurrentStep(step.id)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                          isActive
-                            ? "border-foreground bg-foreground text-background"
-                            : isDone
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:bg-muted/40"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold",
-                            isActive ? "bg-background/15 text-background" : isDone ? "bg-emerald-100 text-emerald-700" : "bg-muted text-foreground"
-                          )}
-                        >
-                          {isDone ? <Check className="h-3 w-3" /> : index + 1}
-                        </span>
-                        {step.label}
-                      </button>
-                    );
-                  })}
+        <WizardModal
+          open
+          onOpenChange={(open) => { if (!open) leaveExpenseForm(); }}
+          mode={editId ? "edit" : "new"}
+          stepper="sidebar"
+          saveMode="final"
+          sidebarWidth={380}
+          height={820}
+          steps={wizardSteps}
+          stepIndex={Math.max(activeStepIndex, 0)}
+          highestStep={wizardSteps.length - 1}
+          onStepChange={(index) => setCurrentStep(steps[index].id)}
+          onSubmit={() => void handleFinalizeClick()}
+          submitting={isSaving}
+          submitLabel={editId ? "Atualizar despesa" : "Provisionar despesa"}
+          dirty={form.formState.isDirty}
+          title={drawerTitle}
+          description={drawerSubtitle}
+          headerActions={isDraftFlow ? (
+            <Button type="button" variant="ds-secondary" size="xs" loading={isSaving} loadingLabel="Salvando…" onClick={() => void handleSaveDraft()}>
+              Salvar rascunho
+            </Button>
+          ) : undefined}
+          footerNote={
+            paymentMethod === "recurring"
+              ? "Essa despesa parece recorrente. Confira o período antes de finalizar."
+              : "Se essa despesa se repete com frequência, considere salvar um rascunho modelo."
+          }
+          sidebar={
+            <div className="space-y-5">
+              <div>
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">
+                  Despesas / {editId ? "Editar" : "Lançar nova"}
+                </p>
+                <h2 className="mt-2 break-words text-[26px] font-extrabold leading-tight tracking-[-0.03em]">
+                  {descriptionValue || "Descrição da despesa"}
+                </h2>
+                <p className="mt-1 text-[13px] text-ds-on-dark-sub">{supplierValue || "Sem fornecedor"}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <StatusPill variant="info">{previewStatusLabel}</StatusPill>
+                  {isApportioned ? <StatusPill variant="neutral">Rateada</StatusPill> : null}
                 </div>
               </div>
 
-              <ScrollArea className="flex-1">
-                <div className="space-y-6 px-6 py-6">
+              <div className="rounded-ds-btn-lg bg-white/[.06] p-4">
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Como aparecerá na fila</p>
+                <p className="mt-1 font-mono text-[26px] font-extrabold">{formatCurrency(totalValue || 0)}</p>
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]">
+                  <div>
+                    <dt className="text-ds-on-dark-muted">Vencimento</dt>
+                    <dd className="mt-0.5 font-semibold">{previewDueDate ? format(previewDueDate, "dd/MM/yyyy") : "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ds-on-dark-muted">Competência</dt>
+                    <dd className="mt-0.5 font-semibold">{previewCompetence ? format(previewCompetence, "MM/yyyy") : "—"}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-ds-on-dark-muted">Centro de referência</dt>
+                    <dd className="mt-0.5 font-semibold">{referenceResultCenterName || "—"}{isApportioned ? " · Rateado" : ""}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-ds-on-dark-muted">Plano de contas</dt>
+                    <dd className="mt-0.5 font-semibold">
+                      {selectedAccountPlan?.name || "—"}
+                      {hasAccountAllocations ? ` · ${(accountAllocations || []).length} apropriações` : ""}
+                      {hasPersonAllocations ? ` · ${(personAllocations || []).length} vínculos` : ""}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-ds-on-dark-muted">Pagamento previsto</dt>
+                    <dd className="mt-0.5 font-semibold">
+                      {plannedPaymentMethodType
+                        ? plannedPaymentMethodLabel || PLANNED_PAYMENT_METHOD_LABELS[plannedPaymentMethodType]
+                        : "Não informado"}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div>
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Validações</p>
+                <ul className="mt-2 space-y-1.5">
+                  {validationItems.map((item) => (
+                    <li key={item.label} className={cn("flex items-center gap-2 text-[13px]", item.ok ? "text-ds-on-dark" : "text-ds-on-dark-muted")}>
+                      <span className={cn("grid h-5 w-5 place-items-center rounded-full", item.ok ? "bg-ds-ok text-white" : "bg-white/10")}>
+                        <Check aria-hidden="true" className="h-3 w-3" />
+                      </span>
+                      {item.label} {item.ok ? "informado" : "pendente"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-6">
                   {currentStep === "identification" && (
                     <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold">Identificação</h2>
-                        <p className="text-sm text-muted-foreground">Quem cobra, do que se trata e quanto.</p>
-                      </div>
 
                       <FormField
                         control={form.control}
@@ -2494,10 +2541,6 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
                   {currentStep === "classification" && (
                     <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold">Classificação contábil</h2>
-                        <p className="text-sm text-muted-foreground">Plano de contas, centro de resultado e rateio.</p>
-                      </div>
 
                       <FormField
                         control={form.control}
@@ -2978,12 +3021,6 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
                   {currentStep === "individualization" && canEditPersonnelCosts && (
                     <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold">Individualização</h2>
-                        <p className="text-sm text-muted-foreground">
-                          Vincule cada parte do título ao colaborador, contrato e centro responsáveis pelo valor.
-                        </p>
-                      </div>
 
                       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
                         <p className="font-medium">O favorecido bancário continua sendo único.</p>
@@ -3231,10 +3268,6 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
                   {currentStep === "schedule" && (
                     <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold">Vencimento e parcelas</h2>
-                        <p className="text-sm text-muted-foreground">Quando pagar e como dividir.</p>
-                      </div>
 
                       <div className="rounded-xl border bg-muted/15 p-4">
                         <FormLabel>Forma de pagamento prevista</FormLabel>
@@ -3388,10 +3421,6 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
                   {currentStep === "review" && (
                     <div className="space-y-4">
-                      <div>
-                        <h2 className="text-base font-semibold">Revisão final</h2>
-                        <p className="text-sm text-muted-foreground">Confira antes de salvar.</p>
-                      </div>
 
                       <div className="rounded-xl border p-4">
                         <div className="flex items-start justify-between gap-4 border-b pb-4">
@@ -3508,129 +3537,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                       </div>
                     </div>
                   )}
-                </div>
-              </ScrollArea>
-
-              <div className="border-t bg-background px-6 py-4">
-                <div className={cn("flex flex-wrap items-center justify-between gap-3")}>
-                  <Button type="button" variant="ghost" onClick={() => leaveExpenseForm()}>
-                    Cancelar
-                  </Button>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {activeStepIndex > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setCurrentStep(steps[activeStepIndex - 1].id)}
-                      >
-                        <ChevronLeft className="mr-2 h-4 w-4" />
-                        Voltar
-                      </Button>
-                    )}
-                    {isDraftFlow && (
-                      <Button type="button" variant="secondary" disabled={isSaving} onClick={() => void handleSaveDraft()}>
-                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Salvar rascunho
-                      </Button>
-                    )}
-                    {currentStep !== "review" ? (
-                      <Button type="button" onClick={() => setCurrentStep(steps[activeStepIndex + 1].id)}>
-                        Continuar
-                        <ChevronRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <Button type="button" disabled={isSaving} onClick={() => void handleFinalizeClick()}>
-                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {editId ? "Atualizar despesa" : "Provisionar despesa"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <aside className="hidden w-[344px] shrink-0 bg-muted/20 xl:block">
-              <div className="border-b px-5 py-5">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pré-visualização</p>
-                <h3 className="mt-1 text-sm font-semibold">Como aparecerá na fila</h3>
-              </div>
-
-              <div className="space-y-4 p-5">
-                <div className="rounded-2xl border bg-background p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="mt-1 h-9 w-1 rounded-full bg-blue-500" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{descriptionValue || "Descrição da despesa"}</p>
-                      <p className="truncate text-xs text-muted-foreground">{supplierValue || "Sem fornecedor"}</p>
-                    </div>
-                    <p className="font-mono text-lg font-bold">{formatCurrency(totalValue || 0)}</p>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-700">
-                      {editId ? "Em aberto" : "Rascunho"}
-                    </span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <p className="font-medium text-muted-foreground">Vencimento</p>
-                      <p className="mt-1">{previewDueDate ? format(previewDueDate, "dd/MM/yyyy") : "—"}</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-muted-foreground">Centro de referência</p>
-                      <p className="mt-1">
-                        {referenceResultCenterName || "—"}{isApportioned ? " · Rateado" : ""}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-muted-foreground">Competência</p>
-                      <p className="mt-1">{previewCompetence ? format(previewCompetence, "MM/yyyy") : "—"}</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-muted-foreground">Plano</p>
-                      <p className="mt-1">
-                        {selectedAccountPlan?.name || "—"}
-                        {hasAccountAllocations ? ` · ${(accountAllocations || []).length} apropriações` : ""}
-                        {hasPersonAllocations ? ` · ${(personAllocations || []).length} vínculos` : ""}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="font-medium text-muted-foreground">Pagamento previsto</p>
-                      <p className="mt-1">
-                        {plannedPaymentMethodType
-                          ? plannedPaymentMethodLabel || PLANNED_PAYMENT_METHOD_LABELS[plannedPaymentMethodType]
-                          : "Não informado"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border bg-background p-4 shadow-sm">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Validações</p>
-                  <div className="mt-3 space-y-2">
-                    {validationItems.map((item) => (
-                      <div key={item.label} className={cn("flex items-center gap-2 text-sm", item.ok ? "text-emerald-600" : "text-muted-foreground")}>
-                        <span className={cn("flex h-5 w-5 items-center justify-center rounded-full", item.ok ? "bg-emerald-50" : "bg-muted")}>
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                        <span>{item.label} {item.ok ? "informado" : "pendente"}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground shadow-sm">
-                  <p className="font-semibold text-foreground">Sugestão</p>
-                  <p className="mt-2">
-                    {paymentMethod === "recurring"
-                      ? "Essa despesa parece recorrente. Confira o período antes de finalizar."
-                      : "Se essa despesa se repete com frequência, considere salvar um rascunho modelo."}
-                  </p>
-                </div>
-              </div>
-            </aside>
           </div>
-        </div>
+        </WizardModal>
 
         <Dialog
           open={seriesUpdateDialogOpen}
@@ -3640,7 +3548,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
             if (!open) setPendingSeriesValues(null);
           }}
         >
-          <DialogContent className="sm:max-w-xl">
+          <DialogContent className="rounded-ds-modal sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>Onde aplicar as alterações?</DialogTitle>
               <DialogDescription>
@@ -3657,8 +3565,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                 <label
                   htmlFor="series-update-single"
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
-                    seriesUpdateScope === "single" && "border-primary bg-primary/5"
+                    "flex cursor-pointer items-start gap-3 rounded-ds-btn-lg border border-ds-border-input p-4 transition-colors hover:bg-ds-muted",
+                    seriesUpdateScope === "single" && "border-ds-modal bg-ds-modal-soft"
                   )}
                 >
                   <RadioGroupItem id="series-update-single" value="single" className="mt-0.5" />
@@ -3683,8 +3591,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                 <label
                   htmlFor="series-update-future"
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
-                    seriesUpdateScope === "current-and-future" && "border-primary bg-primary/5"
+                    "flex cursor-pointer items-start gap-3 rounded-ds-btn-lg border border-ds-border-input p-4 transition-colors hover:bg-ds-muted",
+                    seriesUpdateScope === "current-and-future" && "border-ds-modal bg-ds-modal-soft"
                   )}
                 >
                   <RadioGroupItem id="series-update-future" value="current-and-future" className="mt-0.5" />
@@ -3713,8 +3621,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                 <label
                   htmlFor="series-update-all"
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
-                    seriesUpdateScope === "all" && "border-primary bg-primary/5"
+                    "flex cursor-pointer items-start gap-3 rounded-ds-btn-lg border border-ds-border-input p-4 transition-colors hover:bg-ds-muted",
+                    seriesUpdateScope === "all" && "border-ds-modal bg-ds-modal-soft"
                   )}
                 >
                   <RadioGroupItem id="series-update-all" value="all" className="mt-0.5" />
@@ -3738,14 +3646,15 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
               </RadioGroup>
             </TooltipProvider>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800">
+            <div className="rounded-ds-btn border border-ds-info-bg bg-ds-info-bg px-3 py-2 text-xs leading-relaxed text-ds-info">
               Nas demais parcelas, vencimento, competência, numeração, status e liquidação são preservados. O valor de parcelas pagas ou de competências fechadas também não é alterado.
             </div>
 
             <DialogFooter>
               <Button
                 type="button"
-                variant="outline"
+                variant="ds-ghost"
+                size="md"
                 disabled={isSaving}
                 onClick={() => {
                   setSeriesUpdateDialogOpen(false);
@@ -3754,7 +3663,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
               >
                 Cancelar
               </Button>
-              <Button type="button" disabled={isSaving} onClick={() => void handleConfirmSeriesUpdate()}>
+              <Button type="button" variant="primary-modal" size="md" disabled={isSaving} onClick={() => void handleConfirmSeriesUpdate()}>
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Aplicar alterações
               </Button>

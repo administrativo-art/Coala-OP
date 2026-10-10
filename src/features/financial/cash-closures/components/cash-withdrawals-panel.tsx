@@ -103,7 +103,7 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
     setSelected(null); refresh();
   });
   if (!canView) return <p className="text-sm text-muted-foreground">A classificação de sangrias exige acesso às despesas. A finalização continua validando os vínculos no servidor.</p>;
-  return <Card className="border-stone-200">
+  return <Card className="border-ds-border">
     <CardHeader><CardTitle>Sangrias — despesas pagas em espécie</CardTitle><CardDescription>O PDV já descontou estas saídas do dinheiro esperado. Classifique cada uma ou vincule uma despesa existente; não haverá outro pagamento bancário.</CardDescription></CardHeader>
     <CardContent className="space-y-3">
       {loading ? <p role="status">Consultando sangrias…</p> : !payload ? <Button variant="outline" onClick={refresh}>Tentar novamente</Button> : <>
