@@ -8,6 +8,7 @@ import { payrollGuideExtractionPrompt } from "@/ai/prompts/financial/payroll-gui
 import { payslipExtractionPrompt } from "@/ai/prompts/financial/payslip-extraction";
 import { provisionDocumentExtractionPrompt } from "@/ai/prompts/financial/provision-document-extraction";
 import { financialInboxDocumentExtractionPrompt } from "@/ai/prompts/financial/inbox-document-extraction";
+import { mobilePurchaseExtractionPrompt } from "@/ai/prompts/financial/mobile-purchase-extraction";
 import { employeeDocumentPrompt } from "@/ai/prompts/hr/employee-document";
 import { consumptionAnalysisPrompt } from "@/ai/prompts/operations/consumption-analysis";
 import {
@@ -29,6 +30,7 @@ const definitions = [
   payslipExtractionPrompt,
   provisionDocumentExtractionPrompt,
   financialInboxDocumentExtractionPrompt,
+  mobilePurchaseExtractionPrompt,
   employeeDocumentPrompt,
   consumptionAnalysisPrompt,
 ] as const satisfies readonly AiPromptDefinition<any>[];

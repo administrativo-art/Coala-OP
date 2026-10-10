@@ -94,6 +94,12 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
     const result = await api<Candidates>(`${path}?${params}`);
     setCandidates(current => ({ ...result, candidates: cursor ? [...(current?.candidates ?? []), ...result.candidates] : result.candidates }));
   });
+  // The operator already attached the invoice in the app: prefill the link, the closure only confirms it.
+  const usePreLink = (preLink: Payload["preLinks"][number]) => {
+    setSelected(preLink.sourceId); setMode("link"); setAccount(""); setCenter(preLink.resultCenterId);
+    setDescription(""); setReason(""); setExistingId(preLink.expenseId); setCandidates(null); setError("");
+  };
+  const selectedPreLink = payload?.preLinks.find(row => row.sourceId === selected && row.expenseId === existingId);
   const save = () => run(async () => {
     const common = { sourceId: selected, ...(reason.trim() ? { reason: reason.trim() } : {}) };
     const json = active ? { action: "unlink", ...common }
@@ -113,9 +119,12 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
         {[...payload.sources.map(row => ({ ...row, removed: false })), ...orphaned.map(row => ({ ...row, identityVerified: false, removed: true }))].map(row => {
           const link = payload.classifications.find(item => item.sourceId === row.sourceId && item.active);
           const name = data.operators.find(operator => operator.operatorId === row.operatorId)?.operatorName ?? row.operatorId;
+          const preLink = link || row.removed ? undefined : payload.preLinks.find(item => item.sourceId === row.sourceId);
           return <div key={row.sourceId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-            <div><p className="font-medium">{name} · {formatBRL(row.amountCents)}</p><p className="text-muted-foreground">{row.removed ? "Removida do PDV: desfaça o vínculo anterior" : !row.identityVerified ? "Identificador ainda não comprovado: sincronize o PDV" : link?.fingerprint === row.fingerprint ? `${link.accountPlanName} · ${link.resultCenterName}` : "Classificação pendente ou origem alterada"}</p></div>
+            <div><p className="font-medium">{name} · {formatBRL(row.amountCents)}</p><p className="text-muted-foreground">{row.removed ? "Removida do PDV: desfaça o vínculo anterior" : !row.identityVerified ? "Identificador ainda não comprovado: sincronize o PDV" : link?.fingerprint === row.fingerprint ? `${link.accountPlanName} · ${link.resultCenterName}` : "Classificação pendente ou origem alterada"}</p>
+              {preLink && <p className="text-muted-foreground">Nota enviada pelo aplicativo: {preLink.supplierName} · {formatBRL(preLink.totalCents)}{preLink.changeCents > 0 ? ` · troco de ${formatBRL(preLink.changeCents)}: exige um suprimento desse valor no PDV neste dia` : ""}</p>}</div>
             <div className="flex gap-2">{link && <Button asChild variant="outline" size="sm"><Link href={`/dashboard/financial/expenses?search=${encodeURIComponent(link.description)}`}>Ver despesa</Link></Button>}
+              {canLink && preLink && preLink.changeCents >= 0 && row.identityVerified && <Button type="button" size="sm" disabled={busy} onClick={() => usePreLink(preLink)}>Usar nota do aplicativo</Button>}
               {canClassify && <Button type="button" variant="outline" size="sm" disabled={busy} aria-expanded={selected === row.sourceId} onClick={() => choose(row.sourceId)}>{link ? "Corrigir vínculo" : "Classificar"}</Button>}</div>
           </div>;
         })}
@@ -126,8 +135,9 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
           <label className="block text-sm">Como registrar?<select className="mt-1 w-full rounded-md border bg-background p-2" value={mode} disabled={busy} onChange={event => setMode(event.target.value as "create" | "link")}>{canCreate && <option value="create">Criar a despesa paga pela sangria</option>}{canLink && <option value="link">Vincular despesa já cadastrada</option>}</select></label>
           <label className="block text-sm">Centro de resultado da unidade<select className="mt-1 w-full rounded-md border bg-background p-2" value={center} disabled={busy || centers.loading} onChange={event => { setCenter(event.target.value); setCandidates(null); setExistingId(""); }}><option value="">Selecione</option>{centerOptions.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
           {mode === "create" ? <><label className="block text-sm">Plano de contas<AccountPlanTreeSelect value={account} onChange={setAccount} options={accountOptions} placeholder="Pesquise a categoria da despesa" disabled={busy || accounts.loading} /></label><label className="block text-sm">O que foi pago?<Input value={description} maxLength={240} disabled={busy} onChange={event => setDescription(event.target.value)} placeholder="Ex.: material de limpeza do quiosque" /></label></> : <>
+            {selectedPreLink && <p className="text-sm">Compra pré-vinculada pelo aplicativo: {selectedPreLink.supplierName} · {formatBRL(selectedPreLink.totalCents)}. Confirme abaixo ou busque outra despesa.</p>}
             <Button type="button" variant="outline" disabled={busy || !center} onClick={() => void loadCandidates()}>Buscar despesas em aberto desta unidade e competência</Button>
-            {candidates && <><label className="block text-sm">Despesa já cadastrada<select className="mt-1 w-full rounded-md border bg-background p-2" value={existingId} disabled={busy} onChange={event => setExistingId(event.target.value)}><option value="">Selecione</option>{candidates.candidates.map(row => <option key={row.id} value={row.id}>{row.description} · {formatBRL(row.amountCents)}</option>)}</select></label>{!candidates.candidates.length && <p className="text-sm">Nenhuma despesa elegível nesta página. São aceitas despesas avulsas com mesmo valor e competência, sem outro pagamento.</p>}{candidates.nextCursor && <Button type="button" variant="outline" disabled={busy} onClick={() => void loadCandidates(candidates.nextCursor!)}>Buscar mais</Button>}</>}
+            {candidates && <><label className="block text-sm">Compra ou despesa já cadastrada<select className="mt-1 w-full rounded-md border bg-background p-2" value={existingId} disabled={busy} onChange={event => setExistingId(event.target.value)}><option value="">Selecione</option>{candidates.candidates.map(row => <option key={row.id} value={row.id}>{row.localPurchase ? "Compra local · " : ""}{row.description} · {formatBRL(row.amountCents)}</option>)}</select></label>{!candidates.candidates.length && <p className="text-sm">Nenhuma compra local ou despesa elegível nesta página. O valor, a competência e a unidade precisam coincidir e não pode existir outro pagamento.</p>}{candidates.nextCursor && <Button type="button" variant="outline" disabled={busy} onClick={() => void loadCandidates(candidates.nextCursor!)}>Buscar mais</Button>}</>}
           </>}
         </>}
         {!finalized && <><label className="block text-sm">{classification ? "Motivo da correção (obrigatório)" : "Observação (opcional)"}<Textarea value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} /></label>

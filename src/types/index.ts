@@ -791,6 +791,34 @@ export type PermissionSet = {
     manageFinancialLink: boolean;
     manageBaseItems: boolean;
   };
+  /**
+   * Coala One APP (aplicativo Android). Lista separada da do sistema web: ter uma permissão
+   * no sistema não libera a função correspondente no aplicativo, e vice-versa.
+   */
+  app: {
+    localPurchase: {
+      /** Enviar nota e comprovante e registrar a compra local. */
+      register: boolean;
+      /** Dar entrada no estoque da própria unidade ao registrar a compra. */
+      stockEntry: boolean;
+    };
+    stockCount: {
+      /** Iniciar, salvar e concluir a contagem de estoque da unidade. */
+      perform: boolean;
+    };
+    reposition: {
+      /** Conferir e registrar o recebimento das reposições destinadas às unidades do usuário. */
+      receive: boolean;
+    };
+    goals: {
+      /** Ver as metas em andamento, o placar da equipe e a previsão de prêmio das unidades do usuário. */
+      view: boolean;
+    };
+    schedule: {
+      /** Ver a escala publicada das unidades em que a pessoa está lotada, com todos da equipe. */
+      view: boolean;
+    };
+  };
   // Conceptual groupers — granular fields defined in Plano Técnico de Formulários
   hr: {
     view: boolean;
@@ -2928,6 +2956,7 @@ export const defaultGuestPermissions: PermissionSet = {
       manageFinancialLink: false,
       manageBaseItems: false,
     },
+    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false } },
     hr: {
       view: false,
       employees: { view: false, manage: false },
@@ -3039,6 +3068,7 @@ export const defaultAdminPermissions: PermissionSet = {
       manageFinancialLink: true,
       manageBaseItems: true,
     },
+    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true } },
     hr: {
       view: true,
       employees: { view: true, manage: true },
