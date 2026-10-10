@@ -241,7 +241,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard` | [page.tsx](../../src/app/dashboard/page.tsx) | [goals-provider.tsx](../../src/components/goals-provider.tsx), [dp-context.tsx](../../src/components/dp-context.tsx) |
+| `dashboard` | [page.tsx](../../src/app/dashboard/page.tsx) | [page-hero.tsx](../../src/components/patterns/page-hero.tsx), [goals-provider.tsx](../../src/components/goals-provider.tsx) |
 
 ## registration (4)
 

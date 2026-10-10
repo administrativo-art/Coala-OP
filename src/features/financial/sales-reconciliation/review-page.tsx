@@ -9,7 +9,9 @@ import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { AuthenticatedApiError } from "@/lib/authenticated-api-client";
 import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/layout/page-header";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroBackButton } from "@/components/patterns/hero-back-button";
+import { HeroChip } from "@/components/patterns/hero-chip";
 import type { CatalogPage, MappingView } from "../agent/configuration";
 import type { DailySalesApiResult } from "./review-state";
 import { buildSalesReviewYear, type DailySalesCalendarRecord, type SalesReviewCalendarResponse } from "./review-calendar";
@@ -29,18 +31,18 @@ const UNCOMPARED_PREVIEW = 6;
 
 type CoverageTab = "pix" | "issues" | "events" | "limits";
 
-const label = "mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#9a9ba1]";
-const field = "h-[50px] w-full rounded-xl border border-[#e3ded3] bg-[#faf9f6] px-3.5 text-[13.5px] font-semibold text-[#1a1b1f] disabled:cursor-not-allowed disabled:opacity-55";
-const pager = "h-8 rounded-[9px] border border-[#e3ded3] bg-white px-3 text-xs font-bold text-[#374151] hover:bg-[#faf9f6] disabled:cursor-default disabled:opacity-45";
+const label = "mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint";
+const field = "h-[50px] w-full rounded-xl border border-ds-border bg-ds-input px-3.5 text-[13.5px] font-semibold text-ds-ink disabled:cursor-not-allowed disabled:opacity-55";
+const pager = "h-8 rounded-[9px] border border-ds-border bg-white px-3 text-xs font-bold text-ds-ink-2 hover:bg-ds-input disabled:cursor-default disabled:opacity-45";
 const rowGrid = "grid min-w-[780px] grid-cols-[52px_64px_minmax(0,1fr)_minmax(0,1fr)_96px_minmax(0,1.25fr)] items-center gap-3.5 px-[18px]";
 const mono = "font-mono tabular-nums";
 
 function Panel({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-2xl border border-[#e9e5dc] bg-white", className)} {...props}>{children}</div>;
+  return <div className={cn("rounded-2xl border border-ds-border bg-white", className)} {...props}>{children}</div>;
 }
 
 function Metric({ title, value, detail, tone = "neutral" }: { title: string; value: string; detail: string; tone?: "neutral" | "ok" | "bad" }) {
-  return <div className={cn("rounded-2xl border px-[18px] py-4", tone === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : tone === "bad" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-[#e9e5dc] bg-white")}>
+  return <div className={cn("rounded-2xl border px-[18px] py-4", tone === "ok" ? "border-ds-border bg-ds-ok-bg text-ds-ok" : tone === "bad" ? "border-ds-confirm-border bg-ds-danger-bg text-ds-confirm-ink" : "border-ds-border bg-white")}>
     <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] opacity-75">{title}</p>
     <p className={cn(mono, "mt-2.5 text-[22px] font-bold tracking-tight")}>{value}</p>
     <p className="mt-1 text-[11.5px] opacity-80">{detail}</p>
@@ -49,10 +51,10 @@ function Metric({ title, value, detail, tone = "neutral" }: { title: string; val
 
 function SideCell({ ids, facts, missing }: { ids: string[]; facts: Map<string, SalesMatchFact>; missing: string }) {
   const list = ids.map(id => facts.get(id)).filter((fact): fact is SalesMatchFact => !!fact);
-  if (!list.length) return <div className="min-w-0"><p className="text-xs italic text-[#b8b3a9]">Não localizado</p><p className="mt-0.5 truncate text-[11px] text-[#9a9ba1]">{missing}</p></div>;
+  if (!list.length) return <div className="min-w-0"><p className="text-xs italic text-ds-ink-faint">Não localizado</p><p className="mt-0.5 truncate text-[11px] text-ds-ink-faint">{missing}</p></div>;
   return <div className="min-w-0">
     <p className={cn(mono, "text-[12.5px] font-semibold")}>{money(list.reduce((sum, fact) => sum + fact.grossAmountCents, 0))}</p>
-    <p className="mt-0.5 truncate text-[11px] text-[#9a9ba1]">{list.length > 1 ? `${list.length} pagamento(s) · ${factLabel(list[0])}…` : factLabel(list[0])}</p>
+    <p className="mt-0.5 truncate text-[11px] text-ds-ink-faint">{list.length > 1 ? `${list.length} pagamento(s) · ${factLabel(list[0])}…` : factLabel(list[0])}</p>
   </div>;
 }
 
@@ -271,9 +273,9 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
 
   if (!isDefaultAdmin) {
     return <PageContainer surface>
-      <div role="alert" className="mx-auto my-24 max-w-[420px] rounded-2xl border border-[#e9e5dc] bg-white px-[30px] py-7 text-center">
+      <div role="alert" className="mx-auto my-24 max-w-[420px] rounded-2xl border border-ds-border bg-white px-[30px] py-7 text-center">
         <p className="text-[15px] font-extrabold">Consulta restrita à administração.</p>
-        <p className="mt-1.5 text-[12.5px] text-[#7c8189]">Peça acesso a um administrador da conta para conferir vendas PDV × Stone.</p>
+        <p className="mt-1.5 text-[12.5px] text-ds-ink-faint">Peça acesso a um administrador da conta para conferir vendas PDV × Stone.</p>
       </div>
     </PageContainer>;
   }
@@ -380,21 +382,21 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
   ];
 
   return <PageContainer variant={date ? "wide" : "fluid"} surface className="space-y-4 py-6">
-    <PageHeader
+    <PageHero
+      kicker="Financeiro · Conciliação"
       title="Conciliação de vendas"
-      description={date ? "Evidências detalhadas do PDV e da Stone para o dia selecionado." : "Acompanhe o fechamento automático de cada dia e priorize somente as pendências."}
-      back={{ fallbackHref: date ? selectionHref({ nextMonth: date.slice(0, 7) }) : "/dashboard/financial", parentLabel: date ? "Calendário" : "Financeiro" }}
-      actions={<span className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 text-xs font-bold text-sky-700">◉ Conciliação automática</span>}
+      subtitle={date ? "Evidências detalhadas do PDV e da Stone para o dia selecionado." : "Acompanhe o fechamento automático de cada dia e priorize somente as pendências."}
+      actions={<><HeroChip value="◉" label="Conciliação automática" /><HeroBackButton fallbackHref={date ? selectionHref({ nextMonth: date.slice(0, 7) }) : "/dashboard/financial"} parentLabel={date ? "Calendário" : "Financeiro"} /></>}
     />
 
-    <div role="note" className="flex items-start gap-2.5 rounded-xl border border-[#d3ecfb] bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-[1.55] text-sky-950">
+    <div role="note" className="flex items-start gap-2.5 rounded-xl border border-ds-border bg-ds-info-bg px-3.5 py-2.5 text-[12.5px] leading-[1.55] text-ds-info">
       <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
       <p className="min-w-0 flex-1">
         Pares individuais compatíveis e conjuntos diários com os mesmos valores e quantidades são conferidos automaticamente.
         {howOpen ? <> A tela abre nas divergências quando existem e nas conferidas quando o dia está íntegro; use <b>Todas</b> para inspecionar cada venda. Esta conferência não confirma recebimento no banco e não lança valores no financeiro.</>
           : " Esta conferência não confirma recebimento no banco."}
       </p>
-      <button type="button" aria-expanded={howOpen} onClick={() => setHowOpen(value => !value)} className="shrink-0 text-xs font-bold text-sky-700">{howOpen ? "Menos" : "Como funciona"}</button>
+      <button type="button" aria-expanded={howOpen} onClick={() => setHowOpen(value => !value)} className="shrink-0 text-xs font-bold text-ds-info">{howOpen ? "Menos" : "Como funciona"}</button>
     </div>
 
     <Panel className="p-4 sm:px-[18px]">
@@ -403,21 +405,21 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           <p className={label}>Unidade / conta</p>
           <button type="button" aria-label="Vínculo oficial" aria-haspopup="listbox" aria-expanded={unitOpen} disabled={busy}
             onClick={() => setUnitOpen(value => !value)}
-            className={cn(field, "flex items-center justify-between gap-2.5 text-left", unitOpen && "border-[#db2777] shadow-[0_0_0_3px_rgba(219,39,119,.12)]")}>
+            className={cn(field, "flex items-center justify-between gap-2.5 text-left", unitOpen && "border-ds-accent shadow-[0_0_0_3px_rgba(219,39,119,.12)]")}>
             <span className="flex min-w-0 flex-col items-start gap-0.5">
-              <span className={cn("max-w-full truncate text-[13.5px]", mapping ? "font-bold" : "font-medium text-[#8a8f99]")}>
+              <span className={cn("max-w-full truncate text-[13.5px]", mapping ? "font-bold" : "font-medium text-ds-ink-faint")}>
                 {catalogBusy ? "Carregando vínculos…" : mapping ? mappingLabel : mappings.length ? "Selecione" : "Nenhum vínculo carregado"}
               </span>
-              <span className="max-w-full truncate text-[11px] font-normal text-[#9a9ba1]">
+              <span className="max-w-full truncate text-[11px] font-normal text-ds-ink-faint">
                 {mapping ? `${mapping.stoneCodes.length} StoneCode(s)` : `${mappings.length} vínculo(s) oficial(is)`}
               </span>
             </span>
-            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[#9a9ba1]" />
+            <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ds-ink-faint" />
           </button>
-          {unitOpen && !busy ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px] border border-[#e3ded3] bg-white shadow-[0_18px_40px_rgba(0,0,0,.14)]">
-            <div className="flex items-center justify-between border-b border-[#f0ece4] px-3.5 pb-2 pt-2.5">
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#9a9ba1]">Vínculos oficiais · {mappings.length}</span>
-              <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 text-xs font-bold text-[#db2777]"><RefreshCw className="h-3 w-3" />{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</button>
+          {unitOpen && !busy ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px] border border-ds-border bg-white shadow-[0_18px_40px_rgba(0,0,0,.14)]">
+            <div className="flex items-center justify-between border-b border-ds-divider px-3.5 pb-2 pt-2.5">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">Vínculos oficiais · {mappings.length}</span>
+              <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 text-xs font-bold text-ds-accent"><RefreshCw className="h-3 w-3" />{loaded ? "Atualizar vínculos" : "Carregar vínculos"}</button>
             </div>
             <div role="listbox" aria-label="Vínculos oficiais" className="max-h-[290px] overflow-auto p-1.5">
               {mappings.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === selected}
@@ -426,15 +428,15 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
                   setSelected(item.id); setCode(nextCode); setDate(""); setMonth(""); setUnitOpen(false); clear();
                   router.push(selectionHref({ mappingId: item.id, stoneCode: nextCode }));
                 }}
-                className={cn("flex w-full items-center justify-between gap-2.5 rounded-[10px] px-2.5 py-[9px] text-left hover:bg-[#fdf2f8]", item.id === selected && "bg-[#fdf2f8]")}>
+                className={cn("flex w-full items-center justify-between gap-2.5 rounded-[10px] px-2.5 py-[9px] text-left hover:bg-ds-accent-row", item.id === selected && "bg-ds-accent-row")}>
                 <span className="flex min-w-0 flex-col items-start gap-0.5">
                   <span className="text-[13px] font-bold">{item.kioskName}</span>
-                  <span className="text-[11px] text-[#9a9ba1]">{item.accountName} · {item.stoneCodes.length} StoneCode(s)</span>
+                  <span className="text-[11px] text-ds-ink-faint">{item.accountName} · {item.stoneCodes.length} StoneCode(s)</span>
                 </span>
-                <Check aria-hidden="true" className={cn("h-4 w-4 text-[#db2777]", item.id === selected ? "opacity-100" : "opacity-0")} />
+                <Check aria-hidden="true" className={cn("h-4 w-4 text-ds-accent", item.id === selected ? "opacity-100" : "opacity-0")} />
               </button>)}
             </div>
-            {cursor ? <button type="button" onClick={() => void load(cursor)} className="h-10 w-full border-t border-[#f0ece4] bg-[#faf9f6] text-[12.5px] font-bold text-[#5f646c]">Mais vínculos</button> : null}
+            {cursor ? <button type="button" onClick={() => void load(cursor)} className="h-10 w-full border-t border-ds-divider bg-ds-input text-[12.5px] font-bold text-ds-ink-muted">Mais vínculos</button> : null}
           </div> : null}
         </div>
 
@@ -453,42 +455,42 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
 
         {date ? <div className="min-w-0">
           <p className={label}>Dia das vendas</p>
-          <div className="flex h-[50px] overflow-hidden rounded-xl border border-[#e3ded3] bg-[#faf9f6]">
+          <div className="flex h-[50px] overflow-hidden rounded-xl border border-ds-border bg-ds-input">
             <button type="button" aria-label="Dia anterior" disabled={busy || !date} onClick={() => changeDate(addDays(date, -1))}
-              className="flex w-[38px] items-center justify-center border-r border-[#ebe7de] text-[#5f646c] hover:bg-[#f1eee7] disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
+              className="flex w-[38px] items-center justify-center border-r border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
             <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={publishedThrough}
               onChange={event => changeDate(event.target.value)}
               className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-none" />
             <button type="button" aria-label="Próximo dia" disabled={nextDayDisabled} onClick={() => changeDate(addDays(date, 1))}
-              className="flex w-[38px] items-center justify-center border-l border-[#ebe7de] text-[#5f646c] hover:bg-[#f1eee7] disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
+              className="flex w-[38px] items-center justify-center border-l border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div> : null}
 
         {date ? <div role="status" aria-live="polite" className={cn("flex h-[50px] min-w-[200px] items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[12.5px] font-bold",
-          error ? "border-rose-200 bg-rose-50 text-rose-700" : "border-[#ebe7de] bg-[#faf9f6]", !error && result ? "text-emerald-700" : !error && "text-[#8a8f99]")}>
-          {busy ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-[#db2777]" /> : null}
+          error ? "border-ds-confirm-border bg-ds-danger-bg text-ds-danger" : "border-ds-border bg-ds-input", !error && result ? "text-ds-ok" : !error && "text-ds-ink-faint")}>
+          {busy ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-ds-accent" /> : null}
           <span className="flex-1">{statusLabel}</span>
           {mapping && code && date ? <button type="button" aria-label="Reconsultar fontes" title="Reconsultar fontes" disabled={busy}
-            onClick={() => setRefreshVersion(value => value + 1)} className="rounded-md p-1 text-[#5f646c] hover:bg-[#efebe3] disabled:opacity-40">
+            onClick={() => setRefreshVersion(value => value + 1)} className="rounded-md p-1 text-ds-ink-muted hover:bg-ds-muted disabled:opacity-40">
             <RefreshCw className={cn("h-3.5 w-3.5", reviewBusy && "animate-spin")} />
           </button> : null}
-        </div> : <div role="status" aria-live="polite" className="flex h-[50px] min-w-0 items-center justify-between gap-3 rounded-xl border border-[#ebe7de] bg-[#faf9f6] px-3.5">
-          <div className="min-w-0"><p className="truncate text-[12.5px] font-extrabold text-[#374151]">{month ? `Calendário de ${formatDateKey(`${month}-01`).replace(/^01\//, "")}` : `Janeiro a ${formatDateKey(`${calendarToday.slice(0, 7)}-01`).replace(/^01\//, "")}`}</p><p className="mt-0.5 truncate text-[10.5px] text-[#9a9ba1]">Atualização automática · sem ação manual</p></div>
+        </div> : <div role="status" aria-live="polite" className="flex h-[50px] min-w-0 items-center justify-between gap-3 rounded-xl border border-ds-border bg-ds-input px-3.5">
+          <div className="min-w-0"><p className="truncate text-[12.5px] font-extrabold text-ds-ink-2">{month ? `Calendário de ${formatDateKey(`${month}-01`).replace(/^01\//, "")}` : `Janeiro a ${formatDateKey(`${calendarToday.slice(0, 7)}-01`).replace(/^01\//, "")}`}</p><p className="mt-0.5 truncate text-[10.5px] text-ds-ink-faint">Atualização automática · sem ação manual</p></div>
           <button type="button" aria-label="Atualizar calendário" title="Atualizar calendário" disabled={calendarBusy || !mapping || !code}
-            onClick={() => setCalendarRefreshVersion(value => value + 1)} className="rounded-lg border border-[#e3ded3] bg-white p-2 text-[#5f646c] hover:bg-[#efebe3] disabled:opacity-40">
+            onClick={() => setCalendarRefreshVersion(value => value + 1)} className="rounded-lg border border-ds-border bg-white p-2 text-ds-ink-muted hover:bg-ds-muted disabled:opacity-40">
             <RefreshCw className={cn("h-3.5 w-3.5", calendarBusy && "animate-spin")} />
           </button>
         </div>}
       </div>
       <div className="mt-3 flex flex-col justify-between gap-1 text-[11.5px] leading-normal sm:flex-row sm:gap-4">
-        <span className="text-[#374151]">{mapping ? `Vigência do vínculo: ${formatDateKey(mapping.validFrom)} a ${mapping.validTo ? formatDateKey(mapping.validTo) : "sem data final"}.` : ""}</span>
-        <span className="text-[#9a9ba1] sm:text-right">{date ? "Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte." : "O calendário não presume fechamento: dias sem revisão ficam como não verificados até o backfill automático processá-los."}</span>
+        <span className="text-ds-ink-2">{mapping ? `Vigência do vínculo: ${formatDateKey(mapping.validFrom)} a ${mapping.validTo ? formatDateKey(mapping.validTo) : "sem data final"}.` : ""}</span>
+        <span className="text-ds-ink-faint sm:text-right">{date ? "Um dia por consulta, até 500 cupons ou eventos por fonte. Arquivos Stone ficam disponíveis após as 05h do dia seguinte." : "O calendário não presume fechamento: dias sem revisão ficam como não verificados até o backfill automático processá-los."}</span>
       </div>
     </Panel>
 
-    {loaded && !mappings.length && !busy ? <div role="status" className="flex items-center justify-between gap-4 rounded-[14px] border border-amber-200 bg-amber-50 px-[18px] py-4">
-      <span className="text-[13px] text-amber-900">Cadastre o vínculo oficial entre unidade, StoneCode e conta antes de consultar.</span>
-      <button type="button" onClick={() => void load()} className="inline-flex h-[34px] items-center gap-1.5 rounded-[10px] border border-amber-300 bg-white px-3 text-xs font-bold text-amber-800"><RefreshCw className="h-3.5 w-3.5" />Atualizar vínculos</button>
+    {loaded && !mappings.length && !busy ? <div role="status" className="flex items-center justify-between gap-4 rounded-[14px] border border-ds-alert-border bg-ds-warn-bg px-[18px] py-4">
+      <span className="text-[13px] text-ds-alert-ink">Cadastre o vínculo oficial entre unidade, StoneCode e conta antes de consultar.</span>
+      <button type="button" onClick={() => void load()} className="inline-flex h-[34px] items-center gap-1.5 rounded-[10px] border border-ds-alert-border bg-white px-3 text-xs font-bold text-ds-alert-ink"><RefreshCw className="h-3.5 w-3.5" />Atualizar vínculos</button>
     </div> : null}
 
     {!date ? <SalesReviewCalendarView
@@ -502,50 +504,50 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
       monthHref={nextMonth => selectionHref({ nextMonth })}
       dayHref={nextDate => selectionHref({ nextDate })}
     /> : <Link href={selectionHref({ nextMonth: date.slice(0, 7) })}
-      className="inline-flex items-center gap-1.5 text-xs font-extrabold text-zinc-500 hover:text-pink-700">
+      className="inline-flex items-center gap-1.5 text-xs font-extrabold text-ds-ink-muted hover:text-ds-accent-ink">
       <ChevronLeft className="h-3.5 w-3.5" />Voltar ao calendário de {formatDateKey(`${date.slice(0, 7)}-01`).replace(/^01\//, "")}
     </Link>}
 
-    {date && error && !busy ? <div role="alert" className="flex items-center justify-between gap-4 rounded-[14px] border border-rose-200 bg-rose-50 px-[18px] py-4">
+    {date && error && !busy ? <div role="alert" className="flex items-center justify-between gap-4 rounded-[14px] border border-ds-confirm-border bg-ds-danger-bg px-[18px] py-4">
       <div>
-        <p className="text-[13.5px] font-extrabold text-rose-800">Não foi possível comparar</p>
-        <p className="mt-[3px] text-[12.5px] text-rose-800">{error}</p>
+        <p className="text-[13.5px] font-extrabold text-ds-confirm-ink">Não foi possível comparar</p>
+        <p className="mt-[3px] text-[12.5px] text-ds-confirm-ink">{error}</p>
       </div>
-      {mapping && code && date ? <button type="button" onClick={() => setRefreshVersion(value => value + 1)} className="h-[34px] shrink-0 rounded-[10px] border border-rose-300 bg-white px-3 text-xs font-bold text-rose-700">Tentar novamente</button> : null}
+      {mapping && code && date ? <button type="button" onClick={() => setRefreshVersion(value => value + 1)} className="h-[34px] shrink-0 rounded-[10px] border border-ds-confirm-border bg-white px-3 text-xs font-bold text-ds-danger">Tentar novamente</button> : null}
     </div> : null}
 
-    {date && !result && !error && !busy && mappings.length > 0 && !(mapping && code && date) ? <div className="rounded-2xl border-[1.5px] border-dashed border-[#dcd8cf] px-6 py-14 text-center">
+    {date && !result && !error && !busy && mappings.length > 0 && !(mapping && code && date) ? <div className="rounded-2xl border-[1.5px] border-dashed border-ds-border-input px-6 py-14 text-center">
       <p className="text-[14.5px] font-extrabold">{mapping ? "Selecione o StoneCode" : "Escolha o recorte da comparação"}</p>
-      <p className="mt-[5px] text-[12.5px] text-[#8a8f99]">{mapping ? "A comparação carrega automaticamente assim que unidade, StoneCode e dia estiverem definidos." : "Selecione unidade / conta, StoneCode e dia das vendas. A comparação carrega automaticamente."}</p>
+      <p className="mt-[5px] text-[12.5px] text-ds-ink-faint">{mapping ? "A comparação carrega automaticamente assim que unidade, StoneCode e dia estiverem definidos." : "Selecione unidade / conta, StoneCode e dia das vendas. A comparação carrega automaticamente."}</p>
     </div> : null}
 
     {date && reviewBusy ? <div aria-hidden="true" className="grid animate-pulse gap-3 md:grid-cols-4">
-      {[0, 1, 2, 3].map(index => <div key={index} className="h-[132px] rounded-2xl bg-[#ebe7de]" />)}
-      <div className="h-[300px] rounded-2xl bg-[#ebe7de] md:col-span-4" />
+      {[0, 1, 2, 3].map(index => <div key={index} className="h-[132px] rounded-2xl bg-ds-border" />)}
+      <div className="h-[300px] rounded-2xl bg-ds-border md:col-span-4" />
     </div> : null}
 
     {result && !reviewBusy ? <section aria-label="Resultado da comparação" className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))]">
-        <div className={cn("rounded-2xl border bg-white px-[18px] py-4 md:col-span-2 xl:col-span-1", verdictTone === "ok" ? "border-emerald-200" : verdictTone === "warn" ? "border-amber-200" : "border-rose-200")}>
+        <div className={cn("rounded-2xl border bg-white px-[18px] py-4 md:col-span-2 xl:col-span-1", verdictTone === "ok" ? "border-ds-border" : verdictTone === "warn" ? "border-ds-alert-border" : "border-ds-confirm-border")}>
           <div className="flex items-center gap-3">
             <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[17px] font-extrabold",
-              verdictTone === "ok" ? "bg-emerald-50 text-emerald-700" : verdictTone === "warn" ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700")}>{verdictTone === "ok" ? "✓" : verdictTone === "warn" ? "…" : "⚠"}</span>
+              verdictTone === "ok" ? "bg-ds-ok-bg text-ds-ok" : verdictTone === "warn" ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-danger-bg text-ds-danger")}>{verdictTone === "ok" ? "✓" : verdictTone === "warn" ? "…" : "⚠"}</span>
             <div className="min-w-0">
               <p className="text-[17px] font-extrabold tracking-tight">{verdictTitle}</p>
-              <p className="mt-0.5 text-[12.5px] text-[#5f646c]">{totals.auto} de {totals.list.length} casos conferidos automaticamente</p>
+              <p className="mt-0.5 text-[12.5px] text-ds-ink-muted">{totals.auto} de {totals.list.length} casos conferidos automaticamente</p>
             </div>
           </div>
-          <div className="mt-3.5 flex h-2 overflow-hidden rounded-full bg-[#efe9e2]" aria-hidden="true">
-            <div className="bg-emerald-500" style={{ width: `${totals.list.length ? totals.auto / totals.list.length * 100 : 0}%` }} />
-            <div className="bg-rose-600" style={{ width: `${totals.list.length ? totals.attention / totals.list.length * 100 : 0}%` }} />
+          <div className="mt-3.5 flex h-2 overflow-hidden rounded-full bg-ds-muted" aria-hidden="true">
+            <div className="bg-ds-ok" style={{ width: `${totals.list.length ? totals.auto / totals.list.length * 100 : 0}%` }} />
+            <div className="bg-ds-danger" style={{ width: `${totals.list.length ? totals.attention / totals.list.length * 100 : 0}%` }} />
           </div>
-          <div className="mt-[9px] flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-[#5f646c]">
-            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />{totals.auto} conferidas automaticamente</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-600" />{totals.attention} divergências</span>
-            <button type="button" onClick={() => goCoverage("issues")} className="ml-auto font-bold text-amber-700">{issues.length} apontamento(s) de fonte →</button>
+          <div className="mt-[9px] flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ds-ink-muted">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ds-ok" />{totals.auto} conferidas automaticamente</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ds-danger" />{totals.attention} divergências</span>
+            <button type="button" onClick={() => goCoverage("issues")} className="ml-auto font-bold text-ds-warn">{issues.length} apontamento(s) de fonte →</button>
           </div>
-          <p className="mt-2 text-[11px] text-[#9a9ba1]">Revisão {result.review.revision} · registrada em {new Date(result.review.reviewedAt).toLocaleString("pt-BR")}</p>
-          {result.review.sourceChanged ? <p className="mt-1 text-[11px] font-medium text-amber-800">As fontes mudaram desde a revisão anterior; o estado foi recalculado.</p> : null}
+          <p className="mt-2 text-[11px] text-ds-ink-faint">Revisão {result.review.revision} · registrada em {new Date(result.review.reviewedAt).toLocaleString("pt-BR")}</p>
+          {result.review.sourceChanged ? <p className="mt-1 text-[11px] font-medium text-ds-alert-ink">As fontes mudaram desde a revisão anterior; o estado foi recalculado.</p> : null}
         </div>
         <Metric title="Vendas PDV comparadas" value={money(totals.pdv)} detail={`${result.pdvFacts.length} pagamentos digitais no PDV`} />
         <Metric title="Capturas Stone" value={money(totals.stone)} detail={`${result.stoneSales.length} eventos comparáveis`} />
@@ -556,7 +558,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
       <div>
         <div className="mb-[9px] mt-1 flex items-baseline gap-2.5">
           <span className={cn(label, "mb-0")}>Resumo por meio de pagamento</span>
-          <span className="text-[11.5px] text-[#a3a099]">clique para filtrar a conferência</span>
+          <span className="text-[11.5px] text-ds-ink-faint">clique para filtrar a conferência</span>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {(["all", ...channelOrder] as ChannelFilter[]).map(value => {
@@ -568,20 +570,20 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
                 : item.auto ? { tone: "ok" as const, text: `${item.auto} conferida(s)` }
                   : { tone: "muted" as const, text: "Sem vendas" };
             return <button key={value} type="button" aria-pressed={active} onClick={() => pickChannel(value)}
-              className={cn("block w-full rounded-[14px] border bg-white px-[15px] py-[13px] text-left", active ? "border-[1.5px] border-[#db2777] shadow-[0_0_0_3px_rgba(219,39,119,.1)]" : "border-[#e9e5dc] hover:border-[#d8d2c6]")}>
+              className={cn("block w-full rounded-[14px] border bg-white px-[15px] py-[13px] text-left", active ? "border-[1.5px] border-ds-accent shadow-[0_0_0_3px_rgba(219,39,119,.1)]" : "border-ds-border hover:border-ds-border-input")}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-extrabold">{value === "all" ? "Todos os meios" : channels[value as ReconciliationSalesChannel]}</span>
                 <StatusBadge tone={chip.tone}>{chip.text}</StatusBadge>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2.5 text-left">
                 {[["PDV", item.pdv], ["Stone", item.stone]].map(([title, amount]) => <div key={title}>
-                  <p className="text-[9.5px] font-extrabold uppercase tracking-[0.12em] text-[#9a9ba1]">{title}</p>
+                  <p className="text-[9.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">{title}</p>
                   <p className={cn(mono, "mt-[3px] text-[13.5px] font-semibold")}>{money(amount as number)}</p>
                 </div>)}
               </div>
-              <div className="mt-[11px] flex items-center justify-between gap-2 border-t border-dashed border-[#ebe6dc] pt-[9px]">
-                <span className="text-[11.5px] text-[#8a8f99]">{pixOff ? "Fora da comparação" : "Diferença"}</span>
-                <span className={cn(mono, "text-[12.5px] font-bold", pixOff ? "text-amber-700" : item.difference ? "text-rose-700" : "text-emerald-700")}>
+              <div className="mt-[11px] flex items-center justify-between gap-2 border-t border-dashed border-ds-border pt-[9px]">
+                <span className="text-[11.5px] text-ds-ink-faint">{pixOff ? "Fora da comparação" : "Diferença"}</span>
+                <span className={cn(mono, "text-[12.5px] font-bold", pixOff ? "text-ds-warn" : item.difference ? "text-ds-danger" : "text-ds-ok")}>
                   {pixOff ? `${uncompared.length} pag. · ${money(uncomparedSum)}` : money(item.difference)}
                 </span>
               </div>
@@ -592,19 +594,19 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
 
       <div className={cn("grid items-start gap-4", detail ? "xl:grid-cols-[minmax(0,1fr)_400px]" : "grid-cols-1")}>
         <Panel className="min-w-0 overflow-hidden">
-          <div className="border-b border-[#f0ece4] px-[18px] pb-3.5 pt-4">
+          <div className="border-b border-ds-divider px-[18px] pb-3.5 pt-4">
             <h3 className="text-base font-extrabold tracking-tight">Conferência do dia</h3>
-            <p className="mt-1 text-xs text-[#7c8189]">
+            <p className="mt-1 text-xs text-ds-ink-faint">
               {formatDateKey(result.scope.referenceDate)} · Filial PDV {result.pdvFilialId} · StoneCode {result.scope.stoneCode} · consulta {new Date(result.collectedAt).toLocaleString("pt-BR")}
             </p>
             <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
-              <div role="group" aria-label="Filtrar situação" className="flex gap-[3px] rounded-[11px] bg-[#f4f2ec] p-[3px]">
+              <div role="group" aria-label="Filtrar situação" className="flex gap-[3px] rounded-[11px] bg-ds-muted p-[3px]">
                 {([
-                  { id: "attention", icon: "⚠ ", text: "Divergências", count: view.attention.length, tone: "bg-rose-50 text-rose-700" },
-                  { id: "all", icon: "", text: "Todas", count: view.inChannel.length, tone: "bg-[#efebe3] text-[#5f646c]" },
-                  { id: "auto", icon: "✓ ", text: "Conferidas", count: view.auto, tone: "bg-emerald-50 text-emerald-700" },
+                  { id: "attention", icon: "⚠ ", text: "Divergências", count: view.attention.length, tone: "bg-ds-danger-bg text-ds-danger" },
+                  { id: "all", icon: "", text: "Todas", count: view.inChannel.length, tone: "bg-ds-muted text-ds-ink-muted" },
+                  { id: "auto", icon: "✓ ", text: "Conferidas", count: view.auto, tone: "bg-ds-ok-bg text-ds-ok" },
                 ] as const).map(tab => <button key={tab.id} type="button" aria-pressed={caseFilter === tab.id} onClick={() => pickCaseFilter(tab.id)}
-                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-bold", caseFilter === tab.id ? "bg-white text-[#1a1b1f] shadow-sm" : "text-[#7c8189]")}>
+                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-bold", caseFilter === tab.id ? "bg-white text-ds-ink shadow-sm" : "text-ds-ink-faint")}>
                   {tab.icon}{tab.text}
                   <span className={cn("inline-flex h-[18px] min-w-5 items-center justify-center rounded-full px-1.5 text-[10.5px]", tab.tone)}>{tab.count}</span>
                 </button>)}
@@ -612,7 +614,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
               <div role="group" aria-label="Filtrar meio de pagamento" className="flex gap-0.5">
                 {(["all", ...channelOrder] as ChannelFilter[]).map(value => <button key={value} type="button" aria-pressed={channel === value}
                   onClick={() => { setChannel(value); setKindFilter("all"); setPage(0); setDetailKey(null); }}
-                  className={cn("h-[30px] rounded-lg px-[11px] text-[12.5px]", channel === value ? "bg-[#f1eee7] font-bold text-[#1a1b1f]" : "font-semibold text-[#7c8189]")}>
+                  className={cn("h-[30px] rounded-lg px-[11px] text-[12.5px]", channel === value ? "bg-ds-muted font-bold text-ds-ink" : "font-semibold text-ds-ink-faint")}>
                   {value === "all" ? "Todos" : channels[value as ReconciliationSalesChannel]}
                 </button>)}
               </div>
@@ -621,7 +623,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
               {([["all", "Todos os tipos", view.attention.length], ...[...view.kindCounts].map(([kind, count]) => [kind, kindsShort[kind as keyof typeof kindsShort], count])] as Array<[KindFilter, string, number]>).map(([kind, text, count]) =>
                 <button key={kind} type="button" aria-pressed={view.kind === kind} onClick={() => { setKindFilter(kind); setPage(0); setDetailKey(null); }}
                   className={cn("inline-flex h-[26px] items-center gap-[5px] whitespace-nowrap rounded-full border px-[11px] text-[11.5px] font-bold",
-                    view.kind === kind ? "border-[#1a1b1f] bg-[#1a1b1f] text-white" : "border-[#e3ded3] bg-white text-[#4b5058]")}>
+                    view.kind === kind ? "border-ds-ink bg-ds-dark text-white" : "border-ds-border bg-white text-ds-ink-2")}>
                   {text} <span className="opacity-60">{count}</span>
                 </button>)}
             </div> : null}
@@ -630,7 +632,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           {rows.length ? <>
             <div className="overflow-x-auto">
               <div role="table" aria-label="Comparação de pagamentos do PDV com capturas Stone">
-                <div role="row" className={cn(rowGrid, "h-[34px] bg-[#faf9f6] text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9a9ba1]")}>
+                <div role="row" className={cn(rowGrid, "h-[34px] bg-ds-input text-[10px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint")}>
                   <span role="columnheader">Hora</span><span role="columnheader">Meio</span><span role="columnheader">PDV</span><span role="columnheader">Stone</span>
                   <span role="columnheader" className="text-right">Diferença</span><span role="columnheader">Situação</span>
                 </div>
@@ -640,25 +642,25 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
                   return <div key={row.deterministicKey} role="row" tabIndex={0} aria-selected={on}
                     onClick={() => setDetailKey(on ? null : row.deterministicKey)}
                     onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDetailKey(on ? null : row.deterministicKey); } }}
-                    className={cn(rowGrid, "min-h-[58px] cursor-pointer border-t border-[#f4f1ea] py-[9px] hover:bg-[#fdf7fa]", on ? "bg-[#fdf2f8] shadow-[inset_3px_0_0_#db2777]" : "bg-white")}>
-                    <span role="cell" className="font-mono text-xs text-[#7c8189]">{caseTime(row, facts)}</span>
+                    className={cn(rowGrid, "min-h-[58px] cursor-pointer border-t border-ds-divider py-[9px] hover:bg-ds-accent-row", on ? "bg-ds-accent-row shadow-[inset_3px_0_0_#db2777]" : "bg-white")}>
+                    <span role="cell" className="font-mono text-xs text-ds-ink-faint">{caseTime(row, facts)}</span>
                     <span role="cell" className="text-[12.5px] font-bold">{channels[row.channel]}</span>
                     <div role="cell" className="min-w-0"><SideCell ids={row.pdvFactIds} facts={facts} missing="sem pagamento no PDV" /></div>
                     <div role="cell" className="min-w-0"><SideCell ids={row.stoneSaleIds} facts={facts} missing="sem captura na Stone" /></div>
-                    <span role="cell" className={cn(mono, "text-right text-[12.5px] font-bold", row.differenceAmountCents ? "text-rose-700" : "text-emerald-700")}>{money(row.differenceAmountCents)}</span>
+                    <span role="cell" className={cn(mono, "text-right text-[12.5px] font-bold", row.differenceAmountCents ? "text-ds-danger" : "text-ds-ok")}>{money(row.differenceAmountCents)}</span>
                     <div role="cell" className="flex min-w-0 flex-col items-start gap-[3px]">
                       <StatusBadge tone={attention ? "bad" : "ok"}>{attention ? "⚠" : "✓"} {caseBadgeLabel(row)}</StatusBadge>
-                      <span className="max-w-full truncate text-[11px] text-[#9a9ba1]">{bases[row.matchBasis]}</span>
+                      <span className="max-w-full truncate text-[11px] text-ds-ink-faint">{bases[row.matchBasis]}</span>
                     </div>
                   </div>;
                 })}
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#f0ece4] px-[18px] py-3">
-              <span className="text-xs text-[#8a8f99]">{currentPage * PAGE_SIZE + 1}–{Math.min(rows.length, (currentPage + 1) * PAGE_SIZE)} de {rows.length}</span>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ds-divider px-[18px] py-3">
+              <span className="text-xs text-ds-ink-faint">{currentPage * PAGE_SIZE + 1}–{Math.min(rows.length, (currentPage + 1) * PAGE_SIZE)} de {rows.length}</span>
               <div className="flex items-center gap-2">
                 <button type="button" className={pager} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Anterior</button>
-                <span className="text-xs font-semibold text-[#5f646c]">Página {currentPage + 1} de {pageCount}</span>
+                <span className="text-xs font-semibold text-ds-ink-muted">Página {currentPage + 1} de {pageCount}</span>
                 <button type="button" className={pager} disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Próxima</button>
               </div>
             </div>
@@ -667,11 +669,11 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
               {channel === "pix" && pixPending ? "Pix não foi comparado neste dia." : caseFilter === "attention" ? "Nenhuma divergência neste filtro." : "Nenhuma venda neste filtro."}
             </p>
             {channel === "pix" && pixPending ? <>
-              <p className="mt-[5px] text-xs text-[#8a8f99]">{uncompared.length} pagamento(s) Pix do PDV ({money(uncomparedSum)}) aguardam o arquivo da fonte Pix.</p>
-              <button type="button" onClick={() => goCoverage("pix")} className="mt-3.5 h-[34px] rounded-[10px] border border-[#e3ded3] bg-white px-3.5 text-xs font-bold text-[#374151]">Ver fonte Pix</button>
+              <p className="mt-[5px] text-xs text-ds-ink-faint">{uncompared.length} pagamento(s) Pix do PDV ({money(uncomparedSum)}) aguardam o arquivo da fonte Pix.</p>
+              <button type="button" onClick={() => goCoverage("pix")} className="mt-3.5 h-[34px] rounded-[10px] border border-ds-border bg-white px-3.5 text-xs font-bold text-ds-ink-2">Ver fonte Pix</button>
             </> : caseFilter === "attention" && view.auto ? <>
-              <p className="mt-[5px] text-xs text-[#8a8f99]">Todas as vendas deste recorte foram conferidas automaticamente.</p>
-              <button type="button" onClick={() => pickCaseFilter("auto")} className="mt-3.5 h-[34px] rounded-[10px] border border-[#e3ded3] bg-white px-3.5 text-xs font-bold text-[#374151]">Ver conferidas ({view.auto})</button>
+              <p className="mt-[5px] text-xs text-ds-ink-faint">Todas as vendas deste recorte foram conferidas automaticamente.</p>
+              <button type="button" onClick={() => pickCaseFilter("auto")} className="mt-3.5 h-[34px] rounded-[10px] border border-ds-border bg-white px-3.5 text-xs font-bold text-ds-ink-2">Ver conferidas ({view.auto})</button>
             </> : null}
           </div>}
         </Panel>
@@ -683,10 +685,10 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
       <Panel className="scroll-mt-4 overflow-hidden" id="cobertura-fontes">
         <div className="px-[18px] pt-4">
           <h3 className="text-base font-extrabold tracking-tight">Cobertura e apontamentos das fontes</h3>
-          <div role="tablist" className="mt-3 flex gap-0.5 overflow-x-auto border-b border-[#f0ece4]">
+          <div role="tablist" className="mt-3 flex gap-0.5 overflow-x-auto border-b border-ds-divider">
             {coverageTabs.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={coverageTab === tab.id} onClick={() => setCoverageTab(tab.id)}
-              className={cn("-mb-px h-[38px] shrink-0 whitespace-nowrap border-b-2 px-[13px] text-[12.5px] font-bold", coverageTab === tab.id ? "border-[#db2777] text-[#1a1b1f]" : "border-transparent text-[#8a8f99]")}>
-              {tab.label}{tab.dot ? <span className="ml-[7px] inline-block h-1.5 w-1.5 rounded-full bg-amber-500 align-middle" /> : null}
+              className={cn("-mb-px h-[38px] shrink-0 whitespace-nowrap border-b-2 px-[13px] text-[12.5px] font-bold", coverageTab === tab.id ? "border-ds-accent text-ds-ink" : "border-transparent text-ds-ink-faint")}>
+              {tab.label}{tab.dot ? <span className="ml-[7px] inline-block h-1.5 w-1.5 rounded-full bg-ds-warn align-middle" /> : null}
             </button>)}
           </div>
         </div>
@@ -694,25 +696,25 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           {coverageTab === "pix" ? <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
               <StatusBadge tone={pixPending ? "warn" : "ok"}>{pixPending ? "Pendente ou indisponível" : "Disponível no recorte"}</StatusBadge>
-              <span className="text-[12.5px] text-[#4b5058]">
+              <span className="text-[12.5px] text-ds-ink-2">
                 Fonte: {pixSourceLabels[result.pix.status]}{result.pix.coverage === "partial" ? " · cobertura parcial" : result.pix.coverage === "complete" ? " · cobertura completa" : ""}
                 {" · "}Arquivo: <span className="font-mono">{result.pix.fileId ?? "não configurado"}</span> · Registros excluídos: {result.pix.excludedCount}
               </span>
             </div>
-            <p className="text-[12.5px] leading-[1.55] text-[#7c8189]">Os dados recebidos ficam armazenados no Coala; a tela não solicita novamente um arquivo já processado. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
+            <p className="text-[12.5px] leading-[1.55] text-ds-ink-faint">Os dados recebidos ficam armazenados no Coala; a tela não solicita novamente um arquivo já processado. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
             <p className={cn(label, "mb-0 mt-1")}>PDV não comparado ({uncompared.length}){uncompared.length ? ` · ${money(uncomparedSum)}` : ""}</p>
-            {uncompared.length ? <div className="overflow-x-auto rounded-xl border border-[#efebe3]"><div className="min-w-[640px]">
-              <div className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] gap-3 bg-[#faf9f6] px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9a9ba1]">
+            {uncompared.length ? <div className="overflow-x-auto rounded-xl border border-ds-border"><div className="min-w-[640px]">
+              <div className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint">
                 <span>Hora</span><span>Cupom</span><span>ID da evidência</span><span>Situação</span><span className="text-right">Valor</span>
               </div>
-              {(showAllUncompared ? uncompared : uncompared.slice(0, UNCOMPARED_PREVIEW)).map(fact => <div key={fact.id} className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] items-center gap-3 border-t border-[#f4f1ea] px-3.5 py-2 text-xs">
-                <span className="font-mono text-[#7c8189]">{new Date(fact.soldAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+              {(showAllUncompared ? uncompared : uncompared.slice(0, UNCOMPARED_PREVIEW)).map(fact => <div key={fact.id} className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] items-center gap-3 border-t border-ds-divider px-3.5 py-2 text-xs">
+                <span className="font-mono text-ds-ink-faint">{new Date(fact.soldAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                 <span className="font-semibold">{fact.couponId ? `Cupom ${fact.couponId}` : "—"}</span>
-                <span className="truncate font-mono text-[11px] text-[#a3a099]">{fact.id}</span>
-                <span className="text-[#5f646c]">{saleStatuses[fact.status]}</span>
+                <span className="truncate font-mono text-[11px] text-ds-ink-faint">{fact.id}</span>
+                <span className="text-ds-ink-muted">{saleStatuses[fact.status]}</span>
                 <span className="text-right font-mono font-semibold">{money(fact.grossAmountCents)}</span>
               </div>)}
-              {uncompared.length > UNCOMPARED_PREVIEW ? <button type="button" onClick={() => setShowAllUncompared(value => !value)} className="h-[38px] w-full border-t border-[#f0ece4] bg-[#faf9f6] text-xs font-bold text-[#5f646c]">
+              {uncompared.length > UNCOMPARED_PREVIEW ? <button type="button" onClick={() => setShowAllUncompared(value => !value)} className="h-[38px] w-full border-t border-ds-divider bg-ds-input text-xs font-bold text-ds-ink-muted">
                 {showAllUncompared ? "Mostrar menos" : `Mostrar todos (${uncompared.length})`}
               </button> : null}
             </div></div> : null}
@@ -720,36 +722,36 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
 
           {coverageTab === "issues" ? <div className="flex flex-col gap-1.5">
             {issues.slice(currentIssuePage * ISSUE_PAGE_SIZE, (currentIssuePage + 1) * ISSUE_PAGE_SIZE).map((issue, index) =>
-              <div key={`${currentIssuePage}:${index}`} className="grid items-center gap-x-3 gap-y-1 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-[9px] text-[12.5px] text-amber-950 sm:grid-cols-[62px_minmax(0,260px)_minmax(0,1fr)]">
-                <span className="rounded-md bg-amber-100 py-[3px] text-center text-[10px] font-extrabold tracking-[0.1em]">{issue.source.toUpperCase()}</span>
+              <div key={`${currentIssuePage}:${index}`} className="grid items-center gap-x-3 gap-y-1 rounded-[10px] border border-ds-alert-border bg-ds-warn-bg px-3 py-[9px] text-[12.5px] text-ds-alert-ink sm:grid-cols-[62px_minmax(0,260px)_minmax(0,1fr)]">
+                <span className="rounded-md bg-ds-warn-bg py-[3px] text-center text-[10px] font-extrabold tracking-[0.1em]">{issue.source.toUpperCase()}</span>
                 <span className="break-all font-mono text-[11.5px]">{issue.reference}</span>
                 <span>{issueReasons[issue.reason]}</span>
               </div>)}
             {issues.length > ISSUE_PAGE_SIZE ? <div className="mt-2 flex items-center gap-2.5">
               <button type="button" className={pager} disabled={currentIssuePage === 0} onClick={() => setIssuePage(currentIssuePage - 1)}>Apontamentos anteriores</button>
-              <span className="text-xs font-semibold text-[#5f646c]">{currentIssuePage + 1} / {issuePages}</span>
+              <span className="text-xs font-semibold text-ds-ink-muted">{currentIssuePage + 1} / {issuePages}</span>
               <button type="button" className={pager} disabled={currentIssuePage >= issuePages - 1} onClick={() => setIssuePage(currentIssuePage + 1)}>Mais apontamentos</button>
             </div> : null}
-            {!issues.length ? <p className="text-[12.5px] text-[#8a8f99]">Nenhum apontamento fora da comparação.</p> : null}
+            {!issues.length ? <p className="text-[12.5px] text-ds-ink-faint">Nenhum apontamento fora da comparação.</p> : null}
           </div> : null}
 
           {coverageTab === "events" ? <>
-            <p className="mb-2.5 text-[12.5px] text-[#7c8189]">Decimais originais da fonte, sem arredondamento.</p>
-            <div className="max-h-[360px] overflow-auto rounded-xl border border-[#efebe3]"><div className="min-w-[760px]">
-              <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-[#faf9f6] px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#9a9ba1]">
+            <p className="mb-2.5 text-[12.5px] text-ds-ink-faint">Decimais originais da fonte, sem arredondamento.</p>
+            <div className="max-h-[360px] overflow-auto rounded-xl border border-ds-border"><div className="min-w-[760px]">
+              <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint">
                 <span>Seção</span><span>Transação</span><span className="text-right">Bruto original</span><span className="text-right">Cancelado original</span><span>Contadores</span>
               </div>
-              {result.stoneEvents.map(event => <div key={`${event.sourceSection}:${event.transactionId}`} className="grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] items-center gap-3 border-t border-[#f4f1ea] px-3.5 py-[7px] text-[11.5px]">
-                <span className="text-[#5f646c]">{event.sourceSection}</span>
-                <span className="break-all font-mono text-[#374151]">{event.transactionId}</span>
+              {result.stoneEvents.map(event => <div key={`${event.sourceSection}:${event.transactionId}`} className="grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] items-center gap-3 border-t border-ds-divider px-3.5 py-[7px] text-[11.5px]">
+                <span className="text-ds-ink-muted">{event.sourceSection}</span>
+                <span className="break-all font-mono text-ds-ink-2">{event.transactionId}</span>
                 <span className="text-right font-mono">{event.capturedAmount ?? "Não informado"}</span>
-                <span className="text-right font-mono text-[#7c8189]">{event.canceledAmount ?? "Não informado"}</span>
-                <span className="font-mono text-[11px] text-[#7c8189]">{Object.entries(event.events).map(([name, count]) => `${stoneEventLabels[name] ?? name}: ${count}`).join(" · ")}</span>
+                <span className="text-right font-mono text-ds-ink-faint">{event.canceledAmount ?? "Não informado"}</span>
+                <span className="font-mono text-[11px] text-ds-ink-faint">{Object.entries(event.events).map(([name, count]) => `${stoneEventLabels[name] ?? name}: ${count}`).join(" · ")}</span>
               </div>)}
             </div></div>
           </> : null}
 
-          {coverageTab === "limits" ? <ul className="list-disc space-y-1.5 pl-[18px] text-[12.5px] leading-normal text-[#5f646c]">
+          {coverageTab === "limits" ? <ul className="list-disc space-y-1.5 pl-[18px] text-[12.5px] leading-normal text-ds-ink-muted">
             {result.limitations.map(text => <li key={text}>{text}</li>)}
           </ul> : null}
         </div>

@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroChip } from "@/components/patterns/hero-chip";
+import { cn } from "@/lib/utils";
 import {
   ArrowRight,
   AlertTriangle,
@@ -416,7 +419,7 @@ function getGoalBonusContext(
 /* Live clock                                                                 */
 /* -------------------------------------------------------------------------- */
 
-function LiveClock() {
+function LiveClock({ onDark = false }: { onDark?: boolean }) {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -426,47 +429,13 @@ function LiveClock() {
   }, []);
 
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-sm font-medium tabular-nums text-ds-ink-muted">
+    <span className={cn("inline-flex items-center gap-1.5 font-mono text-sm font-medium tabular-nums", onDark ? "text-ds-on-dark-2" : "text-ds-ink-muted")}>
       <Clock className="h-3.5 w-3.5" />
       {now ? format(now, "HH:mm") : "--:--"}
     </span>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Progress ring                                                              */
-/* -------------------------------------------------------------------------- */
-
-function ProgressRing({ value, total, done }: { value: number; total: number; done: boolean }) {
-  const radius = 34;
-  const circumference = 2 * Math.PI * radius;
-  const ratio = total > 0 ? Math.min(value / total, 1) : 0;
-  const dash = circumference * ratio;
-
-  return (
-    <div className="relative h-[84px] w-[84px] shrink-0">
-      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90">
-        <circle cx="40" cy="40" r={radius} fill="none" strokeWidth="6" className="stroke-[#ece9fb]" />
-        <circle
-          cx="40"
-          cy="40"
-          r={radius}
-          fill="none"
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circumference}`}
-          className={done ? "stroke-emerald-500" : "stroke-indigo-600"}
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-lg font-bold tracking-tight">
-          {value}
-          <span className="font-medium text-ds-ink-muted">/{total}</span>
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 /* Timeline                                                                   */
@@ -1821,59 +1790,23 @@ function CollaboratorDashboardPanelInner() {
         {/* Left column */}
         <div className="space-y-6">
           {/* Greeting hero */}
-          <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">{dateEyebrow}</p>
-              <LiveClock />
-            </div>
-            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0">
-                <h2 className="text-3xl font-bold tracking-tight">
-                  {greetingFor(today)}, {firstName}
-                </h2>
-                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-                  {todayShift ? (
-                    <span className="inline-flex items-center gap-2 text-sm font-medium text-ds-accent-ink">
-                      <Clock className="h-4 w-4" />
-                      {todayShift.name} · {todayShift.time}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2 text-sm font-medium text-ds-ink-muted">
-                      <Clock className="h-4 w-4" />
-                      Sem turno hoje
-                    </span>
-                  )}
-                  {todayShift?.unit ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-ds-muted px-2.5 py-1 text-xs font-medium text-ds-ink-muted">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {todayShift.unit}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 md:shrink-0">
-                <ProgressRing value={routinesDone} total={routinesTotal} done={allDone} />
-                <div className="max-w-[170px]">
-                  <p className="font-semibold">{allDone ? "Rotina do dia concluída" : "Rotinas do dia"}</p>
-                  <p className="text-sm text-ds-ink-muted">
-                    {loadingForms
-                      ? "Carregando rotinas..."
-                      : allDone
-                        ? "Nada pendente. Bom turno!"
-                        : routinesTotal === 0
-                          ? "Nenhuma rotina para hoje."
-                          : `${pendingCount} pendente(s) até o fim do turno`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {!loadingForms && !formsError && nextAction ? (
-              <div className="mt-6">
-                <NextActionCard execution={nextAction} />
-              </div>
-            ) : null}
+          <div className="space-y-4">
+            <PageHero
+              kicker={dateEyebrow}
+              title={`${greetingFor(today)}, ${firstName}`}
+              subtitle={todayShift ? `${todayShift.name} · ${todayShift.time}${todayShift.unit ? ` · ${todayShift.unit}` : ""}` : "Sem turno hoje"}
+              actions={<LiveClock onDark />}
+              chips={
+                loadingForms ? <HeroChip value="…" label="Carregando rotinas" /> : allDone ? (
+                  <HeroChip value="✓" label="Rotina do dia concluída" />
+                ) : routinesTotal === 0 ? (
+                  <HeroChip value={0} label="Nenhuma rotina para hoje" />
+                ) : (
+                  <HeroChip value={`${routinesDone}/${routinesTotal}`} label={`Rotinas do dia · ${pendingCount} pendente(s) até o fim do turno`} tone={pendingCount > 0 ? "warning" : "info"} />
+                )
+              }
+            />
+            {!loadingForms && !formsError && nextAction ? <NextActionCard execution={nextAction} /> : null}
           </div>
 
           {/* Acessos rápidos */}
