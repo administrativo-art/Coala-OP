@@ -175,7 +175,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/commercial/page.tsx`](../../src/app/dashboard/commercial/page.tsx).
 
-Arquivos locais percorridos: 2.
+Arquivos locais percorridos: 7.
 
 Chamadas candidatas encontradas:
 
@@ -623,9 +623,9 @@ Chamadas candidatas encontradas:
 
 ## `goals`
 
-Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/history/page.tsx`](../../src/app/dashboard/goals/history/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
+Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
 
-Arquivos locais percorridos: 52.
+Arquivos locais percorridos: 57.
 
 Chamadas candidatas encontradas:
 
@@ -652,9 +652,9 @@ Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `goals.manage` — [`src/app/dashboard/goals/history/page.tsx`](../../src/app/dashboard/goals/history/page.tsx)
+- `goals.manage` — [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx)
 - `goals.view` — [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx)
-- `settings.manageUsers` — [`src/app/dashboard/goals/history/page.tsx`](../../src/app/dashboard/goals/history/page.tsx)
+- `settings.manageUsers` — [`src/components/goals-history-view.tsx`](../../src/components/goals-history-view.tsx)
 
 ## `help`
 
@@ -1078,7 +1078,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx).
 
-Arquivos locais percorridos: 60.
+Arquivos locais percorridos: 63.
 
 Chamadas candidatas encontradas:
 
@@ -1126,21 +1126,16 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dashboard.collaborator` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `dashboard.operational` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `dashboard.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
-- `dp.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `financial.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
-- `goals.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
-- `pricing.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `reposition.prepareDispatch` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `reposition.receive` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `reposition.view` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
-- `settings.viewAiCosts` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `stock.analysis.restock` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 - `stock.audit.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 - `stock.returns.updateStatus` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.approve` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.perform` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
-- `stock.view` — [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx)
 
 ## `pricing`
 
