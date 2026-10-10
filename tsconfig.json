@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next-e2e/types/**/*.ts", ".next-boleto-e2e/types/**/*.ts", ".next-reconciliation-api-e2e/types/**/*.ts", ".next-instagram-e2e/types/**/*.ts"],
-  "exclude": ["node_modules", "functions"]
+  "exclude": ["node_modules", "functions", "apps/coala-notas"]
 }

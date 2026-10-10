@@ -157,6 +157,7 @@
     "firebase-admin": "^13.10.0",
     "genkit": "^1.0.0",
     "glob": "^13.0.6",
+    "google-auth-library": "^9.15.1",
     "hono": "^4.12.25",
     "html5-qrcode": "^2.3.8",
     "immer": "^10.1.1",

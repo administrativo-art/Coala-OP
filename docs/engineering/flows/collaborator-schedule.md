@@ -10,6 +10,12 @@ A [página da escala](../../../src/app/dashboard/collaborator/schedule/page.tsx)
 
 [`buildCollaboratorSchedulePayload`](../../../src/features/collaborator-schedule/server.ts) consulta `dp_schedules` do mês, retém somente escalas `locked`, escolhe a mais recente por unidade e lê os turnos de cada escala escolhida. Identifica turnos próprios por IDs da conta, RH, Bizneo, PDV e acessos PDV; escolhe turnos da equipe pelas unidades vinculadas à pessoa ou a seus próprios turnos. Deduplica turnos, busca nomes de unidade/definição/pessoas por ID e devolve `shifts`, `teamUnits`, ano, mês e sinal de publicação. A tela apresenta os dados em modos diário/mensal e estado sem escala publicada.
 
+## Escala no aplicativo (2026-10-09)
+
+O módulo "Escala" de `apps/coala-notas` reutiliza `buildCollaboratorSchedulePayload` sem alterar a regra: só escalas `locked`, a mais recente por unidade, turnos próprios identificados pelos mesmos IDs e equipe das unidades vinculadas à pessoa ou aos seus turnos. Permissão própria da lista do aplicativo, `app.schedule.view`; `dashboard.collaborator` do sistema não a concede. `GET /api/dp/mobile-schedule?year=&month=` aplica os mesmos limites de período do web e devolve, por unidade, as pessoas (uma vez cada, com cargo e foto) e os turnos referenciados por posição; nenhum ID interno de usuário sai do servidor. O aplicativo abre em hoje, com a semana no topo, filtro "Só a minha" e, em tela larga, quadro semanal; cada mês é lido uma vez por visita, sem polling. O custo por leitura é o da função reutilizada (subcoleção `shifts` inteira de cada escala publicada do mês) mais um `getAll` dos usuários da equipe para a foto.
+
+`GET /api/mobile/profile` devolve somente o cartão de quem está autenticado (nome, cargo e `avatarUrl`, este apenas se `https`) e quais módulos do aplicativo o perfil libera, para a tela inicial esconder o que a pessoa não pode usar; a autorização de cada módulo continua nas respectivas rotas. `POST /api/mobile/profile/photo` troca a foto da própria pessoa, como o perfil web já permite: grava em `avatars/{userId}` (o ID vem da sessão, nunca da requisição) e atualiza `users/{userId}.avatarUrl`, com o mesmo limite de 5 MB das regras de armazenamento; o tipo é verificado pelo conteúdo (JPG, PNG ou WEBP). A imagem não passa por moderação; como no web, fica visível para a equipe.
+
 ## Dados, acesso e dependências
 
 | Dado | Leitura e limite observado |

@@ -10,7 +10,7 @@ import {
 
 test("registra prompts do sistema com IDs e versões únicos", () => {
   const prompts = listSystemPrompts();
-  assert.equal(prompts.length, 12);
+  assert.equal(prompts.length, 13);
   assert.equal(new Set(prompts.map((prompt) => prompt.id)).size, prompts.length);
   assert.equal(new Set(prompts.map((prompt) => `${prompt.id}@${prompt.version}`)).size, prompts.length);
   assert.ok(prompts.every((prompt) => prompt.version.length > 0));
@@ -25,6 +25,7 @@ test("segmenta o catálogo global por módulo e status", () => {
       "financial.agent",
       "financial.card.statement-extraction",
       "financial.inbox-document-extraction",
+      "financial.mobile-purchase-extraction",
       "financial.payroll.guide-extraction",
       "financial.payroll.payslip-extraction",
       "financial.provision.document-extraction",
@@ -32,8 +33,8 @@ test("segmenta o catálogo global por módulo e status", () => {
     ],
   );
   assert.equal(financial.find((prompt) => prompt.id === "financial.card.statement-extraction")?.status, "active");
-  assert.ok(financial.filter((prompt) => !["financial.agent", "financial.card.statement-extraction", "financial.inbox-document-extraction"].includes(prompt.id)).every((prompt) => prompt.status === "draft"));
-  assert.equal(listSystemPrompts({ status: "active" }).length, 8);
+  assert.ok(financial.filter((prompt) => !["financial.agent", "financial.card.statement-extraction", "financial.inbox-document-extraction", "financial.mobile-purchase-extraction"].includes(prompt.id)).every((prompt) => prompt.status === "draft"));
+  assert.equal(listSystemPrompts({ status: "active" }).length, 9);
 });
 
 test("renderiza o prompt ativo de RH pelo registro central", () => {

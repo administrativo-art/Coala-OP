@@ -11,6 +11,7 @@ import { AppError } from './observability/app-error';
 import {
   getSignageAssetUrl,
   getSlideScreenIds,
+  isSignageOrientation,
   SIGNAGE_DEFAULT_SCREEN_NAME,
   SIGNAGE_STORAGE_BUCKET,
 } from './signage';
@@ -53,6 +54,7 @@ function defaultScreen(kiosk: Kiosk, override?: FirebaseFirestore.DocumentData):
     kioskName: kiosk.name,
     name: typeof override?.name === 'string' && override.name ? override.name : SIGNAGE_DEFAULT_SCREEN_NAME,
     ...(kiosk.deviceToken ? { deviceToken: kiosk.deviceToken } : {}),
+    ...(isSignageOrientation(override?.orientation) ? { orientation: override.orientation } : {}),
     isDefault: true,
   };
 }
@@ -64,6 +66,7 @@ function extraScreen(id: string, data: FirebaseFirestore.DocumentData, kioskName
     kioskName,
     name: typeof data.name === 'string' && data.name ? data.name : 'Tela',
     ...(typeof data.deviceToken === 'string' && data.deviceToken ? { deviceToken: data.deviceToken } : {}),
+    ...(isSignageOrientation(data.orientation) ? { orientation: data.orientation } : {}),
     isDefault: false,
   };
 }

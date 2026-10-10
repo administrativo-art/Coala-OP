@@ -32,6 +32,7 @@ import {
   getSlideOrder,
   isSlideScheduleActive,
   SIGNAGE_FETCH_TIMEOUT_MS,
+  SIGNAGE_ORIENTATION_LABEL,
   type SignagePublicationState,
 } from '@/lib/signage';
 import { canAccessUnit } from '@/lib/unit-access';
@@ -979,6 +980,18 @@ export function SignageAdmin() {
                 </div>
               )}
 
+              <p className="mt-4 text-xs font-bold text-ds-ink-2">Posição da tela</p>
+              <p className="mt-1 text-[13.5px] font-bold text-ds-ink">
+                {selectedScreen.orientation ? SIGNAGE_ORIENTATION_LABEL[selectedScreen.orientation] : 'Não informada'}
+              </p>
+              <p className="mt-1 text-xs text-ds-ink-muted">
+                {selectedScreen.orientation === 'portrait'
+                  ? 'Produza as mídias desta tela em formato vertical (9:16).'
+                  : selectedScreen.orientation === 'landscape'
+                    ? 'Produza as mídias desta tela em formato horizontal (16:9).'
+                    : 'A posição é informada ao adicionar a tela pelo aplicativo Coala One.'}
+              </p>
+
               <p className="mt-4 text-xs font-bold text-ds-ink-2">Endereço do player</p>
               <div className="mt-1.5 flex items-start gap-2">
                 <a
@@ -1046,7 +1059,7 @@ export function SignageAdmin() {
               <div className="mt-4 border-t border-ds-divider pt-3">
                 <p className="text-xs font-bold text-ds-ink-2">App da tela</p>
                 <p className="mt-1 text-xs text-ds-ink-muted">
-                  No monitor Samsung, abra URL Launcher e informe o endereço abaixo. O app instala, pede o código de acesso desta tela e passa a tocar mesmo sem internet.
+                  No monitor Samsung, abra URL Launcher e informe o endereço abaixo. O app instala e mostra um QR code: leia-o no aplicativo Coala One, em Signage, para ligar o monitor a uma tela. Depois ele toca mesmo sem internet.
                 </p>
                 <p className="mt-1.5 break-all font-ds-mono text-[11.5px] text-ds-ink">{signageAppUrl}</p>
                 <a
@@ -1058,7 +1071,7 @@ export function SignageAdmin() {
                   Abrir a página de aplicativos
                 </a>
                 {!selectedScreen.deviceToken && (
-                  <p className="mt-1.5 text-xs font-semibold text-ds-warn">Esta tela ainda não tem código de acesso; o app precisa de um para conectar.</p>
+                  <p className="mt-1.5 text-xs font-semibold text-ds-warn">Esta tela ainda não tem monitor ligado pelo aplicativo.</p>
                 )}
               </div>
 

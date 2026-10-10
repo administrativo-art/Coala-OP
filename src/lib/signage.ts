@@ -23,7 +23,8 @@ export const COALA_APP_INSTALLERS: {
   mobile: { packagePath: string | null };
 } = {
   signage: { launcherPath: '/app', packagePath: '/app/CoalaSignage.wgt' },
-  mobile: { packagePath: null },
+  // APK do aplicativo Coala One, gerado por `apps/coala-notas/scripts/build-apk.sh`.
+  mobile: { packagePath: '/app/CoalaMobile.apk' },
 };
 /** Registro de quem abriu a página de aplicativos e de quem baixou cada um. */
 export const signageAppDownloadSchema = z.object({
@@ -131,6 +132,63 @@ export const signageHeartbeatSchema = z.object({
 export const signagePairSchema = z.object({
   code: z.string().trim().toUpperCase().regex(SIGNAGE_DEVICE_TOKEN_PATTERN),
 }).strict();
+
+export const signageOrientationSchema = z.enum(['landscape', 'portrait']);
+export type SignageOrientation = z.infer<typeof signageOrientationSchema>;
+export const SIGNAGE_ORIENTATION_LABEL: Record<SignageOrientation, string> = { landscape: 'Horizontal', portrait: 'Vertical' };
+export function isSignageOrientation(value: unknown): value is SignageOrientation {
+  return value === 'landscape' || value === 'portrait';
+}
+
+/**
+ * Cadastro de tela pelo aplicativo: o monitor sorteia um código e o mostra em QR code; quem lê
+ * o QR code informa a unidade e a posição, e o código passa a ser o da tela. Com `screenId`, o
+ * monitor assume uma tela que já existe (troca de aparelho) em vez de criar outra.
+ */
+export const signageMobileScreenSchema = z.object({
+  kioskId: signageIdSchema,
+  screenId: signageIdSchema.optional(),
+  orientation: signageOrientationSchema,
+  code: z.string().trim().toUpperCase().regex(SIGNAGE_DEVICE_TOKEN_PATTERN),
+}).strict();
+
+/** O que o QR code do monitor carrega: o endereço da página de aplicativos com o código da tela. */
+export function signagePairingUrl(origin: string, code: string) {
+  return `${origin.replace(/\/+$/, '')}/app?tela=${code}`;
+}
+
+/** Código lido de um QR code de pareamento; `null` quando o QR code não é de uma tela do Coala Signage. */
+export function parseSignagePairingCode(scanned: string) {
+  const match = /[?&]tela=([A-Za-z0-9]{8})(?:[&#]|$)/.exec(scanned.trim());
+  const code = match?.[1]?.toUpperCase() ?? '';
+  return SIGNAGE_DEVICE_TOKEN_PATTERN.test(code) ? code : null;
+}
+
+/**
+ * A tela que "Adicionar tela" vai criar na unidade: enquanto a tela padrão não tem monitor, é ela
+ * (a "Tela 1"); depois, uma tela adicional com o próximo nome livre.
+ */
+export function planNewSignageScreen(screens: { name: string; isDefault: boolean; deviceToken?: string }[]) {
+  const first = screens.find((screen) => screen.isDefault);
+  if (first && !first.deviceToken) return { name: first.name, usesDefault: true, full: false };
+  return {
+    name: nextSignageScreenName(screens.map((screen) => screen.name)),
+    usesDefault: false,
+    full: screens.length >= SIGNAGE_MAX_SCREENS_PER_KIOSK,
+  };
+}
+
+/**
+ * Nome automático da próxima tela da unidade: a primeira é a "Tela 1" (a tela padrão); as demais
+ * recebem o menor número ainda livre, para um nome apagado poder ser reaproveitado sem repetir outro.
+ */
+export function nextSignageScreenName(existingNames: string[]) {
+  const taken = new Set(existingNames.map((name) => name.trim().toLocaleLowerCase('pt-BR')));
+  for (let number = 1; number <= SIGNAGE_MAX_SCREENS_PER_KIOSK + 1; number += 1) {
+    if (!taken.has(`tela ${number}`)) return `Tela ${number}`;
+  }
+  return `Tela ${existingNames.length + 1}`;
+}
 
 export function stripUndefined<T extends Record<string, unknown>>(value: T) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
