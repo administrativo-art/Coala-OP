@@ -1288,7 +1288,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                         />
                         <div className="min-w-0">
                             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pink-600">Coala · Comercial</p>
-                            <h1 className="mt-1 text-[26px] font-black tracking-[-0.02em] text-slate-950">Precificação &amp; CMV</h1>
+                            <h1 className="mt-1 text-[26px] font-black tracking-[-0.02em] text-slate-950">Precificação e CMV</h1>
                             <p className="mt-1 max-w-[620px] text-[13px] text-muted-foreground">Ferramenta de decisão comercial — encontre margens ruins, CMV anormal e divergências de preço por canal sem abrir cada mercadoria.</p>
                         </div>
                     </div>

@@ -5,7 +5,8 @@ import { useState, useMemo } from 'react';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { ControlPanel } from '@/components/patterns/control-panel';
+import { FilterChips } from '@/components/patterns/filter-chips';
 import { Search, Inbox, Filter } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { TechnicalSheetCard } from './technical-sheet-card';
@@ -57,63 +58,44 @@ export function TechnicalSheetDashboard() {
     if (loading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <Skeleton className="h-52 w-full" />
-                <Skeleton className="h-52 w-full" />
-                <Skeleton className="h-52 w-full" />
-                <Skeleton className="h-52 w-full" />
+                <Skeleton className="h-52 w-full rounded-ds-card" />
+                <Skeleton className="h-52 w-full rounded-ds-card" />
+                <Skeleton className="h-52 w-full rounded-ds-card" />
+                <Skeleton className="h-52 w-full rounded-ds-card" />
             </div>
         );
     }
 
     return (
         <>
-            <div className="space-y-4 no-print">
-                <div className="space-y-3 p-4 border rounded-lg bg-card">
-                    <div className="flex gap-2 items-center">
-                        <Button 
-                            variant={activeLine === 'all' ? 'default' : 'outline'}
-                            onClick={() => setActiveLine('all')}
-                            size="sm"
-                        >
-                            Todas
-                        </Button>
-                        <ScrollArea className="w-full whitespace-nowrap no-scrollbar">
-                            <div className="flex gap-2 pb-2">
-                            {lines.map(line => (
-                                <Button 
-                                    key={line.id}
-                                    variant={activeLine === line.id ? 'default' : 'outline'}
-                                    onClick={() => setActiveLine(line.id)}
-                                    size="sm"
-                                    style={{ backgroundColor: activeLine === line.id ? line.color : undefined, borderColor: line.color }}
-                                    className={activeLine === line.id ? 'text-white' : ''}
-                                >
-                                    {line.name}
-                                </Button>
-                            ))}
-                            </div>
-                        </ScrollArea>
+            <div className="space-y-4 font-ds no-print">
+                <ControlPanel>
+                    <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Comercial</p>
+                    <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+                        <h1 className="text-2xl font-extrabold">Fichas técnicas</h1>
+                        <p className="text-[13px] font-bold text-ds-on-dark-2">{filteredSimulations.length} de {simulations.length} mercadoria(s)</p>
                     </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                         <div className="relative flex-grow">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
+                            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-on-dark-muted" />
+                            <input
+                                type="search"
+                                aria-label="Buscar por nome ou SKU"
                                 placeholder="Buscar por nome ou SKU..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 w-full"
+                                className="h-11 w-full rounded-ds-btn border border-white/[.12] bg-white/[.06] pl-9 pr-3 text-[14px] font-semibold text-ds-on-dark outline-none placeholder:text-ds-on-dark-muted focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
                             />
                         </div>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-full sm:w-auto">
-                                    <Filter className="mr-2 h-4 w-4" />
+                                <Button variant="ds-secondary" size="md" className="w-full sm:w-auto">
+                                    <Filter aria-hidden="true" className="mr-2 h-4 w-4" />
                                     Categorias ({selectedCategories.size})
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
-                                <DropdownMenuLabel>Filtrar por Categoria</DropdownMenuLabel>
+                                <DropdownMenuLabel>Filtrar por categoria</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <ScrollArea className="h-48">
                                 {mainCategories.map(cat => (
@@ -129,15 +111,15 @@ export function TechnicalSheetDashboard() {
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
-                    {(activeLine !== 'all' || searchTerm || selectedCategories.size > 0) && (
-                        <div className="text-xs text-muted-foreground">
-                            Filtrando por:
-                            {activeLine !== 'all' && ` Linha: ${lines.find(l => l.id === activeLine)?.name}`}
-                            {searchTerm && `, Busca: "${searchTerm}"`}
-                            {selectedCategories.size > 0 && `, Categorias: ${Array.from(selectedCategories).map(id => mainCategories.find(c => c.id === id)?.name).join(', ')}`}
-                        </div>
-                    )}
-                </div>
+                    <FilterChips
+                        className="mt-4"
+                        value={activeLine === 'all' ? null : activeLine}
+                        onChange={value => setActiveLine(value ?? 'all')}
+                        allLabel="Todas as linhas"
+                        allCount={simulations.length}
+                        chips={lines.map(line => ({ value: line.id, label: line.name, count: simulations.filter(sim => sim.lineId === line.id).length }))}
+                    />
+                </ControlPanel>
 
                 {filteredSimulations.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -151,10 +133,9 @@ export function TechnicalSheetDashboard() {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <Inbox className="h-12 w-12 mx-auto mb-4" />
-                        <p className="font-semibold">Nenhuma ficha técnica encontrada</p>
-                        <p className="text-sm">Tente ajustar os filtros ou o termo de busca.</p>
+                    <div className="rounded-ds-card border border-dashed border-ds-border-input px-4 py-16 text-center">
+                        <Inbox aria-hidden="true" className="mx-auto mb-3 h-10 w-10 text-ds-ink-faint" />
+                        <p className="text-[14px] font-bold text-ds-ink-2">Nenhuma ficha técnica encontrada para esses filtros.</p>
                     </div>
                 )}
             </div>

@@ -25,7 +25,7 @@ export default function CollaboratorDashboardPage() {
   }
 
   return (
-    <div className="space-y-8 pb-8">
+    <div className="space-y-8 pb-8 font-ds">
       <CollaboratorDashboardPanel />
     </div>
   );

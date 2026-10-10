@@ -15,13 +15,12 @@ import { canViewPurchasing } from "@/lib/purchasing-permissions";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import {
-  ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
+  ChevronDown, X, LayoutDashboard, Package, ListTodo,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
-  Files, Building2, FileStack, Banknote, UserCircle
-} from "lucide-react";
+  Files, Building2, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale} from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
 interface NavItem {
@@ -100,7 +99,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Tarefas gerais", href: "/dashboard/tasks", icon: ListTodo, show: permissions.tasks.view, badge: pendingTaskCount > 0 ? { count: pendingTaskCount, variant: "warn" } : undefined },
           {
             label: "Formulários",
-            href: "/dashboard/forms",
+            href: "__group:forms",
             icon: FileText,
             show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.forms.global.manage_templates || permissions.forms.global.view_analytics,
             children: [
@@ -129,7 +128,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             ],
           },
           {
-            label: "Compras", href: "/dashboard/purchasing", icon: ShoppingCart, show: canAccessPurchasing,
+            label: "Compras", href: "__group:purchasing", icon: ShoppingCart, show: canAccessPurchasing,
             children: [
               { label: "Painel", href: "/dashboard/purchasing", icon: LayoutGrid, show: canAccessPurchasing },
               { label: "Cotações", href: "/dashboard/purchasing/quotations", icon: ReceiptText, show: canAccessPurchasing },
@@ -143,22 +142,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {
         key: "com",
         label: "Comercial",
-        icon: Target,
+        icon: Store,
         items: [
-          { label: "Ficha técnica", href: "/dashboard/commercial", icon: FileText, show: canViewTechnicalSheets(permissions) },
+          { label: "Ficha técnica", href: "/dashboard/commercial", icon: BookOpenText, show: canViewTechnicalSheets(permissions) },
           {
-            label: "Metas de Vendas", href: "/dashboard/goals", icon: Target, show: permissions.goals?.view,
+            label: "Metas de Vendas", href: "__group:goals", icon: Trophy, show: permissions.goals?.view,
             children: [
-              { label: "Acompanhamento", href: "/dashboard/goals/tracking", icon: Target, show: permissions.goals?.view },
-              { label: "Análise", href: "/dashboard/goals/analysis", icon: BarChart3, show: permissions.goals?.view },
-              { label: "Histórico", href: "/dashboard/goals/history", icon: ListChecks, show: permissions.goals?.view },
+              { label: "Acompanhamento", href: "/dashboard/goals/tracking", icon: Gauge, show: permissions.goals?.view },
+              { label: "Análise e fechamentos", href: "/dashboard/goals/analysis", icon: ChartNoAxesCombined, show: permissions.goals?.view },
             ],
           },
           {
-            label: "Gestão de Preços", href: "/dashboard/pricing", icon: DollarSign, show: permissions.pricing.view,
+            label: "Gestão de Preços", href: "__group:pricing", icon: BadgeDollarSign, show: permissions.pricing.view,
             children: [
-              { label: "Ficha de custo e margem", href: "/dashboard/pricing/cost-analysis", icon: DollarSign, show: permissions.pricing.view },
-              { label: "Estudo de preço", href: "/dashboard/pricing/price-comparison", icon: BarChart3, show: permissions.pricing.view },
+              { label: "Ficha de custo e margem", href: "/dashboard/pricing/cost-analysis", icon: Calculator, show: permissions.pricing.view },
+              { label: "Estudo de preço", href: "/dashboard/pricing/price-comparison", icon: Scale, show: permissions.pricing.view },
             ],
           },
         ],
@@ -482,7 +480,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         </div>
         <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
           <div className="overflow-hidden">
-            <div className="ml-4 mt-0.5 space-y-0.5 pb-0.5 pl-1">
+            <div className="ml-[18px] mt-0.5 space-y-0.5 border-l border-white/10 pb-0.5 pl-2">
               {children.map((child) => renderItem(child, depth + 1))}
             </div>
           </div>
@@ -566,6 +564,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             navSections.map((section) => {
               const isOpen = openSections.has(section.key);
               const sectionBadgeCount = section.items.reduce((sum, item) => sum + (item.badge?.count || 0), 0);
+              const sectionActive = section.items.some(isItemOrChildActive);
+              const SectionIcon = section.icon;
               return (
                 <section key={section.key} aria-labelledby={`nav-${section.key}`} className="mb-1">
                   <h2 id={`nav-${section.key}`}>
@@ -573,18 +573,25 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       type="button"
                       onClick={() => toggleSection(section.key)}
                       aria-expanded={isOpen}
-                      className="flex w-full items-center justify-between rounded-ds-sm px-2.5 py-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted transition-colors hover:text-ds-on-dark-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                      className={cn(
+                        "group/section relative mt-1 flex w-full items-center gap-2.5 rounded-ds-btn px-2.5 py-2 text-left text-[12.5px] font-bold tracking-[0.02em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                        isOpen || sectionActive
+                          ? "bg-white/[0.06] text-ds-on-dark"
+                          : "text-ds-on-dark-2 hover:bg-white/[0.04] hover:text-ds-on-dark"
+                      )}
                     >
-                      <span>{section.label}</span>
+                      {(isOpen || sectionActive) && <span aria-hidden="true" className="absolute -left-1 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent" />}
+                      <SectionIcon aria-hidden="true" className={cn("h-[18px] w-[18px] shrink-0", sectionActive ? "text-ds-accent-kicker" : "text-ds-on-dark-muted group-hover/section:text-ds-on-dark-2")} />
+                      <span className="flex-1">{section.label}</span>
                       <span className="flex items-center gap-2">
                         {sectionBadgeCount > 0 && <span className="rounded-full bg-ds-accent px-1.5 py-0.5 font-ds-mono text-[10px] font-bold normal-case tracking-normal text-ds-dark">{sectionBadgeCount}</span>}
-                        <ChevronDown className={cn("h-3 w-3 transition-transform duration-200 motion-reduce:transition-none", !isOpen && "-rotate-90")} aria-hidden="true" />
+                        <ChevronDown className={cn("h-3.5 w-3.5 text-ds-on-dark-muted transition-transform duration-200 motion-reduce:transition-none", !isOpen && "-rotate-90")} aria-hidden="true" />
                       </span>
                     </button>
                   </h2>
                   <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
                     <div className="overflow-hidden">
-                      <div className="space-y-0.5 py-0.5">
+                      <div className="ml-[18px] space-y-0.5 border-l border-white/10 py-0.5 pl-2">
                         {section.items.map((item) => renderItem(item, 0))}
                       </div>
                     </div>

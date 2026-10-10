@@ -1,3 +1,4 @@
+import { buildGoalClosureBonusSnapshot } from "@/lib/goal-bonus-snapshot";
 import { calculateTieredGoalBonus } from "@/lib/goal-methods";
 import type { EmployeeGoal, GoalMethodSnapshot, GoalParticipantRole, GoalType } from "@/types";
 
@@ -112,33 +113,26 @@ export function mobileGoalTeam(employeeGoals: EmployeeGoal[]) {
 }
 
 /**
- * Prize the team would earn if the period closed with today's revenue, split per person by the
- * tiered method: fixed staff share equally what is left after the relief worker's covered turns,
- * and the leader receives the leadership factor. Mirrors the closing calculation of the web system.
+ * Prize the team would earn if the period closed with today's revenue. The split per person is the
+ * closing calculation itself (`buildGoalClosureBonusSnapshot`), so the app can never disagree with
+ * the amount the web system records when the goal is closed.
  */
 export function mobileGoalPrize(period: MobileGoalPeriodInput, team: ReturnType<typeof mobileGoalTeam>) {
   const method = period.method;
   if (!method || method.type !== "tiered_unit_bonus") return null;
-  const bonusRows = team.filter((row) => row.role !== "leader");
-  const fixedRows = bonusRows.filter((row) => row.role !== "relief");
-  const reliefRows = bonusRows.filter((row) => row.role === "relief");
-  const turnsPerDay = Math.max(method.teamBonus.reliefWorker?.turnsPerDay ?? period.shiftCount ?? 1, 1);
-  const totalPeriodTurns = Math.max(dayKeysBetween(period.startKey, period.endKey).length, 1) * turnsPerDay;
-  let result: ReturnType<typeof calculateTieredGoalBonus>;
+  const participants = team.map((row) => ({ employeeId: row.employeeId, participantRole: row.role, scheduledTurnCount: row.scheduledTurns }) as EmployeeGoal);
+  const closing = { currentValue: period.currentValue, goalMethodSnapshot: method, shifts: Array.from({ length: period.shiftCount }, () => ({})) } as unknown as Parameters<typeof buildGoalClosureBonusSnapshot>[0]["period"];
+  let snapshot: ReturnType<typeof buildGoalClosureBonusSnapshot>;
+  let forecast: ReturnType<typeof calculateTieredGoalBonus>;
   try {
-    result = calculateTieredGoalBonus(method, period.currentValue, bonusRows.length, {
-      fixedCollaboratorCount: fixedRows.length,
-      reliefWorkerCount: reliefRows.length,
-      reliefWorkerCoveredTurnsByPerson: reliefRows.map((row) => row.scheduledTurns),
-      totalPeriodTurns,
-    });
+    snapshot = buildGoalClosureBonusSnapshot({ period: closing, employeeGoals: participants, periodDayCount: dayKeysBetween(period.startKey, period.endKey).length, source: "backfill" });
+    // Only the next tier and the incentive message come from here; amounts are the closing snapshot's.
+    forecast = calculateTieredGoalBonus(method, period.currentValue, team.filter((row) => row.role !== "leader").length);
   } catch {
     // A method without usable team/tier configuration has no prize to show.
     return null;
   }
-  if (!result) return null;
-  const reliefBonus = new Map(reliefRows.map((row, index) => [row.employeeId, result!.reliefWorkerSplit?.reliefWorkerBonuses[index] ?? result!.perCollaboratorBonus]));
-  const fixedBonus = result.reliefWorkerSplit?.perFixedCollaboratorBonus ?? result.perCollaboratorBonus;
+  if (!snapshot) return null;
   const amount = (value: number) => round(Number.isFinite(value) ? value : 0);
   return {
     methodName: method.name,
@@ -146,13 +140,11 @@ export function mobileGoalPrize(period: MobileGoalPeriodInput, team: ReturnType<
       label: tier.label, fromAmount: round(tier.fromAmount), fixedBonusAmount: round(tier.fixedBonusAmount), excessPercent: tier.excessPercent,
       reached: period.currentValue >= tier.fromAmount,
     })),
-    highestTierLabel: result.highestAchievedTier?.label ?? null,
-    nextTier: result.nextTier ? { label: result.nextTier.label, remaining: amount(result.remainingToNextTier ?? 0) } : null,
-    totalTeamBonus: amount(result.totalTeamBonus),
-    leadershipBonus: amount(result.leadershipBonus),
-    message: result.incentiveMessage?.message ?? null,
-    byEmployee: Object.fromEntries(team.map((row) => [row.employeeId, amount(
-      row.role === "leader" ? result!.leadershipBonus : row.role === "relief" ? reliefBonus.get(row.employeeId) ?? result!.perCollaboratorBonus : fixedBonus,
-    )])),
+    highestTierLabel: snapshot.highestTierLabel,
+    nextTier: forecast?.nextTier ? { label: forecast.nextTier.label, remaining: amount(forecast.remainingToNextTier ?? 0) } : null,
+    totalTeamBonus: amount(snapshot.totalTeamBonus),
+    leadershipBonus: amount(snapshot.leadershipBonus),
+    message: forecast?.incentiveMessage?.message ?? null,
+    byEmployee: Object.fromEntries(snapshot.participants.map((participant) => [participant.employeeId, amount(participant.bonusAmount)])),
   };
 }
