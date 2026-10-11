@@ -1,0 +1,2 @@
+-keepattributes Signature,InnerClasses,EnclosingMethod
+-keepclassmembers,allowobfuscation class * { @kotlinx.serialization.SerialName <fields>; }

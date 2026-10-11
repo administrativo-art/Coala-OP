@@ -1,5 +1,7 @@
 # Estoque: sessões de contagem e ajustes de lote
 
+**Mobile atual (2026-10-11):** somente [Coala Go Kotlin](../../../apps/coala-one-android/README.md), package `coalaone.go`, Android8+. Usuário confirmou ausência de usuários e autorizou retirar Expo/instalador antigo. Download preparado em `/app/CoalaGo.apk`, versão0.2.0/code4, página `/app` com botão "Baixar Coala Go". Trechos históricos que citam Expo/coala-notas descrevem a implementação retirada; IDs de negócio `coala-notas-android` permanecem por compatibilidade, sem migração de dados. Homologação física/integrada e publicação continuam separadas; ver [matriz](../coala-go-parity.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.
@@ -37,5 +39,7 @@ O [teste de fluxo de contagem](../../../tests/unit/stock-count-flow.test.ts) é 
 Na [API registry](../../../src/app/api/registry/[...path]/route.ts), POST `stock-audit` normaliza payload, exige unidade/nome/itens e `canAccessUnit`, persiste sessão e chama sincronização de tarefa. PATCH valida dono antes de salvar itens ou delegar conclusão à transação de finalização. DELETE também exige dono, remove documento da sessão e depois chama `cancelStockCountTaskSafely`. Cancelamento nesse handler não executa movimento inverso nos lotes: não deve ser interpretado como estorno de contagem já aplicada. Criação/cancelamento e espelho da tarefa são etapas separadas; testes devem cobrir estado concluído, proprietário, falha de tarefa e repetição. A semântica de estorno desejada não é estabelecida pela existência do DELETE.
 
 ## Evidências da etapa 2
+
+**Coala Go (2026-10-11, local).** O [cliente Kotlin](../../../apps/coala-one-android/README.md) usa os mesmos contratos móveis de contexto/início/save/cancelamento/foto, com rascunho cifrado por UID, preferência pelo rascunho mais recente e descarte de lotes desconhecidos. `save` parcial mantém o estado até confirmação do servidor; concluir/cancelar exige confirmação inline. Fotos passam pelo cliente autenticado. [Matriz mobile](../coala-go-parity.md) separa testes de regras/ViewModels/Compose e a homologação integrada/real pendente. O legado não foi alterado, e rascunhos Expo precisam ser salvos no servidor antes da instalação.
 
 A [verificação por grupo](../flow-verification.md) aponta testes disponíveis e lacunas na main. Execuções do worktree de correções não certificam esta base; funções ou regras isoladas não certificam o percurso completo.

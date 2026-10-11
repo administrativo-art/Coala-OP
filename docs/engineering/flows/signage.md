@@ -1,5 +1,7 @@
 # Sinalização digital: slides, publicação e heartbeat
 
+**Mobile atual (2026-10-11):** somente [Coala Go Kotlin](../../../apps/coala-one-android/README.md), package `coalaone.go`, Android8+. Usuário confirmou ausência de usuários e autorizou retirar Expo/instalador antigo. Download preparado em `/app/CoalaGo.apk`, versão0.2.0/code4, página `/app` com botão "Baixar Coala Go". Trechos históricos que citam Expo/coala-notas descrevem a implementação retirada; IDs de negócio `coala-notas-android` permanecem por compatibilidade, sem migração de dados. Homologação física/integrada e publicação continuam separadas; ver [matriz](../coala-go-parity.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.
@@ -79,6 +81,8 @@ Estado: implementado e coberto por testes unitários; **não executado em monito
 Por tela com o app: 1.440 sinais de vida por dia. Cada um lê 2 documentos para resolver a tela (3 em tela adicional) e 1 de `publishedPlayers`, e grava 1 em `playerHeartbeats`. Com 3 telas: cerca de 13 a 17 mil leituras e 4,3 mil escritas por dia. A leitura de `publishedPlayers` é o acréscimo deste trabalho (+1 por sinal de vida, também para o player web). O pareamento faz 2 consultas por igualdade com `limit(2)` por chamada. Com o QR code, um monitor **sem tela ligada** consulta 4 vezes por minuto nos primeiros 20 minutos (cerca de 160 leituras cobradas) e 1 vez por minuto depois (2.880 leituras por dia enquanto ficar esquecido nessa tela); monitor ligado não consulta. O QR code não lê nem grava no banco. `GET /api/signage/mobile` lê `kiosks` e `screens` inteiras (dezenas de documentos, crescem com unidades e TVs) uma vez por abertura do módulo; adicionar uma tela faz 2 consultas de unicidade, 1 transação e até 14 leituras.
 
 ### Lacunas
+
+**Coala Go (2026-10-11, local).** O [Android Kotlin](../../../apps/coala-one-android/README.md) consome `/api/signage/mobile` e `/api/signage/mobile/screens`, incluindo substituição de tela e orientação; CameraX/ZXing exige prefixo `COALA-SIGNAGE` no QR, enquanto entrada manual aceita o código. Não altera o player Tizen ou a distribuição publicada. Atualizador nativo valida Range, package, versão e certificado antes do instalador. [Paridade mobile](../coala-go-parity.md) registra scanner físico, Play Integrity e atualização assinada ainda não homologados; não promover a versão do instalador sem autorização própria.
 
 - `.wgt` **sem assinatura** (Tizen Studio não está instalado). Não foi confirmado que o QM32C aceita pacote não assinado pelo URL Launcher; se recusar, é preciso assinar com certificado de autor pelo Tizen Studio.
 - Não confirmado no aparelho: pasta de destino do `tizen.download` (`wgt-private`, com troca automática para `downloads`), formato do caminho devolvido, reprodução de `file://` em `<video>`, teclas do controle e troca entre dois vídeos seguidos.

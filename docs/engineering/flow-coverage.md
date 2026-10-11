@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-11: [Coala Go Kotlin](../../apps/coala-one-android/README.md), package `coalaone.go`, único mobile após autorização expressa de retirada do Expo/APK antigo (não havia usuários). APK assinado/metadados/hash/link `/app/CoalaGo.apk` preparados localmente; [matriz](coala-go-parity.md) registra testes/lacunas. Extensões autorizadas: foto privada do recebimento e seleção de package na atestação/versão; [acesso/privacidade](access-and-privacy.md) documenta controles. Estoque/compras/signage continuam Traçados; testes locais não homologam serviços reais/aparelhos físicos. Sem publicação.
+
 2026-10-05: [Instagram](flows/instagram-publishing.md) passa a usar dimensões reais nas prévias e avaliação de proporção por formato; detalhes permitem editar a legenda de agendamentos ainda editáveis, com auditoria e invalidação segura do contêiner preparado. Regressões cobertas em `tests/unit/instagram-media-presentation.test.ts`; não equivale a homologação visual ou publicação real na Meta. A superfície externa permanece fora da contagem de grupos das páginas internas.
 
 Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1. Os nomes são grupos de investigação, sujeitos a divisão ou fusão quando a sequência ponta a ponta for confirmada. **Localizado** significa que as páginas proprietárias foram identificadas; não significa fluxo traçado ou regra aprovada.

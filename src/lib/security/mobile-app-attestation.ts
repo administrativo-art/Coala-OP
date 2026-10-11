@@ -6,6 +6,9 @@ import { z } from "zod";
 export const MOBILE_ATTESTATION_HEADER = "x-coala-app-attestation";
 export const MOBILE_ATTESTATION_TTL_MS = 60 * 60 * 1000;
 export const MOBILE_ATTESTATION_PACKAGE = "com.coalaone.notas";
+export const MOBILE_GO_PACKAGE = "coalaone.go";
+export const mobilePackageSchema = z.enum([MOBILE_ATTESTATION_PACKAGE, MOBILE_GO_PACKAGE]);
+export type MobilePackage = z.infer<typeof mobilePackageSchema>;
 /** How old a Play verdict may be when exchanged; older tokens are replays. */
 export const MOBILE_INTEGRITY_MAX_AGE_MS = 5 * 60 * 1000;
 
@@ -14,6 +17,7 @@ export type MobileAttestationMode = "off" | "monitor" | "enforce";
 export const mobileAttestationRequestSchema = z.object({
   integrityToken: z.string().min(100).max(20_000),
   nonce: z.string().uuid(),
+  packageName: mobilePackageSchema.optional(),
 }).strict();
 
 export function mobileAttestationMode(raw: string | undefined): MobileAttestationMode {
@@ -50,10 +54,11 @@ type Verdict = {
 };
 
 /** Why a decoded Play Integrity verdict is not acceptable, or null when the call came from the official app. */
-export function mobileIntegrityRejection(verdict: Verdict | null | undefined, expected: { requestHash: string; now?: number }) {
+export function mobileIntegrityRejection(verdict: Verdict | null | undefined, expected: { requestHash: string; now?: number; packageName?: MobilePackage }) {
   const now = expected.now ?? Date.now();
   const details = verdict?.requestDetails;
-  if (details?.requestPackageName !== MOBILE_ATTESTATION_PACKAGE || verdict?.appIntegrity?.packageName !== MOBILE_ATTESTATION_PACKAGE) return "package";
+  const packageName = expected.packageName ?? MOBILE_ATTESTATION_PACKAGE;
+  if (!mobilePackageSchema.safeParse(packageName).success || details?.requestPackageName !== packageName || verdict?.appIntegrity?.packageName !== packageName) return "package";
   if (details.requestHash !== expected.requestHash) return "request-hash";
   const issuedAt = Number(details.timestampMillis);
   if (!Number.isFinite(issuedAt) || Math.abs(now - issuedAt) > MOBILE_INTEGRITY_MAX_AGE_MS) return "stale";
