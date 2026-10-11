@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { downloadAndInstall, type AppRelease } from "./app-update";
+import * as Application from "expo-application";
+
+import { downloadAndInstall, installedVersionCode, loadRelease, updateState, type AppRelease } from "./app-update";
 import { AppButton, FillBar, ui } from "./ui";
 
 /** Baixa e abre o instalador; devolve o estado da ação para a faixa e a tela cheia mostrarem igual. */
@@ -52,7 +54,34 @@ export function UpdateBanner({ release, onDismiss }: { release: AppRelease; onDi
   </View>;
 }
 
+/** Rodapé da tela inicial: versão instalada e botão que confere (e instala) a atualização a qualquer hora. */
+export function VersionRow({ release, onChecked }: { release: AppRelease | null; onChecked: (release: AppRelease) => void }) {
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const { percent, error, run } = useUpdate(release ?? { versionCode: 0, versionName: "", minVersionCode: 0, packagePath: "" });
+  const hasUpdate = updateState(release, installedVersionCode()) !== "current";
+  async function check() {
+    setChecking(true);
+    setMessage(null);
+    const next = await loadRelease();
+    setChecking(false);
+    if (!next) { setMessage("Não foi possível consultar. Confira a internet."); return; }
+    onChecked(next);
+    if (updateState(next, installedVersionCode()) === "current") setMessage("Você está na versão mais recente.");
+  }
+  const busy = percent !== null;
+  return <View style={styles.version}>
+    <Text style={styles.versionText}>Coala One · versão {Application.nativeApplicationVersion ?? "?"}</Text>
+    {busy ? <FillBar percent={percent} height={6} /> : null}
+    {message || error ? <Text style={styles.bannerText}>{error ?? message}</Text> : null}
+    {busy ? <Text style={styles.bannerText}>Baixando… {percent}%</Text>
+      : hasUpdate && release ? <AppButton compact label={`Atualizar para ${release.versionName}`} onPress={() => void run()} />
+      : <AppButton compact secondary disabled={checking} label={checking ? "Consultando…" : "Verificar atualização"} onPress={() => void check()} />}
+  </View>;
+}
+
 const styles = StyleSheet.create({
+  version: { gap: 8, marginTop: 18, alignItems: "stretch" }, versionText: { color: ui.inkMuted, fontSize: 12, textAlign: "center" },
   full: { flex: 1, alignItems: "stretch", justifyContent: "center", gap: 14, padding: 24, backgroundColor: ui.dark },
   title: { color: ui.onDark, fontSize: 24, fontWeight: "800", letterSpacing: -0.5 },
   text: { color: ui.onDarkSub, fontSize: 15, lineHeight: 22 },

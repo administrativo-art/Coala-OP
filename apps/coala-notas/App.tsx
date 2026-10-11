@@ -21,7 +21,7 @@ import { loadAppProfile, type AppModules, type AppProfile } from "./src/profile"
 import { ReceiveScreen } from "./src/ReceiveScreen";
 import { ReviewScreen, type StockOutcome } from "./src/ReviewScreen";
 import { ScheduleScreen } from "./src/ScheduleScreen";
-import { UpdateBanner, UpdateRequired } from "./src/UpdatePanel";
+import { UpdateBanner, UpdateRequired, VersionRow } from "./src/UpdatePanel";
 import { createSimulationAnalysis, createSimulationWithdrawals, simulationContext } from "./src/simulation";
 import { colors, contentColumn } from "./src/theme";
 import { AppButton, BusyOverlay, FadeIn, Pill, ScreenHeader, ui } from "./src/ui";
@@ -335,7 +335,7 @@ function AppContent() {
     : module === "reposition-receipt" ? <ReceiveScreen user={user ?? undefined} simulation={simulation} onBack={() => setModule(null)} />
     : module === "stock-count" ? <CountScreen user={user ?? undefined} simulation={simulation} onBack={() => setModule(null)} />
     : module === "local-purchase" ? <UploadScreen user={user ?? undefined} mode={simulation ? "simulation" : "real"} onBack={() => setModule(null)} />
-    : <HomeScreen user={user ?? undefined} simulation={simulation} profile={appProfile?.profile ?? null} modules={appProfile?.modules ?? null}
+    : <HomeScreen footer={<VersionRow release={release} onChecked={setRelease} />} user={user ?? undefined} simulation={simulation} profile={appProfile?.profile ?? null} modules={appProfile?.modules ?? null}
       onPhotoChanged={(avatarUrl) => setAppProfile((current) => current ? { ...current, profile: { ...current.profile, avatarUrl } } : current)}
       onOpen={setModule} onExit={() => { setModule(null); if (simulation) setSimulation(false); else void signOut(auth); }} />;
   const showLock = locked && !!user && !simulation && !previewMode;
