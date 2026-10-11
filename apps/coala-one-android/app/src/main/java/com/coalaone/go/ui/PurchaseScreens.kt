@@ -2,6 +2,8 @@ package com.coalaone.go.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.coalaone.go.data.*
@@ -28,25 +30,26 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             else Action("Confirmar compra", feedback.busy) { confirmation = true }
         } else if (selected != null) Action("Enviar documentos e revisar", feedback.busy, enabled = selected.receipts.isNotEmpty()) { vm.upload() }
     }, header = {
-        StepHeader("Compra local", if (review != null) "Confira os dados antes de confirmar" else "Notas e comprovantes", if (review != null) 2 else if (selected != null) 1 else 0, 3, feedback.busy, back, listOf("Tipo", "Anexos", "Finalizar"))
+        StepHeader("Compra local", if (review != null) "Confira os dados antes de confirmar" else "Notas e comprovantes", if (review != null) 2 else if (selected != null) 1 else 0, 3, feedback.busy, back, listOf("Tipo", "Anexos", "Finalizar"), onRefresh = if (review == null && selected == null) ({ vm.refresh() }) else null)
     }) {
         state.result?.let { result -> CardBlock {
-            Text("Compra ${result.status}"); Text("Estoque: ${result.stockEntry ?: "not_needed"} · ${result.stockItemCount ?: 0} itens")
+            Text(when (result.status) { "confirmed" -> "Compra confirmada"; "linked" -> "Compra conciliada com a sangria"; else -> "Compra registrada" }, style = MaterialTheme.typography.titleMedium)
+            when (result.stockEntry) { "done" -> "Entrada no estoque: ${result.stockItemCount ?: 0} itens"; "pending" -> "Entrada no estoque pendente"; "reversed" -> "Entrada no estoque estornada"; else -> null }?.let { Text(it) }
             result.changeCents?.let { Text("Troco: ${money(it)}") }
         } }
         if (review != null) {
             CardBlock {
                 Text(review.supplierName.ifBlank { "Fornecedor a conferir" }, style = MaterialTheme.typography.titleMedium)
                 Text(money(review.totalCents), style = MaterialTheme.typography.headlineLarge)
-                Text(review.purchaseDate, color = Tokens.muted)
+                Text(fullDate(review.purchaseDate), color = Tokens.muted)
             }
             Text("A leitura da nota é uma sugestão. Confira Compra, Pagamento e Itens antes de confirmar.")
             state.analysis?.warnings?.forEach { Text(it, color = Tokens.warning) }
-            state.analysis?.payment?.let { payment -> Text("Comprovante: ${payment.payeeName.orEmpty()} · ${payment.amountCents?.let(::money).orEmpty()} · ${payment.paidAt.orEmpty()}"); if (payment.amountMatchesReceipt == false || payment.payeeMatchesSupplier == false) Text("O comprovante diverge da nota. Confira antes de confirmar.", color = Tokens.warning) }
+            state.analysis?.payment?.let { payment -> Text("Comprovante: " + listOfNotNull(payment.payeeName?.takeIf(String::isNotBlank), payment.amountCents?.let(::money), payment.paidAt?.takeIf(String::isNotBlank)?.let(::fullDate)).joinToString(" · ")); if (payment.amountMatchesReceipt == false || payment.payeeMatchesSupplier == false) Text("O comprovante diverge da nota. Confira antes de confirmar.", color = Tokens.warning) }
             key(review.submissionId) { ReviewFields(review, state.context, selected?.withdrawal, !feedback.busy, vm::review) }
         } else if (selected != null) {
             Text(if (selected.fundingSource == "company_payment") "Pagamento da empresa" else "Compra por sangria")
-            selected.withdrawal?.let { Text("${it.unitName} · ${money(it.amountCents)} · ${it.date}") }
+            selected.withdrawal?.let { Text("${it.unitName} · ${money(it.amountCents)} · ${fullDate(it.date)}") }
             Text("Até 2 arquivos por documento; 15 MB por arquivo e 25 MB no total.")
             CardBlock {
             CaptureButtons("Nota da compra", !feedback.busy && selected.receipts.size < 2) { vm.attach(it, false) }
@@ -60,23 +63,24 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             }
             Field("Observação (até 240 caracteres)", selected.note, !feedback.busy, onChange = vm::note)
         } else {
-            Action("Atualizar sangrias", feedback.busy, secondary = true) { vm.refresh() }
             state.withdrawals?.let { list ->
-                if (list.partial) Text("Lista parcial de sangrias. Confira o período ${list.window.from} a ${list.window.to}.")
-                list.withdrawals.forEach { withdrawal -> CardBlock {
-                    Text("${withdrawal.unitName} · ${money(withdrawal.amountCents)}", style = MaterialTheme.typography.titleMedium)
-                    Text("${withdrawal.date} · ${withdrawal.time.orEmpty()} · ${withdrawal.operatorName.orEmpty()}")
-                    Action("Registrar compra desta sangria", feedback.busy, secondary = true) { vm.select("cash_withdrawal", withdrawal) }
-                } }
+                if (list.partial) Text("Lista parcial de sangrias. Confira o período de ${fullDate(list.window.from)} a ${fullDate(list.window.to)}.", color = Tokens.warning)
+                SectionLabel("Paga com sangria do caixa")
+                list.withdrawals.forEach { withdrawal ->
+                    ListRow("${withdrawal.unitName} · ${money(withdrawal.amountCents)}", listOfNotNull(fullDate(withdrawal.date), withdrawal.time?.takeIf(String::isNotBlank), withdrawal.operatorName?.takeIf(String::isNotBlank)).joinToString(" · "), !feedback.busy, leading = "R$") { vm.select("cash_withdrawal", withdrawal) }
+                }
+                ListRow("Outra sangria", "A sangria usada não aparece na lista", !feedback.busy, leading = "+") { vm.select("cash_withdrawal") }
+                SectionLabel("Paga pela empresa")
+                ListRow("Compra paga pela empresa", "PIX, cartão, boleto ou a prazo", !feedback.busy, leading = "E") { vm.select("company_payment") }
+                if (list.awaitingPurchases.isNotEmpty()) SectionLabel("Aguardando conciliação")
                 list.awaitingPurchases.forEach { purchase -> CardBlock {
-                    Text("Conciliar: ${purchase.supplierName} · ${money(purchase.totalCents)}")
+                    Text("${purchase.supplierName} · ${money(purchase.totalCents)}", style = MaterialTheme.typography.titleMedium)
+                    Text("Compra de ${fullDate(purchase.purchaseDate)} sem sangria vinculada", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                     list.withdrawals.filter { it.unitId == purchase.unitId }.forEach { withdrawal -> Action("Vincular sangria de ${money(withdrawal.amountCents)}", feedback.busy, secondary = true) { vm.link(purchase, withdrawal) } }
                 } }
             }
-            Action("Registrar compra por sangria fora da lista", feedback.busy, secondary = true) { vm.select("cash_withdrawal") }
-            Action("Registrar compra paga pela empresa", feedback.busy, secondary = true) { vm.select("company_payment") }
             if (state.queue.isNotEmpty()) {
-                Text("Envios protegidos no aparelho", style = MaterialTheme.typography.titleMedium)
+                SectionLabel("Envios guardados no aparelho")
                 Action("Sincronizar pendências", feedback.busy, secondary = true) { vm.sync() }
                 state.queue.forEach { row -> CardBlock {
                     Text(when (row.state) { "UPLOADED" -> "Recebido — revisão pendente"; "BLOCKED" -> "Revise o envio antes de tentar novamente"; else -> "Aguardando envio" })
@@ -96,7 +100,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             else Choices("Unidade", context?.units.orEmpty().map { it.id to it.name }, input.unitId, enabled) { unit -> onChange(input.copy(unitId = unit, resultCenterId = "")) }
             Field("Fornecedor", input.supplierName, enabled) { onChange(input.copy(supplierName = it)) }
             Field("CNPJ (14 dígitos, opcional)", input.supplierTaxId.orEmpty(), enabled) { onChange(input.copy(supplierTaxId = it.filter(Char::isDigit).take(14).ifBlank { null })) }
-            Field("Data da compra (AAAA-MM-DD)", input.purchaseDate, enabled) { onChange(input.copy(purchaseDate = it)) }
+            DateField("Data da compra", input.purchaseDate, enabled) { onChange(input.copy(purchaseDate = it)) }
             ReviewDecimal("Total (R$)", centsText(input.totalCents), enabled) { onChange(input.copy(totalCents = Rules.cents(it) ?: 0)) }
         }
     }
@@ -124,7 +128,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 if (context?.products?.isNotEmpty() == true) Choices("Entrada no estoque", listOf("" to "Sem entrada") + context.products.map { it.id to "${it.name} (${it.packageLabel})" }, item.stock?.productId.orEmpty(), enabled) { productId -> edit(item.copy(stock = productId.takeIf(String::isNotEmpty)?.let { StockEntry(it, item.quantity) })) }
                 item.stock?.let { stock ->
                     ReviewDecimal("Quantidade no estoque", Rules.quantityText(stock.quantity), enabled) { edit(item.copy(stock = stock.copy(quantity = Rules.quantity(it)))) }
-                    Field("Validade (AAAA-MM-DD, vazio se não houver)", stock.expiryDate.orEmpty(), enabled) { edit(item.copy(stock = stock.copy(expiryDate = it.ifBlank { null }))) }
+                    DateField("Validade", stock.expiryDate.orEmpty(), enabled, optional = true) { edit(item.copy(stock = stock.copy(expiryDate = it.ifBlank { null }))) }
                 }
                 TextButton({ onChange(input.copy(items = input.items.filterIndexed { i, _ -> i != index })) }, enabled = enabled) { Text("Remover item", color = Tokens.danger) }
                 }
