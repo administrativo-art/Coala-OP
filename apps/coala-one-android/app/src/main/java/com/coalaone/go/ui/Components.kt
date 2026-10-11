@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.font.FontWeight
 import com.coalaone.go.domain.Rules
@@ -68,52 +69,84 @@ fun shortDate(value: String?): String? {
     catch (_: Exception) { try { java.time.LocalDate.parse(value.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("dd/MM", locale)) } catch (_: Exception) { null } }
 }
 @Composable private fun BarButton(label: String, enabled: Boolean, onClick: () -> Unit, glyph: DrawScope.(Color) -> Unit) {
-    val tint = if (enabled) Tokens.onDark else Tokens.onDark2.copy(alpha = .5f)
-    Box(Modifier.size(44.dp).clip(CircleShape).background(Tokens.onDark.copy(alpha = .1f)).clickable(enabled = enabled, role = Role.Button, onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(20.dp)) { glyph(tint) }
+    val tint = if (enabled) Tokens.onDark2 else Tokens.onDark2.copy(alpha = .4f)
+    // 38dp bordered square from the prototype, inside a 44dp touch target.
+    Box(Modifier.size(44.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(38.dp).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Canvas(Modifier.size(18.dp)) { glyph(tint) } }
     }
 }
-/** One navigation bar for every screen: back on the left, title, optional actions on the right. */
-@Composable fun TopBar(title: String, subtitle: String = "", busy: Boolean = false, onBack: (() -> Unit)? = null, onRefresh: (() -> Unit)? = null, action: Pair<String, () -> Unit>? = null) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+/** One navigation bar for every screen: back on the left, optional kicker, title, actions on the right. */
+@Composable fun TopBar(title: String, subtitle: String = "", busy: Boolean = false, onBack: (() -> Unit)? = null, onRefresh: (() -> Unit)? = null, action: Pair<String, () -> Unit>? = null, kicker: String = "") {
+    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (onBack != null) BarButton("Voltar", !busy, onBack) { tint ->
-            val stroke = 2.dp.toPx(); val mid = size.height / 2
+            val stroke = 1.8.dp.toPx(); val mid = size.height / 2
             drawLine(tint, Offset(size.width * .2f, mid), Offset(size.width * .82f, mid), stroke, StrokeCap.Round)
-            drawLine(tint, Offset(size.width * .2f, mid), Offset(size.width * .5f, size.height * .2f), stroke, StrokeCap.Round)
-            drawLine(tint, Offset(size.width * .2f, mid), Offset(size.width * .5f, size.height * .8f), stroke, StrokeCap.Round)
+            drawLine(tint, Offset(size.width * .2f, mid), Offset(size.width * .48f, size.height * .24f), stroke, StrokeCap.Round)
+            drawLine(tint, Offset(size.width * .2f, mid), Offset(size.width * .48f, size.height * .76f), stroke, StrokeCap.Round)
         }
         Column(Modifier.weight(1f)) {
-            Text(title, color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, lineHeight = 25.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotBlank()) Text(subtitle, color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (kicker.isNotBlank()) Text(kicker.uppercase(Locale.forLanguageTag("pt-BR")), color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.4.sp))
+            Text(title, color = Tokens.onDark, style = if (action != null) MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp, lineHeight = 23.sp) else MaterialTheme.typography.titleLarge, maxLines = if (action != null) 2 else 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotBlank()) Text(subtitle, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onRefresh != null) BarButton("Atualizar", !busy, onRefresh) { tint ->
             val inset = size.width * .16f
-            drawArc(tint, 30f, 300f, false, Offset(inset, inset), Size(size.width - inset * 2, size.height - inset * 2), style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
+            drawArc(tint, 30f, 300f, false, Offset(inset, inset), Size(size.width - inset * 2, size.height - inset * 2), style = Stroke(1.8.dp.toPx(), cap = StrokeCap.Round))
             drawPath(androidx.compose.ui.graphics.Path().apply { moveTo(size.width * .87f, size.height * .5f); lineTo(size.width * .93f, size.height * .24f); lineTo(size.width * .66f, size.height * .38f); close() }, tint)
         }
-        action?.let { (label, run) -> TextButton(run, enabled = !busy) { Text(label, color = Tokens.pink) } }
+        action?.let { (label, run) -> Box(Modifier.heightIn(min = 34.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(10.dp)).clickable(enabled = !busy, role = Role.Button, onClick = run).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) { Text(label, color = Tokens.onDark, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp)) } }
     }
 }
-@Composable fun Page(title: String, feedback: Feedback = Feedback(), onBack: (() -> Unit)? = null, footer: @Composable ColumnScope.() -> Unit = {}, header: (@Composable ColumnScope.() -> Unit)? = null, onRefresh: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().background(Tokens.page).imePadding()) {
-        // The dark bar runs under the status bar, so no strip of page colour shows above it.
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Tokens.dark).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(horizontal = 20.dp, vertical = 16.dp)) {
-            if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack, onRefresh = onRefresh)
-        }
-        if (feedback.busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(top = 6.dp))
-        Column(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-            Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                content()
+@Composable fun Page(title: String, feedback: Feedback = Feedback(), onBack: (() -> Unit)? = null, footer: (@Composable ColumnScope.() -> Unit)? = null, header: (@Composable ColumnScope.() -> Unit)? = null, onRefresh: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    Box(Modifier.fillMaxSize().background(Tokens.page).imePadding()) {
+        Column(Modifier.fillMaxSize()) {
+            // The dark bar runs under the status bar, so no strip of page colour shows above it.
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Tokens.dark).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 18.dp)) {
+                if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack, onRefresh = onRefresh)
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+            }
+            val hasFooter = footer != null || feedback.error != null || feedback.notice != null
+            if (hasFooter && footer != null) HorizontalDivider(color = Tokens.border)
+            Column(Modifier.fillMaxWidth().then(if (footer != null) Modifier.background(Color.White) else Modifier).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = 16.dp, vertical = if (hasFooter) 12.dp else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Messages sit next to the actions, so they stay visible wherever the list is scrolled.
+                    feedback.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp), modifier = Modifier.fillMaxWidth().background(Tokens.dangerBg, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) }
+                    feedback.notice?.let { Text(it, color = Tokens.onDark, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.dark, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 12.dp)) }
+                    footer?.invoke(this)
+                }
             }
         }
-        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = 20.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Column(Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Messages sit next to the actions, so they stay visible wherever the list is scrolled.
-                feedback.error?.let { Text(it, color = Tokens.danger, modifier = Modifier.fillMaxWidth().background(Tokens.dangerBg, RoundedCornerShape(12.dp)).padding(12.dp)) }
-                feedback.notice?.let { Text(it, color = Tokens.ok, modifier = Modifier.fillMaxWidth().background(Tokens.okBg, RoundedCornerShape(12.dp)).padding(12.dp)) }
-                footer()
-            }
+        // Prototype busy state: a scrim with a spinner over the whole phone.
+        if (feedback.busy) Column(Modifier.fillMaxSize().background(Tokens.dark.copy(alpha = .72f)).clickable(enabled = false) {}, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            CircularProgressIndicator(color = Tokens.pink, trackColor = Tokens.onDark.copy(alpha = .18f), strokeWidth = 3.dp, modifier = Modifier.size(38.dp))
+            Spacer(Modifier.height(14.dp)); Text("Aguarde…", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium)
         }
+    }
+}
+/** "Anterior | Próximo" footer pair from the prototype. */
+@Composable fun FooterPair(back: String, backEnabled: Boolean, onBack: () -> Unit, next: String, nextEnabled: Boolean, onNext: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.weight(1f)) { Action(back, enabled = backEnabled, secondary = true, onClick = onBack) }
+        Box(Modifier.weight(1f)) { Action(next, enabled = nextEnabled, onClick = onNext) }
+    }
+}
+@Composable fun StatusChip(text: String, ink: Color, background: Color) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
+/** Pill filter from the prototype: dark when selected, outlined otherwise. */
+@Composable fun PillChoice(label: String, selected: Boolean, enabled: Boolean = true, accent: Boolean = false, onClick: () -> Unit) {
+    val ink = when { selected && accent -> Tokens.wine; selected -> Color.White; else -> Tokens.muted }
+    val fill = when { selected && accent -> Tokens.accentSoft; selected -> Tokens.dark; else -> Color.White }
+    val line = when { selected && accent -> Tokens.accent; selected -> Tokens.dark; else -> Tokens.fieldBorder }
+    Text(label, color = ink, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(50)).background(fill).border(1.dp, line, RoundedCornerShape(50)).selectable(selected, enabled, Role.RadioButton, onClick).padding(horizontal = 13.dp, vertical = 8.dp))
+}
+/** Label above a plain input, as the prototype draws quantities and notes. */
+@Composable fun LabeledInput(label: String, value: String, enabled: Boolean = true, decimal: Boolean = false, placeholder: String = "", alert: Color? = null, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (label.isNotBlank()) Text(label, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+        OutlinedTextField(value, onValueChange = onChange, enabled = enabled, singleLine = true, shape = RoundedCornerShape(12.dp), placeholder = { if (placeholder.isNotBlank()) Text(placeholder, color = Tokens.faint) },
+            colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Tokens.soft, focusedContainerColor = Tokens.soft, disabledContainerColor = Tokens.soft, unfocusedBorderColor = alert ?: Tokens.fieldBorder, focusedBorderColor = alert ?: Tokens.accent),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label.ifBlank { placeholder } }, keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Text))
     }
 }
 @Composable fun SectionLabel(text: String) { Text(text.uppercase(Locale.forLanguageTag("pt-BR")), color = Tokens.muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp, start = 4.dp)) }
@@ -122,7 +155,7 @@ fun shortDate(value: String?): String? {
     Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, if (highlight) Tokens.pink.copy(alpha = .5f) else Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White, disabledContainerColor = Color.White)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(if (highlight) Tokens.accentSoft else Tokens.soft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                Text(leading ?: title.trim().take(1).uppercase(), color = if (highlight) Tokens.accent else Tokens.ink, style = MaterialTheme.typography.titleMedium)
+                Text(leading ?: unitInitials(title), color = if (highlight) Tokens.accent else Tokens.ink, style = MaterialTheme.typography.titleMedium)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -138,7 +171,7 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun Action(label: String, busy: Boolean = false, enabled: Boolean = true, secondary: Boolean = false, dark: Boolean = false, onClick: () -> Unit) {
-    if (secondary) OutlinedButton(onClick, enabled = enabled && !busy, colors = ButtonDefaults.outlinedButtonColors(contentColor = if (dark) Tokens.onDark else Tokens.ink, disabledContentColor = if (dark) Tokens.onDark2 else Tokens.muted), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, if (dark) Tokens.onDark.copy(alpha = .3f) else Tokens.fieldBorder), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
+    if (secondary) OutlinedButton(onClick, enabled = enabled && !busy, colors = ButtonDefaults.outlinedButtonColors(containerColor = if (dark) Color.Transparent else Color.White, contentColor = if (dark) Tokens.onDark else Tokens.ink, disabledContentColor = if (dark) Tokens.onDark2 else Tokens.muted), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, if (dark) Tokens.onDark.copy(alpha = .14f) else Tokens.fieldBorder), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
     else Button(onClick, enabled = enabled && !busy, colors = ButtonDefaults.buttonColors(disabledContainerColor = if (dark) Tokens.accent.copy(alpha = .32f) else Tokens.ink.copy(alpha = .12f), disabledContentColor = if (dark) Tokens.onDark.copy(alpha = .6f) else Tokens.muted), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (busy) "Aguarde…" else label) }
 }
 @Composable fun Field(label: String, value: String, enabled: Boolean = true, decimal: Boolean = false, onChange: (String) -> Unit) {
@@ -243,18 +276,21 @@ fun shortDate(value: String?): String? {
 @Composable fun CardBlock(selected: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth().then(if (LocalMotionEnabled.current) Modifier.animateContentSize() else Modifier), shape = RoundedCornerShape(18.dp), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) Tokens.accent else Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content) }
 }
-@Composable fun StepHeader(title: String, subtitle: String, step: Int, steps: Int, busy: Boolean, onBack: () -> Unit, labels: List<String> = emptyList(), backLabel: String = "Voltar", onRefresh: (() -> Unit)? = null) {
-    TopBar(title, subtitle, busy, onBack, onRefresh, action = if (backLabel != "Voltar") backLabel to onBack else null)
-    Spacer(Modifier.height(14.dp))
+@Composable fun StepHeader(title: String, subtitle: String, step: Int, steps: Int, busy: Boolean, onBack: () -> Unit, labels: List<String> = emptyList(), backLabel: String = "Voltar", onRefresh: (() -> Unit)? = null, kicker: String = "", aside: String = "") {
+    TopBar(title, subtitle, busy, onBack, onRefresh, action = if (backLabel != "Voltar") backLabel to onBack else null, kicker = kicker)
+    Spacer(Modifier.height(12.dp))
     if (labels.isNotEmpty()) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         labels.forEachIndexed { index, label -> Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.fillMaxWidth().height(4.dp).background(if (index <= step) Tokens.pink else Tokens.onDark.copy(alpha = .15f), RoundedCornerShape(4.dp)))
-            Text(label, color = if (index <= step) Tokens.onDark else Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.fillMaxWidth().height(4.dp).background(if (index <= step) Tokens.pink else Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(4.dp)))
+            Text("${index + 1} $label", color = if (index == step) Tokens.onDark else Tokens.onDark4, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.5.sp))
         } }
     } else {
-        AnimatedProgress((step + 1).toFloat() / steps, duration = 300)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text("Etapa ${step + 1} de $steps", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp), modifier = Modifier.weight(1f))
+            if (aside.isNotBlank()) Text(aside, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
+        }
         Spacer(Modifier.height(8.dp))
-        Text("Etapa ${step + 1} de $steps", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+        AnimatedProgress((step + 1).toFloat() / steps, duration = 300, height = 5, track = Tokens.onDark.copy(alpha = .14f), fill = androidx.compose.ui.graphics.SolidColor(Tokens.pink))
     }
 }
 @Composable fun ProductPhoto(url: String?, label: String, size: Int = 52) {

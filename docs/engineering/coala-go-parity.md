@@ -56,6 +56,19 @@ exclusivo), lint Android sem erros e dez capturas conferidas. Não exercitados e
 execução: tela de bloqueio, seletor com busca, calendário e leitor de QR em tela
 cheia; testes de Firebase e fila offline não foram repetidos nesta rodada.
 
+### Verificação da 0.3.2 (telas no desenho do protótipo, metas e escala)
+
+Telas de compra local, contagem, recebimento, metas, escala e início refeitas
+conforme `Coala One App - Prototipo`; ícone novo; iniciais de duas letras por
+unidade; cor cadastrada de cada pessoa na escala e na equipe das metas; metas
+com "minha parte", ritmo do dia, selo de ritmo e gráfico por dia (valores da
+unidade, não individuais). A escala passa a aparecer sem depender de trancar
+(ver `flows/collaborator-schedule.md`). 35 testes JVM e lint Android aprovados;
+oito instrumentados aprovados antes do último ajuste de texto da aba Dias e não
+repetidos depois dele, por decisão do responsável, que conferiu as telas no
+emulador. Anexos, revisão, calendário, tela de bloqueio, meta de ticket médio e
+aviso de dias com escala não foram exercitados em execução.
+
 ## Entrega por etapa
 
 | Etapa | Feito | Verificação local | Pendente |
