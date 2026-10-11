@@ -11,7 +11,7 @@ import {
   planDownloadRanges,
   planNewSignageScreen,
   signageMobileScreenSchema,
-  signagePairingUrl,
+  signagePairingPayload,
   isSlideScheduleActive,
   resolveActiveSlide,
   SIGNAGE_DEVICE_TOKEN_PATTERN,
@@ -120,14 +120,14 @@ test("app do monitor: sorteia o código do QR code no formato do servidor", () =
   for (const byte of [0, 31, 32, 200, 255]) {
     assert.ok(SIGNAGE_DEVICE_TOKEN_PATTERN.test(core.generateCode(() => byte)), String(byte));
   }
-  // O QR code leva o endereço da página de aplicativos; o aplicativo tira dele só o código.
-  const url = signagePairingUrl(`${SERVER}/`, sequential);
-  assert.equal(url, `${SERVER}/app?tela=${sequential}`);
-  assert.equal(parseSignagePairingCode(url), sequential);
-  assert.equal(parseSignagePairingCode(`${url}&x=1`), sequential);
-  assert.equal(parseSignagePairingCode(url.toLowerCase()), sequential);
-  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=ABCDEFG1`), null);
-  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=ABCDEFGHJ`), null);
+  // O QR code leva só o código (sem endereço, para a câmera comum não abrir o sistema).
+  const payload = signagePairingPayload(sequential);
+  assert.equal(payload, `COALA-SIGNAGE:${sequential}`);
+  assert.equal(parseSignagePairingCode(payload), sequential);
+  assert.equal(parseSignagePairingCode(payload.toLowerCase()), sequential);
+  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=${sequential}`), null);
+  assert.equal(parseSignagePairingCode('COALA-SIGNAGE:ABCDEFG1'), null);
+  assert.equal(parseSignagePairingCode('COALA-SIGNAGE:ABCDEFGHJ'), null);
   assert.equal(parseSignagePairingCode("https://exemplo.com/outro-qr"), null);
   // Consulta rápida enquanto alguém instala; lenta em monitor esquecido na tela de pareamento.
   assert.equal(core.pairingPollDelayMs(0), 15_000);
