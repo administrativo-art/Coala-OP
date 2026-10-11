@@ -817,6 +817,8 @@ export type PermissionSet = {
     schedule: {
       /** Ver a escala publicada das unidades em que a pessoa está lotada, com todos da equipe. */
       view: boolean;
+      /** Gestão: ver também a escala das demais unidades do acesso da pessoa, mesmo sem estar escalada nelas. */
+      viewAllUnits?: boolean;
     };
     signage: {
       /** Adicionar telas do Coala Signage às unidades do usuário, lendo o QR code do monitor. */
@@ -2999,7 +3001,7 @@ export const defaultGuestPermissions: PermissionSet = {
       manageFinancialLink: false,
       manageBaseItems: false,
     },
-    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false }, signage: { manage: false } },
+    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false, viewAllUnits: false }, signage: { manage: false } },
     hr: {
       view: false,
       employees: { view: false, manage: false },
@@ -3111,7 +3113,7 @@ export const defaultAdminPermissions: PermissionSet = {
       manageFinancialLink: true,
       manageBaseItems: true,
     },
-    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true }, signage: { manage: true } },
+    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true, viewAllUnits: true }, signage: { manage: true } },
     hr: {
       view: true,
       employees: { view: true, manage: true },

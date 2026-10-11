@@ -67,7 +67,7 @@ test("schedule and profile reuse the web rules and need the app permission", () 
   assert.equal(defaultAdminPermissions.app.schedule.view, true);
   const server = readFileSync("src/features/collaborator-schedule/mobile-schedule.server.ts", "utf8");
   assert.match(server, /permissions\.app\?\.schedule\?\.view !== true/);
-  assert.match(server, /buildCollaboratorSchedulePayload\(actor, year, month\)/);
+  assert.match(server, /buildCollaboratorSchedulePayload\(actor, year, month, await extraScheduleUnits\(actor\)\)/);
   assert.match(readFileSync("src/features/goals/mobile-goals.server.ts", "utf8"), /period\.distributionMode !== "scheduled_days" \? null/);
   assert.match(readFileSync("src/app/api/dp/mobile-schedule/route.ts", "utf8"), /action: "app\.schedule\.view"/);
   const profile = readFileSync("src/app/api/mobile/profile/route.ts", "utf8");
@@ -88,4 +88,19 @@ test("a person can only replace their own photo, with an image checked by conten
   assert.match(server, /const userId = actor\.userDoc\.id;/);
   assert.match(server, /const path = `avatars\/\$\{userId\}`;/);
   assert.match(server, /collection\("users"\)\.doc\(userId\)\.set\(\{ avatarUrl,/);
+});
+
+test("the schedule of other units needs its own app permission and stays inside the person's access", () => {
+  assert.equal(defaultGuestPermissions.app.schedule.viewAllUnits, false);
+  assert.equal(defaultAdminPermissions.app.schedule.viewAllUnits, true);
+  const rules = readFileSync("src/features/collaborator-schedule/mobile-schedule.server.ts", "utf8");
+  const extra = rules.slice(rules.indexOf("async function extraScheduleUnits"), rules.indexOf("const UNITS_TTL_MS"));
+  // Sem a permissão, nada além das unidades da própria pessoa; com ela, só unidades do acesso.
+  assert.match(extra, /if \(actor\.isDefaultAdmin\) return "all";/);
+  assert.match(extra, /actor\.permissions\.app\?\.schedule\?\.viewAllUnits !== true\) return \[\];/);
+  assert.match(extra, /canAccessUnit\(actor\.userDoc, kiosk\.id, \{ isDefaultAdmin: false \}\)/);
+  assert.match(rules, /buildCollaboratorSchedulePayload\(actor, year, month, await extraScheduleUnits\(actor\)\)/);
+  // O portal do colaborador continua sem unidades extras.
+  const portal = readFileSync("src/features/collaborator-schedule/server.ts", "utf8");
+  assert.match(portal, /extraTeamUnitIds: string\[\] \| "all" = \[\]/);
 });
