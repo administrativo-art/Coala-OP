@@ -481,3 +481,5 @@ api,src/app/api/signage/mobile/route.ts,,docs/engineering/flows/signage.md,Unida
 api,src/app/api/signage/mobile/screens/route.ts,,docs/engineering/flows/signage.md,Liga o monitor do QR code lido a uma tela nova ou existente da unidade; exige app.signage.manage e unidade no escopo; grava em dois bancos.
 api,src/app/api/signage/pair/qr/route.ts,,docs/engineering/flows/signage.md,QR code de pareamento em SVG para o app do monitor; publica e limitada por IP; nao le nem grava.
 api,src/app/api/app/version/route.ts,,docs/engineering/flows/signage.md,Versao publicada do Coala One para o botao de atualizar do app; publica; nao le nem grava.
+api,src/app/api/stock/mobile-count/cancel/route.ts,,docs/engineering/flows/stock-count.md,Cancela (apaga) a contagem aberta do proprio operador pelo aplicativo; nada foi aplicado ao estoque; mesma regra de dono do web.
+api,src/app/api/stock/mobile-count/photo/route.ts,,docs/engineering/flows/stock-count.md,Entrega ao aplicativo a foto do insumo guardada dentro do cadastro (data URI); exige app.stockCount.perform; GET sem escrita.
