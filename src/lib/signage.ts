@@ -15,7 +15,7 @@ export const SIGNAGE_FETCH_TIMEOUT_MS = 30 * 1000;
 export const SIGNAGE_STORAGE_BUCKET = 'smart-converter-752gf.firebasestorage.app';
 /**
  * Aplicativos do Coala, servidos de `public/app/` e listados em `/app`. São dois produtos:
- * o Coala Signage APP (vai nas telas) e o Coala Mobile APP (smartphones e tablets Android).
+ * o Coala Signage APP (vai nas telas) e o Coala Go (smartphones e tablets Android).
  * `packagePath: null` é instalador que ainda não existe: a página mostra o botão desativado.
  */
 export const COALA_APP_INSTALLERS: {
@@ -23,8 +23,8 @@ export const COALA_APP_INSTALLERS: {
   mobile: { packagePath: string | null };
 } = {
   signage: { launcherPath: '/app', packagePath: '/app/CoalaSignage.wgt' },
-  // APK do aplicativo Coala One, gerado por `apps/coala-notas/scripts/build-apk.sh`.
-  mobile: { packagePath: '/app/CoalaMobile.apk' },
+  // Android Kotlin, gerado por apps/coala-one-android/scripts/build-apk.sh.
+  mobile: { packagePath: '/app/CoalaGo.apk' },
 };
 /**
  * O servidor corta respostas acima de ~30 MB, e o instalador do aplicativo passa disso. A página

@@ -54,7 +54,7 @@ function Steps({ items }: { items: React.ReactNode[] }) {
 /**
  * Aplicativos do Coala, atrás de login: a abertura da página e cada download ficam registrados
  * com o usuário. São dois produtos diferentes: o Coala Signage APP, que vai nas telas, e o
- * Coala Mobile APP, para smartphones e tablets Android. O monitor Samsung não faz login, então
+ * Coala Go, para smartphones e tablets Android. O monitor Samsung não faz login, então
  * o pacote do Signage segue público no endereço do URL Launcher.
  */
 export function SignageAppInstall() {
@@ -136,7 +136,7 @@ export function SignageAppInstall() {
                   <span className="mt-1 block break-all font-ds-mono text-[12.5px] font-bold text-ds-ink">{launcherUrl}</span>
                 </>,
                 'O monitor baixa e abre o app sozinho, sem login, e mostra um QR code.',
-                'No aplicativo Coala One, abra Signage, toque em “Adicionar tela” e leia o QR code do monitor.',
+                'No Coala Go, abra Signage, toque em “Adicionar tela” e leia o QR code do monitor.',
               ]}
             />
             <div className="mt-auto pt-6">
@@ -149,13 +149,13 @@ export function SignageAppInstall() {
           </section>
 
           <section className="flex flex-col rounded-ds-card border border-ds-border bg-ds-surface p-6">
-            <h2 className="text-[17px] font-extrabold text-ds-ink">Coala Mobile APP</h2>
-            <p className="mt-1 text-[13px] text-ds-ink-muted">Para smartphones e tablets Android.</p>
+            <h2 className="text-[17px] font-extrabold text-ds-ink">Coala Go</h2>
+            <p className="mt-1 text-[13px] text-ds-ink-muted">Para smartphones e tablets com Android 8 ou superior.</p>
             <Steps
               items={[
                 'Abra esta página no navegador do aparelho e baixe o instalador.',
                 'Abra o arquivo baixado e permita a instalação de apps desta fonte.',
-                'Abra o Coala One no aparelho e entre com o seu usuário do sistema.',
+                'Abra o Coala Go no aparelho e entre com o seu usuário do sistema.',
               ]}
             />
             <div className="mt-auto pt-6">
@@ -169,9 +169,9 @@ export function SignageAppInstall() {
                 onClick={() => { if (mobile.packagePath) void handleDownload('mobile', mobile.packagePath); }}
               >
                 <Download aria-hidden="true" className="h-4 w-4" />
-                Baixar Coala Mobile APP
+                Baixar Coala Go
               </Button>
-              {!mobile.packagePath && <p className="mt-2 text-xs text-ds-ink-muted">O instalador do Coala Mobile ainda não está disponível.</p>}
+              {!mobile.packagePath && <p className="mt-2 text-xs text-ds-ink-muted">O instalador do Coala Go ainda não está disponível.</p>}
             </div>
           </section>
         </div>

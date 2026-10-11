@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **416**
-- Totalmente contratados: **44**
+- Arquivos de rota: **417**
+- Totalmente contratados: **45**
 - Legados congelados: **372**
 - Exceções temporárias: **0**
 - Violações: **0**
@@ -391,6 +391,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/stock/mobile-count/save` | POST ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/save/route.ts](../../src/app/api/stock/mobile-count/save/route.ts) |
 | `/api/stock/mobile-count/start` | POST ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/start/route.ts](../../src/app/api/stock/mobile-count/start/route.ts) |
 | `/api/stock/mobile-reposition` | GET ✓ | `CONTRACTED` | [src/app/api/stock/mobile-reposition/route.ts](../../src/app/api/stock/mobile-reposition/route.ts) |
+| `/api/stock/mobile-reposition/photo` | GET ✓ | `CONTRACTED` | [src/app/api/stock/mobile-reposition/photo/route.ts](../../src/app/api/stock/mobile-reposition/photo/route.ts) |
 | `/api/stock/mobile-reposition/receive` | POST ✓ | `CONTRACTED` | [src/app/api/stock/mobile-reposition/receive/route.ts](../../src/app/api/stock/mobile-reposition/receive/route.ts) |
 | `/api/stock/movement-history` | GET | `LEGACY_BASELINE` | [src/app/api/stock/movement-history/route.ts](../../src/app/api/stock/movement-history/route.ts) |
 | `/api/stock/replenishment-policy` | GET | `LEGACY_BASELINE` | [src/app/api/stock/replenishment-policy/route.ts](../../src/app/api/stock/replenishment-policy/route.ts) |

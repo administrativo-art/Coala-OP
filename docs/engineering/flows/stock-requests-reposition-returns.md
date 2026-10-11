@@ -1,5 +1,7 @@
 # Estoque: solicitação de item, reposição e devolução
 
+**Mobile atual (2026-10-11):** somente [Coala Go Kotlin](../../../apps/coala-one-android/README.md), package `coalaone.go`, Android8+. Usuário confirmou ausência de usuários e autorizou retirar Expo/instalador antigo. Download preparado em `/app/CoalaGo.apk`, versão0.2.0/code4, página `/app` com botão "Baixar Coala Go". Trechos históricos que citam Expo/coala-notas descrevem a implementação retirada; IDs de negócio `coala-notas-android` permanecem por compatibilidade, sem migração de dados. Homologação física/integrada e publicação continuam separadas; ver [matriz](../coala-go-parity.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** rastreamento estático concluído na base `3f64b3c`, atualizado em 2026-09-26. Entradas, sequência, dados, controles e efeitos estão descritos abaixo e nos subfluxos vinculados. Verificação integrada pendente; comportamento implementado não equivale a regra aprovada.
@@ -17,6 +19,14 @@ As solicitações que antecedem a atividade usam contratos próprios em [`/api/s
 ### Recebimento pelo aplicativo (2026-10-09)
 
 Só a etapa de recebimento existe em `apps/coala-notas` (módulo "Recebimento"). Permissão própria da lista do aplicativo, `app.reposition.receive`; `reposition.receive` do sistema não a concede. `GET /api/stock/mobile-reposition` consulta `repositionActivities` com `status == "Aguardando recebimento"` (até 50) e devolve apenas as atividades cujo **destino** está nas unidades do usuário, sem a imagem das assinaturas. `POST /api/stock/mobile-reposition/receive` revalida, em transação, permissão, destino e status; exige uma quantidade recebida para cada lote despachado e uma explicação quando ela difere da enviada; grava `receivedLots`, `Recebido com/sem divergência`, `receiptSignature` (nome e hora) e `receiptSource: coala-notas-android`, no mesmo formato do web, e sincroniza a tarefa. Diferente do `PATCH` web, a transição só parte de "Aguardando recebimento" e a repetição pela mesma pessoa é idempotente. Não movimenta estoque: a efetivação (`finalize`) continua no sistema. Sem polling: a lista é lida ao abrir o módulo e ao puxar para atualizar. Lacunas: sem E2E nem teste em aparelho.
+
+### Coala Go nativo e fotos privadas (2026-10-11)
+
+O [Android Kotlin](../../../apps/coala-one-android/README.md) consome os mesmos contratos de lista e confirmação, sem alterar a efetivação de estoque. Foi autorizado explicitamente o ajuste delimitado de fotos: imagens embutidas recebem URL relativa de [`GET /api/stock/mobile-reposition/photo`](../../../src/app/api/stock/mobile-reposition/photo/route.ts), em vez de serem omitidas da lista. URLs HTTPS existentes permanecem iguais. O app envia token de login e atestação via cliente Coil/OkHttp compartilhado; não envia credenciais a origens externas nem segue redirecionamentos.
+
+A rota usa `secureRoute`, usuário ativo, `app.reposition.receive`, atestação e destino autorizado. Revalida atividade em `Aguardando recebimento` e vínculo do lote efetivamente despachado antes de ler a imagem do produto. Não aceita produto arbitrário; a resposta é privada, `no-store` e `nosniff`. No máximo duas leituras pontuais por foto, sem query/listener/polling novo. Custo: `2 × fotos solicitadas × aberturas/dia × usuários × dias`; cenário ilustrativo de 10 fotos, 4 aberturas, 20 usuários e 30 dias = 48.000 leituras/mês, não uma medição de uso real.
+
+Testes de autorização e vínculo estão em [`reposition-mobile-photo.test.ts`](../../../tests/unit/reposition-mobile-photo.test.ts); validação de divergência e Compose constam da [matriz mobile](../coala-go-parity.md). Não homologam Firestore real, imagem real de cada insumo ou aparelho físico. O app Expo permanece sem alterações.
 
 ## Devolução e bonificação (`stock-returns`)
 
