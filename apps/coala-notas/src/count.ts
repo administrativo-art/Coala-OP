@@ -1,6 +1,9 @@
 import type { User } from "@firebase/auth";
 import * as FileSystem from "expo-file-system/legacy";
 
+import { attestationHeaders } from "./attestation";
+import { appConfig } from "./config";
+import type { StoredDrafts } from "./count-merge";
 import { authenticatedJson } from "./upload";
 
 export type CountExitReason = string;
@@ -20,7 +23,7 @@ export type CountItem = {
   imageUrl?: string | null;
   countingInstruction?: string | null;
 };
-export type CountSession = { id: string; kioskId: string; kioskName: string; status: string; startedAt: string; items: CountItem[] };
+export type CountSession = { id: string; kioskId: string; kioskName: string; status: string; startedAt: string; updatedAt?: string | null; items: CountItem[] };
 export type CountContext = {
   units: Array<{ id: string; name: string }>;
   openSessions: Array<{ id: string; kioskId: string; kioskName: string; startedAt: string; itemCount: number }>;
@@ -80,14 +83,37 @@ export function saveCount(user: User, session: CountSession, drafts: CountDrafts
     user, "/api/stock/mobile-count/save", { method: "POST", body: JSON.stringify({ sessionId: session.id, entries, complete }) });
 }
 
+/** Apaga a contagem aberta no Coala One; nada dela chegou ao estoque. */
+export function cancelCount(user: User, sessionId: string) {
+  return authenticatedJson<{ cancelled: boolean; alreadyCancelled: boolean }>(user, "/api/stock/mobile-count/cancel", { method: "POST", body: JSON.stringify({ sessionId }) });
+}
+
+export type PhotoSource = { uri: string; headers?: Record<string, string> };
+
+/** Cabeçalhos de login para as fotos que o Coala One entrega por rota própria (as guardadas dentro do cadastro). */
+export async function loadPhotoHeaders(user: User): Promise<Record<string, string>> {
+  return { Authorization: `Bearer ${await user.getIdToken()}`, ...(await attestationHeaders(user)) };
+}
+
+/** Foto em endereço público abre direto; caminho do Coala One recebe o servidor e o login. Sem login ainda, espera. */
+export function photoSource(imageUrl: string | null | undefined, headers: Record<string, string> | null): PhotoSource | null {
+  if (!imageUrl) return null;
+  if (!imageUrl.startsWith("/")) return { uri: imageUrl };
+  return headers ? { uri: `${appConfig.apiBaseUrl}${imageUrl}`, headers } : null;
+}
+
 // Rascunho no aparelho: o estoque costuma ter sinal ruim, e nada digitado pode se perder por isso.
 const DRAFT_DIRECTORY = `${FileSystem.documentDirectory ?? ""}coala-notas-count/`;
 const draftPath = (sessionId: string) => `${DRAFT_DIRECTORY}${sessionId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
 
-export async function loadLocalDrafts(sessionId: string): Promise<CountDrafts | null> {
+/** Rascunho deste aparelho com a hora em que foi gravado; arquivos antigos, sem hora, contam como os mais velhos. */
+export async function loadLocalDrafts(sessionId: string): Promise<StoredDrafts<CountDraft> | null> {
   try {
     const value = JSON.parse(await FileSystem.readAsStringAsync(draftPath(sessionId))) as unknown;
-    return value && typeof value === "object" && !Array.isArray(value) ? value as CountDrafts : null;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const stored = value as { savedAt?: unknown; drafts?: unknown };
+    if (typeof stored.savedAt === "number" && stored.drafts && typeof stored.drafts === "object") return { savedAt: stored.savedAt, drafts: stored.drafts as CountDrafts };
+    return { savedAt: 0, drafts: value as CountDrafts };
   } catch {
     return null;
   }
@@ -96,7 +122,7 @@ export async function loadLocalDrafts(sessionId: string): Promise<CountDrafts | 
 export async function saveLocalDrafts(sessionId: string, drafts: CountDrafts) {
   if (!FileSystem.documentDirectory) return;
   await FileSystem.makeDirectoryAsync(DRAFT_DIRECTORY, { intermediates: true }).catch(() => undefined);
-  await FileSystem.writeAsStringAsync(draftPath(sessionId), JSON.stringify(drafts)).catch(() => undefined);
+  await FileSystem.writeAsStringAsync(draftPath(sessionId), JSON.stringify({ savedAt: Date.now(), drafts })).catch(() => undefined);
 }
 
 export async function clearLocalDrafts(sessionId: string) {

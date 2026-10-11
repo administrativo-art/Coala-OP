@@ -6,16 +6,18 @@ import { AppError } from "@/lib/observability/app-error";
 import { canAccessUnit } from "@/lib/unit-access";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import type { BaseProduct, LotEntry, Product, StockAuditItem, StockAuditSession } from "@/types";
-import { safeAvatarUrl } from "@/features/collaborator-schedule/mobile-schedule";
 import { completeStockCountSession, isStockCountOwner } from "./lib/finalize";
-import { syncStockCountTaskSafely } from "./lib/task-sync";
+import { cancelStockCountTaskSafely, syncStockCountTaskSafely } from "./lib/task-sync";
 import { OWN_OPEN_STOCK_COUNT_SESSION_LIMIT } from "./lib/visibility";
 import {
   applyMobileCountEntries,
+  cancelMobileCountSchema,
   isMobileCountProduct,
   MOBILE_COUNT_EXIT_REASONS,
   mobileCountDisplayUnit,
+  mobileCountPhotoUrl,
   mobileCountProductName,
+  parseProductPhotoDataUri,
   saveMobileCountSchema,
   startMobileCountSchema,
   toMobileCountItem,
@@ -44,7 +46,7 @@ async function sessionPayload(session: StockAuditSession) {
   const productIds = [...new Set(items.map((item) => item.productId).filter(Boolean))];
   const snapshots = productIds.length ? await dbAdmin.getAll(...productIds.map((id) => dbAdmin.collection("products").doc(id))) : [];
   const media = new Map(snapshots.map((snapshot) => [snapshot.id, {
-    imageUrl: safeAvatarUrl(snapshot.get("imageUrl")),
+    imageUrl: mobileCountPhotoUrl(snapshot.id, snapshot.get("imageUrl")),
     countingInstruction: typeof snapshot.get("countingInstruction") === "string" ? String(snapshot.get("countingInstruction")).trim().slice(0, 400) || null : null,
   }]));
   return {
@@ -53,6 +55,8 @@ async function sessionPayload(session: StockAuditSession) {
     kioskName: session.kioskName,
     status: session.status,
     startedAt: session.startedAt,
+    // Last save on the server: the app compares it with a draft left on the phone and keeps the newer one.
+    updatedAt: typeof (session as { updatedAt?: unknown }).updatedAt === "string" ? (session as { updatedAt?: string }).updatedAt : null,
     items: items.map((item) => ({ ...toMobileCountItem(item), imageUrl: media.get(item.productId)?.imageUrl ?? null, countingInstruction: media.get(item.productId)?.countingInstruction ?? null })),
   };
 }
@@ -153,6 +157,43 @@ export async function startMobileCount(raw: unknown, actor: ServerUserContext) {
   const session = { id: reference.id, ...data } as StockAuditSession;
   await syncStockCountTaskSafely({ context: actor, session, label: "create" });
   return { session: await sessionPayload(session), resumed: false };
+}
+
+/**
+ * Photo of a product whose registration stores the image inside the document. One document read;
+ * any operator who may count may see product photos, which carry no unit or cost data.
+ */
+export async function loadMobileCountPhoto(productId: string, actor: ServerUserContext) {
+  assertCanPerformMobileCount(actor);
+  const photo = parseProductPhotoDataUri((await dbAdmin.collection("products").doc(productId).get()).get("imageUrl"));
+  if (!photo) failure("PHOTO_NOT_FOUND", "Foto não encontrada.", "NOT_FOUND");
+  return { contentType: photo.contentType, bytes: Buffer.from(photo.base64, "base64") };
+}
+
+/**
+ * Cancels an open count, by the same rule as the web: only who started it, only while open.
+ * Nothing was applied to stock yet, so removing the session undoes it entirely.
+ */
+export async function cancelMobileCount(raw: unknown, actor: ServerUserContext) {
+  assertCanPerformMobileCount(actor);
+  const parsed = cancelMobileCountSchema.safeParse(raw);
+  if (!parsed.success) failure("INPUT_INVALID", "Contagem inválida.", "VALIDATION");
+  const reference = dbAdmin.collection("stockAuditSessions").doc(parsed.data.sessionId);
+  const taskId = await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    // Cancelling twice (retry after a lost answer) is not an error.
+    if (!snapshot.exists) return null;
+    const session = { id: snapshot.id, ...(snapshot.data() ?? {}) } as StockAuditSession;
+    if (!isStockCountOwner(actor, session) || !canAccessUnit(actor.userDoc, session.kioskId, { isDefaultAdmin: actor.isDefaultAdmin })) {
+      failure("NOT_FOUND", "Contagem não encontrada.", "NOT_FOUND");
+    }
+    if (session.status !== "pending_review") failure("ALREADY_COMPLETED", "Esta contagem já foi concluída e não pode mais ser cancelada.");
+    transaction.delete(reference);
+    return session.taskId ?? undefined;
+  });
+  if (taskId === null) return { cancelled: true, alreadyCancelled: true };
+  await cancelStockCountTaskSafely({ context: actor, sessionId: parsed.data.sessionId, taskId, label: "mobile-cancel" });
+  return { cancelled: true, alreadyCancelled: false };
 }
 
 /** Saves the draft or, with `complete`, applies the count to stock through the same transaction the web uses. */

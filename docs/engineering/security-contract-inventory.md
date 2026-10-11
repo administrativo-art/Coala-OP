@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **414**
-- Totalmente contratados: **42**
+- Arquivos de rota: **416**
+- Totalmente contratados: **44**
 - Legados congelados: **372**
 - Exceções temporárias: **0**
 - Violações: **0**
@@ -386,6 +386,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/stock/item-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/stock/item-requests/route.ts](../../src/app/api/stock/item-requests/route.ts) |
 | `/api/stock/item-requests/[requestId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/stock/item-requests/[requestId]/route.ts](../../src/app/api/stock/item-requests/[requestId]/route.ts) |
 | `/api/stock/mobile-count` | GET ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/route.ts](../../src/app/api/stock/mobile-count/route.ts) |
+| `/api/stock/mobile-count/cancel` | POST ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/cancel/route.ts](../../src/app/api/stock/mobile-count/cancel/route.ts) |
+| `/api/stock/mobile-count/photo` | GET ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/photo/route.ts](../../src/app/api/stock/mobile-count/photo/route.ts) |
 | `/api/stock/mobile-count/save` | POST ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/save/route.ts](../../src/app/api/stock/mobile-count/save/route.ts) |
 | `/api/stock/mobile-count/start` | POST ✓ | `CONTRACTED` | [src/app/api/stock/mobile-count/start/route.ts](../../src/app/api/stock/mobile-count/start/route.ts) |
 | `/api/stock/mobile-reposition` | GET ✓ | `CONTRACTED` | [src/app/api/stock/mobile-reposition/route.ts](../../src/app/api/stock/mobile-reposition/route.ts) |

@@ -97,7 +97,7 @@ export function ReceiveScreen({ user, simulation, onBack }: { user?: User; simul
   }, [busy, confirming, activity, currentStep, drafts]);
 
   if (activity) {
-    return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.fill}>
+    return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.screen}>
       <ScreenHeader title="Recebimento" onBack={() => setActivity(null)} backLabel="Voltar para a lista" backDisabled={busy}>
         <Text style={styles.headerMeta}>{activity.originName} → {activity.destinationName}{activity.dispatchedAt ? ` · despachada em ${isoToBrDate(activity.dispatchedAt)}` : ""}{simulation ? " · simulação" : ""}</Text>
       </ScreenHeader>
@@ -142,7 +142,7 @@ export function ReceiveScreen({ user, simulation, onBack }: { user?: User; simul
     </KeyboardAvoidingView>;
   }
 
-  return <View style={styles.fill}>
+  return <View style={styles.screen}>
     <ScreenHeader kicker={simulation ? "COALA ONE · SIMULAÇÃO" : "COALA ONE"} title="Recebimento" onBack={onBack} backLabel="Voltar para o início" />
     <FlatList
     data={activities ?? []}
@@ -171,14 +171,14 @@ export function ReceiveScreen({ user, simulation, onBack }: { user?: User; simul
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: ui.page }, content: { ...contentColumn, paddingHorizontal: 20, paddingVertical: 16 }, stack: { gap: 10 }, gap: { height: 10 }, headerBlock: { gap: 10, marginBottom: 10 },
+  screen: { flex: 1, backgroundColor: ui.page }, fill: { flex: 1 }, content: { ...contentColumn, paddingHorizontal: 20, paddingVertical: 16 }, stack: { gap: 10 }, gap: { height: 10 }, headerBlock: { gap: 10, marginBottom: 10 },
   headerMeta: { color: ui.onDarkSub, fontSize: 12.5 }, hint: { color: ui.inkMuted, fontSize: 12, lineHeight: 17 }, meta: { color: ui.inkMuted, fontSize: 12, lineHeight: 17 }, loading: { alignItems: "center", gap: 8, paddingVertical: 24 },
   progress: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }, progressText: { color: ui.ink, fontSize: 14, fontWeight: "800" },
   segments: { flexDirection: "row", gap: 4 }, segment: { flex: 1, height: 4, borderRadius: 4, backgroundColor: ui.border }, segmentOn: { backgroundColor: ui.accent },
   product: { gap: 8 }, productName: { color: ui.ink, fontSize: 14, fontWeight: "800" }, productHead: { flexDirection: "row", alignItems: "center", gap: 10 }, fillText: { flex: 1 },
   thumb: { width: 52, height: 52, borderRadius: 12, backgroundColor: ui.muted }, thumbEmpty: { alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: ui.border }, thumbText: { color: ui.inkFaint, fontSize: 9, fontWeight: "700" },
   lot: { backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 14, gap: 8 }, lotDiffers: { borderWidth: 2, borderColor: ui.warn, padding: 13 }, lotProblem: { borderWidth: 2, borderColor: ui.danger, backgroundColor: "#FFF5F6", padding: 13 },
-  lotHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }, mono: { color: ui.inkFaint, fontSize: 11, fontFamily: "monospace" },
+  lotHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }, mono: { color: ui.inkFaint, fontSize: 11 },
   row: { flexDirection: "row", gap: 8 }, label: { color: ui.inkMuted, fontSize: 11.5, fontWeight: "700", marginBottom: 3 }, sent: { color: ui.ink, fontSize: 16, fontWeight: "800", paddingTop: 9 },
   input: { height: 40, borderWidth: 1, borderColor: ui.borderInput, backgroundColor: ui.soft, borderRadius: 11, paddingHorizontal: 12, color: ui.ink, fontSize: 15, fontWeight: "700" },
   error: { color: ui.danger, fontSize: 12.5, lineHeight: 18, fontWeight: "600" }, errorBox: { color: ui.danger, backgroundColor: ui.dangerBg, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, fontSize: 12.5, lineHeight: 18, fontWeight: "600" }, empty: { color: ui.inkMuted, backgroundColor: ui.muted, borderRadius: 12, padding: 14, fontSize: 13, lineHeight: 19 },
