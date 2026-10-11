@@ -3,6 +3,7 @@ import "server-only";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { matchDPUnitForKiosk } from "@/lib/dp-kiosk-match";
+import { canAccessUnit } from "@/lib/unit-access";
 import { AppError } from "@/lib/observability/app-error";
 import type { DPUnit } from "@/types";
 import { buildCollaboratorSchedulePayload } from "./server";
@@ -23,10 +24,23 @@ export function assertCanViewMobileSchedule(actor: ServerUserContext) {
  */
 export async function loadMobileSchedule(actor: ServerUserContext, year: number, month: number) {
   assertCanViewMobileSchedule(actor);
-  const payload = await buildCollaboratorSchedulePayload(actor, year, month);
+  const payload = await buildCollaboratorSchedulePayload(actor, year, month, await extraScheduleUnits(actor));
   const userIds = [...new Set(payload.teamUnits.flatMap((unit) => unit.shifts.map((shift) => shift.userId)).filter(Boolean))];
   const snapshots = userIds.length ? await dbAdmin.getAll(...userIds.map((id) => dbAdmin.collection("users").doc(id))) : [];
   return toMobileSchedule(payload, new Map(snapshots.map((snapshot) => [snapshot.id, safeAvatarUrl(snapshot.get("avatarUrl"))])));
+}
+
+/**
+ * Units beyond the person's own, for whoever holds `app.schedule.viewAllUnits`: the default admin
+ * sees every unit; anyone else, the schedule units that correspond to the units of their access.
+ */
+async function extraScheduleUnits(actor: ServerUserContext): Promise<string[] | "all"> {
+  if (actor.isDefaultAdmin) return "all";
+  if (actor.permissions.app?.schedule?.viewAllUnits !== true) return [];
+  const [kiosks, units] = await Promise.all([dbAdmin.collection("kiosks").limit(201).get(), dpUnits()]);
+  return [...new Set(kiosks.docs
+    .filter((kiosk) => canAccessUnit(actor.userDoc, kiosk.id, { isDefaultAdmin: false }))
+    .flatMap((kiosk) => matchDPUnitForKiosk(String(kiosk.get("name") ?? ""), units)?.id ?? []))];
 }
 
 const UNITS_TTL_MS = 10 * 60_000;

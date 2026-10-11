@@ -1,6 +1,6 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop, Text as SvgText, TSpan } from "react-native-svg";
 
 import { colors, contentColumn } from "./theme";
 
@@ -51,22 +51,82 @@ export function Aurora() {
   </View>;
 }
 
-/** "Coala One": o "One" pulsa entre rosa e branco no lugar do gradiente corrido do protótipo. */
-export function Brand({ size }: { size: number }) {
-  const value = useLoop(4500);
-  return <View style={styles.brand}>
-    <Text style={[styles.brandText, { fontSize: size }]}>Coala</Text>
-    <Animated.Text style={[styles.brandText, { fontSize: size, color: ui.pink, opacity: value.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) }]}>One</Animated.Text>
+/** Avanço de 0 a 1 de um ciclo, recalculado ~20 vezes por segundo: move os gradientes de texto, que o driver nativo não anima. */
+function useCycle(duration: number) {
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    let last = 0;
+    let frame = requestAnimationFrame(function tick() {
+      const now = Date.now();
+      if (now - last >= 50) { last = now; setProgress(((now - start) % duration) / duration); }
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [duration]);
+  return progress;
+}
+
+/**
+ * Texto com gradiente: o texto comum mede a largura (e aparece enquanto a medida não chega);
+ * depois some e o desenho em SVG, do mesmo tamanho, entra por cima com o preenchimento animado.
+ */
+function GradientLine(props: { fontSize: number; fontWeight: "600" | "700" | "800"; letterSpacing?: number; fallback: ReactNode; children: (width: number) => ReactNode }) {
+  const [width, setWidth] = useState(0);
+  const height = Math.ceil(props.fontSize * 1.3);
+  return <View style={styles.gradientLine}>
+    <View onLayout={(event) => setWidth(Math.ceil(event.nativeEvent.layout.width))} style={[styles.gradientMeasure, width > 0 && styles.hidden]}>{props.fallback}</View>
+    {width > 0 ? <Svg width={width + 12} height={height} style={styles.gradientSvg}>
+      <SvgText x={(width + 12) / 2} y={props.fontSize} fontSize={props.fontSize} fontWeight={props.fontWeight} letterSpacing={props.letterSpacing} textAnchor="middle">{props.children(width)}</SvgText>
+    </Svg> : null}
   </View>;
 }
 
-/** Slogan do login, com o brilho que passa aproximado por opacidade. Dois textos lado a lado: texto aninhado não anima no driver nativo. */
+// O gradiente do "One" repetido lado a lado: assim ele cobre o texto em qualquer ponto do deslocamento.
+const ONE_REPEATS = 4;
+const ONE_COLORS = ["#F08BB1", "#D13670", "#93B4FF"];
+const ONE_STOPS = Array.from({ length: ONE_REPEATS * ONE_COLORS.length + 1 }, (_, index) => ({ offset: index / (ONE_REPEATS * ONE_COLORS.length), color: ONE_COLORS[index % ONE_COLORS.length]! }));
+
+/** "Coala One": o "One" tem o gradiente rosa → magenta → azul correndo sem parar, como no protótipo (6 s por volta). */
+export function Brand({ size }: { size: number }) {
+  const progress = useCycle(6000);
+  // O gradiente se repete a cada `period`; deslocá-lo um período inteiro fecha o laço sem salto.
+  const period = size * 3.8;
+  const offset = -progress * period;
+  return <GradientLine fontSize={size} fontWeight="800" letterSpacing={-0.8}
+    fallback={<View style={styles.brand}><Text style={[styles.brandText, { fontSize: size }]}>Coala</Text><Text style={[styles.brandText, { fontSize: size, color: ui.pink }]}>One</Text></View>}>
+    {() => <>
+      <Defs><LinearGradient id="coOne" gradientUnits="userSpaceOnUse" x1={offset - period} y1={0} x2={offset + (ONE_REPEATS - 1) * period} y2={0}>
+        {ONE_STOPS.map((stop) => <Stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />)}
+      </LinearGradient></Defs>
+      <TSpan fill={ui.onDark}>Coala </TSpan><TSpan fill="url(#coOne)">One</TSpan>
+    </>}
+  </GradientLine>;
+}
+
+const SLOGAN = "Acredite em você";
+const SLOGAN_REST = ", humano";
+const easeInOut = (value: number) => value < 0.5 ? 2 * value * value : 1 - Math.pow(-2 * value + 2, 2) / 2;
+
+/** Slogan do login: um brilho branco atravessa "Acredite em você" a cada 4,5 s (parado no começo e no fim do ciclo, como no protótipo). */
 export function Slogan() {
-  const value = useLoop(4500);
-  return <View style={styles.sloganRow}>
-    <Animated.Text style={[styles.slogan, styles.sloganStrong, { opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }]}>Acredite em você</Animated.Text>
-    <Text style={styles.slogan}>, humano</Text>
-  </View>;
+  const progress = useCycle(4500);
+  const sweep = easeInOut(Math.min(Math.max((progress - 0.35) / 0.4, 0), 1));
+  return <GradientLine fontSize={16} fontWeight="700"
+    fallback={<View style={styles.sloganRow}><Text style={[styles.slogan, styles.sloganStrong]}>{SLOGAN}</Text><Text style={styles.slogan}>{SLOGAN_REST}</Text></View>}>
+    {(width) => {
+      // A parte rosa ocupa cerca de 2/3 da linha; a faixa branca entra pela esquerda e sai pela direita dela.
+      const strong = width * (SLOGAN.length / (SLOGAN.length + SLOGAN_REST.length));
+      const center = 6 + strong * (-0.25 + 1.5 * sweep);
+      const half = strong * 0.25;
+      return <>
+        <Defs><LinearGradient id="coShine" gradientUnits="userSpaceOnUse" x1={center - half} y1={0} x2={center + half} y2={0}>
+          <Stop offset={0} stopColor="#F08BB1" /><Stop offset={0.5} stopColor="#FFFFFF" /><Stop offset={1} stopColor="#F08BB1" />
+        </LinearGradient></Defs>
+        <TSpan fill="url(#coShine)">{SLOGAN}</TSpan><TSpan fill={ui.onDark2} fontWeight="600">{SLOGAN_REST}</TSpan>
+      </>;
+    }}
+  </GradientLine>;
 }
 
 export function BackButton({ onPress, label, disabled }: { onPress: () => void; label: string; disabled?: boolean }) {
@@ -193,6 +253,7 @@ export function BiometricIcon() {
 
 const styles = StyleSheet.create({
   blob: { position: "absolute", filter: [{ blur: 38 }] },
+  gradientLine: { alignItems: "center", justifyContent: "center" }, gradientMeasure: { flexDirection: "row" }, gradientSvg: { position: "absolute" }, hidden: { opacity: 0 },
   brand: { flexDirection: "row", gap: 6, alignItems: "baseline" }, brandText: { color: ui.onDark, fontWeight: "800", letterSpacing: -0.8 },
   slogan: { color: ui.onDark2, fontSize: 16, fontWeight: "600" }, sloganStrong: { color: ui.pink, fontWeight: "700" }, sloganRow: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap" },
   back: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, borderColor: ui.line, alignItems: "center", justifyContent: "center" }, backText: { color: ui.onDark2, fontSize: 16 },

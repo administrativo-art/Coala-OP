@@ -59,7 +59,12 @@ export function canAccessCollaboratorSchedule(access: ServerUserContext) {
 export async function buildCollaboratorSchedulePayload(
   access: ServerUserContext,
   year: number,
-  month: number
+  month: number,
+  /**
+   * Unidades a mais na visão da equipe, além das da própria pessoa: usado pelo aplicativo para quem
+   * pode ver a escala de outras unidades. O portal do colaborador não passa nada aqui.
+   */
+  extraTeamUnitIds: string[] | "all" = []
 ) {
   const user = access.userDoc;
   const pdvAccessIds = Array.isArray(user.pdvAccesses)
@@ -140,9 +145,15 @@ export async function buildCollaboratorSchedulePayload(
       ...ownPublishedShifts.map((shift) => String(shift.unitId ?? "")),
     ])
   );
-  const visibleTeamShifts = allPublishedShifts.filter((shift) =>
-    linkedUnitIds.has(String(shift.unitId ?? ""))
-  );
+  if (extraTeamUnitIds !== "all") {
+    for (const unitId of extraTeamUnitIds) linkedUnitIds.add(unitId);
+  }
+  const visibleTeamShifts =
+    extraTeamUnitIds === "all"
+      ? allPublishedShifts.filter((shift) => String(shift.unitId ?? ""))
+      : allPublishedShifts.filter((shift) =>
+          linkedUnitIds.has(String(shift.unitId ?? ""))
+        );
 
   const dedupedShifts = new Map<string, Record<string, unknown>>();
   for (const shift of ownPublishedShifts) {

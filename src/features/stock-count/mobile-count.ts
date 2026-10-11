@@ -44,6 +44,29 @@ export const saveMobileCountSchema = z.object({
 
 export type MobileCountEntry = z.infer<typeof mobileCountEntrySchema>;
 
+export const cancelMobileCountSchema = z.object({ sessionId: documentId }).strict();
+export const mobileCountPhotoQuerySchema = z.object({ productId: documentId }).strict();
+
+const PHOTO_DATA_URI = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
+// Fotos do cadastro são reduzidas no navegador antes de salvar; o teto só barra conteúdo anômalo.
+const MAX_PHOTO_DATA_URI_CHARS = 2_800_000;
+
+/** Foto do cadastro guardada dentro do próprio documento (data URI): tipo e conteúdo, ou `null` se não for uma imagem aceita. */
+export function parseProductPhotoDataUri(value: unknown) {
+  if (typeof value !== "string" || value.length > MAX_PHOTO_DATA_URI_CHARS) return null;
+  const match = PHOTO_DATA_URI.exec(value.trim());
+  return match ? { contentType: match[1]!, base64: match[2]! } : null;
+}
+
+/**
+ * Endereço da foto para o aplicativo. Foto em endereço público segue como está; foto embutida no
+ * cadastro vira o caminho da rota que a entrega (o aplicativo acrescenta o servidor e o login).
+ */
+export function mobileCountPhotoUrl(productId: string, stored: unknown) {
+  if (typeof stored === "string" && /^https:\/\/[^\s]+$/.test(stored.trim()) && stored.length <= 2000) return stored.trim();
+  return parseProductPhotoDataUri(stored) ? `/api/stock/mobile-count/photo?productId=${encodeURIComponent(productId)}` : null;
+}
+
 export function mobileCountProductName(product: Pick<Product, "baseName" | "brand" | "packageSize" | "unit">) {
   const brand = product.brand ? ` - ${product.brand}` : "";
   const size = product.packageSize && product.unit ? ` (${product.packageSize}${product.unit})` : "";

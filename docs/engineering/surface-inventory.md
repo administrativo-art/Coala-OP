@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **414 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **416 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -409,6 +409,8 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/stock/item-requests` | GET, POST | [src/app/api/stock/item-requests/route.ts](../../src/app/api/stock/item-requests/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/item-requests/[requestId]` | PATCH, DELETE | [src/app/api/stock/item-requests/[requestId]/route.ts](../../src/app/api/stock/item-requests/%5BrequestId%5D/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/mobile-count` | GET | [src/app/api/stock/mobile-count/route.ts](../../src/app/api/stock/mobile-count/route.ts) | [stock-count](flows/stock-count.md) |
+| `/api/stock/mobile-count/cancel` | POST | [src/app/api/stock/mobile-count/cancel/route.ts](../../src/app/api/stock/mobile-count/cancel/route.ts) | [stock-count](flows/stock-count.md) |
+| `/api/stock/mobile-count/photo` | GET | [src/app/api/stock/mobile-count/photo/route.ts](../../src/app/api/stock/mobile-count/photo/route.ts) | [stock-count](flows/stock-count.md) |
 | `/api/stock/mobile-count/save` | POST | [src/app/api/stock/mobile-count/save/route.ts](../../src/app/api/stock/mobile-count/save/route.ts) | [stock-count](flows/stock-count.md) |
 | `/api/stock/mobile-count/start` | POST | [src/app/api/stock/mobile-count/start/route.ts](../../src/app/api/stock/mobile-count/start/route.ts) | [stock-count](flows/stock-count.md) |
 | `/api/stock/mobile-reposition` | GET | [src/app/api/stock/mobile-reposition/route.ts](../../src/app/api/stock/mobile-reposition/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |

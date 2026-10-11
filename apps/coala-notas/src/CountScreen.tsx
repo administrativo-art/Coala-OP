@@ -6,7 +6,9 @@ import {
   clearLocalDrafts, createSimulationCountSession, DEFAULT_EXIT_REASON, draftChanged, draftFromItem, finalQuantity, formatQuantity,
   loadCountContext, loadLocalDrafts, OTHER_EXIT_REASON, parseQuantity, saveCount, saveLocalDrafts, simulationCountContext, startCount,
   type CountContext, type CountDraft, type CountDrafts, type CountItem, type CountSession,
+  cancelCount, loadPhotoHeaders, photoSource, type PhotoSource,
 } from "./count";
+import { chooseCountDrafts } from "./count-merge";
 import { isoToBrDate } from "./ItemStock";
 import { colors, contentColumn } from "./theme";
 import { AppButton, BusyOverlay, FadeIn, FillBar, HeaderAction, ScreenHeader, ui } from "./ui";
@@ -17,17 +19,17 @@ const emptyDraft: CountDraft = { exit: "", reason: DEFAULT_EXIT_REASON, exitNote
 const maskQuantity = (value: string) => value.replace(/[^\d,]/g, "").replace(/(,.*),/g, "$1").slice(0, 12);
 
 /** Cabeçalho do insumo: foto do cadastro (toque para ampliar), nome e a instrução de contagem, quando houver. */
-function ProductHeader({ name, imageUrl, instruction }: { name: string; imageUrl: string | null; instruction: string | null }) {
+function ProductHeader({ name, image, instruction }: { name: string; image: PhotoSource | null; instruction: string | null }) {
   const [enlarged, setEnlarged] = useState(false);
   const [failed, setFailed] = useState(false);
-  const photo = imageUrl && !failed ? imageUrl : null;
+  const photo = image && !failed ? image : null;
   return <View style={styles.productHeader}>
     <View style={styles.row}>
-      {photo ? <Pressable accessibilityRole="button" accessibilityLabel={`Ampliar a foto de ${name}`} onPress={() => setEnlarged((open) => !open)}><Image source={{ uri: photo }} onError={() => setFailed(true)} style={styles.productThumb} /></Pressable>
+      {photo ? <Pressable accessibilityRole="button" accessibilityLabel={`Ampliar a foto de ${name}`} onPress={() => setEnlarged((open) => !open)}><Image source={photo} onError={() => setFailed(true)} style={styles.productThumb} /></Pressable>
         : <View style={[styles.productThumb, styles.productThumbEmpty]}><Text style={styles.productThumbText}>sem foto</Text></View>}
       <View style={styles.fill}><Text style={styles.lotName}>{name}</Text>{instruction ? <Text style={styles.instruction}>Como contar: {instruction}</Text> : null}</View>
     </View>
-    {photo && enlarged ? <Pressable accessibilityRole="button" accessibilityLabel="Fechar a foto" onPress={() => setEnlarged(false)}><Image resizeMode="contain" source={{ uri: photo }} style={styles.productPhoto} /></Pressable> : null}
+    {photo && enlarged ? <Pressable accessibilityRole="button" accessibilityLabel="Fechar a foto" onPress={() => setEnlarged(false)}><Image resizeMode="contain" source={photo} style={styles.productPhoto} /></Pressable> : null}
   </View>;
 }
 
@@ -78,6 +80,8 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
   const [search, setSearch] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [photoHeaders, setPhotoHeaders] = useState<Record<string, string> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ adjustedLots: number; unitName: string } | null>(null);
@@ -98,10 +102,12 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
     try {
       const opened = simulation || !user ? createSimulationCountSession() : (await startCount(user, kioskId)).session;
       const server: CountDrafts = Object.fromEntries(opened.items.filter((item) => item.exitQuantity > 0 || item.entryQuantity > 0).map((item) => [item.lotId, draftFromItem(item)]));
-      // O que ficou só no aparelho (sem internet na hora de salvar) vale sobre o rascunho do servidor.
+      // Rascunho que ficou só neste aparelho (sem internet ao sair) só vale se for mais novo que o do Coala One.
       const local = simulation ? null : await loadLocalDrafts(opened.id);
-      const known = new Set(opened.items.map((item) => item.lotId));
-      setDrafts({ ...server, ...Object.fromEntries(Object.entries(local ?? {}).filter(([lotId]) => known.has(lotId))) });
+      const chosen = chooseCountDrafts({ server, serverUpdatedAt: opened.updatedAt, local, knownLotIds: opened.items.map((item) => item.lotId) });
+      if (chosen.discardedLocal) { await clearLocalDrafts(opened.id); setNotice("Esta contagem foi continuada em outro aparelho. Os lançamentos antigos guardados neste celular foram descartados."); }
+      else if (chosen.source === "local") setNotice("Recuperamos os lançamentos que estavam guardados neste aparelho. Eles são enviados quando você sair ou concluir.");
+      setDrafts(chosen.drafts);
       setSession(opened); setStep(0); setSearch(""); setOnlyChanged(false); setConfirming(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível iniciar a contagem."); }
     finally { setBusy(false); }
@@ -145,10 +151,31 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
   }
   function filter(nextSearch: string, nextOnlyChanged: boolean) { setSearch(nextSearch); setOnlyChanged(nextOnlyChanged); setStep(0); setConfirming(false); }
 
+  // Sair guarda a contagem no aparelho e, havendo internet, no Coala One; ela continua "em andamento".
   async function leave() {
-    if (session && !simulation) await saveLocalDrafts(session.id, drafts);
-    setSession(null); setConfirming(false);
+    if (!session || busy) return;
+    if (simulation || !user) { setSession(null); setConfirming(false); setCancelling(false); return; }
+    setBusy(true);
+    await saveLocalDrafts(session.id, drafts);
+    // Lote com erro de digitação não é enviado: fica só no aparelho até ser corrigido.
+    const sent = problems.size ? false : await saveCount(user, session, drafts, false).then(() => true, () => false);
+    // Enviado, o Coala One passa a ser a única versão: um rascunho esquecido aqui não pode voltar por cima depois.
+    if (sent) await clearLocalDrafts(session.id);
+    setNotice(sent ? "Contagem guardada. Você pode continuar depois, neste ou em outro aparelho." : "Contagem guardada neste aparelho. Ela será enviada quando você voltar a ela com internet.");
+    setBusy(false); setSession(null); setConfirming(false); setCancelling(false);
     void refreshContext();
+  }
+  // Cancelar apaga a contagem aberta: nada chegou ao estoque, então nada precisa ser desfeito.
+  async function cancel() {
+    if (!session || busy) return;
+    setBusy(true); setError(null);
+    try {
+      if (!simulation && user) { await cancelCount(user, session.id); await clearLocalDrafts(session.id); }
+      setNotice(simulation ? null : `Contagem de ${session.kioskName} cancelada. Nada foi alterado no estoque.`);
+      setSession(null); setConfirming(false); setCancelling(false); setDrafts({});
+      void refreshContext();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível cancelar a contagem."); setCancelling(false); }
+    finally { setBusy(false); }
   }
   async function save(complete: boolean) {
     if (!session || busy) return;
@@ -162,7 +189,8 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
       }
       await saveLocalDrafts(session.id, drafts);
       const result = await saveCount(user, session, drafts, complete);
-      if (complete) { await clearLocalDrafts(session.id); setDone({ adjustedLots: result.adjustedLots, unitName: session.kioskName }); }
+      await clearLocalDrafts(session.id);
+      if (complete) { setDone({ adjustedLots: result.adjustedLots, unitName: session.kioskName }); }
       else setNotice("Contagem salva. Você pode continuar depois, neste ou em outro aparelho.");
       setSession(null); setConfirming(false);
       void refreshContext();
@@ -172,27 +200,41 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
     } finally { setBusy(false); }
   }
 
+  // O login das fotos vence em uma hora; renovar a cada etapa sai de graça (o aparelho reaproveita o que ainda vale).
+  useEffect(() => {
+    if (!session || simulation || !user) { setPhotoHeaders(null); return; }
+    let active = true;
+    void loadPhotoHeaders(user).then((headers) => { if (active) setPhotoHeaders(headers); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [session?.id, currentStep, simulation, user?.uid]);
+
   // Voltar do Android: fecha a confirmação, volta uma etapa e, na primeira, sai da contagem guardando o rascunho.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (busy) return true;
+      if (cancelling) { setCancelling(false); return true; }
       if (confirming) { setConfirming(false); return true; }
       if (session && currentStep > 0) { goToStep(currentStep - 1); return true; }
       if (session) { void leave(); return true; }
       onBack(); return true;
     });
     return () => subscription.remove();
-  }, [busy, confirming, currentStep, session, drafts]);
+  }, [busy, confirming, cancelling, currentStep, session, drafts]);
 
   if (session) {
-    return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.fill}>
-      <ScreenHeader kicker={simulation ? "CONTAGEM DE ESTOQUE · SIMULAÇÃO" : "CONTAGEM DE ESTOQUE"} title={session.kioskName} onBack={() => void leave()} backLabel="Voltar para as unidades" backDisabled={busy} right={<HeaderAction label="Salvar e sair" onPress={() => void save(false)} disabled={busy} />}>
+    return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.screen}>
+      <ScreenHeader kicker={simulation ? "CONTAGEM DE ESTOQUE · SIMULAÇÃO" : "CONTAGEM DE ESTOQUE"} title={session.kioskName} onBack={() => void leave()} backLabel="Voltar para as unidades" backDisabled={busy} right={<HeaderAction label="Cancelar" onPress={() => { setConfirming(false); setCancelling(true); scrollRef.current?.scrollTo({ y: 0, animated: true }); }} disabled={busy} />}>
         <View style={styles.stepBlock}>
           <View style={styles.progress}><Text style={styles.progressText}>Etapa {currentStep + 1} de {stepCount}</Text><Text style={styles.progressMeta}>{changedCount} {changedCount === 1 ? "lote com lançamento" : "lotes com lançamento"}</Text></View>
           <FillBar key={`${currentStep}-${stepCount}`} percent={Math.round(((currentStep + 1) / stepCount) * 100)} color={ui.pink} track={ui.line} height={5} />
         </View>
       </ScreenHeader>
       <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}><FadeIn key={currentStep} style={styles.stack}>
+        {notice ? <View style={styles.success}><Text style={styles.successText}>{notice}</Text></View> : null}
+        {cancelling ? <View style={styles.confirm}>
+          <Text style={styles.confirmText}>Cancelar esta contagem? Os lançamentos digitados são descartados e nada muda no estoque. Para só interromper e continuar depois, use a seta de voltar: a contagem fica guardada.</Text>
+          <View style={styles.row}><View style={styles.fill}><AppButton compact secondary label="Continuar contando" onPress={() => setCancelling(false)} disabled={busy} /></View><View style={styles.fill}><AppButton compact label="Cancelar contagem" onPress={() => void cancel()} disabled={busy} /></View></View>
+        </View> : null}
         {currentStep === 0 ? <Text style={styles.hint}>Confira cada insumo. Se a quantidade bater com a do sistema, só avance; se não, lance a saída do turno (com o motivo) ou a sobra encontrada.</Text> : null}
         <TextInput value={search} onChangeText={(value) => filter(value, onlyChanged)} placeholder="Buscar insumo ou lote" placeholderTextColor={ui.inkFaint} style={[styles.input, styles.searchInput]} />
         <View style={styles.chips}>
@@ -201,7 +243,7 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
         </View>
         {!products.length ? <Text style={styles.empty}>{onlyChanged ? "Nenhum lote com lançamento ainda." : "Nenhum insumo encontrado com essa busca."}</Text> : null}
         {stepProducts.map((product) => <View key={product.name} style={styles.product}>
-          <ProductHeader name={product.name} imageUrl={product.lots.find((lot) => lot.imageUrl)?.imageUrl ?? null} instruction={product.lots.find((lot) => lot.countingInstruction)?.countingInstruction ?? null} />
+          <ProductHeader name={product.name} image={photoSource(product.lots.find((lot) => lot.imageUrl)?.imageUrl ?? null, photoHeaders)} instruction={product.lots.find((lot) => lot.countingInstruction)?.countingInstruction ?? null} />
           {product.lots.map((lot) => <LotRow key={lot.lotId} item={lot} draft={drafts[lot.lotId]} reasons={context?.exitReasons ?? []} problem={problems.get(lot.lotId) ?? null} onChange={(draft) => change(lot.lotId, draft)} />)}
         </View>)}
       </FadeIn></ScrollView>
@@ -223,7 +265,7 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
   }
 
   const openByUnit = new Map(context?.openSessions.map((open) => [open.kioskId, open]) ?? []);
-  return <View style={styles.fill}>
+  return <View style={styles.screen}>
     <ScreenHeader kicker={simulation ? "COALA ONE · SIMULAÇÃO" : "COALA ONE"} title="Contagem de estoque" onBack={onBack} backLabel="Voltar para o início" backDisabled={busy} />
     <FlatList
     data={context?.units ?? []}
@@ -241,7 +283,7 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
     renderItem={({ item: unit }) => {
       const pending = openByUnit.get(unit.id);
       return <Pressable accessibilityRole="button" disabled={busy} onPress={() => void open(unit.id)} style={[styles.unit, busy && styles.disabled]}>
-        <View style={styles.fill}><Text style={styles.unitName}>{unit.name}</Text><Text style={styles.lotMeta}>{pending ? `Contagem em andamento · iniciada em ${isoToBrDate(pending.startedAt)} · ${pending.itemCount} lotes` : "Nenhuma contagem em andamento"}</Text></View>
+        <View style={styles.fill}><Text style={styles.unitName}>{unit.name}</Text><Text style={styles.unitMeta}>{pending ? `Contagem em andamento · iniciada em ${isoToBrDate(pending.startedAt)} · ${pending.itemCount} lotes` : "Nenhuma contagem em andamento"}</Text></View>
         <Text style={[styles.unitAction, pending && styles.unitActionOn]}>{pending ? "Continuar" : "Iniciar"}</Text>
       </Pressable>;
     }}
@@ -251,7 +293,7 @@ export function CountScreen({ user, simulation, onBack }: { user?: User; simulat
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: ui.page }, content: { ...contentColumn, paddingHorizontal: 16, paddingVertical: 14 }, stack: { gap: 10 }, gap: { height: 10 }, headerBlock: { gap: 10, marginBottom: 10 },
+  screen: { flex: 1, backgroundColor: ui.page }, fill: { flex: 1 }, content: { ...contentColumn, paddingHorizontal: 16, paddingVertical: 14 }, stack: { gap: 10 }, gap: { height: 10 }, headerBlock: { gap: 10, marginBottom: 10 },
   stepBlock: { gap: 8 }, progress: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }, progressText: { color: ui.onDark, fontSize: 14, fontWeight: "800" }, progressMeta: { color: ui.onDarkSub, fontSize: 12 },
   hint: { color: ui.inkMuted, fontSize: 12.5, lineHeight: 18 }, loading: { alignItems: "center", gap: 8, paddingVertical: 24 },
   input: { height: 44, borderWidth: 1, borderColor: ui.borderInput, backgroundColor: ui.soft, borderRadius: 12, paddingHorizontal: 12, color: ui.ink, fontSize: 15 }, searchInput: { backgroundColor: ui.surface },
@@ -261,11 +303,11 @@ const styles = StyleSheet.create({
   productThumbText: { color: ui.inkFaint, fontSize: 10, fontWeight: "700" }, productPhoto: { width: "100%", height: 200, borderRadius: 12, backgroundColor: ui.muted }, instruction: { color: ui.inkMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   product: { backgroundColor: ui.surface, borderRadius: 18, borderWidth: 1, borderColor: ui.border, padding: 14, gap: 10 },
   lot: { backgroundColor: ui.soft, borderRadius: 14, borderWidth: 1, borderColor: ui.border, padding: 12, gap: 9 }, lotChanged: { borderWidth: 2, borderColor: ui.accent, backgroundColor: "#FFF8FA", padding: 11 }, lotProblem: { borderWidth: 2, borderColor: ui.danger, backgroundColor: "#FFF5F6", padding: 11 },
-  lotName: { color: ui.ink, fontSize: 15, fontWeight: "800", lineHeight: 19 }, lotMeta: { color: ui.inkMuted, fontSize: 11.5, fontFamily: "monospace" }, lotNumbers: { flexDirection: "row", justifyContent: "space-between", gap: 8, marginTop: 6 }, lotSystem: { color: ui.ink, fontSize: 13 }, lotSystemValue: { fontWeight: "800" }, lotFinal: { color: ui.inkFaint, fontSize: 13, fontWeight: "600" }, lotFinalChanged: { color: ui.accentInk, fontWeight: "800" }, lotFinalProblem: { color: ui.danger },
+  lotName: { color: ui.ink, fontSize: 15, fontWeight: "800", lineHeight: 19 }, lotMeta: { color: ui.inkMuted, fontSize: 12 }, lotNumbers: { flexDirection: "row", justifyContent: "space-between", gap: 8, marginTop: 6 }, lotSystem: { color: ui.ink, fontSize: 13 }, lotSystemValue: { fontWeight: "800" }, lotFinal: { color: ui.inkFaint, fontSize: 13, fontWeight: "600" }, lotFinalChanged: { color: ui.accentInk, fontWeight: "800" }, lotFinalProblem: { color: ui.danger },
   editor: { gap: 8 }, label: { color: "#4A4F57", fontSize: 12, fontWeight: "700", marginBottom: 4 }, link: { color: ui.accentInk, fontSize: 12.5, fontWeight: "700", paddingVertical: 4 }, row: { flexDirection: "row", gap: 8 },
   error: { color: ui.danger, fontSize: 12.5, lineHeight: 18, fontWeight: "600" }, errorBox: { color: ui.danger, backgroundColor: ui.dangerBg, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, fontSize: 12.5, lineHeight: 18, fontWeight: "600" }, empty: { color: ui.inkMuted, backgroundColor: ui.muted, borderRadius: 12, padding: 14, fontSize: 13, lineHeight: 19 },
   footer: { borderTopWidth: 1, borderTopColor: ui.border, backgroundColor: ui.surface }, footerInner: { ...contentColumn, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, gap: 8 }, footnote: { color: ui.inkMuted, fontSize: 11.5, lineHeight: 16, textAlign: "center" },
   confirm: { gap: 10, borderRadius: 14, backgroundColor: colors.alertBg, borderWidth: 1, borderColor: colors.alertBorder, padding: 12 }, confirmText: { color: colors.alertInk, fontSize: 13, lineHeight: 19 },
   success: { borderRadius: 14, backgroundColor: ui.okBg, borderWidth: 1, borderColor: "#BFE3CC", paddingVertical: 14, paddingHorizontal: 16, gap: 3 }, successTitle: { color: "#0F5A2B", fontSize: 14, fontWeight: "800" }, successText: { color: "#14532D", fontSize: 13, lineHeight: 19 },
-  unit: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 16 }, unitName: { color: ui.ink, fontSize: 15.5, fontWeight: "800" }, unitAction: { color: ui.ink, fontSize: 13.5, fontWeight: "800" }, unitActionOn: { color: ui.accentInk }, disabled: { opacity: 0.55 },
+  unit: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: ui.surface, borderRadius: 16, borderWidth: 1, borderColor: ui.border, padding: 16 }, unitName: { color: ui.ink, fontSize: 15.5, fontWeight: "800" }, unitMeta: { color: ui.inkMuted, fontSize: 12.5, lineHeight: 17, marginTop: 2 }, unitAction: { color: ui.ink, fontSize: 13.5, fontWeight: "800" }, unitActionOn: { color: ui.accentInk }, disabled: { opacity: 0.55 },
 });
