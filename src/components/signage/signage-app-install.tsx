@@ -8,9 +8,35 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
-import { COALA_APP_INSTALLERS } from '@/lib/signage';
+import { COALA_APP_DOWNLOAD_CHUNK_BYTES, COALA_APP_INSTALLERS, planDownloadRanges } from '@/lib/signage';
 
 type Platform = 'signage' | 'mobile';
+
+/**
+ * Baixa o instalador em partes e devolve o arquivo inteiro. A primeira parte informa o tamanho
+ * total (`Content-Range`); qualquer parte incompleta interrompe o download com erro.
+ */
+async function downloadInParts(packagePath: string, onProgress: (percent: number) => void) {
+  const fetchPart = async (start: number, end: number) => {
+    const response = await fetch(packagePath, { headers: { Range: `bytes=${start}-${end}` }, cache: 'no-store' });
+    if (response.status !== 206) throw new Error('O servidor não entregou o instalador em partes.');
+    return response;
+  };
+  const first = await fetchPart(0, COALA_APP_DOWNLOAD_CHUNK_BYTES - 1);
+  const total = Number(/\/(\d+)$/.exec(first.headers.get('Content-Range') ?? '')?.[1]);
+  if (!Number.isFinite(total) || total <= 0) throw new Error('Não foi possível ler o tamanho do instalador.');
+  const ranges = planDownloadRanges(total);
+  const parts: ArrayBuffer[] = [];
+  let received = 0;
+  for (const [index, range] of ranges.entries()) {
+    const part = await (index === 0 ? first : await fetchPart(range.start, range.end)).arrayBuffer();
+    if (part.byteLength !== range.end - range.start + 1) throw new Error('O download foi interrompido. Tente de novo.');
+    parts.push(part);
+    received += part.byteLength;
+    onProgress(Math.round((received / total) * 100));
+  }
+  return new Blob(parts, { type: first.headers.get('Content-Type') ?? 'application/octet-stream' });
+}
 
 function Steps({ items }: { items: React.ReactNode[] }) {
   return (
@@ -36,6 +62,7 @@ export function SignageAppInstall() {
   const request = useAuthenticatedApi();
   const { isAuthenticated, loading } = useAuth();
   const [downloading, setDownloading] = useState<Platform | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const viewLogged = useRef(false);
   const { signage, mobile } = COALA_APP_INSTALLERS;
@@ -58,16 +85,21 @@ export function SignageAppInstall() {
       setError(null);
       // Sem o registro o download não começa: é ele que diz quem baixou.
       await request('/api/signage/app/downloads', { method: 'POST', json: { platform, event: 'download' }, fallbackError: 'Não foi possível registrar o download.' });
+      setProgress(0);
+      const url = URL.createObjectURL(await downloadInParts(packagePath, setProgress));
       const link = document.createElement('a');
-      link.href = packagePath;
-      link.download = '';
+      link.href = url;
+      link.download = packagePath.split('/').pop() ?? '';
       document.body.appendChild(link);
       link.click();
       link.remove();
+      // O navegador ainda está gravando o arquivo quando o clique retorna.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível registrar o download.');
+      setError(cause instanceof Error ? cause.message : 'Não foi possível baixar o instalador.');
     } finally {
       setDownloading(null);
+      setProgress(null);
     }
   }
 
@@ -108,7 +140,7 @@ export function SignageAppInstall() {
               ]}
             />
             <div className="mt-auto pt-6">
-              <Button type="button" variant="ds-secondary" size="md" loading={downloading === 'signage'} loadingLabel="Registrando…" disabled={downloading !== null} onClick={() => void handleDownload('signage', signage.packagePath)}>
+              <Button type="button" variant="ds-secondary" size="md" loading={downloading === 'signage'} loadingLabel={progress === null ? 'Registrando…' : `Baixando… ${progress}%`} disabled={downloading !== null} onClick={() => void handleDownload('signage', signage.packagePath)}>
                 <Download aria-hidden="true" className="h-4 w-4" />
                 Baixar Coala Signage APP
               </Button>
@@ -132,7 +164,7 @@ export function SignageAppInstall() {
                 variant="ds-secondary"
                 size="md"
                 loading={downloading === 'mobile'}
-                loadingLabel="Registrando…"
+                loadingLabel={progress === null ? 'Registrando…' : `Baixando… ${progress}%`}
                 disabled={!mobile.packagePath || downloading !== null}
                 onClick={() => { if (mobile.packagePath) void handleDownload('mobile', mobile.packagePath); }}
               >

@@ -132,6 +132,9 @@ env:
     value: "https://op.coalashakes.com"
   - variable: INSTAGRAM_SCHEDULER_ALLOWED_EMAILS
     value: "administrativo@coalashakes.com"
+  # Compra local pelo aplicativo: sangrias do PDV anteriores a esta data não aparecem para vincular nota.
+  - variable: LOCAL_PURCHASE_WITHDRAWAL_CUTOFF_DATE
+    value: "2026-10-12"
   - variable: META_SYSTEM_USER_TOKEN
     secret: META_SYSTEM_USER_TOKEN
   - variable: META_INSTAGRAM_ACCOUNT_ID
