@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **413**
-- Totalmente contratados: **41**
+- Arquivos de rota: **414**
+- Totalmente contratados: **42**
 - Legados congelados: **372**
 - Exceções temporárias: **0**
 - Violações: **0**
@@ -15,6 +15,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/admin/fix-receipts` | POST | `LEGACY_BASELINE` | [src/app/api/admin/fix-receipts/route.ts](../../src/app/api/admin/fix-receipts/route.ts) |
 | `/api/ai/analyze-consumption` | POST | `LEGACY_BASELINE` | [src/app/api/ai/analyze-consumption/route.ts](../../src/app/api/ai/analyze-consumption/route.ts) |
 | `/api/ai/analyze-goals` | POST | `LEGACY_BASELINE` | [src/app/api/ai/analyze-goals/route.ts](../../src/app/api/ai/analyze-goals/route.ts) |
+| `/api/app/version` | GET ✓ | `CONTRACTED` | [src/app/api/app/version/route.ts](../../src/app/api/app/version/route.ts) |
 | `/api/assets` | GET, POST | `LEGACY_BASELINE` | [src/app/api/assets/route.ts](../../src/app/api/assets/route.ts) |
 | `/api/assets/[assetId]` | GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/assets/[assetId]/route.ts](../../src/app/api/assets/[assetId]/route.ts) |
 | `/api/assets/[assetId]/movements` | GET | `LEGACY_BASELINE` | [src/app/api/assets/[assetId]/movements/route.ts](../../src/app/api/assets/[assetId]/movements/route.ts) |

@@ -26,6 +26,19 @@ export const COALA_APP_INSTALLERS: {
   // APK do aplicativo Coala One, gerado por `apps/coala-notas/scripts/build-apk.sh`.
   mobile: { packagePath: '/app/CoalaMobile.apk' },
 };
+/**
+ * O servidor corta respostas acima de ~30 MB, e o instalador do aplicativo passa disso. A página
+ * baixa em partes (`Range`) e junta no navegador; cada parte fica bem abaixo do limite.
+ */
+export const COALA_APP_DOWNLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+
+/** Faixas de bytes, inclusivas, que cobrem um arquivo de `total` bytes em partes de até `chunk`. */
+export function planDownloadRanges(total: number, chunk = COALA_APP_DOWNLOAD_CHUNK_BYTES) {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (let start = 0; start < total; start += chunk) ranges.push({ start, end: Math.min(start + chunk, total) - 1 });
+  return ranges;
+}
+
 /** Registro de quem abriu a página de aplicativos e de quem baixou cada um. */
 export const signageAppDownloadSchema = z.object({
   platform: z.enum(['signage', 'mobile', 'page']),
@@ -152,14 +165,19 @@ export const signageMobileScreenSchema = z.object({
   code: z.string().trim().toUpperCase().regex(SIGNAGE_DEVICE_TOKEN_PATTERN),
 }).strict();
 
-/** O que o QR code do monitor carrega: o endereço da página de aplicativos com o código da tela. */
-export function signagePairingUrl(origin: string, code: string) {
-  return `${origin.replace(/\/+$/, '')}/app?tela=${code}`;
+/**
+ * O que o QR code do monitor carrega: só o código, com um prefixo do Coala Signage. Não é um endereço
+ * de propósito: a câmera comum do celular mostra o texto e não abre o sistema; só o aplicativo liga a tela.
+ */
+export const SIGNAGE_PAIRING_PREFIX = 'COALA-SIGNAGE:';
+
+export function signagePairingPayload(code: string) {
+  return `${SIGNAGE_PAIRING_PREFIX}${code}`;
 }
 
 /** Código lido de um QR code de pareamento; `null` quando o QR code não é de uma tela do Coala Signage. */
 export function parseSignagePairingCode(scanned: string) {
-  const match = /[?&]tela=([A-Za-z0-9]{8})(?:[&#]|$)/.exec(scanned.trim());
+  const match = /^COALA-SIGNAGE:([A-Za-z0-9]{8})$/i.exec(scanned.trim());
   const code = match?.[1]?.toUpperCase() ?? '';
   return SIGNAGE_DEVICE_TOKEN_PATTERN.test(code) ? code : null;
 }

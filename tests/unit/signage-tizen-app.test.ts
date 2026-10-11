@@ -8,9 +8,10 @@ import {
   getNextSlide,
   nextSignageScreenName,
   parseSignagePairingCode,
+  planDownloadRanges,
   planNewSignageScreen,
   signageMobileScreenSchema,
-  signagePairingUrl,
+  signagePairingPayload,
   isSlideScheduleActive,
   resolveActiveSlide,
   SIGNAGE_DEVICE_TOKEN_PATTERN,
@@ -119,19 +120,32 @@ test("app do monitor: sorteia o código do QR code no formato do servidor", () =
   for (const byte of [0, 31, 32, 200, 255]) {
     assert.ok(SIGNAGE_DEVICE_TOKEN_PATTERN.test(core.generateCode(() => byte)), String(byte));
   }
-  // O QR code leva o endereço da página de aplicativos; o aplicativo tira dele só o código.
-  const url = signagePairingUrl(`${SERVER}/`, sequential);
-  assert.equal(url, `${SERVER}/app?tela=${sequential}`);
-  assert.equal(parseSignagePairingCode(url), sequential);
-  assert.equal(parseSignagePairingCode(`${url}&x=1`), sequential);
-  assert.equal(parseSignagePairingCode(url.toLowerCase()), sequential);
-  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=ABCDEFG1`), null);
-  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=ABCDEFGHJ`), null);
+  // O QR code leva só o código (sem endereço, para a câmera comum não abrir o sistema).
+  const payload = signagePairingPayload(sequential);
+  assert.equal(payload, `COALA-SIGNAGE:${sequential}`);
+  assert.equal(parseSignagePairingCode(payload), sequential);
+  assert.equal(parseSignagePairingCode(payload.toLowerCase()), sequential);
+  assert.equal(parseSignagePairingCode(`${SERVER}/app?tela=${sequential}`), null);
+  assert.equal(parseSignagePairingCode('COALA-SIGNAGE:ABCDEFG1'), null);
+  assert.equal(parseSignagePairingCode('COALA-SIGNAGE:ABCDEFGHJ'), null);
   assert.equal(parseSignagePairingCode("https://exemplo.com/outro-qr"), null);
   // Consulta rápida enquanto alguém instala; lenta em monitor esquecido na tela de pareamento.
   assert.equal(core.pairingPollDelayMs(0), 15_000);
   assert.equal(core.pairingPollDelayMs(19 * 60_000), 15_000);
   assert.equal(core.pairingPollDelayMs(20 * 60_000), 60_000);
+});
+
+test("página de aplicativos: instalador baixado em partes abaixo do limite do servidor", async () => {
+  assert.deepEqual(planDownloadRanges(10, 4), [{ start: 0, end: 3 }, { start: 4, end: 7 }, { start: 8, end: 9 }]);
+  assert.deepEqual(planDownloadRanges(8, 4), [{ start: 0, end: 3 }, { start: 4, end: 7 }]);
+  assert.deepEqual(planDownloadRanges(0, 4), []);
+  const ranges = planDownloadRanges(53_831_409);
+  assert.equal(ranges.at(-1)?.end, 53_831_408);
+  assert.ok(ranges.every((range) => range.end - range.start + 1 <= 8 * 1024 * 1024));
+  // Um link direto para o arquivo voltaria a entregar um instalador cortado.
+  const page = await readFile("src/components/signage/signage-app-install.tsx", "utf8");
+  assert.match(page, /downloadInParts\(packagePath, setProgress\)/);
+  assert.doesNotMatch(page, /link\.href = packagePath/);
 });
 
 test("telas pelo aplicativo: numeração automática e entrada validada", () => {

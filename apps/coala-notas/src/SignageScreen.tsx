@@ -121,7 +121,7 @@ export function SignageScreen({ user, simulation, onBack }: { user?: User; simul
   if (step === "scan") {
     return <View style={styles.screen}>{header}
       <View style={styles.scanArea}>
-        {simulation ? <View style={styles.scanSim}><Text style={styles.scanSimText}>Na simulação não há monitor para ler.</Text><AppButton compact label="Simular leitura do QR code" onPress={() => onScanned(`${signageInstallUrl}?tela=ABCDEFGH`)} /></View>
+        {simulation ? <View style={styles.scanSim}><Text style={styles.scanSimText}>Na simulação não há monitor para ler.</Text><AppButton compact label="Simular leitura do QR code" onPress={() => onScanned("COALA-SIGNAGE:ABCDEFGH")} /></View>
           : <CameraView style={styles.camera} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={sending ? undefined : ({ data }) => onScanned(data)} />}
         {!simulation ? <View pointerEvents="none" style={styles.scanOverlay}><View style={styles.scanFrame} /></View> : null}
         {sending ? <View style={styles.scanBusy}><ActivityIndicator color={ui.pink} size="large" /><Text style={styles.scanBusyText}>Adicionando a tela…</Text></View> : null}

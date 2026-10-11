@@ -480,3 +480,4 @@ api,src/app/api/mobile/profile/photo/route.ts,,docs/engineering/access-and-priva
 api,src/app/api/signage/mobile/route.ts,,docs/engineering/flows/signage.md,Unidades e telas do escopo do usuario para o modulo Signage do aplicativo; exige app.signage.manage; GET sem escrita e sem codigo de acesso.
 api,src/app/api/signage/mobile/screens/route.ts,,docs/engineering/flows/signage.md,Liga o monitor do QR code lido a uma tela nova ou existente da unidade; exige app.signage.manage e unidade no escopo; grava em dois bancos.
 api,src/app/api/signage/pair/qr/route.ts,,docs/engineering/flows/signage.md,QR code de pareamento em SVG para o app do monitor; publica e limitada por IP; nao le nem grava.
+api,src/app/api/app/version/route.ts,,docs/engineering/flows/signage.md,Versao publicada do Coala One para o botao de atualizar do app; publica; nao le nem grava.

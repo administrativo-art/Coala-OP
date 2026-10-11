@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **413 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **414 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -38,6 +38,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/admin/fix-receipts` | POST | [src/app/api/admin/fix-receipts/route.ts](../../src/app/api/admin/fix-receipts/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/ai/analyze-consumption` | POST | [src/app/api/ai/analyze-consumption/route.ts](../../src/app/api/ai/analyze-consumption/route.ts) | [stock-analysis](flows/stock-analysis.md) |
 | `/api/ai/analyze-goals` | POST | [src/app/api/ai/analyze-goals/route.ts](../../src/app/api/ai/analyze-goals/route.ts) | [goals](flows/goals.md) |
+| `/api/app/version` | GET | [src/app/api/app/version/route.ts](../../src/app/api/app/version/route.ts) | [signage](flows/signage.md) |
 | `/api/assets` | GET, POST | [src/app/api/assets/route.ts](../../src/app/api/assets/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]` | GET, PATCH, POST | [src/app/api/assets/[assetId]/route.ts](../../src/app/api/assets/%5BassetId%5D/route.ts) | [assets](flows/assets.md) |
 | `/api/assets/[assetId]/movements` | GET | [src/app/api/assets/[assetId]/movements/route.ts](../../src/app/api/assets/%5BassetId%5D/movements/route.ts) | [assets](flows/assets.md) |
