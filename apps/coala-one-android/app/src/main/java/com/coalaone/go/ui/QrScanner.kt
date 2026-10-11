@@ -21,13 +21,13 @@ import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-@Composable fun QrScanner(onCode: (String) -> Unit, onCancel: () -> Unit) {
+@Composable fun QrScanner(onCode: (String) -> Unit, onCancel: () -> Unit, previewModifier: Modifier = Modifier.fillMaxWidth().height(280.dp), dark: Boolean = false) {
     val context = LocalContext.current; val lifecycle = LocalLifecycleOwner.current
     var permission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var error by remember { mutableStateOf<String?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permission = it }
     LaunchedEffect(Unit) { if (!permission) launcher.launch(Manifest.permission.CAMERA) }
-    if (!permission) { Text("Permita a câmera ou digite o código do monitor."); return }
+    if (!permission) { Text("Permita a câmera ou digite o código do monitor.", color = if (dark) Tokens.onDark else Tokens.ink); Action("Fechar câmera", secondary = true, dark = dark, onClick = onCancel); return }
     val preview = remember { PreviewView(context) }
     val executor = remember { Executors.newSingleThreadExecutor() }
     val done = remember { AtomicBoolean(false) }
@@ -62,7 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean
         }, ContextCompat.getMainExecutor(context))
         onDispose { disposed = true; boundAnalysis?.clearAnalyzer(); boundPreview?.let { provider?.unbind(it) }; boundAnalysis?.let { provider?.unbind(it) }; executor.shutdown() }
     }
-    AndroidView(factory = { preview }, modifier = Modifier.fillMaxWidth().height(280.dp))
+    AndroidView(factory = { preview }, modifier = previewModifier)
     error?.let { Text(it, color = Tokens.danger) }
-    Action("Fechar câmera", secondary = true, onClick = onCancel)
+    Action("Fechar câmera", secondary = true, dark = dark, onClick = onCancel)
 }

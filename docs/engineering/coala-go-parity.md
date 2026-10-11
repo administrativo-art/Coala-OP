@@ -44,6 +44,18 @@ continuam aceitos pelos schemas Zod. 2.229 testes TS, typecheck/lint web e
 contratos de segurança/erro aprovados nesta rodada. Sensores físicos e piloto
 integrado não foram executados; não há mudança nos contratos de negócio.
 
+### Verificação da revisão de navegação e usabilidade 0.3.1
+
+Barra superior única (voltar à esquerda, atualizar à direita, fundo escuro sob a
+barra de status), listas de unidade em linhas clicáveis na contagem e no
+recebimento, seletor com busca para listas longas, calendário para datas,
+quantidade com − e +, mensagens junto ao rodapé, tela de Perfil e semana da
+escala inteira na largura. Sem alteração de ViewModels, contratos ou permissões.
+33 testes JVM e oito instrumentados aprovados no Android 15/API 35 (AVD
+exclusivo), lint Android sem erros e dez capturas conferidas. Não exercitados em
+execução: tela de bloqueio, seletor com busca, calendário e leitor de QR em tela
+cheia; testes de Firebase e fila offline não foram repetidos nesta rodada.
+
 ## Entrega por etapa
 
 | Etapa | Feito | Verificação local | Pendente |
