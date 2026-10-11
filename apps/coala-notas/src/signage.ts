@@ -26,7 +26,7 @@ const CODE = /^[A-HJ-NP-Z2-9]{8}$/;
 
 /** Código do monitor dentro do QR code; `null` quando o QR code lido não é de uma tela do Coala Signage. */
 export function parsePairingCode(scanned: string) {
-  const code = /[?&]tela=([A-Za-z0-9]{8})(?:[&#]|$)/.exec(scanned.trim())?.[1]?.toUpperCase() ?? "";
+  const code = /^COALA-SIGNAGE:([A-Za-z0-9]{8})$/i.exec(scanned.trim())?.[1]?.toUpperCase() ?? "";
   return CODE.test(code) ? code : null;
 }
 

@@ -27,7 +27,7 @@ const SMALL: Array<{ id: AppModule; module: keyof AppModules; title: string; hin
 ];
 
 /** Tela de entrada: saudação no cabeçalho escuro e um cartão por função liberada no perfil da pessoa. */
-export function HomeScreen({ user, simulation, profile, modules, onOpen, onExit, onPhotoChanged }: { user?: User; simulation: boolean; profile: AppProfile | null; modules: AppModules | null; onOpen: (module: AppModule) => void; onExit: () => void; onPhotoChanged: (avatarUrl: string) => void }) {
+export function HomeScreen({ user, simulation, profile, modules, onOpen, onExit, onPhotoChanged, footer }: { footer?: ReactNode; user?: User; simulation: boolean; profile: AppProfile | null; modules: AppModules | null; onOpen: (module: AppModule) => void; onExit: () => void; onPhotoChanged: (avatarUrl: string) => void }) {
   const [pending, setPending] = useState(0);
   const [photoMenu, setPhotoMenu] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -91,6 +91,7 @@ export function HomeScreen({ user, simulation, profile, modules, onOpen, onExit,
         <Text style={styles.tileHint}>{card.hint}</Text>
       </Pressable>)}</View>
       {!allowed("localPurchase") && !small.length ? <Text style={styles.empty}>Seu perfil ainda não tem nenhuma função do aplicativo liberada. Peça ao responsável para ajustar as permissões em "Coala One · APP".</Text> : null}
+      {footer}
     </FadeIn></ScrollView>
   </View>;
 }

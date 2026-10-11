@@ -6,7 +6,7 @@ import { createInMemoryRateLimiter } from '@/lib/observability/rate-limit';
 import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
 import { defineSecurityContract } from '@/lib/security/route-contract';
 import { secureRoute } from '@/lib/security/secure-route.server';
-import { SIGNAGE_DEVICE_TOKEN_PATTERN, signagePairingUrl } from '@/lib/signage';
+import { SIGNAGE_DEVICE_TOKEN_PATTERN, signagePairingPayload } from '@/lib/signage';
 import { type StaticRouteContext } from '@/lib/signage-server';
 
 export const runtime = 'nodejs';
@@ -42,6 +42,6 @@ export const GET = secureRoute({ contract, enforcer }, async ({ request }) => {
   if (!SIGNAGE_DEVICE_TOKEN_PATTERN.test(code)) {
     throw new AppError({ code: 'SIGNAGE_PAIR_QR_INVALID', kind: 'VALIDATION', safeMessage: 'Código inválido.' });
   }
-  const svg = await QRCode.toString(signagePairingUrl(request.nextUrl.origin, code), { type: 'svg', margin: 2, errorCorrectionLevel: 'M' });
+  const svg = await QRCode.toString(signagePairingPayload(code), { type: 'svg', margin: 2, errorCorrectionLevel: 'M' });
   return new NextResponse(svg, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400, immutable' } });
 });
