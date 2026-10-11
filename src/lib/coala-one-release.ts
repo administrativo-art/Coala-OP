@@ -7,7 +7,7 @@
  * um APK de `versionCode` maior. Suba `minVersionCode` só para travar versões com problema.
  */
 export const COALA_ONE_RELEASE = {
-  versionCode: 2,
-  versionName: '0.1.1',
+  versionCode: 3,
+  versionName: '0.1.2',
   minVersionCode: 1,
 } as const;

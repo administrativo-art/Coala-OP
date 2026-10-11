@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { EmailAuthProvider, reauthenticateWithCredential, signInWithEmailAndPassword, signOut, type User } from "@firebase/auth";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 
 import { Avatar } from "./Avatar";
 import { biometricUnlockEnabled, biometricUnlockReady, biometricsAvailable, promptBiometricUnlock, recordPasswordUnlock } from "./biometric-unlock";
@@ -17,7 +18,7 @@ export function friendlyAuthError(error: unknown) {
   const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
   if (["auth/invalid-credential", "auth/user-not-found", "auth/wrong-password"].includes(code)) return "E-mail ou senha inválidos.";
   if (code === "auth/too-many-requests") return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
-  if (code === "auth/network-request-failed") return "Sem conexão. Você ainda pode abrir o modo de simulação.";
+  if (code === "auth/network-request-failed") return "Sem conexão. Confira a internet e tente de novo.";
   return "Não foi possível entrar no Coala One.";
 }
 
@@ -35,6 +36,21 @@ function DarkScreen({ children, busy, top }: { children: ReactNode; busy?: strin
 
 function Field(props: { label: string; right?: ReactNode; children: ReactNode }) {
   return <View style={styles.field}><View style={styles.fieldHead}><Text style={styles.fieldLabel}>{props.label}</Text>{props.right}</View>{props.children}</View>;
+}
+
+/** Campo de senha com o olho que mostra o que foi digitado; volta a esconder sempre que a tela é aberta de novo. */
+function PasswordInput(props: Pick<TextInputProps, "value" | "onChangeText" | "onSubmitEditing" | "autoFocus">) {
+  const [visible, setVisible] = useState(false);
+  return <View style={styles.passwordRow}>
+    <TextInput {...props} autoCapitalize="none" autoCorrect={false} autoComplete="current-password" placeholder="Sua senha" placeholderTextColor={ui.onDarkFaint} secureTextEntry={!visible} style={[styles.input, styles.passwordInput]} />
+    <Pressable accessibilityRole="button" accessibilityLabel={visible ? "Esconder senha" : "Mostrar senha"} onPress={() => setVisible((current) => !current)} hitSlop={8} style={styles.eye}>
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={ui.onDark2} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        {visible
+          ? <><Path d="M10.7 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.9 3.8" /><Path d="M6.6 6.6A17.3 17.3 0 0 0 2 12s3.5 7 10 7a10.7 10.7 0 0 0 5.4-1.6" /><Path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /><Path d="m2 2 20 20" /></>
+          : <><Path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><Circle cx={12} cy={12} r={3} /></>}
+      </Svg>
+    </Pressable>
+  </View>;
 }
 
 export function LoginScreen({ onSimulate }: { onSimulate: () => void }) {
@@ -93,13 +109,12 @@ export function LoginScreen({ onSimulate }: { onSimulate: () => void }) {
     <Slogan />
     <Field label="E-mail">{emailInput}</Field>
     <Field label="Senha" right={<Pressable accessibilityRole="button" onPress={() => go("reset")} hitSlop={8}><Text style={styles.link}>Esqueci minha senha</Text></Pressable>}>
-      <TextInput autoCapitalize="none" autoComplete="current-password" onChangeText={setPassword} onSubmitEditing={() => void login()} placeholder="Sua senha" placeholderTextColor={ui.onDarkFaint} secureTextEntry style={styles.input} value={password} />
+      <PasswordInput value={password} onChangeText={setPassword} onSubmitEditing={() => void login()} />
     </Field>
     {error ? <Text style={styles.error}>{error}</Text> : null}
     <AppButton label="Entrar no Coala One" onPress={() => void login()} disabled={!!busy} />
-    {/* Fora do protótipo: o modo de simulação já existia e continua disponível para treino. */}
-    <Pressable accessibilityRole="button" disabled={!!busy} onPress={onSimulate} style={styles.textButton}><Text style={styles.link}>Conhecer em modo de simulação</Text></Pressable>
-    <Text style={styles.faintCenter}>A simulação funciona sem login e nunca envia nem registra dados.</Text>
+    {/* O modo de simulação não aparece no aplicativo instalado; fica só para quem desenvolve as telas sem login. */}
+    {__DEV__ ? <Pressable accessibilityRole="button" disabled={!!busy} onPress={onSimulate} style={styles.textButton}><Text style={styles.link}>Abrir em modo de simulação (desenvolvimento)</Text></Pressable> : null}
   </DarkScreen>;
 }
 
@@ -146,7 +161,7 @@ export function LockScreen({ user, profile, onUnlocked }: { user: User; profile:
       <AppButton label="Desbloquear com biometria" onPress={() => void unlockWithBiometrics()} disabled={!!busy} />
     </> : null}
     {showPassword ? <>
-      <Field label="Senha"><TextInput autoCapitalize="none" autoComplete="current-password" autoFocus={usePassword} onChangeText={setPassword} onSubmitEditing={() => void unlock()} placeholder="Sua senha" placeholderTextColor={ui.onDarkFaint} secureTextEntry style={styles.input} value={password} /></Field>
+      <Field label="Senha"><PasswordInput autoFocus={usePassword} value={password} onChangeText={setPassword} onSubmitEditing={() => void unlock()} /></Field>
       {biometric.available ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: biometric.enabled }} disabled={!!busy} onPress={() => setBiometric((current) => ({ ...current, enabled: !current.enabled }))} style={styles.checkRow}>
         <View style={[styles.checkBox, biometric.enabled && styles.checkBoxOn]}>{biometric.enabled ? <Text style={styles.checkMark}>✓</Text> : null}</View>
         <Text style={styles.checkLabel}>Usar digital ou rosto neste aparelho nas próximas vezes</Text>
@@ -167,6 +182,7 @@ const styles = StyleSheet.create({
   lead: { color: ui.onDarkSub, fontSize: 14.5, lineHeight: 21, textAlign: "center" }, strong: { color: ui.onDark, fontWeight: "700" }, faint: { color: ui.onDarkFaint, fontSize: 12.5, lineHeight: 19, textAlign: "center" }, faintCenter: { color: ui.onDarkFaint, fontSize: 11.5, lineHeight: 17, textAlign: "center" },
   field: { gap: 6 }, fieldHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, fieldLabel: { color: ui.onDark2, fontSize: 13, fontWeight: "700" },
   input: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: ui.fieldLine, backgroundColor: ui.field, paddingHorizontal: 14, fontSize: 15, color: ui.onDark },
+  passwordRow: { justifyContent: "center" }, passwordInput: { paddingRight: 50 }, eye: { position: "absolute", right: 4, width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   link: { color: ui.pink, fontSize: 12.5, fontWeight: "700" }, textButton: { alignSelf: "center", paddingVertical: 6 },
   error: { color: "#FFB4C0", backgroundColor: "rgba(190,18,60,0.22)", borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 19 },
   note: { gap: 4, padding: 14, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.05)", borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" }, noteTitle: { color: ui.onDark, fontSize: 13, fontWeight: "700" }, noteText: { color: ui.onDarkSub, fontSize: 12.5, lineHeight: 19 },

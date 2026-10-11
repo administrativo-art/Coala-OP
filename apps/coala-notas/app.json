@@ -2,19 +2,20 @@
   "expo": {
     "name": "Coala One",
     "slug": "coala-notas",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.coalaone.notas",
-      "versionCode": 2,
+      "versionCode": 3,
       "allowBackup": false,
       "permissions": [
         "CAMERA",
         "REQUEST_INSTALL_PACKAGES"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#17171A"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
       }
     },
     "plugins": [
@@ -49,6 +50,7 @@
     ],
     "extra": {
       "purpose": "Registro de compras locais recebidas e conciliação com sangrias no Coala One"
-    }
+    },
+    "icon": "./assets/icon.png"
   }
 }
