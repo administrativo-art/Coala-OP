@@ -27,12 +27,19 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             if (confirmation) InlineConfirmation("Confirmar esta compra e os dados revisados?", feedback.busy, { confirmation = false }, "Confirmar compra") { vm.confirm(); confirmation = false }
             else Action("Confirmar compra", feedback.busy) { confirmation = true }
         } else if (selected != null) Action("Enviar documentos e revisar", feedback.busy, enabled = selected.receipts.isNotEmpty()) { vm.upload() }
+    }, header = {
+        StepHeader("Compra local", if (review != null) "Confira os dados antes de confirmar" else "Notas e comprovantes", if (review != null) 2 else if (selected != null) 1 else 0, 3, feedback.busy, back, listOf("Tipo", "Anexos", "Finalizar"))
     }) {
         state.result?.let { result -> CardBlock {
             Text("Compra ${result.status}"); Text("Estoque: ${result.stockEntry ?: "not_needed"} · ${result.stockItemCount ?: 0} itens")
             result.changeCents?.let { Text("Troco: ${money(it)}") }
         } }
         if (review != null) {
+            CardBlock {
+                Text(review.supplierName.ifBlank { "Fornecedor a conferir" }, style = MaterialTheme.typography.titleMedium)
+                Text(money(review.totalCents), style = MaterialTheme.typography.headlineLarge)
+                Text(review.purchaseDate, color = Tokens.muted)
+            }
             Text("A leitura da nota é uma sugestão. Confira Compra, Pagamento e Itens antes de confirmar.")
             state.analysis?.warnings?.forEach { Text(it, color = Tokens.warning) }
             state.analysis?.payment?.let { payment -> Text("Comprovante: ${payment.payeeName.orEmpty()} · ${payment.amountCents?.let(::money).orEmpty()} · ${payment.paidAt.orEmpty()}"); if (payment.amountMatchesReceipt == false || payment.payeeMatchesSupplier == false) Text("O comprovante diverge da nota. Confira antes de confirmar.", color = Tokens.warning) }
@@ -41,11 +48,15 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             Text(if (selected.fundingSource == "company_payment") "Pagamento da empresa" else "Compra por sangria")
             selected.withdrawal?.let { Text("${it.unitName} · ${money(it.amountCents)} · ${it.date}") }
             Text("Até 2 arquivos por documento; 15 MB por arquivo e 25 MB no total.")
+            CardBlock {
             CaptureButtons("Nota da compra", !feedback.busy && selected.receipts.size < 2) { vm.attach(it, false) }
             selected.receipts.forEachIndexed { index, doc -> Text("Nota ${index + 1}: ${doc.name} · ${doc.bytes.size / 1024} KB"); TextButton({ vm.remove(index, false) }, enabled = !feedback.busy) { Text("Remover nota ${index + 1}") } }
+            }
             if (selected.fundingSource == "company_payment") {
+                CardBlock {
                 CaptureButtons("Comprovante de pagamento", !feedback.busy && selected.paymentProofs.size < 2) { vm.attach(it, true) }
                 selected.paymentProofs.forEachIndexed { index, doc -> Text("Comprovante ${index + 1}: ${doc.name}"); TextButton({ vm.remove(index, true) }, enabled = !feedback.busy) { Text("Remover comprovante ${index + 1}") } }
+                }
             }
             Field("Observação (até 240 caracteres)", selected.note, !feedback.busy, onChange = vm::note)
         } else {
@@ -78,7 +89,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
 }
 @Composable private fun ReviewFields(input: ConfirmPurchase, context: PurchaseContext?, withdrawal: Withdrawal?, enabled: Boolean, onChange: (ConfirmPurchase) -> Unit) {
     var open by rememberSaveable(input.submissionId) { mutableStateOf(0) }
-    CardBlock {
+    CardBlock(selected = open == 0) {
         TextButton({ open = if (open == 0) -1 else 0 }) { Text("1 · Compra · ${money(input.totalCents)}") }
         if (open == 0) {
             if (withdrawal != null) Text("Unidade: ${withdrawal.unitName} (fixada pela sangria)")
@@ -89,7 +100,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             ReviewDecimal("Total (R$)", centsText(input.totalCents), enabled) { onChange(input.copy(totalCents = Rules.cents(it) ?: 0)) }
         }
     }
-    CardBlock {
+    CardBlock(selected = open == 1) {
         TextButton({ open = if (open == 1) -1 else 1 }) { Text("2 · Pagamento e classificação") }
         if (open == 1) {
             Choices("Categoria", context?.accounts.orEmpty().map { it.id to it.name }, input.accountPlanId, enabled) { onChange(input.copy(accountPlanId = it)) }
@@ -98,7 +109,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             else withdrawal?.let { Text("Troco previsto: ${money((it.amountCents - input.totalCents).coerceAtLeast(0))}") }
         }
     }
-    CardBlock {
+    CardBlock(selected = open == 2) {
         TextButton({ open = if (open == 2) -1 else 2 }) { Text("3 · Itens · soma ${money(input.items.sumOf { it.totalCents })}") }
         if (open == 2) {
             input.items.forEachIndexed { index, item ->

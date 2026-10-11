@@ -28,7 +28,7 @@ import com.coalaone.go.domain.Rules
                 TextButton({ cancel = true }, enabled = !feedback.busy) { Text("Cancelar contagem", color = Tokens.danger) }
             }
         }
-    }) {
+    }, header = if (session != null) ({ StepHeader("Contagem de estoque", session.kioskName, step, steps, feedback.busy, back, backLabel = "Salvar e sair") }) else null) {
         if (session == null) {
             Action("Atualizar unidades", feedback.busy, secondary = true) { vm.refresh() }
             state.context?.let { context ->
@@ -42,18 +42,20 @@ import com.coalaone.go.domain.Rules
             Field("Buscar insumo", state.search) { vm.filters(it, state.onlyChanged) }
             Row { Checkbox(state.onlyChanged, { vm.filters(state.search, it) }); Text("Somente alterados") }
             if (groups.isEmpty()) Text("Nenhum insumo corresponde aos filtros.")
-            groups.drop(step * 3).take(3).forEach { (name, items) -> CardBlock {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(items.firstOrNull { it.imageUrl != null }?.imageUrl, name); Text(name, style = MaterialTheme.typography.titleMedium) }
+            groups.drop(step * 3).take(3).forEach { (name, items) -> CardBlock(selected = items.any { state.drafts[it.lotId]?.let(Rules::changed) == true }) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(items.firstOrNull { it.imageUrl != null }?.imageUrl, name, 64); Text(name, style = MaterialTheme.typography.titleMedium) }
                 items.firstOrNull { it.countingInstruction != null }?.countingInstruction?.let { Text(it) }
                 items.forEach { item ->
                     val draft = state.drafts[item.lotId] ?: Rules.draft(item)
-                    Text("Lote ${item.lotNumber} · ${item.expiryDate ?: "sem validade"} · ${Rules.quantityText(item.systemQuantity)} ${item.displayUnit}")
-                    Field("Saída (${item.displayUnit})", draft.exit, !feedback.busy, decimal = true) { vm.edit(item.lotId, draft.copy(exit = it)) }
+                    Text("Lote ${item.lotNumber} · ${item.expiryDate ?: "sem validade"} · ${Rules.quantityText(item.systemQuantity)} ${item.displayUnit}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f)) { Field("Saída (${item.displayUnit})", draft.exit, !feedback.busy, decimal = true) { vm.edit(item.lotId, draft.copy(exit = it)) } }
+                        Column(Modifier.weight(1f)) { Field("Entrada (${item.displayUnit})", draft.entry, !feedback.busy, decimal = true) { vm.edit(item.lotId, draft.copy(entry = it)) } }
+                    }
                     Choices("Motivo", state.context?.exitReasons.orEmpty().map { it.value to it.label }, draft.reason, !feedback.busy) { vm.edit(item.lotId, draft.copy(reason = it)) }
                     Field("Observação da saída${if (draft.reason == "SAIDA_DESCARTE_OUTROS") " (obrigatória)" else ""}", draft.exitNotes, !feedback.busy) { vm.edit(item.lotId, draft.copy(exitNotes = it.take(240))) }
-                    Field("Entrada (${item.displayUnit})", draft.entry, !feedback.busy, decimal = true) { vm.edit(item.lotId, draft.copy(entry = it)) }
                     Field("Observação da entrada", draft.entryNotes, !feedback.busy) { vm.edit(item.lotId, draft.copy(entryNotes = it.take(240))) }
-                    Text("Quantidade final: ${Rules.quantityText(item.systemQuantity - Rules.quantity(draft.exit) + Rules.quantity(draft.entry))}")
+                    Text("Quantidade final: ${Rules.quantityText(item.systemQuantity - Rules.quantity(draft.exit) + Rules.quantity(draft.entry))}", style = MaterialTheme.typography.titleMedium)
                 }
             } }
         }
@@ -73,7 +75,7 @@ import com.coalaone.go.domain.Rules
             else Action("Confirmar recebimento", feedback.busy) { confirm = true }
             if (step > 0) Action("Etapa anterior", feedback.busy, secondary = true) { vm.step(step - 1) }
         }
-    }) {
+    }, header = if (activity != null) ({ StepHeader("Recebimento", "${activity.originName} → ${activity.destinationName}", step, steps, feedback.busy, back) }) else null) {
         if (activity == null) {
             Action("Atualizar reposições", feedback.busy, secondary = true) { vm.refresh() }
             if (state.list?.activities?.isEmpty() == true) Text("Nenhuma reposição aguardando recebimento.")
@@ -89,9 +91,15 @@ import com.coalaone.go.domain.Rules
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(rows.firstOrNull { it.imageUrl != null }?.imageUrl, name); Text(name, style = MaterialTheme.typography.titleMedium) }
                 rows.forEach { row ->
                     val key = Rules.receiptKey(row); val draft = state.drafts.getValue(key)
-                    Text("Lote ${row.lotNumber} · enviado ${Rules.quantityText(row.sentQuantity)}")
-                    Field("Recebido", draft.first, !feedback.busy, decimal = true) { vm.edit(key, it, draft.second) }
-                    if (Rules.quantity(draft.first) != row.sentQuantity) Field("Explique a divergência (obrigatório)", draft.second, !feedback.busy) { vm.edit(key, draft.first, it.take(240)) }
+                    Text("Lote ${row.lotNumber} · enviado ${Rules.quantityText(row.sentQuantity)}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f)) { Text("Enviado", color = Tokens.muted, style = MaterialTheme.typography.bodySmall); Text(Rules.quantityText(row.sentQuantity), style = MaterialTheme.typography.titleLarge) }
+                        Column(Modifier.weight(1f)) { Field("Recebido", draft.first, !feedback.busy, decimal = true) { vm.edit(key, it, draft.second) } }
+                    }
+                    if (Rules.quantity(draft.first) != row.sentQuantity) {
+                        Text("Quantidade diferente da enviada", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                        Field("Explique a divergência (obrigatório)", draft.second, !feedback.busy) { vm.edit(key, draft.first, it.take(240)) }
+                    }
                 }
             } }
         }
