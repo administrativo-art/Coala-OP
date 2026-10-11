@@ -24,12 +24,12 @@ class DemoApi @Inject constructor() : ApiService {
     override suspend fun link(request: LinkWithdrawal) = PurchaseResponse(PurchaseResult(request.purchaseId, "linked", changeCents = 0))
     override suspend fun schedule(year: Int, month: Int): MonthSchedule {
         val first = LocalDate.of(year, month, 1)
-        val people = listOf(SchedulePerson("Ana", "Atendente", true), SchedulePerson("Bia", "Atendente", false))
+        val people = listOf(SchedulePerson("Ana", "Atendente", true, color = "#BDB2FF"), SchedulePerson("Bia", "Atendente", false))
         val shifts = (1..first.lengthOfMonth()).flatMap { day -> people.indices.map { index -> ScheduleShift(index, first.withDayOfMonth(day).toString(), "08:00", "16:00", if ((day + index) % 7 == 0) "day_off" else "work", "Manhã") } }
         return MonthSchedule(LocalDate.now().toString(), year, month, true, listOf(ScheduleUnit(unit.id, unit.name, people, shifts)))
     }
     override suspend fun goalUnits() = GoalUnits(listOf(unit))
-    override suspend fun goals(kioskId: String) = UnitGoals(unit.id, LocalDate.now().toString(), listOf(Goal("goal", "Faturamento", "2026-10-01", "2026-10-31", GoalSummary(15000.0, listOf(GoalLevel("target", "Meta", 60000.0, false)), 25.0, NextLevel("Meta", 45000.0), 31, 8, 23, true, 58125.0, 1956.52, 1935.48), listOf(GoalDay("2026-10-01", 1500.0, false)), listOf(GoalMember("Ana", isMe = true, role = "fixed", currentValue = 7500.0, targetValue = 30000.0, percent = 25.0, prize = 120.0)), Prize("Simulação", listOf(PrizeTier("Meta", 60000.0, 300.0, 2.0, false)), totalTeamBonus = 300.0, leadershipBonus = 0.0))))
+    override suspend fun goals(kioskId: String) = UnitGoals(unit.id, LocalDate.now().toString(), listOf(Goal("goal", "Faturamento", "2026-10-01", "2026-10-31", GoalSummary(15000.0, listOf(GoalLevel("target", "Meta", 60000.0, false)), 25.0, NextLevel("Meta", 45000.0), 31, 8, 23, true, 58125.0, 1956.52, 1935.48), listOf(2100.0, 1800.0, 2400.0, 1500.0, 2050.0, 1950.0, 2300.0, 900.0).mapIndexed { index, value -> GoalDay(LocalDate.now().minusDays((7 - index).toLong()).toString(), value, value >= 1935.48) }, listOf(GoalMember("Ana", isMe = true, role = "fixed", currentValue = 7500.0, targetValue = 30000.0, percent = 25.0, prize = 120.0, color = "#BDB2FF"), GoalMember("Bia", isMe = false, role = "relief", currentValue = 7500.0, targetValue = 30000.0, percent = 25.0, prize = 0.0)), Prize("Simulação", listOf(PrizeTier("Meta", 60000.0, 300.0, 2.0, false)), totalTeamBonus = 300.0, leadershipBonus = 0.0))))
     override suspend fun signage() = SignageUnits(listOf(SignageUnit(unit.id, unit.name, listOf(SignageScreen(unit.id, "Tela 1", "landscape", true)), "Tela 2", false)))
     override suspend fun pair(request: PairScreen) = PairResponse(PairedScreen(request.screenId ?: "simulation-screen", "Tela 2", unit.name, request.orientation), request.screenId == null)
 }
