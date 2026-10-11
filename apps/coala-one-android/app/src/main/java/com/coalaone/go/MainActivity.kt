@@ -9,6 +9,8 @@ import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -44,7 +46,7 @@ import javax.inject.Inject
             SideEffect {
                 val lightSurface = !identity.loading && identity.identity != null && !identity.locked
                 WindowCompat.getInsetsController(window, window.decorView).apply {
-                    isAppearanceLightStatusBars = lightSurface
+                    isAppearanceLightStatusBars = false // every screen now has a dark surface under the status bar
                     isAppearanceLightNavigationBars = lightSurface
                 }
             }
@@ -95,6 +97,8 @@ import javax.inject.Inject
         popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
         popExitTransition = { fadeOut(tween(if (motion) 160 else 0)) + slideOutVertically(tween(if (motion) 160 else 0)) { if (motion) 6 else 0 } }) {
         composable("home") { HomeScreen(hiltViewModel(), session, update) { nav.navigate(it) } }
+        // Same HomeViewModel as the home entry, so a new photo shows up when the user goes back.
+        composable("profile") { entry -> ProfileScreen(hiltViewModel(remember(entry) { nav.getBackStackEntry("home") }), session, update, back) }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
         composable("purchase") { PurchaseScreen(hiltViewModel(), back) }
@@ -103,55 +107,71 @@ import javax.inject.Inject
         composable("signage") { SignageScreen(hiltViewModel(), back) }
     }
 }
+private fun installUpdate(context: android.content.Context, file: File) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+    if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
+}
 @Composable private fun HomeScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, navigate: (String) -> Unit) {
     val state by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle(); val release by update.release.collectAsStateWithLifecycle()
     val updateFeedback by update.feedback.collectAsStateWithLifecycle()
-    var profileOpen by remember { mutableStateOf(false) }
-    var signOut by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     Page("Início", feedback, header = {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Brand(compact = true)
-            TextButton({ signOut = true }) { Text("Sair", color = Tokens.onDark2) }
-        }
+        Brand(compact = true)
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(Modifier.weight(1f)) {
                 Text("Olá, ${state?.profile?.name?.substringBefore(' ') ?: "humano"}", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
                 Text(state?.profile?.role.orEmpty(), color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
             }
-            ProfileAvatar(state?.profile?.name.orEmpty(), state?.profile?.avatarUrl) { profileOpen = !profileOpen }
+            ProfileAvatar(state?.profile?.name.orEmpty(), state?.profile?.avatarUrl) { navigate("profile") }
         }
     }) {
-        if (session.mode.simulation) Text("SIMULAÇÃO · nenhum dado é enviado", color = Tokens.warning)
-        TextButton({ profileOpen = !profileOpen }) { Text("Alterar foto de perfil") }
-        if (profileOpen) CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true, onDocument = vm::avatar)
-        if (pending.isNotEmpty()) Text("${pending.count { it.state != "UPLOADED" }} envios pendentes · ${pending.count { it.state == "UPLOADED" }} revisões pendentes")
+        if (session.mode.simulation) Text("Simulação · nenhum dado é enviado", color = Tokens.warning, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().background(Tokens.warning.copy(alpha = .1f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+        release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { target -> CardBlock(selected = true) {
+            Text("Atualização ${target.versionName} disponível", style = MaterialTheme.typography.titleMedium)
+            Action("Baixar atualização", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
+            updateFeedback.error?.let { Text(it, color = Tokens.danger) }
+        } }
+        if (pending.isNotEmpty()) {
+            val waiting = pending.count { it.state != "UPLOADED" }; val reviews = pending.count { it.state == "UPLOADED" }
+            ListRow("Compras pendentes", listOfNotNull("$waiting aguardando envio".takeIf { waiting > 0 }, "$reviews aguardando revisão".takeIf { reviews > 0 }).joinToString(" · "), badge = "${pending.size}", highlight = true, leading = "!") { navigate("purchase") }
+        }
         state?.modules?.let { modules ->
             if (modules.localPurchase) HomeTile("Compra local", "purchase", Modifier.fillMaxWidth(), pending.size) { navigate("purchase") }
             val tiles = listOf(Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento de reposição", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
             tiles.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    row.forEach { (_, title, route) -> HomeTile(title, route, Modifier.weight(1f)) { navigate(route) } }
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { (_, title, route) -> HomeTile(title, route, Modifier.weight(1f).fillMaxHeight()) { navigate(route) } }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage)) Text("Seu perfil não tem módulos liberados para o aplicativo.")
+            if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
         }
-        release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { target ->
-            Text("Atualização ${target.versionName} disponível")
-            Action("Baixar atualização", updateFeedback.busy) { update.download { file ->
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-                if (context.packageManager.canRequestPackageInstalls()) context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                else context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${context.packageName}")))
-            } }
+    }
+}
+/** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */
+@Composable private fun ProfileScreen(vm: HomeViewModel, session: SessionViewModel, update: UpdateViewModel, onBack: () -> Unit) {
+    val state by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
+    val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
+    var signOut by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Page("Perfil", feedback, onBack, onRefresh = { vm.refresh() }) {
+        CardBlock {
+            Text(state?.profile?.name.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
+        }
+        CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true, onDocument = vm::avatar) }
+        CardBlock {
+            Text("Aplicativo", style = MaterialTheme.typography.titleMedium)
+            Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            val target = release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+            if (target != null) Action("Baixar atualização ${target.versionName}", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
+            else Action("Verificar atualização", updateFeedback.busy, secondary = true, onClick = { update.check() })
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
         }
         if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta", session::signOut)
-        else TextButton({ signOut = true }) { Text("Sair da conta") }
-        Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", style = MaterialTheme.typography.bodySmall)
-        Action("Atualizar perfil", feedback.busy, secondary = true) { vm.refresh() }
-        Action("Verificar atualização", updateFeedback.busy, secondary = true, onClick = { update.check() })
+        else TextButton({ signOut = true }) { Text("Sair da conta", color = Tokens.danger) }
     }
 }

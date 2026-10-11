@@ -24,7 +24,7 @@ fun profileInitials(name: String): String = name.trim().split(Regex("\\s+"))
 @Composable fun ProfileAvatar(name: String, url: String?, onClick: () -> Unit) {
     Box(Modifier.size(54.dp).clip(CircleShape).background(Tokens.dark)
         .border(2.dp, Brush.linearGradient(listOf(Tokens.pink, Tokens.indigo)), CircleShape)
-        .clickable(role = Role.Button, onClickLabel = "Alterar foto de perfil", onClick = onClick), contentAlignment = Alignment.Center) {
+        .clickable(role = Role.Button, onClickLabel = "Abrir perfil", onClick = onClick), contentAlignment = Alignment.Center) {
         if (url.isNullOrBlank()) Text(profileInitials(name), color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
         else ProductPhoto(url, "Foto de perfil", 50)
     }

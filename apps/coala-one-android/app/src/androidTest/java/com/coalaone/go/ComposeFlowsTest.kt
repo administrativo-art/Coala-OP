@@ -32,22 +32,22 @@ class ComposeFlowsTest {
             return layouts.first().layoutInput.text.text
         }
         assertNotEquals("senha-local", renderedPassword())
-        compose.onNodeWithText("Mostrar").performClick()
+        compose.onNodeWithContentDescription("Mostrar senha").performClick()
         assertEquals("senha-local", renderedPassword())
-        compose.onNodeWithText("Ocultar").performClick()
+        compose.onNodeWithContentDescription("Ocultar senha").performClick()
         assertNotEquals("senha-local", renderedPassword())
     }
     @Test fun simulatedStockCountCompletesAndCancellationRequiresConfirmation() {
         compose.onNodeWithText("Explorar simulação").performScrollTo().performClick()
         compose.onNodeWithText("Contagem de estoque").performScrollTo().performClick()
-        compose.onNodeWithText("Contar Unidade de simulação").performScrollTo().performClick()
+        compose.onNodeWithText("Unidade de simulação").performScrollTo().performClick()
         compose.onNodeWithText("Saída (caixa)").performScrollTo().performTextInput("1")
         compose.onNodeWithText("Próxima etapa").performClick()
         compose.onNodeWithText("Concluir contagem").performClick()
         compose.onNodeWithText("Concluir a contagem e aplicar os ajustes?").assertIsDisplayed()
         compose.onNodeWithText("Concluir contagem").performClick()
         compose.onNodeWithText("Contagem concluída.").assertIsDisplayed()
-        compose.onNodeWithText("Contar Unidade de simulação").performScrollTo().performClick()
+        compose.onNodeWithText("Unidade de simulação").performScrollTo().performClick()
         compose.onNodeWithText("Cancelar contagem").performClick()
         compose.onNodeWithText("Cancelar esta contagem? Os ajustes ainda não chegaram ao estoque.").assertIsDisplayed()
         compose.onNodeWithText("Cancelar contagem").performClick()
@@ -56,7 +56,7 @@ class ComposeFlowsTest {
     @Test fun receiptDivergenceIsBlockedThenExplainedAndConfirmed() {
         compose.onNodeWithText("Explorar simulação").performScrollTo().performClick()
         compose.onNodeWithText("Recebimento de reposição").performScrollTo().performClick()
-        compose.onNodeWithText("Conferir recebimento").performScrollTo().performClick()
+        compose.onNodeWithText("Unidade de simulação").performScrollTo().performClick()
         compose.onAllNodesWithText("Recebido").onFirst().performScrollTo().performTextReplacement("0")
         compose.onNodeWithText("Confirmar recebimento").performClick()
         compose.onNodeWithText("Confirmar recebimento").performClick()
@@ -74,7 +74,7 @@ class ComposeFlowsTest {
             Intents.intending(IntentMatchers.hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(uri)))
             compose.onNodeWithText("Explorar simulação").performScrollTo().performClick()
             compose.onNodeWithText("Compra local").performScrollTo().performClick()
-            compose.onNodeWithText("Registrar compra por sangria fora da lista").performScrollTo().performClick()
+            compose.onNodeWithText("Outra sangria").performScrollTo().performClick()
             compose.onNodeWithText("Escolher arquivo").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodes(hasText("Nota 1:", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Enviar documentos e revisar").performClick()

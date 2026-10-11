@@ -46,7 +46,7 @@ val CodeFont = FontFamily(Font(R.font.jetbrains_mono, variationSettings = FontVa
         bodyLarge = TextStyle(fontFamily = InterfaceFont, fontSize = 15.sp, lineHeight = 22.sp),
         bodyMedium = TextStyle(fontFamily = InterfaceFont, fontSize = 14.sp, lineHeight = 20.sp),
         bodySmall = TextStyle(fontFamily = InterfaceFont, fontSize = 12.sp, lineHeight = 17.sp),
-        labelSmall = TextStyle(fontFamily = InterfaceFont, fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 1.sp),
+        labelSmall = TextStyle(fontFamily = InterfaceFont, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp),
         labelLarge = TextStyle(fontFamily = InterfaceFont, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
     ), content = content) }
 }
