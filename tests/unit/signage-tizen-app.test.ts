@@ -8,6 +8,7 @@ import {
   getNextSlide,
   nextSignageScreenName,
   parseSignagePairingCode,
+  planDownloadRanges,
   planNewSignageScreen,
   signageMobileScreenSchema,
   signagePairingUrl,
@@ -132,6 +133,19 @@ test("app do monitor: sorteia o código do QR code no formato do servidor", () =
   assert.equal(core.pairingPollDelayMs(0), 15_000);
   assert.equal(core.pairingPollDelayMs(19 * 60_000), 15_000);
   assert.equal(core.pairingPollDelayMs(20 * 60_000), 60_000);
+});
+
+test("página de aplicativos: instalador baixado em partes abaixo do limite do servidor", async () => {
+  assert.deepEqual(planDownloadRanges(10, 4), [{ start: 0, end: 3 }, { start: 4, end: 7 }, { start: 8, end: 9 }]);
+  assert.deepEqual(planDownloadRanges(8, 4), [{ start: 0, end: 3 }, { start: 4, end: 7 }]);
+  assert.deepEqual(planDownloadRanges(0, 4), []);
+  const ranges = planDownloadRanges(53_831_409);
+  assert.equal(ranges.at(-1)?.end, 53_831_408);
+  assert.ok(ranges.every((range) => range.end - range.start + 1 <= 8 * 1024 * 1024));
+  // Um link direto para o arquivo voltaria a entregar um instalador cortado.
+  const page = await readFile("src/components/signage/signage-app-install.tsx", "utf8");
+  assert.match(page, /downloadInParts\(packagePath, setProgress\)/);
+  assert.doesNotMatch(page, /link\.href = packagePath/);
 });
 
 test("telas pelo aplicativo: numeração automática e entrada validada", () => {
