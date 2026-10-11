@@ -462,7 +462,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                               aria-label="Lista de permissões"
                               value={permissionScope}
                               onChange={setPermissionScope}
-                              options={[{ value: 'system', label: 'Coala One · Sistema' }, { value: 'app', label: 'Coala One · APP' }]}
+                              options={[{ value: 'system', label: 'Coala One · Sistema' }, { value: 'app', label: 'Coala Go · APP' }]}
                             />
                             {/* The app list stays mounted but hidden with the system list so neither loses edits when switching. */}
                             <div className={permissionScope === 'app' ? 'space-y-2' : 'hidden'}>

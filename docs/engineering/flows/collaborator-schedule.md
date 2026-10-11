@@ -1,5 +1,7 @@
 # Escala do colaborador: consulta própria e equipe
 
+**Mobile atual (2026-10-11):** somente [Coala Go Kotlin](../../../apps/coala-one-android/README.md), package `coalaone.go`, Android8+. Usuário confirmou ausência de usuários e autorizou retirar Expo/instalador antigo. Download preparado em `/app/CoalaGo.apk`, versão0.2.0/code4, página `/app` com botão "Baixar Coala Go". Trechos históricos que citam Expo/coala-notas descrevem a implementação retirada; IDs de negócio `coala-notas-android` permanecem por compatibilidade, sem migração de dados. Homologação física/integrada e publicação continuam separadas; ver [matriz](../coala-go-parity.md).
+
 **Compatibilidade:** guia trazido do levantamento `3f64b3cc` e adaptado à main `70aaab65`. Resultados históricos citados não são homologação desta versão; ver [integração documental](../main-map-integration.md).
 
 **Estado:** percurso de leitura traçado no checkout `3f64b3ccd77acf2ba304bf2d7c4fe427b36983fe` em 2026-09-25; revisão de privacidade/custo e testes de integração pendentes. A publicação da escala pertence ao fluxo DP.

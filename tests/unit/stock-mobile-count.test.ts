@@ -15,7 +15,6 @@ import {
   saveMobileCountSchema,
   toMobileCountItem,
 } from "../../src/features/stock-count/mobile-count";
-import { chooseCountDrafts } from "../../apps/coala-notas/src/count-merge";
 import { defaultAdminPermissions, defaultGuestPermissions, type Product, type StockAuditItem } from "../../src/types";
 
 const item = (lotId: string, systemQuantity: number): StockAuditItem => ({
@@ -147,34 +146,24 @@ test("cancelling a count is the owner's, only while open, and never touches stoc
     assert.match(route, /action: "app\.stock-count\.perform"/);
   }
   // No aplicativo, sair guarda a contagem; só "Cancelar", com confirmação, apaga.
-  const screen = readFileSync("apps/coala-notas/src/CountScreen.tsx", "utf8");
-  assert.match(screen, /label="Cancelar contagem" onPress=\{\(\) => void cancel\(\)\}/);
-  assert.match(screen, /saveCount\(user, session, drafts, false\)\.then\(\(\) => true, \(\) => false\)/);
-  assert.doesNotMatch(screen, /Salvar e sair/);
+  const vm = readFileSync("apps/coala-one-android/app/src/main/java/com/coalaone/go/ui/CountViewModel.kt", "utf8");
+  assert.match(vm, /fun leave\(onSaved: \(\) -> Unit\)/);
+  assert.match(vm, /repository.saveCount\(Rules.countRequest\(session, current.drafts, false\)\)/);
+  assert.match(vm, /require\(result.cancelled\)/);
+  const screens = readFileSync("apps/coala-one-android/app/src/main/java/com/coalaone/go/ui/StockScreens.kt", "utf8");
+  assert.match(screens, /Cancelar esta contagem/);
 });
 
-test("reopening a count keeps the newer draft: a phone left behind never overwrites another device", () => {
-  const server = { a: "servidor-a", b: "servidor-b" };
-  const saved = (savedAt: number, drafts: Record<string, string>) => ({ savedAt, drafts });
-  const at = (iso: string) => Date.parse(iso);
-  const base = { server, knownLotIds: ["a", "b", "c"] };
-  // Sem rascunho no aparelho, vale o do sistema.
-  assert.deepEqual(chooseCountDrafts({ ...base, serverUpdatedAt: "2026-10-11T10:00:00.000Z", local: null }), { drafts: server, source: "server", discardedLocal: false });
-  // Ficou sem internet e voltou no mesmo aparelho: o aparelho é mais novo e vale por cima, lote a lote.
-  assert.deepEqual(
-    chooseCountDrafts({ ...base, serverUpdatedAt: "2026-10-11T10:00:00.000Z", local: saved(at("2026-10-11T10:05:00.000Z"), { a: "celular-a", c: "celular-c" }) }),
-    { drafts: { a: "celular-a", b: "servidor-b", c: "celular-c" }, source: "local", discardedLocal: false },
-  );
-  // Continuou em outro aparelho depois: o rascunho velho deste celular é descartado.
-  assert.deepEqual(
-    chooseCountDrafts({ ...base, serverUpdatedAt: "2026-10-11T11:00:00.000Z", local: saved(at("2026-10-11T10:05:00.000Z"), { a: "celular-a" }) }),
-    { drafts: server, source: "server", discardedLocal: true },
-  );
-  // Contagem nunca salva no sistema: só o aparelho tem lançamentos.
-  assert.equal(chooseCountDrafts({ ...base, serverUpdatedAt: null, local: saved(0, { a: "celular-a" }) }).source, "local");
-  // Rascunho de lote que não existe mais na contagem não conta.
-  assert.deepEqual(chooseCountDrafts({ ...base, serverUpdatedAt: null, local: saved(5, { z: "sumiu" }) }), { drafts: server, source: "server", discardedLocal: false });
-  const screen = readFileSync("apps/coala-notas/src/CountScreen.tsx", "utf8");
-  assert.match(screen, /if \(sent\) await clearLocalDrafts\(session\.id\);/);
+test("native draft merge has JVM behavioral coverage and clears local data only after server acknowledgement", () => {
+  const root = "apps/coala-one-android/app/src/";
+  const rules = readFileSync(`${root}main/java/com/coalaone/go/domain/Rules.kt`, "utf8");
+  assert.match(rules, /filterKeys \{ it in server \}/);
+  assert.match(rules, /local!!\.savedAt > time/);
+  const suite = readFileSync(`${root}test/java/com/coalaone/go/RulesTest.kt`, "utf8");
+  assert.match(suite, /mergePrefersNewerServerAndFiltersUnknownLots/);
+  const vm = readFileSync(`${root}main/java/com/coalaone/go/ui/CountViewModel.kt`, "utf8");
+  const leave = vm.slice(vm.indexOf("fun leave"), vm.indexOf("fun cancel"));
+  assert.ok(leave.indexOf("repository.saveCount") < leave.indexOf("store.clear"));
+  assert.match(leave, /catch \(_: Exception\)/);
   assert.match(readFileSync("src/features/stock-count/mobile-count.server.ts", "utf8"), /updatedAt: typeof \(session as/);
 });

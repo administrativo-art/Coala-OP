@@ -792,7 +792,7 @@ export type PermissionSet = {
     manageBaseItems: boolean;
   };
   /**
-   * Coala One APP (aplicativo Android). Lista separada da do sistema web: ter uma permissão
+   * Coala Go (aplicativo Android). Lista separada da do sistema web: ter uma permissão
    * no sistema não libera a função correspondente no aplicativo, e vice-versa.
    */
   app: {
