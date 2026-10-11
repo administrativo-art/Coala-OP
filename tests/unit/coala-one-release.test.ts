@@ -18,3 +18,17 @@ test("atualização do app: o botão usa partes, confere o Content-Range e deixa
   assert.match(source, /response\.status !== 206/);
   assert.match(source, /application\/vnd\.android\.package-archive/);
 });
+
+test("aplicativo tem ícone próprio e o login instalado não oferece simulação", async () => {
+  const { expo } = JSON.parse(await readFile("apps/coala-notas/app.json", "utf8")) as { expo: { icon?: string; android: { adaptiveIcon?: { foregroundImage?: string } } } };
+  // Sem estes dois campos o Android instala o app com o robô padrão.
+  for (const image of [expo.icon, expo.android.adaptiveIcon?.foregroundImage]) {
+    assert.ok(image, "ícone não configurado em app.json");
+    const file = await readFile(`apps/coala-notas/${image.replace(/^\.\//, "")}`);
+    assert.deepEqual([...file.subarray(1, 4)], [0x50, 0x4e, 0x47], `${image} não é PNG`);
+  }
+  const login = await readFile("apps/coala-notas/src/AuthScreens.tsx", "utf8");
+  assert.match(login, /\{__DEV__ \? <Pressable[^\n]*onPress=\{onSimulate\}/);
+  assert.match(login, /secureTextEntry=\{!visible\}/);
+  assert.doesNotMatch(login, /secureTextEntry style/);
+});

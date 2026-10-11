@@ -4,6 +4,10 @@ import test from "node:test";
 
 import {
   applyMobileCountEntries,
+  cancelMobileCountSchema,
+  mobileCountPhotoQuerySchema,
+  mobileCountPhotoUrl,
+  parseProductPhotoDataUri,
   isMobileCountProduct,
   mobileCountDisplayUnit,
   mobileCountEntrySchema,
@@ -11,6 +15,7 @@ import {
   saveMobileCountSchema,
   toMobileCountItem,
 } from "../../src/features/stock-count/mobile-count";
+import { chooseCountDrafts } from "../../apps/coala-notas/src/count-merge";
 import { defaultAdminPermissions, defaultGuestPermissions, type Product, type StockAuditItem } from "../../src/types";
 
 const item = (lotId: string, systemQuantity: number): StockAuditItem => ({
@@ -98,11 +103,78 @@ test("count routes use the app permission, the owner check and the shared finali
   assert.match(server, /completeStockCountSession\(\{ context: actor, sessionId: input\.sessionId, items: applied\.items \}\)/);
   assert.match(server, /if \(existing\) return \{ session: await sessionPayload\(existing\), resumed: true \}/);
   // Product photo: only https links from the registration, as the web count shows.
-  assert.match(server, /imageUrl: safeAvatarUrl\(snapshot\.get\("imageUrl"\)\)/);
+  assert.match(server, /imageUrl: mobileCountPhotoUrl\(snapshot\.id, snapshot\.get\("imageUrl"\)\)/);
   for (const route of ["route.ts", "start/route.ts", "save/route.ts"]) {
     const source = readFileSync(`src/app/api/stock/mobile-count/${route}`, "utf8");
     assert.match(source, /action: "app\.stock-count\.perform"/);
     assert.match(source, /assertCanPerformMobileCount\(actor\)/);
     assert.match(source, /secureRoute\(\{ contract, enforcer \}/);
   }
+});
+
+test("product photos reach the app whether the registration stores an address or the image itself", () => {
+  const embedded = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+  // A foto pública segue como está; a embutida no cadastro vira o caminho da rota autenticada.
+  assert.equal(mobileCountPhotoUrl("p1", "https://images.exemplo.com/a.jpg"), "https://images.exemplo.com/a.jpg");
+  assert.equal(mobileCountPhotoUrl("p 1", embedded), "/api/stock/mobile-count/photo?productId=p%201");
+  for (const stored of ["", undefined, "http://inseguro.com/a.jpg", "gs://bucket/a.jpg", "data:text/html;base64,PGI+", "data:image/svg+xml;base64,PHN2Zz4="]) {
+    assert.equal(mobileCountPhotoUrl("p1", stored), null, String(stored));
+  }
+  assert.deepEqual(parseProductPhotoDataUri(embedded), { contentType: "image/jpeg", base64: "/9j/4AAQSkZJRg==" });
+  assert.equal(parseProductPhotoDataUri("data:image/png;base64,abc def"), null);
+  assert.equal(parseProductPhotoDataUri(`data:image/png;base64,${"A".repeat(2_800_000)}`), null);
+  assert.equal(mobileCountPhotoQuerySchema.safeParse({ productId: "p1" }).success, true);
+  assert.equal(mobileCountPhotoQuerySchema.safeParse({ productId: "a/b" }).success, false);
+  assert.equal(mobileCountPhotoQuerySchema.safeParse({ productId: "p1", size: "big" }).success, false);
+});
+
+test("cancelling a count is the owner's, only while open, and never touches stock", () => {
+  assert.equal(cancelMobileCountSchema.safeParse({ sessionId: "s1" }).success, true);
+  assert.equal(cancelMobileCountSchema.safeParse({ sessionId: "s1", force: true }).success, false);
+  const rules = readFileSync("src/features/stock-count/mobile-count.server.ts", "utf8");
+  const cancel = rules.slice(rules.indexOf("export async function cancelMobileCount"), rules.indexOf("/** Saves the draft"));
+  assert.match(cancel, /assertCanPerformMobileCount\(actor\)/);
+  assert.match(cancel, /!isStockCountOwner\(actor, session\) \|\| !canAccessUnit\(/);
+  assert.match(cancel, /session\.status !== "pending_review"/);
+  assert.match(cancel, /transaction\.delete\(reference\)/);
+  assert.match(cancel, /cancelStockCountTaskSafely\(/);
+  assert.doesNotMatch(cancel, /collection\("lots"\)|completeStockCountSession/);
+  for (const name of ["cancel", "photo"]) {
+    const route = readFileSync(`src/app/api/stock/mobile-count/${name}/route.ts`, "utf8");
+    assert.match(route, /secureRoute\(\{ contract, enforcer \}/);
+    assert.match(route, /assertMobileAppAttested\(/);
+    assert.match(route, /assertCanPerformMobileCount\(actor\)/);
+    assert.match(route, /action: "app\.stock-count\.perform"/);
+  }
+  // No aplicativo, sair guarda a contagem; só "Cancelar", com confirmação, apaga.
+  const screen = readFileSync("apps/coala-notas/src/CountScreen.tsx", "utf8");
+  assert.match(screen, /label="Cancelar contagem" onPress=\{\(\) => void cancel\(\)\}/);
+  assert.match(screen, /saveCount\(user, session, drafts, false\)\.then\(\(\) => true, \(\) => false\)/);
+  assert.doesNotMatch(screen, /Salvar e sair/);
+});
+
+test("reopening a count keeps the newer draft: a phone left behind never overwrites another device", () => {
+  const server = { a: "servidor-a", b: "servidor-b" };
+  const saved = (savedAt: number, drafts: Record<string, string>) => ({ savedAt, drafts });
+  const at = (iso: string) => Date.parse(iso);
+  const base = { server, knownLotIds: ["a", "b", "c"] };
+  // Sem rascunho no aparelho, vale o do sistema.
+  assert.deepEqual(chooseCountDrafts({ ...base, serverUpdatedAt: "2026-10-11T10:00:00.000Z", local: null }), { drafts: server, source: "server", discardedLocal: false });
+  // Ficou sem internet e voltou no mesmo aparelho: o aparelho é mais novo e vale por cima, lote a lote.
+  assert.deepEqual(
+    chooseCountDrafts({ ...base, serverUpdatedAt: "2026-10-11T10:00:00.000Z", local: saved(at("2026-10-11T10:05:00.000Z"), { a: "celular-a", c: "celular-c" }) }),
+    { drafts: { a: "celular-a", b: "servidor-b", c: "celular-c" }, source: "local", discardedLocal: false },
+  );
+  // Continuou em outro aparelho depois: o rascunho velho deste celular é descartado.
+  assert.deepEqual(
+    chooseCountDrafts({ ...base, serverUpdatedAt: "2026-10-11T11:00:00.000Z", local: saved(at("2026-10-11T10:05:00.000Z"), { a: "celular-a" }) }),
+    { drafts: server, source: "server", discardedLocal: true },
+  );
+  // Contagem nunca salva no sistema: só o aparelho tem lançamentos.
+  assert.equal(chooseCountDrafts({ ...base, serverUpdatedAt: null, local: saved(0, { a: "celular-a" }) }).source, "local");
+  // Rascunho de lote que não existe mais na contagem não conta.
+  assert.deepEqual(chooseCountDrafts({ ...base, serverUpdatedAt: null, local: saved(5, { z: "sumiu" }) }), { drafts: server, source: "server", discardedLocal: false });
+  const screen = readFileSync("apps/coala-notas/src/CountScreen.tsx", "utf8");
+  assert.match(screen, /if \(sent\) await clearLocalDrafts\(session\.id\);/);
+  assert.match(readFileSync("src/features/stock-count/mobile-count.server.ts", "utf8"), /updatedAt: typeof \(session as/);
 });

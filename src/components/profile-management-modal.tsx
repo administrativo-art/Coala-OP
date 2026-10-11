@@ -382,6 +382,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialCashDepositsViewWatch = form.watch('permissions.financial.cashDeposits.view' as any);
   const financialSettingsViewWatch = form.watch('permissions.financial.settings.view' as any);
   const dpViewWatch = form.watch('permissions.dp.view' as any);
+  const appScheduleViewWatch = form.watch('permissions.app.schedule.view' as any);
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
@@ -476,6 +477,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                               {renderPermissionSwitch("permissions.app.goals.view" as any, "Ver metas", "Permite ver as metas em andamento das unidades do usuário, o resultado de cada colega da unidade e a previsão de prêmio por pessoa.")}
                               <h3 className="pt-4 text-lg font-semibold">Escala</h3>
                               {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
+                              {renderPermissionSwitch("permissions.app.schedule.viewAllUnits" as any, "Ver escala de todas as unidades", "Para gestores: mostra também a escala publicada das outras unidades do acesso da pessoa, mesmo sem ela estar escalada nelas.", !appScheduleViewWatch, true)}
                               <h3 className="pt-4 text-lg font-semibold">Signage</h3>
                               {renderPermissionSwitch("permissions.app.signage.manage" as any, "Adicionar telas", "Permite cadastrar telas do Coala Signage nas unidades do usuário, lendo com o celular o QR code que o monitor mostra. As mídias continuam sendo montadas no sistema.")}
                             </div>
