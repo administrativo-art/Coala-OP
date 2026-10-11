@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, AppState, BackHandler, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { installedVersionCode, loadRelease, updateState, type AppRelease } from "./src/app-update";
 import { recordPasswordLogin } from "./src/biometric-unlock";
 import { CountScreen } from "./src/CountScreen";
 import { HomeScreen, type AppModule } from "./src/HomeScreen";
@@ -20,6 +21,7 @@ import { loadAppProfile, type AppModules, type AppProfile } from "./src/profile"
 import { ReceiveScreen } from "./src/ReceiveScreen";
 import { ReviewScreen, type StockOutcome } from "./src/ReviewScreen";
 import { ScheduleScreen } from "./src/ScheduleScreen";
+import { UpdateBanner, UpdateRequired } from "./src/UpdatePanel";
 import { createSimulationAnalysis, createSimulationWithdrawals, simulationContext } from "./src/simulation";
 import { colors, contentColumn } from "./src/theme";
 import { AppButton, BusyOverlay, FadeIn, Pill, ScreenHeader, ui } from "./src/ui";
@@ -296,6 +298,16 @@ function AppContent() {
     if (!user || typeof user.getIdToken !== "function") return;
     void loadAppProfile(user).then(setAppProfile).catch(() => undefined);
   }, [user?.uid]);
+  // Versão publicada no sistema: abaixo da mínima o app só oferece a atualização; abaixo da última mostra uma faixa.
+  const [release, setRelease] = useState<AppRelease | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  useEffect(() => {
+    const check = () => { void loadRelease().then((next) => { if (next) setRelease(next); }); };
+    check();
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") check(); });
+    return () => subscription.remove();
+  }, []);
+  const update = previewMode ? "current" : updateState(release, installedVersionCode());
   const restored = useRef(false); const sessionUid = useRef<string | null>(null); const leftAt = useRef<number | null>(null);
   useEffect(() => { if (previewMode) { setLoading(false); return; } return onAuthStateChanged(auth, (next) => {
     // O primeiro aviso é a sessão restaurada do aparelho: ninguém digitou a senha agora, então abre bloqueado.
@@ -312,7 +324,8 @@ function AppContent() {
     });
     return () => subscription.remove();
   }, []);
-  const content = previewMode === "review" ? <ReviewScreen submissionId="preview" note="Compra local de insumos" fundingSource="cash_withdrawal" previewOnly simulation previewContext={simulationContext} analysis={createSimulationAnalysis()} onCancel={() => undefined} onDone={() => undefined} />
+  const content = update === "required" && release ? <UpdateRequired release={release} />
+    : previewMode === "review" ? <ReviewScreen submissionId="preview" note="Compra local de insumos" fundingSource="cash_withdrawal" previewOnly simulation previewContext={simulationContext} analysis={createSimulationAnalysis()} onCancel={() => undefined} onDone={() => undefined} />
     : previewMode === "capture" ? <UploadScreen user={{} as User} mode="real" />
     : loading ? <View style={styles.loading}><ActivityIndicator color={ui.pink} size="large" /><Text style={styles.loadingText}>Abrindo o Coala One…</Text></View>
     : !simulation && !user ? <LoginScreen onSimulate={() => setSimulation(true)} />
@@ -327,11 +340,11 @@ function AppContent() {
       onOpen={setModule} onExit={() => { setModule(null); if (simulation) setSimulation(false); else void signOut(auth); }} />;
   const showLock = locked && !!user && !simulation && !previewMode;
   // Login, bloqueio e carregamento são telas escuras de ponta a ponta; as demais têm o cabeçalho escuro sobre fundo claro.
-  const darkScreen = loading || showLock || (!simulation && !user && !previewMode);
+  const darkScreen = loading || showLock || update === "required" || (!simulation && !user && !previewMode);
   return <View style={styles.root}>
     <StatusBar style="light" />
     <View style={[styles.inset, { height: insets.top }]} />
-    <View style={styles.fill}>{content}{showLock ? <LockScreen user={user!} profile={appProfile?.profile ?? null} onUnlocked={() => setLocked(false)} /> : null}</View>
+    <View style={styles.fill}>{update === "available" && release && !updateDismissed && !showLock ? <UpdateBanner release={release} onDismiss={() => setUpdateDismissed(true)} /> : null}{content}{showLock ? <LockScreen user={user!} profile={appProfile?.profile ?? null} onUnlocked={() => setLocked(false)} /> : null}</View>
     <View style={{ height: insets.bottom, backgroundColor: darkScreen ? ui.dark : ui.page }} />
   </View>;
 }

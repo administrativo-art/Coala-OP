@@ -113,6 +113,16 @@ Estado: implementado, coberto por testes unitários e de contrato; **não execut
 - **Posição:** `orientation` (`landscape` | `portrait`) é só um registro. O editor mostra "Posição da tela" e o formato esperado das artes (16:9 ou 9:16); nada é girado nem redimensionado. Telas criadas antes ou pelo sistema ficam como "Não informada".
 - **Código no editor:** "Gerar novo código" e "Remover código" continuam existindo no card "Conectar a tela"; depois deles o monitor ligado para de atualizar e precisa ser lido de novo pelo aplicativo.
 
+### Atualização do Coala One pelo próprio aplicativo (2026-10-11)
+
+Estado: implementado e coberto por testes unitários; **não executado em aparelho** (o botão exige um APK gerado e instalado).
+
+- **Versão publicada:** `src/lib/coala-one-release.ts` (`versionCode`, `versionName`, `minVersionCode`), exposta por `GET /api/app/version` (pública, sem leitura nem gravação, `no-store`) junto com o caminho do instalador. Um teste exige que bata com `apps/coala-notas/app.json`; o APK em `public/app/CoalaMobile.apk` precisa ser o dessa versão.
+- **Aplicativo:** ao abrir e ao voltar para a frente, consulta a rota. Abaixo de `minVersionCode`, só mostra "Atualização necessária"; abaixo da última, mostra uma faixa com "Atualizar" e "Depois". Sem internet ou com resposta inesperada, segue normalmente.
+- **Instalação:** baixa o APK em partes de 8 MB (`Range`, exige `206` e `Content-Range`) para o cache e abre o instalador do Android (`REQUEST_INSTALL_PACKAGES`). A pessoa sempre confirma; o Android só aceita APK assinado com a mesma chave e de `versionCode` maior.
+- **Para publicar uma versão:** subir `versionCode` e `versionName` em `app.json` e em `coala-one-release.ts`, gerar o APK (`npm run build:apk` no app) e publicar tudo junto. Subir `minVersionCode` só para travar versões com problema.
+- **Limite:** a primeira atualização (da 0.1.0, sem o botão) é manual, pela página `/app`.
+
 ### Custo (preflight)
 
 - Biblioteca: abrir o modal lê até 300 documentos de `mediaLibrary` e até 50 de `mediaFolders`; não há leitura periódica. Excluir mídia faz 1 consulta com `limit(1)`. Excluir slide faz +1 leitura de `mediaLibrary`.

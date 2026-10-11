@@ -2,15 +2,16 @@
   "expo": {
     "name": "Coala One",
     "slug": "coala-notas",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.coalaone.notas",
-      "versionCode": 1,
+      "versionCode": 2,
       "allowBackup": false,
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "REQUEST_INSTALL_PACKAGES"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#17171A"
