@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.coalaone.go.data.*
@@ -28,34 +29,54 @@ import com.coalaone.go.domain.Rules
                 TextButton({ cancel = true }, enabled = !feedback.busy) { Text("Cancelar contagem", color = Tokens.danger) }
             }
         }
-    }, header = if (session != null) ({ StepHeader("Contagem de estoque", session.kioskName, step, steps, feedback.busy, back, backLabel = "Salvar e sair") }) else null) {
+    }, header = if (session != null) ({ StepHeader("Contagem de estoque", session.kioskName, step, steps, feedback.busy, back, backLabel = "Salvar e sair") }) else null, onRefresh = { vm.refresh() }) {
         if (session == null) {
-            Action("Atualizar unidades", feedback.busy, secondary = true) { vm.refresh() }
             state.context?.let { context ->
-                if (context.units.isEmpty()) Text("Nenhuma unidade disponível para contagem.")
-                context.openSessions.forEach { open -> CardBlock { Text("Retomar: ${open.kioskName} · ${open.itemCount} lotes"); Action("Retomar contagem", feedback.busy, secondary = true) { vm.open(open.kioskId) } } }
-                context.units.forEach { unit -> Action("Contar ${unit.name}", feedback.busy, secondary = true) { vm.open(unit.id) } }
+                val resuming = context.openSessions.map { it.kioskId }.toSet()
+                val fresh = context.units.filter { it.id !in resuming }
+                if (context.units.isEmpty() && context.openSessions.isEmpty()) EmptyState("Nenhuma unidade disponível", "Seu perfil não tem unidade liberada para contagem.")
+                if (context.openSessions.isNotEmpty()) {
+                    SectionLabel("Em andamento")
+                    context.openSessions.forEach { open -> ListRow(open.kioskName, listOfNotNull("${open.itemCount} lotes", shortDate(open.startedAt)?.let { "iniciada em $it" }).joinToString(" · "), !feedback.busy, badge = "Retomar", highlight = true) { vm.open(open.kioskId) } }
+                }
+                if (fresh.isNotEmpty()) {
+                    SectionLabel(if (context.openSessions.isEmpty()) "Escolha a unidade" else "Outras unidades")
+                    fresh.forEach { unit -> ListRow(unit.name, "Iniciar contagem", !feedback.busy) { vm.open(unit.id) } }
+                }
             }
         } else {
-            Text(session.kioskName, style = MaterialTheme.typography.titleMedium)
-            Text("Etapa ${step + 1} de $steps · O rascunho é protegido no aparelho.")
+            Text("O rascunho fica protegido neste aparelho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             Field("Buscar insumo", state.search) { vm.filters(it, state.onlyChanged) }
-            Row { Checkbox(state.onlyChanged, { vm.filters(state.search, it) }); Text("Somente alterados") }
-            if (groups.isEmpty()) Text("Nenhum insumo corresponde aos filtros.")
+            CheckRow("Somente alterados", state.onlyChanged) { vm.filters(state.search, it) }
+            if (groups.isEmpty()) EmptyState("Nenhum insumo encontrado", "Revise a busca ou desmarque \"Somente alterados\".")
             groups.drop(step * 3).take(3).forEach { (name, items) -> CardBlock(selected = items.any { state.drafts[it.lotId]?.let(Rules::changed) == true }) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(items.firstOrNull { it.imageUrl != null }?.imageUrl, name, 64); Text(name, style = MaterialTheme.typography.titleMedium) }
-                items.firstOrNull { it.countingInstruction != null }?.countingInstruction?.let { Text(it) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ProductPhoto(items.firstOrNull { it.imageUrl != null }?.imageUrl, name, 56)
+                    Column { Text(name, style = MaterialTheme.typography.titleMedium); items.firstOrNull { it.countingInstruction != null }?.countingInstruction?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall) } }
+                }
                 items.forEach { item ->
                     val draft = state.drafts[item.lotId] ?: Rules.draft(item)
-                    Text("Lote ${item.lotNumber} · ${item.expiryDate ?: "sem validade"} · ${Rules.quantityText(item.systemQuantity)} ${item.displayUnit}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Column(Modifier.weight(1f)) { Field("Saída (${item.displayUnit})", draft.exit, !feedback.busy, decimal = true) { vm.edit(item.lotId, draft.copy(exit = it)) } }
-                        Column(Modifier.weight(1f)) { Field("Entrada (${item.displayUnit})", draft.entry, !feedback.busy, decimal = true) { vm.edit(item.lotId, draft.copy(entry = it)) } }
+                    val exit = Rules.quantity(draft.exit); val entry = Rules.quantity(draft.entry)
+                    HorizontalDivider(color = Tokens.border)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Lote ${item.lotNumber}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
+                            Text(item.expiryDate?.let { "Validade ${fullDate(it)}" } ?: "Sem validade", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("No sistema", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                            Text("${Rules.quantityText(item.systemQuantity)} ${item.displayUnit}", style = MaterialTheme.typography.titleMedium)
+                        }
                     }
-                    Choices("Motivo", state.context?.exitReasons.orEmpty().map { it.value to it.label }, draft.reason, !feedback.busy) { vm.edit(item.lotId, draft.copy(reason = it)) }
-                    Field("Observação da saída${if (draft.reason == "SAIDA_DESCARTE_OUTROS") " (obrigatória)" else ""}", draft.exitNotes, !feedback.busy) { vm.edit(item.lotId, draft.copy(exitNotes = it.take(240))) }
-                    Field("Observação da entrada", draft.entryNotes, !feedback.busy) { vm.edit(item.lotId, draft.copy(entryNotes = it.take(240))) }
-                    Text("Quantidade final: ${Rules.quantityText(item.systemQuantity - Rules.quantity(draft.exit) + Rules.quantity(draft.entry))}", style = MaterialTheme.typography.titleMedium)
+                    QuantityField("Saída (${item.displayUnit})", draft.exit, !feedback.busy) { vm.edit(item.lotId, draft.copy(exit = it)) }
+                    // Reason and notes only matter once something left or entered the lot.
+                    if (exit > 0) {
+                        Choices("Motivo", state.context?.exitReasons.orEmpty().map { it.value to it.label }, draft.reason, !feedback.busy) { vm.edit(item.lotId, draft.copy(reason = it)) }
+                        Field("Observação da saída${if (draft.reason == "SAIDA_DESCARTE_OUTROS") " (obrigatória)" else ""}", draft.exitNotes, !feedback.busy) { vm.edit(item.lotId, draft.copy(exitNotes = it.take(240))) }
+                    }
+                    QuantityField("Entrada (${item.displayUnit})", draft.entry, !feedback.busy) { vm.edit(item.lotId, draft.copy(entry = it)) }
+                    if (entry > 0) Field("Observação da entrada", draft.entryNotes, !feedback.busy) { vm.edit(item.lotId, draft.copy(entryNotes = it.take(240))) }
+                    if (exit > 0 || entry > 0) Text("Quantidade final: ${Rules.quantityText(item.systemQuantity - exit + entry)} ${item.displayUnit}", color = Tokens.accent, style = MaterialTheme.typography.titleMedium)
                 }
             } }
         }
@@ -75,27 +96,26 @@ import com.coalaone.go.domain.Rules
             else Action("Confirmar recebimento", feedback.busy) { confirm = true }
             if (step > 0) Action("Etapa anterior", feedback.busy, secondary = true) { vm.step(step - 1) }
         }
-    }, header = if (activity != null) ({ StepHeader("Recebimento", "${activity.originName} → ${activity.destinationName}", step, steps, feedback.busy, back) }) else null) {
+    }, header = if (activity != null) ({ StepHeader("Recebimento", "${activity.originName} → ${activity.destinationName}", step, steps, feedback.busy, back) }) else null, onRefresh = { vm.refresh() }) {
         if (activity == null) {
-            Action("Atualizar reposições", feedback.busy, secondary = true) { vm.refresh() }
-            if (state.list?.activities?.isEmpty() == true) Text("Nenhuma reposição aguardando recebimento.")
+            if (state.list?.activities?.isEmpty() == true) EmptyState("Nenhuma reposição a receber", "Quando o centro de distribuição enviar uma reposição, ela aparece aqui.")
             if (state.list?.truncated == true) Text("Há mais reposições em trânsito. Receba as mais antigas primeiro.")
-            state.list?.activities.orEmpty().forEach { row -> CardBlock {
-                Text(row.destinationName, style = MaterialTheme.typography.titleMedium); Text("De ${row.originName} · ${row.rows.size} lotes · ${row.dispatchedAt.orEmpty()}")
-                Action("Conferir recebimento", feedback.busy, secondary = true) { vm.open(row) }
-            } }
+            if (state.list?.activities?.isNotEmpty() == true) SectionLabel("Aguardando conferência")
+            state.list?.activities.orEmpty().forEach { row ->
+                ListRow(row.destinationName, listOfNotNull("De ${row.originName}", "${row.rows.size} lotes", shortDate(row.dispatchedAt)?.let { "enviada em $it" }).joinToString(" · "), !feedback.busy) { vm.open(row) }
+            }
         } else {
-            Text("${activity.originName} → ${activity.destinationName}"); Text("Etapa ${step + 1} de $steps")
-            Text("Confira a quantidade recebida. Altere e explique somente o que chegou diferente.")
+            Text("Confira a quantidade recebida. Altere e explique somente o que chegou diferente.", color = Tokens.muted)
             groups.drop(step * 3).take(3).forEach { (name, rows) -> CardBlock {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(rows.firstOrNull { it.imageUrl != null }?.imageUrl, name); Text(name, style = MaterialTheme.typography.titleMedium) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(rows.firstOrNull { it.imageUrl != null }?.imageUrl, name); Text(name, style = MaterialTheme.typography.titleMedium) }
                 rows.forEach { row ->
                     val key = Rules.receiptKey(row); val draft = state.drafts.getValue(key)
-                    Text("Lote ${row.lotNumber} · enviado ${Rules.quantityText(row.sentQuantity)}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Column(Modifier.weight(1f)) { Text("Enviado", color = Tokens.muted, style = MaterialTheme.typography.bodySmall); Text(Rules.quantityText(row.sentQuantity), style = MaterialTheme.typography.titleLarge) }
-                        Column(Modifier.weight(1f)) { Field("Recebido", draft.first, !feedback.busy, decimal = true) { vm.edit(key, it, draft.second) } }
+                    HorizontalDivider(color = Tokens.border)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Lote ${row.lotNumber}", style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont), modifier = Modifier.weight(1f))
+                        Column(horizontalAlignment = Alignment.End) { Text("Enviado", color = Tokens.muted, style = MaterialTheme.typography.bodySmall); Text(Rules.quantityText(row.sentQuantity), style = MaterialTheme.typography.titleMedium) }
                     }
+                    QuantityField("Recebido", draft.first, !feedback.busy, emptyAtZero = false) { vm.edit(key, it, draft.second) }
                     if (Rules.quantity(draft.first) != row.sentQuantity) {
                         Text("Quantidade diferente da enviada", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
                         Field("Explique a divergência (obrigatório)", draft.second, !feedback.busy) { vm.edit(key, draft.first, it.take(240)) }
