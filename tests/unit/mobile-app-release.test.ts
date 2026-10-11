@@ -15,7 +15,7 @@ test('withdrawn legacy package never receives the Go installer', () => {
   assert.equal(mobileReleaseForPackage('com.coalaone.notas').packagePath, null);
   const selected = mobileReleaseForPackage('coalaone.go');
   selected.versionCode = 100;
-  assert.equal(mobileReleaseForPackage('coalaone.go').versionCode, 4);
+  assert.equal(mobileReleaseForPackage('coalaone.go').versionCode, COALA_GO_RELEASE.versionCode);
 });
 
 test('package selection rejects unsupported apps and unknown query fields', () => {
