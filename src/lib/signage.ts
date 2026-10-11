@@ -165,14 +165,19 @@ export const signageMobileScreenSchema = z.object({
   code: z.string().trim().toUpperCase().regex(SIGNAGE_DEVICE_TOKEN_PATTERN),
 }).strict();
 
-/** O que o QR code do monitor carrega: o endereço da página de aplicativos com o código da tela. */
-export function signagePairingUrl(origin: string, code: string) {
-  return `${origin.replace(/\/+$/, '')}/app?tela=${code}`;
+/**
+ * O que o QR code do monitor carrega: só o código, com um prefixo do Coala Signage. Não é um endereço
+ * de propósito: a câmera comum do celular mostra o texto e não abre o sistema; só o aplicativo liga a tela.
+ */
+export const SIGNAGE_PAIRING_PREFIX = 'COALA-SIGNAGE:';
+
+export function signagePairingPayload(code: string) {
+  return `${SIGNAGE_PAIRING_PREFIX}${code}`;
 }
 
 /** Código lido de um QR code de pareamento; `null` quando o QR code não é de uma tela do Coala Signage. */
 export function parseSignagePairingCode(scanned: string) {
-  const match = /[?&]tela=([A-Za-z0-9]{8})(?:[&#]|$)/.exec(scanned.trim());
+  const match = /^COALA-SIGNAGE:([A-Za-z0-9]{8})$/i.exec(scanned.trim());
   const code = match?.[1]?.toUpperCase() ?? '';
   return SIGNAGE_DEVICE_TOKEN_PATTERN.test(code) ? code : null;
 }
