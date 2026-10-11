@@ -42,8 +42,8 @@ android {
         applicationId = "coalaone.go"
         minSdk = 26
         targetSdk = 36
-        versionCode = configured("COALA_VERSION_CODE", "4").toInt()
-        versionName = configured("COALA_VERSION_NAME", "0.2.0")
+        versionCode = configured("COALA_VERSION_CODE", "5").toInt()
+        versionName = configured("COALA_VERSION_NAME", "0.3.0")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoted(configured("COALA_API_BASE_URL", "https://op.coalashakes.com")))
         buildConfigField("String", "FIREBASE_API_KEY", quoted(configured("COALA_FIREBASE_API_KEY")))
@@ -96,7 +96,7 @@ gradle.taskGraph.whenReady {
     if (allTasks.any { it.name.contains("Release", ignoreCase = true) }) {
         require(configured("COALA_FIREBASE_API_KEY").isNotBlank() && configured("COALA_FIREBASE_PROJECT_ID").isNotBlank() && configured("COALA_FIREBASE_APP_ID").contains(":android:") && configured("COALA_FIREBASE_SENDER_ID").toLongOrNull() != null) { "Release exige configuração pública Firebase Android (COALA_FIREBASE_*)." }
         require(configured("COALA_LOCAL_TEST", "false") == "false" && configured("COALA_API_BASE_URL", "https://op.coalashakes.com").startsWith("https://")) { "Release não pode usar configuração de teste ou HTTP." }
-        require(configured("COALA_VERSION_CODE", "4").toInt() > 0) { "VersionCode do Coala Go precisa ser positivo." }
+        require(configured("COALA_VERSION_CODE", "5").toInt() > 0) { "VersionCode do Coala Go precisa ser positivo." }
         require(android.signingConfigs.findByName("existingRelease") != null) { "Release exige a chave existente de ~/.coala-one via o processo de assinatura." }
     }
 }

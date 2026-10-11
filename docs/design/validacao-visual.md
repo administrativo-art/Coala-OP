@@ -54,3 +54,25 @@ O repositório ainda não possui `@testing-library/react`, `@testing-library/use
 - Playwright + `@axe-core/playwright` para a página autenticada.
 
 Axe é verificação adicional e não substitui inspeção de ordem de foco, rótulos, contraste e comportamento com leitor de tela.
+
+## Coala Go — handoff Android (11/10/2026)
+
+O handoff `Coala One App - Prototipo.dc.html` é referência visual para Compose,
+não uma autorização para importar runtime web, simular sucesso ou trocar APIs.
+Nome exibido: Coala Go. Fonte/tokens e movimento são descritos no
+[README nativo](../../apps/coala-one-android/README.md#handoff-visual-nativo).
+Validação local usa emulador Android 15/API 35, simulação nativa sem produção,
+`DesignScreensTest` para capturas das sete telas e navegação de Metas/Escala,
+`DesignMotionTest` para avanço de frames, modo estático e marca/slogan a 160%,
+além dos testes Compose dos fluxos de negócio. A janela é liberada para captura
+somente pelo teste; FLAG_SECURE permanece no release.
+
+Divergências intencionais: Coala Go substitui One na marca; Signage e ações
+operacionais permanecem disponíveis; contagens/valores/permissões são reais;
+limites de anexos e consequências das confirmações seguem o backend, não o
+mock. A aurora usa gradientes radiais suaves (API 26), sem blur de API 31.
+Não há moldura de telefone, status bar falsa, relógio fictício ou navegação de
+preview dentro do app. Não foi aberto navegador para renderizar o protótipo.
+Os pares de texto seguem os tokens com contraste registrado em `tokens.md`;
+gradientes são usados na marca grande/ilustrações/progresso, sem substituir
+mensagens ou rótulos das ações. O aceite em aparelhos físicos permanece pendente.
