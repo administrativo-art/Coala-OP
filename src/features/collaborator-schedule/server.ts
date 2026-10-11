@@ -88,18 +88,18 @@ export async function buildCollaboratorSchedulePayload(
     .where("month", "==", month)
     .get();
 
-  // "Trancar" é hoje a confirmação operacional da escala. Escalas ainda
-  // editáveis não podem aparecer no portal do colaborador.
-  const publishedSchedules = schedulesSnap.docs
-    .filter((doc) => doc.get("locked") === true)
-    .sort(
-      (left, right) =>
-        timestampMillis(right.get("createdAt")) -
+  // "Trancar" preserva o estado daquela escala (alterações posteriores de cadastro
+  // não a mudam retroativamente); não é publicação. A escala do mês vale como está,
+  // trancada ou não, porque ela muda ao longo do mês. Se a unidade tiver mais de
+  // uma escala no mês, a trancada tem prioridade e, entre iguais, a mais recente.
+  const publishedSchedules = [...schedulesSnap.docs].sort(
+    (left, right) =>
+      Number(right.get("locked") === true) - Number(left.get("locked") === true) ||
+      timestampMillis(right.get("createdAt")) -
         timestampMillis(left.get("createdAt"))
-    );
+  );
 
-  // Se houver mais de uma escala confirmada para a mesma unidade, a mais
-  // recente é a fonte oficial. Isso evita duplicar turnos históricos.
+  // Uma escala por unidade é a fonte oficial. Isso evita duplicar turnos históricos.
   const latestScheduleByUnit = new Map<string, (typeof publishedSchedules)[number]>();
   for (const schedule of publishedSchedules) {
     const scope = String(schedule.get("unitId") ?? "__legacy__");

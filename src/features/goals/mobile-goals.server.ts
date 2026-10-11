@@ -4,7 +4,7 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { AppError } from "@/lib/observability/app-error";
 import { canAccessUnit } from "@/lib/unit-access";
-import { safeAvatarUrl } from "@/features/collaborator-schedule/mobile-schedule";
+import { safeAvatarUrl, safePersonColor } from "@/features/collaborator-schedule/mobile-schedule";
 import { loadScheduledGoalDateKeys } from "@/features/collaborator-schedule/mobile-schedule.server";
 import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
 import type { EmployeeGoal, GoalPeriodDoc } from "@/types";
@@ -57,6 +57,7 @@ export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: str
   const userSnapshots = employeeIds.length ? await dbAdmin.getAll(...employeeIds.map((id) => dbAdmin.collection("users").doc(id))) : [];
   const names = new Map(userSnapshots.map((snapshot) => [snapshot.id, String(snapshot.get("username") || snapshot.get("name") || "Colaborador")]));
   const avatars = new Map(userSnapshots.map((snapshot) => [snapshot.id, safeAvatarUrl(snapshot.get("avatarUrl"))]));
+  const colors = new Map(userSnapshots.map((snapshot) => [snapshot.id, safePersonColor(snapshot.get("color"))]));
   const unit = periods.some((period) => period.distributionMode === "scheduled_days") ? await dbAdmin.collection("kiosks").doc(kioskId).get() : null;
   const unitName = String(unit?.get("name") || unit?.get("displayName") || "");
   // The period itself says how its days are counted; "scheduled days" come from the unit's schedule, as in the web panel.
@@ -89,12 +90,15 @@ export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: str
       typeLabel: TYPE_LABELS[input.type] ?? "Meta",
       startDate: input.startKey,
       endDate: input.endKey,
+      // True when the daily share is spread over the days the unit is actually scheduled, not the calendar.
+      distributedBySchedule: period.distributionMode === "scheduled_days" && (scheduledDays[index]?.length ?? 0) > 0,
       summary: mobileGoalSummary(input, today),
       days: mobileGoalDays(input, today),
       team: team
         .map((row) => ({
           name: names.get(row.employeeId) ?? "Colaborador",
           avatarUrl: avatars.get(row.employeeId) ?? null,
+          color: colors.get(row.employeeId) ?? null,
           isMe: row.employeeId === actor.userDoc.id,
           role: row.role,
           currentValue: row.currentValue,

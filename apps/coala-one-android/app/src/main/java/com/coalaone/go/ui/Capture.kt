@@ -28,13 +28,16 @@ private suspend fun readDocument(context: Context, uri: Uri): Document = withCon
     val extension = when (type) { "application/pdf" -> "pdf"; "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
     Document("documento-${UUID.randomUUID()}.$extension", type, bytes)
 }
-@Composable fun CaptureButtons(label: String, enabled: Boolean, imagesOnly: Boolean = false, onDocument: (Document) -> Unit) {
+class CaptureActions(val photograph: () -> Unit, val pickFile: () -> Unit, val error: String?)
+/** Camera and file picker wired once; screens decide how the two actions look. */
+@Composable fun rememberCaptureActions(imagesOnly: Boolean = false, onDocument: (Document) -> Unit): CaptureActions {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     var capture by rememberSaveable { mutableStateOf<String?>(null) }
     var capturePath by rememberSaveable { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    val deliver by rememberUpdatedState(onDocument)
     fun read(uri: Uri, capturedFile: String? = null) { scope.launch {
-        try { onDocument(readDocument(context, uri)); error = null }
+        try { deliver(readDocument(context, uri)); error = null }
         catch (cause: Exception) { error = if (cause is IllegalArgumentException) cause.message else "Não foi possível abrir o documento." }
         finally { capturedFile?.let { File(it).delete() } }
     } }
@@ -46,9 +49,15 @@ private suspend fun readDocument(context: Context, uri: Uri): Document = withCon
         capture = uri.toString(); capturePath = file.path; camera.launch(uri)
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) takePicture() else error = "Permita a câmera ou escolha um arquivo." }
+    return CaptureActions(
+        { if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) takePicture() else permission.launch(Manifest.permission.CAMERA) },
+        { picker.launch(if (imagesOnly) arrayOf("image/jpeg", "image/png", "image/webp") else arrayOf("image/jpeg", "image/png", "image/webp", "application/pdf")) }, error)
+}
+@Composable fun CaptureButtons(label: String, enabled: Boolean, imagesOnly: Boolean = false, onDocument: (Document) -> Unit) {
+    val actions = rememberCaptureActions(imagesOnly, onDocument)
     TextLabel(label)
-    Action("Fotografar", enabled = enabled, secondary = true) { if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) takePicture() else permission.launch(Manifest.permission.CAMERA) }
-    Action("Escolher arquivo", enabled = enabled, secondary = true) { picker.launch(if (imagesOnly) arrayOf("image/jpeg", "image/png", "image/webp") else arrayOf("image/jpeg", "image/png", "image/webp", "application/pdf")) }
-    error?.let { androidx.compose.material3.Text(it, color = Tokens.danger) }
+    Action("Fotografar", enabled = enabled, secondary = true, onClick = actions.photograph)
+    Action("Escolher arquivo", enabled = enabled, secondary = true, onClick = actions.pickFile)
+    actions.error?.let { androidx.compose.material3.Text(it, color = Tokens.danger) }
 }
 @Composable private fun TextLabel(text: String) { androidx.compose.material3.Text(text, style = androidx.compose.material3.MaterialTheme.typography.titleMedium) }

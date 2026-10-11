@@ -31,6 +31,11 @@ object Tokens {
     val soft = Color(0xFFFAF9F6); val accentSoft = Color(0xFFFBE7EF); val onDark = Color(0xFFF3F2EE)
     val onDark2 = Color(0xFFC8C7D0); val danger = Color(0xFFBE123C); val dangerBg = Color(0xFFFFE4E8)
     val ok = Color(0xFF147337); val okBg = Color(0xFFE8F5EE); val warning = Color(0xFFC2410C)
+    // Prototype palette: wine for text links, quieter greys on dark, status tints.
+    val wine = Color(0xFFA6325B); val onDark3 = Color(0xFFA9A8B3); val onDark4 = Color(0xFF8E8D99)
+    val warningBg = Color(0xFFFFF1E6); val info = Color(0xFF1D4ED8); val infoBg = Color(0xFFEEF3FE)
+    val okBorder = Color(0xFFBFE3CC); val okInk = Color(0xFF14532D); val amberBg = Color(0xFFFFF7E6); val amberInk = Color(0xFF6B4500); val amberBorder = Color(0xFFF5D9A3)
+    val track = Color(0xFF34343F); val greyBg = Color(0xFFECEAE5); val segment = Color(0xFFE6E3DC); val faint = Color(0xFF6E737A); val changedBg = Color(0xFFFFF8FA); val problemBg = Color(0xFFFFF5F6)
 }
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 val InterfaceFont = FontFamily(listOf(400, 500, 600, 700, 800, 900).map { weight ->
