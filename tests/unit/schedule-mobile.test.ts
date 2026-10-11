@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { parseSchedulePeriod, safeAvatarUrl, toMobileSchedule } from "../../src/features/collaborator-schedule/mobile-schedule";
+import { parseSchedulePeriod, safeAvatarUrl, safePersonColor, toMobileSchedule } from "../../src/features/collaborator-schedule/mobile-schedule";
 import { goalDistributionDays, mobileGoalDays, mobileGoalSummary, type MobileGoalPeriodInput } from "../../src/features/goals/mobile-goals";
 import { defaultAdminPermissions, defaultGuestPermissions } from "../../src/types";
 
@@ -15,11 +15,23 @@ test("the app schedule lists each person once, the viewer first, and never expos
   const view = toMobileSchedule({
     year: 2026, month: 10, published: true,
     teamUnits: [{ id: "unit-x", name: "Unidade X", shifts: [shift("u-ana", "2026-10-09"), shift("u-bia", "2026-10-09", { startTime: "14:00", endTime: "20:00" }), shift("u-ana", "2026-10-10", { type: "day_off", shiftName: "Folga" })] }],
-  }, new Map([["u-ana", "https://cdn.example/ana.jpg"], ["u-bia", null]]));
+  }, new Map([["u-ana", "https://cdn.example/ana.jpg"], ["u-bia", null]]), new Map([["u-ana", "#BDB2FF"]]));
   const unit = view.units[0]!;
   assert.deepEqual(unit.people.map((person) => [person.name, person.isMe, person.avatarUrl]), [["Bia", true, null], ["Ana", false, "https://cdn.example/ana.jpg"]]);
   assert.deepEqual(unit.shifts.map((entry) => [unit.people[entry.person]!.name, entry.date, entry.type]), [["Ana", "2026-10-09", "work"], ["Bia", "2026-10-09", "work"], ["Ana", "2026-10-10", "day_off"]]);
   assert.equal(JSON.stringify(view).includes("u-ana"), false);
+  assert.deepEqual(unit.people.map((person) => person.color), [null, "#BDB2FF"]);
+});
+
+test("only a plain hex colour leaves the server", () => {
+  assert.equal(safePersonColor("#bdb2ff"), "#BDB2FF");
+  for (const value of ["red", "#fff", "#BDB2FF80", "url(x)", "", null, 7]) assert.equal(safePersonColor(value), null);
+});
+
+test("the month's schedule is shown whether or not it is locked", () => {
+  const builder = readFileSync("src/features/collaborator-schedule/server.ts", "utf8");
+  assert.doesNotMatch(builder, /\.filter\(\(doc\) => doc\.get\("locked"\) === true\)/);
+  assert.match(builder, /Number\(right\.get\("locked"\) === true\) - Number\(left\.get\("locked"\) === true\)/);
 });
 
 test("only https photo links leave the server", () => {

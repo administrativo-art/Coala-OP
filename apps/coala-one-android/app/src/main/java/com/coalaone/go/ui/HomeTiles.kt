@@ -16,37 +16,69 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 fun profileInitials(name: String): String = name.trim().split(Regex("\\s+"))
     .mapNotNull { word -> word.firstOrNull { it.isLetter() } }.take(2)
     .joinToString("") { it.uppercaseChar().toString() }.ifBlank { "H" }
 
+private val genericUnitWords = setOf("unidade", "quiosque", "loja", "coala", "de", "da", "do", "das", "dos", "e")
+/**
+ * Two-letter badge for a unit: generic words are skipped, two significant words give their
+ * initials ("João Paulo" -> JP) and a single one gives its first letter plus the next consonant
+ * ("Unidade Tirirical" -> TR).
+ */
+fun unitInitials(name: String): String {
+    val plain = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+    val words = plain.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotBlank() }
+    val significant = words.filter { it.lowercase() !in genericUnitWords }.ifEmpty { words }
+    val letters = when {
+        significant.isEmpty() -> ""
+        significant.size >= 2 -> "${significant[0].first()}${significant[1].first()}"
+        else -> significant[0].let { word -> "${word.first()}${word.drop(1).firstOrNull { it.isLetterOrDigit() && it.lowercaseChar() !in "aeiou" } ?: word.drop(1).firstOrNull() ?: ""}" }
+    }
+    return letters.uppercase().ifBlank { "?" }
+}
+/** Fallback tones for people without a registered colour; they follow the position in the list. */
+private val personTones = listOf(Color(0xFFDB2777), Color(0xFF7C3AED), Color(0xFF0B76B7), Color(0xFF059669), Color(0xFFD97706))
+/** The colour the schedule editor gave the person ("#RRGGBB"), or null when it is not a plain hex. */
+fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F]{6}").matches(it) }?.let { Color(0xFF000000 or it.drop(1).toLong(16)) }
+/** Photo when the profile has one, initials otherwise; either way ringed in the person's colour. */
+@Composable fun PersonBadge(name: String, url: String?, index: Int, hex: String? = null, size: Int = 42) {
+    val color = personColor(hex) ?: personTones[Math.floorMod(index, personTones.size)]
+    // Registered colours are often pastel: the ring and tint use the colour, the letters stay dark.
+    Box(Modifier.size(size.dp).clip(CircleShape).background(color.copy(alpha = .22f)).border(2.5.dp, color, CircleShape), contentAlignment = Alignment.Center) {
+        if (url?.startsWith("https://") == true) Box(Modifier.padding(3.dp).clip(CircleShape)) { ProductPhoto(url, name, size - 6) }
+        else Text(profileInitials(name), color = Tokens.ink, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
 @Composable fun ProfileAvatar(name: String, url: String?, onClick: () -> Unit) {
-    Box(Modifier.size(54.dp).clip(CircleShape).background(Tokens.dark)
-        .border(2.dp, Brush.linearGradient(listOf(Tokens.pink, Tokens.indigo)), CircleShape)
-        .clickable(role = Role.Button, onClickLabel = "Abrir perfil", onClick = onClick), contentAlignment = Alignment.Center) {
-        if (url.isNullOrBlank()) Text(profileInitials(name), color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
-        else ProductPhoto(url, "Foto de perfil", 50)
+    Box(Modifier.size(58.dp).clickable(role = Role.Button, onClickLabel = "Abrir perfil", onClick = onClick)) {
+        Box(Modifier.size(54.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Tokens.pink, Tokens.indigo))), contentAlignment = Alignment.Center) {
+            if (url.isNullOrBlank()) Text(profileInitials(name), color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp))
+            else Box(Modifier.padding(2.dp).clip(CircleShape)) { ProductPhoto(url, "Foto de perfil", 50) }
+        }
+        // Pencil badge of the prototype: the avatar opens the profile, where the photo is changed.
+        Box(Modifier.align(Alignment.BottomEnd).size(22.dp).background(Tokens.dark, CircleShape).border(1.dp, Tokens.onDark.copy(alpha = .2f), CircleShape), contentAlignment = Alignment.Center) { Text("✎", color = Tokens.onDark, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp)) }
     }
 }
 
 @Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, onClick: () -> Unit) {
     val hero = route == "purchase"
-    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(if (hero) 22.dp else 20.dp),
-        border = BorderStroke(1.dp, if (hero) Tokens.pink.copy(alpha = .4f) else Tokens.border),
-        colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        if (hero) Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                Text("Envie notas e comprovantes", color = Tokens.muted, style = MaterialTheme.typography.bodyMedium)
-                if (pending > 0) Text("$pending pendentes", color = Tokens.accent, style = MaterialTheme.typography.labelLarge)
-                Text("Registrar compra →", color = Tokens.accent, style = MaterialTheme.typography.labelLarge)
+    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(if (hero) 22.dp else 20.dp), border = BorderStroke(1.dp, Tokens.border),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (hero) 6.dp else 0.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        if (hero) Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp))
+                Text("Nota de sangria ou de compra paga pela empresa.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                if (pending > 0) Box(Modifier.padding(top = 4.dp)) { StatusChip(if (pending == 1) "1 nota no aparelho" else "$pending notas no aparelho", Tokens.info, Tokens.infoBg) }
             }
-            Box(Modifier.background(Tokens.accentSoft, RoundedCornerShape(18.dp)).padding(12.dp)) { ModuleIcon(route, Modifier.size(72.dp)) }
-        } else Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.background(Tokens.soft, RoundedCornerShape(14.dp)).padding(4.dp)) { ModuleIcon(route) }
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(when (route) { "count" -> "Confira os insumos"; "receive" -> "Confira a entrega"; "schedule" -> "Seu time e seus turnos"; "goals" -> "Acompanhe os resultados"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            Box(Modifier.size(84.dp, 104.dp).background(Tokens.accentSoft, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(64.dp)) }
+        } else Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(44.dp).background(Color(0xFFF6F4EF), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(34.dp)) }
+            Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
+            Text(when (route) { "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Quem trabalha e suas folgas"; "goals" -> "O que falta e o placar da equipe"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
         }
     }
 }

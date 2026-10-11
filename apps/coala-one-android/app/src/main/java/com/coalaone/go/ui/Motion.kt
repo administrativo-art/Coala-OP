@@ -68,14 +68,14 @@ val LocalMotionEnabled = staticCompositionLocalOf { true }
     }
 }
 
-@Composable fun AnimatedProgress(value: Float, modifier: Modifier = Modifier, duration: Int = 1200) {
+@Composable fun AnimatedProgress(value: Float, modifier: Modifier = Modifier, duration: Int = 1200, height: Int = 8, track: Color = Tokens.border, fill: Brush = Brush.horizontalGradient(listOf(Tokens.accent, Tokens.indigo))) {
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
     val progress by animateFloatAsState(if (entered || !LocalMotionEnabled.current) value.coerceIn(0f, 1f) else 0f,
         if (LocalMotionEnabled.current) tween(duration, easing = CubicBezierEasing(.2f, .8f, .2f, 1f)) else snap(), label = "progress")
-    Canvas(modifier.fillMaxWidth().height(8.dp).progressSemantics(progress)) {
-        drawRoundRect(Tokens.border, cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
-        if (progress > 0) drawRoundRect(Brush.horizontalGradient(listOf(Tokens.accent, Tokens.indigo)), size = Size(size.width * progress, size.height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
+    Canvas(modifier.fillMaxWidth().height(height.dp).progressSemantics(progress)) {
+        drawRoundRect(track, cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
+        if (progress > 0) drawRoundRect(fill, size = Size(size.width * progress, size.height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
     }
 }
 

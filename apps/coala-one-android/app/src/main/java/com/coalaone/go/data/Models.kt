@@ -57,7 +57,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Document(val name: String, val mimeType: String, @Serializable(with = Base64Bytes::class) val bytes: ByteArray)
 @Serializable data class PendingUpload(val submissionId: String, val capturedAt: String, val note: String, val fundingSource: String, val receipts: List<Document>, val paymentProofs: List<Document>, val withdrawal: Withdrawal? = null)
 
-@Serializable data class SchedulePerson(val name: String, val role: String, val isMe: Boolean, val avatarUrl: String? = null)
+@Serializable data class SchedulePerson(val name: String, val role: String, val isMe: Boolean, val avatarUrl: String? = null, val color: String? = null)
 @Serializable data class ScheduleShift(val person: Int, val date: String, val startTime: String, val endTime: String, val type: String, val shiftName: String)
 @Serializable data class ScheduleUnit(val id: String, val name: String, val people: List<SchedulePerson>, val shifts: List<ScheduleShift>)
 @Serializable data class MonthSchedule(val today: String, val year: Int, val month: Int, val published: Boolean, val units: List<ScheduleUnit>)
@@ -65,10 +65,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class NextLevel(val label: String, val remaining: Double)
 @Serializable data class GoalSummary(val currentValue: Double, val levels: List<GoalLevel>, val percentOfTarget: Double, val nextLevel: NextLevel? = null, val totalDays: Int, val elapsedDays: Int, val remainingDays: Int, val cumulative: Boolean, val projection: Double? = null, val neededDaily: Double? = null, val dailyTarget: Double? = null)
 @Serializable data class GoalDay(val date: String, val value: Double, val reachedDailyTarget: Boolean? = null)
-@Serializable data class GoalMember(val name: String, val avatarUrl: String? = null, val isMe: Boolean, val role: String, val currentValue: Double, val targetValue: Double, val percent: Double, val prize: Double? = null)
+@Serializable data class GoalMember(val name: String, val avatarUrl: String? = null, val isMe: Boolean, val role: String, val currentValue: Double, val targetValue: Double, val percent: Double, val prize: Double? = null, val color: String? = null)
 @Serializable data class PrizeTier(val label: String, val fromAmount: Double, val fixedBonusAmount: Double, val excessPercent: Double, val reached: Boolean)
 @Serializable data class Prize(val methodName: String, val tiers: List<PrizeTier>, val highestTierLabel: String? = null, val nextTier: NextLevel? = null, val totalTeamBonus: Double, val leadershipBonus: Double, val message: String? = null)
-@Serializable data class Goal(val id: String, val typeLabel: String, val startDate: String, val endDate: String, val summary: GoalSummary, val days: List<GoalDay>, val team: List<GoalMember>, val prize: Prize? = null)
+@Serializable data class Goal(val id: String, val typeLabel: String, val startDate: String, val endDate: String, val summary: GoalSummary, val days: List<GoalDay>, val team: List<GoalMember>, val prize: Prize? = null, val distributedBySchedule: Boolean = false)
 @Serializable data class GoalUnits(val units: List<UnitRef>)
 @Serializable data class UnitGoals(val kioskId: String, val today: String, val goals: List<Goal>)
 
