@@ -13,8 +13,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,6 +41,13 @@ import javax.inject.Inject
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent { CoalaTheme {
             val identity by session.state.collectAsStateWithLifecycle()
+            SideEffect {
+                val lightSurface = !identity.loading && identity.identity != null && !identity.locked
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = lightSurface
+                    isAppearanceLightNavigationBars = lightSurface
+                }
+            }
             val update: UpdateViewModel = hiltViewModel()
             DisposableEffect(update) {
                 val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -74,7 +88,12 @@ import javax.inject.Inject
 @Composable private fun AppNavigation(session: SessionViewModel, update: UpdateViewModel) {
     val nav = rememberNavController()
     val back: () -> Unit = { nav.popBackStack(); Unit }
-    NavHost(nav, startDestination = "home") {
+    val motion = LocalMotionEnabled.current
+    NavHost(nav, startDestination = "home",
+        enterTransition = { fadeIn(tween(if (motion) 280 else 0)) + slideInVertically(tween(if (motion) 280 else 0)) { if (motion) 6 else 0 } },
+        exitTransition = { fadeOut(tween(if (motion) 160 else 0)) },
+        popEnterTransition = { fadeIn(tween(if (motion) 280 else 0)) },
+        popExitTransition = { fadeOut(tween(if (motion) 160 else 0)) + slideOutVertically(tween(if (motion) 160 else 0)) { if (motion) 6 else 0 } }) {
         composable("home") { HomeScreen(hiltViewModel(), session, update) { nav.navigate(it) } }
         composable("count") { CountScreen(hiltViewModel(), back) }
         composable("receive") { ReceiveScreen(hiltViewModel(), back) }
@@ -91,14 +110,33 @@ import javax.inject.Inject
     var profileOpen by remember { mutableStateOf(false) }
     var signOut by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    Page("Olá, ${state?.profile?.name?.substringBefore(' ') ?: "humano"}", feedback) {
+    Page("Início", feedback, header = {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Brand(compact = true)
+            TextButton({ signOut = true }) { Text("Sair", color = Tokens.onDark2) }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("Olá, ${state?.profile?.name?.substringBefore(' ') ?: "humano"}", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
+                Text(state?.profile?.role.orEmpty(), color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+            }
+            ProfileAvatar(state?.profile?.name.orEmpty(), state?.profile?.avatarUrl) { profileOpen = !profileOpen }
+        }
+    }) {
         if (session.mode.simulation) Text("SIMULAÇÃO · nenhum dado é enviado", color = Tokens.warning)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(state?.profile?.avatarUrl, "Foto de perfil", 64); Column { Text(state?.profile?.name.orEmpty(), style = MaterialTheme.typography.titleMedium); Text(state?.profile?.role.orEmpty()); TextButton({ profileOpen = !profileOpen }) { Text("Alterar foto de perfil") } } }
+        TextButton({ profileOpen = !profileOpen }) { Text("Alterar foto de perfil") }
         if (profileOpen) CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true, onDocument = vm::avatar)
-        Action("Atualizar perfil", feedback.busy, secondary = true) { vm.refresh() }
         if (pending.isNotEmpty()) Text("${pending.count { it.state != "UPLOADED" }} envios pendentes · ${pending.count { it.state == "UPLOADED" }} revisões pendentes")
         state?.modules?.let { modules ->
-            listOf(Triple(modules.localPurchase, "Compra local", "purchase"), Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento de reposição", "receive"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.goals, "Metas", "goals"), Triple(modules.signage, "Signage", "signage")).filter { it.first }.forEach { (_, title, route) -> Action(title, secondary = true) { navigate(route) } }
+            if (modules.localPurchase) HomeTile("Compra local", "purchase", Modifier.fillMaxWidth(), pending.size) { navigate("purchase") }
+            val tiles = listOf(Triple(modules.stockCount, "Contagem de estoque", "count"), Triple(modules.repositionReceipt, "Recebimento de reposição", "receive"), Triple(modules.goals, "Metas", "goals"), Triple(modules.schedule, "Escala", "schedule"), Triple(modules.signage, "Signage", "signage")).filter { it.first }
+            tiles.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { (_, title, route) -> HomeTile(title, route, Modifier.weight(1f)) { navigate(route) } }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
             if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage)) Text("Seu perfil não tem módulos liberados para o aplicativo.")
         }
         release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { target ->
@@ -113,6 +151,7 @@ import javax.inject.Inject
         if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta", session::signOut)
         else TextButton({ signOut = true }) { Text("Sair da conta") }
         Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", style = MaterialTheme.typography.bodySmall)
+        Action("Atualizar perfil", feedback.busy, secondary = true) { vm.refresh() }
         Action("Verificar atualização", updateFeedback.busy, secondary = true, onClick = { update.check() })
     }
 }

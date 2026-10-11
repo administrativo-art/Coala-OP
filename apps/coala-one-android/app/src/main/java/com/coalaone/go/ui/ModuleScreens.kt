@@ -1,6 +1,8 @@
 package com.coalaone.go.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -17,6 +19,8 @@ import java.time.format.DateTimeFormatter
     val dates = Rules.week(state.day)
     val units = state.schedules.values.flatMap { it.units }.distinctBy { it.id }
     val selected = units.firstOrNull { it.id == state.selectedScheduleUnit } ?: units.firstOrNull()
+    var selectedDay by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    val day = dates.firstOrNull { it.toString() == selectedDay } ?: dates.firstOrNull { it == state.day } ?: dates.first()
     Page("Escala", feedback, onBack) {
         Action("Atualizar escala", feedback.busy, secondary = true) { vm.refreshSchedule() }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -25,10 +29,13 @@ import java.time.format.DateTimeFormatter
             TextButton({ vm.schedule(state.day.plusWeeks(1)) }, enabled = !feedback.busy) { Text("Semana →") }
         }
         Choices("Unidade", units.map { it.id to it.name }, selected?.id.orEmpty(), !feedback.busy) { vm.scheduleFilter(it, state.onlyMine) }
-        Row { Checkbox(state.onlyMine, { vm.scheduleFilter(selected?.id.orEmpty(), it) }); Text("Somente minha escala") }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            dates.forEach { date -> FilterChip(day == date, { selectedDay = date.toString() }, label = { Text(date.format(DateTimeFormatter.ofPattern("EEE\ndd", java.util.Locale.forLanguageTag("pt-BR")))) }) }
+        }
+        Choices("Visualização", listOf("team" to "Equipe", "mine" to "Só minha"), if (state.onlyMine) "mine" else "team") { vm.scheduleFilter(selected?.id.orEmpty(), it == "mine") }
         if (units.isEmpty() && !feedback.busy) Text("Nenhuma escala publicada para este período.")
-        dates.forEach { date -> CardBlock {
-            Text(date.format(DateTimeFormatter.ofPattern("EEE, dd/MM")), style = MaterialTheme.typography.titleMedium)
+        listOf(day).forEach { date -> CardBlock {
+            Text(date.format(DateTimeFormatter.ofPattern("EEE, dd/MM", java.util.Locale.forLanguageTag("pt-BR"))), style = MaterialTheme.typography.titleMedium)
             val month = state.schedules[date.toString().take(7)]
             val unit = month?.units?.firstOrNull { it.id == selected?.id }
             if (month?.published == false) Text("Escala não publicada.")
@@ -48,18 +55,29 @@ import java.time.format.DateTimeFormatter
 @Composable fun GoalsScreen(vm: ModulesViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     var selectedGoal by rememberSaveable { mutableStateOf("") }
+    var tab by rememberSaveable { mutableStateOf("days") }
     LaunchedEffect(Unit) { vm.goalUnits() }
-    Page("Metas", feedback, onBack) {
+    val goals = state.goals?.goals.orEmpty()
+    val goal = goals.firstOrNull { it.id == selectedGoal } ?: goals.firstOrNull()
+    Page("Metas", feedback, onBack, header = {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Metas", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
+            TextButton(onBack, enabled = !feedback.busy) { Text("← Voltar", color = Tokens.pink) }
+        }
+        goal?.let { target ->
+            Text(target.typeLabel, color = Tokens.onDark2)
+            Text(moneyValue(target.summary.currentValue), color = Tokens.onDark, style = MaterialTheme.typography.headlineLarge)
+            Spacer(Modifier.height(14.dp))
+            AnimatedProgress((target.summary.percentOfTarget / 100).toFloat())
+            Spacer(Modifier.height(8.dp))
+            Text("${target.summary.percentOfTarget}% da meta · ${target.summary.remainingDays} dias restantes", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
+        }
+    }) {
         Choices("Unidade", state.goalUnits.map { it.id to it.name }, state.goals?.kioskId.orEmpty(), !feedback.busy) { selectedGoal = ""; vm.goals(it) }
-        val goals = state.goals?.goals.orEmpty()
-        val goal = goals.firstOrNull { it.id == selectedGoal } ?: goals.firstOrNull()
         Choices("Meta", goals.map { it.id to "${it.typeLabel} · ${it.startDate} a ${it.endDate}" }, goal?.id.orEmpty()) { selectedGoal = it }
         if (state.goals != null && goals.isEmpty()) Text("Nenhuma meta ativa nesta unidade.")
         goal?.let { target ->
             CardBlock {
-                Text(target.typeLabel, style = MaterialTheme.typography.titleLarge)
-                Text(moneyValue(target.summary.currentValue), style = MaterialTheme.typography.headlineLarge)
-                LinearProgressIndicator(progress = { (target.summary.percentOfTarget / 100).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
                 target.summary.levels.forEach { Text("${it.label}: ${moneyValue(it.amount)}${if (it.reached) " · alcançada" else ""}") }
                 target.summary.nextLevel?.let { Text("Faltam ${moneyValue(it.remaining)} para ${it.label}") }
                 Text("${target.summary.elapsedDays}/${target.summary.totalDays} dias · ${target.summary.remainingDays} restantes")
@@ -67,17 +85,20 @@ import java.time.format.DateTimeFormatter
                 target.summary.neededDaily?.let { Text("Necessário por dia: ${moneyValue(it)}") }
                 target.summary.dailyTarget?.let { Text("Meta diária: ${moneyValue(it)}") }
             }
-            CardBlock { Text("Dias", style = MaterialTheme.typography.titleMedium); target.days.forEach { Text("${it.date} · ${moneyValue(it.value)}${if (it.reachedDailyTarget == true) " · meta diária alcançada" else ""}") } }
-            CardBlock { Text("Equipe", style = MaterialTheme.typography.titleMedium); target.team.forEach { member ->
+            Choices("Resultados", listOf("days" to "Dias", "team" to "Equipe", "prize" to "Prêmio"), tab) { tab = it }
+            if (tab == "days") CardBlock { Text("Resultado por dia", style = MaterialTheme.typography.titleMedium); target.days.forEach { Text("${it.date} · ${moneyValue(it.value)}${if (it.reachedDailyTarget == true) " · meta diária alcançada" else ""}") } }
+            if (tab == "team") CardBlock { Text("Resultado da equipe", style = MaterialTheme.typography.titleMedium); target.team.forEach { member ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { ProductPhoto(member.avatarUrl, member.name, 36); Column { Text("${member.name}${if (member.isMe) " · você" else ""} · ${member.role}"); Text("${moneyValue(member.currentValue)} / ${moneyValue(member.targetValue)} · ${member.percent}%"); member.prize?.let { Text("Prêmio: ${moneyValue(it)}") } } }
+                AnimatedProgress((member.percent / 100).toFloat(), duration = 1000)
             } }
-            target.prize?.let { prize -> CardBlock {
+            if (tab == "prize") target.prize?.let { prize -> CardBlock {
                 Text("Prêmio · ${prize.methodName}", style = MaterialTheme.typography.titleMedium)
                 prize.tiers.forEach { tier -> Text("${tier.label}: a partir de ${moneyValue(tier.fromAmount)} · ${moneyValue(tier.fixedBonusAmount)} + ${tier.excessPercent}%${if (tier.reached) " · alcançado" else ""}") }
                 prize.nextTier?.let { Text("Faltam ${moneyValue(it.remaining)} para ${it.label}") }
                 Text("Equipe: ${moneyValue(prize.totalTeamBonus)} · liderança: ${moneyValue(prize.leadershipBonus)}")
                 prize.message?.let { Text(it) }
             } }
+            if (tab == "prize" && target.prize == null) Text("Nenhum prêmio informado para esta meta.")
         }
     }
 }

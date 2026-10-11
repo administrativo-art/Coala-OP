@@ -151,10 +151,18 @@ class ViewModelsTest {
         vm.pair("unit", null, "landscape", "COALA-SIGNAGE:ABCDEFGH"); advanceUntilIdle(); assertEquals(1, pairs)
     }
     @Test fun updateDownloadsOnlyPublishedReleaseAndPropagatesProgress() = runTest {
-        val api = object : ApiService by DemoApi() { override suspend fun release() = Release(5, "0.3.0", 0, "/app/CoalaGo.apk") }; var downloads = 0
-        val vm = UpdateViewModel(api, InstallerDownloader { release, progress -> downloads++; assertEquals(5, release.versionCode); progress(0.5f); File("test.apk") })
+        val nextVersion = BuildConfig.VERSION_CODE + 1
+        val api = object : ApiService by DemoApi() { override suspend fun release() = Release(nextVersion, "próxima", 0, "/app/CoalaGo.apk") }; var downloads = 0
+        val vm = UpdateViewModel(api, InstallerDownloader { release, progress -> downloads++; assertEquals(nextVersion, release.versionCode); progress(0.5f); File("test.apk") })
         vm.check(); advanceUntilIdle(); var opened = false; vm.download { opened = true }; advanceUntilIdle()
         assertEquals(1, downloads); assertTrue(opened); assertEquals(0.5f, vm.progress.value)
+    }
+    @Test fun currentReleaseNeverInvokesDownloader() = runTest {
+        val api = object : ApiService by DemoApi() { override suspend fun release() = Release(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 0, "/app/CoalaGo.apk") }
+        var downloads = 0
+        val vm = UpdateViewModel(api, InstallerDownloader { _, _ -> downloads++; File("test.apk") })
+        vm.check(); advanceUntilIdle(); vm.download { fail("Already installed") }; advanceUntilIdle()
+        assertEquals(0, downloads)
     }
     @Test fun unpublishedGoNeverInvokesDownloader() = runTest {
         val api = object : ApiService by DemoApi() { override suspend fun release() = Release(0, "Não publicado", 0, null) }

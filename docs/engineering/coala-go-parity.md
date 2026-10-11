@@ -1,28 +1,28 @@
 # Coala Go — matriz de paridade e homologação
 
-Implementação local na branch `feat/coala-one-kotlin`, sem commit/publicação. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam.
+Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. O handoff visual 0.3.0 mantém esses contratos; publicação autorizada, sem substituir o aceite físico/integrado pendente.
 
 ## Tela × contrato × teste
 
 | Tela/fluxo | Contrato/persistência | Evidência automatizada | Homologação restante |
 |---|---|---|---|
 | Login, bloqueio, sair, recuperação | Firebase Auth nativo; `/api/auth/forgot-password`; UID e bloqueio por inatividade | `ViewModelsTest`: login/bloqueio/reauth/reset; `FirebaseAuthInstrumentedTest`: SDK com Auth Emulator | Conta de homologação autorizada |
-| Marca e slogan | Tokens `theme.ts`/`ui.tsx`; Brush animado em texto Compose | `ComposeFlowsTest.brandingAndSloganUseRealTextWithoutClipping` | Fontes ampliadas e aparelhos do parque |
+| Marca e slogan | Tokens do handoff; Inter Tight embarcada; Brush animado em texto Compose | `ComposeFlowsTest.brandingAndSloganUseRealTextWithoutClipping`; `DesignMotionTest`: animação/redução/fonte 160% | Aparelhos do parque e leitor de tela |
 | Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` | `ViewModelsTest`: módulos, avatar, saída; `ApiContractTest`: autenticação | Foto/câmera física e permissões reais |
 | Contagem | `/api/stock/mobile-count`, `/start`, `/save` (parcial ou completo), `/cancel`, `/photo`; rascunho cifrado/merge | `RulesTest`, `ViewModelsTest`, `ComposeFlowsTest`: concluir/cancelar; `stock-mobile-count.test.ts`; payloads Kotlin validados em Zod | Concorrência com web e conectividade real |
 | Recebimento | `/api/stock/mobile-reposition`, `/receive`, `/photo`; divergência por lote | `ViewModelsTest`, `ComposeFlowsTest`: bloquear divergência sem nota; `reposition-mobile-receipt.test.ts`, `reposition-mobile-photo.test.ts`; headers e escopo | Imagens reais e transação completa em homologação |
 | Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm` | `ViewModelsTest`: UUID estável, upload offline, retry de estoque; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod | OCR real, câmera e conciliação financeira integrada |
 | Pendências offline | Room + arquivos AES-GCM/Keystore por UID + WorkManager | `OfflineQueueInstrumentedTest`: persistência, cifra, tamper, conta errada, WorkManager, recuperação atômica, tombstone; `ViewModelsTest`: falha mantém fila | Reinício forçado/bateria/rede em aparelhos reais |
-| Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda | `ViewModelsTest`, `schedule-mobile.test.ts` | Usabilidade da lista semanal com dados reais |
-| Metas | `/api/goals/mobile`, filtro `kioskId` (inclui equipe/prêmio) | `ViewModelsTest`: unidade, metas, equipe e prêmio | Conferência de todos os indicadores com backend de homologação |
+| Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda; seleção diária e Equipe/Só minha | `ViewModelsTest`, `schedule-mobile.test.ts`, `DesignScreensTest` | Usabilidade diária com dados reais |
+| Metas | `/api/goals/mobile`, filtro `kioskId`; abas Dias/Equipe/Prêmio com progresso animado | `ViewModelsTest`: unidade, metas, equipe e prêmio; `DesignScreensTest`: abas | Conferência de todos os indicadores com backend de homologação |
 | Signage | `/api/signage/mobile`, `/api/signage/mobile/screens`; CameraX/QR `COALA-SIGNAGE` | `RulesTest`, `ViewModelsTest`, `signage-tizen-app.test.ts`; payload Zod | Scanner físico e TV Tizen ponta a ponta |
-| Biometria | BiometricPrompt forte; opt-in por UID e validade de sete dias cifrada | `ViewModelsTest`: opt-in/expiração/lock; Keystore na instrumentação | Sensor físico, cancelamento e indisponibilidade |
+| Biometria | BiometricPrompt forte; opt-in por UID e validade de sete dias cifrada | `ViewModelsTest`: opt-in vinculado ao UID e bloqueio/reauth; Keystore da fila na instrumentação | Validade do registro biométrico, sensor físico, cancelamento e indisponibilidade |
 | Atestação | `/api/mobile/app-attestation`; package opcional, nonce local e Play Integrity nativo | `mobile-app-attestation.test.ts`: Go/legado/cross-package; `ApiContractTest`: DTO/transporte | Play Integrity com certificado de release e políticas do servidor |
 | Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
 
 As suítes JVM ficam em `apps/coala-one-android/app/src/test`; instrumentação em `app/src/androidTest`. Fotos privadas usam o mesmo interceptor autenticado. Header interno de UID esperado é removido antes da rede; teste impede envio de outro usuário e vazamento de token a origem externa. Documentos não passam por backup Android; não há permissão de microfone.
 
-## Evidências e limites
+## Evidências e limites da migração original (histórico)
 
 - Backend dirigido final: **55 testes aprovados**, incluindo versão/release/rótulos/hash e ausência do Expo/APK antigo, com contagem adaptada ao Kotlin.
 - Após mudança para `coalaone.go`: **31 testes JVM, 14 instrumentados no Android 15/API 35 e lint aprovados**. Teste novo comprova sandbox próprio, backup desativado e ausência de microfone. Não há teste físico em Android 8/API 26 ainda.
@@ -33,6 +33,16 @@ As suítes JVM ficam em `apps/coala-one-android/app/src/test`; instrumentação 
 - Release local assinado gerado: versão0.2.0/code4, minSdk26, package `coalaone.go`, mesmo certificado público do APK anterior. `public/app/CoalaGo.apk`, SHA256 `2b3e5bec7861ffad22eab3b484be843c54588d71c9f13e4c8ea26b9a892c969a`. Código/instalador antigos retirados nesta branch; download atualizado localmente, sem deploy.
 - Gate geral final `npm run verify`: typecheck/lint aprovados; **2.228/2.229 testes aprovados**, com única falha de minimatch instalado10.2.4 vs esperado3.1.5 no Firebase CLI, também reproduzida anteriormente no checkout original. Não é gate verde; build Next do gate não executou. Build Next separado anterior compilou/validou tipos, mas abortou na coleta pela proteção contra Auth Emulator em `production`; proteção preservada.
 - Download real no Next local (demo, sem navegador): `/app/CoalaGo.apk` devolveu200, MIME APK, 3.793.541 bytes e SHA256 correto; `Range: bytes=0-1023` devolveu206/Content-Range correto e1024 bytes. Servidor local encerrado após conferência. Não é teste do site publicado.
+
+### Verificação do handoff 0.3.0
+
+33 testes JVM e oito instrumentados aprovados no Android 15/API 35;
+build debug/AndroidTest e lint Android aprovados. Os testes cobrem texto a 160%,
+movimento normal/reduzido, contraste do CTA desabilitado, capturas de sete telas,
+abas de metas e fluxos de compra/contagem/recebimento. Sete payloads Kotlin
+continuam aceitos pelos schemas Zod. 2.229 testes TS, typecheck/lint web e
+contratos de segurança/erro aprovados nesta rodada. Sensores físicos e piloto
+integrado não foram executados; não há mudança nos contratos de negócio.
 
 ## Entrega por etapa
 
@@ -60,4 +70,4 @@ O usuário confirmou `coalaone.go` como identificador novo, lado a lado e sem at
 
 Após autorização para retirar o antigo e atualizar download, versão sem parâmetro seleciona Go; query explícita antiga tem instalador nulo. Atestação mantém compatibilidade de formato/allowlist, exigindo reconhecimento Play e integridade. APK/metadados/link preparados localmente não atualizam produção sem deploy autorizado.
 
-Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. Até isso ocorrer, é implementação local em homologação, não paridade final comprovada.
+Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. A publicação para teste foi posteriormente autorizada e realizada; não equivale a paridade final comprovada.
