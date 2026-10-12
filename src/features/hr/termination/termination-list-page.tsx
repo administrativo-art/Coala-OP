@@ -135,7 +135,7 @@ export function TerminationListPage() {
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(330px,1fr))]">
+      <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(330px,1fr))]">
         {shown.map((item, cardIndex) => {
           const { phases, currentIndex, current, daysInPhase } = phaseData(item);
           const completedSteps = phases.filter((phase) => phase.steps.length > 0 && phase.steps.every((step) => step && TERMINAL_STATUSES.has(step.status))).length;
@@ -144,7 +144,7 @@ export function TerminationListPage() {
           const isLate = item.health === "overdue";
           return (
             <Link key={item.id} href={`/dashboard/dp/terminations/${item.id}`} className="group">
-              <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition group-hover:-translate-y-0.5 group-hover:border-pink-200 group-hover:shadow-md">
+              <article className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition group-hover:-translate-y-0.5 group-hover:border-pink-200 group-hover:shadow-md">
                 <div className="flex items-center gap-3">
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-sm font-black text-white" style={{ backgroundColor: CARD_COLORS[cardIndex % CARD_COLORS.length] }}>
                     {initials}

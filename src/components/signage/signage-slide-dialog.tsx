@@ -361,14 +361,14 @@ export function SignageSlideDialog({ open, onOpenChange, slide, defaultScreenIds
       >
         <aside className="hidden min-h-0 flex-col gap-5 overflow-y-auto bg-ds-dark px-7 py-[30px] text-ds-on-dark md:flex">
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">{slide ? 'Editar slide' : 'Novo slide'}</p>
-          <p className={cn('break-words text-[26px] font-extrabold leading-[1.08] tracking-[-0.03em]', !form.title.trim() && 'text-ds-on-dark-muted')}>
+          <p className={cn('wrap-break-word text-[26px] font-extrabold leading-[1.08] tracking-[-0.03em]', !form.title.trim() && 'text-ds-on-dark-muted')}>
             {form.title.trim() || 'Sem título'}
           </p>
           <div className="space-y-2">
             <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Como fica na tela</p>
             {preview}
           </div>
-          <dl className="space-y-2.5 rounded-ds-btn-lg bg-white/[.06] p-4 text-[12.5px]">
+          <dl className="space-y-2.5 rounded-ds-btn-lg bg-white/6 p-4 text-[12.5px]">
             <SideFact label="Tipo" value={SLIDE_TYPE_LABEL[form.type]} />
             <SideFact label="Tempo na tela" value={formatSignageDuration(form.durationMs)} />
             <SideFact label="Quando" value={scheduleSummary ?? 'O dia todo'} />
@@ -393,7 +393,7 @@ export function SignageSlideDialog({ open, onOpenChange, slide, defaultScreenIds
               type="button"
               aria-label="Fechar"
               onClick={requestClose}
-              className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-md text-ds-ink-muted hover:bg-ds-page hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+              className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-md text-ds-ink-muted hover:bg-ds-page hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </button>

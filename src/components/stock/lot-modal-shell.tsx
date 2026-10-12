@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { cn } from '@/lib/utils';
 
 export const MODAL_INPUT =
-  'h-[42px] w-full rounded-[11px] border border-[#dcd9d1] bg-white px-3 text-[13.5px] outline-none focus:border-[#5b5bd6] disabled:bg-[#eceae5] disabled:text-[#70757d]';
+  'h-[42px] w-full rounded-[11px] border border-[#dcd9d1] bg-white px-3 text-[13.5px] outline-hidden focus:border-[#5b5bd6] disabled:bg-[#eceae5] disabled:text-[#70757d]';
 
 export const MODAL_ERROR_TEXT = 'text-xs font-semibold text-[#be123c]';
 
@@ -45,7 +45,7 @@ export function LotModalShell({ open, onOpenChange, title, description, width, h
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
         <div
-          className="grid h-full min-h-0 grid-cols-1 overflow-y-auto md:overflow-hidden md:[grid-template-columns:var(--sidebar)_minmax(0,1fr)]"
+          className="grid h-full min-h-0 grid-cols-1 overflow-y-auto md:overflow-hidden md:grid-cols-[var(--sidebar)_minmax(0,1fr)]"
           style={{ ['--sidebar' as string]: `${sidebarWidth}px` }}
         >
           <aside className="flex min-h-0 flex-col gap-[18px] overflow-auto bg-[#15151c] px-6 py-7 text-[#f3f2ee]">{sidebar}</aside>
@@ -68,7 +68,7 @@ export function ShellFacts({ rows }: { rows: { label: string; value: React.React
   return (
     <div className="flex flex-col rounded-2xl border border-white/10 bg-white/5 text-[12.5px]">
       {rows.map((row, index) => (
-        <div key={row.label} className={cn('flex justify-between gap-2.5 px-3.5 py-[11px]', index > 0 && 'border-t border-white/[.06]')}>
+        <div key={row.label} className={cn('flex justify-between gap-2.5 px-3.5 py-[11px]', index > 0 && 'border-t border-white/6')}>
           <span className="text-[#8e8d99]">{row.label}</span>
           <span className={cn('text-right font-bold', row.mono && 'font-mono', row.className)}>{row.value}</span>
         </div>

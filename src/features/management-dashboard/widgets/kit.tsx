@@ -48,7 +48,7 @@ export function WidgetCard({ widgetId, className, children }: { widgetId: Manage
         ref={ref}
         data-density={density}
         className={cn(
-          "flex flex-col overflow-hidden rounded-ds-card-lg border border-ds-border bg-ds-surface shadow-sm",
+          "flex flex-col overflow-hidden rounded-ds-card-lg border border-ds-border bg-ds-surface shadow-xs",
           density === "compact" ? "gap-3 p-4" : density === "medium" ? "gap-4 p-5" : "gap-4 p-6",
         )}
       >

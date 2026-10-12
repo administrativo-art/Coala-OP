@@ -89,7 +89,7 @@ export function TerminationAsoCard({
   const blocked = step?.status === "blocked";
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-sm">
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-xs">
       <div className="border-b border-sky-100 bg-sky-50/60 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex gap-3">
@@ -153,7 +153,7 @@ export function TerminationUniformCard({
 }) {
   const completed = step?.status === "completed";
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-sm">
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-xs">
       <div className="border-b border-violet-100 bg-violet-50/60 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex gap-3">

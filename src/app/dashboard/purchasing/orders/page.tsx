@@ -241,7 +241,7 @@ export default function PurchaseOrdersPage() {
         ) : (
           <div className="overflow-x-auto rounded-[14px] border border-zinc-200 bg-white">
             <div className="min-w-[980px]">
-              <div className="grid grid-cols-[128px_minmax(260px,1.7fr)_158px_132px_120px_96px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+              <div className="grid grid-cols-[128px_minmax(260px,1.7fr)_158px_132px_120px_96px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">
                 <span>Código</span><span>Fornecedor e pedido</span><span>Etapa</span><span>Financeiro</span><span className="text-right">Valor</span><span className="text-right">Prev.</span>
               </div>
               <div className="divide-y divide-zinc-100">

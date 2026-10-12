@@ -24,7 +24,7 @@ export function SelectBox({ checked, onToggle, label }: SelectBoxProps) {
         onToggle()
       }}
       className={cn(
-        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[11px] font-extrabold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
+        "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] p-0 text-[11px] font-extrabold text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
         checked ? "bg-ds-accent-ink" : "border-[1.5px] border-ds-border-input bg-white"
       )}
     >

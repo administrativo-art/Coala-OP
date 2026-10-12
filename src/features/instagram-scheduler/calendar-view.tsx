@@ -108,7 +108,7 @@ function CalendarPostCard({
           onDragEnd={onDragEnd}
           onClick={() => !dragging && onOpen()}
           className={cn(
-            "w-full truncate rounded-ds-sm py-1 pl-1.5 pr-7 text-left text-[11px] font-bold outline-none transition hover:ring-2 hover:ring-ds-accent focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+            "w-full truncate rounded-ds-sm py-1 pl-1.5 pr-7 text-left text-[11px] font-bold outline-hidden transition hover:ring-2 hover:ring-ds-accent focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
             tone.chip,
             editable ? "cursor-grab" : "cursor-pointer",
             dragging && "opacity-50"
@@ -145,7 +145,7 @@ function CalendarPostCard({
       <button
         type="button"
         onClick={() => !dragging && onOpen()}
-        className="block w-full rounded-ds-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+        className="block w-full rounded-ds-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
       >
         <div className="flex items-center justify-between gap-1 pr-7">
           <span className="flex items-center gap-1 font-ds-mono text-[12px] font-bold text-ds-ink">
@@ -208,7 +208,7 @@ function CalendarPostCard({
             value={dateKey}
             min={dateKeyInBelem(new Date())}
             onChange={(event) => event.target.value && onReschedule(event.target.value)}
-            className="mt-1 block h-7 w-full rounded-ds-sm border border-ds-border-input bg-ds-input px-1.5 text-[11px] text-ds-ink outline-none focus:border-ds-modal"
+            className="mt-1 block h-7 w-full rounded-ds-sm border border-ds-border-input bg-ds-input px-1.5 text-[11px] text-ds-ink outline-hidden focus:border-ds-modal"
           />
         </label>
       )}
@@ -361,7 +361,7 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, acti
                 aria-pressed={active}
                 onClick={() => setFormatFilter(chip.value)}
                 className={cn(
-                  "h-8 rounded-full border px-3 text-[12.5px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+                  "h-8 rounded-full border px-3 text-[12.5px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
                   active ? "border-ds-ink bg-ds-ink text-white" : "border-ds-border-input bg-white text-ds-ink-2 hover:bg-ds-muted"
                 )}
               >
@@ -397,20 +397,20 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, acti
                     <span className={cn("rounded-xl px-2 py-0.5 text-[17px] font-extrabold", isToday && "bg-ds-accent-ink text-white")}>{date?.getUTCDate()}</span>
                     {dayItems.length > 0 && <span className="ml-auto text-[11px] text-ds-ink-muted">{dayItems.length}</span>}
                     {!isPast && (
-                      <button type="button" onClick={() => onCreate(day)} aria-label={`Planejar publicação em ${day}`} className={cn(dayItems.length === 0 && "ml-auto", "grid h-6 w-6 place-items-center rounded-ds-sm font-bold text-ds-accent-ink hover:bg-ds-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink")}>+</button>
+                      <button type="button" onClick={() => onCreate(day)} aria-label={`Planejar publicação em ${day}`} className={cn(dayItems.length === 0 && "ml-auto", "grid h-6 w-6 place-items-center rounded-ds-sm font-bold text-ds-accent-ink hover:bg-ds-accent-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink")}>+</button>
                     )}
                   </div>
                   <div className="flex flex-1 flex-col gap-2 p-2">
                     {dayItems.map((item) => <CalendarPostCard key={item.id} {...cardHandlers(item)} />)}
                     {dayItems.length === 0 && !isPast && (
-                      <button type="button" onClick={() => onCreate(day)} className="rounded-ds-btn border border-dashed border-ds-border-input px-2 py-3 text-center text-[12px] leading-5 text-ds-ink-muted hover:border-ds-accent hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+                      <button type="button" onClick={() => onCreate(day)} className="rounded-ds-btn border border-dashed border-ds-border-input px-2 py-3 text-center text-[12px] leading-5 text-ds-ink-muted hover:border-ds-accent hover:bg-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
                         Dia livre
                         <br />
                         <span className="font-bold text-ds-accent-ink">Pronto para planejar</span>
                       </button>
                     )}
                     {dayItems.length > 0 && !isPast && (
-                      <button type="button" onClick={() => onCreate(day)} className="mt-auto flex items-center justify-center gap-1 rounded-ds-btn border border-dashed border-ds-border-input bg-white/60 px-2 py-2 text-[11px] font-extrabold text-ds-accent-ink hover:border-ds-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+                      <button type="button" onClick={() => onCreate(day)} className="mt-auto flex items-center justify-center gap-1 rounded-ds-btn border border-dashed border-ds-border-input bg-white/60 px-2 py-2 text-[11px] font-extrabold text-ds-accent-ink hover:border-ds-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
                         + Mais uma publicação
                       </button>
                     )}
@@ -425,7 +425,7 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, acti
           <div className="min-w-[760px]">
             <div className="grid grid-cols-7 border-b border-ds-divider">
               {weekdays.map((weekday) => (
-                <div key={weekday} className="px-2.5 py-2 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint">{weekday}</div>
+                <div key={weekday} className="px-2.5 py-2 text-[10.5px] font-extrabold uppercase tracking-widest text-ds-ink-faint">{weekday}</div>
               ))}
             </div>
             <div className="grid grid-cols-7">
@@ -445,7 +445,7 @@ export function CalendarView({ items, loading, onRefresh, onCreate, onOpen, acti
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span className={cn("self-start rounded-xl px-2 py-0.5 text-[12px] font-extrabold", day === today && "bg-ds-accent-ink text-white")}>{date?.getUTCDate()}</span>
-                      {day >= today && <button type="button" onClick={() => onCreate(day)} aria-label={`Planejar publicação em ${day}`} className="grid h-6 w-6 place-items-center rounded-ds-sm font-bold text-ds-accent-ink hover:bg-ds-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink">+</button>}
+                      {day >= today && <button type="button" onClick={() => onCreate(day)} aria-label={`Planejar publicação em ${day}`} className="grid h-6 w-6 place-items-center rounded-ds-sm font-bold text-ds-accent-ink hover:bg-ds-accent-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">+</button>}
                     </div>
                     {dayItems.slice(0, 3).map((item) => <CalendarPostCard key={item.id} compact {...cardHandlers(item)} />)}
                     {dayItems.length > 3 && <span className="text-[11px] font-bold text-ds-ink-muted">+{dayItems.length - 3}</span>}

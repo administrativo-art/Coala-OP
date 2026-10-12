@@ -179,7 +179,7 @@ export function ExpenseListRow({
         <p className="truncate text-[13px] font-semibold text-ds-ink">{expense.supplier || "—"}</p>
         <p className="truncate text-xs text-ds-ink-faint">{planName}</p>
       </div>
-      <p className="col-span-2 line-clamp-2 break-words text-[13px] leading-5 text-ds-ink md:col-span-1">{unitLabel}</p>
+      <p className="col-span-2 line-clamp-2 wrap-break-word text-[13px] leading-5 text-ds-ink md:col-span-1">{unitLabel}</p>
       <div className="col-span-2 md:col-span-1">
         <p className="font-mono text-[13px] text-ds-ink">{due ? format(due, "dd/MM/yyyy") : "—"}</p>
         {due ? <DueHint due={due} show={showDueHint} /> : null}
@@ -301,7 +301,7 @@ export function DueWeekHeader({
       aria-expanded={!collapsed}
       aria-label={`${collapsed ? "Expandir" : "Recolher"} ${name} · ${label}`}
       onClick={onToggle}
-      className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-ds-divider bg-ds-accent-row px-[18px] py-2.5 text-left transition-colors hover:bg-ds-accent-row focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink"
+      className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-ds-divider bg-ds-accent-row px-[18px] py-2.5 text-left transition-colors hover:bg-ds-accent-row focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink"
     >
       <ChevronRight
         aria-hidden="true"

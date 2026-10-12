@@ -160,7 +160,7 @@ export function DynamicPriceQuery() {
                                 <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                        <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                             <DropdownMenuLabel>Fornecedores disponíveis</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <ScrollArea className="h-48">

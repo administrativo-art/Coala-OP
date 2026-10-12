@@ -138,7 +138,7 @@ export default function ReceiptsPage() {
         <PurchasingModuleNavigation activeTab="receipts" activeStage="receiving" />
 
         <div className="mb-4">
-          <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Recebimentos</h1>
+          <h1 className="text-[27px] font-black leading-none tracking-tighter text-zinc-950">Recebimentos</h1>
           <p className="mt-1.5 text-[13.5px] text-zinc-600">Um recebimento por pedido confirmado. Abra para conferir item por item.</p>
         </div>
 
@@ -175,7 +175,7 @@ export default function ReceiptsPage() {
         ) : (
           <div className="overflow-x-auto rounded-[14px] border border-zinc-200 bg-white">
             <div className="min-w-[900px]">
-              <div className="grid grid-cols-[132px_minmax(250px,1.7fr)_172px_164px_130px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+              <div className="grid grid-cols-[132px_minmax(250px,1.7fr)_172px_164px_130px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">
                 <span>Pedido</span><span>Fornecedor</span><span>Situação</span><span>Conferência</span><span className="text-right">Valor</span>
               </div>
               <div className="divide-y divide-zinc-100">

@@ -273,13 +273,13 @@ export function NewTransactionDialog({
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)} className="w-full">
           <TabsList className="grid h-auto w-full grid-cols-3 rounded-ds-btn bg-ds-seg p-1">
-            <TabsTrigger value="revenue" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-sm">
+            <TabsTrigger value="revenue" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-xs">
               <TrendingUp className="mr-2 h-4 w-4" /> Receita
             </TabsTrigger>
-            <TabsTrigger value="transfer" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-sm">
+            <TabsTrigger value="transfer" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-xs">
               <ArrowLeftRight className="mr-2 h-4 w-4" /> Transferência
             </TabsTrigger>
-            <TabsTrigger value="adjustment" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-sm">
+            <TabsTrigger value="adjustment" className="rounded-ds-md text-[13px] font-bold data-[state=active]:bg-ds-surface data-[state=active]:text-ds-ink data-[state=active]:shadow-xs">
               <SlidersHorizontal className="mr-2 h-4 w-4" /> Ajuste
             </TabsTrigger>
           </TabsList>

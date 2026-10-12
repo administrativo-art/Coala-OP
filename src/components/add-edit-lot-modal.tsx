@@ -215,7 +215,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
       {selectedProduct ? (
         <>
           <div className="flex flex-col gap-3">
-            <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-[18px] bg-white font-mono text-xl font-bold text-[#9a9ba1]">
+            <div className="relative flex aspect-4/3 w-full items-center justify-center overflow-hidden rounded-[18px] bg-white font-mono text-xl font-bold text-[#9a9ba1]">
               {selectedProduct.imageUrl ? (
                 <Image src={selectedProduct.imageUrl} alt={selectedProduct.baseName} fill sizes="300px" className="object-contain" />
               ) : (
@@ -230,7 +230,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
               Lotes ativos{kioskName ? ` · ${kioskName}` : ''}
             </span>
             {activeLots.slice(0, 5).map(l => (
-              <div key={l.id} className="flex justify-between gap-2.5 border-t border-white/[.06] px-3.5 py-[11px]">
+              <div key={l.id} className="flex justify-between gap-2.5 border-t border-white/6 px-3.5 py-[11px]">
                 <span className="flex flex-col gap-0.5">
                   <span className="font-mono font-bold">{l.lotNumber}</span>
                   <span className="text-[#8e8d99]">{l.expiryDate ? format(new Date(l.expiryDate), 'dd/MM/yyyy') : 'Sem validade'}</span>
@@ -238,7 +238,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                 <span className="whitespace-nowrap font-bold">{l.quantity.toLocaleString('pt-BR')} {packageLabel}(s)</span>
               </div>
             ))}
-            {activeLots.length === 0 && <span className="border-t border-white/[.06] px-3.5 py-[11px] text-[#8e8d99]">Nenhum lote ativo.</span>}
+            {activeLots.length === 0 && <span className="border-t border-white/6 px-3.5 py-[11px] text-[#8e8d99]">Nenhum lote ativo.</span>}
           </div>
         </>
       ) : (
@@ -290,7 +290,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Nome, marca ou código de barras"
-                      className="min-w-0 flex-1 border-none bg-transparent text-[13.5px] outline-none"
+                      className="min-w-0 flex-1 border-none bg-transparent text-[13.5px] outline-hidden"
                     />
                   </div>
                   <button type="button" onClick={() => setIsScannerOpen(true)} className="flex h-[42px] items-center gap-1.5 whitespace-nowrap rounded-[11px] border border-[#dcd9d1] bg-white px-3.5 text-[13px] font-bold hover:bg-[#f6f4ef]">
@@ -372,7 +372,7 @@ export function AddEditLotModal({ open, onOpenChange, lotToEdit, kiosks, addLot,
                       inputMode="decimal"
                       value={form.watch('quantity') as any}
                       onChange={(event) => form.setValue('quantity', event.target.value as any, { shouldValidate: true })}
-                      className="w-[84px] border-x border-[#ebe7df] text-center text-xl font-extrabold outline-none"
+                      className="w-[84px] border-x border-[#ebe7df] text-center text-xl font-extrabold outline-hidden"
                     />
                     <button type="button" aria-label="Aumentar" onClick={() => setQuantity(quantity + 1)} className="w-12 text-xl text-[#4a4f57] hover:bg-[#f6f4ef]">+</button>
                   </div>

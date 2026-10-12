@@ -137,7 +137,7 @@ export function OnboardingDetailNavigation({ process, activePhaseId, onSelect }:
     <div className="space-y-3">
       <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
         {formalizationOpen ? (
-          <section className="min-w-[720px] flex-1 rounded-[18px] border border-[#e2ded6] bg-white p-4 shadow-sm">
+          <section className="min-w-[720px] flex-1 rounded-[18px] border border-[#e2ded6] bg-white p-4 shadow-xs">
             <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
               <span className="h-6 w-1.5 rounded-full bg-[#df2f78]" />
               <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[0.09em] text-stone-600">Formalização</span><span className="mt-0.5 block text-[11.5px] font-medium text-stone-500">Da coleta dos dados à criação dos acessos.</span></span>
@@ -149,44 +149,44 @@ export function OnboardingDetailNavigation({ process, activePhaseId, onSelect }:
         ) : (
           <button type="button" onClick={() => onSelect("integration")} className="flex w-[90px] shrink-0 flex-col items-center justify-center gap-2.5 rounded-2xl border border-[#e2ded6] bg-[#faf9f6] px-2 py-4 text-stone-600 hover:bg-white">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white"><Check className="h-4 w-4" /></span>
-            <span className="text-[10px] font-black uppercase tracking-[0.09em] [writing-mode:vertical-rl] [transform:rotate(180deg)]">Formalização</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.09em] [writing-mode:vertical-rl] transform-[rotate(180deg)]">Formalização</span>
             <span className="font-mono text-[10px] font-bold">5/5</span>
           </button>
         )}
 
         <div className={`flex w-[74px] shrink-0 flex-col items-center justify-center gap-2 rounded-[18px] border border-dashed px-2 text-center ${formalizationComplete ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-stone-300 bg-[#faf9f6] text-stone-400"}`}>
           <span className={`grid h-6 w-6 place-items-center rounded-full ${formalizationComplete ? "bg-emerald-600 text-white" : "bg-stone-200 text-stone-500"}`}><Milestone className="h-3.5 w-3.5" /></span>
-          <span className="text-[9px] font-black uppercase leading-tight tracking-[0.05em]">Marco da admissão</span>
+          <span className="text-[9px] font-black uppercase leading-tight tracking-wider">Marco da admissão</span>
         </div>
 
         {!formalizationOpen ? (
-          <section className="min-w-[360px] flex-1 rounded-[18px] border border-violet-200 bg-white p-4 shadow-sm">
+          <section className="min-w-[360px] flex-1 rounded-[18px] border border-violet-200 bg-white p-4 shadow-xs">
             <div className="mb-2.5 flex flex-wrap items-center gap-2.5"><span className="h-6 w-1.5 rounded-full bg-violet-600" /><span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[0.09em] text-stone-600">Experiência e treinamento</span><span className="mt-0.5 block text-[11.5px] font-medium text-stone-500">Acompanhamento posterior à formalização.</span></span><span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black uppercase text-violet-700">Paralelo</span></div>
             <div className="flex gap-1">{EXPERIENCE_STAGES.map((stage, index) => renderTab(stage, FORMALIZATION_STAGES.length + index, true))}</div>
           </section>
         ) : (
           <button type="button" onClick={() => onSelect("probation")} className="flex w-[90px] shrink-0 flex-col items-center justify-center gap-2.5 rounded-2xl border border-violet-200 bg-violet-50/40 px-2 py-4 text-violet-700 hover:bg-violet-50">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-violet-600 text-white"><GraduationCap className="h-4 w-4" /></span>
-            <span className="text-[10px] font-black uppercase tracking-[0.09em] [writing-mode:vertical-rl] [transform:rotate(180deg)]">Treinamento</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.09em] [writing-mode:vertical-rl] transform-[rotate(180deg)]">Treinamento</span>
             <span className="font-mono text-[10px] font-bold">0/2 etapas</span>
           </button>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#e2ded6] bg-white px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#e2ded6] bg-white px-4 py-3 shadow-xs">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-950 font-mono text-sm font-bold text-white">
           {selectedIsExperience ? FORMALIZATION_STAGES.length + selectedExperienceIndex + 1 : selectedIndex + 1}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[15px] font-black tracking-[-0.02em]">{selectedStage.label}</span>
-            <span className={`rounded-lg px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.05em] ${isPreview ? "bg-amber-50 text-amber-700" : selectedState === "Concluída" ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-pink-700"}`}>{selectedState}</span>
-            <span className="inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.05em] text-stone-500">
+            <span className={`rounded-lg px-2.5 py-1 text-[9.5px] font-black uppercase tracking-wider ${isPreview ? "bg-amber-50 text-amber-700" : selectedState === "Concluída" ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-pink-700"}`}>{selectedState}</span>
+            <span className="inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1 text-[9.5px] font-black uppercase tracking-wider text-stone-500">
               <Users className="h-3.5 w-3.5" />
               {selectedStage.owner}
             </span>
             {selectedDueDays ? (
-              <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.05em] text-amber-700">
+              <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9.5px] font-black uppercase tracking-wider text-amber-700">
                 <Clock className="h-3.5 w-3.5" />
                 Prazo {selectedDueDays} dia{selectedDueDays === 1 ? "" : "s"}
               </span>

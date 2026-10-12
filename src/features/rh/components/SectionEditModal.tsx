@@ -41,7 +41,7 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
   value:    string;
   onChange: (v: string) => void;
 }) {
-  const base = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white';
+  const base = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white';
 
   if (entry.type === 'boolean') {
     return (
@@ -49,7 +49,7 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
         <SelectTrigger className={`${base} h-10`}>
           <SelectValue placeholder="Selecionar…" />
         </SelectTrigger>
-        <SelectContent className="z-[70] rounded-xl">
+        <SelectContent className="z-70 rounded-xl">
           <SelectItem value="true">Sim</SelectItem>
           <SelectItem value="false">Não</SelectItem>
         </SelectContent>
@@ -63,7 +63,7 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
         <SelectTrigger className={`${base} h-10`}>
           <SelectValue placeholder="Selecionar…" />
         </SelectTrigger>
-        <SelectContent className="z-[70] rounded-xl">
+        <SelectContent className="z-70 rounded-xl">
           {entry.options.map((option) => (
             <SelectItem key={option} value={option} className="rounded-lg">
               {formatFieldOptionLabel(fieldKey, option)}
@@ -165,7 +165,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-xs" onClick={onClose} />
 
       <div className="relative w-full max-w-sm rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">

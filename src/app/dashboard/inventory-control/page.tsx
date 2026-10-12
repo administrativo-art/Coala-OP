@@ -33,7 +33,7 @@ function InventoryControlContent() {
                                 className="h-9 w-9 shrink-0 rounded-[11px] border-white/10 bg-white/[.07] text-[#c8c7d0] hover:bg-white/15 hover:text-white"
                                 iconClassName="h-4 w-4"
                             />
-                            <h1 className="m-0 text-2xl font-extrabold tracking-[-.025em] text-white">Controle de Estoque</h1>
+                            <h1 className="m-0 text-2xl font-extrabold tracking-tight text-white">Controle de Estoque</h1>
                         </div>
                     )}
                     onOpenWriteDown={() => setIsWriteDownOpen(true)}

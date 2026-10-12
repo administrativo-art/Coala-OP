@@ -268,7 +268,7 @@ function Stepper({ post, step, onStep }: { post: InstagramEditorialPost; step: P
             title={unlocked ? undefined : lockedReason[item]}
             onClick={() => onStep(item)}
             className={cn(
-              "flex items-center gap-2 rounded-ds-btn-lg border px-3 py-2 text-left text-[12.5px] font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+              "flex items-center gap-2 rounded-ds-btn-lg border px-3 py-2 text-left text-[12.5px] font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
               current ? "border-ds-accent-ink bg-ds-accent-row text-ds-ink" : unlocked ? "border-ds-border bg-white text-ds-ink-2 hover:bg-ds-muted" : "cursor-not-allowed border-ds-border bg-ds-muted text-ds-ink-faint",
             )}
           >
@@ -433,11 +433,11 @@ function PostDrawer({ post, others, onUpdate, onUpload, onAction, onOpenReports,
         <div className="flex gap-2 overflow-x-auto pb-1">
           {post.media.map((item) => (
             <div key={item.id} className="w-[64px] shrink-0 overflow-hidden rounded-ds-btn border border-ds-border bg-white" title={item.fileName}>
-              <div className="aspect-[4/5]"><ProtectedMedia url={item.previewUrl} alt={item.fileName} kind={item.kind} previewVideo /></div>
+              <div className="aspect-4/5"><ProtectedMedia url={item.previewUrl} alt={item.fileName} kind={item.kind} previewVideo /></div>
             </div>
           ))}
           {editable && post.media.length < 10 && (
-            <label className="flex aspect-[4/5] w-[64px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-ds-btn border-2 border-dashed border-ds-border-input bg-white text-center text-[10px] font-bold text-ds-ink-muted transition-colors hover:border-ds-accent hover:text-ds-accent-ink focus-within:ring-2 focus-within:ring-ds-accent-ink">
+            <label className="flex aspect-4/5 w-[64px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-ds-btn border-2 border-dashed border-ds-border-input bg-white text-center text-[10px] font-bold text-ds-ink-muted transition-colors hover:border-ds-accent hover:text-ds-accent-ink focus-within:ring-2 focus-within:ring-ds-accent-ink">
               <span aria-hidden="true" className="text-base leading-none">+</span> Arte
               <input ref={uploadRef} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" className="sr-only" onChange={(event) => void upload(event.target.files)} />
             </label>
@@ -815,8 +815,8 @@ export function EditorialPostsView(props: EditorialPostsViewProps) {
               aria-current={selected?.id === post.id ? "true" : undefined}
               onClick={() => setSelectedId(post.id)}
               className={cn(
-                "relative flex w-full gap-3.5 rounded-ds-card border p-3.5 text-left transition-[transform,box-shadow,background] duration-150 hover:z-10 hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(21,21,28,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-                selected?.id === post.id ? "z-[1] border-ds-accent-ink bg-ds-accent-row ring-1 ring-ds-accent-ink" : "border-ds-border bg-ds-surface"
+                "relative flex w-full gap-3.5 rounded-ds-card border p-3.5 text-left transition-[transform,box-shadow,background] duration-150 hover:z-10 hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(21,21,28,0.12)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                selected?.id === post.id ? "z-1 border-ds-accent-ink bg-ds-accent-row ring-1 ring-ds-accent-ink" : "border-ds-border bg-ds-surface"
               )}
             >
               <PostPhoneThumb post={post} width={92} />
@@ -860,7 +860,7 @@ export function EditorialPostsView(props: EditorialPostsViewProps) {
               </div>
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_240px]">
                 <PostDrawer key={selected.id} post={selected} others={props.posts} onUpdate={props.onUpdate} onUpload={props.onUpload} onAction={props.onAction} onOpenReports={props.onOpenReports} performance={props.performance} />
-                <aside aria-label="Prévia no celular" className="order-first lg:order-none lg:sticky lg:top-0 lg:self-start">
+                <aside aria-label="Prévia no celular" className="order-first lg:order-0 lg:sticky lg:top-0 lg:self-start">
                   <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Prévia · {formatLabels[selected.format]}</p>
                   <PostPhonePreview key={selected.id} post={selected} scale={0.8} />
                 </aside>

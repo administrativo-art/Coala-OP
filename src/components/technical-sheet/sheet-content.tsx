@@ -76,7 +76,7 @@ export function SheetContent({ product, className }: { product: SheetData; class
   return (
     <div className={cn('md:grid md:items-start md:gap-6', className)} style={{ gridTemplateColumns: '320px 1fr' }}>
         <aside className="mb-6 space-y-3 md:sticky md:top-20 md:mb-0">
-          <SheetThumb imageUrl={product.imageUrl} name={product.name} className="aspect-[4/3] w-full rounded-ds-card border border-ds-border" sizes="320px" />
+          <SheetThumb imageUrl={product.imageUrl} name={product.name} className="aspect-4/3 w-full rounded-ds-card border border-ds-border" sizes="320px" />
           <div className="grid grid-cols-3 gap-2">
             {metrics.map(({ icon: Icon, label, value }) => (
               <div key={label} className="rounded-ds-md border border-ds-border bg-ds-surface p-3">

@@ -177,7 +177,7 @@ export function StockWriteDown({ open, onOpenChange }: StockWriteDownProps) {
         </>
       }
     >
-      <div className="-mx-[30px] -my-[26px] flex min-h-0 flex-1 flex-col">
+      <div className="mx-[-30px] my-[-26px] flex min-h-0 flex-1 flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-[#e6e2da] px-7 pb-4 pt-[22px]">
           <div className="flex flex-col gap-1">
             <h3 className="m-0 text-[21px] font-extrabold tracking-[-.02em]">{done ? 'Baixas registradas' : 'Itens para baixa'}</h3>
@@ -207,7 +207,7 @@ export function StockWriteDown({ open, onOpenChange }: StockWriteDownProps) {
                 <span className="text-xs font-bold text-[#4a4f57]">Itens em estoque ({kioskLots.length})</span>
                 <div className="flex h-[38px] items-center gap-2 rounded-[11px] border border-[#dcd9d1] bg-white px-3 focus-within:border-[#5b5bd6]">
                   <span className="text-[#9a9ba1]">⌕</span>
-                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar por nome ou lote" className="min-w-0 flex-1 border-none bg-transparent text-[13px] outline-none" />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar por nome ou lote" className="min-w-0 flex-1 border-none bg-transparent text-[13px] outline-hidden" />
                 </div>
               </div>
               <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-5 pb-4">

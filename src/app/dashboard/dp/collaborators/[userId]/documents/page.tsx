@@ -163,7 +163,7 @@ function InlineVisibilityMenu({
           type="button"
           disabled={disabled}
           onClick={(event) => event.stopPropagation()}
-          className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-white px-2 text-[10px] font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-white px-2 text-[10px] font-black text-slate-600 shadow-xs hover:bg-slate-50 disabled:opacity-50"
           aria-label={`Definir visibilidade. Atual: ${current.label}`}
         >
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${current.dot}`} />
@@ -1018,7 +1018,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/dashboard/dp/documents?configureVisibility=1"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-sm hover:bg-slate-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-xs hover:bg-slate-50"
             >
               <Settings2 className="h-4 w-4" />
               Visibilidade
@@ -1026,7 +1026,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             <button
               type="button"
               onClick={() => setUploadModalOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#df2f78] px-4 text-xs font-black text-white shadow-sm hover:bg-[#c81f69]"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#df2f78] px-4 text-xs font-black text-white shadow-xs hover:bg-[#c81f69]"
             >
               <Upload className="h-4 w-4" />
               Anexar documentos
@@ -1060,7 +1060,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       ) : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
+        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-xs lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
           {EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES.map(({ id, label }) => {
             const catActive = category === id;
             const catSelected = catActive && activeFolderPath.length === 0;
@@ -1100,7 +1100,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
         <main className="min-w-0 space-y-3">
           {analysis ? (
-            <section className="rounded-3xl border border-sky-100 bg-sky-50/60 p-4 shadow-sm">
+            <section className="rounded-3xl border border-sky-100 bg-sky-50/60 p-4 shadow-xs">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-sm font-black text-sky-900">Prévia de classificação e arquivamento</p>
@@ -1124,7 +1124,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
               <div className="mt-4 space-y-3">
                 {analysis.documents.map((document) => (
-                  <div key={document.clientFileId} className="rounded-2xl bg-white p-4 shadow-sm">
+                  <div key={document.clientFileId} className="rounded-2xl bg-white p-4 shadow-xs">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-slate-900">{document.originalName}</p>
@@ -1253,7 +1253,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                         </p>
                         <div className="mt-2 grid gap-2 md:grid-cols-2">
                           {document.profileSuggestions.map((suggestion) => (
-                            <div key={`${document.itemId}-${suggestion.fieldKey}`} className="rounded-xl bg-white p-3 text-xs shadow-sm">
+                            <div key={`${document.itemId}-${suggestion.fieldKey}`} className="rounded-xl bg-white p-3 text-xs shadow-xs">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="font-black text-slate-900">{suggestion.fieldLabel}</p>
                                 <span className={`rounded-full px-2 py-1 font-black ${profileSuggestionStatusClass(suggestion.status)}`}>
@@ -1314,7 +1314,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
           {message ? <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{message}</p> : null}
 
-          <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <section className="overflow-hidden rounded-xl border bg-white shadow-xs">
             <div className="border-b px-4 py-3">
               <div className="mb-1 flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
                 {openFolderTrail.map((segment, index) => (
@@ -1365,7 +1365,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                     key={folder.path.join("/")}
                     type="button"
                     onClick={() => selectFolder(folder.path)}
-                    className="group flex min-h-24 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-pink-200 hover:bg-pink-50/40 hover:shadow-sm"
+                    className="group flex min-h-24 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-pink-200 hover:bg-pink-50/40 hover:shadow-xs"
                   >
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pink-50 text-[#df2f78] transition group-hover:bg-white">
                       <Folder className="h-5 w-5" />
@@ -1496,7 +1496,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                   <button
                                     type="button"
                                     disabled={busy}
-                                    className={`inline-flex h-9 min-w-[126px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black shadow-sm hover:bg-slate-50 disabled:opacity-50 ${STATUS_PRESENTATION[item.status]?.text ?? "text-slate-700"}`}
+                                    className={`inline-flex h-9 min-w-[126px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black shadow-xs hover:bg-slate-50 disabled:opacity-50 ${STATUS_PRESENTATION[item.status]?.text ?? "text-slate-700"}`}
                                     aria-label={`Alterar status. Atual: ${STATUS[item.status] ?? item.status}`}
                                   >
                                     <span className="inline-flex items-center gap-2">
@@ -1572,11 +1572,11 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                                   <div>
                                     <dt className="font-bold text-slate-400">No documento</dt>
-                                    <dd className="mt-0.5 break-words font-bold text-slate-700">{suggestion.extractedValue || "Não identificado"}</dd>
+                                    <dd className="mt-0.5 wrap-break-word font-bold text-slate-700">{suggestion.extractedValue || "Não identificado"}</dd>
                                   </div>
                                   <div>
                                     <dt className="font-bold text-slate-400">No cadastro</dt>
-                                    <dd className="mt-0.5 break-words font-bold text-slate-700">{suggestion.currentValue || "Vazio"}</dd>
+                                    <dd className="mt-0.5 wrap-break-word font-bold text-slate-700">{suggestion.currentValue || "Vazio"}</dd>
                                   </div>
                                 </dl>
                                 <p className="mt-3 font-bold text-slate-400">Confiança da extração: {(suggestion.confidence * 100).toFixed(0)}%</p>
@@ -1693,7 +1693,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4">
+        <div className="fixed inset-0 z-60 grid place-items-center bg-slate-950/60 p-4">
           <section className="flex h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
               <div className="min-w-0">
@@ -1708,7 +1708,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
               {preview.mimeType?.startsWith("image/") ? (
                 <div className="flex h-full items-center justify-center overflow-auto p-4">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={preview.url} alt={preview.title} className="max-h-full max-w-full rounded-xl bg-white object-contain shadow" />
+                  <img src={preview.url} alt={preview.title} className="max-h-full max-w-full rounded-xl bg-white object-contain shadow-sm" />
                 </div>
               ) : (
                 <iframe title={preview.title} src={preview.url} className="h-full w-full bg-white" />

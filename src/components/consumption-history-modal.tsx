@@ -74,7 +74,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                     <Accordion type="single" collapsible className="w-full" key={kioskName}>
                         <AccordionItem value={kioskName} className="border-none">
                             <Card className="bg-muted/30">
-                                <AccordionTrigger className="p-4 hover:no-underline rounded-t-lg text-lg font-semibold [&[data-state=open]]:border-b">
+                                <AccordionTrigger className="p-4 hover:no-underline rounded-t-lg text-lg font-semibold data-[state=open]:border-b">
                                     <div className="flex items-center gap-2">
                                         <Warehouse className="h-5 w-5 text-primary"/>
                                         {kioskName}
@@ -87,7 +87,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                                                 <Card className="relative">
                                                     <AccordionTrigger className="p-4 pr-16 hover:no-underline rounded-lg w-full">
                                                         <div className="flex items-center justify-between gap-4 w-full">
-                                                            <div className="grid gap-1 flex-grow text-left">
+                                                            <div className="grid gap-1 grow text-left">
                                                                 <p className="font-semibold">Relatório de {report.month}/{report.year}</p>
                                                                 <p className="text-sm text-muted-foreground">Analisado em: {report.createdAt && isValid(parseISO(report.createdAt)) ? format(new Date(report.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'Data indisponível'}</p>
                                                             </div>
@@ -150,7 +150,7 @@ export function ConsumptionHistoryModal({ open, onOpenChange, history, loading, 
                             Consulte, expanda e exclua análises de consumo de meses anteriores.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex-grow overflow-hidden">
+                    <div className="grow overflow-hidden">
                         <ScrollArea className="h-full pr-4">
                             {renderContent()}
                         </ScrollArea>

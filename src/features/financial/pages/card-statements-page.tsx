@@ -1022,7 +1022,7 @@ export function CardStatementsWorkspace({
                       onClick={() => setLineSourceFilter(value)}
                       className={cn(
                         "rounded-full px-3 py-1 text-[10.5px] font-medium transition-colors",
-                        lineSourceFilter === value ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        lineSourceFilter === value ? "bg-white text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {label}
@@ -1058,7 +1058,7 @@ export function CardStatementsWorkspace({
               </div>
             ) : visibleCardLineGroups.map((group) => (
               <div key={format(group.date, "yyyy-MM-dd")}>
-                <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-ds-input px-4 py-2 backdrop-blur">
+                <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-ds-input px-4 py-2 backdrop-blur-sm">
                   <span className="text-[11px] font-semibold text-foreground">{format(group.date, "dd/MM")}</span>
                   <span className="text-[10.5px] capitalize text-muted-foreground">{format(group.date, "EEEE", { locale: ptBR })}</span>
                   <span className="h-px flex-1 bg-border/60" />
@@ -1224,7 +1224,7 @@ export function CardStatementsWorkspace({
                       setLineSourceFilter("all");
                     }}
                     className={cn(
-                      "rounded-[14px] border bg-white p-3.5 text-left shadow-sm transition-all",
+                      "rounded-[14px] border bg-white p-3.5 text-left shadow-xs transition-all",
                       selected
                         ? "border-primary shadow-[0_8px_24px_rgba(219,39,119,0.14)]"
                         : "hover:border-primary/40 hover:shadow-md"
@@ -1270,7 +1270,7 @@ export function CardStatementsWorkspace({
           </div>
 
           {selectedGroup ? (
-            <div className="overflow-x-auto rounded-[14px] border bg-white px-4 py-3 shadow-sm">
+            <div className="overflow-x-auto rounded-[14px] border bg-white px-4 py-3 shadow-xs">
               <div className="flex min-w-[720px] items-center gap-2">
                 {workflowSteps.map((step, index) => (
                   <div key={step.label} className="contents">
@@ -1295,7 +1295,7 @@ export function CardStatementsWorkspace({
 
           {selectedGroup && (
             <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_348px]">
-              <Card className="overflow-hidden rounded-2xl border-ds-border shadow-sm">
+              <Card className="overflow-hidden rounded-2xl border-ds-border shadow-xs">
                 <div className="px-4 pt-4 sm:px-[18px]">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -1363,7 +1363,7 @@ export function CardStatementsWorkspace({
                           onClick={() => setLineSourceFilter(value)}
                           className={cn(
                             "rounded-full px-3 py-1 text-[10.5px] font-bold transition-colors",
-                            lineSourceFilter === value ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            lineSourceFilter === value ? "bg-white text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
                           )}
                         >
                           {label}
@@ -1422,7 +1422,7 @@ export function CardStatementsWorkspace({
                         </div>
                       ) : visibleCardLineGroups.map((group) => (
                         <div key={format(group.date, "yyyy-MM-dd")}>
-                          <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-ds-input px-[18px] py-2 backdrop-blur">
+                          <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-ds-input px-[18px] py-2 backdrop-blur-sm">
                             <span className="font-mono text-[11.5px] font-bold">{format(group.date, "dd/MM")}</span>
                             <span className="text-[11px] capitalize text-muted-foreground">{format(group.date, "EEEE", { locale: ptBR })}</span>
                             <span className="h-px flex-1 bg-border/70" />
@@ -1527,7 +1527,7 @@ export function CardStatementsWorkspace({
               </Card>
 
               <div className="space-y-3.5">
-                <Card className="rounded-2xl border-ds-border shadow-sm">
+                <Card className="rounded-2xl border-ds-border shadow-xs">
                   <CardContent className="p-[18px] sm:p-[18px]">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Reconciliação</CardTitle>
@@ -1634,7 +1634,7 @@ export function CardStatementsWorkspace({
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl border-ds-border shadow-sm">
+                <Card className="rounded-2xl border-ds-border shadow-xs">
                   <CardContent className="p-[18px] sm:p-[18px]">
                     <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Pagamento no extrato</CardTitle>
                     <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
@@ -1862,7 +1862,7 @@ export function CardStatementsWorkspace({
                   const match = importExpenseMatchByLineId.get(line.id);
                   const resolution = importResolutionByLineId[line.id] || "create";
                   return (
-                    <div key={line.id} className={cn("grid min-w-[750px] grid-cols-[26px_58px_minmax(0,1fr)_232px_92px] items-start gap-2.5 border-b px-[13px] py-3 text-xs last:border-b-0", duplicate ? "bg-muted/35 text-muted-foreground" : selected ? "bg-white" : "bg-ds-input hover:bg-primary/[0.03]")}>
+                    <div key={line.id} className={cn("grid min-w-[750px] grid-cols-[26px_58px_minmax(0,1fr)_232px_92px] items-start gap-2.5 border-b px-[13px] py-3 text-xs last:border-b-0", duplicate ? "bg-muted/35 text-muted-foreground" : selected ? "bg-white" : "bg-ds-input hover:bg-primary/3")}>
                       <input
                         type="checkbox"
                         aria-label={`Selecionar ${line.description}`}

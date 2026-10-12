@@ -33,7 +33,7 @@ export function FinancialCompetenceNavigator({
       data-ui="financial-competence-navigator"
       aria-label={`Competência ${label}`}
       className={cn(
-        "flex w-full shrink-0 flex-col justify-between rounded-[14px] border border-border/70 bg-card p-3.5 shadow-sm lg:w-[220px]",
+        "flex w-full shrink-0 flex-col justify-between rounded-[14px] border border-border/70 bg-card p-3.5 shadow-xs lg:w-[220px]",
         className,
       )}
     >

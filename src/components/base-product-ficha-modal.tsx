@@ -186,7 +186,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
             <aside className="flex min-h-0 flex-col gap-[26px] overflow-hidden bg-[#15151c] px-6 py-7 text-[#f3f2ee] sm:px-[30px] sm:py-8">
               <div className="flex flex-col gap-3">
                 <Eyebrow>Ficha cadastral · insumo base</Eyebrow>
-                <h2 className="break-words text-[40px] font-extrabold leading-none tracking-[-.035em]">{baseProduct.name}</h2>
+                <h2 className="wrap-break-word text-[40px] font-extrabold leading-none tracking-[-.035em]">{baseProduct.name}</h2>
                 <div className="flex flex-wrap gap-1.5">
                   {classificationName && <span className="whitespace-nowrap rounded-full bg-[rgba(185,185,255,.14)] px-2.5 py-[3px] text-[11.5px] font-bold text-[#d4d4ff]">{classificationName}</span>}
                   <span className="whitespace-nowrap rounded-full border border-white/15 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#c8c7d0]">{linkedLabel}</span>
@@ -195,10 +195,10 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
 
               <div className="flex items-center gap-[18px]">
                 <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-3xl border border-[rgba(185,185,255,.28)] bg-[rgba(185,185,255,.12)]">
-                  <span className="text-[56px] font-extrabold leading-none tracking-[-.05em] text-[#b9b9ff]">{unitSymbol(baseProduct.unit)}</span>
+                  <span className="text-[56px] font-extrabold leading-none tracking-tighter text-[#b9b9ff]">{unitSymbol(baseProduct.unit)}</span>
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <span className="break-words text-[22px] font-extrabold tracking-[-.02em] text-white">{unitFullName(baseProduct.unit)}</span>
+                  <span className="wrap-break-word text-[22px] font-extrabold tracking-[-.02em] text-white">{unitFullName(baseProduct.unit)}</span>
                   <span className="text-xs text-[#8e8d99]">no sistema: <b className="font-bold text-[#c8c7d0]">{baseProduct.unit} · categoria {baseProduct.category}</b></span>
                 </div>
               </div>
@@ -318,7 +318,7 @@ export function BaseProductFichaModal({ open, onOpenChange, baseProduct, onEdit 
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Buscar insumo, marca ou embalagem"
                             aria-label="Buscar insumo, marca ou embalagem"
-                            className="flex-1 bg-transparent text-[13.5px] outline-none"
+                            className="flex-1 bg-transparent text-[13.5px] outline-hidden"
                           />
                         </div>
                         <div role="radiogroup" aria-label="Filtrar por dados" className="flex gap-0.5 rounded-[10px] bg-[#efede7] p-[3px]">

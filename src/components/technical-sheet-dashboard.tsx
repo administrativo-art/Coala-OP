@@ -76,7 +76,7 @@ export function TechnicalSheetDashboard() {
                         <p className="text-[13px] font-bold text-ds-on-dark-2">{filteredSimulations.length} de {simulations.length} mercadoria(s)</p>
                     </div>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <div className="relative flex-grow">
+                        <div className="relative grow">
                             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-on-dark-muted" />
                             <input
                                 type="search"
@@ -84,7 +84,7 @@ export function TechnicalSheetDashboard() {
                                 placeholder="Buscar por nome ou SKU..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-11 w-full rounded-ds-btn border border-white/[.12] bg-white/[.06] pl-9 pr-3 text-[14px] font-semibold text-ds-on-dark outline-none placeholder:text-ds-on-dark-muted focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                                className="h-11 w-full rounded-ds-btn border border-white/12 bg-white/6 pl-9 pr-3 text-[14px] font-semibold text-ds-on-dark outline-hidden placeholder:text-ds-on-dark-muted focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
                             />
                         </div>
                         <DropdownMenu>

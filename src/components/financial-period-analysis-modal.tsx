@@ -241,7 +241,7 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
                 </div>
             ) : (
                 <div className="overflow-hidden rounded-2xl border border-[#e3dfd6] bg-white">
-                    <div className="grid grid-cols-[minmax(0,1fr)_180px] gap-3 bg-[#f6f4ef] px-4 py-[11px] text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_180px] gap-3 bg-[#f6f4ef] px-4 py-[11px] text-[10.5px] font-extrabold uppercase tracking-widest text-[#9a9ba1]">
                         <span>Insumo</span><span className="text-right">Consumo teórico</span>
                     </div>
                     {analysisResult.map(res => (

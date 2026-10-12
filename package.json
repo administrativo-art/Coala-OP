@@ -156,7 +156,7 @@
     "firebase": "^11.9.1",
     "firebase-admin": "^14.5.0",
     "glob": "^13.0.6",
-    "google-auth-library": "^9.15.1",
+    "google-auth-library": "^10.9.1",
     "handlebars": "^4.7.10",
     "hono": "^4.12.25",
     "html5-qrcode": "^2.3.8",
@@ -194,6 +194,7 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "4.0.1",
     "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20.14.9",
     "@types/papaparse": "^5.3.14",
     "@types/qrcode": "^1.5.5",
@@ -204,7 +205,7 @@
     "eslint-config-next": "16.4.0",
     "firebase-tools": "15.33.0",
     "postcss": "8.5.28",
-    "tailwindcss": "^3.4.4",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.0",
     "typescript": "^5.5.2"
   },

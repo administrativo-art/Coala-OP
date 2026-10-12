@@ -111,7 +111,7 @@ function CollaboratorInfoTile({
 
   return (
     <div className={`flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 ${toneClass.shell}`}>
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md shadow-sm ${toneClass.icon}`}>
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md shadow-xs ${toneClass.icon}`}>
         <Icon className="h-3 w-3" />
       </span>
       <div className="min-w-0">
@@ -140,7 +140,7 @@ function CollaboratorCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group overflow-hidden rounded-xl border border-[#f1c7da] bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#df2f78]/45 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
+      className="group overflow-hidden rounded-xl border border-[#f1c7da] bg-white text-left shadow-xs transition hover:-translate-y-0.5 hover:border-[#df2f78]/45 hover:shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
       <div className="flex items-start justify-between gap-2 p-2.5">
         <div className="flex min-w-0 items-start gap-2">
@@ -323,14 +323,14 @@ export default function DPCollaboratorsPage() {
             <ToggleGroupItem
               value="cards"
               aria-label="Cards"
-              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-sm"
+              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-xs"
             >
               <Grid2X2 className="h-[17px] w-[17px]" />
             </ToggleGroupItem>
             <ToggleGroupItem
               value="table"
               aria-label="Tabela"
-              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-sm"
+              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-xs"
             >
               <List className="h-[17px] w-[17px]" />
             </ToggleGroupItem>
@@ -349,7 +349,7 @@ export default function DPCollaboratorsPage() {
           </div>
         )
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border bg-white py-10 text-center text-sm text-muted-foreground shadow-sm">
+        <div className="rounded-xl border bg-white py-10 text-center text-sm text-muted-foreground shadow-xs">
           <Briefcase className="mx-auto mb-2 h-8 w-8" />
           Nenhum colaborador encontrado.
         </div>
@@ -400,7 +400,7 @@ export default function DPCollaboratorsPage() {
                         router.push(`/dashboard/dp/collaborators/${user.id}`);
                       }
                     }}
-                    className="grid cursor-pointer items-center gap-3.5 border-t border-[#f2f2f5] px-5 py-3 transition hover:bg-[#fbfbfc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#df2f78]"
+                    className="grid cursor-pointer items-center gap-3.5 border-t border-[#f2f2f5] px-5 py-3 transition hover:bg-[#fbfbfc] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#df2f78]"
                     style={{ gridTemplateColumns: COLLABORATOR_GRID }}
                   >
                     <div className="flex min-w-0 items-center gap-3">
@@ -442,7 +442,7 @@ export default function DPCollaboratorsPage() {
       <Dialog open={newUserOpen} onOpenChange={setNewUserOpen}>
         <DialogContent className="max-h-[84vh] w-[calc(100vw-1rem)] overflow-y-auto rounded-lg p-0 sm:max-w-[min(720px,calc(100vw-1rem))]">
           <DialogHeader className="space-y-0 border-b border-[#f0efeb] px-3.5 pb-2.5 pt-3 text-left">
-            <p className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[.1em] text-[#df2f78]">
+            <p className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[#df2f78]">
               Gestão do colaborador
               <span className="text-[#e2b8cd]">›</span>
               <span className="text-[#c9a6b8]">Novo usuário</span>

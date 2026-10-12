@@ -49,7 +49,7 @@ export function SignatureCaptureModal({
       <DialogContent className="max-w-2xl overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5 text-left">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-xs">
               <PenLine className="h-5 w-5" />
             </div>
             <div>

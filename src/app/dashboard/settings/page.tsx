@@ -260,7 +260,7 @@ function DepartmentMenu<T extends { value: string; label: string }>({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[11px] border border-[#f3c7d5] bg-[#fbe7ef] px-3 text-[13px] font-bold text-[#a6325b] outline-none transition-colors hover:bg-[#f8dce8] data-[state=open]:bg-[#f8dce8]"
+          className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[11px] border border-[#f3c7d5] bg-[#fbe7ef] px-3 text-[13px] font-bold text-[#a6325b] outline-hidden transition-colors hover:bg-[#f8dce8] data-[state=open]:bg-[#f8dce8]"
         >
           <span className="text-[10.5px] font-semibold text-[#c06a8c]">Departamento</span>
           {current?.label}
@@ -827,7 +827,7 @@ export default function SettingsPage() {
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <h1 className="text-2xl font-extrabold tracking-[-0.025em]">Configurações</h1>
+                <h1 className="text-2xl font-extrabold tracking-tight">Configurações</h1>
                 <span className="mx-1 hidden h-6 w-px bg-[#d6d2c8] sm:block" />
                 <DepartmentMenu
                   tabs={departmentTabs}

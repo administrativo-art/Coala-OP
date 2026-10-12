@@ -89,7 +89,7 @@ export default function QuotationsPage() {
 
         <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Cotações</h1>
+            <h1 className="text-[27px] font-black leading-none tracking-tighter text-zinc-950">Cotações</h1>
             <p className="mt-1.5 text-[13.5px] text-zinc-600">Preços informados por fornecedor. Nada aqui movimenta estoque ou financeiro.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -139,7 +139,7 @@ export default function QuotationsPage() {
         ) : (
           <div className="overflow-x-auto rounded-[14px] border border-zinc-200 bg-white">
             <div className="min-w-[820px]">
-              <div className="grid grid-cols-[132px_minmax(250px,1.6fr)_150px_120px_150px_32px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+              <div className="grid grid-cols-[132px_minmax(250px,1.6fr)_150px_120px_150px_32px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500">
                 <span>Código</span><span>Fornecedor</span><span>Situação</span><span>Modo</span><span>Validade</span><span />
               </div>
               <div className="divide-y divide-zinc-100">

@@ -210,7 +210,7 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
       {/* Header */}
       <div className="flex items-center gap-3 border-b px-[22px] py-5">
         <span
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
           style={{ background: user.color || '#8B5CF6' }}
         >
           {initials(user.username)}
@@ -227,7 +227,7 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
       <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-[22px] py-[18px]">
         {multiOpen && (
           <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3.5 py-3">
-            <span className="flex-shrink-0 text-sm text-amber-600 dark:text-amber-400">⚠</span>
+            <span className="shrink-0 text-sm text-amber-600 dark:text-amber-400">⚠</span>
             <p className="text-xs leading-relaxed">
               {openCycles.length} ciclos concessivos em aberto ao mesmo tempo. O mais urgente é o{' '}
               <b>Ciclo {openCycles[0].id}</b>, vencido/vencendo em {fmt(openCycles[0].concessivePeriod.end)}.
@@ -335,7 +335,7 @@ function CycleBlock({
       <div className="flex items-start gap-3">
         {!done ? (
           <div
-            className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-full"
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full"
             style={{ background: `conic-gradient(from -90deg, ${rc.fg} ${progress * 3.6}deg, hsl(var(--secondary)) 0deg)` }}
           >
             <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-card">
@@ -343,7 +343,7 @@ function CycleBlock({
             </div>
           </div>
         ) : (
-          <div className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-full bg-green-500/15 text-[22px] text-green-700 dark:text-green-400">
+          <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-green-500/15 text-[22px] text-green-700 dark:text-green-400">
             ✓
           </div>
         )}
@@ -453,7 +453,7 @@ function RecordRow({
   return (
     <div className="flex flex-wrap items-start gap-2.5 rounded-[10px] bg-muted px-3 py-2.5">
       <div
-        className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-lg text-xs font-extrabold"
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg text-xs font-extrabold"
         style={
           isVenda
             ? { background: 'rgba(59,130,246,0.14)', color: '#1D4ED8' }
