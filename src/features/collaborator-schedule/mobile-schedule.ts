@@ -17,6 +17,23 @@ export function parseSchedulePeriod(yearRaw: string | null, monthRaw: string | n
   return { year, month };
 }
 
+/** Keep every unit with team shifts for the default admin; other callers stay within their resolved unit access. */
+export function visibleTeamUnitIds(
+  unitIds: string[],
+  linkedUnitIds: ReadonlySet<string>,
+  extraTeamUnitIds: string[] | "all",
+) {
+  return unitIds.filter((unitId) => extraTeamUnitIds === "all" || linkedUnitIds.has(unitId));
+}
+
+/** The app presents the person's first registered function; their role is the fallback. */
+export function mobileProfileRole(user: { jobFunctionNames?: unknown; jobRoleName?: unknown }) {
+  const functions = user.jobFunctionNames;
+  const firstFunction = Array.isArray(functions) ? functions.find((value) => typeof value === "string" && value.trim()) : null;
+  if (typeof firstFunction === "string") return firstFunction.trim();
+  return typeof user.jobRoleName === "string" && user.jobRoleName.trim() ? user.jobRoleName.trim() : null;
+}
+
 type TeamShift = {
   date: string; startTime: string; endTime: string; type: "work" | "day_off"; shiftName: string;
   userId: string; employeeName: string; employeeRole: string; isCurrentUser: boolean;

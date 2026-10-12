@@ -7,7 +7,7 @@ import { canAccessUnit } from "@/lib/unit-access";
 import { AppError } from "@/lib/observability/app-error";
 import type { DPUnit } from "@/types";
 import { buildCollaboratorSchedulePayload } from "./server";
-import { safeAvatarUrl, safePersonColor, toMobileSchedule } from "./mobile-schedule";
+import { mobileProfileRole, safeAvatarUrl, safePersonColor, toMobileSchedule } from "./mobile-schedule";
 
 function failure(code: string, safeMessage: string): never {
   throw new AppError({ code: `MOBILE_SCHEDULE_${code}`, kind: "AUTHORIZATION", safeMessage });
@@ -88,13 +88,10 @@ export async function loadScheduledGoalDateKeys(input: { kioskName: string; star
 /** The signed-in person's own card: name, role and photo, exactly as registered in Coala One. */
 export function mobileProfile(actor: ServerUserContext) {
   const user = actor.userDoc as unknown as Record<string, unknown>;
-  const functions = user.jobFunctionNames;
-  const role = typeof user.jobRoleName === "string" && user.jobRoleName.trim() ? user.jobRoleName.trim()
-    : Array.isArray(functions) && typeof functions[0] === "string" ? functions[0] : null;
   return {
     name: String(user.username || actor.decoded.email || "Usuário"),
     email: typeof actor.decoded.email === "string" ? actor.decoded.email : null,
-    role,
+    role: mobileProfileRole(user),
     avatarUrl: safeAvatarUrl(user.avatarUrl),
   };
 }

@@ -3,12 +3,19 @@ package com.coalaone.go
 import com.coalaone.go.ui.profileInitials
 import com.coalaone.go.ui.unitInitials
 import com.coalaone.go.ui.personColor
+import com.coalaone.go.ui.homeRoleSubtitle
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PresentationTest {
+    @Test fun homeSubtitleUsesProfileRoleAndNeutralFallback() {
+        assertEquals("Atendente", homeRoleSubtitle(" Atendente "))
+        assertEquals("Gerente", homeRoleSubtitle("Gerente"))
+        assertEquals("Equipe Coala", homeRoleSubtitle(null))
+        assertEquals("Equipe Coala", homeRoleSubtitle("  "))
+    }
     @Test fun avatarUsesLettersInsteadOfPunctuation() {
         assertEquals("AS", profileInitials("Ana (simulação)"))
         assertEquals("AM", profileInitials(" Ana   Maria "))

@@ -1,5 +1,6 @@
 import { dbAdmin } from "@/lib/firebase-admin";
 import type { ServerUserContext } from "@/lib/auth-server";
+import { visibleTeamUnitIds } from "./mobile-schedule";
 
 const UNIT_TONES = [
   { color: "#db2777", tint: "#fce7f0", border: "#fbcfe8" },
@@ -309,8 +310,7 @@ export async function buildCollaboratorSchedulePayload(
     month,
     published: latestScheduleByUnit.size > 0,
     shifts: shifts.map(enrichShift),
-    teamUnits: unitIds
-      .filter((unitId) => linkedUnitIds.has(unitId))
+    teamUnits: visibleTeamUnitIds(unitIds, linkedUnitIds, extraTeamUnitIds)
       .map((unitId) => {
         const unit = units.get(unitId) ?? {
           name: "Unidade não definida",
