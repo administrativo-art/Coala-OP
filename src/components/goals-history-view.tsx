@@ -315,7 +315,7 @@ function PeriodCard({
                         setExpanded(false);
                         setModalData({ eg: emp.mergedGoal, originalEgs: emp.goals, userName: name, snapshot: distributionSnapshot });
                       }}
-                      className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2.5 text-left hover:bg-ds-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink"
+                      className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2.5 text-left hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink"
                     >
                       <span className="truncate text-[13px] font-extrabold text-ds-ink">{name}</span>
                       <span className="text-right text-[13px] font-extrabold text-ds-ok">{prize ? `R$ ${fmt(prize.bonusAmount)}` : ''}</span>
@@ -492,7 +492,7 @@ export function GoalsHistoryView({ kioskId, groupId = null, status }: { kioskId:
                     type="button"
                     onClick={() => toggleMonth(monthKey)}
                     aria-expanded={!isCollapsed}
-                    className="mb-3 flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-ds-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                    className="mb-3 flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-ds-md text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
                   >
                     <span className="text-[19px] font-extrabold capitalize text-ds-ink">{toMonthLabel(monthKey)}</span>
                     <span className="text-[12.5px] font-bold text-ds-ink-muted">{monthPeriods.length} meta(s)</span>

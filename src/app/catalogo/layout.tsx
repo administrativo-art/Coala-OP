@@ -1,6 +1,6 @@
 export default function CatalogoLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
+    <div className="min-h-screen bg-(--bg)">
       {children}
     </div>
   );

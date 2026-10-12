@@ -186,7 +186,7 @@ export function CompetitorManagementModal({ isOpen, onClose }: { isOpen: boolean
                 <DialogDescription>Adicione, edite e gerencie seus concorrentes e grupos.</DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue="units" className="flex-grow overflow-hidden">
+            <Tabs defaultValue="units" className="grow overflow-hidden">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="units">Concorrentes (Unidades)</TabsTrigger>
                     <TabsTrigger value="groups">Grupos de Concorrentes</TabsTrigger>

@@ -75,7 +75,7 @@ const STATUS_FILTER_NAMES: Record<string, string> = {
 };
 
 const ROW_HOVER =
-  'transition-[transform,box-shadow,border-radius,background-color] duration-[180ms] ease-[cubic-bezier(.2,.8,.2,1)] hover:z-[3] hover:-translate-y-[3px] hover:rounded-[14px] hover:bg-white hover:shadow-[0_16px_36px_rgba(21,21,28,.16),0_2px_6px_rgba(21,21,28,.06)]';
+  'transition-[transform,box-shadow,border-radius,background-color] duration-180 ease-[cubic-bezier(.2,.8,.2,1)] hover:z-3 hover:translate-y-[-3px] hover:rounded-[14px] hover:bg-white hover:shadow-[0_16px_36px_rgba(21,21,28,.16),0_2px_6px_rgba(21,21,28,.06)]';
 
 const DARK_CONTROL =
   'flex h-12 items-center gap-2 whitespace-nowrap rounded-[14px] border border-white/15 bg-transparent px-4 text-[13.5px] font-bold text-[#f3f2ee] hover:bg-white/10';
@@ -545,7 +545,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
   const renderTableContent = () => (
     <div className="overflow-auto rounded-[18px] border border-[#e3dfd6] bg-white">
       <div className="min-w-[980px]">
-        <div className="grid grid-cols-[minmax(0,2.4fr)_130px_minmax(0,1.3fr)_150px_170px_minmax(0,1.2fr)] gap-3.5 border-b border-[#e3dfd6] bg-[#f6f4ef] px-[18px] py-3 text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]">
+        <div className="grid grid-cols-[minmax(0,2.4fr)_130px_minmax(0,1.3fr)_150px_170px_minmax(0,1.2fr)] gap-3.5 border-b border-[#e3dfd6] bg-[#f6f4ef] px-[18px] py-3 text-[10.5px] font-extrabold uppercase tracking-widest text-[#9a9ba1]">
           <span>Insumo / marca</span><span>Lote</span><span>Local</span><span>Validade</span><span className="text-right">Quantidade</span><span>Reserva</span>
         </div>
         {groupedData.map((baseGroup) => {
@@ -809,7 +809,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Buscar por insumo base, produto, lote, cód. de barras…"
-                  className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-none placeholder:text-[#8e8d99]"
+                  className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-hidden placeholder:text-[#8e8d99]"
                 />
                 {searchTerm && (
                   <button type="button" onClick={() => setSearchTerm('')} aria-label="Limpar busca" className="text-[#8e8d99] hover:text-white">
@@ -821,7 +821,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDow
                   onClick={() => setIsSearchScannerOpen(true)}
                   title="Escanear código de barras"
                   aria-label="Escanear código de barras para busca"
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-white/[.08] text-[#c8c7d0] hover:bg-white/15"
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-white/8 text-[#c8c7d0] hover:bg-white/15"
                 >
                   <Camera className="h-4 w-4" />
                 </button>

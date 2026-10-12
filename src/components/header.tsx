@@ -165,7 +165,7 @@ function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
   if (expiringCount === 0 && taskCount === 0) return null;
 
   const chip = "inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full bg-white/[0.07] px-3 text-[12px] font-semibold text-ds-on-dark-2 ring-1 ring-inset ring-white/10";
-  const see = "ml-0.5 font-extrabold text-ds-accent-kicker hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
+  const see = "ml-0.5 font-extrabold text-ds-accent-kicker hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
 
   return (
     <div className="flex items-center gap-2" aria-label="Pendências">
@@ -384,10 +384,10 @@ function HeaderSearch() {
         "flex h-8 w-full cursor-text items-center gap-2 rounded-full border bg-white/[0.07] px-3.5 text-xs text-ds-on-dark-muted transition-[border-color,box-shadow,background] duration-200",
         open ? "border-ds-accent-kicker bg-white/10 ring-2 ring-ds-accent-kicker/30" : "border-white/10 hover:bg-white/10"
       )}>
-        <Search className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+        <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <input
           ref={inputRef}
-          className="flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-ds-on-dark-muted"
+          className="flex-1 bg-transparent text-[13px] text-white outline-hidden placeholder:text-ds-on-dark-muted"
           placeholder="Buscar…"
           value={query}
           onChange={e => { setQuery(e.target.value); setCursor(0); setOpen(true); }}
@@ -414,7 +414,7 @@ function HeaderSearch() {
                 i === cursor ? "bg-muted" : "hover:bg-muted/60"
               )}
             >
-              <ArrowRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+              <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium">{item.label}</p>
                 <p className="truncate text-[10px] text-muted-foreground">{item.section}</p>
@@ -457,7 +457,7 @@ export function Header({ onMenuClick, tasks, gutterClassName = "mx-4 md:mx-8" }:
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 flex-shrink-0 text-ds-on-dark-2 hover:bg-white/10 hover:text-white lg:hidden"
+          className="h-8 w-8 shrink-0 text-ds-on-dark-2 hover:bg-white/10 hover:text-white lg:hidden"
           onClick={onMenuClick}
           aria-label="Abrir menu"
         >

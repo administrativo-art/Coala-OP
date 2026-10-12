@@ -31,7 +31,7 @@ export function ArchivedProductsModal({ open, onOpenChange }: ArchivedProductsMo
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col h-[50vh]">
-                    <ScrollArea className="flex-grow">
+                    <ScrollArea className="grow">
                         <div className="space-y-2 pr-4">
                             {archivedProducts.length > 0 ? (
                                 archivedProducts.map(product => (

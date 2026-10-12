@@ -137,7 +137,7 @@ export function PriceComparisonSheet({
       >
         <SheetHeader className="shrink-0 border-b border-violet-200 bg-violet-50/80 px-6 py-5 pr-12 text-left">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
               <Scale className="h-4 w-4" />
             </span>
             <div className="min-w-0">

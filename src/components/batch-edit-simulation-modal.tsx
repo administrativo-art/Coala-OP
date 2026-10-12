@@ -347,7 +347,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     <h3 className="text-base font-black text-gray-900">Defina os novos valores</h3>
                                     
                                     {selectedFields.has('status') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Status</FormLabel>
                                             <FormField control={form.control} name="statusValue" render={({ field }) => (
                                                 <FormItem><FormControl>
@@ -364,7 +364,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
 
                                     {selectedFields.has('kiosks') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Quiosques</FormLabel>
                                             <FormField control={form.control} name="kioskAction" render={({ field }) => (
                                                 <FormItem><FormControl>
@@ -389,7 +389,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                                 </Button>
                                                             </FormControl>
                                                         </DropdownMenuTrigger>
-                                                        <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                                        <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                                                             {kiosks.map((k) => (
                                                                 <DropdownMenuCheckboxItem
                                                                     key={k.id}
@@ -412,7 +412,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
 
                                     {selectedFields.has('line') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Linha</FormLabel>
                                             <div className="flex gap-2">
                                                 <FormField control={form.control} name="lineAction" render={({ field }) => (
@@ -422,7 +422,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                     </Select>
                                                 )}/>
                                                 <FormField control={form.control} name="lineId" render={({ field }) => (
-                                                    <FormItem className="flex-grow"><FormControl>
+                                                    <FormItem className="grow"><FormControl>
                                                         <Select onValueChange={field.onChange} value={field.value} disabled={form.watch('lineAction') === 'clear'}>
                                                             <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                                             <SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
@@ -434,7 +434,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
 
                                     {selectedFields.has('category') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Categoria</FormLabel>
                                             <div className="flex gap-2">
                                                 <FormField control={form.control} name="categoryAction" render={({ field }) => (
@@ -444,7 +444,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                     </Select>
                                                 )}/>
                                                 <FormField control={form.control} name="categoryId" render={({ field }) => (
-                                                    <FormItem className="flex-grow"><FormControl>
+                                                    <FormItem className="grow"><FormControl>
                                                         <Select onValueChange={field.onChange} value={field.value} disabled={form.watch('categoryAction') === 'clear'}>
                                                             <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                                             <SelectContent>{mainCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
@@ -456,7 +456,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
 
                                     {selectedFields.has('group') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Grupo por Insumo</FormLabel>
                                             <div className="flex gap-2">
                                                 <FormField control={form.control} name="groupAction" render={({ field }) => (
@@ -470,7 +470,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                     </Select>
                                                 )}/>
                                                 <FormField control={form.control} name="groupId" render={({ field }) => (
-                                                    <FormItem className="flex-grow"><FormControl>
+                                                    <FormItem className="grow"><FormControl>
                                                         <Select onValueChange={field.onChange} value={field.value}>
                                                             <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                                             <SelectContent>{groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
@@ -482,7 +482,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
 
                                     {selectedFields.has('fiscal') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Informações Fiscais</FormLabel>
                                             <div className="grid grid-cols-3 gap-3">
                                                 <FormField control={form.control} name="ncm" render={({ field }) => (
@@ -499,7 +499,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
 
                                     {selectedFields.has('price') && (
-                                        <div className="p-5 bg-white border rounded-2xl shadow-sm space-y-4">
+                                        <div className="p-5 bg-white border rounded-2xl shadow-xs space-y-4">
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Preço de Venda</FormLabel>
                                             <div className="flex flex-col gap-4">
                                                 <FormField control={form.control} name="priceAdjustmentType" render={({ field }) => (

@@ -42,11 +42,11 @@ function FeedScreen({ post, index, onIndex }: { post: InstagramEditorialPost; in
   return (
     <div className="flex h-full flex-col bg-white text-[#181818]">
       <div className="flex items-center gap-2 px-3 py-2.5 text-[11px]">
-        <span className="h-7 w-7 rounded-full bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] p-[2px]"><span className="block h-full w-full rounded-full border-2 border-white bg-[#fde3ef]" /></span>
+        <span className="h-7 w-7 rounded-full bg-linear-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7] p-[2px]"><span className="block h-full w-full rounded-full border-2 border-white bg-[#fde3ef]" /></span>
         <strong className="flex-1 leading-tight">{ACCOUNT}</strong>
         <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
       </div>
-      <div className="relative aspect-[4/5] w-full shrink-0 overflow-hidden bg-[#f3e8dc]">
+      <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-[#f3e8dc]">
         <MediaSlot post={post} index={index} eager />
         {many && (
           <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-bold text-white">
@@ -86,7 +86,7 @@ function StoryScreen({ post, index, onIndex }: { post: InstagramEditorialPost; i
   return (
     <div className="relative h-full overflow-hidden bg-[#181818] text-white">
       <div className="absolute inset-0"><MediaSlot post={post} index={index} className="object-contain" eager /></div>
-      <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-3 pb-10 pt-9">
+      <div className="pointer-events-none absolute inset-x-0 top-0 bg-linear-to-b from-black/55 to-transparent px-3 pb-10 pt-9">
         <div className="flex gap-1">
           {Array.from({ length: total }, (_, position) => (
             <span key={position} className="h-0.5 flex-1 rounded bg-white/45"><span className={cn("block h-full rounded", position <= index ? "w-full bg-white" : "w-0")} /></span>
@@ -100,7 +100,7 @@ function StoryScreen({ post, index, onIndex }: { post: InstagramEditorialPost; i
         </div>
         {post.storyMentions.length > 0 && <p className="mt-2 text-[10px] font-semibold text-white/85">{post.storyMentions.map((name) => `@${name}`).join(" ")}</p>}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent px-3 pb-4 pt-14">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-linear-to-t from-black/60 to-transparent px-3 pb-4 pt-14">
         <span className="flex-1 rounded-full border border-white/80 px-3 py-2 text-[10px] font-semibold">Enviar mensagem</span>
         <Heart className="h-5 w-5" aria-hidden="true" />
         <Send className="h-5 w-5" aria-hidden="true" />
@@ -119,11 +119,11 @@ function ReelScreen({ post }: { post: InstagramEditorialPost }) {
   return (
     <div className="relative h-full overflow-hidden bg-[#181818] text-white">
       <div className="absolute inset-0"><MediaSlot post={post} index={0} eager /></div>
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent px-4 pb-10 pt-10 text-[15px] font-extrabold">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-linear-to-b from-black/50 to-transparent px-4 pb-10 pt-10 text-[15px] font-extrabold">
         <span>Reels</span>
         <Volume2 className="h-4 w-4" aria-hidden="true" />
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 grid grid-cols-[1fr_auto] items-end gap-3 bg-gradient-to-t from-black/75 to-transparent px-3 pb-4 pt-24">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 grid grid-cols-[1fr_auto] items-end gap-3 bg-linear-to-t from-black/75 to-transparent px-3 pb-4 pt-24">
         <div className="min-w-0 text-[10px] leading-[1.4]">
           <div className="mb-2 flex items-center gap-2 font-extrabold"><span className="h-7 w-7 rounded-full border border-white bg-[#fde3ef]" />{ACCOUNT}</div>
           {post.caption && <p className="line-clamp-3 whitespace-pre-wrap">{post.caption}</p>}

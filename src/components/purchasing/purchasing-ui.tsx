@@ -97,7 +97,7 @@ export function PurchasingPeriodControl({
           onClick={() => onChange({ ...value, mode: 'recent' })}
           className={cn(
             'inline-flex h-9 items-center rounded-[7px] px-3 text-sm font-bold transition-colors',
-            value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
+            value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-xs' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
           )}
         >
           <CalendarDays className="mr-2 h-4 w-4" />
@@ -108,7 +108,7 @@ export function PurchasingPeriodControl({
           onClick={() => onChange({ mode: 'month', month: currentMonth, year: currentYear })}
           className={cn(
             'inline-flex h-9 items-center rounded-[7px] px-3 text-sm font-bold transition-colors',
-            value.mode === 'month' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
+            value.mode === 'month' ? 'bg-zinc-950 text-white shadow-xs' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
           )}
         >
           Mês
@@ -119,7 +119,7 @@ export function PurchasingPeriodControl({
           <select
             value={value.month}
             onChange={(event) => onChange({ ...value, mode: 'month', month: Number(event.target.value) })}
-            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-hidden"
           >
             {purchasingMonthLabels.map((label, index) => (
               <option key={label} value={index}>{label}</option>
@@ -128,7 +128,7 @@ export function PurchasingPeriodControl({
           <select
             value={value.year}
             onChange={(event) => onChange({ ...value, mode: 'month', year: Number(event.target.value) })}
-            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-hidden"
           >
             {years.map((year) => (
               <option key={year} value={year}>{year}</option>
@@ -178,11 +178,11 @@ export function PurchasingFlowStrip({ stages }: { stages: PurchasingFlowStage[] 
               aria-current={stage.active ? 'page' : undefined}
               className={cn(
                 'relative min-w-0 flex-1 px-4 pb-4 pt-[17px] text-white transition-colors hover:bg-white/[0.07]',
-                stage.active && 'bg-white/[0.08]',
+                stage.active && 'bg-white/8',
               )}
             >
               <span className={cn('absolute inset-x-0 top-0 h-[3px]', toneClass.bg)} />
-              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-zinc-300">
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-300">
                 <span className={cn('h-1.5 w-1.5 rounded-full', toneClass.bg)} />
                 {stage.label}
               </span>
@@ -343,7 +343,7 @@ export function PurchasingToolbar({
               onClick={() => onViewChange?.(value)}
               className={cn(
                 'inline-flex h-9 items-center rounded-[8px] px-3 text-sm font-medium transition-colors',
-                (view ?? 'cards') === value ? 'border border-zinc-200 bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800',
+                (view ?? 'cards') === value ? 'border border-zinc-200 bg-white text-zinc-900 shadow-xs' : 'text-zinc-500 hover:text-zinc-800',
               )}
             >
               <Icon className="mr-2 h-4 w-4" />
@@ -453,7 +453,7 @@ export function PurchasingKanbanCard({
   return (
     <Link
       href={href}
-      className="group relative block overflow-hidden rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 hover:shadow-md"
+      className="group relative block overflow-hidden rounded-[10px] border border-zinc-200 bg-white p-3 shadow-xs transition hover:border-zinc-300 hover:bg-zinc-50 hover:shadow-md"
     >
       <span className={cn('absolute inset-x-0 top-0 h-0.5', toneClasses[tone].bg)} />
       {meta ? <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{meta}</div> : null}

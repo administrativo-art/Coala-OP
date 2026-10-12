@@ -33,12 +33,12 @@ export function EmployeeHeader({ employee, cache, jobTitle, kioskName }: Props) 
             />
           </div>
         ) : (
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center ring-2 ring-white shadow-md">
+          <div className="w-20 h-20 rounded-full bg-linear-to-br from-violet-400 to-violet-600 flex items-center justify-center ring-2 ring-white shadow-md">
             <span className="text-white text-xl font-semibold">{initials}</span>
           </div>
         )}
         <span
-          className={`absolute -bottom-1 -right-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-white shadow-sm ${statusColor}`}
+          className={`absolute -bottom-1 -right-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-white shadow-xs ${statusColor}`}
         >
           {statusLabel}
         </span>

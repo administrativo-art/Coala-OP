@@ -2,7 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import { ai, DEFAULT_MODEL } from "@/ai/genkit";
+import { generateStructuredOutput } from "@/ai/google-genai";
 import { getActiveSystemPrompt } from "@/ai/prompts/registry";
 
 const Input = z.object({
@@ -25,16 +25,11 @@ const Output = z.object({
   signatureScope: z.enum(["bundle", "standalone", "none"]),
 });
 
-const prompt = ai.definePrompt({
-  name: "documentTemplateMappingPlan",
-  model: DEFAULT_MODEL,
-  input: { schema: Input },
-  output: { schema: Output },
-  prompt: getActiveSystemPrompt("documents.template-mapping-plan").render({}),
-});
-
 export async function proposeDocumentTemplatePlan(documentText: string) {
-  const { output } = await prompt({ documentText });
-  if (!output) throw new Error("A IA não devolveu um plano estruturado.");
-  return output;
+  return generateStructuredOutput({
+    input: { documentText },
+    inputSchema: Input,
+    outputSchema: Output,
+    promptTemplate: getActiveSystemPrompt("documents.template-mapping-plan").render({}),
+  });
 }

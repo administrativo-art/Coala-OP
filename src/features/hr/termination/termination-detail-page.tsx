@@ -210,7 +210,7 @@ function AccessRevocationPanel({
     { target: "healthPlan", label: "Odontoprev", status: state?.healthPlan.status ?? "pending", detail: "Confirmação da exclusão do benefício." },
   ] as const;
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
       <div className="border-b border-slate-100 px-4 py-3.5">
         <p className="font-black text-slate-950">Sistemas</p>
         <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -608,7 +608,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
     <div className="min-h-full bg-[#f0eee9] px-4 py-5 text-[#1d1d26] sm:px-7 sm:py-7">
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-3">
-          <Button asChild variant="outline" className="h-10 rounded-xl border-[#e2e0da] bg-white px-4 font-bold text-slate-700 shadow-sm">
+          <Button asChild variant="outline" className="h-10 rounded-xl border-[#e2e0da] bg-white px-4 font-bold text-slate-700 shadow-xs">
             <Link href="/dashboard/dp/terminations">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Voltar aos desligamentos
@@ -629,7 +629,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
         <section className="overflow-hidden rounded-[24px] border border-[#e2e0da] bg-white shadow-[0_12px_36px_-24px_rgba(15,23,42,0.35)]">
           <div className="flex flex-wrap items-start justify-between gap-7 px-5 py-6 sm:px-7">
             <div className="flex min-w-0 items-start gap-4 sm:gap-5">
-              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-pink-500 to-pink-700 text-lg font-black text-white shadow-[0_12px_24px_-14px_rgba(219,39,119,0.8)] sm:h-16 sm:w-16">
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[18px] bg-linear-to-br from-pink-500 to-pink-700 text-lg font-black text-white shadow-[0_12px_24px_-14px_rgba(219,39,119,0.8)] sm:h-16 sm:w-16">
                 {initials}
               </span>
               <div className="min-w-0">
@@ -648,7 +648,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
                     {healthLabel(process.health)}
                   </span>
                 </div>
-                <h1 className="mt-3 break-words text-xl font-black tracking-[-0.02em] text-slate-950 sm:text-2xl">
+                <h1 className="mt-3 wrap-break-word text-xl font-black tracking-[-0.02em] text-slate-950 sm:text-2xl">
                   {process.employeeName}
                 </h1>
                 <p className="mt-1 break-all text-[13px] font-medium text-slate-500">{process.employeeEmail}</p>
@@ -700,22 +700,22 @@ export function TerminationDetailPage({ id }: { id: string }) {
 
           <div className="grid gap-px border-t border-[#eeece6] bg-[#eeece6] sm:grid-cols-2 xl:grid-cols-4">
             <div className="bg-[#fbfaf7] px-5 py-4 sm:px-7 xl:px-5">
-              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Tipo de desligamento</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tipo de desligamento</p>
               <p className="mt-1.5 text-xs font-extrabold text-slate-700">{process.terminationReason ?? "Encerramento contratual"}</p>
             </div>
             <div className="bg-[#fbfaf7] px-5 py-4 xl:px-5">
-              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Último dia do contrato</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Último dia do contrato</p>
               <p className="mt-1.5 inline-flex items-center gap-2 text-xs font-extrabold text-slate-700">
                 <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
                 {dateLabel(process.notice?.contractEndDate ?? process.request.desiredLastDay)}
               </p>
             </div>
             <div className="bg-[#fbfaf7] px-5 py-4 xl:px-5">
-              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Próxima ação</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Próxima ação</p>
               <p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionLabel}</p>
             </div>
             <div className="bg-[#fbfaf7] px-5 py-4 sm:px-7 xl:px-5">
-              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Responsável</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Responsável</p>
               <span className={`mt-1.5 inline-flex rounded-md border px-2 py-1 text-[10px] font-extrabold ${ownerChipStyle(nextActionOwner)}`}>
                 {nextActionOwner}
               </span>
@@ -827,7 +827,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
             <div className="min-w-0 px-5 py-6 sm:px-7">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-pink-600">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-pink-600">
                     Etapa {rawPhases.findIndex((phase) => phase.id === selectedPhase.id) + 1} de {rawPhases.length}
                     <span className="mx-2 text-pink-200">·</span>
                     Trilha de desligamento

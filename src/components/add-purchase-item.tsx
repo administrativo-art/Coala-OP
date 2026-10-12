@@ -220,7 +220,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                         control={form.control}
                         name="price"
                         render={({ field }) => (
-                        <FormItem className="flex-grow">
+                        <FormItem className="grow">
                             <Label>Preço</Label>
                             <FormControl>
                             <Input
@@ -236,7 +236,7 @@ export function AddPurchaseItem({ baseProductId, sessionId }: { baseProductId: s
                         )}
                     />
                     {selectedProduct?.rotulo_caixa && (
-                        <div className="w-40 flex-shrink-0">
+                        <div className="w-40 shrink-0">
                             <Label>Unidade de compra</Label>
                             <Select value={purchaseUnit} onValueChange={setPurchaseUnit}>
                                 <SelectTrigger>

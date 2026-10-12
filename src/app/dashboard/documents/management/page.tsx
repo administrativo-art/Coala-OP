@@ -50,7 +50,7 @@ export default function DocumentManagementPage() {
           <Link
             key={href}
             href={href}
-            className="group flex min-h-36 items-start gap-3 rounded-lg border bg-white p-4 shadow-sm transition hover:border-teal-200 hover:shadow-md"
+            className="group flex min-h-36 items-start gap-3 rounded-lg border bg-white p-4 shadow-xs transition hover:border-teal-200 hover:shadow-md"
           >
             <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${tone}`}>
               <Icon className="h-5 w-5" />

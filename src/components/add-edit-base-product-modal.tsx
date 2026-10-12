@@ -276,7 +276,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                   <DialogDescription className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">
                     {productToEdit ? 'Insumo base · editando' : 'Novo insumo base'}
                   </DialogDescription>
-                  <DialogTitle className={cn('break-words font-extrabold leading-none tracking-[-.035em]', currentStep === 1 && nameWatch.trim().length <= 18 ? 'text-[40px]' : 'text-[30px]', nameWatch.trim() ? 'text-[#f3f2ee]' : 'text-[#5d5c68]')}>
+                  <DialogTitle className={cn('wrap-break-word font-extrabold leading-none tracking-[-.035em]', currentStep === 1 && nameWatch.trim().length <= 18 ? 'text-[40px]' : 'text-[30px]', nameWatch.trim() ? 'text-[#f3f2ee]' : 'text-[#5d5c68]')}>
                     {heroName}
                   </DialogTitle>
                   <div className="flex flex-wrap gap-1.5">
@@ -292,10 +292,10 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                       <Eyebrow>Unidade de referência</Eyebrow>
                       <div className="flex items-center gap-[18px]">
                         <div className="flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-3xl border border-[rgba(185,185,255,.28)] bg-[rgba(185,185,255,.12)]">
-                          <span className="text-[56px] font-extrabold leading-none tracking-[-.05em] text-[#b9b9ff]">{unitSymbol}</span>
+                          <span className="text-[56px] font-extrabold leading-none tracking-tighter text-[#b9b9ff]">{unitSymbol}</span>
                         </div>
                         <div className="flex min-w-0 flex-col gap-1">
-                          <span className="break-words text-[22px] font-extrabold tracking-[-.02em] text-white">{unitFullName}</span>
+                          <span className="wrap-break-word text-[22px] font-extrabold tracking-[-.02em] text-white">{unitFullName}</span>
                           <span className="text-xs text-[#8e8d99]">no sistema: <b className="font-bold text-[#c8c7d0]">{unitWatch}</b></span>
                         </div>
                       </div>
@@ -456,7 +456,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                             autoComplete="off"
                             {...field}
                             onChange={(event) => field.onChange(event.target.value.toLocaleUpperCase('pt-BR'))}
-                            className={cn('border-0 border-b-2 bg-transparent pb-2 pt-1 text-[28px] font-extrabold tracking-[-.02em] text-[#15151c] outline-none placeholder:text-[#c9c6bd]', form.formState.errors.name ? 'border-[#e11d48]' : 'border-[#15151c]')}
+                            className={cn('border-0 border-b-2 bg-transparent pb-2 pt-1 text-[28px] font-extrabold tracking-[-.02em] text-[#15151c] outline-hidden placeholder:text-[#c9c6bd]', form.formState.errors.name ? 'border-[#e11d48]' : 'border-[#15151c]')}
                           />
                         </FormControl>
                         <FormMessage className="text-xs font-semibold text-[#e11d48]" />
@@ -590,7 +590,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                     <FormItem className="space-y-0">
                                       <div className={cn('flex h-[38px] items-center rounded-[10px]', manualMin ? 'border-[1.5px] border-[#5b5bd6] bg-white' : 'bg-[#f4f3ef]')}>
                                         <FormControl><input type="number" {...field} value={field.value ?? ''} readOnly={!manualMin} aria-label={`Estoque mínimo — ${kiosk.name}`} title={manualMin ? undefined : 'Calculado automaticamente no motor legado.'}
-                                          className={cn('h-full w-full min-w-0 bg-transparent pl-3 pr-1.5 text-sm outline-none', manualMin ? 'font-extrabold' : 'font-mono font-bold text-[#1a1b1f]')} /></FormControl>
+                                          className={cn('h-full w-full min-w-0 bg-transparent pl-3 pr-1.5 text-sm outline-hidden', manualMin ? 'font-extrabold' : 'font-mono font-bold text-[#1a1b1f]')} /></FormControl>
                                         <span className="pr-3 text-xs text-[#8a8f99]">{unitWatch}</span>
                                       </div>
                                       {lastAutoCalculatedAt && !manualMin && <p className="pt-1.5 text-[10px] text-[#8a8f99]">Calc. automaticamente em {new Date(lastAutoCalculatedAt).toLocaleDateString('pt-BR')}</p>}
@@ -614,7 +614,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                   <FormField control={form.control} name={`stockLevels.${kiosk.id}.safetyStock`} render={({ field }) => (
                                     <FormItem className="space-y-0">
                                       <div className="flex h-[38px] items-center rounded-[10px] border border-[#dcd9d1] bg-white">
-                                        <FormControl><input type="number" {...field} value={field.value ?? ''} aria-label={`Segurança legada — ${kiosk.name}`} className="h-full w-full min-w-0 bg-transparent pl-3 pr-1.5 text-sm font-bold outline-none" /></FormControl>
+                                        <FormControl><input type="number" {...field} value={field.value ?? ''} aria-label={`Segurança legada — ${kiosk.name}`} className="h-full w-full min-w-0 bg-transparent pl-3 pr-1.5 text-sm font-bold outline-hidden" /></FormControl>
                                         <span className="pr-3 text-xs text-[#8a8f99]">{unitWatch}</span>
                                       </div>
                                       <FormMessage />
@@ -658,7 +658,7 @@ export function AddEditBaseProductModal({ open, onOpenChange, productToEditId }:
                                   <FormField control={form.control} name={`stockLevels.${kiosk.id}.leadTime`} render={({ field }) => (
                                     <FormItem className="space-y-0">
                                       <div className={cn('flex h-[38px] items-center rounded-[10px] border', leadError ? 'border-[1.5px] border-[#e11d48]' : 'border-[#dcd9d1]', policyEnabled === null ? 'bg-[#f4f3ef]' : 'bg-white')}>
-                                        <FormControl><input type="number" min={mode === 'direct' ? 1 : 0} {...field} value={field.value ?? ''} disabled={policyEnabled === null} aria-label={`Prazo de abastecimento — ${kiosk.name}`} className="h-full w-full min-w-0 bg-transparent pl-3 pr-1 text-sm font-bold outline-none" /></FormControl>
+                                        <FormControl><input type="number" min={mode === 'direct' ? 1 : 0} {...field} value={field.value ?? ''} disabled={policyEnabled === null} aria-label={`Prazo de abastecimento — ${kiosk.name}`} className="h-full w-full min-w-0 bg-transparent pl-3 pr-1 text-sm font-bold outline-hidden" /></FormControl>
                                         <span className="pr-2.5 text-xs text-[#8a8f99]">dias</span>
                                       </div>
                                     </FormItem>

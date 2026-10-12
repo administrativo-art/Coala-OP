@@ -863,7 +863,7 @@ export default function PurchaseOrderPage() {
                           : "purple"
                   }
                 />
-                <span className="rounded-[6px] bg-zinc-100 px-2 py-1 text-[10px] font-black uppercase tracking-[0.05em] text-zinc-600">
+                <span className="rounded-[6px] bg-zinc-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-zinc-600">
                   {order.origin === "direct" ? "Compra direta" : "Via cotação"}
                 </span>
               </div>
@@ -1199,7 +1199,7 @@ export default function PurchaseOrderPage() {
               )}
               <div className="flex flex-wrap justify-end gap-9 border-t border-zinc-200 bg-zinc-50 px-[18px] py-3.5">
                 <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                     Mercadoria
                   </p>
                   <p className="mt-1 font-mono text-[13.5px] font-extrabold text-zinc-800">
@@ -1212,7 +1212,7 @@ export default function PurchaseOrderPage() {
                   ) : null}
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                     Frete
                   </p>
                   <p className="mt-1 font-mono text-[13.5px] font-extrabold text-zinc-800">
@@ -1223,7 +1223,7 @@ export default function PurchaseOrderPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                     Total do pedido
                   </p>
                   <p className="mt-1 font-mono text-[19px] font-black tracking-[-0.04em] text-zinc-950">
@@ -1531,7 +1531,7 @@ export default function PurchaseOrderPage() {
                     <span className="text-[11.5px] text-zinc-500">
                       Rastreio
                     </span>
-                    <p className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-zinc-800">
+                    <p className="whitespace-pre-wrap wrap-break-word text-[12.5px] leading-relaxed text-zinc-800">
                       {order.trackingInfo}
                     </p>
                   </div>
@@ -1547,7 +1547,7 @@ export default function PurchaseOrderPage() {
                     Observações
                   </h3>
                 </div>
-                <p className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-zinc-600">
+                <p className="whitespace-pre-wrap wrap-break-word text-[12.5px] leading-relaxed text-zinc-600">
                   {order.notes}
                 </p>
               </div>
@@ -1572,13 +1572,13 @@ export default function PurchaseOrderPage() {
         >
           <SheetContent
             side="right"
-            className="font-purchasing flex h-full !w-full flex-col gap-0 overflow-hidden p-0 sm:!max-w-[520px]"
+            className="font-purchasing flex h-full w-full! flex-col gap-0 overflow-hidden p-0 sm:max-w-[520px]!"
           >
             {actionPanel === "confirm" && (
               <>
                 <SheetHeader className="shrink-0 border-b border-violet-200 bg-violet-50/80 px-6 py-5 pr-12 text-left">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
                       <CheckCircle2 className="h-4 w-4" />
                     </span>
                     <div>
@@ -1677,7 +1677,7 @@ export default function PurchaseOrderPage() {
               <>
                 <SheetHeader className="shrink-0 border-b border-orange-200 bg-orange-50/80 px-6 py-5 pr-12 text-left">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-600 text-white shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-600 text-white shadow-xs">
                       <RotateCcw className="h-4 w-4" />
                     </span>
                     <div>
@@ -1696,7 +1696,7 @@ export default function PurchaseOrderPage() {
                 </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto bg-[#f6f6f7] px-5 py-5 sm:px-6">
-                  <div className="rounded-[14px] border border-orange-200 bg-orange-50 p-4 text-sm leading-relaxed text-orange-950 shadow-sm">
+                  <div className="rounded-[14px] border border-orange-200 bg-orange-50 p-4 text-sm leading-relaxed text-orange-950 shadow-xs">
                     O retrocesso só é permitido antes do início da conferência,
                     da entrada no estoque e do pagamento. A ação fica registrada
                     com usuário, data e motivo.
@@ -1816,7 +1816,7 @@ export default function PurchaseOrderPage() {
               <>
                 <SheetHeader className="shrink-0 border-b border-amber-200 bg-amber-50/80 px-6 py-5 pr-12 text-left">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
                       <Truck className="h-4 w-4" />
                     </span>
                     <div>
@@ -1832,7 +1832,7 @@ export default function PurchaseOrderPage() {
                 </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto bg-[#f6f6f7] px-5 py-5 sm:px-6">
-                  <div className="rounded-[14px] border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950 shadow-sm">
+                  <div className="rounded-[14px] border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950 shadow-xs">
                     O pedido será encerrado sem criar lote, patrimônio ou
                     movimentação de estoque por este fluxo. O financeiro será
                     confirmado pelo valor do pedido.
@@ -1914,7 +1914,7 @@ export default function PurchaseOrderPage() {
               <>
                 <SheetHeader className="shrink-0 border-b border-rose-200 bg-rose-50/80 px-6 py-5 pr-12 text-left">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-xs">
                       <XCircle className="h-4 w-4" />
                     </span>
                     <div>
@@ -1930,7 +1930,7 @@ export default function PurchaseOrderPage() {
                 </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto bg-[#f6f6f7] px-5 py-5 sm:px-6">
-                  <div className="rounded-[14px] border border-rose-200 bg-rose-50 p-4 text-sm leading-relaxed text-rose-950 shadow-sm">
+                  <div className="rounded-[14px] border border-rose-200 bg-rose-50 p-4 text-sm leading-relaxed text-rose-950 shadow-xs">
                     O recebimento pendente e os registros financeiros vinculados
                     serão cancelados. Compras que já geraram entrada no estoque
                     não podem ser canceladas por aqui.
@@ -2027,11 +2027,11 @@ export default function PurchaseOrderPage() {
           <Sheet open={editOpen} onOpenChange={setEditOpen}>
             <SheetContent
               side="right"
-              className="font-purchasing flex h-full !w-full flex-col gap-0 overflow-hidden p-0 sm:!max-w-[720px]"
+              className="font-purchasing flex h-full w-full! flex-col gap-0 overflow-hidden p-0 sm:max-w-[720px]!"
             >
               <SheetHeader className="shrink-0 border-b border-violet-200 bg-violet-50/80 px-6 py-5 pr-12 text-left">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
                     <Pencil className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
@@ -2048,7 +2048,7 @@ export default function PurchaseOrderPage() {
 
               <div className="flex-1 overflow-y-auto bg-[#f6f6f7] px-5 py-5 sm:px-6">
                 {editPendingFields.length > 0 && (
-                  <div className="mb-4 rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm">
+                  <div className="mb-4 rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-xs">
                     <p className="font-bold">
                       {editPendingFields.length === 1
                         ? "1 campo obrigatório pendente"
@@ -2593,7 +2593,7 @@ function DetailSummaryRow({
   return (
     <div className="grid grid-cols-[112px_minmax(0,1fr)] items-start gap-3">
       <span className="text-[11.5px] leading-snug text-zinc-500">{label}</span>
-      <span className="break-words text-right text-[12.5px] font-bold leading-snug text-zinc-900">
+      <span className="wrap-break-word text-right text-[12.5px] font-bold leading-snug text-zinc-900">
         {children}
       </span>
     </div>
@@ -2647,7 +2647,7 @@ function ActionSummaryItem({
         className,
       )}
     >
-      <p className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
         {label}
       </p>
       <p className="mt-1 text-sm font-black text-zinc-900">{value}</p>

@@ -57,7 +57,7 @@ export function AuditLogTab({ entries, fieldMap, loading }: Props) {
       {entries.map((entry, i) => {
         const fieldLabel = fieldMap.fields[entry.field_key]?.label ?? entry.field_key;
         return (
-          <div key={i} className="rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
+          <div key={i} className="rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-xs">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">{fieldLabel}</p>

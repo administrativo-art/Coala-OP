@@ -333,7 +333,7 @@ export function BaseProductManagement({ tabs, view, onViewChange }: CadastrosTab
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="break-words text-[19px] font-extrabold leading-[1.15] tracking-[-0.02em]">{product.name}</span>
+                    <span className="wrap-break-word text-[19px] font-extrabold leading-[1.15] tracking-[-0.02em]">{product.name}</span>
                     <Mono className="text-[11px] uppercase text-[#9a9ba1]">{product.id.slice(0, 8)}</Mono>
                   </div>
                   <SoftPill isEmpty={!classificationName(product)}>{classificationName(product) || 'Sem classificação'}</SoftPill>

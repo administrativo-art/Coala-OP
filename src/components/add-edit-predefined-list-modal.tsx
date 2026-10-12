@@ -148,7 +148,7 @@ export function AddEditPredefinedListModal({ open, onOpenChange, listToEdit, pro
                   
                   return (
                     <div key={field.id} className="flex items-start gap-2 p-3 border rounded-lg">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-grow">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 grow">
                           <FormField
                             control={form.control}
                             name={`items.${index}.productId`}

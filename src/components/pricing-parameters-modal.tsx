@@ -187,7 +187,7 @@ export function PricingParametersModal({ open, onOpenChange }: PricingParameters
                             {(form.watch('profitGoals') || []).map((goal, index) => (
                                 <div key={index} className="flex items-center gap-2">
                                   <FormField control={form.control} name={`profitGoals.${index}`} render={({ field: inputField }) => (
-                                      <FormItem className="flex-grow"><FormControl><Input type="number" {...inputField} value={inputField.value ?? ''} onChange={e => inputField.onChange(e.target.value === '' ? '' : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>
+                                      <FormItem className="grow"><FormControl><Input type="number" {...inputField} value={inputField.value ?? ''} onChange={e => inputField.onChange(e.target.value === '' ? '' : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>
                                   )}/>
                                   <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveGoal(index)}><Trash2 className="h-4 w-4" /></Button>
                                 </div>

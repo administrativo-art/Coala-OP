@@ -47,7 +47,7 @@ export class DPRuntimeGuard extends React.Component<DPGuardProps, DPGuardState> 
               ? 'O módulo carregou sem acessar o mesmo DPProvider do restante da aplicação. Isso costuma acontecer quando há chunk/contexto duplicado no bundle publicado.'
               : 'O módulo lançou uma exceção em runtime antes de concluir a renderização.'}
           </p>
-          <p className="font-mono text-xs break-words opacity-90">{this.state.error.message}</p>
+          <p className="font-mono text-xs wrap-break-word opacity-90">{this.state.error.message}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="destructive" onClick={this.handleRetry}>
               <RefreshCw className="h-3.5 w-3.5" />

@@ -42,7 +42,7 @@ function VisibilityMenu({ value, inherited, onChange }: {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="inline-flex h-9 min-w-[168px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-sm hover:bg-slate-50">
+        <button type="button" className="inline-flex h-9 min-w-[168px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-xs hover:bg-slate-50">
           <span className="inline-flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${current.color}`} />{inherited ? `Herdado: ${current.label}` : current.label}</span>
           <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
         </button>
@@ -181,10 +181,10 @@ function OverviewMetric({
   }[tone];
 
   return (
-    <div className={`rounded-lg border px-2.5 py-2 shadow-sm ${toneClass.shell}`}>
+    <div className={`rounded-lg border px-2.5 py-2 shadow-xs ${toneClass.shell}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[.1em] text-slate-500">{label}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
           <p className={`mt-0.5 text-lg font-black leading-none ${toneClass.value}`}>{value}</p>
           <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">{description}</p>
         </div>
@@ -215,7 +215,7 @@ function DocumentCollaboratorCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group overflow-hidden rounded-xl border border-[#dedfe4] bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#df2f78]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
+      className="group overflow-hidden rounded-xl border border-[#dedfe4] bg-white text-left shadow-xs transition hover:-translate-y-0.5 hover:border-[#df2f78]/40 hover:shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
       <div className="flex min-h-[58px] items-center justify-between gap-2 bg-[#fbfbfc] px-2.5 py-2">
         <div className="flex min-w-0 items-start gap-2">
@@ -460,7 +460,7 @@ export default function DPDocumentsPage() {
         />
       </div>
 
-      <div className="rounded-lg border border-[#dedfe4] bg-white p-2 shadow-sm">
+      <div className="rounded-lg border border-[#dedfe4] bg-white p-2 shadow-xs">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-64 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9d9da9]" />

@@ -132,7 +132,7 @@ function SortableSlideRow(props: SlideRowProps) {
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(SLIDE_ROW_GRID, 'bg-ds-surface', isDragging && 'relative z-[2] rounded-ds-btn shadow-ds-lift')}
+      className={cn(SLIDE_ROW_GRID, 'bg-ds-surface', isDragging && 'relative z-2 rounded-ds-btn shadow-ds-lift')}
     >
       <SlideRowContent
         {...props}
@@ -141,7 +141,7 @@ function SortableSlideRow(props: SlideRowProps) {
             type="button"
             {...attributes}
             {...listeners}
-            className="cursor-grab touch-none rounded-ds-sm p-0.5 text-ds-ink-faint hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
+            className="cursor-grab touch-none rounded-ds-sm p-0.5 text-ds-ink-faint hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
             aria-label={`Reordenar ${props.slide.title}`}
           >
             <GripVertical aria-hidden="true" className="h-4 w-4" />
@@ -749,7 +749,7 @@ export function SignageAdmin() {
                 aria-pressed={isSelected}
                 onClick={() => setSelectedKioskId(kiosk.id)}
                 className={cn(
-                  'rounded-ds-card border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                  'rounded-ds-card border p-4 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
                   isSelected ? 'border-ds-accent-ink bg-ds-accent-row shadow-[inset_3px_0_0_var(--ds-accent-ink)]' : 'border-ds-border bg-ds-surface hover:bg-ds-muted',
                 )}
               >
@@ -792,7 +792,7 @@ export function SignageAdmin() {
                   title={health.label}
                   onClick={() => setSelectedScreenId(screen.id)}
                   className={cn(
-                    'inline-flex h-9 items-center gap-2 rounded-ds-pill border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                    'inline-flex h-9 items-center gap-2 rounded-ds-pill border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
                     active ? 'border-ds-accent-ink bg-ds-accent-soft text-ds-accent-ink' : 'border-ds-border-input bg-ds-surface text-ds-ink-2 hover:bg-ds-muted',
                   )}
                 >

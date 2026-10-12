@@ -487,7 +487,7 @@ function TimelineItem({
         {!isLast ? <span className="absolute right-[-8px] top-7 h-[calc(100%+0.75rem)] w-px bg-ds-divider" /> : null}
       </div>
 
-      <div className="rounded-ds-card border border-ds-border bg-ds-surface p-4 shadow-sm">
+      <div className="rounded-ds-card border border-ds-border bg-ds-surface p-4 shadow-xs">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -928,7 +928,7 @@ function SidebarCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 shadow-sm">
+    <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 shadow-xs">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <span className="text-ds-ink-muted">{icon}</span>
@@ -1197,7 +1197,7 @@ function SidebarMetas({
     <Dialog>
       <DialogTrigger asChild>
         <button type="button" className="block w-full text-left">
-          <div className="rounded-ds-card-lg border bg-ds-surface p-4 shadow-sm transition-colors hover:border-ds-divider hover:bg-ds-muted">
+          <div className="rounded-ds-card-lg border bg-ds-surface p-4 shadow-xs transition-colors hover:border-ds-divider hover:bg-ds-muted">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Flag className="h-4 w-4 text-ds-ink-muted" />
@@ -1387,7 +1387,7 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg border bg-ds-surface p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md"
+      className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg border bg-ds-surface p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md"
     >
       <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-ds-card ${tone}`}>
         {icon}

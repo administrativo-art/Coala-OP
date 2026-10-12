@@ -121,7 +121,7 @@ export function BulkEditScheduleModal({ open, onOpenChange, selectedKeys, onConf
                                 </Button>
                             </FormControl>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                            <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                                 <ScrollArea className="h-60">
                                     <DropdownMenuGroup>
                                         <DropdownMenuLabel>Colaboradores do Quiosque</DropdownMenuLabel>

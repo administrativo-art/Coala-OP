@@ -45,7 +45,7 @@ export default function ReportsPage() {
                         <CardTitle className="text-xl mb-2">Projeção de consumo</CardTitle>
                         <CardDescription className="text-sm">Preveja se o estoque será consumido antes do vencimento.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/projection" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
@@ -63,7 +63,7 @@ export default function ReportsPage() {
                         <CardTitle className="text-xl mb-2">Consumo médio</CardTitle>
                         <CardDescription className="text-sm">Visualize o consumo médio dos seus insumos.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/consumption" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
@@ -81,7 +81,7 @@ export default function ReportsPage() {
                         <CardTitle className="text-xl mb-2">Análise de vendas</CardTitle>
                         <CardDescription className="text-sm">Visualize o ranking e a evolução das vendas de produtos.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/sales" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
@@ -99,7 +99,7 @@ export default function ReportsPage() {
                         <CardTitle className="text-xl mb-2">Análise de movimentações</CardTitle>
                         <CardDescription className="text-sm">Analise o fluxo de transferências entre quiosques.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/movement-analysis" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
@@ -117,7 +117,7 @@ export default function ReportsPage() {
                         <CardTitle className="text-xl mb-2">Avaliação financeira</CardTitle>
                         <CardDescription className="text-sm">Calcule o valor financeiro do seu estoque.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/stock/analysis/valuation" className="w-full">
                             <Button className="w-full">
                                 Acessar <ArrowRight className="ml-2 h-4 w-4" />
