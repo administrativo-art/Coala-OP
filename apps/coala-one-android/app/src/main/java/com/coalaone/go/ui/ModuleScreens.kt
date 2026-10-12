@@ -33,7 +33,7 @@ private val ptBR = java.util.Locale.forLanguageTag("pt-BR")
 private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerInstance(ptBR).format(Math.round(value))
 @Composable private fun NavSquare(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(34.dp).background(Color.White, RoundedCornerShape(10.dp)).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(glyph, style = MaterialTheme.typography.titleMedium) }
+        Box(Modifier.size(34.dp).background(Tokens.surface, RoundedCornerShape(10.dp)).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(glyph, style = MaterialTheme.typography.titleMedium) }
     }
 }
 @Composable fun ScheduleScreen(vm: ModulesViewModel, onBack: () -> Unit) {
@@ -43,25 +43,57 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     val units = state.schedules.values.flatMap { it.units }.distinctBy { it.id }
     val selected = units.firstOrNull { it.id == state.selectedScheduleUnit } ?: units.firstOrNull()
     var selectedDay by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
-    val day = dates.firstOrNull { it.toString() == selectedDay } ?: dates.firstOrNull { it == state.day } ?: dates.first()
+    var monthView by rememberSaveable { mutableStateOf(false) }
+    val picked = runCatching { LocalDate.parse(selectedDay) }.getOrNull()
+    // In the month view any day of the month can be picked; in the week view, a day of the loaded week.
+    val day = if (monthView) picked?.takeIf { it.year == state.day.year && it.month == state.day.month } ?: state.day
+        else dates.firstOrNull { it.toString() == selectedDay } ?: dates.firstOrNull { it == state.day } ?: dates.first()
     val today = LocalDate.now()
     // The person's own shift on a date, across every unit they are scheduled in.
     fun mine(date: LocalDate) = state.schedules[date.toString().take(7)]?.units.orEmpty().flatMap { unit -> unit.shifts.filter { it.date == date.toString() && unit.people.getOrNull(it.person)?.isMe == true } }.minByOrNull { it.startTime }
     Page("Escala", feedback, onBack, onRefresh = { vm.refreshSchedule() }) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            NavSquare("‹", "Semana anterior", !feedback.busy) { vm.schedule(state.day.minusWeeks(1)) }
-            val sameMonth = dates.first().month == dates.last().month
-            Text("${dates.first().dayOfMonth}${if (sameMonth) "" else dates.first().format(DateTimeFormatter.ofPattern(" 'de' MMMM", ptBR))} a ${dates.last().format(DateTimeFormatter.ofPattern("d 'de' MMMM", ptBR))}", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-            NavSquare("›", "Próxima semana", !feedback.busy) { vm.schedule(state.day.plusWeeks(1)) }
-        }
-        // The seven days always fit the width; each one carries the hour the person starts, or a dash.
-        Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            dates.forEach { date ->
-                val active = date == day; val own = mine(date)
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (active) Tokens.dark else Color.Transparent).selectable(active, role = Role.Tab) { selectedDay = date.toString() }.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(date.format(DateTimeFormatter.ofPattern("EEE", ptBR)).take(3), color = if (active) Tokens.pink else if (date == today) Tokens.wine else Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
-                    Text("${date.dayOfMonth}", color = if (active) Color.White else Tokens.ink, style = MaterialTheme.typography.titleMedium)
-                    Text(when { own == null -> "—"; own.type == "day_off" -> "folga"; else -> own.startTime.take(2) + "h" }, color = if (active) Tokens.onDark2 else if (own == null || own.type == "day_off") Color(0xFFB9B8C2) else Tokens.ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, letterSpacing = 0.sp))
+        if (monthView) {
+            val first = state.day.withDayOfMonth(1)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                NavSquare("‹", "Mês anterior", !feedback.busy) { selectedDay = first.minusMonths(1).toString(); vm.schedule(first.minusMonths(1)) }
+                Text(first.format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                NavSquare("›", "Próximo mês", !feedback.busy) { selectedDay = first.plusMonths(1).toString(); vm.schedule(first.plusMonths(1)) }
+            }
+            // The whole month, with the hour the person starts each day; folgas adiante ficam à vista.
+            Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(Modifier.fillMaxWidth()) { listOf("seg", "ter", "qua", "qui", "sex", "sáb", "dom").forEach { Text(it, color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp)) } }
+                var cursor = first.minusDays((first.dayOfWeek.value - 1).toLong())
+                while (cursor.isBefore(first.plusMonths(1))) {
+                    val weekStart = cursor
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        (0..6).forEach { offset ->
+                            val date = weekStart.plusDays(offset.toLong()); val inside = date.month == first.month
+                            val active = inside && date == day; val own = if (inside) mine(date) else null
+                            Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) Tokens.pillFill else Color.Transparent).then(if (inside) Modifier.selectable(active, role = Role.Tab) { selectedDay = date.toString() } else Modifier).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(if (inside) "${date.dayOfMonth}" else "", color = when { active -> Tokens.pillInk; date == today -> Tokens.wine; else -> Tokens.ink }, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
+                                Text(when { !inside -> ""; own == null -> "—"; own.type == "day_off" -> "folga"; else -> own.startTime.take(2) + "h" }, color = when { active -> Tokens.pillInk.copy(alpha = .75f); own == null || own.type == "day_off" -> Tokens.faint; else -> Tokens.ink }, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.sp))
+                            }
+                        }
+                    }
+                    cursor = cursor.plusWeeks(1)
+                }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                NavSquare("‹", "Semana anterior", !feedback.busy) { vm.schedule(state.day.minusWeeks(1)) }
+                val sameMonth = dates.first().month == dates.last().month
+                Text("${dates.first().dayOfMonth}${if (sameMonth) "" else dates.first().format(DateTimeFormatter.ofPattern(" 'de' MMMM", ptBR))} a ${dates.last().format(DateTimeFormatter.ofPattern("d 'de' MMMM", ptBR))}", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp), textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                NavSquare("›", "Próxima semana", !feedback.busy) { vm.schedule(state.day.plusWeeks(1)) }
+            }
+            // The seven days always fit the width; each one carries the hour the person starts, or a dash.
+            Row(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                dates.forEach { date ->
+                    val active = date == day; val own = mine(date)
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (active) Tokens.pillFill else Color.Transparent).selectable(active, role = Role.Tab) { selectedDay = date.toString() }.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(date.format(DateTimeFormatter.ofPattern("EEE", ptBR)).take(3), color = if (active) Tokens.pillAccent else if (date == today) Tokens.wine else Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+                        Text("${date.dayOfMonth}", color = if (active) Tokens.pillInk else Tokens.ink, style = MaterialTheme.typography.titleMedium)
+                        Text(when { own == null -> "—"; own.type == "day_off" -> "folga"; else -> own.startTime.take(2) + "h" }, color = if (active) Tokens.pillInk.copy(alpha = .75f) else if (own == null || own.type == "day_off") Tokens.faint else Tokens.ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, letterSpacing = 0.sp))
+                    }
                 }
             }
         }
@@ -69,7 +101,8 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             PillChoice("Equipe", !state.onlyMine) { vm.scheduleFilter(selected?.id.orEmpty(), false) }
             PillChoice("Só a minha", state.onlyMine) { vm.scheduleFilter(selected?.id.orEmpty(), true) }
             Spacer(Modifier.weight(1f))
-            if (today !in dates) Text("Hoje", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy, role = Role.Button) { selectedDay = today.toString(); vm.schedule(today) }.padding(8.dp))
+            PillChoice(if (monthView) "Ver semana" else "Ver mês", false) { if (monthView) vm.schedule(day); monthView = !monthView }
+            if (today !in dates && !monthView) Text("Hoje", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy, role = Role.Button) { selectedDay = today.toString(); vm.schedule(today) }.padding(8.dp))
         }
         if (units.size > 1 && !state.onlyMine) Choices("Unidade", units.map { it.id to it.name }, selected?.id.orEmpty(), !feedback.busy) { vm.scheduleFilter(it, state.onlyMine) }
         if (units.isEmpty() && !feedback.busy) EmptyState("Nenhuma escala neste período", "Ainda não há escala lançada para esta semana.")
@@ -114,17 +147,20 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     val goals = state.goals?.goals.orEmpty()
     val goal = goals.firstOrNull { it.id == selectedGoal } ?: goals.firstOrNull()
     val unitName = state.goalUnits.firstOrNull { it.id == state.goals?.kioskId }?.name.orEmpty()
+    var choosingUnit by rememberSaveable { mutableStateOf(false) }
+    if (choosingUnit) PickerSheet("Unidade", state.goalUnits.map { it.id to it.name }, state.goals?.kioskId.orEmpty(), { id -> selectedGoal = ""; preferences.edit().putString("unit:$owner", id).apply(); vm.goals(id) }) { choosingUnit = false }
     Page("Metas", feedback, onBack, header = {
         TopBar("Metas", busy = feedback.busy, onBack = onBack)
-        // Units live in the dark header, as pills, like the prototype.
+        // One line whatever the number of units: the current unit and, when there is a choice, "Trocar unidade".
         if (state.goalUnits.isNotEmpty()) {
+            val several = state.goalUnits.size > 1
             Spacer(Modifier.height(10.dp))
-            @OptIn(ExperimentalLayoutApi::class) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                state.goalUnits.forEach { unit ->
-                    val on = unit.id == state.goals?.kioskId
-                    Text(unit.name, color = if (on) Color.White else Tokens.onDark2, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp),
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (on) Tokens.pink.copy(alpha = .16f) else Color.Transparent).border(1.dp, if (on) Tokens.pink else Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(50)).selectable(on, !feedback.busy, Role.Tab) { selectedGoal = ""; preferences.edit().putString("unit:$owner", unit.id).apply(); vm.goals(unit.id) }.padding(horizontal = 13.dp, vertical = 8.dp))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !feedback.busy, role = Role.Button, onClickLabel = "Trocar unidade") { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("UNIDADE", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+                    Text(unitName.ifBlank { "Escolher unidade" }, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
+                if (several) Text("Trocar unidade ⌄", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
             }
         }
         goal?.let { target ->
@@ -134,7 +170,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             val amount: (Double) -> String = { if (summary.cumulative) money0(it) else moneyValue(it) }
             val mainTarget = summary.levels.firstOrNull()?.amount
             Spacer(Modifier.height(12.dp))
-            Text("${unitName} · ${target.typeLabel}".uppercase(ptBR), color = Tokens.pink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black))
+            Text(target.typeLabel.uppercase(ptBR), color = Tokens.pink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black))
             Text("${shortDate(target.startDate) ?: target.startDate} a ${shortDate(target.endDate) ?: target.endDate} · dia ${summary.elapsedDays} de ${summary.totalDays}", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -178,7 +214,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
         goal?.let { target ->
             val today = state.goals?.today
             target.team.firstOrNull { it.isMe }?.let { me ->
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.pink.copy(alpha = .5f), RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.pink.copy(alpha = .5f), RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("MINHA PARTE", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold))
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(money0(me.currentValue), style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp), modifier = Modifier.weight(1f))
@@ -194,7 +230,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             val dailyTarget = target.summary.dailyTarget
             // A day outside the distribution (reachedDailyTarget == null) has no daily share to chase.
             if (todayRow != null && dailyTarget != null && dailyTarget > 0 && todayRow.reachedDailyTarget != null) {
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("HOJE NA UNIDADE", color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.weight(1f))
                         if (todayRow.value >= dailyTarget) StatusChip("Meta do dia batida", Tokens.ok, Tokens.okBg)
@@ -208,7 +244,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             Row(Modifier.fillMaxWidth().background(Tokens.segment, RoundedCornerShape(12.dp)).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("days" to "Dias", "team" to "Equipe", "prize" to "Prêmio").forEach { (id, label) ->
                     val on = tab == id
-                    Box(Modifier.weight(1f).heightIn(min = 36.dp).clip(RoundedCornerShape(9.dp)).background(if (on) Color.White else Color.Transparent).selectable(on, role = Role.Tab) { tab = id }, contentAlignment = Alignment.Center) { Text(label, color = if (on) Tokens.ink else Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Bold)) }
+                    Box(Modifier.weight(1f).heightIn(min = 36.dp).clip(RoundedCornerShape(9.dp)).background(if (on) Tokens.raised else Color.Transparent).selectable(on, role = Role.Tab) { tab = id }, contentAlignment = Alignment.Center) { Text(label, color = if (on) Tokens.ink else Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Bold)) }
                 }
             }
             if (tab == "days") {
@@ -217,7 +253,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
                 val ordered = target.days.sortedBy { it.date }
                 if (ordered.size > 1) {
                     val top = maxOf(ordered.maxOf { it.value }, dailyTarget ?: 0.0, 1.0)
-                    Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         // One bar per day; the dashed line is the daily share of the goal.
                         androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(96.dp).semantics { contentDescription = "Gráfico do resultado da unidade por dia" }) {
                             val gap = 3.dp.toPx(); val width = ((size.width - gap * (ordered.size - 1)) / ordered.size).coerceAtLeast(1f)
@@ -235,7 +271,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
                     }
                 }
                 Text("Resultado da unidade por dia", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 2.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 2.dp)) {
                     if (target.days.isEmpty()) Text("Ainda não há resultado lançado neste período.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
                     target.days.sortedByDescending { it.date }.forEachIndexed { index, row ->
                         val isToday = row.date == today
@@ -251,7 +287,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             }
             if (tab == "team") {
                 Text("Resultado da equipe", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 2.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 2.dp)) {
                     if (target.team.isEmpty()) Text("Nenhuma pessoa vinculada a esta meta.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
                     target.team.forEachIndexed { index, member ->
                         if (index > 0) HorizontalDivider(color = Tokens.border)
@@ -269,7 +305,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
                 }
             }
             if (tab == "prize") target.prize?.let { prize ->
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(money0(prize.totalTeamBonus), style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Black))
                     Text("Prêmio previsto da equipe · ${prize.methodName}${if (prize.leadershipBonus > 0) " · liderança: ${money0(prize.leadershipBonus)}" else ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
                     Text((prize.highestTierLabel?.let { "Faixa atual: $it" } ?: "Nenhuma faixa atingida ainda") + (prize.nextTier?.let { " · faltam ${money0(it.remaining)} para ${it.label}" } ?: ""), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
@@ -299,34 +335,49 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     var pairing by rememberSaveable { mutableStateOf(false) }; var scanning by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.signage() }
     val unit = state.signage?.units?.firstOrNull { it.id == unitId }
-    Page("Signage", feedback, onBack, onRefresh = { vm.signage() }) {
-        state.paired?.let { Text("${it.screen.name} conectada em ${it.screen.kioskName}", color = Tokens.ok) }
-        state.signage?.units.orEmpty().forEach { row -> CardBlock {
-            Text(row.name, style = MaterialTheme.typography.titleMedium)
-            row.screens.forEach { screen -> Row(Modifier.fillMaxWidth()) {
-                Text("${screen.name} · ${when (screen.orientation) { "landscape" -> "horizontal"; "portrait" -> "vertical"; else -> "orientação pendente" }}", modifier = Modifier.weight(1f))
-                Text(if (screen.connected) "Conectada" else "Desconectada", color = if (screen.connected) Tokens.ok else Tokens.muted)
-            } }
-            Action("Conectar monitor em ${row.name}", feedback.busy, secondary = true) { unitId = row.id; screenId = ""; pairing = true }
-        } }
-        if (pairing && unit != null) CardBlock {
-            Text("Conectar monitor · ${unit.name}", style = MaterialTheme.typography.titleMedium)
-            Choices("Orientação", listOf("landscape" to "Horizontal", "portrait" to "Vertical"), orientation, !feedback.busy) { orientation = it }
-            Choices("Tela", (if (!unit.full) listOf("" to "Nova: ${unit.nextScreenName}") else emptyList()) + unit.screens.map { it.id to "Substituir ${it.name}" }, screenId, !feedback.busy) { screenId = it }
-            if (unit.full && screenId.isEmpty()) Text("Limite de telas alcançado; escolha uma tela existente.", color = Tokens.warning)
-            Text("No URL Launcher do monitor, abra ${BuildConfig.API_BASE_URL.trimEnd('/')}/app e leia o QR apresentado.")
-            Field("Código do monitor", code, !feedback.busy) { code = it.uppercase().take(32) }
-            Action("Ler QR code", feedback.busy, secondary = true) { scanning = true }
+    val connecting = pairing && unit != null
+    // Connecting is its own step: the form replaces the list instead of opening below every unit, out of sight.
+    val back = { if (connecting) pairing = false else onBack() }
+    androidx.activity.compose.BackHandler(enabled = connecting && !feedback.busy) { pairing = false }
+    Page("Signage", feedback, back, onRefresh = if (connecting) null else ({ vm.signage() }), header = { TopBar(if (connecting) "Conectar monitor" else "Signage", if (connecting) unit?.name.orEmpty() else "", feedback.busy, back) },
+        footer = if (connecting && unit != null) ({
+            Action("Confirmar conexão", feedback.busy, enabled = Rules.pairingCode(code) != null && (!unit.full || screenId.isNotEmpty())) { vm.pair(unitId, screenId.ifBlank { null }, orientation, code); pairing = false; code = "" }
+        }) else null) {
+        if (connecting && unit != null) {
+            Text("No monitor, abra ${BuildConfig.API_BASE_URL.trimEnd('/')}/app pelo URL Launcher. Ele mostra um QR e um código: leia o QR com a câmera ou digite o código abaixo.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp))
+            CardBlock {
+                Choices("Tela", (if (!unit.full) listOf("" to "Nova: ${unit.nextScreenName}") else emptyList()) + unit.screens.map { it.id to "Substituir ${it.name}" }, screenId, !feedback.busy) { screenId = it }
+                if (unit.full && screenId.isEmpty()) Text("Limite de telas alcançado; escolha uma tela existente.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                if (screenId.isNotEmpty()) Text("O novo monitor substituirá a conexão da tela escolhida.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                Choices("Orientação", listOf("landscape" to "Horizontal", "portrait" to "Vertical"), orientation, !feedback.busy) { orientation = it }
+            }
+            CardBlock {
+                Action("Ler QR code", feedback.busy, onClick = { scanning = true })
+                LabeledInput("Ou digite o código do monitor", code, !feedback.busy, placeholder = "Código") { code = it.uppercase().take(32) }
+                if (code.isNotBlank() && Rules.pairingCode(code) == null) Text("Código incompleto ou inválido.", color = Tokens.danger, style = MaterialTheme.typography.bodySmall)
+            }
             if (scanning) Dialog(onDismissRequest = { scanning = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 Column(Modifier.fillMaxSize().background(Tokens.dark).safeDrawingPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("Aponte para o QR do monitor", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
                     QrScanner({ scanned -> code = scanned; scanning = false }, { scanning = false }, Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(20.dp)), dark = true)
                 }
             }
-            if (screenId.isNotEmpty()) Text("O novo monitor substituirá a conexão da tela escolhida.", color = Tokens.warning)
-            Action("Confirmar conexão", feedback.busy, enabled = Rules.pairingCode(code) != null && (!unit.full || screenId.isNotEmpty())) { vm.pair(unitId, screenId.ifBlank { null }, orientation, code); pairing = false }
-            TextButton({ pairing = false }) { Text("Voltar para as telas") }
+        } else {
+            state.paired?.let { Text("${it.screen.name} conectada em ${it.screen.kioskName}.", color = Tokens.okInk, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.okBg, RoundedCornerShape(14.dp)).border(1.dp, Tokens.okBorder, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 12.dp)) }
+            if (state.signage?.units?.isEmpty() == true) EmptyState("Nenhuma unidade disponível", "Seu perfil não tem unidade liberada para Signage.")
+            state.signage?.units.orEmpty().forEach { row ->
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(row.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Text("Conectar monitor ›", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !feedback.busy, role = Role.Button, onClickLabel = "Conectar monitor em ${row.name}") { unitId = row.id; screenId = if (row.full) row.screens.firstOrNull()?.id.orEmpty() else ""; code = ""; pairing = true }.padding(vertical = 8.dp, horizontal = 4.dp))
+                    }
+                    if (row.screens.isEmpty()) Text("Nenhuma tela conectada ainda.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                    row.screens.forEach { screen -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${screen.name} · ${when (screen.orientation) { "landscape" -> "horizontal"; "portrait" -> "vertical"; else -> "orientação pendente" }}", style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.weight(1f))
+                        StatusChip(if (screen.connected) "Conectada" else "Desconectada", if (screen.connected) Tokens.ok else Tokens.muted, if (screen.connected) Tokens.okBg else Tokens.greyBg)
+                    } }
+                }
+            }
         }
-        if (state.signage?.units?.isEmpty() == true) EmptyState("Nenhuma unidade disponível", "Seu perfil não tem unidade liberada para Signage.")
     }
 }

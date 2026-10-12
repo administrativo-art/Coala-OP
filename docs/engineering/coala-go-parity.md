@@ -16,7 +16,7 @@ Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [
 | Escala | `/api/dp/mobile-schedule`; semanas/meses sob demanda; seleção diária e Equipe/Só minha | `ViewModelsTest`, `schedule-mobile.test.ts`, `DesignScreensTest` | Usabilidade diária com dados reais |
 | Metas | `/api/goals/mobile`, filtro `kioskId`; abas Dias/Equipe/Prêmio com progresso animado | `ViewModelsTest`: unidade, metas, equipe e prêmio; `DesignScreensTest`: abas | Conferência de todos os indicadores com backend de homologação |
 | Signage | `/api/signage/mobile`, `/api/signage/mobile/screens`; CameraX/QR `COALA-SIGNAGE` | `RulesTest`, `ViewModelsTest`, `signage-tizen-app.test.ts`; payload Zod | Scanner físico e TV Tizen ponta a ponta |
-| Biometria | BiometricPrompt forte; opt-in por UID e validade de sete dias cifrada | `ViewModelsTest`: opt-in vinculado ao UID e bloqueio/reauth; Keystore da fila na instrumentação | Validade do registro biométrico, sensor físico, cancelamento e indisponibilidade |
+| Biometria | BiometricPrompt forte; opt-in por UID, cifrado e sem prazo de validade (decisão do responsável em 2026-10-11); pedido automaticamente ao abrir o app bloqueado | `ViewModelsTest`: opt-in vinculado ao UID e bloqueio/reauth; Keystore da fila na instrumentação | Validade do registro biométrico, sensor físico, cancelamento e indisponibilidade |
 | Atestação | `/api/mobile/app-attestation`; package opcional, nonce local e Play Integrity nativo | `mobile-app-attestation.test.ts`: Go/legado/cross-package; `ApiContractTest`: DTO/transporte | Play Integrity com certificado de release e políticas do servidor |
 | Atualização | `/api/app/version?packageName=coalaone.go`; download Range; pacote/versão/certificado; instalador Android | `mobile-app-release.test.ts`, `ApiContractTest`, `RulesTest`, `ViewModelsTest`: versão/progresso/não publicado | Atualização futura Go sobre Go e fontes desconhecidas |
 
@@ -68,6 +68,23 @@ oito instrumentados aprovados antes do último ajuste de texto da aba Dias e nã
 repetidos depois dele, por decisão do responsável, que conferiu as telas no
 emulador. Anexos, revisão, calendário, tela de bloqueio, meta de ticket médio e
 aviso de dias com escala não foram exercitados em execução.
+
+### Verificação da 0.3.3 (início, biometria, tema escuro, mês da escala)
+
+Início com saudação como título, perfil na foto e o resumo de hoje numa extensão
+recolhível da barra; selos nos cartões. Biometria pedida ao abrir o app bloqueado
+e sem prazo de validade (decisão do responsável). Unidade das metas num seletor
+único com busca. Resumo antes de concluir a contagem, puxar para atualizar, faixa
+de sem conexão, tema escuro seguindo o aparelho e visão do mês na escala. A
+simulação de debug passou a ter oito unidades. Para o resumo de hoje, o início
+faz até cinco leituras ao abrir, ao puxar para atualizar ou ao voltar depois de
+dois minutos; nunca por temporizador. 35 testes JVM e lint Android aprovados;
+o teste de capturas (`DesignScreensTest`) aprovado em tema escuro e, na versão
+final, em tema claro, incluindo o novo passo de conexão de monitor no Signage
+(o formulário abria abaixo da lista de unidades, fora da tela; agora é uma etapa
+própria). O teste de fluxos alterado (compra com escolha de unidade) não foi
+executado depois da alteração. Biometria, tela de
+bloqueio, sem conexão e calendário do mês não foram exercitados em execução.
 
 ## Entrega por etapa
 

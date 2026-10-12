@@ -44,7 +44,8 @@ class DesignScreensTest {
         snapshot("home")
         compose.runOnIdle { assertFalse(WindowCompat.getInsetsController(compose.activity.window, compose.activity.window.decorView).isAppearanceLightStatusBars) }
         compose.onNodeWithText("Metas").performScrollTo().performClick()
-        compose.onNodeWithText("Unidade de simulação").performClick()
+        // Goals open straight on a unit; the header shows it with "Trocar unidade".
+        compose.onNodeWithText("Trocar unidade ⌄").assertExists()
         compose.onNodeWithText("MINHA PARTE").assertExists()
         compose.onNodeWithText("HOJE NA UNIDADE").assertExists()
         snapshot("goals-days")
@@ -73,6 +74,16 @@ class DesignScreensTest {
         compose.onNodeWithText("Unidade de simulação").performScrollTo().performClick()
         snapshot("receipt")
         compose.onNodeWithContentDescription("Voltar").performClick()
+        compose.onNodeWithContentDescription("Voltar").performClick()
+        // Signage: connecting a monitor opens the form on screen, not below the list of units.
+        compose.onNodeWithText("Signage").performScrollTo().performClick()
+        compose.onAllNodesWithText("Conectar monitor ›").onFirst().performScrollTo().performClick()
+        compose.onNodeWithText("Ler QR code").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Ou digite o código do monitor").performTextInput("COALA-SIGNAGE:ABCD2345")
+        snapshot("signage-connect")
+        compose.onNodeWithText("Confirmar conexão").assertIsEnabled().performClick()
+        compose.onNodeWithText("Tela conectada.").assertIsDisplayed()
+        snapshot("signage-connected")
         compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("AS").performClick()
         compose.onNodeWithText("Sair da conta").performScrollTo().assertExists()

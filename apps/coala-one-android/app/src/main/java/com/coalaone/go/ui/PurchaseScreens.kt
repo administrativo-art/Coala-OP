@@ -37,7 +37,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
 @Composable private fun DocumentCard(title: String, subtitle: String, docs: List<Document>, enabled: Boolean, onAdd: (Document) -> Unit, onRemove: (Int) -> Unit) {
     val actions = rememberCaptureActions(onDocument = onAdd)
     val empty = docs.isEmpty(); val full = docs.size >= 2
-    Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(if (empty) 1.5.dp else 1.dp, if (empty) Tokens.fieldBorder else Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(if (empty) 1.5.dp else 1.dp, if (empty) Tokens.fieldBorder else Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
@@ -64,7 +64,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
     }
 }
 @Composable private fun ChoiceCard(kicker: String, title: String, text: String, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(onClick = onClick, enabled = enabled, modifier = modifier, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White, disabledContainerColor = Color.White)) {
+    Card(onClick = onClick, enabled = enabled, modifier = modifier, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
         Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(kicker, color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold))
             Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.5.sp))
@@ -116,7 +116,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
             }
             key(review.submissionId) { ReviewFields(review, state.context, selected?.withdrawal, !feedback.busy, vm::review) }
         } else if (selected != null) {
-            Row(Modifier.fillMaxWidth().background(Color(0xFFFFFDF9), RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().background(Tokens.soft, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("TIPO DA COMPRA", color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
                     Text(when { needsProof -> "Compra normal"; selected.withdrawal != null -> "Sangria · ${money(selected.withdrawal.amountCents)}"; else -> "Sangria fora da lista" }, style = MaterialTheme.typography.titleMedium)
@@ -141,12 +141,12 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                     Text("Sangrias aguardando nota", style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
                     Text(list?.let { "Registradas no PDV desde ${shortDate(it.window.from) ?: it.window.from}" } ?: "Registradas no PDV", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                 }
-                Text("Atualizar", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Color.White).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)).clickable(enabled = !feedback.busy, role = Role.Button) { vm.refresh() }.padding(horizontal = 12.dp, vertical = 9.dp))
+                Text("Atualizar", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Tokens.surface).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)).clickable(enabled = !feedback.busy, role = Role.Button) { vm.refresh() }.padding(horizontal = 12.dp, vertical = 9.dp))
             }
             if (list?.partial == true) Text("Lista parcial. Confira o período de ${fullDate(list.window.from)} a ${fullDate(list.window.to)}.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
             if (list != null && list.withdrawals.isEmpty()) Text("Nenhuma sangria aguardando nota.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
             list?.withdrawals.orEmpty().forEach { withdrawal ->
-                Card(onClick = { vm.select("cash_withdrawal", withdrawal) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White, disabledContainerColor = Color.White)) {
+                Card(onClick = { vm.select("cash_withdrawal", withdrawal) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(money(withdrawal.amountCents), style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp))
@@ -183,7 +183,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
 }
 /** Numbered section header of the review: a tick when collapsed, the number while open. */
 @Composable private fun ReviewSection(number: Int, title: String, subtitle: String, open: Boolean, onToggle: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(if (open) 2.dp else 1.dp, if (open) Tokens.accent else Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(if (open) 2.dp else 1.dp, if (open) Tokens.accent else Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onToggle), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(22.dp).background(if (open) Tokens.accentSoft else Tokens.soft, CircleShape), contentAlignment = Alignment.Center) { Text("$number", color = if (open) Tokens.wine else Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, letterSpacing = 0.sp, fontWeight = FontWeight.Black)) }
             Column(Modifier.weight(1f)) {
