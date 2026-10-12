@@ -9,6 +9,7 @@ import {
   nextSignageScreenName,
   parseSignagePairingCode,
   planDownloadRanges,
+  hasUnitFirstScreen,
   planNewSignageScreen,
   signageMobileScreenSchema,
   signagePairingPayload,
@@ -152,7 +153,13 @@ test("telas pelo aplicativo: numeração automática e entrada validada", () => 
   assert.equal(nextSignageScreenName([]), "Tela 1");
   assert.equal(nextSignageScreenName(["Tela 1", "tela 2 "]), "Tela 3");
   assert.equal(nextSignageScreenName(["Tela 1", "Tela 3", "Balcão"]), "Tela 2");
-  // Unidade sem monitor: a primeira tela é a padrão, mesmo renomeada.
+  // Unidade sem tela cadastrada não tem tela nenhuma; a primeira passa a existir com o código ou o documento dela.
+  assert.equal(hasUnitFirstScreen({}, false), false);
+  assert.equal(hasUnitFirstScreen({ deviceToken: "" }, false), false);
+  assert.equal(hasUnitFirstScreen({ deviceToken: "ABCDEFGH" }, false), true);
+  assert.equal(hasUnitFirstScreen({}, true), true);
+  assert.deepEqual(planNewSignageScreen([]), { name: "Tela 1", usesDefault: false, full: false });
+  // Primeira tela ainda sem monitor: é ela que recebe o monitor, mesmo renomeada.
   assert.deepEqual(planNewSignageScreen([{ name: "Tela 1", isDefault: true }]), { name: "Tela 1", usesDefault: true, full: false });
   assert.deepEqual(planNewSignageScreen([{ name: "Balcão", isDefault: true }]), { name: "Balcão", usesDefault: true, full: false });
   assert.deepEqual(
