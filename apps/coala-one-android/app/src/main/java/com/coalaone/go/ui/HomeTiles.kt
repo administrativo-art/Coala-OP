@@ -54,7 +54,7 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
 }
 
 @Composable fun ProfileAvatar(name: String, url: String?, onClick: () -> Unit) {
-    Box(Modifier.size(58.dp).clickable(role = Role.Button, onClickLabel = "Abrir perfil", onClick = onClick)) {
+    Box(Modifier.size(58.dp).clickable(role = Role.Button, onClickLabel = "Abrir perfil: foto, versão e sair", onClick = onClick)) {
         Box(Modifier.size(54.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Tokens.pink, Tokens.indigo))), contentAlignment = Alignment.Center) {
             if (url.isNullOrBlank()) Text(profileInitials(name), color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp))
             else Box(Modifier.padding(2.dp).clip(CircleShape)) { ProductPhoto(url, "Foto de perfil", 50) }
@@ -64,10 +64,10 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
     }
 }
 
-@Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, onClick: () -> Unit) {
+@Composable fun HomeTile(title: String, route: String, modifier: Modifier = Modifier, pending: Int = 0, badge: String? = null, badgeWarm: Boolean = false, onClick: () -> Unit) {
     val hero = route == "purchase"
     Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(if (hero) 22.dp else 20.dp), border = BorderStroke(1.dp, Tokens.border),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (hero) 6.dp else 0.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        elevation = CardDefaults.cardElevation(defaultElevation = if (hero) 6.dp else 0.dp), colors = CardDefaults.cardColors(containerColor = Tokens.surface)) {
         if (hero) Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp))
@@ -76,7 +76,12 @@ fun personColor(hex: String?): Color? = hex?.trim()?.takeIf { Regex("#[0-9a-fA-F
             }
             Box(Modifier.size(84.dp, 104.dp).background(Tokens.accentSoft, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(64.dp)) }
         } else Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.size(44.dp).background(Color(0xFFF6F4EF), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(34.dp)) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Box(Modifier.size(44.dp).background(Tokens.soft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { ModuleIcon(route, Modifier.size(34.dp)) }
+                Spacer(Modifier.weight(1f))
+                // Status of the module at a glance, as in the prototype.
+                badge?.let { StatusChip(it, if (badgeWarm) Tokens.warning else Tokens.info, if (badgeWarm) Tokens.warningBg else Tokens.infoBg) }
+            }
             Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
             Text(when (route) { "count" -> "Saídas e sobras do turno"; "receive" -> "O que chegou da reposição"; "schedule" -> "Quem trabalha e suas folgas"; "goals" -> "O que falta e o placar da equipe"; else -> "Conecte os monitores" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp))
         }

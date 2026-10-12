@@ -45,6 +45,9 @@ import com.coalaone.go.BuildConfig
         Brand()
         Spacer(Modifier.height(18.dp))
         val locked = state.identity != null && state.locked
+        // Whoever already opted in is asked for the fingerprint or face as soon as the app opens locked.
+        val autoPrompt = locked && !state.loading && vm.biometricReady()
+        LaunchedEffect(autoPrompt) { if (autoPrompt) biometricPrompt() }
         if (!locked && reset && !state.resetSent) Text("Redefinir senha", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
         if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         val submit = { if (locked) { if (password.isNotEmpty()) { vm.unlock(password, biometric); password = "" } } else if (email.isNotBlank() && password.isNotBlank()) { vm.login(email, password); password = "" } }
@@ -57,7 +60,7 @@ import com.coalaone.go.BuildConfig
             Text("Se o e-mail estiver cadastrado, você receberá as instruções para redefinir a senha.", color = Tokens.onDark2)
         }
         if (locked) {
-            CheckRow("Ativar desbloqueio por biometria por 7 dias", biometric, !state.busy, dark = true) { biometric = it }
+            CheckRow("Ativar desbloqueio por biometria", biometric, !state.busy, dark = true) { biometric = it }
             Action("Desbloquear", state.busy, enabled = password.isNotEmpty(), dark = true) { submit() }
             if (vm.biometricReady()) Action("Usar biometria", secondary = true, dark = true, onClick = biometricPrompt)
             TextButton(vm::signOut) { Text("Sair da conta", color = Tokens.onDark2) }
