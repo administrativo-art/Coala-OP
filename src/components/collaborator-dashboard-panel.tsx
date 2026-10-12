@@ -51,6 +51,7 @@ import {
 } from "@/lib/goals-distribution";
 import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1666,7 +1667,7 @@ function CollaboratorDashboardPanelInner() {
             meta={task.description}
             action={
               <Button asChild size="sm" variant="outline">
-                <Link href={task.link || "/dashboard/tasks"}>Concluir</Link>
+                <Link href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}>Concluir</Link>
               </Button>
             }
             isLast={isLast}

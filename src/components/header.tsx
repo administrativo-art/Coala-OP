@@ -10,6 +10,7 @@ import { type LegacyTask, NotificationCenter } from "./notification-center";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { cn } from "@/lib/utils";
 import { useNavTrail } from "@/components/navigation/nav-trail";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -223,7 +224,7 @@ function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
                 {tasks.slice(0, 6).map((task) => (
                   <Link
                     key={task.id}
-                    href={task.link || "/dashboard/tasks"}
+                    href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}
                     className="block rounded-lg px-2 py-2 text-xs hover:bg-muted/60"
                   >
                     <p className="truncate font-medium text-foreground">{task.title}</p>

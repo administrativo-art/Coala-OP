@@ -7,6 +7,7 @@ import { Skeleton } from './ui/skeleton';
 import { Inbox, ListTodo } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from './ui/button';
+import { resolveSafeReturnPath } from '@/lib/safe-return-path';
 
 export function PendingTasksDashboard() {
     const { taskNotifications, pendingTaskCount, loading } = useAllTasks();
@@ -46,7 +47,7 @@ export function PendingTasksDashboard() {
                         {taskNotifications.slice(0, 5).map(task => {
                             const Icon = task.icon;
                             return (
-                                <Link href={task.link} key={task.id}>
+                                <Link href={resolveSafeReturnPath(task.link, "/dashboard/tasks")} key={task.id}>
                                     <div className="flex items-start justify-between rounded-md border p-3 hover:bg-muted/50 transition-colors gap-2">
                                         <Icon className="h-5 w-5 text-primary shrink-0 mt-1" />
                                         <div className="flex-grow">

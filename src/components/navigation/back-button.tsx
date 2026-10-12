@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
 type BackButtonProps = {
   fallbackHref: string;
@@ -34,7 +35,7 @@ export function BackButton({
       return;
     }
 
-    router.push(fallbackHref);
+    router.push(resolveSafeReturnPath(fallbackHref));
   }
 
   return (
