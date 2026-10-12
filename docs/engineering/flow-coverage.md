@@ -19,7 +19,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `cash-flow` | 4 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
 | `catalog` | 1 | Traçado | [Fichas técnicas](flows/catalog.md) — verificação de acesso e custo pendente |
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
-| `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — privacidade/custo e teste integrado pendentes |
+| `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
@@ -54,7 +54,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
 | `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — visão anual/mensal desde janeiro de 2026, snapshots normalizados, rotina limitada de backfill/revisão tardia, fechamento/reabertura, eventos adversos Stone e NSU Stone do PDV cobertos localmente; amostra real confirmou somente o contrato PDV, sem homologar API Stone, scheduler/webhook, backfill real ou liquidação bancária |
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
-| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
+| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de unidades e fluxo local de perfis cobertos por contratos; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — política automática com 30%, compra direta por unidade e comparação local; motor/legado testados em emulador; E2E, piloto e ativação pendentes |
 | `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |
