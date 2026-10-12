@@ -245,7 +245,7 @@ export function SignageAdmin() {
 
   const enabledKiosks = useMemo(() => allowedKiosks.filter((kiosk) => kiosk.signageEnabled !== false), [allowedKiosks]);
 
-  // Telas das unidades com signage; a padrão de cada unidade vem primeiro.
+  // Telas das unidades com signage; a primeira de cada unidade vem antes.
   const enabledScreens = useMemo(() => {
     const enabledIds = new Set(enabledKiosks.map((kiosk) => kiosk.id));
     return screens
@@ -738,10 +738,12 @@ export function SignageAdmin() {
           {visibleStatuses.map(({ kiosk, screens: unitScreens, onlineCount, slideCount, activeSlideCount, pendingPublication }) => {
             const isSelected = kiosk.id === selectedKioskId;
             const single = unitScreens.length === 1 ? unitScreens[0] : null;
-            const unitVariant = single
+            const unitVariant = unitScreens.length === 0
+              ? 'neutral'
+              : single
               ? single.health.variant
               : onlineCount === unitScreens.length ? 'ok' : onlineCount > 0 ? 'warn' : unitScreens.some(({ lastSeenAt }) => lastSeenAt) ? 'danger' : 'neutral';
-            const unitLabel = single ? single.health.label : `${onlineCount} de ${unitScreens.length} no ar`;
+            const unitLabel = unitScreens.length === 0 ? 'Nenhuma tela' : single ? single.health.label : `${onlineCount} de ${unitScreens.length} no ar`;
             return (
               <button
                 key={kiosk.id}
@@ -758,7 +760,9 @@ export function SignageAdmin() {
                   <StatusPill variant={unitVariant} className="gap-1.5"><LiveDot variant={unitVariant} />{unitLabel}</StatusPill>
                 </div>
                 <p className="mt-2 text-[13px] font-semibold text-ds-ink-2">
-                  {single
+                  {unitScreens.length === 0
+                    ? 'Cadastre a primeira tela para montar a playlist.'
+                    : single
                     ? (slideCount === 0
                       ? 'Sem slides'
                       : `${activeSlideCount} de ${slideCount} ${slideCount === 1 ? 'slide ativo' : 'slides ativos'} · ciclo de ${formatSignageDuration(single.cycleMs)}`)
@@ -778,7 +782,7 @@ export function SignageAdmin() {
         </div>
       )}
 
-      {selectedKiosk && (unitHasManyScreens || canManage) && unitScreenStatuses.length > 0 && (
+      {selectedKiosk && (unitScreenStatuses.length === 0 || unitHasManyScreens || canManage) && (
         <section aria-label={`Telas de ${selectedKiosk.name}`} className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="mr-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Telas de {selectedKiosk.name}</h2>
@@ -802,6 +806,11 @@ export function SignageAdmin() {
                 </button>
               );
             })}
+            {unitScreenStatuses.length === 0 && (
+              <p className="mr-1 text-[13px] text-ds-ink-muted">
+                Nenhuma tela cadastrada. {canManage ? 'Adicione aqui ou leia o QR code do monitor no Coala Go.' : 'Peça a quem gerencia o signage para cadastrar a primeira.'}
+              </p>
+            )}
             {canManage && screenForm?.mode !== 'add' && (
               <Button type="button" variant="ds-link" size="xs" onClick={() => { setScreenError(null); setScreenForm({ mode: 'add', name: '' }); }}>
                 <Plus aria-hidden="true" className="h-3.5 w-3.5" />
@@ -1075,7 +1084,7 @@ export function SignageAdmin() {
                 )}
               </div>
 
-              {canManage && !selectedScreen.isDefault && (
+              {canManage && (
                 <div className="mt-4 border-t border-ds-divider pt-3">
                   {confirmDeleteScreen ? (
                     <InlineConfirm
