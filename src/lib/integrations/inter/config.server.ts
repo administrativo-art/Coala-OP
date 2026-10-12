@@ -64,19 +64,26 @@ function credentialVariable(environment: InterEnvironment, suffix: string) {
   return environment === "sandbox" ? `INTER_SANDBOX_${suffix}` : `INTER_${suffix}`;
 }
 
+export function getInterAccountNumber(environment: InterEnvironment) {
+  return process.env[credentialVariable(environment, "ACCOUNT_NUMBER")]?.trim() || undefined;
+}
+
+export function getInterEnvironment(): InterEnvironment {
+  return environmentFrom(process.env.INTER_ENVIRONMENT, "sandbox");
+}
+
 export function getInterConfig(environmentOverride?: InterEnvironment): InterConfig {
-  const environment = environmentOverride ?? environmentFrom(process.env.INTER_ENVIRONMENT, "sandbox");
+  const environment = environmentOverride ?? getInterEnvironment();
   const apiBaseUrl = environment === "production"
     ? "https://cdpj.partners.bancointer.com.br"
     : "https://cdpj-sandbox.partners.uatinter.co";
-  const accountVariable = credentialVariable(environment, "ACCOUNT_NUMBER");
   return {
     environment,
     clientId: required(credentialVariable(environment, "CLIENT_ID")),
     clientSecret: required(credentialVariable(environment, "CLIENT_SECRET")),
     certificate: decodeBase64(credentialVariable(environment, "CERTIFICATE_BASE64")),
     privateKey: decodeBase64(credentialVariable(environment, "PRIVATE_KEY_BASE64")),
-    accountNumber: process.env[accountVariable]?.trim() || undefined,
+    accountNumber: getInterAccountNumber(environment),
     apiBaseUrl,
     tokenUrl: `${apiBaseUrl}/oauth/v2/token`,
     webhookSecret: process.env.INTER_WEBHOOK_SECRET?.trim() || undefined,
