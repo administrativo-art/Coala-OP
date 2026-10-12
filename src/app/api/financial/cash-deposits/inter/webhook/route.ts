@@ -60,7 +60,7 @@ export const GET = secureRoute({ contract: getContract, enforcer: enforcer(getCo
   const configured = await retrieveConfiguredCobrancaWebhook();
   return NextResponse.json({
     environment: getInterCobrancaEnvironment(),
-    webhookUrl: publicWebhookUrl(configured.webhookUrl),
+    webhookUrl: configured ? publicWebhookUrl(configured.webhookUrl) : null,
   }, { headers: { "Cache-Control": "private, no-store" } });
 });
 

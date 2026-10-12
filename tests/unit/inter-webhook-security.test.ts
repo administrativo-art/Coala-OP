@@ -70,11 +70,12 @@ test("Inter callback URL is HTTPS and contains no secret-bearing query", () => {
 });
 
 test("Inter webhook routes use secureRoute and do not consume query secrets or raw bodies", async () => {
-  const [cobranca, banking, configuration, reconciliation] = await Promise.all([
+  const [cobranca, banking, configuration, reconciliation, provider] = await Promise.all([
     readFile("src/app/api/webhooks/inter/cobranca/route.ts", "utf8"),
     readFile("src/app/api/webhooks/inter/banking/route.ts", "utf8"),
     readFile("src/app/api/financial/cash-deposits/inter/webhook/route.ts", "utf8"),
     readFile("src/app/api/jobs/inter/cobrancas/reconcile/route.ts", "utf8"),
+    readFile("src/lib/integrations/inter/cobrancas.ts", "utf8"),
   ]);
   for (const source of [cobranca, banking, configuration, reconciliation]) {
     assert.match(source, /secureRoute/);
@@ -83,5 +84,7 @@ test("Inter webhook routes use secureRoute and do not consume query secrets or r
   assert.doesNotMatch(banking, /searchParams\.get\(["']token/);
   assert.doesNotMatch(configuration, /INTER_WEBHOOK_SECRET|searchParams\.set/);
   assert.doesNotMatch(cobranca, /rawBody,\s*$/m);
+  assert.match(provider, /statusCode === 404\) return null/);
+  assert.match(configuration, /configured \? publicWebhookUrl\(configured\.webhookUrl\) : null/);
 });
 
