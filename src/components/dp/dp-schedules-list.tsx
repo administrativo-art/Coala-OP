@@ -1032,7 +1032,7 @@ export function DPSchedulesList() {
       <div className="flex flex-wrap items-end gap-4">
         <div className="min-w-0">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#db2777]">Escalas operacionais</p>
-          <h1 className="dp-schedules-list-title mt-[7px] text-[29px] font-black leading-[34px] tracking-[-0.025em] text-[#0f172a]">Meses de escala</h1>
+          <h1 className="dp-schedules-list-title mt-[7px] text-[29px] font-black leading-[34px] tracking-tight text-[#0f172a]">Meses de escala</h1>
           <p className="mt-2 text-[13.5px] font-semibold text-[#64748b]">
             {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'}
             {overview.states > 0 && ` · ${overview.states} ${overview.states === 1 ? 'estado' : 'estados'}`}

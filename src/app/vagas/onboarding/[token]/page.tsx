@@ -634,7 +634,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       <div className="onboarding-publico flex min-h-screen items-center justify-center bg-[#F4ECD8] px-5 text-[#2A1F2A]">
         <PageStyles />
         <PageContainer variant="compact" className="w-full">
-          <div className="mx-auto max-w-xl rounded-[30px] bg-white p-7 text-center shadow-sm md:p-10">
+          <div className="mx-auto max-w-xl rounded-[30px] bg-white p-7 text-center shadow-xs md:p-10">
             <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-emerald-700">
               <CheckCircle2 className="h-7 w-7" />
             </span>
@@ -671,7 +671,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       </header>
 
       <div
-        className={`fixed right-0 top-[22%] z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-full border border-r-0 px-2.5 py-2 shadow-sm backdrop-blur-md transition-[opacity,transform] hover:opacity-100 focus-within:opacity-100 ${
+        className={`fixed right-0 top-[22%] z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-full border border-r-0 px-2.5 py-2 shadow-xs backdrop-blur-md transition-[opacity,transform] hover:opacity-100 focus-within:opacity-100 ${
           linkExpired
             ? "border-red-200 bg-red-50/95 text-red-800 opacity-100"
             : "border-[#2A1F2A]/10 bg-white/90 text-[#2A1F2A] opacity-75"
@@ -716,7 +716,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             </div>
           </div>
 
-          <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.06] p-5">
+          <div className="mt-4 rounded-[24px] border border-white/10 bg-white/6 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-bold uppercase tracking-wider text-white/40">Como funciona o envio</p>
               <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-extrabold text-white">
@@ -1253,7 +1253,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
           {data.imageVoiceConsentTerm ? (
             <section
               aria-label="Tela de consentimento opcional para uso de imagem e voz"
-              className="mt-7 rounded-[22px] border-2 border-[#EE6FA8]/25 bg-[#EE6FA8]/[0.06] p-5"
+              className="mt-7 rounded-[22px] border-2 border-[#EE6FA8]/25 bg-[#EE6FA8]/6 p-5"
             >
               <p className="text-xs font-bold uppercase tracking-wider text-[#EE6FA8]">Imagem e voz</p>
               <h3 className="mt-1 text-base font-extrabold">{data.imageVoiceConsentTerm.title}</h3>
@@ -1319,7 +1319,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                 {privacyAcknowledged ? "✓" : "•"} Confirme a ciência do Aviso de Privacidade.
               </p>
             </div>
-            <p className="mt-3 rounded-xl bg-[#EE6FA8]/[0.08] px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#5B4C5B]">
+            <p className="mt-3 rounded-xl bg-[#EE6FA8]/8 px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#5B4C5B]">
               A autorização de uso de imagem e voz é opcional e não impede o envio.
             </p>
           </section>

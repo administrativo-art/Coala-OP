@@ -73,7 +73,7 @@ export function RolesConfigPage() {
             onClick={() => setRoleFilter((prev) => prev === r ? '' : r)}
             className={`rounded-xl border p-4 text-left transition-all ${
               roleFilter === r
-                ? 'border-violet-300 bg-violet-50 shadow-sm'
+                ? 'border-violet-300 bg-violet-50 shadow-xs'
                 : 'border-gray-100 bg-white hover:border-gray-200'
             }`}
           >
@@ -84,7 +84,7 @@ export function RolesConfigPage() {
       </div>
 
       {/* List */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-gray-100 bg-white shadow-xs overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">

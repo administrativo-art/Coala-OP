@@ -119,7 +119,7 @@ export default function QuotationComparePage() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Comparativo de cotações</h1>
+          <h1 className="text-[27px] font-black leading-none tracking-tighter text-zinc-950">Comparativo de cotações</h1>
           <p className="mt-1.5 text-[13.5px] text-zinc-600">
             Menores preços por insumo em cotações finalizadas e ainda ativas.
           </p>

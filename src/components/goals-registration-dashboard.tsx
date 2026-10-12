@@ -156,8 +156,8 @@ export function GoalsRegistrationDashboard() {
       aria-pressed={activeSection === key}
       onClick={() => setActiveSection(key)}
       className={cn(
-        'inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark',
-        activeSection === key ? 'border-ds-accent bg-ds-accent text-white' : 'border-white/[.12] text-ds-on-dark-2 hover:bg-white/[.06]',
+        'inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark',
+        activeSection === key ? 'border-ds-accent bg-ds-accent text-white' : 'border-white/12 text-ds-on-dark-2 hover:bg-white/6',
       )}
     >
       <Icon aria-hidden="true" className="h-3.5 w-3.5" />{label}
@@ -238,7 +238,7 @@ export function GoalsRegistrationDashboard() {
             return (
               <article
                 key={period.id}
-                className="rounded-ds-card border border-ds-border bg-ds-surface p-5 transition-[transform,box-shadow] duration-[180ms] ease-ds-lift hover:-translate-y-[2px] hover:shadow-ds-lift motion-reduce:hover:translate-y-0"
+                className="rounded-ds-card border border-ds-border bg-ds-surface p-5 transition-[transform,box-shadow] duration-180 ease-ds-lift hover:translate-y-[-2px] hover:shadow-ds-lift motion-reduce:hover:translate-y-0"
               >
                 <div className="grid gap-5 xl:grid-cols-[minmax(200px,0.8fr)_minmax(320px,1.2fr)_minmax(200px,0.7fr)_auto] xl:items-center">
                   <div className="min-w-0">

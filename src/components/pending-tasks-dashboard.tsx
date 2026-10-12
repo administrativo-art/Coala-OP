@@ -50,7 +50,7 @@ export function PendingTasksDashboard() {
                                 <Link href={resolveSafeReturnPath(task.link, "/dashboard/tasks")} key={task.id}>
                                     <div className="flex items-start justify-between rounded-md border p-3 hover:bg-muted/50 transition-colors gap-2">
                                         <Icon className="h-5 w-5 text-primary shrink-0 mt-1" />
-                                        <div className="flex-grow">
+                                        <div className="grow">
                                             <p className="font-semibold text-sm leading-tight">{task.title}</p>
                                             <p className="text-xs text-muted-foreground">{task.description}</p>
                                         </div>

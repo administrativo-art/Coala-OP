@@ -215,7 +215,7 @@ export function PurchaseAlertCard() {
                                     </TableCell>
                                     <TableCell className="text-right">{getStatusBadge(item)}</TableCell>
                                     <TableCell className="text-right pr-4">
-                                        <Button variant="outline" size="sm" className="h-8 bg-card hover:bg-accent border-border/50 shadow-sm font-bold">
+                                        <Button variant="outline" size="sm" className="h-8 bg-card hover:bg-accent border-border/50 shadow-xs font-bold">
                                             Pedir agora
                                         </Button>
                                     </TableCell>

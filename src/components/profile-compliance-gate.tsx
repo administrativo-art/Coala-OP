@@ -50,7 +50,7 @@ const STEPS = ["Dados pessoais", "Endereço", "PIX", "Emergência", "Conferênci
 const UF = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 const RELATIONS = ["Mãe/Pai", "Cônjuge", "Filho(a)", "Irmão/Irmã", "Parente", "Amigo(a)", "Outro"];
 
-const inputClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-100 disabled:text-slate-500";
+const inputClass = "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-100 disabled:text-slate-500";
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -223,7 +223,7 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
             <nav className="border-b border-slate-100 bg-slate-50/70 p-4 md:border-b-0 md:border-r">
               <ol className="grid grid-cols-5 gap-2 md:grid-cols-1">
                 {STEPS.map((label, index) => (
-                  <li key={label} className={`flex min-w-0 items-center gap-2 rounded-xl p-2 text-xs font-bold ${index === step ? "bg-white text-violet-700 shadow-sm" : index < step ? "text-emerald-700" : "text-slate-400"}`}>
+                  <li key={label} className={`flex min-w-0 items-center gap-2 rounded-xl p-2 text-xs font-bold ${index === step ? "bg-white text-violet-700 shadow-xs" : index < step ? "text-emerald-700" : "text-slate-400"}`}>
                     <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${index === step ? "bg-violet-600 text-white" : index < step ? "bg-emerald-100" : "bg-slate-200"}`}>
                       {index < step ? <Check className="h-4 w-4" /> : index + 1}
                     </span>

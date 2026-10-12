@@ -76,7 +76,7 @@ function TreeNameCell<T extends HrTreeItem>({
             event.stopPropagation();
             onToggle();
           }}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-ds-sm text-[11px] text-ds-ink-faint hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-ds-sm text-[11px] text-ds-ink-faint hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
         >
           {collapsed ? "▸" : "▾"}
         </button>

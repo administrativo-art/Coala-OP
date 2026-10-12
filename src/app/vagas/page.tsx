@@ -497,7 +497,7 @@ export default function VagasPage() {
     <div className="vagas-publicas min-h-screen overflow-x-hidden bg-[#F4ECD8] text-[#2A1F2A]">
       <PageStyles />
 
-      <header className="sticky top-0 z-40 border-b border-[#2A1F2A]/10 bg-[#F4ECD8]/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-[#2A1F2A]/10 bg-[#F4ECD8]/95 backdrop-blur-sm">
         <div className="vagas-shell flex h-[68px] items-center gap-4">
           <Link href="/vagas" aria-label="Coala Shakes vagas" className="shrink-0">
             <Logo />
@@ -676,14 +676,14 @@ export default function VagasPage() {
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Buscar cargo ou unidade..."
-                      className="w-full bg-transparent text-[15px] font-medium text-[#2A1F2A] outline-none placeholder:text-[#2A1F2A]/35"
+                      className="w-full bg-transparent text-[15px] font-medium text-[#2A1F2A] outline-hidden placeholder:text-[#2A1F2A]/35"
                     />
                   </label>
                   <label className="flex h-[56px] items-center gap-1.5 rounded-2xl bg-[#F4ECD8] px-4">
                     <select
                       value={filterCategory}
                       onChange={(event) => setFilterCategory(event.target.value)}
-                      className="w-full appearance-none bg-transparent text-[13px] font-bold text-[#2A1F2A] outline-none"
+                      className="w-full appearance-none bg-transparent text-[13px] font-bold text-[#2A1F2A] outline-hidden"
                     >
                       <option value="">Todos os cargos</option>
                       {categories.map((category) => (
@@ -696,7 +696,7 @@ export default function VagasPage() {
                     <select
                       value={filterLocation}
                       onChange={(event) => setFilterLocation(event.target.value)}
-                      className="w-full appearance-none bg-transparent text-[13px] font-bold text-[#2A1F2A] outline-none"
+                      className="w-full appearance-none bg-transparent text-[13px] font-bold text-[#2A1F2A] outline-hidden"
                     >
                       <option value="">Todas as unidades</option>
                       {locations.map((location) => (

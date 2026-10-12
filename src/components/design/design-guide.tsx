@@ -81,7 +81,7 @@ export function DesignGuide() {
       <div className="flex flex-col gap-6 py-6">
         <header>
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">Guia de design</p>
-          <h1 className="text-2xl font-extrabold tracking-[-0.025em] text-ds-ink">Design do Coala</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ds-ink">Design do Coala</h1>
           <p className="text-[12.5px] text-ds-ink-muted">Componentes reais. A regra escrita está em docs/design.</p>
         </header>
 
@@ -184,11 +184,11 @@ export function DesignGuide() {
               <>
                 <div>
                   <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">{modalKind === "record" ? "Ficha cadastral" : "Editar insumo"}</p>
-                  <h3 className="mt-2 break-words text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em]">Leite integral</h3>
-                  <span className="mt-3 inline-flex rounded-ds-pill bg-white/[.08] px-2.5 py-1 text-[11.5px] font-bold text-ds-on-dark-2">Ativo</span>
+                  <h3 className="mt-2 wrap-break-word text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em]">Leite integral</h3>
+                  <span className="mt-3 inline-flex rounded-ds-pill bg-white/8 px-2.5 py-1 text-[11.5px] font-bold text-ds-on-dark-2">Ativo</span>
                 </div>
-                <div className="rounded-ds-card border border-white/[.08] bg-white/[.05] p-4 text-[12.5px]">
-                  <div className="flex justify-between gap-3 border-b border-white/[.06] pb-2"><span className="text-ds-on-dark-muted">Conversão</span><strong>1 pacote = 1 kg</strong></div>
+                <div className="rounded-ds-card border border-white/8 bg-white/5 p-4 text-[12.5px]">
+                  <div className="flex justify-between gap-3 border-b border-white/6 pb-2"><span className="text-ds-on-dark-muted">Conversão</span><strong>1 pacote = 1 kg</strong></div>
                   <div className="flex justify-between gap-3 pt-2"><span className="text-ds-on-dark-muted">Vínculos</span><strong>3 derivados</strong></div>
                 </div>
               </>
@@ -206,11 +206,11 @@ export function DesignGuide() {
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-muted">
                   Nome do insumo
-                  <input defaultValue="Leite integral" className="h-[42px] rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-semibold normal-case tracking-normal text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink" />
+                  <input defaultValue="Leite integral" className="h-[42px] rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-semibold normal-case tracking-normal text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink" />
                 </label>
                 <label className="grid gap-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-ds-ink-muted">
                   Unidade de medida
-                  <select defaultValue="kg" className="h-[42px] rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-semibold normal-case tracking-normal text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+                  <select defaultValue="kg" className="h-[42px] rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-semibold normal-case tracking-normal text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
                     <option value="kg">Quilograma</option>
                     <option value="l">Litro</option>
                   </select>

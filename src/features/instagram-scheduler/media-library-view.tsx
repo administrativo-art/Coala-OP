@@ -228,7 +228,7 @@ export function MediaLibraryView({
     await onMoveFolder(folderId, targetFolderId);
   }
 
-  const dropClass = (key: string) => (dropTarget === key ? "outline outline-2 outline-ds-accent-ink" : "");
+  const dropClass = (key: string) => (dropTarget === key ? "outline-solid outline-2 outline-ds-accent-ink" : "");
   const dropProps = (key: string, targetFolderId: string | null) => ({
     onDragOver: (event: DragEvent) => allowDrop(event, key),
     onDragLeave: () => setDropTarget((current) => (current === key ? null : current)),
@@ -266,7 +266,7 @@ export function MediaLibraryView({
             type="button"
             aria-pressed={active}
             onClick={() => openFolder(node.id)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left text-[13px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
           >
             <span className="truncate">{node.name}</span>
           </button>
@@ -287,7 +287,7 @@ export function MediaLibraryView({
   }, [tree]);
 
   const unusedCount = media.filter((item) => item.uses.length === 0).length;
-  const folderButton = (active: boolean) => cn("flex w-full items-center gap-2 rounded-ds-btn px-2 py-2 text-left text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink", active ? "bg-ds-accent-row font-extrabold" : "hover:bg-ds-muted");
+  const folderButton = (active: boolean) => cn("flex w-full items-center gap-2 rounded-ds-btn px-2 py-2 text-left text-[13px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink", active ? "bg-ds-accent-row font-extrabold" : "hover:bg-ds-muted");
 
   async function removeCurrentFolder() {
     if (!currentFolder) return;
@@ -463,7 +463,7 @@ export function MediaLibraryView({
                   onDragStart={(event) => dragFolder(event, folder.id)}
                   onClick={() => openFolder(folder.id)}
                   {...dropProps(`card:${folder.id}`, folder.id)}
-                  className={cn("flex items-center gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3 py-3 text-left text-[13px] font-bold hover:shadow-ds-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink", dropClass(`card:${folder.id}`))}
+                  className={cn("flex items-center gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3 py-3 text-left text-[13px] font-bold hover:shadow-ds-lift focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink", dropClass(`card:${folder.id}`))}
                 >
                   <span aria-hidden="true" className="text-ds-accent-ink">▤</span>
                   <span className="min-w-0 truncate">{folder.name}</span>
@@ -497,12 +497,12 @@ export function MediaLibraryView({
                       type="button"
                       aria-pressed={selected?.id === item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className="block w-full min-w-0 text-left focus-visible:outline-none"
+                      className="block w-full min-w-0 text-left focus-visible:outline-hidden"
                     >
                       <div
                         className={cn(
-                          "relative aspect-[4/5] overflow-hidden rounded-ds-btn border border-ds-border bg-ds-muted outline-offset-2",
-                          selected?.id === item.id && "outline outline-2 outline-ds-accent-ink"
+                          "relative aspect-4/5 overflow-hidden rounded-ds-btn border border-ds-border bg-ds-muted outline-offset-2",
+                          selected?.id === item.id && "outline-solid outline-2 outline-ds-accent-ink"
                         )}
                       >
                         <ProtectedMedia url={item.previewUrl} kind={item.kind} alt={item.name} />
@@ -538,11 +538,11 @@ export function MediaLibraryView({
         <aside className="hidden self-start rounded-ds-card-lg border border-ds-border bg-ds-surface p-5 xl:flex xl:flex-col xl:gap-4">
           {selected ? (
             <>
-              <div className="aspect-[4/5] max-h-[340px] overflow-hidden rounded-ds-btn border border-ds-border bg-ds-muted">
+              <div className="aspect-4/5 max-h-[340px] overflow-hidden rounded-ds-btn border border-ds-border bg-ds-muted">
                 <ProtectedMedia url={selected.previewUrl} kind={selected.kind} alt={selected.name} eager />
               </div>
               <div>
-                <h2 className="break-words text-[18px] font-extrabold">{selected.name}</h2>
+                <h2 className="wrap-break-word text-[18px] font-extrabold">{selected.name}</h2>
                 <p className="mt-1 text-[12px] text-ds-ink-muted">
                   {scheduledView ? "Agendamentos" : path.map((folder) => folder.name).join(" / ") || "Biblioteca"} · {selected.kind === "video" ? "vídeo" : "foto"} · {sizeLabel(selected.sizeBytes)}
                 </p>

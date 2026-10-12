@@ -106,7 +106,7 @@ export function TaskList({ tasks, onTaskSelect, getTaskStatusLabel, getTaskMeta 
             ) : (
                  StatusIcon ? <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusInfo?.color}`} /> : null
             )}
-            <div className="flex-grow">
+            <div className="grow">
               <p className="font-semibold">{task.title}</p>
               {!isLegacy && createdAt ? (
                 <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">

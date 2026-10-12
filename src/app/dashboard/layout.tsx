@@ -280,7 +280,7 @@ export default function DashboardLayout({
   ) : null;
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[var(--bg)]">
+    <div className="flex min-h-screen w-full flex-col bg-(--bg)">
       <NavTrailProvider>
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
       <div className="min-w-0 flex flex-1 flex-col lg:pl-[88px]">

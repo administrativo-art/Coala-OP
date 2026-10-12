@@ -193,7 +193,7 @@ export function StockTransfer({ open, onOpenChange }: StockTransferProps) {
         </>
       }
     >
-      <div className="-mx-[30px] -my-[26px] flex min-h-0 flex-1 flex-col">
+      <div className="mx-[-30px] my-[-26px] flex min-h-0 flex-1 flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-[#e6e2da] px-7 pb-4 pt-[22px]">
           <div className="flex flex-col gap-1">
             <h3 className="m-0 text-[21px] font-extrabold tracking-[-.02em]">{done ? 'Transferência criada' : originName && destinationName ? `${originName} → ${destinationName}` : 'Itens da transferência'}</h3>

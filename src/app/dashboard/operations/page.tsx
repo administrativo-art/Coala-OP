@@ -36,7 +36,7 @@ function StatCard({ title, value, subtitle, icon, accent, href }: {
 }) {
   const content = (
     <Card className={`relative overflow-hidden transition-all duration-300 group ${href ? 'hover:shadow-lg hover:-translate-y-0.5 cursor-pointer' : ''}`}>
-      <div className={`absolute inset-0 opacity-[0.04] bg-gradient-to-br ${accent}`} />
+      <div className={`absolute inset-0 opacity-[0.04] bg-linear-to-br ${accent}`} />
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
@@ -44,7 +44,7 @@ function StatCard({ title, value, subtitle, icon, accent, href }: {
             <p className="text-3xl font-bold tracking-tight">{value}</p>
             {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
           </div>
-          <div className={`rounded-xl p-2.5 bg-gradient-to-br ${accent} text-white shadow-lg`}>
+          <div className={`rounded-xl p-2.5 bg-linear-to-br ${accent} text-white shadow-lg`}>
             {icon}
           </div>
         </div>

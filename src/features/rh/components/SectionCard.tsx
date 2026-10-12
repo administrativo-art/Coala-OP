@@ -25,7 +25,7 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
   if (!visible.length) return null;
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-xl border border-gray-100 bg-white shadow-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((p) => !p)}

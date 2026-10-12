@@ -127,7 +127,7 @@ export default function EffectiveCostsPage() {
 
         <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Custo efetivo</h1>
+            <h1 className="text-[27px] font-black leading-none tracking-tighter text-zinc-950">Custo efetivo</h1>
             <p className="mt-1.5 text-[13.5px] text-zinc-600">Preço realmente pago por lote recebido. Base de custo da ficha técnica e da precificação.</p>
           </div>
           <Button
@@ -194,11 +194,11 @@ export default function EffectiveCostsPage() {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">Custo atual</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Custo atual</div>
                       <div className="mt-1 font-mono text-base font-black text-zinc-950">{money(latest.unitCost)}/{base?.unit ?? ''}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">Variação</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Variação</div>
                       <div className={`mt-1 text-[15px] font-black ${variation > 0 ? 'text-rose-600' : variation < 0 ? 'text-emerald-600' : 'text-zinc-600'}`}>
                         {variation > 0 ? '+' : ''}{variation.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
                       </div>

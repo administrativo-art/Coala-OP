@@ -79,7 +79,7 @@ function EmptyState({ children }: { children: ReactNode }) {
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-ds-btn border border-ds-border bg-ds-surface p-3 shadow-sm">
+    <div className="rounded-ds-btn border border-ds-border bg-ds-surface p-3 shadow-xs">
       <p className="text-xs font-semibold text-ds-ink-faint">{label}</p>
       <p className="mt-0.5 text-xl font-extrabold tracking-tight text-ds-ink">{value}</p>
       {detail ? <p className="mt-0.5 text-[11px] font-medium text-ds-ink-faint">{detail}</p> : null}
@@ -773,7 +773,7 @@ function ManagementDashboard() {
             periodLabel={formatSalesPeriod(visibleSalesReports)}
             onDetails={() => setSalesModalOpen(true)}
             unitFilter={
-              <div className="flex gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+              <div className="flex gap-2 *:min-w-0 *:flex-1">
               <MonthFilter label="Mês e ano das vendas" value={salesMonthValue} months={monthChoices} onChange={setSalesMonth} />
               <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
                 <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
@@ -862,7 +862,7 @@ function ManagementDashboard() {
             </div>
             <div className="space-y-5">
               {goalRows.map((goal) => (
-                <div key={goal.kioskId} className="space-y-2 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
+                <div key={goal.kioskId} className="space-y-2 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-xs">
                   <div className="grid grid-cols-[1fr_auto_48px] items-center gap-4 text-sm">
                     <span className="truncate text-base font-black text-ds-ink">{goal.name}</span>
                     <span className="font-semibold text-ds-ink-muted">{formatCurrency(goal.current)} / {formatCurrency(goal.target)}</span>
@@ -1020,7 +1020,7 @@ function ManagementDashboard() {
                 {filteredVacations.map(({ vacation, start }, index) => {
                   const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
                   return (
-                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
+                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-xs">
                       <div
                         className={cn(
                           "flex h-12 w-12 items-center justify-center rounded-full text-sm font-black text-white",
@@ -1104,7 +1104,7 @@ function ManagementDashboard() {
                       .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""))
                     const date = new Date(`${dateKey}T12:00:00`)
                     return (
-                      <div key={dateKey} className="grid grid-cols-[72px_1fr] gap-5 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
+                      <div key={dateKey} className="grid grid-cols-[72px_1fr] gap-5 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-xs">
                         <div className="text-center">
                           <p className="text-xs font-black uppercase text-ds-ink-faint">{format(date, "EEE", { locale: ptBR })}</p>
                           <p className="text-2xl font-black text-ds-ink">{format(date, "dd")}</p>

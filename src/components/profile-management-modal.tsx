@@ -304,7 +304,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       control={form.control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-muted/30">
+        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-xs bg-muted/30">
           <div className="space-y-0.5">
             <FormLabel className="text-base">{label}</FormLabel>
             {description && <FormDescription>{description}</FormDescription>}

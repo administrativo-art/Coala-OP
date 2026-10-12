@@ -84,7 +84,7 @@ export function ScheduleWidget({ days, emptyMessage, unitFilter, unitLabel, onMo
                   ) : (
                     <ul className="mt-2 space-y-1.5">
                       {day.shifts.slice(0, 3).map((shift) => (
-                        <li key={shift.id} className="rounded-md bg-ds-surface px-2 py-1.5 shadow-sm">
+                        <li key={shift.id} className="rounded-md bg-ds-surface px-2 py-1.5 shadow-xs">
                           <p className="truncate text-xs font-extrabold text-ds-ink-2">{shift.name}</p>
                           <p className="text-[10px] font-semibold text-ds-ink-faint">{shift.time}</p>
                         </li>

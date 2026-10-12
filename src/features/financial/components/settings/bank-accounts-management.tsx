@@ -488,7 +488,7 @@ function BankAccountPanel({
           <PanelSection
             title="Formas de pagamento"
             aside={
-              <button type="button" onClick={() => append(NEW_METHOD())} className="font-bold text-ds-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+              <button type="button" onClick={() => append(NEW_METHOD())} className="font-bold text-ds-accent-ink hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
                 + Adicionar
               </button>
             }

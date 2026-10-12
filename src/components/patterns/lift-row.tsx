@@ -34,16 +34,16 @@ export const LiftRow = React.forwardRef<HTMLDivElement, LiftRowProps>(
         }
       }}
       className={cn(
-        "relative border-b border-ds-divider px-[18px] py-[13px] outline-none",
+        "relative border-b border-ds-divider px-[18px] py-[13px] outline-hidden",
         interactive && "cursor-pointer",
-        "transition-[transform,box-shadow,border-radius,background] duration-[180ms] ease-ds-lift",
-        "hover:z-[3] hover:rounded-[14px] hover:bg-ds-surface hover:shadow-ds-lift",
+        "transition-[transform,box-shadow,border-radius,background] duration-180 ease-ds-lift",
+        "hover:z-3 hover:rounded-[14px] hover:bg-ds-surface hover:shadow-ds-lift",
         table
-          ? "hover:-translate-y-[3px] hover:scale-[1.006]"
-          : "hover:-translate-y-[3px] hover:scale-[1.012]",
-        "focus-visible:z-[3] focus-visible:rounded-[14px] focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
+          ? "hover:translate-y-[-3px] hover:scale-[1.006]"
+          : "hover:translate-y-[-3px] hover:scale-[1.012]",
+        "focus-visible:z-3 focus-visible:rounded-[14px] focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
         "motion-reduce:hover:translate-y-0 motion-reduce:hover:scale-100",
-        "data-[selected]:bg-ds-accent-row data-[selected]:shadow-[inset_3px_0_0_var(--ds-accent-ink)]",
+        "data-selected:bg-ds-accent-row data-selected:shadow-[inset_3px_0_0_var(--ds-accent-ink)]",
         className
       )}
       {...props}

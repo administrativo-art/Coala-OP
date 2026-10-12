@@ -10,7 +10,7 @@ export function HeroBackButton({ fallbackHref, parentLabel }: { fallbackHref: st
       label={parentLabel}
       ariaLabel={`Voltar para ${parentLabel}`}
       variant="ghost"
-      className="h-9 rounded-ds-btn border border-white/[.14] px-3 text-[13px] font-bold text-ds-on-dark hover:bg-white/[.06] hover:text-ds-on-dark"
+      className="h-9 rounded-ds-btn border border-white/[.14] px-3 text-[13px] font-bold text-ds-on-dark hover:bg-white/6 hover:text-ds-on-dark"
     />
   )
 }

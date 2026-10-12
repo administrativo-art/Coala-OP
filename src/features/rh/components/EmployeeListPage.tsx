@@ -31,7 +31,7 @@ function EmployeeRow({ employee }: { employee: Employee }) {
             <Image src={employee.photo_url} alt={employee.name} width={40} height={40} className="object-cover w-full h-full" />
           </div>
         ) : (
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-full bg-linear-to-br from-violet-400 to-violet-600 flex items-center justify-center">
             <span className="text-white text-sm font-semibold">{initials}</span>
           </div>
         )}
@@ -115,14 +115,14 @@ export function EmployeeListPage() {
             placeholder="Buscar por nome…"
             value={searchInput}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white"
           />
         </div>
 
         <select
           value={filters.status ?? ''}
           onChange={(e) => setFilters((f) => ({ ...f, status: (e.target.value as EmployeeStatus) || undefined }))}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-hidden focus:ring-2 focus:ring-violet-500"
         >
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -131,7 +131,7 @@ export function EmployeeListPage() {
       </div>
 
       {/* List */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm divide-y divide-gray-50">
+      <div className="rounded-xl border border-gray-100 bg-white shadow-xs divide-y divide-gray-50">
         {listState.status === 'loading' && (
           <div className="space-y-px p-2 animate-pulse">
             {Array.from({ length: 6 }).map((_, i) => (

@@ -263,7 +263,7 @@ export function SignagePlayer() {
   const statusBadge = useMemo(() => {
     if (status === 'online' && realtimeConnected) {
       return (
-        <div className="flex items-center gap-2 rounded-full bg-success/15 px-4 py-2 text-sm text-emerald-200 backdrop-blur-sm">
+        <div className="flex items-center gap-2 rounded-full bg-success/15 px-4 py-2 text-sm text-emerald-200 backdrop-blur-xs">
           <Wifi className="h-4 w-4" />
           Tempo real
         </div>
@@ -271,7 +271,7 @@ export function SignagePlayer() {
     }
 
     return (
-      <div className="flex items-center gap-2 rounded-full bg-warning/15 px-4 py-2 text-sm text-amber-200 backdrop-blur-sm">
+      <div className="flex items-center gap-2 rounded-full bg-warning/15 px-4 py-2 text-sm text-amber-200 backdrop-blur-xs">
         <WifiOff className="h-4 w-4" />
         Cache local
       </div>
@@ -292,7 +292,7 @@ export function SignagePlayer() {
   if (!kioskId || (!published && error)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#020617] p-8 text-white">
-        <div className="max-w-lg rounded-3xl border border-white/10 bg-white/5 p-8 text-center backdrop-blur">
+        <div className="max-w-lg rounded-3xl border border-white/10 bg-white/5 p-8 text-center backdrop-blur-sm">
           <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-amber-300" />
           <h1 className="text-2xl font-semibold">Player indisponível</h1>
           <p className="mt-3 text-white/70">{error}</p>
@@ -319,7 +319,7 @@ export function SignagePlayer() {
       {isDebug && (
         <div className="absolute left-6 top-6 z-20 flex items-center gap-3">
           {statusBadge}
-          <div className="rounded-full bg-black/35 px-4 py-2 text-sm text-white/70 backdrop-blur">
+          <div className="rounded-full bg-black/35 px-4 py-2 text-sm text-white/70 backdrop-blur-sm">
             {published?.kioskName ?? kioskId}
           </div>
         </div>
@@ -333,7 +333,7 @@ export function SignagePlayer() {
               event.stopPropagation();
               void requestFullscreen();
             }}
-            className="inline-flex items-center gap-3 rounded-full bg-white/14 px-5 py-3 text-sm font-medium text-white backdrop-blur transition hover:bg-white/20"
+            className="inline-flex items-center gap-3 rounded-full bg-white/14 px-5 py-3 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20"
           >
             <Expand className="h-4 w-4" />
             Entrar em tela cheia
@@ -343,7 +343,7 @@ export function SignagePlayer() {
 
       <div className="relative z-10 flex min-h-screen items-center justify-center p-8">
         {!activeSlide ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center backdrop-blur">
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center backdrop-blur-sm">
             <p className="text-2xl font-semibold">Nenhum slide publicado</p>
             <p className="mt-2 text-white/70">Publique conteúdo no painel `/signage` para este quiosque.</p>
           </div>
@@ -352,7 +352,7 @@ export function SignagePlayer() {
             key={activeSlide.id}
             src={activeSlide.assetUrl}
             alt={activeSlide.title}
-            className="max-h-[92vh] w-full rounded-[2rem] object-contain shadow-2xl shadow-black/40"
+            className="max-h-[92vh] w-full rounded-4xl object-contain shadow-2xl shadow-black/40"
           />
         ) : activeSlide.type === 'video' ? (
           <video
@@ -362,7 +362,7 @@ export function SignagePlayer() {
             muted
             loop
             playsInline
-            className="max-h-[92vh] w-full rounded-[2rem] object-contain shadow-2xl shadow-black/40"
+            className="max-h-[92vh] w-full rounded-4xl object-contain shadow-2xl shadow-black/40"
           />
         ) : (
           <div

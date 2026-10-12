@@ -800,7 +800,7 @@ export default function InstagramProgramacaoPage() {
       </div>
 
       {toast && (
-        <div role="status" className="fixed bottom-6 left-1/2 z-[90] max-w-[90vw] -translate-x-1/2 rounded-[10px] bg-[#4A1A04] px-4 py-2.5 text-[13px] font-bold text-white shadow-2xl">
+        <div role="status" className="fixed bottom-6 left-1/2 z-90 max-w-[90vw] -translate-x-1/2 rounded-[10px] bg-[#4A1A04] px-4 py-2.5 text-[13px] font-bold text-white shadow-2xl">
           {toast}
         </div>
       )}

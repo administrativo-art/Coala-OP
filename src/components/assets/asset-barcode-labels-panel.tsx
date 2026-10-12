@@ -170,7 +170,7 @@ function BarcodeSvg({ code, variant = "print" }: { code: string; variant?: "prin
 
 function AssetLabelPrintCard({ row }: { row: LabelRow }) {
   return (
-    <div className="asset-label-card rounded-md border bg-white p-2 text-zinc-950 shadow-sm">
+    <div className="asset-label-card rounded-md border bg-white p-2 text-zinc-950 shadow-xs">
       <div className="flex h-full min-h-0 items-center gap-1.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={brand.logo} alt="Coala" className="h-8 w-8 shrink-0 object-contain" />

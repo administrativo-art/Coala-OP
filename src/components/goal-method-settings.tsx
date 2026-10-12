@@ -284,7 +284,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
 
   if (!editingId) {
     return (
-      <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+      <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
         <CardContent className="space-y-5 p-5 lg:p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0">
@@ -325,7 +325,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
                   key={config.id}
                   type="button"
                   onClick={() => openEditor(config.id)}
-                  className="group rounded-2xl border border-slate-200 bg-slate-50/60 p-5 text-left transition hover:border-pink-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500"
+                  className="group rounded-2xl border border-slate-200 bg-slate-50/60 p-5 text-left transition hover:border-pink-200 hover:bg-white hover:shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-pink-500"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
@@ -398,7 +398,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+      <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
         <CardContent className="p-6 lg:p-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-3">
@@ -436,7 +436,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
 
       <div className="grid gap-7 2xl:grid-cols-[minmax(0,1fr)_540px]">
         <div className="space-y-6">
-          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
             <CardContent className="space-y-6 p-6 lg:p-7">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -505,7 +505,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
             <CardContent className="space-y-5 p-6 lg:p-7">
               <div className="flex items-center gap-2">
                 <Gift className="h-5 w-5 text-pink-600" />
@@ -559,7 +559,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
             <CardContent className="space-y-5 p-6 lg:p-7">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-pink-600" />
@@ -705,7 +705,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
             <CardContent className="space-y-5 p-6 lg:p-7">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -814,7 +814,7 @@ export function GoalMethodSettings({ canManage }: GoalMethodSettingsProps) {
         </div>
 
         <div className="min-w-0 space-y-6">
-          <Card className="sticky top-4 rounded-2xl border-slate-200 bg-white shadow-sm">
+          <Card className="sticky top-4 rounded-2xl border-slate-200 bg-white shadow-xs">
             <CardContent className="space-y-5 p-5 lg:p-6">
               <div className="flex items-center gap-2">
                 <Calculator className="h-5 w-5 text-pink-600" />

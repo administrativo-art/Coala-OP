@@ -232,7 +232,7 @@ function ContentList({ title, items }: { title: string; items: InstagramInsightC
                 </dl>
               </div>
               {item.permalink ? (
-                <a href={item.permalink} target="_blank" rel="noopener noreferrer" aria-label="Abrir publicação no Instagram" className="hidden h-9 w-9 place-items-center rounded-ds-btn-lg border border-ds-border text-ds-ink-muted transition hover:bg-ds-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink lg:grid">
+                <a href={item.permalink} target="_blank" rel="noopener noreferrer" aria-label="Abrir publicação no Instagram" className="hidden h-9 w-9 place-items-center rounded-ds-btn-lg border border-ds-border text-ds-ink-muted transition hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink lg:grid">
                   <ExternalLink aria-hidden="true" className="h-4 w-4" />
                 </a>
               ) : null}
@@ -339,7 +339,7 @@ export function InsightsView({
                   aria-pressed={period === option}
                   onClick={() => onPeriodChange(option)}
                   className={cn(
-                    "h-[34px] whitespace-nowrap rounded-ds-md px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                    "h-[34px] whitespace-nowrap rounded-ds-md px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
                     period === option ? "bg-ds-on-dark text-ds-dark" : "text-ds-on-dark-sub hover:text-white",
                   )}
                 >
@@ -366,7 +366,7 @@ export function InsightsView({
                   aria-controls="instagram-insights-panel"
                   onClick={() => onSectionChange(value)}
                   className={cn(
-                    "shrink-0 border-b-4 px-4 pb-3 pt-1.5 text-[15px] font-extrabold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                    "shrink-0 border-b-4 px-4 pb-3 pt-1.5 text-[15px] font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
                     section === value ? "border-ds-accent text-white" : "border-transparent text-ds-indicator-zero hover:text-ds-on-dark-2",
                   )}
                 >
@@ -403,7 +403,7 @@ export function InsightsView({
             </dl>
           </section>
 
-          <div id="instagram-insights-panel" role="tabpanel" aria-labelledby={`instagram-insights-tab-${section}`} tabIndex={0} className="space-y-5 outline-none">
+          <div id="instagram-insights-panel" role="tabpanel" aria-labelledby={`instagram-insights-tab-${section}`} tabIndex={0} className="space-y-5 outline-hidden">
 
           {section === "overview" ? (
           <>
@@ -420,7 +420,7 @@ export function InsightsView({
                 <Sparkles aria-hidden="true" className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-ds-accent-ink">Leitura do período</p>
+                <p className="text-[11px] font-extrabold uppercase tracking-widest text-ds-accent-ink">Leitura do período</p>
                 <h2 id="period-reading-title" className="mt-1 text-lg font-bold tracking-tight text-ds-ink">Do alcance à ação</h2>
                 <p className="mt-1 text-sm leading-6 text-ds-ink-muted">Estes sinais conectam descoberta, resposta ao conteúdo e intenção de avançar pelo perfil.</p>
               </div>
@@ -459,7 +459,7 @@ export function InsightsView({
           <section aria-labelledby="instagram-performance-title">
             <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-ds-accent-ink">Resultados</p>
+                <p className="text-[11px] font-extrabold uppercase tracking-widest text-ds-accent-ink">Resultados</p>
                 <h2 id="instagram-performance-title" className="mt-1 text-lg font-bold tracking-tight text-ds-ink">Desempenho no Instagram</h2>
               </div>
               <p className="text-xs text-ds-ink-muted">A Meta pode levar até 48 horas para consolidar os dados.</p>
@@ -493,7 +493,7 @@ export function InsightsView({
           <section aria-labelledby="instagram-growth-title" className="rounded-ds-card-lg border border-ds-border bg-white p-4 md:p-5">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-ds-accent-ink">Audiência</p>
+                <p className="text-[11px] font-extrabold uppercase tracking-widest text-ds-accent-ink">Audiência</p>
                 <h2 id="instagram-growth-title" className="mt-1 text-lg font-bold tracking-tight text-ds-ink">Crescimento da comunidade</h2>
               </div>
               <p className="text-xs text-ds-ink-muted">Ganhos, perdas e saldo são conceitos diferentes.</p>
@@ -692,7 +692,7 @@ export function InsightsView({
             <div className="rounded-ds-card-lg border border-ds-border bg-white p-4 md:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-ds-accent-ink">Diagnóstico de conteúdo</p>
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-ds-accent-ink">Diagnóstico de conteúdo</p>
                   <div className="mt-1 flex items-center gap-2">
                     <h2 id="content-analysis-title" className="text-lg font-bold tracking-tight text-ds-ink">Resposta por formato — amostra recente</h2>
                     <InfoTooltip title="Como comparar formatos"><p>Este resumo usa até 18 conteúdos recentes retornados para a visão geral, não o arquivo completo. Publicações mais antigas tiveram mais tempo para acumular resultados; use os marcos de 48 horas, 7 e 30 dias para comparações equivalentes.</p></InfoTooltip>
@@ -715,7 +715,7 @@ export function InsightsView({
             </div>
 
             <div className="rounded-ds-card-lg border border-ds-border bg-ds-dark p-4 text-white md:p-5">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-ds-accent-kicker">Conteúdo em destaque</p>
+              <p className="text-[11px] font-extrabold uppercase tracking-widest text-ds-accent-kicker">Conteúdo em destaque</p>
               {reading?.topContent ? (
                 <>
                   <div className="mt-3 flex items-start gap-3">
@@ -753,7 +753,7 @@ export function InsightsView({
           <section className="rounded-ds-card-lg border border-ds-border bg-ds-warm p-4 md:p-5" aria-labelledby="coverage-title">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="max-w-2xl">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-ds-accent-ink">Qualidade dos dados</p>
+                <p className="text-[11px] font-extrabold uppercase tracking-widest text-ds-accent-ink">Qualidade dos dados</p>
                 <h2 id="coverage-title" className="mt-1 text-lg font-bold tracking-tight text-ds-ink">Cobertura histórica própria</h2>
                 <p className="mt-1 text-sm leading-6 text-ds-ink-muted">A Meta fornece o recorte atual. A base própria preserva a evolução desde a ativação do coletor e deve deixar qualquer lacuna explícita.</p>
               </div>

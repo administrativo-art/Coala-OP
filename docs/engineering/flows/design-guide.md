@@ -10,7 +10,7 @@ Durante o carregamento da autenticação, a página apresenta estado neutro. Dep
 
 ## Contratos e impacto
 
-Os tokens `--ds-*` ficam em `src/app/globals.css` e `tailwind.config.ts`. As variantes novas de `Button` são aditivas: `default`, `secondary`, `ghost`, `link` e demais variantes existentes não mudaram. A regra escrita está em [`docs/design`](../../design/README.md). O guia não implica que os componentes já sejam usados por Cadastros, Estoque, Financeiro, DP ou modais operacionais.
+Os tokens `--ds-*` e sua exposição ao Tailwind ficam em `src/app/globals.css`, por meio do bloco `@theme` do Tailwind CSS 4. As variantes novas de `Button` são aditivas: `default`, `secondary`, `ghost`, `link` e demais variantes existentes não mudaram. A regra escrita está em [`docs/design`](../../design/README.md). O guia não implica que os componentes já sejam usados por Cadastros, Estoque, Financeiro, DP ou modais operacionais.
 
 ## Verificação
 

@@ -93,7 +93,7 @@ function RuptureAlerts({ results, kioskId }: { results: GroupedProjectionResult[
                     {alerts.map(alert => {
                         const criticalDate = isMatriz ? alert.orderDate : alert.ruptureDate;
                         return (
-                            <div key={alert.baseProductId} className="p-4 border rounded-lg bg-card shadow-sm flex flex-col gap-3">
+                            <div key={alert.baseProductId} className="p-4 border rounded-lg bg-card shadow-xs flex flex-col gap-3">
                                 <p className="font-semibold">{alert.baseProductName}</p>
                                 <div className="text-sm space-y-1">
                                     <div className="flex items-center justify-between">

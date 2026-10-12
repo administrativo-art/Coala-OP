@@ -214,8 +214,8 @@ function PlanningContextPreview({
                     )}
                     {entry.source === "draft" && <span className="absolute left-1 top-1 rounded bg-[#D90F6F] px-1 py-0.5 text-[7px] font-extrabold uppercase text-white">Nova</span>}
                     {entry.source === "schedule" && <span className="absolute left-1 top-1 rounded bg-[#4A1A04]/85 px-1 py-0.5 text-[7px] font-extrabold uppercase text-white">Programada</span>}
-                    {entry.format === "carousel" && <Images className="absolute right-1 top-1 h-3.5 w-3.5 text-white drop-shadow" />}
-                    {entry.format === "reel" && <Play className="absolute right-1 top-1 h-3.5 w-3.5 fill-white text-white drop-shadow" />}
+                    {entry.format === "carousel" && <Images className="absolute right-1 top-1 h-3.5 w-3.5 text-white drop-shadow-sm" />}
+                    {entry.format === "reel" && <Play className="absolute right-1 top-1 h-3.5 w-3.5 fill-white text-white drop-shadow-sm" />}
                   </div>
                 ))}
               </div>
@@ -253,14 +253,14 @@ function DraftStorySequencePreview({ files, urls }: { files: File[]; urls: strin
         <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-[#7D184A]">{activeIndex + 1} de {files.length}</span>
       </div>
       <div className="relative mx-auto w-full max-w-[310px] rounded-[34px] bg-[#283137] p-2.5 shadow-[0_18px_35px_rgba(74,26,4,.16)]">
-        <div className="relative aspect-[9/16] overflow-hidden rounded-[27px] bg-[#181818] text-white">
+        <div className="relative aspect-9/16 overflow-hidden rounded-[27px] bg-[#181818] text-white">
           <div
             ref={viewportRef}
             onScroll={(event) => {
               const viewport = event.currentTarget;
               if (viewport.clientWidth > 0) setActiveIndex(Math.round(viewport.scrollLeft / viewport.clientWidth));
             }}
-            className="flex h-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex h-full snap-x snap-mandatory overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden"
           >
             {files.map((file, index) => (
               <div key={`${file.name}-${file.lastModified}-${index}`} className="relative h-full min-w-full snap-center">
@@ -274,7 +274,7 @@ function DraftStorySequencePreview({ files, urls }: { files: File[]; urls: strin
             ))}
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent px-3 pb-14 pt-3">
+          <div className="pointer-events-none absolute inset-x-0 top-0 bg-linear-to-b from-black/60 to-transparent px-3 pb-14 pt-3">
             <div className="flex gap-1">
               {files.map((file, index) => (
                 <span key={`${file.name}-progress-${index}`} className="h-0.5 flex-1 overflow-hidden rounded bg-white/35">
@@ -290,7 +290,7 @@ function DraftStorySequencePreview({ files, urls }: { files: File[]; urls: strin
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/65 to-transparent px-3 pb-4 pt-16">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-linear-to-t from-black/65 to-transparent px-3 pb-4 pt-16">
             <span className="flex-1 rounded-full border border-white/80 px-3 py-2 text-[10px] font-semibold">Enviar mensagem</span>
             <Heart className="h-5 w-5" aria-hidden="true" />
             <Send className="h-5 w-5" aria-hidden="true" />
@@ -354,7 +354,7 @@ function DraftFeedPreview({
         {files.length > 1 && <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-extrabold text-[#7D184A]">{activeIndex + 1} de {files.length}</span>}
       </div>
 
-      <div className={`relative mx-auto w-full max-w-[310px] overflow-hidden ${vertical ? "rounded-[34px] border-[10px] border-[#283137] bg-[#181818] text-white" : "rounded-2xl border border-[#EADFD3] bg-white text-[#4A1A04]"}`}>
+      <div className={`relative mx-auto w-full max-w-[310px] overflow-hidden ${vertical ? "rounded-[34px] border-10 border-[#283137] bg-[#181818] text-white" : "rounded-2xl border border-[#EADFD3] bg-white text-[#4A1A04]"}`}>
         {!vertical && (
           <div className="flex items-center gap-2 px-3 py-2.5">
             <span className="h-8 w-8 rounded-full bg-[#FDE3EF]" />
@@ -369,7 +369,7 @@ function DraftFeedPreview({
         <div className="relative">
           <div
             ref={viewportRef}
-            className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth bg-black scrollbar-none [&::-webkit-scrollbar]:hidden"
             style={{ aspectRatio: mediaPreviewRatio(format, dimensions[activeIndex], dimensions[0]) }}
             onScroll={(event) => {
               const viewport = event.currentTarget;
@@ -402,7 +402,7 @@ function DraftFeedPreview({
           )}
 
           {vertical && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-3 pb-4 pt-20">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/75 to-transparent px-3 pb-4 pt-20">
               <div className="text-[11px] font-extrabold">@coalashakes</div>
             </div>
           )}
@@ -421,13 +421,13 @@ function DraftFeedPreview({
                 {files.map((file, index) => <button key={`${file.name}-feed-dot-${index}`} type="button" onClick={() => show(index)} aria-label={`Mostrar mídia ${index + 1}`} className={`h-1.5 rounded-full ${index === activeIndex ? "w-4 bg-[#D90F6F]" : "w-1.5 bg-[#D9C8B6]"}`} />)}
               </div>
             )}
-            {caption && <p className="mt-2 whitespace-pre-wrap break-words text-[10px] leading-4"><strong>coalashakes</strong> {caption}</p>}
+            {caption && <p className="mt-2 whitespace-pre-wrap wrap-break-word text-[10px] leading-4"><strong>coalashakes</strong> {caption}</p>}
           </div>
         )}
       </div>
       {vertical && caption && (
         <div className="mx-auto mt-3 w-full max-w-[310px] rounded-xl bg-white px-3 py-2.5 text-[10px] leading-4 text-[#4A1A04]">
-          <p className="whitespace-pre-wrap break-words"><strong>coalashakes</strong> {caption}</p>
+          <p className="whitespace-pre-wrap wrap-break-word"><strong>coalashakes</strong> {caption}</p>
         </div>
       )}
     </div>
@@ -600,7 +600,7 @@ export function CreateScheduleDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-[#4A1A04]/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="presentation">
+    <div className="fixed inset-0 z-100 flex items-end justify-center bg-[#4A1A04]/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-5" role="presentation">
       <section role="dialog" aria-modal="true" aria-labelledby="create-instagram-title" className="flex max-h-[96vh] w-full max-w-[1120px] flex-col overflow-hidden rounded-t-[20px] bg-[#FAF5EF] shadow-2xl sm:rounded-[20px]">
         <header className="flex items-center gap-3 border-b border-[#EADFD3] bg-white px-5 py-4">
           <div className="grid h-10 w-10 place-items-center rounded-full bg-[#FDE3EF] text-[#D90F6F]"><Plus className="h-5 w-5" /></div>

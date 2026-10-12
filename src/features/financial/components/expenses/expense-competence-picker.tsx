@@ -136,8 +136,8 @@ export function ExpenseCompetencePicker({
                   className={cn(
                     "relative h-10 rounded-lg px-2 text-xs font-medium",
                     isAvailable && !isSelected && "border border-transparent hover:border-border hover:bg-muted/70",
-                    isCurrent && !isSelected && "border-primary/30 bg-primary/[0.04] text-primary",
-                    isSelected && "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground"
+                    isCurrent && !isSelected && "border-primary/30 bg-primary/4 text-primary",
+                    isSelected && "bg-primary text-primary-foreground shadow-xs hover:bg-primary hover:text-primary-foreground"
                   )}
                   disabled={!isAvailable}
                   onClick={() => selectCompetence(competence)}
@@ -158,7 +158,7 @@ export function ExpenseCompetencePicker({
             variant="ghost"
             className={cn(
               "h-9 w-full justify-between rounded-lg px-3 text-xs font-medium",
-              value === "all" && "bg-background text-primary shadow-sm"
+              value === "all" && "bg-background text-primary shadow-xs"
             )}
             onClick={() => selectCompetence("all")}
           >

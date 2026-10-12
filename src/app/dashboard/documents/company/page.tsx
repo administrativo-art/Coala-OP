@@ -324,7 +324,7 @@ export default function CompanyDocumentsPage() {
       {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
+        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-xs lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
           <button
             type="button"
             onClick={selectAllDocuments}
@@ -404,7 +404,7 @@ export default function CompanyDocumentsPage() {
             {categoryFilter === "all" ? "Todos os documentos" : categoryFilter}
             {unitFilter !== "all" ? ` › ${unitFilter === NO_UNIT_FILTER ? "Sem unidade específica" : unitFilter}` : ""}
           </p>
-          <div className="rounded-lg border bg-white p-2 shadow-sm">
+          <div className="rounded-lg border bg-white p-2 shadow-xs">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input className="h-9 pl-9 text-sm" placeholder="Buscar documento, categoria ou unidade..." value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -418,7 +418,7 @@ export default function CompanyDocumentsPage() {
               <div><Building2 className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Nenhum documento encontrado</p></div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <div className="overflow-hidden rounded-lg border bg-white shadow-xs">
               {filtered.map((document) => (
                 <div key={document.id} className="flex flex-col gap-3 border-b p-3 last:border-b-0 sm:flex-row sm:items-center">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700"><FileText className="h-4 w-4" /></span>
@@ -477,7 +477,7 @@ export default function CompanyDocumentsPage() {
             {pendingItems.length > 0 ? (
               <div className="space-y-3">
                 {pendingItems.map((item) => (
-                  <div key={item.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                  <div key={item.id} className="rounded-2xl border bg-white p-4 shadow-xs">
                     <div className="flex items-center justify-between gap-2">
                       <p className="min-w-0 truncate text-sm font-black text-slate-900" title={item.file.name}>{item.file.name} <span className="font-semibold text-slate-400">· {formatSize(item.file.size)}</span></p>
                       <button type="button" onClick={() => removePendingItem(item.id)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-slate-500 hover:bg-slate-50" title="Remover">

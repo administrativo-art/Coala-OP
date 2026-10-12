@@ -29,7 +29,7 @@ export function InfoTooltip({ title, children }: InfoTooltipProps) {
           </button>
         </TooltipTrigger>
         <TooltipPortal>
-          <TooltipContent side="top" align="end" collisionPadding={16} className="w-[380px] max-w-[calc(100vw-32px)] max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto whitespace-normal break-words space-y-2 p-3 text-xs leading-relaxed">
+          <TooltipContent side="top" align="end" collisionPadding={16} className="w-[380px] max-w-[calc(100vw-32px)] max-h-(--radix-tooltip-content-available-height) overflow-y-auto whitespace-normal wrap-break-word space-y-2 p-3 text-xs leading-relaxed">
             <p className="font-bold text-slate-950">{title}</p>
             <div className="space-y-1 text-muted-foreground">{children}</div>
           </TooltipContent>

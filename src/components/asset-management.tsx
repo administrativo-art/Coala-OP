@@ -422,10 +422,10 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <div className="space-y-5">
               <div>
                 <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Cadastro · Patrimônio</p>
-                <h2 className="mt-2 break-words text-[26px] font-extrabold leading-tight tracking-[-0.03em]">{v.name?.trim() || 'Novo patrimônio'}</h2>
+                <h2 className="mt-2 wrap-break-word text-[26px] font-extrabold leading-tight tracking-[-0.03em]">{v.name?.trim() || 'Novo patrimônio'}</h2>
                 <p className="mt-1 font-mono text-[13px] text-ds-on-dark-sub">{normalizeAssetCodeInput(v.code ?? '') || 'Informe a placa'}</p>
               </div>
-              <div className="rounded-ds-btn-lg bg-white/[.06] p-4">
+              <div className="rounded-ds-btn-lg bg-white/6 p-4">
                 <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Prévia da etiqueta</p>
                 <LabelPreview code={v.code} name={v.name} brand={v.brand} model={v.model} unitName={unitName} category={v.subcategory} />
               </div>
@@ -1058,20 +1058,20 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
             sidebar={
               <div className="space-y-5">
                 <div className="overflow-hidden rounded-ds-btn-lg">
-                  <AssetThumb asset={asset} className="aspect-[4/3] w-full" fit="contain" />
+                  <AssetThumb asset={asset} className="aspect-4/3 w-full" fit="contain" />
                 </div>
                 <div>
                   <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">
                     {asset.subcategory || asset.category || 'Patrimônio'}
                   </p>
-                  <h2 className="mt-2 break-words text-[24px] font-extrabold leading-tight tracking-[-0.03em]">{form.watch('name') || asset.name}</h2>
+                  <h2 className="mt-2 wrap-break-word text-[24px] font-extrabold leading-tight tracking-[-0.03em]">{form.watch('name') || asset.name}</h2>
                   <p className="mt-1 text-[13px] text-ds-on-dark-sub">{[asset.brand, asset.model].filter(Boolean).join(' · ') || '—'}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <AssetStatusChip status={form.watch('status')} />
                     <AssetPlateBadge asset={asset} />
                   </div>
                 </div>
-                <div className="rounded-ds-btn-lg bg-white/[.06] p-4 text-center">
+                <div className="rounded-ds-btn-lg bg-white/6 p-4 text-center">
                   <div className="mx-auto grid h-32 w-32 place-items-center overflow-hidden rounded-lg bg-white p-2">
                     {qrUrl ? <img src={qrUrl} alt={`QR ${asset.code}`} className="h-full w-full object-contain" /> : <QrCode className="h-20 w-20 text-zinc-400" />}
                   </div>
@@ -1548,7 +1548,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                           <ol className="relative ml-1.5 space-y-3.5 border-l pl-5">
                             {movements.map((m) => (
                               <li key={m.id} className="relative">
-                                <span className="absolute -left-[27px] grid h-5 w-5 place-items-center rounded-full bg-zinc-900 text-white ring-2 ring-background dark:bg-zinc-100 dark:text-zinc-900"><Check className="h-2.5 w-2.5" /></span>
+                                <span className="absolute left-[-27px] grid h-5 w-5 place-items-center rounded-full bg-zinc-900 text-white ring-2 ring-background dark:bg-zinc-100 dark:text-zinc-900"><Check className="h-2.5 w-2.5" /></span>
                                 <div className="rounded-xl border bg-card p-3">
                                   <div className="flex items-center justify-between">
                                     <span className="text-[10.5px] font-bold uppercase tracking-wider text-foreground/70">{MOVEMENT_LABEL[m.type] ?? m.type}</span>
@@ -1825,16 +1825,16 @@ function AssetCardHero({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset)
     <button
       type="button"
       onClick={() => onOpen(asset)}
-      className="group relative flex flex-col overflow-hidden rounded-2xl bg-card text-left ring-1 ring-border transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="group relative flex flex-col overflow-hidden rounded-2xl bg-card text-left ring-1 ring-border transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-zinc-300 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500"
     >
-      <div className="relative aspect-[4/3] overflow-hidden" style={{ background: cat.soft }}>
+      <div className="relative aspect-4/3 overflow-hidden" style={{ background: cat.soft }}>
         <AssetThumb asset={asset} className="h-full w-full" fit="contain" />
         <div className="absolute left-2.5 top-2.5"><AssetStatusChip status={asset.status} variant="solid" /></div>
         <div className="absolute right-2.5 top-2.5">
-          <span className="rounded-md bg-white/90 px-1.5 py-1 font-mono text-[10px] font-bold text-zinc-900 ring-1 ring-zinc-200 backdrop-blur">{assetCodeTail(asset.code)}</span>
+          <span className="rounded-md bg-white/90 px-1.5 py-1 font-mono text-[10px] font-bold text-zinc-900 ring-1 ring-zinc-200 backdrop-blur-sm">{assetCodeTail(asset.code)}</span>
         </div>
         <div className="absolute inset-x-2.5 bottom-2.5 opacity-0 transition group-hover:opacity-100">
-          <span className="block rounded-md bg-zinc-900/85 py-1.5 text-center text-[11px] font-semibold text-white backdrop-blur">Ver detalhes</span>
+          <span className="block rounded-md bg-zinc-900/85 py-1.5 text-center text-[11px] font-semibold text-white backdrop-blur-sm">Ver detalhes</span>
         </div>
       </div>
       <div className="p-4">

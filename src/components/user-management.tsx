@@ -144,7 +144,7 @@ function FieldHelpTooltip({ title, description }: { title: string; description: 
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-200 hover:text-pink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500/40"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-200 hover:text-pink-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-pink-500/40"
             aria-label={title}
           >
             <Info className="h-3.5 w-3.5" />
@@ -1461,7 +1461,7 @@ export function UserManagement({
                                 </Button>
                               </FormControl>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                            <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                               <DropdownMenuLabel>Unidades disponíveis</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               <ScrollArea className="h-48">
@@ -1746,7 +1746,7 @@ export function UserManagement({
                   </div>
                 </>
               );
-              const cardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
+              const cardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-xs";
               return clickable ? (
                 <Link
                   key={stat.label}
@@ -1763,8 +1763,8 @@ export function UserManagement({
             })}
           </div>
 
-          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
-            <div className="relative flex-grow w-full">
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs sm:flex-row sm:items-center">
+            <div className="relative grow w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome, email..."
@@ -1810,7 +1810,7 @@ export function UserManagement({
           ) : (
             <div className="space-y-4">
               {groupedUsers.map(group => (
-                <section key={group.profileId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <section key={group.profileId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                   <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="rounded-lg bg-pink-100 px-2.5 py-1 text-xs font-black text-pink-600">{group.profileName}</span>
