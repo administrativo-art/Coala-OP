@@ -227,13 +227,16 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val state by vm.profile.collectAsStateWithLifecycle(); val feedback by vm.feedback.collectAsStateWithLifecycle()
     val release by update.release.collectAsStateWithLifecycle(); val updateFeedback by update.feedback.collectAsStateWithLifecycle()
     var signOut by remember { mutableStateOf(false) }
+    var framing by remember { mutableStateOf<com.coalaone.go.data.Document?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     Page("Perfil", feedback, onBack, onRefresh = { vm.refresh() }) {
         CardBlock {
             Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
             Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
         }
-        CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true, onDocument = vm::avatar) }
+        CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true) { framing = it } }
+        // The chosen photo is framed by the person before it is sent; only the framed square leaves the phone.
+        framing?.let { photo -> PhotoCropDialog(photo, { framing = null }) { framed -> framing = null; vm.avatar(framed) } }
         CardBlock {
             Text("Aplicativo", style = MaterialTheme.typography.titleMedium)
             Text("Coala Go ${BuildConfig.VERSION_NAME} · Android ${BuildConfig.VERSION_CODE}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)

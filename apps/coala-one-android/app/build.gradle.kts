@@ -125,6 +125,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
     implementation("androidx.room:room-runtime:2.7.1")
     implementation("androidx.room:room-ktx:2.7.1")
