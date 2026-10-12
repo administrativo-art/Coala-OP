@@ -29,7 +29,7 @@ import com.coalaone.go.domain.Rules
     }
 }
 /** Unit row of the prototype: name, what is going on there and the action in words; the badge carries the unit initials. */
-@Composable private fun UnitRow(name: String, meta: String, action: String, highlight: Boolean, enabled: Boolean, onClick: () -> Unit) {
+@Composable fun UnitRow(name: String, meta: String, action: String, highlight: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(if (highlight) Tokens.accentSoft else Tokens.soft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Text(unitInitials(name), color = if (highlight) Tokens.wine else Tokens.ink, style = MaterialTheme.typography.titleMedium) }

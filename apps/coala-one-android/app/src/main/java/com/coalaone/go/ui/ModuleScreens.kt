@@ -328,55 +328,182 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
         }
     }
 }
+/** Monitor position chosen by its drawing, so "horizontal" and "vertical" cannot be mixed up. */
+@Composable private fun OrientationPicker(selected: String, enabled: Boolean, onSelect: (String) -> Unit) {
+    Text("Como o monitor está instalado?", style = MaterialTheme.typography.titleMedium)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf(Triple("landscape", "Horizontal", "Deitado, mais largo que alto"), Triple("portrait", "Vertical", "Em pé, mais alto que largo")).forEach { (id, label, hint) ->
+            val on = selected == id
+            Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(if (on) Tokens.accentSoft else Tokens.soft).border(if (on) 2.dp else 1.dp, if (on) Tokens.accent else Tokens.border, RoundedCornerShape(16.dp)).selectable(on, enabled, Role.RadioButton) { onSelect(id) }.padding(horizontal = 10.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.Canvas(Modifier.size(96.dp, 104.dp)) {
+                    val ink = if (on) Tokens.accent else Tokens.muted; val stroke = 2.5.dp.toPx(); val radius = androidx.compose.ui.geometry.CornerRadius(5.dp.toPx())
+                    // The panel is drawn in the real proportion (16:9 or 9:16), with a stand so it reads as a monitor.
+                    val panel = if (id == "landscape") androidx.compose.ui.geometry.Size(size.width * .92f, size.width * .92f * 9 / 16) else androidx.compose.ui.geometry.Size(size.height * .78f * 9 / 16, size.height * .78f)
+                    val left = (size.width - panel.width) / 2; val top = (size.height * .84f - panel.height) / 2
+                    drawRoundRect(if (on) Tokens.accent.copy(alpha = .14f) else Tokens.border.copy(alpha = .5f), androidx.compose.ui.geometry.Offset(left, top), panel, radius)
+                    drawRoundRect(ink, androidx.compose.ui.geometry.Offset(left, top), panel, radius, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                    val base = size.height * .95f; val neck = top + panel.height
+                    drawLine(ink, androidx.compose.ui.geometry.Offset(size.width / 2, neck), androidx.compose.ui.geometry.Offset(size.width / 2, base), stroke, androidx.compose.ui.graphics.StrokeCap.Round)
+                    drawLine(ink, androidx.compose.ui.geometry.Offset(size.width * .34f, base), androidx.compose.ui.geometry.Offset(size.width * .66f, base), stroke, androidx.compose.ui.graphics.StrokeCap.Round)
+                }
+                Text(label, color = if (on) Tokens.wine else Tokens.ink, style = MaterialTheme.typography.titleMedium)
+                Text(hint, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp), textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+/** A monitor whose address bar types the installation address over and over; the address itself stays fixed in the field below. */
+@Composable private fun UrlTypingMonitor(address: String) {
+    val phase = motionPhase("signage address typing", 5200)
+    // 70% of the loop types, the rest holds the full address; with animations off the address is simply shown.
+    val typed = if (!LocalMotionEnabled.current) address else address.take((address.length * (phase / .7f).coerceIn(0f, 1f)).toInt())
+    Column(Modifier.fillMaxWidth().semantics { contentDescription = "Ilustração: o endereço sendo digitado no monitor" }, horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth(.86f).background(Tokens.dark, RoundedCornerShape(12.dp)).border(3.dp, Tokens.muted, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("URL Launcher", color = Tokens.onDark3, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+            Row(Modifier.fillMaxWidth().background(Tokens.onDark.copy(alpha = .1f), RoundedCornerShape(8.dp)).border(1.dp, Tokens.pink, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(typed, color = Tokens.onDark, style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont, fontSize = 13.sp), maxLines = 1)
+                if (LocalMotionEnabled.current && (phase * 12).toInt() % 2 == 0) Box(Modifier.padding(start = 1.dp).size(1.5.dp, 15.dp).background(Tokens.pink))
+            }
+            Box(Modifier.fillMaxWidth(.5f).height(6.dp).background(Tokens.onDark.copy(alpha = .1f), RoundedCornerShape(4.dp)))
+        }
+        Box(Modifier.size(4.dp, 12.dp).background(Tokens.muted))
+        Box(Modifier.size(72.dp, 4.dp).background(Tokens.muted, RoundedCornerShape(4.dp)))
+    }
+}
+/** One numbered instruction of the "add screen" walkthrough. */
+@Composable private fun GuideStep(number: Int, title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(18.dp)).border(1.dp, Tokens.border, RoundedCornerShape(18.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(28.dp).background(Tokens.accentSoft, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) { Text("$number", color = Tokens.wine, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp)) }
+            Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
+        }
+        content()
+    }
+}
+/**
+ * Signage in three levels: the units, the panel of one unit (each screen with its status) and the
+ * walkthrough that adds a screen or swaps the monitor of an existing one.
+ */
 @Composable fun SignageScreen(vm: ModulesViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
     var unitId by rememberSaveable { mutableStateOf("") }; var screenId by rememberSaveable { mutableStateOf("") }
     var orientation by rememberSaveable { mutableStateOf("landscape") }; var code by rememberSaveable { mutableStateOf("") }
-    var pairing by rememberSaveable { mutableStateOf(false) }; var scanning by rememberSaveable { mutableStateOf(false) }
+    var adding by rememberSaveable { mutableStateOf(false) }; var replacing by rememberSaveable { mutableStateOf(false) }
+    var step by rememberSaveable { mutableStateOf(0) }; var scanning by rememberSaveable { mutableStateOf(false) }
+    var awaiting by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.signage() }
     val unit = state.signage?.units?.firstOrNull { it.id == unitId }
-    val connecting = pairing && unit != null
-    // Connecting is its own step: the form replaces the list instead of opening below every unit, out of sight.
-    val back = { if (connecting) pairing = false else onBack() }
-    androidx.activity.compose.BackHandler(enabled = connecting && !feedback.busy) { pairing = false }
-    Page("Signage", feedback, back, onRefresh = if (connecting) null else ({ vm.signage() }), header = { TopBar(if (connecting) "Conectar monitor" else "Signage", if (connecting) unit?.name.orEmpty() else "", feedback.busy, back) },
-        footer = if (connecting && unit != null) ({
-            Action("Confirmar conexão", feedback.busy, enabled = Rules.pairingCode(code) != null && (!unit.full || screenId.isNotEmpty())) { vm.pair(unitId, screenId.ifBlank { null }, orientation, code); pairing = false; code = "" }
-        }) else null) {
-        if (connecting && unit != null) {
-            Text("No monitor, abra ${BuildConfig.API_BASE_URL.trimEnd('/')}/app pelo URL Launcher. Ele mostra um QR e um código: leia o QR com a câmera ou digite o código abaixo.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp))
-            CardBlock {
-                Choices("Tela", (if (!unit.full) listOf("" to "Nova: ${unit.nextScreenName}") else emptyList()) + unit.screens.map { it.id to "Substituir ${it.name}" }, screenId, !feedback.busy) { screenId = it }
-                if (unit.full && screenId.isEmpty()) Text("Limite de telas alcançado; escolha uma tela existente.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                if (screenId.isNotEmpty()) Text("O novo monitor substituirá a conexão da tela escolhida.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
-                Choices("Orientação", listOf("landscape" to "Horizontal", "portrait" to "Vertical"), orientation, !feedback.busy) { orientation = it }
-            }
-            CardBlock {
-                Action("Ler QR code", feedback.busy, onClick = { scanning = true })
-                LabeledInput("Ou digite o código do monitor", code, !feedback.busy, placeholder = "Código") { code = it.uppercase().take(32) }
-                if (code.isNotBlank() && Rules.pairingCode(code) == null) Text("Código incompleto ou inválido.", color = Tokens.danger, style = MaterialTheme.typography.bodySmall)
-            }
-            if (scanning) Dialog(onDismissRequest = { scanning = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                Column(Modifier.fillMaxSize().background(Tokens.dark).safeDrawingPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Aponte para o QR do monitor", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
-                    QrScanner({ scanned -> code = scanned; scanning = false }, { scanning = false }, Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(20.dp)), dark = true)
+    val wizard = adding && unit != null
+    // The walkthrough only closes when the server confirmed the connection; a failure keeps the person on the last step.
+    LaunchedEffect(awaiting, feedback.busy, feedback.error) { if (awaiting && !feedback.busy) { if (feedback.error == null) { adding = false; code = "" }; awaiting = false } }
+    val back: () -> Unit = { when { wizard && step > 0 -> step -= 1; wizard -> adding = false; unit != null -> unitId = ""; else -> onBack() } }
+    androidx.activity.compose.BackHandler(enabled = unit != null && !feedback.busy) { back() }
+    val address = BuildConfig.API_BASE_URL.trimEnd('/').removePrefix("https://").removePrefix("http://") + "/app"
+    val labels = listOf("Monitor", "Instalar", "Tela", "Conectar")
+    val codeValid = Rules.pairingCode(code) != null
+    Page("Signage", feedback, back, onRefresh = if (wizard) null else ({ vm.signage() }),
+        header = { when {
+            wizard && unit != null -> StepHeader(if (replacing) "Trocar monitor" else "Adicionar tela", unit.name, step, labels.size, feedback.busy, back, labels)
+            unit != null -> TopBar(unit.name, "", feedback.busy, back, kicker = "Signage")
+            else -> TopBar("Signage", "", feedback.busy, back)
+        } },
+        footer = when {
+            wizard && unit != null -> ({
+                if (step < labels.size - 1) FooterPair(if (step == 0) "Cancelar" else "Anterior", !feedback.busy, back, "Próximo", !feedback.busy && (step != 2 || !unit.full || screenId.isNotEmpty())) { step += 1 }
+                else FooterPair("Anterior", !feedback.busy, back, "Confirmar conexão", !feedback.busy && codeValid) { awaiting = true; vm.pair(unitId, screenId.ifBlank { null }, orientation, code) }
+            })
+            unit != null -> ({
+                Action(if (unit.full) "Ligar outro monitor" else "Adicionar tela", feedback.busy) { screenId = ""; replacing = false; code = ""; step = 0; adding = true }
+                if (unit.full) Text("Esta unidade já tem o número máximo de telas. Na etapa 3 você escolhe qual delas o novo monitor substitui.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            })
+            else -> null
+        }) {
+        when {
+            wizard && unit != null -> when (step) {
+                0 -> GuideStep(1, "Abra o URL Launcher do monitor") {
+                    Text("No controle do monitor, aperte MENU (ou HOME) e escolha URL Launcher. Em \"Configurações do URL Launcher\", selecione \"Instalar aplicativo web\".", color = Tokens.muted)
+                    UrlTypingMonitor(address)
+                    Text("Digite exatamente este endereço e confirme:", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                    Text(address, style = MaterialTheme.typography.titleMedium.copy(fontFamily = CodeFont, fontSize = 17.sp), modifier = Modifier.fillMaxWidth().background(Tokens.soft, RoundedCornerShape(12.dp)).border(1.dp, Tokens.border, RoundedCornerShape(12.dp)).padding(14.dp))
                 }
-            }
-        } else {
-            state.paired?.let { Text("${it.screen.name} conectada em ${it.screen.kioskName}.", color = Tokens.okInk, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.okBg, RoundedCornerShape(14.dp)).border(1.dp, Tokens.okBorder, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 12.dp)) }
-            if (state.signage?.units?.isEmpty() == true) EmptyState("Nenhuma unidade disponível", "Seu perfil não tem unidade liberada para Signage.")
-            state.signage?.units.orEmpty().forEach { row ->
-                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(row.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        Text("Conectar monitor ›", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !feedback.busy, role = Role.Button, onClickLabel = "Conectar monitor em ${row.name}") { unitId = row.id; screenId = if (row.full) row.screens.firstOrNull()?.id.orEmpty() else ""; code = ""; pairing = true }.padding(vertical = 8.dp, horizontal = 4.dp))
+                1 -> GuideStep(2, "Aguarde a instalação") {
+                    listOf(
+                        "Depois de confirmar o endereço, você não precisa clicar em mais nada no monitor.",
+                        "O monitor mostra que está baixando o aplicativo. Aguarde o download terminar; pode levar um ou dois minutos.",
+                        "Quando terminar, o monitor abre o Coala Signage sozinho, sem pedir login, e mostra um QR code com um código embaixo.").forEachIndexed { index, line ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text("${'a' + index})", color = Tokens.wine, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)); Text(line, color = Tokens.muted) }
                     }
-                    if (row.screens.isEmpty()) Text("Nenhuma tela conectada ainda.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
-                    row.screens.forEach { screen -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${screen.name} · ${when (screen.orientation) { "landscape" -> "horizontal"; "portrait" -> "vertical"; else -> "orientação pendente" }}", style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.weight(1f))
-                        StatusChip(if (screen.connected) "Conectada" else "Desconectada", if (screen.connected) Tokens.ok else Tokens.muted, if (screen.connected) Tokens.okBg else Tokens.greyBg)
-                    } }
+                    Column(Modifier.fillMaxWidth().background(Tokens.amberBg, RoundedCornerShape(12.dp)).border(1.dp, Tokens.amberBorder, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Apareceu uma página com dois aplicativos?", color = Tokens.amberInk, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp))
+                        Text("Então o endereço foi aberto no navegador, e não no URL Launcher. Nessa página, \"Coala Signage APP\" é o das telas e \"Coala Go\" é este aplicativo do celular; baixar por ali não instala no monitor. Volte à etapa 1 e use o URL Launcher.", color = Tokens.amberInk, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Nada aconteceu? Confira a internet do monitor e digite o endereço de novo.", color = Tokens.faint, style = MaterialTheme.typography.bodySmall)
                 }
+                2 -> GuideStep(3, if (replacing) "Confirme a tela e a posição" else "Tela nova ou substituir?") {
+                    if (replacing) Text("O novo monitor vai substituir a conexão de ${unit.screens.firstOrNull { it.id == screenId }?.name ?: "uma tela existente"}.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                    else {
+                        // Two explicit answers: a new screen, or the monitor of one that already exists.
+                        val fresh = screenId.isEmpty() && !unit.full
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (fresh) Tokens.accentSoft else Tokens.soft).border(if (fresh) 2.dp else 1.dp, if (fresh) Tokens.accent else Tokens.border, RoundedCornerShape(14.dp)).selectable(fresh, !feedback.busy && !unit.full, Role.RadioButton) { screenId = "" }.padding(14.dp)) {
+                            Text("Adicionar uma tela nova", color = if (unit.full) Tokens.faint else Tokens.ink, style = MaterialTheme.typography.titleMedium)
+                            Text(if (unit.full) "Esta unidade já tem o número máximo de telas." else "Ela será a ${unit.nextScreenName} desta unidade.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (unit.screens.isNotEmpty()) {
+                            Text("Ou substituir o monitor de uma tela que já existe:", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                            unit.screens.forEach { screen ->
+                                val on = screenId == screen.id
+                                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (on) Tokens.accentSoft else Tokens.soft).border(if (on) 2.dp else 1.dp, if (on) Tokens.accent else Tokens.border, RoundedCornerShape(14.dp)).selectable(on, !feedback.busy, Role.RadioButton) { screenId = screen.id; orientation = screen.orientation ?: orientation }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Substituir ${screen.name}", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
+                                        Text(when (screen.orientation) { "landscape" -> "Monitor na horizontal"; "portrait" -> "Monitor na vertical"; else -> "Posição ainda não informada" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    StatusChip(if (screen.connected) "Conectada" else "Desconectada", if (screen.connected) Tokens.ok else Tokens.warning, if (screen.connected) Tokens.okBg else Tokens.warningBg)
+                                }
+                            }
+                            if (screenId.isNotEmpty()) Text("A tela escolhida continua com o mesmo nome e a mesma programação; só o monitor ligado a ela muda.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    OrientationPicker(orientation, !feedback.busy) { orientation = it }
+                }
+                else -> GuideStep(4, "Leia o QR code do monitor") {
+                    Text("Aponte a câmera para o QR code que está na tela do monitor.", color = Tokens.muted)
+                    Action("Ler QR code", feedback.busy, onClick = { scanning = true })
+                    LabeledInput("Ou digite o código que aparece abaixo do QR", code, !feedback.busy, placeholder = "Código") { code = it.uppercase().take(32) }
+                    if (code.isNotBlank() && !codeValid) Text("Código incompleto ou inválido.", color = Tokens.danger, style = MaterialTheme.typography.bodySmall)
+                    if (codeValid) Text("Código lido. Toque em Confirmar conexão.", color = Tokens.ok, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold))
+                }
+            }
+            unit != null -> {
+                state.paired?.takeIf { it.screen.kioskName == unit.name }?.let { Text("${it.screen.name} conectada em ${it.screen.kioskName}.", color = Tokens.okInk, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.okBg, RoundedCornerShape(14.dp)).border(1.dp, Tokens.okBorder, RoundedCornerShape(14.dp)).padding(horizontal = 16.dp, vertical = 12.dp)) }
+                val connected = unit.screens.count { it.connected }
+                Text(when { unit.screens.isEmpty() -> "Esta unidade ainda não tem tela."; else -> "${unit.screens.size} ${if (unit.screens.size == 1) "tela" else "telas"} · ${connected} ${if (connected == 1) "conectada" else "conectadas"}" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp))
+                if (unit.screens.isEmpty()) EmptyState("Nenhuma tela nesta unidade", "Toque em Adicionar tela para ligar o primeiro monitor.")
+                unit.screens.forEach { screen ->
+                    Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(screen.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            StatusChip(if (screen.connected) "Conectada" else "Desconectada", if (screen.connected) Tokens.ok else Tokens.warning, if (screen.connected) Tokens.okBg else Tokens.warningBg)
+                        }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(when (screen.orientation) { "landscape" -> "Monitor na horizontal"; "portrait" -> "Monitor na vertical"; else -> "Posição ainda não informada" }, color = Tokens.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            Text("Trocar monitor ›", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !feedback.busy, role = Role.Button, onClickLabel = "Trocar o monitor de ${screen.name}") { screenId = screen.id; orientation = screen.orientation ?: "landscape"; replacing = true; code = ""; step = 0; adding = true }.padding(vertical = 6.dp, horizontal = 4.dp))
+                        }
+                    }
+                }
+            }
+            else -> {
+                if (state.signage?.units?.isEmpty() == true) EmptyState("Nenhuma unidade disponível", "Seu perfil não tem unidade liberada para Signage.")
+                else if (state.signage != null) Text("Escolha a unidade para ver as telas e ligar um monitor.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp))
+                state.signage?.units.orEmpty().forEach { row ->
+                    val connected = row.screens.count { it.connected }
+                    UnitRow(row.name, when { row.screens.isEmpty() -> "Nenhuma tela"; else -> "${row.screens.size} ${if (row.screens.size == 1) "tela" else "telas"} · ${connected} ${if (connected == 1) "conectada" else "conectadas"}" }, "Abrir", row.screens.any { !it.connected }, !feedback.busy) { unitId = row.id }
+                }
+            }
+        }
+        if (scanning) Dialog(onDismissRequest = { scanning = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Column(Modifier.fillMaxSize().background(Tokens.dark).safeDrawingPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Aponte para o QR do monitor", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge)
+                QrScanner({ scanned -> code = scanned; scanning = false }, { scanning = false }, Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(20.dp)), dark = true)
             }
         }
     }
