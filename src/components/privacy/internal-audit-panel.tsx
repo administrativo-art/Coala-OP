@@ -220,7 +220,12 @@ export function InternalAuditPanel() {
               <p className="truncate text-xs text-ds-ink-faint">{log.user_id ?? "-"}</p>
             </div>
             <div className="min-w-0 space-y-1">
-              <StatusPill variant="neutral">{MODULE_LABELS[log.module] ?? log.module}</StatusPill>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <StatusPill variant="neutral">{MODULE_LABELS[log.module] ?? log.module}</StatusPill>
+                {log.trust_source === "client-declared" ? (
+                  <StatusPill variant="warn">Declarado pelo cliente</StatusPill>
+                ) : null}
+              </div>
               <p className="truncate text-xs font-bold text-ds-ink-2">{ACTION_LABELS[log.action] ?? log.action}</p>
             </div>
             <span className="truncate text-[13px] font-semibold">{getTarget(log.metadata)}</span>
@@ -250,6 +255,9 @@ export function InternalAuditPanel() {
               <PanelField label="ID do usuário"><span className="break-all font-ds-mono text-xs">{openLog.user_id ?? "-"}</span></PanelField>
               <PanelField label="Destino">{getTarget(openLog.metadata)}</PanelField>
               <PanelField label="IP"><span className="font-ds-mono text-xs">{openLog.ip_address ?? "-"}</span></PanelField>
+              <PanelField label="Confiança">
+                {openLog.trust_source === "client-declared" ? "Declarado pelo cliente" : "Evento autoritativo do servidor"}
+              </PanelField>
             </div>
           </PanelSection>
         ) : null}

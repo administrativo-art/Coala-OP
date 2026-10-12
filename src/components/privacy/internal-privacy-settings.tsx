@@ -117,7 +117,7 @@ const SECTIONS = [
   { value: "retention", label: "Retenção e controles" },
 ];
 
-export function InternalPrivacySettings() {
+export function InternalPrivacySettings({ canManage }: { canManage: boolean }) {
   /** `null` é o primeiro chip ("Inventário"), o padrão do FilterChips. */
   const [section, setSection] = useState<string | null>(null);
   const active = section ?? "inventory";
@@ -205,7 +205,7 @@ export function InternalPrivacySettings() {
         </section>
       ) : null}
 
-      {active === "governance" ? <PrivacyGovernancePanel /> : null}
+      {active === "governance" ? <PrivacyGovernancePanel canManage={canManage} /> : null}
 
       {active === "retention" ? (
         <div className="grid gap-4 lg:grid-cols-2">
