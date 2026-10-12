@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
 export interface LegacyTask {
   id: string;
@@ -181,7 +182,7 @@ export function NotificationCenter({
                       </div>
 
                       <Link
-                        href={task.link}
+                        href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}
                         onClick={(e) => e.stopPropagation()}
                         className="hidden flex-shrink-0 self-center rounded-md bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary group-hover:flex hover:bg-primary/20 transition-colors"
                       >

@@ -15,8 +15,12 @@ test("piloto de API usa envelope central sem expor error.message ou stack", asyn
 });
 
 test("piloto de job propaga IDs e reporta somente a falha terminal", async () => {
-  const route = await source("src/app/api/jobs/inter/cobrancas/reconcile/route.ts");
-  assert.match(route, /withApiErrorHandling/);
+  const [route, secureRoute] = await Promise.all([
+    source("src/app/api/jobs/inter/cobrancas/reconcile/route.ts"),
+    source("src/lib/security/secure-route.server.ts"),
+  ]);
+  assert.match(route, /secureRoute/);
+  assert.match(secureRoute, /withApiErrorHandling/);
   assert.match(route, /runObservedJob/);
   assert.match(route, /requestId:\s*observation\.requestId/);
   assert.match(route, /correlationId:\s*observation\.correlationId/);

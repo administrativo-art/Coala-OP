@@ -6,6 +6,11 @@ import { z } from "zod";
 import { createInterCobrancaClient } from "./client.server";
 import { getInterCobrancaEnvironment, type InterCobrancaPayer } from "./config.server";
 import { InterApiError } from "./error";
+export {
+  interCobrancaWebhookItemSchema,
+  interCobrancaWebhookSchema,
+  type InterCobrancaWebhookItem,
+} from "./webhook-contract";
 
 export const INTER_COBRANCA_SITUATIONS = [
   "RECEBIDO",
@@ -63,23 +68,6 @@ export const interCobrancaDetailSchema = z.object({
 }).passthrough();
 
 export type InterCobrancaDetail = z.infer<typeof interCobrancaDetailSchema>;
-
-export const interCobrancaWebhookItemSchema = z.object({
-  codigoSolicitacao: z.string().uuid(),
-  seuNumero: z.string(),
-  situacao: situationSchema,
-  dataHoraSituacao: z.string(),
-  valorTotalRecebido: z.union([z.number(), z.string()]).optional(),
-  origemRecebimento: z.string().optional(),
-  nossoNumero: z.string().optional(),
-  codigoBarras: z.string().optional(),
-  linhaDigitavel: z.string().optional(),
-  txid: z.string().optional(),
-  pixCopiaECola: z.string().optional(),
-}).passthrough();
-
-export const interCobrancaWebhookSchema = z.array(interCobrancaWebhookItemSchema).min(1);
-export type InterCobrancaWebhookItem = z.infer<typeof interCobrancaWebhookItemSchema>;
 
 export type CreateInterCobrancaInput = {
   seuNumero: string;
