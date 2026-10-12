@@ -7,10 +7,11 @@ import { useReposition } from '@/hooks/use-reposition';
 import { Inbox } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { BackButton } from '@/components/navigation/back-button';
+import { safeInternalPath } from '@/lib/safe-return-path';
 
 export default function RepositionPage() {
     const searchParams = useSearchParams();
-    const returnTo = searchParams.get('returnTo') || undefined;
+    const returnTo = safeInternalPath(searchParams.get('returnTo')) || undefined;
     const { permissions } = useAuth();
     const { activities } = useReposition();
 

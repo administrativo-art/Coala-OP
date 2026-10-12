@@ -19,6 +19,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useRouter } from 'next/navigation';
+import { safeInternalPath } from '@/lib/safe-return-path';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -123,7 +124,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const originLink = useMemo(() => {
     if (!task) return null;
     if (task.originLink) {
-      return task.originLink;
+      return safeInternalPath(task.originLink);
     }
     if (task.origin.kind === 'form_trigger') {
       return `/dashboard/forms/${task.origin.execution_id}/view`;
@@ -131,7 +132,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     if (task.origin.kind === 'purchase_receipt') {
       return '/dashboard/purchasing/receipts';
     }
-    return task.legacyLink ?? null;
+    return safeInternalPath(task.legacyLink);
   }, [task]);
 
   const isStockCountTask = task?.origin.kind === 'legacy' && task.origin.type === 'stock_count_approval';

@@ -8,7 +8,7 @@
 
 A [página de tarefas](../../../src/app/dashboard/tasks/page.tsx) monta o [gerenciador](../../../src/components/task-manager.tsx), que usa as [rotas de tarefas](../../../src/app/api/tasks/route.ts). `GET` exige módulo habilitado e permissão de visão, aplica política de escopo/limite e carrega projetos, subprojetos, estados e tarefas. [`listTasks`](../../../src/features/tasks/lib/server.ts) filtra por workspace/status, limita a até 500 documentos e depois aplica `canViewTask` por pessoa. Assim, o limite vale antes do filtro de visibilidade individual.
 
-`POST /api/tasks` exige gestão, título e unidade dentro do escopo do usuário. [`createManualTask`](../../../src/features/tasks/lib/server.ts) garante projeto/subprojeto/estado padrão quando faltam, suporta chave de idempotência e grava tarefa com responsável, aprovação, prioridade, origem e histórico. A [rota de status](../../../src/app/api/tasks/%5BtaskId%5D/status/route.ts) exige que a pessoa possa atuar na tarefa/unidade. [`updateTaskStatus`](../../../src/features/tasks/lib/server.ts) rejeita mudança direta em tarefas originadas de contagem de estoque ou outras fontes automáticas; essas devem ser alteradas no fluxo de origem. Ao concluir, reabrir ou aprovar, atualiza histórico, estado e versão e sincroniza ocorrência de formulários, quando vinculada.
+`POST /api/tasks` exige gestão, título e unidade dentro do escopo do usuário. [`createManualTask`](../../../src/features/tasks/lib/server.ts) garante projeto/subprojeto/estado padrão quando faltam, suporta chave de idempotência e grava tarefa com responsável, aprovação, prioridade, origem e histórico. `originLink` só é persistido e devolvido quando [`safeInternalPath`](../../../src/lib/safe-return-path.ts) reconhece um caminho interno; links antigos também são filtrados na leitura e novamente em cada sink de navegação. A [rota de status](../../../src/app/api/tasks/%5BtaskId%5D/status/route.ts) exige que a pessoa possa atuar na tarefa/unidade. [`updateTaskStatus`](../../../src/features/tasks/lib/server.ts) rejeita mudança direta em tarefas originadas de contagem de estoque ou outras fontes automáticas; essas devem ser alteradas no fluxo de origem. Ao concluir, reabrir ou aprovar, atualiza histórico, estado e versão e sincroniza ocorrência de formulários, quando vinculada.
 
 ## Dados, permissão e impacto
 
@@ -22,7 +22,7 @@ A [página de tarefas](../../../src/app/dashboard/tasks/page.tsx) monta o [geren
 
 ## Verificação e limites
 
-Conferir [política de consulta](../../../src/features/tasks/lib/query-policy.ts), [acesso](../../../src/features/tasks/lib/server-access.ts) e testes de tarefas/formulários pertinentes. Para mudança de estado, verificar tarefa manual, tarefa automática, unidade restrita, aprovação, reabertura e ocorrência ligada. Este guia não valida ponta a ponta projetos, exclusão nem todas as origens automáticas.
+Conferir [política de consulta](../../../src/features/tasks/lib/query-policy.ts), [acesso](../../../src/features/tasks/lib/server-access.ts), [navegação interna](../../../tests/unit/safe-internal-navigation.test.ts) e testes de tarefas/formulários pertinentes. Para mudança de estado, verificar tarefa manual, tarefa automática, unidade restrita, aprovação, reabertura, ocorrência ligada e `originLink` externo/relativo. Este guia não valida ponta a ponta projetos, exclusão nem todas as origens automáticas.
 
 ## Projetos e origens rastreados
 
