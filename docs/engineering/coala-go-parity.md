@@ -100,6 +100,20 @@ conferido pelo responsável no emulador. As instruções das etapas 1 e 2 seguem
 que a página `/app` descreve para monitores profissionais e não foram
 confirmadas em monitor físico.
 
+### Verificação da 0.3.5 (escala por unidade e função na saudação)
+
+A escala do administrador padrão preserva todas as unidades com turnos quando a
+permissão `app.schedule.viewAllUnits` está ativa, inclusive sem lotação própria.
+Escala e Metas compartilham o mesmo seletor de unidade pesquisável no cabeçalho.
+O subtítulo da saudação usa a primeira função cadastrada e recorre ao cargo;
+sem ambos, mostra "Equipe Coala", nunca o e-mail. Contratos TypeScript e testes
+JVM cobrem recorte de unidades, precedência da função, filtro/cache e UI. A
+build de release 0.3.5/code10 mantém o pacote `coalaone.go` e o certificado
+público existente. O emulador recebeu tanto a build de debug quanto a release
+assinada final, e `coalaone.go/com.coalaone.go.MainActivity` ficou em primeiro
+plano; dados reais, aparelho físico e sensor biométrico permanecem fora da
+homologação desta rodada.
+
 ## Entrega por etapa
 
 | Etapa | Feito | Verificação local | Pendente |

@@ -42,6 +42,8 @@ fun scheduleShiftDisplayName(name: String): String {
 }
 
 private val genericUnitWords = setOf("unidade", "quiosque", "loja", "coala", "de", "da", "do", "das", "dos", "e")
+
+fun homeRoleSubtitle(role: String?): String = role?.trim()?.takeIf(String::isNotEmpty) ?: "Equipe Coala"
 /**
  * Two-letter badge for a unit: generic words are skipped, two significant words give their
  * initials ("João Paulo" -> JP) and a single one gives its first letter plus the next consonant

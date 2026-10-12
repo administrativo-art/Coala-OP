@@ -61,7 +61,10 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     val today = LocalDate.now()
     // The person's own shift on a date, across every unit they are scheduled in.
     fun mine(date: LocalDate) = state.schedules[date.toString().take(7)]?.units.orEmpty().flatMap { unit -> unit.shifts.filter { it.date == date.toString() && unit.people.getOrNull(it.person)?.isMe == true } }.minByOrNull { it.startTime }
-    Page("Escala", feedback, onBack, onRefresh = { vm.refreshSchedule() }) {
+    Page("Escala", feedback, onBack, onRefresh = { vm.refreshSchedule() }, header = {
+        TopBar("Escala", busy = feedback.busy, onBack = onBack)
+        if (!state.onlyMine) UnitPickerHeader(units.map { it.id to it.name }, selected?.id.orEmpty(), feedback.busy) { vm.scheduleFilter(it, state.onlyMine) }
+    }) {
         if (monthView) {
             val first = state.day.withDayOfMonth(1)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -114,7 +117,6 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             PillChoice(if (monthView) "Ver semana" else "Ver mês", false) { if (monthView) vm.schedule(day); monthView = !monthView }
             if (today !in dates && !monthView) Text("Hoje", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy, role = Role.Button) { selectedDay = today.toString(); vm.schedule(today) }.padding(8.dp))
         }
-        if (units.size > 1 && !state.onlyMine) Choices("Unidade", units.map { it.id to it.name }, selected?.id.orEmpty(), !feedback.busy) { vm.scheduleFilter(it, state.onlyMine) }
         if (units.isEmpty() && !feedback.busy) EmptyState("Nenhuma escala neste período", "Ainda não há escala lançada para esta semana.")
         else {
             val month = state.schedules[day.toString().take(7)]
@@ -166,22 +168,9 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     val goals = state.goals?.goals.orEmpty()
     val goal = goals.firstOrNull { it.id == selectedGoal } ?: goals.firstOrNull()
     val unitName = state.goalUnits.firstOrNull { it.id == state.goals?.kioskId }?.name.orEmpty()
-    var choosingUnit by rememberSaveable { mutableStateOf(false) }
-    if (choosingUnit) PickerSheet("Unidade", state.goalUnits.map { it.id to it.name }, state.goals?.kioskId.orEmpty(), { id -> selectedGoal = ""; preferences.edit().putString("unit:$owner", id).apply(); vm.goals(id) }) { choosingUnit = false }
     Page("Metas", feedback, onBack, header = {
         TopBar("Metas", busy = feedback.busy, onBack = onBack)
-        // One line whatever the number of units: the current unit and, when there is a choice, "Trocar unidade".
-        if (state.goalUnits.isNotEmpty()) {
-            val several = state.goalUnits.size > 1
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !feedback.busy, role = Role.Button, onClickLabel = "Trocar unidade") { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("UNIDADE", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
-                    Text(unitName.ifBlank { "Escolher unidade" }, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
-                if (several) Text("Trocar unidade ⌄", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
-            }
-        }
+        UnitPickerHeader(state.goalUnits.map { it.id to it.name }, state.goals?.kioskId.orEmpty(), feedback.busy) { id -> selectedGoal = ""; preferences.edit().putString("unit:$owner", id).apply(); vm.goals(id) }
         goal?.let { target ->
             val summary = target.summary
             val scale = maxOf(summary.levels.maxOfOrNull { it.amount } ?: 0.0, 1.0)

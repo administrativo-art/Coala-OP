@@ -243,7 +243,22 @@ fun shortDate(value: String?): String? {
     SelectorCard(label, values.firstOrNull { it.first == selected }?.second, "Selecionar", enabled) { open = true }
     if (open) PickerSheet(label, values, selected, onSelect) { open = false }
 }
-/** The searchable list itself, for screens that draw their own trigger (the goals header, for one). */
+/** Compact unit switcher in a dark page header, shared by Metas and Escala. */
+@Composable fun UnitPickerHeader(values: List<Pair<String, String>>, selected: String, busy: Boolean, onSelect: (String) -> Unit) {
+    if (values.isEmpty()) return
+    var choosingUnit by rememberSaveable { mutableStateOf(false) }
+    val several = values.size > 1
+    if (choosingUnit) PickerSheet("Unidade", values, selected, onSelect) { choosingUnit = false }
+    Spacer(Modifier.height(10.dp))
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, Tokens.onDark.copy(alpha = .14f), RoundedCornerShape(14.dp)).clickable(enabled = several && !busy, role = Role.Button, onClickLabel = "Trocar unidade") { choosingUnit = true }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text("UNIDADE", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
+            Text(values.firstOrNull { it.first == selected }?.second ?: "Escolher unidade", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (several) Text("Trocar unidade ⌄", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+    }
+}
+/** Searchable unit list used by the shared header switcher and other pickers. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun PickerSheet(label: String, values: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }

@@ -142,6 +142,21 @@ class ViewModelsTest {
         assertEquals(listOf(2026 to 10, 2026 to 11), loaded)
         vm.schedule(LocalDate.of(2026, 11, 1)); advanceUntilIdle(); assertEquals(2, loaded.size)
     }
+    @Test fun scheduleUnitSelectionKeepsLoadedUnitsAndOnlyMineState() = runTest {
+        val vm = ModulesViewModel(repository(auth, DemoApi()))
+        vm.schedule(LocalDate.of(2026, 10, 12)); advanceUntilIdle()
+        val loaded = vm.state.value.schedules
+        assertEquals(8, loaded.getValue("2026-10").units.size)
+        vm.scheduleFilter("sim-tirirical", false)
+        assertEquals("sim-tirirical", vm.state.value.selectedScheduleUnit)
+        assertFalse(vm.state.value.onlyMine)
+        assertEquals(loaded, vm.state.value.schedules)
+        vm.scheduleFilter(vm.state.value.selectedScheduleUnit, true)
+        assertTrue(vm.state.value.onlyMine)
+        vm.scheduleFilter(vm.state.value.selectedScheduleUnit, false)
+        assertEquals("sim-tirirical", vm.state.value.selectedScheduleUnit)
+        assertFalse(vm.state.value.onlyMine)
+    }
     @Test fun goalsUseSelectedUnitAndSignageRejectsBadCodeWithoutSend() = runTest {
         var goalUnit = ""; var pairs = 0
         val api = object : ApiService by DemoApi() {
