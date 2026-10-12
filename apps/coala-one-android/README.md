@@ -67,8 +67,11 @@ expandem suavemente. Escala zero desliga movimentos decorativos e mostra o
 progresso final. Animações nunca simulam resposta de servidor.
 
 Home usa hero de compra e grid filtrado pelas permissões reais, preservando
-Signage. Metas oferece Dias/Equipe/Prêmio; Escala seleciona um dia da semana
-e Equipe/Só minha, sem perder a navegação semanal. Compra, contagem e
+Signage. O subtítulo da saudação mostra a função recebida do perfil, ou o cargo
+quando não há função; sem ambos, mostra "Equipe Coala". Metas oferece
+Dias/Equipe/Prêmio; Metas e Escala compartilham o seletor de unidade no
+cabeçalho, com lista pesquisável quando há mais de seis opções. Escala seleciona
+um dia da semana e Equipe/Só minha, sem perder a navegação semanal. Compra, contagem e
 recebimento mantêm seus ViewModels, validações, confirmações e contratos.
 Limites/estados reais prevalecem sobre números, timers e sucessos do protótipo.
 
