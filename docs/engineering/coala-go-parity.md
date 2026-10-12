@@ -8,7 +8,7 @@ Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [
 |---|---|---|---|
 | Login, bloqueio, sair, recuperação | Firebase Auth nativo; `/api/auth/forgot-password`; UID e bloqueio por inatividade | `ViewModelsTest`: login/bloqueio/reauth/reset; `FirebaseAuthInstrumentedTest`: SDK com Auth Emulator | Conta de homologação autorizada |
 | Marca e slogan | Tokens do handoff; Inter Tight embarcada; Brush animado em texto Compose | `ComposeFlowsTest.brandingAndSloganUseRealTextWithoutClipping`; `DesignMotionTest`: animação/redução/fonte 160% | Aparelhos do parque e leitor de tela |
-| Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo` | `ViewModelsTest`: módulos, avatar, saída; `ApiContractTest`: autenticação | Foto/câmera física e permissões reais |
+| Home/perfil/avatar | `/api/mobile/profile` (inclui módulos), `/api/mobile/profile/photo`; resumo abre/fecha por arrasto vertical da alça | `ViewModelsTest`: módulos, avatar, saída; `ApiContractTest`: autenticação; `DesignMotionTest`: toque inerte e arrasto para abrir/fechar | Foto/câmera física, permissões reais e gesto em aparelho físico |
 | Contagem | `/api/stock/mobile-count`, `/start`, `/save` (parcial ou completo), `/cancel`, `/photo`; rascunho cifrado/merge | `RulesTest`, `ViewModelsTest`, `ComposeFlowsTest`: concluir/cancelar; `stock-mobile-count.test.ts`; payloads Kotlin validados em Zod | Concorrência com web e conectividade real |
 | Recebimento | `/api/stock/mobile-reposition`, `/receive`, `/photo`; divergência por lote | `ViewModelsTest`, `ComposeFlowsTest`: bloquear divergência sem nota; `reposition-mobile-receipt.test.ts`, `reposition-mobile-photo.test.ts`; headers e escopo | Imagens reais e transação completa em homologação |
 | Compra/captura/revisão | `/api/purchasing/local-purchases/context`, `/withdrawals`, `/link-withdrawal`; `/api/financial/inbox/mobile-upload`; `/api/purchasing/local-purchases/confirm` | `ViewModelsTest`: UUID estável, upload offline, retry de estoque; `ComposeFlowsTest`: seletor/revisão/confirmação; `ApiContractTest`: multipart; schemas Zod | OCR real, câmera e conciliação financeira integrada |
@@ -113,6 +113,18 @@ público existente. O emulador recebeu tanto a build de debug quanto a release
 assinada final, e `coalaone.go/com.coalaone.go.MainActivity` ficou em primeiro
 plano; dados reais, aparelho físico e sensor biométrico permanecem fora da
 homologação desta rodada.
+
+### Verificação da 0.3.6 (identidade compacta e resumo por arrasto)
+
+A interface preserva o nome completo recebido pela API, mas apresenta somente
+primeiro e último nomes nos espaços compactos do aplicativo. Na Escala, a
+identidade e o cargo ficam em uma linha cada, o horário recebe destaque e ícone,
+o rótulo técnico do turno é reduzido ao contexto útil e as colunas mantêm
+alinhamento e largura estáveis. Na home, toque simples na alça não alterna o
+resumo: arrastar para baixo abre e arrastar para cima fecha. Testes JVM cobrem
+a apresentação dos nomes e do turno; o teste Compose do gesto foi compilado.
+O emulador permaneceu encerrado a pedido do responsável durante a preparação
+do release 0.3.6/code11.
 
 ## Entrega por etapa
 
