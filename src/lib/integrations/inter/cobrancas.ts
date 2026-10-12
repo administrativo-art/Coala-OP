@@ -198,6 +198,8 @@ export async function retrieveConfiguredCobrancaWebhook() {
     const response = await client.get("/cobrancas/webhook");
     return z.object({ webhookUrl: z.string().url() }).passthrough().parse(response.data);
   } catch (error) {
+    if (error instanceof InterApiError && error.statusCode === 404) return null;
+    if (axios.isAxiosError(error) && error.response?.status === 404) return null;
     return apiError(error, "Falha ao consultar webhook de cobrança no Banco Inter.");
   }
 }

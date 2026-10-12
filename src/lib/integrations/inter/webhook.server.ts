@@ -20,7 +20,7 @@ export function publicWebhookUrl(value: string) {
 export async function ensureCleanInterCobrancaWebhook() {
   const target = targetInterCobrancaWebhookUrl();
   const configured = await retrieveConfiguredCobrancaWebhook();
-  if (configured.webhookUrl === target.toString()) {
+  if (configured?.webhookUrl === target.toString()) {
     return { updated: false, webhookUrl: publicWebhookUrl(target.toString()) };
   }
   await configureCobrancaWebhook(target.toString());
