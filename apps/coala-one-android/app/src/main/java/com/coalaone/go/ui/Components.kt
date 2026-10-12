@@ -98,18 +98,35 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun Page(title: String, feedback: Feedback = Feedback(), onBack: (() -> Unit)? = null, footer: (@Composable ColumnScope.() -> Unit)? = null, header: (@Composable ColumnScope.() -> Unit)? = null, onRefresh: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val online = rememberOnline()
+    CompositionLocalProvider(LocalContentColor provides Tokens.ink) {
     Box(Modifier.fillMaxSize().background(Tokens.page).imePadding()) {
         Column(Modifier.fillMaxSize()) {
             // The dark bar runs under the status bar, so no strip of page colour shows above it.
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)).background(Tokens.dark).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 18.dp)) {
-                if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack, onRefresh = onRefresh)
+                if (header != null) header() else TopBar(title, busy = feedback.busy, onBack = onBack)
             }
-            Column(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+            // What survives without a connection is said in words, not left for the person to guess.
+            if (!online) Text("Sem conexão. Rascunhos de contagem e notas de compra ficam guardados neste aparelho; o restante precisa de internet.", color = Tokens.warning, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 10.dp).background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+            val body: @Composable () -> Unit = {
+                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+                }
             }
+            // Lists refresh by pulling down; there is no refresh button in the bar.
+            @OptIn(ExperimentalMaterial3Api::class)
+            if (onRefresh != null) {
+                // The indicator only shows for a pull the person made, and always goes away: tying it straight to
+                // "busy" left it stuck on screen when a load finished within a frame.
+                var pulled by remember { mutableStateOf(false) }
+                LaunchedEffect(pulled, feedback.busy) { if (pulled && !feedback.busy) { kotlinx.coroutines.delay(350); pulled = false } }
+                androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = pulled, onRefresh = { pulled = true; onRefresh() }, modifier = Modifier.weight(1f).fillMaxWidth()) { body() }
+            }
+            else Box(Modifier.weight(1f).fillMaxWidth()) { body() }
             val hasFooter = footer != null || feedback.error != null || feedback.notice != null
             if (hasFooter && footer != null) HorizontalDivider(color = Tokens.border)
-            Column(Modifier.fillMaxWidth().then(if (footer != null) Modifier.background(Color.White) else Modifier).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = 16.dp, vertical = if (hasFooter) 12.dp else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().then(if (footer != null) Modifier.background(Tokens.surface) else Modifier).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(horizontal = 16.dp, vertical = if (hasFooter) 12.dp else 0.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Column(Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Messages sit next to the actions, so they stay visible wherever the list is scrolled.
                     feedback.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp), modifier = Modifier.fillMaxWidth().background(Tokens.dangerBg, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) }
@@ -124,6 +141,22 @@ fun shortDate(value: String?): String? {
             Spacer(Modifier.height(14.dp)); Text("Aguarde…", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium)
         }
     }
+    }
+}
+/** Follows the default network of the phone; without the system service the app assumes it is online. */
+@Composable fun rememberOnline(): Boolean {
+    val context = LocalContext.current
+    val manager = remember { context.getSystemService(android.net.ConnectivityManager::class.java) }
+    var online by remember { mutableStateOf(manager?.let { it.getNetworkCapabilities(it.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true } ?: true) }
+    DisposableEffect(manager) {
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) { online = true }
+            override fun onLost(network: android.net.Network) { online = manager?.activeNetwork != null }
+        }
+        runCatching { manager?.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { manager?.unregisterNetworkCallback(callback) } }
+    }
+    return online
 }
 /** "Anterior | Próximo" footer pair from the prototype. */
 @Composable fun FooterPair(back: String, backEnabled: Boolean, onBack: () -> Unit, next: String, nextEnabled: Boolean, onNext: () -> Unit) {
@@ -135,9 +168,9 @@ fun shortDate(value: String?): String? {
 @Composable fun StatusChip(text: String, ink: Color, background: Color) { Text(text, color = ink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.background(background, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 3.dp)) }
 /** Pill filter from the prototype: dark when selected, outlined otherwise. */
 @Composable fun PillChoice(label: String, selected: Boolean, enabled: Boolean = true, accent: Boolean = false, onClick: () -> Unit) {
-    val ink = when { selected && accent -> Tokens.wine; selected -> Color.White; else -> Tokens.muted }
-    val fill = when { selected && accent -> Tokens.accentSoft; selected -> Tokens.dark; else -> Color.White }
-    val line = when { selected && accent -> Tokens.accent; selected -> Tokens.dark; else -> Tokens.fieldBorder }
+    val ink = when { selected && accent -> Tokens.wine; selected -> Tokens.pillInk; else -> Tokens.muted }
+    val fill = when { selected && accent -> Tokens.accentSoft; selected -> Tokens.pillFill; else -> Tokens.surface }
+    val line = when { selected && accent -> Tokens.accent; selected -> Tokens.pillFill; else -> Tokens.fieldBorder }
     Text(label, color = ink, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp), modifier = Modifier.clip(RoundedCornerShape(50)).background(fill).border(1.dp, line, RoundedCornerShape(50)).selectable(selected, enabled, Role.RadioButton, onClick).padding(horizontal = 13.dp, vertical = 8.dp))
 }
 /** Label above a plain input, as the prototype draws quantities and notes. */
@@ -152,7 +185,7 @@ fun shortDate(value: String?): String? {
 @Composable fun SectionLabel(text: String) { Text(text.uppercase(Locale.forLanguageTag("pt-BR")), color = Tokens.muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp, start = 4.dp)) }
 /** Whole-row tap target for lists of units and deliveries. */
 @Composable fun ListRow(title: String, subtitle: String, enabled: Boolean = true, badge: String? = null, highlight: Boolean = false, leading: String? = null, onClick: () -> Unit) {
-    Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, if (highlight) Tokens.pink.copy(alpha = .5f) else Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White, disabledContainerColor = Color.White)) {
+    Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, if (highlight) Tokens.pink.copy(alpha = .5f) else Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(if (highlight) Tokens.accentSoft else Tokens.soft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
                 Text(leading ?: unitInitials(title), color = if (highlight) Tokens.accent else Tokens.ink, style = MaterialTheme.typography.titleMedium)
@@ -171,7 +204,7 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun Action(label: String, busy: Boolean = false, enabled: Boolean = true, secondary: Boolean = false, dark: Boolean = false, onClick: () -> Unit) {
-    if (secondary) OutlinedButton(onClick, enabled = enabled && !busy, colors = ButtonDefaults.outlinedButtonColors(containerColor = if (dark) Color.Transparent else Color.White, contentColor = if (dark) Tokens.onDark else Tokens.ink, disabledContentColor = if (dark) Tokens.onDark2 else Tokens.muted), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, if (dark) Tokens.onDark.copy(alpha = .14f) else Tokens.fieldBorder), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
+    if (secondary) OutlinedButton(onClick, enabled = enabled && !busy, colors = ButtonDefaults.outlinedButtonColors(containerColor = if (dark) Color.Transparent else Tokens.surface, contentColor = if (dark) Tokens.onDark else Tokens.ink, disabledContentColor = if (dark) Tokens.onDark2 else Tokens.muted), shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, if (dark) Tokens.onDark.copy(alpha = .14f) else Tokens.fieldBorder), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(label) }
     else Button(onClick, enabled = enabled && !busy, colors = ButtonDefaults.buttonColors(disabledContainerColor = if (dark) Tokens.accent.copy(alpha = .32f) else Tokens.ink.copy(alpha = .12f), disabledContentColor = if (dark) Tokens.onDark.copy(alpha = .6f) else Tokens.muted), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (busy) "Aguarde…" else label) }
 }
 @Composable fun Field(label: String, value: String, enabled: Boolean = true, decimal: Boolean = false, onChange: (String) -> Unit) {
@@ -205,20 +238,24 @@ fun shortDate(value: String?): String? {
     }
 }
 /** Long lists (categories, products, units) open in a sheet with search instead of a wall of chips. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable fun Picker(label: String, values: List<Pair<String, String>>, selected: String, enabled: Boolean = true, onSelect: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
+    SelectorCard(label, values.firstOrNull { it.first == selected }?.second, "Selecionar", enabled) { open = true }
+    if (open) PickerSheet(label, values, selected, onSelect) { open = false }
+}
+/** The searchable list itself, for screens that draw their own trigger (the goals header, for one). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun PickerSheet(label: String, values: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
-    SelectorCard(label, values.firstOrNull { it.first == selected }?.second, "Selecionar", enabled) { query = ""; open = true }
-    if (open) ModalBottomSheet(onDismissRequest = { open = false }, containerColor = Color.White) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Tokens.surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(label, style = MaterialTheme.typography.titleLarge)
-            Field("Buscar", query) { query = it }
+            if (values.size > 6) Field("Buscar", query) { query = it }
             val shown = values.filter { it.second.contains(query.trim(), ignoreCase = true) }
             if (shown.isEmpty()) Text("Nada encontrado.", color = Tokens.muted)
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                 items(shown) { (id, name) ->
-                    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSelect(id); open = false }.heightIn(min = 52.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSelect(id); onDismiss() }.heightIn(min = 52.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(name, modifier = Modifier.weight(1f), fontWeight = if (id == selected) FontWeight.Bold else FontWeight.Normal)
                         if (id == selected) Text("Selecionado", color = Tokens.accent, style = MaterialTheme.typography.bodySmall)
                     }
@@ -242,7 +279,7 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color.White).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Tokens.surface).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
         Text(glyph, color = if (enabled) Tokens.ink else Tokens.muted, style = MaterialTheme.typography.titleLarge)
     }
 }
@@ -262,7 +299,7 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun EmptyState(title: String, hint: String = "") {
-    Column(Modifier.fillMaxWidth().background(Color.White.copy(alpha = .6f), RoundedCornerShape(18.dp)).border(1.dp, Tokens.border, RoundedCornerShape(18.dp)).padding(horizontal = 20.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth().background(Tokens.surface.copy(alpha = .6f), RoundedCornerShape(18.dp)).border(1.dp, Tokens.border, RoundedCornerShape(18.dp)).padding(horizontal = 20.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         if (hint.isNotBlank()) Text(hint, color = Tokens.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
     }
@@ -274,7 +311,7 @@ fun shortDate(value: String?): String? {
     }
 }
 @Composable fun CardBlock(selected: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth().then(if (LocalMotionEnabled.current) Modifier.animateContentSize() else Modifier), shape = RoundedCornerShape(18.dp), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) Tokens.accent else Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content) }
+    Card(Modifier.fillMaxWidth().then(if (LocalMotionEnabled.current) Modifier.animateContentSize() else Modifier), shape = RoundedCornerShape(18.dp), border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) Tokens.accent else Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content) }
 }
 @Composable fun StepHeader(title: String, subtitle: String, step: Int, steps: Int, busy: Boolean, onBack: () -> Unit, labels: List<String> = emptyList(), backLabel: String = "Voltar", onRefresh: (() -> Unit)? = null, kicker: String = "", aside: String = "") {
     TopBar(title, subtitle, busy, onBack, onRefresh, action = if (backLabel != "Voltar") backLabel to onBack else null, kicker = kicker)
