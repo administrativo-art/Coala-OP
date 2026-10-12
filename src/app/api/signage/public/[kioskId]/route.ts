@@ -1,29 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { dbAdmin } from '@/lib/firebase-admin';
 import { signageDbAdmin } from '@/lib/firebase-signage-admin';
-import { type Kiosk } from '@/types';
+import { AppError } from '@/lib/observability/app-error';
+import { createStandardSecurityEnforcer } from '@/lib/security/enforcer';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { secureRoute } from '@/lib/security/secure-route.server';
+import { requirePlayerScreen, requireRouteId, SIGNAGE_PLAYER_CORS_HEADERS } from '@/lib/signage-server';
+import { type SignageScreen } from '@/types';
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ kioskId: string }> }) {
-  const { kioskId } = await params;
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-  const kioskSnap = await dbAdmin.collection('kiosks').doc(kioskId).get();
-  if (!kioskSnap.exists) {
-    return NextResponse.json({ error: 'Quiosque não encontrado.' }, { status: 404 });
-  }
+// O segmento se chama `kioskId` por histórico; ele carrega o id da tela (a padrão tem o id da unidade).
+type RouteContext = { params: Promise<{ kioskId: string }> };
 
-  const kiosk = { id: kioskSnap.id, ...kioskSnap.data() } as Kiosk;
-  if (kiosk.deviceToken) {
-    const token = new URL(req.url).searchParams.get('token') ?? '';
-    if (token !== kiosk.deviceToken) {
-      return NextResponse.json({ error: 'Token inválido.' }, { status: 403 });
-    }
-  }
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'signage.player.published',
+  version: 1,
+  surface: { method: 'GET', path: '/api/signage/public/[kioskId]' },
+  exposure: 'public',
+  identity: { kind: 'none' },
+  authorization: { kind: 'custom', strategy: 'signage.device-token-when-configured' },
+  resourceScope: { kind: 'custom', strategy: 'signage.screen' },
+  input: { kind: 'none' },
+  effects: { mode: 'read', audit: 'none' },
+  errorExposure: 'sanitized',
+});
 
-  const snapshot = await signageDbAdmin.collection('publishedPlayers').doc(kioskId).get();
+const enforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, undefined, undefined, SignageScreen>(contract, {
+  // `requirePlayerScreen` confere a existência da tela e o código de acesso.
+  async loadResource({ request, routeContext }) {
+    const { kioskId } = await routeContext.params;
+    const token = request.nextUrl.searchParams.get('token') ?? request.headers.get('x-device-token');
+    return requirePlayerScreen(requireRouteId(kioskId, 'Tela'), token);
+  },
+  authorize: () => undefined,
+  assertScope: () => undefined,
+});
+
+export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
+  const snapshot = await signageDbAdmin.collection('publishedPlayers').doc(security.resource.id).get();
   if (!snapshot.exists) {
-    return NextResponse.json({ error: 'Nenhum conteúdo publicado para este quiosque.' }, { status: 404 });
+    throw new AppError({ code: 'SIGNAGE_NOT_PUBLISHED', kind: 'NOT_FOUND', safeMessage: 'Nenhum conteúdo publicado para esta tela.' });
   }
-
-  return NextResponse.json(snapshot.data());
-}
+  return NextResponse.json(snapshot.data(), { headers: SIGNAGE_PLAYER_CORS_HEADERS });
+});

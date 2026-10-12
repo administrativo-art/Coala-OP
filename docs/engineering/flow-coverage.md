@@ -1,5 +1,7 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-11: [Coala Go Kotlin](../../apps/coala-one-android/README.md), package `coalaone.go`, único mobile após autorização expressa de retirada do Expo/APK antigo (não havia usuários). APK assinado/metadados/hash/link `/app/CoalaGo.apk` preparados localmente; [matriz](coala-go-parity.md) registra testes/lacunas. Extensões autorizadas: foto privada do recebimento e seleção de package na atestação/versão; [acesso/privacidade](access-and-privacy.md) documenta controles. Estoque/compras/signage continuam Traçados; testes locais não homologam serviços reais/aparelhos físicos. Sem publicação.
+
 2026-10-05: [Instagram](flows/instagram-publishing.md) passa a usar dimensões reais nas prévias e avaliação de proporção por formato; detalhes permitem editar a legenda de agendamentos ainda editáveis, com auditoria e invalidação segura do contêiner preparado. Regressões cobertas em `tests/unit/instagram-media-presentation.test.ts`; não equivale a homologação visual ou publicação real na Meta. A superfície externa permanece fora da contagem de grupos das páginas internas.
 
 Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1. Os nomes são grupos de investigação, sujeitos a divisão ou fusão quando a sequência ponta a ponta for confirmada. **Localizado** significa que as páginas proprietárias foram identificadas; não significa fluxo traçado ou regra aprovada.
@@ -52,7 +54,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
 | `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — visão anual/mensal desde janeiro de 2026, snapshots normalizados, rotina limitada de backfill/revisão tardia, fechamento/reabertura, eventos adversos Stone e NSU Stone do PDV cobertos localmente; amostra real confirmou somente o contrato PDV, sem homologar API Stone, scheduler/webhook, backfill real ou liquidação bancária |
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
-| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — percurso complementado; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
+| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — política automática com 30%, compra direta por unidade e comparação local; motor/legado testados em emulador; E2E, piloto e ativação pendentes |
 | `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |

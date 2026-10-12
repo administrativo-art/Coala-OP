@@ -1,45 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addDoc, deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
-import { useToast } from "@/hooks/use-toast";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
+import { CadastrosHero, Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton, Mono, SoftPill } from "@/components/cadastros/cadastros-ui";
+import { Field, fieldInputClass } from "@/components/patterns/field";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { errorMessageOf, PanelErrorNote, PanelFormFooter, PanelSelectField, PanelSwitchRow } from "@/components/patterns/panel-form";
+import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { ALIAS_MATCH_LABELS, matchesFinanceQuery } from "./settings-model";
 
 const aliasSchema = z.object({
-  pattern: z.string().min(2, "O padrão deve ter pelo menos 2 caracteres."),
+  pattern: z.string().trim().min(2, "O padrão deve ter pelo menos 2 caracteres."),
   matchType: z.enum(["contains", "startsWith", "endsWith", "exact"]),
   caseSensitive: z.boolean().default(false),
   accountPlanId: z.string().optional(),
@@ -50,359 +32,309 @@ const aliasSchema = z.object({
 
 type AliasFormValues = z.infer<typeof aliasSchema>;
 
-const MATCH_TYPE_LABELS: Record<string, string> = {
-  contains: "Contém",
-  startsWith: "Começa com",
-  endsWith: "Termina com",
-  exact: "Exato",
+type AliasRecord = {
+  id: string;
+  pattern: string;
+  matchType: keyof typeof ALIAS_MATCH_LABELS | string;
+  caseSensitive?: boolean;
+  accountPlanId?: string | null;
+  accountPlanName?: string | null;
+  resultCenterId?: string | null;
+  resultCenterName?: string | null;
+  supplier?: string | null;
+  descriptionOverride?: string | null;
 };
+
+type AccountPlanRecord = { id: string; name: string; active?: boolean; order?: number };
+
+type PanelState = { mode: "view"; item: AliasRecord } | { mode: "edit"; item: AliasRecord } | { mode: "create" };
+
+const TEMPLATE = "minmax(200px,1.1fr) 120px minmax(180px,1fr) minmax(160px,1fr) minmax(160px,1fr) 16px";
 
 export default function ImportAliasesManagement({ canManage = true }: { canManage?: boolean }) {
   const { firebaseUser } = useAuth();
   const { kiosks } = useKiosks();
-  const { toast } = useToast();
-  const { data: aliases, loading } = useFinancialCollection<any>(financialCollection("importAliases"));
-  const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
-  const units = useMemo(
-    () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
-    [kiosks]
+  const { data: aliases, loading, error, refresh } = useFinancialCollection<AliasRecord>(financialCollection("importAliases"));
+  const { data: accountPlans } = useFinancialCollection<AccountPlanRecord>(financialCollection("accounts"));
+  const units = useMemo(() => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")), [kiosks]);
+  const planOptions = useMemo(
+    () => (accountPlans ?? []).filter((plan) => plan.active !== false).sort((left, right) => (left.order ?? 0) - (right.order ?? 0)).map((plan) => ({ id: plan.id, name: plan.name })),
+    [accountPlans]
   );
-  const [open, setOpen] = useState(false);
-  const [editingAlias, setEditingAlias] = useState<any | null>(null);
-  const [deletingAlias, setDeletingAlias] = useState<any | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [query, setQuery] = useState("");
+  const [matchFilter, setMatchFilter] = useState("all");
+  const [panel, setPanel] = useState<PanelState | null>(null);
 
-  const form = useForm<AliasFormValues>({
-    resolver: zodResolver(aliasSchema),
-    defaultValues: { pattern: "", matchType: "contains", caseSensitive: false },
-  });
+  const all = useMemo(() => [...(aliases ?? [])].sort((left, right) => left.pattern.localeCompare(right.pattern, "pt-BR", { sensitivity: "base" })), [aliases]);
+  const rows = useMemo(
+    () =>
+      all.filter(
+        (item) =>
+          (matchFilter === "all" || item.matchType === matchFilter) &&
+          matchesFinanceQuery(query, item.pattern, item.supplier, item.accountPlanName, item.resultCenterName, item.descriptionOverride)
+      ),
+    [all, query, matchFilter]
+  );
+  const chips = useMemo(
+    () => [
+      { id: "all", label: "Todos", count: all.length },
+      ...Object.entries(ALIAS_MATCH_LABELS).map(([id, label]) => ({ id, label, count: all.filter((item) => item.matchType === id).length })),
+    ],
+    [all]
+  );
 
-  function openNew() {
-    setEditingAlias(null);
-    form.reset({
-      pattern: "",
-      matchType: "contains",
-      caseSensitive: false,
-      accountPlanId: "",
-      resultCenterId: "",
-      supplier: "",
-      descriptionOverride: "",
-    });
-    setOpen(true);
-  }
-
-  function openEdit(alias: any) {
-    setEditingAlias(alias);
-    form.reset({
-      pattern: alias.pattern,
-      matchType: alias.matchType,
-      caseSensitive: alias.caseSensitive ?? false,
-      accountPlanId: alias.accountPlanId || "",
-      resultCenterId: alias.resultCenterId || "",
-      supplier: alias.supplier || "",
-      descriptionOverride: alias.descriptionOverride || "",
-    });
-    setOpen(true);
-  }
-
-  async function onSubmit(values: AliasFormValues) {
-    if (!firebaseUser) return;
-    setIsSaving(true);
-    try {
-      const plan = accountPlans?.find((item) => item.id === values.accountPlanId);
-      const unit = units.find((item) => item.id === values.resultCenterId);
-
-      const payload = {
-        pattern: values.pattern,
-        matchType: values.matchType,
-        caseSensitive: values.caseSensitive,
-        accountPlanId: values.accountPlanId || null,
-        accountPlanName: plan?.name || null,
-        resultCenterId: values.resultCenterId || null,
-        resultCenterName: unit?.name || null,
-        supplier: values.supplier || null,
-        descriptionOverride: values.descriptionOverride || null,
-      };
-
-      if (editingAlias) {
-        await updateDoc(financialDoc("importAliases", editingAlias.id), payload);
-        toast({ title: "Alias atualizado." });
-      } else {
-        await addDoc(financialCollection("importAliases"), {
-          ...payload,
-          createdBy: firebaseUser.uid,
-          createdAt: Timestamp.now(),
-        });
-        toast({ title: "Alias criado." });
-      }
-      setOpen(false);
-      setEditingAlias(null);
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao salvar o alias." });
-    } finally {
-      setIsSaving(false);
+  async function save(values: AliasFormValues, current: AliasRecord | null) {
+    if (!firebaseUser) throw new Error("Sessão expirada. Entre novamente.");
+    const plan = planOptions.find((item) => item.id === values.accountPlanId);
+    const unit = units.find((item) => item.id === values.resultCenterId);
+    const payload = {
+      pattern: values.pattern,
+      matchType: values.matchType,
+      caseSensitive: values.caseSensitive,
+      accountPlanId: values.accountPlanId || null,
+      accountPlanName: plan?.name || null,
+      resultCenterId: values.resultCenterId || null,
+      resultCenterName: unit?.name || null,
+      supplier: values.supplier || null,
+      descriptionOverride: values.descriptionOverride || null,
+    };
+    if (current) {
+      await updateDoc(financialDoc("importAliases", current.id), payload);
+    } else {
+      await addDoc(financialCollection("importAliases"), { ...payload, createdBy: firebaseUser.uid, createdAt: Timestamp.now() });
     }
+    refresh();
   }
 
-  async function handleDelete() {
-    if (!deletingAlias) return;
-    try {
-      await deleteDoc(financialDoc("importAliases", deletingAlias.id));
-      toast({ title: "Alias removido." });
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao remover o alias." });
-    } finally {
-      setDeletingAlias(null);
-    }
+  async function remove(item: AliasRecord) {
+    await deleteDoc(financialDoc("importAliases", item.id));
+    refresh();
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-indigo-500" />
-            Aliases de importação
-          </CardTitle>
-          <CardDescription>
-            Regras automáticas usadas para pré-classificar transações de extratos bancários.
-          </CardDescription>
+    <div className="space-y-5">
+      <CadastrosHero
+        kicker="Aliases de importação"
+        tabs={null}
+        search={{ value: query, placeholder: "Buscar padrão, fornecedor ou conta", onChange: setQuery }}
+        primary={canManage ? { label: "Novo alias", onClick: () => setPanel({ mode: "create" }) } : undefined}
+        chips={chips}
+        activeChip={matchFilter}
+        onChip={setMatchFilter}
+      />
+
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[28px] font-extrabold tracking-[-0.03em]">{rows.length}</span>
+        <span className="text-[13px] text-ds-ink-faint">de {all.length} regras</span>
+        <span className="text-[13px] text-ds-ink-muted">· Pré-classificam as transações dos extratos bancários na revisão da importação.</span>
+      </div>
+
+      {error ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-ds-card border border-ds-confirm-border bg-ds-confirm-bg px-5 py-4">
+          <p className="text-[13px] font-semibold text-ds-confirm-ink">{error.message}</p>
+          <Button type="button" variant="ds-secondary" size="md" onClick={() => refresh()}>Tentar novamente</Button>
         </div>
-        {canManage && (
-          <Button size="sm" onClick={openNew}>
-            <Plus className="mr-1.5 h-4 w-4" /> Novo alias
-          </Button>
-        )}
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((row) => (
-              <div key={row} className="h-12 animate-pulse rounded-lg bg-muted" />
-            ))}
-          </div>
-        ) : !aliases?.length ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            Nenhum alias cadastrado.
-          </div>
-        ) : (
-          <div className="divide-y">
-            {aliases.map((alias) => (
-              <div key={alias.id} className="flex items-center justify-between gap-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm font-medium">{alias.pattern}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {MATCH_TYPE_LABELS[alias.matchType] || alias.matchType}
-                    </Badge>
-                    {alias.caseSensitive && (
-                      <Badge variant="outline" className="text-[10px] text-amber-600">
-                        Aa
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                    {alias.accountPlanName && <span>Conta: {alias.accountPlanName}</span>}
-                    {alias.resultCenterName && <span>Unidade: {alias.resultCenterName}</span>}
-                    {alias.supplier && <span>Fornecedor: {alias.supplier}</span>}
-                    {alias.descriptionOverride && <span>Descrição: “{alias.descriptionOverride}”</span>}
-                  </div>
-                </div>
-                {canManage && (
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(alias)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-rose-500 hover:text-rose-600"
-                      onClick={() => setDeletingAlias(alias)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                )}
+      ) : null}
+
+      {loading && !aliases ? (
+        <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando aliases">
+          <ListSkeleton rows={4} />
+        </div>
+      ) : (
+        <ListShell minWidth={980}>
+          <ListHead template={TEMPLATE}>
+            <span>Padrão</span>
+            <span>Comparação</span>
+            <span>Plano de contas</span>
+            <span>Unidade</span>
+            <span>Fornecedor</span>
+            <span />
+          </ListHead>
+          {rows.map((item) => (
+            <ListRow
+              key={item.id}
+              template={TEMPLATE}
+              isOpen={panel?.mode !== "create" && panel?.item.id === item.id}
+              isSelected={false}
+              isMuted={false}
+              onOpen={() => setPanel({ mode: "view", item })}
+              label={`Abrir ${item.pattern}`}
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Mono className="truncate text-[13px] font-bold">{item.pattern}</Mono>
+                {item.caseSensitive ? <SoftPill>Aa</SoftPill> : null}
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
+              <span className="text-xs font-semibold text-ds-ink-2">{ALIAS_MATCH_LABELS[item.matchType] ?? item.matchType}</span>
+              <span className="truncate text-[13px]">{item.accountPlanName || <SoftPill isEmpty>Sem plano</SoftPill>}</span>
+              <span className="truncate text-[13px]">{item.resultCenterName || <SoftPill isEmpty>Sem unidade</SoftPill>}</span>
+              <span className="truncate text-[13px]">{item.supplier || <SoftPill isEmpty>Sem fornecedor</SoftPill>}</span>
+              <Chevron />
+            </ListRow>
+          ))}
+          {rows.length === 0 && !error ? (
+            all.length === 0
+              ? <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum alias cadastrado.</p>
+              : <EmptyResults title="Nenhum alias encontrado com esses filtros." onClear={() => { setQuery(""); setMatchFilter("all"); }} />
+          ) : null}
+        </ListShell>
+      )}
 
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            setOpen(false);
-            setEditingAlias(null);
+      <AliasPanel
+        state={panel}
+        planOptions={planOptions}
+        units={units}
+        canManage={canManage}
+        onClose={() => setPanel(null)}
+        onMode={setPanel}
+        onSave={save}
+        onRemove={remove}
+      />
+    </div>
+  );
+}
+
+function AliasPanel({
+  state,
+  planOptions,
+  units,
+  canManage,
+  onClose,
+  onMode,
+  onSave,
+  onRemove,
+}: {
+  state: PanelState | null;
+  planOptions: Array<{ id: string; name: string }>;
+  units: Array<{ id: string; name: string }>;
+  canManage: boolean;
+  onClose: () => void;
+  onMode: (state: PanelState) => void;
+  onSave: (values: AliasFormValues, current: AliasRecord | null) => Promise<void>;
+  onRemove: (item: AliasRecord) => Promise<void>;
+}) {
+  const empty: AliasFormValues = { pattern: "", matchType: "contains", caseSensitive: false, accountPlanId: "", resultCenterId: "", supplier: "", descriptionOverride: "" };
+  const form = useForm<AliasFormValues>({ resolver: zodResolver(aliasSchema), defaultValues: empty });
+  const { register, control, handleSubmit, reset, formState: { errors, isSubmitting } } = form;
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const item = state && state.mode !== "create" ? state.item : null;
+  const editing = state?.mode === "edit" || state?.mode === "create";
+
+  useEffect(() => {
+    setSaveError(null);
+    setConfirmingDelete(false);
+    if (!state || state.mode === "view") return;
+    reset(
+      state.mode === "edit"
+        ? {
+            pattern: state.item.pattern,
+            matchType: (state.item.matchType as AliasFormValues["matchType"]) ?? "contains",
+            caseSensitive: state.item.caseSensitive ?? false,
+            accountPlanId: state.item.accountPlanId || "",
+            resultCenterId: state.item.resultCenterId || "",
+            supplier: state.item.supplier || "",
+            descriptionOverride: state.item.descriptionOverride || "",
           }
-        }}
-      >
-        <DialogContent className="max-w-md" onCloseAutoFocus={(event) => event.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>{editingAlias ? "Editar alias" : "Novo alias"}</DialogTitle>
-            <DialogDescription>Essa regra será aplicada automaticamente na revisão de importação.</DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="pattern"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Padrão</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: UBER, GOOGLE, IFOOD" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="matchType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de comparação</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.entries(MATCH_TYPE_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="caseSensitive"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div>
-                      <FormLabel>Diferenciar maiúsculas</FormLabel>
-                      <p className="text-xs text-muted-foreground">Desative para comparação case-insensitive.</p>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="accountPlanId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plano de contas</FormLabel>
-                    <Select value={field.value || "none"} onValueChange={(value) => field.onChange(value === "none" ? "" : value)}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o plano" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhum</SelectItem>
-                        {(accountPlans || [])
-                          .filter((plan) => plan.active !== false)
-                          .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
-                          .map((plan) => (
-                            <SelectItem key={plan.id} value={plan.id}>
-                              {plan.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="resultCenterId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unidade</FormLabel>
-                    <Select value={field.value || "none"} onValueChange={(value) => field.onChange(value === "none" ? "" : value)}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a unidade" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhum</SelectItem>
-                        {units.map((unit) => (
-                          <SelectItem key={unit.id} value={unit.id}>
-                            {unit.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="supplier"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fornecedor</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Fornecedor sugerido" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="descriptionOverride"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição sugerida</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Texto que substituirá a descrição original" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSaving}>
-                  Salvar
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+        : empty
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, reset]);
 
-      <AlertDialog open={!!deletingAlias} onOpenChange={(open) => !open && setDeletingAlias(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir alias?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A regra <strong>{deletingAlias?.pattern}</strong> deixará de ser aplicada em futuras importações.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+  return (
+    <SidePanel
+      open={!!state}
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      kicker={state?.mode === "create" ? "Novo alias" : state?.mode === "edit" ? "Editar alias" : "Alias de importação"}
+      title={state?.mode === "create" ? "Sem padrão" : item?.pattern ?? ""}
+      subtitle="Aplicado automaticamente na revisão de importação."
+    >
+      {state && !editing && item ? (
+        <>
+          <PanelSection title="Regra">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+              <PanelField label="Comparação">{ALIAS_MATCH_LABELS[item.matchType] ?? item.matchType}</PanelField>
+              <PanelField label="Maiúsculas">{item.caseSensitive ? "Diferencia" : "Ignora"}</PanelField>
+            </div>
+          </PanelSection>
+          <PanelSection title="Sugestão aplicada">
+            <PanelField label="Plano de contas">{item.accountPlanName || "Não define"}</PanelField>
+            <PanelField label="Unidade">{item.resultCenterName || "Não define"}</PanelField>
+            <PanelField label="Fornecedor">{item.supplier || "Não define"}</PanelField>
+            <PanelField label="Descrição">{item.descriptionOverride || "Mantém a original"}</PanelField>
+          </PanelSection>
+          {canManage ? (
+            <div className="mt-auto space-y-3 border-t border-ds-divider pt-4">
+              {confirmingDelete ? (
+                <InlineConfirm
+                  message={`Excluir a regra “${item.pattern}”? Ela deixa de ser aplicada em futuras importações.`}
+                  loading={deleting}
+                  onCancel={() => setConfirmingDelete(false)}
+                  onConfirm={async () => {
+                    setDeleting(true);
+                    setSaveError(null);
+                    try {
+                      await onRemove(item);
+                      onClose();
+                    } catch (error) {
+                      setConfirmingDelete(false);
+                      setSaveError(errorMessageOf(error, "Não foi possível excluir o alias."));
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="primary-modal" size="md" onClick={() => onMode({ mode: "edit", item })}>Editar alias</Button>
+                  <Button type="button" variant="danger-link" size="md" onClick={() => setConfirmingDelete(true)}>Excluir alias</Button>
+                </div>
+              )}
+              <PanelErrorNote message={saveError} />
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {state && editing ? (
+        <form
+          noValidate
+          className="flex flex-1 flex-col gap-5"
+          onSubmit={handleSubmit(async (values) => {
+            setSaveError(null);
+            try {
+              await onSave(values, item);
+              onClose();
+            } catch (error) {
+              setSaveError(errorMessageOf(error, "Não foi possível salvar o alias."));
+            }
+          })}
+        >
+          <Field label="Padrão" htmlFor="alias-pattern" error={errors.pattern?.message}>
+            <Input id="alias-pattern" placeholder="Ex.: UBER, GOOGLE, IFOOD" aria-invalid={!!errors.pattern} className={fieldInputClass} {...register("pattern")} />
+          </Field>
+          <Controller control={control} name="matchType" render={({ field }) => (
+            <PanelSelectField id="alias-match" label="Tipo de comparação" value={field.value} onChange={field.onChange} options={Object.entries(ALIAS_MATCH_LABELS).map(([id, name]) => ({ id, name }))} />
+          )} />
+          <Controller control={control} name="caseSensitive" render={({ field }) => (
+            <PanelSwitchRow id="alias-case" label="Diferenciar maiúsculas" description="Desative para comparar sem distinguir maiúsculas e minúsculas." checked={field.value} onChange={field.onChange} />
+          )} />
+          <Controller control={control} name="accountPlanId" render={({ field }) => (
+            <PanelSelectField id="alias-plan" label="Plano de contas" requirement="opcional" value={field.value} onChange={field.onChange} noneLabel="Nenhum" options={planOptions} />
+          )} />
+          <Controller control={control} name="resultCenterId" render={({ field }) => (
+            <PanelSelectField id="alias-unit" label="Unidade" requirement="opcional" value={field.value} onChange={field.onChange} noneLabel="Nenhuma" options={units} />
+          )} />
+          <Field label="Fornecedor" htmlFor="alias-supplier" requirement="opcional">
+            <Input id="alias-supplier" placeholder="Fornecedor sugerido" className={fieldInputClass} {...register("supplier")} />
+          </Field>
+          <Field label="Descrição sugerida" htmlFor="alias-description" requirement="opcional">
+            <Textarea id="alias-description" rows={3} placeholder="Texto que substituirá a descrição original" className={cn(fieldInputClass, "h-auto py-2.5")} {...register("descriptionOverride")} />
+          </Field>
+          <PanelErrorNote message={saveError} />
+          <PanelFormFooter submitting={isSubmitting} creating={state.mode === "create"} noun="alias" onCancel={() => (item ? onMode({ mode: "view", item }) : onClose())} />
+        </form>
+      ) : null}
+    </SidePanel>
   );
 }

@@ -791,6 +791,40 @@ export type PermissionSet = {
     manageFinancialLink: boolean;
     manageBaseItems: boolean;
   };
+  /**
+   * Coala Go (aplicativo Android). Lista separada da do sistema web: ter uma permissão
+   * no sistema não libera a função correspondente no aplicativo, e vice-versa.
+   */
+  app: {
+    localPurchase: {
+      /** Enviar nota e comprovante e registrar a compra local. */
+      register: boolean;
+      /** Dar entrada no estoque da própria unidade ao registrar a compra. */
+      stockEntry: boolean;
+    };
+    stockCount: {
+      /** Iniciar, salvar e concluir a contagem de estoque da unidade. */
+      perform: boolean;
+    };
+    reposition: {
+      /** Conferir e registrar o recebimento das reposições destinadas às unidades do usuário. */
+      receive: boolean;
+    };
+    goals: {
+      /** Ver as metas em andamento, o placar da equipe e a previsão de prêmio das unidades do usuário. */
+      view: boolean;
+    };
+    schedule: {
+      /** Ver a escala publicada das unidades em que a pessoa está lotada, com todos da equipe. */
+      view: boolean;
+      /** Gestão: ver também a escala das demais unidades do acesso da pessoa, mesmo sem estar escalada nelas. */
+      viewAllUnits?: boolean;
+    };
+    signage: {
+      /** Adicionar telas do Coala Signage às unidades do usuário, lendo o QR code do monitor. */
+      manage: boolean;
+    };
+  };
   // Conceptual groupers — granular fields defined in Plano Técnico de Formulários
   hr: {
     view: boolean;
@@ -1987,7 +2021,12 @@ export type SignageSlide = {
   type: SignageSlideType;
   durationMs: number;
   order: number;
+  /** Unidades donas das telas em `screenIds`; derivado no servidor para o filtro de acesso. */
   kioskIds: string[];
+  /** Telas que exibem o slide. A tela padrão de uma unidade tem o mesmo id da unidade. */
+  screenIds: string[];
+  /** Posição por tela; sem entrada, vale `order`. */
+  orderByScreen?: Record<string, number>;
   isActive: boolean;
   assetUrl?: string;
   assetPath?: string;
@@ -2020,9 +2059,40 @@ export type PublishedPlayerSlide = {
   schedule?: SignageSchedule;
 };
 
+export type SignageScreen = {
+  id: string;
+  kioskId: string;
+  kioskName: string;
+  name: string;
+  deviceToken?: string;
+  /** Posição física da tela, informada ao cadastrá-la; orienta o formato das artes. Ausente em telas antigas. */
+  orientation?: 'landscape' | 'portrait';
+  /** Tela padrão da unidade: existe sem cadastro e não pode ser excluída. */
+  isDefault: boolean;
+};
+
+export type SignageMediaItem = {
+  id: string;
+  fileName: string;
+  kind: 'image' | 'video';
+  contentType: string;
+  sizeBytes: number;
+  assetPath: string;
+  assetUrl: string;
+  folderId: string | null;
+  createdAt: string;
+};
+
+export type SignageMediaFolder = {
+  id: string;
+  name: string;
+};
+
 export type PublishedPlayerDocument = {
   kioskId: string;
   kioskName?: string;
+  screenId?: string;
+  screenName?: string;
   updatedAt: string;
   generatedBy: {
     userId: string;
@@ -2033,11 +2103,14 @@ export type PublishedPlayerDocument = {
 
 export type PlayerHeartbeat = {
   kioskId: string;
+  screenId?: string;
   kioskName?: string;
   lastSeenAt: string;
-  status: 'cache' | 'realtime';
+  /** `app`: app instalado no monitor, que toca do disco e consulta o Coala a cada minuto. */
+  status: 'cache' | 'realtime' | 'app';
   currentSlideId?: string;
   updatedAt?: string;
+  appVersion?: string;
 };
 
 export type NutritionalNutrient = {
@@ -2928,6 +3001,7 @@ export const defaultGuestPermissions: PermissionSet = {
       manageFinancialLink: false,
       manageBaseItems: false,
     },
+    app: { localPurchase: { register: false, stockEntry: false }, stockCount: { perform: false }, reposition: { receive: false }, goals: { view: false }, schedule: { view: false, viewAllUnits: false }, signage: { manage: false } },
     hr: {
       view: false,
       employees: { view: false, manage: false },
@@ -3039,6 +3113,7 @@ export const defaultAdminPermissions: PermissionSet = {
       manageFinancialLink: true,
       manageBaseItems: true,
     },
+    app: { localPurchase: { register: true, stockEntry: true }, stockCount: { perform: true }, reposition: { receive: true }, goals: { view: true }, schedule: { view: true, viewAllUnits: true }, signage: { manage: true } },
     hr: {
       view: true,
       employees: { view: true, manage: true },
@@ -3352,7 +3427,44 @@ export interface GoalMethodConfig {
 
 export type GoalMethodSnapshot = Omit<GoalMethodConfig, 'createdAt' | 'updatedAt'>
 
+export interface GoalClosureBonusTier {
+  tierId: string
+  label: string
+  fixedBonusAmount: number
+  excessAmount: number
+  variableBonusAmount: number
+  totalBonusAmount: number
+}
+
+export interface GoalClosureBonusParticipant {
+  employeeId: string
+  role: GoalParticipantRole
+  scheduledTurns: number
+  bonusAmount: number
+}
+
+/** Premiação apurada no encerramento da meta (método por faixas). Fica congelada para auditoria. */
+export interface GoalClosureBonusSnapshot {
+  version: 1
+  source: 'closure' | 'backfill'
+  methodId: string
+  methodName: string
+  revenue: number
+  highestTierId: string | null
+  highestTierLabel: string | null
+  tiers: GoalClosureBonusTier[]
+  fixedTotal: number
+  variableTotal: number
+  totalTeamBonus: number
+  leadershipBonus: number
+  totalPrize: number
+  totalPeriodTurns: number
+  participants: GoalClosureBonusParticipant[]
+  capturedAt?: Timestamp
+}
+
 export interface GoalClosureSnapshot {
+  bonus?: GoalClosureBonusSnapshot
   distributionMode: GoalDistributionMode
   periodDateKeys: string[]
   periodDayCount: number

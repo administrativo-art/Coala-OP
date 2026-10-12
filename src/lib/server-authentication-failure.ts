@@ -13,5 +13,8 @@ export function rethrowServerAuthenticationFailure(error: unknown): never {
   if (message === 'Atualização cadastral obrigatória pendente.') {
     throw new AppError({ code: 'PROFILE_COMPLIANCE_REQUIRED', kind: 'AUTHORIZATION' });
   }
+  if (message === 'Conta inativa.') {
+    throw new AppError({ code: 'INACTIVE_ACCOUNT', kind: 'AUTHORIZATION' });
+  }
   throw error;
 }

@@ -73,7 +73,7 @@ export function CadastrosWorkspace({ defaultTab = 'base' }: { defaultTab?: Cadas
   const tabs = <CadastrosTabs tabs={tabItems} active={tab} onChange={(id) => setTab(id as CadastrosTabId)} />;
 
   return (
-    <div className="text-[#1a1b1f]">
+    <div className="text-ds-ink">
       {tab === 'base' ? <BaseProductManagement tabs={tabs} view={view} onViewChange={handleViewChange} /> : null}
       {tab === 'derived' ? <ItemManagement tabs={tabs} view={view} onViewChange={handleViewChange} /> : null}
       {tab === 'entities' ? <EntityManagement tabs={tabs} view={view} onViewChange={handleViewChange} /> : null}

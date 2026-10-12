@@ -76,11 +76,11 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
     : [];
 
   return (
-    <div className="flex h-full flex-col bg-[#faf9f6]">
+    <div className="flex h-full flex-col bg-ds-warm">
       <ScrollArea className="flex-1 p-6">
         <div className="mx-auto w-full space-y-5">
-          {!isInstruction && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#eeece7] bg-white p-3">
-            <span className="mr-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Contexto do preço</span>
+          {!isInstruction && <div className="flex flex-wrap items-center gap-2 rounded-ds-md border border-ds-divider bg-ds-surface p-3">
+            <span className="mr-1 text-[10px] font-black uppercase tracking-wide text-ds-ink-faint">Contexto do preço</span>
             <Select value={unitId} onValueChange={setUnitId}>
               <SelectTrigger className="h-9 w-48 rounded-lg text-xs font-bold"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Preço global</SelectItem>{scopedKiosks.map((kiosk) => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}</SelectContent>
@@ -89,49 +89,49 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
               <SelectTrigger className="h-9 w-44 rounded-lg text-xs font-bold"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Balcão</SelectItem>{activeChannels.map((channel) => <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>)}</SelectContent>
             </Select>
-            <span className="text-[11px] text-slate-400">Indicadores recalculados para a unidade e o canal escolhidos.</span>
+            <span className="text-[11px] text-ds-ink-faint">Indicadores recalculados para a unidade e o canal escolhidos.</span>
           </div>}
           
           {/* Summary Cards */}
           {!isInstruction && <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Preço de Venda</p>
-              <p className="text-lg font-black text-gray-900">{priceResolution.available ? formatCurrency(priceResolution.price) : 'Indisponível'}</p>
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+              <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Preço de Venda</p>
+              <p className="text-lg font-black text-ds-ink">{priceResolution.available ? formatCurrency(priceResolution.price) : 'Indisponível'}</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Custo (CMV)</p>
-              <p className="text-lg font-black text-gray-900">{formatCurrency(simulation.totalCmv)}</p>
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+              <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Custo (CMV)</p>
+              <p className="text-lg font-black text-ds-ink">{formatCurrency(simulation.totalCmv)}</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Margem Bruta R$</p>
-              <p className="text-lg font-black text-gray-900">{formatCurrency(metrics.grossMargin)}</p>
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+              <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Margem Bruta R$</p>
+              <p className="text-lg font-black text-ds-ink">{formatCurrency(metrics.grossMargin)}</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Margem Bruta %</p>
-              <p className="text-lg font-black text-gray-900">{metrics.grossMarginPct.toFixed(1)}%</p>
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+              <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Margem Bruta %</p>
+              <p className="text-lg font-black text-ds-ink">{metrics.grossMarginPct.toFixed(1)}%</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">M. Contribuição</p>
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+              <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">M. Contribuição</p>
               <p className={cn(
                 "text-xl font-black",
-                (simulation.profitGoal && metrics.profitPercentage >= simulation.profitGoal) ? "text-green-600" : "text-orange-500"
+                (simulation.profitGoal && metrics.profitPercentage >= simulation.profitGoal) ? "text-ds-ok" : "text-ds-warn"
               )}>
                 {metrics.profitPercentage.toFixed(1)}%
               </p>
             </div>
-            <div className="bg-white p-4 rounded-xl border shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Markup</p>
-              <p className="text-lg font-black text-gray-700">{metrics.markup.toFixed(2)}x</p>
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+              <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Markup</p>
+              <p className="text-lg font-black text-ds-ink-2">{metrics.markup.toFixed(2)}x</p>
             </div>
           </div>}
 
           <div className="grid gap-5 lg:grid-cols-[1fr_258px]">
             <div className="space-y-8">
               {/* Composition */}
-              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b bg-gray-50/50">
-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                    <Utensils className="h-4 w-4 text-pink-500" />
+              <div className="bg-ds-surface rounded-ds-card border shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b bg-ds-warm">
+                  <h3 className="text-sm font-bold text-ds-ink flex items-center gap-2">
+                    <Utensils className="h-4 w-4 text-ds-accent-ink" />
                     {isInstruction ? 'Checklist de Ingredientes' : 'Composição e Custos'}
                   </h3>
                 </div>
@@ -147,12 +147,12 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
                     {ingredients.map((ing, i) => (
                       <TableRow key={i}>
                         <TableCell className="py-3">
-                          <p className="text-sm font-semibold text-gray-800">{ing.name}</p>
+                          <p className="text-sm font-semibold text-ds-ink">{ing.name}</p>
                         </TableCell>
-                        <TableCell className="py-3 text-center text-xs font-medium text-gray-600">
+                        <TableCell className="py-3 text-center text-xs font-medium text-ds-ink-2">
                           {ing.quantity} {ing.unit}
                         </TableCell>
-                        {!isInstruction && <TableCell className="py-3 text-right text-sm font-bold text-gray-900">
+                        {!isInstruction && <TableCell className="py-3 text-right text-sm font-bold text-ds-ink">
                           {formatCurrency(ing.quantity * ing.cost)}
                         </TableCell>}
                       </TableRow>
@@ -162,37 +162,37 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
               </div>
 
               {/* Instructions */}
-              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b bg-gray-50/50">
-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                    <LayoutDashboard className="h-4 w-4 text-blue-500" />
+              <div className="bg-ds-surface rounded-ds-card border shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b bg-ds-warm">
+                  <h3 className="text-sm font-bold text-ds-ink flex items-center gap-2">
+                    <LayoutDashboard className="h-4 w-4 text-ds-accent-ink" />
                     Modo de Montagem
                   </h3>
                 </div>
                 <div className="p-6 space-y-6">
                   {simulation.ppo?.assemblyInstructions?.map((phase, pi) => (
                     <div key={pi} className="space-y-3">
-                      <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest border-b pb-1">
+                      <h4 className="text-xs font-black text-ds-accent-ink uppercase tracking-widest border-b pb-1">
                         {phase.name}
                       </h4>
                       <div className="space-y-4">
                         {phase.etapas.map((etapa, ei) => (
                           <div key={ei} className="flex gap-4">
-                            <span className="text-sm font-black text-gray-300">{ei + 1}</span>
-                            <p className="text-sm text-gray-700 leading-relaxed">{etapa.text}</p>
+                            <span className="text-sm font-black text-ds-ink-faint">{ei + 1}</span>
+                            <p className="text-sm text-ds-ink-2 leading-relaxed">{etapa.text}</p>
                           </div>
                         ))}
                       </div>
                     </div>
                   ))}
                   {(!simulation.ppo?.assemblyInstructions || simulation.ppo.assemblyInstructions.length === 0) && (
-                    <p className="text-sm text-gray-400 italic">Nenhuma instrução cadastrada.</p>
+                    <p className="text-sm text-ds-ink-faint italic">Nenhuma instrução cadastrada.</p>
                   )}
                 </div>
               </div>
 
               {isInstruction && qualityStandards.length > 0 && (
-                <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+                <div className="overflow-hidden rounded-ds-card border bg-ds-surface shadow-sm">
                   <div className="flex items-center gap-2 border-b bg-slate-950 px-6 py-4 text-white">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                     <h3 className="text-sm font-bold">Padrão de Qualidade</h3>
@@ -213,10 +213,10 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
                   href={simulation.ppo.assemblyVideoUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 transition-colors hover:bg-blue-100"
+                  className="flex items-center gap-3 rounded-ds-card border border-blue-200 bg-blue-50 p-4 transition-colors hover:bg-blue-100"
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white"><Video className="h-4 w-4" /></span>
-                  <span><strong className="block text-sm text-blue-950">Vídeo de montagem</strong><span className="text-xs text-blue-600">Abrir instrução em vídeo</span></span>
+                  <span className="flex h-10 w-10 items-center justify-center rounded-ds-md bg-blue-600 text-white"><Video className="h-4 w-4" /></span>
+                  <span><strong className="block text-sm text-blue-950">Vídeo de montagem</strong><span className="text-xs text-ds-accent-ink">Abrir instrução em vídeo</span></span>
                 </a>
               )}
             </div>
@@ -224,36 +224,36 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
             <div className="space-y-6">
               {/* Photo */}
               {simulation.ppo?.referenceImageUrl ? (
-                <div className="bg-white p-2 rounded-2xl border shadow-sm">
-                   <img src={simulation.ppo.referenceImageUrl} alt={`Foto de referência de ${simulation.name}`} className="w-full aspect-square object-contain rounded-xl" />
+                <div className="bg-ds-surface p-2 rounded-ds-card border shadow-sm">
+                   <img src={simulation.ppo.referenceImageUrl} alt={`Foto de referência de ${simulation.name}`} className="w-full aspect-square object-contain rounded-ds-md" />
                 </div>
               ) : (
-                <div className="bg-gray-50 p-2 rounded-2xl border-2 border-dashed border-gray-200 aspect-square flex flex-col items-center justify-center text-gray-400">
+                <div className="bg-ds-warm p-2 rounded-ds-card border-2 border-dashed border-gray-200 aspect-square flex flex-col items-center justify-center text-ds-ink-faint">
                     <Utensils className="h-8 w-8 mb-2 opacity-20" />
                     <p className="text-sm font-medium text-center">Sem foto<br/>de referência</p>
                 </div>
               )}
 
               {/* Specs */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+              <div className="bg-ds-surface p-6 rounded-ds-card border shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-400" />
-                    <span className="text-xs font-bold text-gray-500 uppercase">Preparo</span>
+                    <Clock className="h-4 w-4 text-ds-ink-faint" />
+                    <span className="text-xs font-bold text-ds-ink-muted uppercase">Preparo</span>
                   </div>
-                  <span className="text-sm font-bold text-gray-900">{simulation.ppo?.preparationTime || 0}s</span>
+                  <span className="text-sm font-bold text-ds-ink">{simulation.ppo?.preparationTime || 0}s</span>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Utensils className="h-4 w-4 text-gray-400" />
-                    <span className="text-xs font-bold text-gray-500 uppercase">Peso</span>
+                    <Utensils className="h-4 w-4 text-ds-ink-faint" />
+                    <span className="text-xs font-bold text-ds-ink-muted uppercase">Peso</span>
                   </div>
-                  <span className="text-sm font-bold text-gray-900">{simulation.ppo?.portionWeight || 0}g</span>
+                  <span className="text-sm font-bold text-ds-ink">{simulation.ppo?.portionWeight || 0}g</span>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-orange-500">
+                  <div className="flex items-center gap-2 text-ds-warn">
                     <ShieldAlert className="h-4 w-4" />
                     <span className="text-xs font-bold uppercase">Alergênicos</span>
                   </div>
@@ -265,62 +265,62 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
                     </Badge>
                   ))}
                   {(!simulation.ppo?.allergens || simulation.ppo.allergens.length === 0) && (
-                    <span className="text-xs text-gray-400">Nenhum</span>
+                    <span className="text-xs text-ds-ink-faint">Nenhum</span>
                   )}
                 </div>
               </div>
               
               {/* Categorização & Kiosks */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+              <div className="bg-ds-surface p-6 rounded-ds-card border shadow-sm space-y-4">
                 <div className="space-y-3">
-                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Localização e Categoria</h4>
+                  <h4 className="text-[10px] font-black text-ds-ink-faint uppercase tracking-widest">Localização e Categoria</h4>
                   <div className="space-y-2">
                     <div className="flex justify-between items-start text-xs">
-                      <span className="text-gray-500">Unidades</span>
+                      <span className="text-ds-ink-muted">Unidades</span>
                       <div className="flex flex-wrap gap-1 justify-end max-w-[150px]">
-                        {scopedKiosks.length === commercialKiosks.length ? <span className="font-bold text-gray-700">Todas</span> : scopedKiosks.map((kiosk) => <Badge key={kiosk.id} variant="secondary" className="h-4 px-1.5 text-[9px]">{kiosk.name}</Badge>)}
+                        {scopedKiosks.length === commercialKiosks.length ? <span className="font-bold text-ds-ink-2">Todas</span> : scopedKiosks.map((kiosk) => <Badge key={kiosk.id} variant="secondary" className="h-4 px-1.5 text-[9px]">{kiosk.name}</Badge>)}
                       </div>
                     </div>
-                    <Separator className="bg-gray-50" />
+                    <Separator className="bg-ds-warm" />
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Categoria</span>
-                      <span className="font-bold text-gray-700">{simulation.categoryIds?.[0] ? getCatName(simulation.categoryIds[0]) : '—'}</span>
+                      <span className="text-ds-ink-muted">Categoria</span>
+                      <span className="font-bold text-ds-ink-2">{simulation.categoryIds?.[0] ? getCatName(simulation.categoryIds[0]) : '—'}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Linha</span>
-                      <span className="font-bold text-gray-700">{simulation.lineId ? getCatName(simulation.lineId) : '—'}</span>
+                      <span className="text-ds-ink-muted">Linha</span>
+                      <span className="font-bold text-ds-ink-2">{simulation.lineId ? getCatName(simulation.lineId) : '—'}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Fiscal & Impostos */}
-              {!isInstruction && <div className="bg-gray-100/50 p-6 rounded-2xl border border-dashed border-gray-200 space-y-3">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dados Fiscais e Taxas</h4>
+              {!isInstruction && <div className="bg-ds-muted/50 p-6 rounded-ds-card border border-dashed border-gray-200 space-y-3">
+                <h4 className="text-[10px] font-black text-ds-ink-faint uppercase tracking-widest">Dados Fiscais e Taxas</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">NCM</span>
-                    <p className="font-mono font-bold text-xs text-gray-700">{simulation.ppo?.ncm || '—'}</p>
+                    <span className="text-[9px] text-ds-ink-faint uppercase">NCM</span>
+                    <p className="font-mono font-bold text-xs text-ds-ink-2">{simulation.ppo?.ncm || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">CEST</span>
-                    <p className="font-mono font-bold text-xs text-gray-700">{simulation.ppo?.cest || '—'}</p>
+                    <span className="text-[9px] text-ds-ink-faint uppercase">CEST</span>
+                    <p className="font-mono font-bold text-xs text-ds-ink-2">{simulation.ppo?.cest || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">CFOP</span>
-                    <p className="font-mono font-bold text-xs text-gray-700">{simulation.ppo?.cfop || '—'}</p>
+                    <span className="text-[9px] text-ds-ink-faint uppercase">CFOP</span>
+                    <p className="font-mono font-bold text-xs text-ds-ink-2">{simulation.ppo?.cfop || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[9px] text-gray-400 uppercase">Meta M.B.</span>
-                    <p className="font-bold text-xs text-gray-700">{simulation.profitGoal ? `${simulation.profitGoal}%` : '—'}</p>
+                    <span className="text-[9px] text-ds-ink-faint uppercase">Meta M.B.</span>
+                    <p className="font-bold text-xs text-ds-ink-2">{simulation.profitGoal ? `${simulation.profitGoal}%` : '—'}</p>
                   </div>
                 </div>
               </div>}
 
               {/* Tabela Nutricional */}
-              <div className="bg-green-50/50 p-6 rounded-2xl border border-dashed border-green-200 space-y-3">
+              <div className="bg-green-50/50 p-6 rounded-ds-card border border-dashed border-green-200 space-y-3">
                 <h4 className="text-[10px] font-black text-green-700 uppercase tracking-widest">Tabela Nutricional</h4>
-                <div className="flex flex-col items-center justify-center py-4 text-center text-green-600/60">
+                <div className="flex flex-col items-center justify-center py-4 text-center text-ds-ok/60">
                     <Utensils className="h-6 w-6 mb-2 opacity-50" />
                     <p className="text-xs font-bold uppercase">Módulo em breve</p>
                     <p className="text-[10px] max-w-[200px]">A tabela nutricional automática será implementada no futuro.</p>
@@ -329,7 +329,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
 
               {/* Notes */}
               {simulation.notes && (
-                <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100">
+                <div className="bg-yellow-50/50 p-4 rounded-ds-md border border-yellow-100">
                   <h4 className="text-[10px] font-black text-yellow-600 uppercase tracking-widest mb-2 flex items-center gap-1">
                     <Info className="h-3 w-3" /> Observações
                   </h4>

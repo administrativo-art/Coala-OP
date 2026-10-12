@@ -7,6 +7,7 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, ser
 import { type GoalTemplate, type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { GoalsContext } from '@/contexts/goals-context';
 import { buildGoalClosureSnapshot, calculateScheduledEmployeeGoalTargets, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
+import { buildGoalClosureBonusSnapshot } from '@/lib/goal-bonus-snapshot';
 import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
@@ -121,9 +122,22 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
       const distributionSnapshot = period
         ? await loadGoalDistributionSnapshot([period], periodEmployeeGoals)
         : null;
-      const closureSnapshot = period
+      const baseClosureSnapshot = period
+        ? buildGoalClosureSnapshot(period, periodEmployeeGoals, distributionSnapshot)
+        : null;
+      // Premiação só é apurada no encerramento (não no cancelamento) e fica congelada no snapshot.
+      const bonus = period && baseClosureSnapshot && status === 'closed'
+        ? buildGoalClosureBonusSnapshot({
+            period,
+            employeeGoals: periodEmployeeGoals,
+            periodDayCount: baseClosureSnapshot.periodDayCount,
+            source: 'closure',
+          })
+        : null;
+      const closureSnapshot = baseClosureSnapshot
         ? {
-            ...buildGoalClosureSnapshot(period, periodEmployeeGoals, distributionSnapshot),
+            ...baseClosureSnapshot,
+            ...(bonus ? { bonus: { ...bonus, capturedAt: serverTimestamp() } } : {}),
             capturedAt: serverTimestamp(),
           }
         : null;

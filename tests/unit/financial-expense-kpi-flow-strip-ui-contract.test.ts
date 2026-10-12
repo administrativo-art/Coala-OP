@@ -23,9 +23,10 @@ test("faixa de KPIs usa um único painel com três colunas", () => {
 });
 
 test("faixa de KPIs preserva hierarquia, paleta e composição financeira", () => {
-  for (const color of ["#e11d48", "#f59e0b", "#3b82f6", "#7c3aed", "#6d28d9", "#fbf6ff"]) {
-    assert.match(kpiFlowStripSource, new RegExp(color));
+  for (const token of ["bg-ds-danger", "bg-ds-warn", "bg-ds-info", "text-ds-warn", "bg-ds-warn-bg"]) {
+    assert.match(kpiFlowStripSource, new RegExp(token));
   }
+  assert.doesNotMatch(kpiFlowStripSource, /#[0-9a-fA-F]{6}/, "a faixa usa tokens do design, sem hex solto");
 
   assert.match(kpiFlowStripSource, /A pagar no período/);
   assert.match(kpiFlowStripSource, /Total do período/);

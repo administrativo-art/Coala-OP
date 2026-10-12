@@ -1,27 +1,20 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import type { ElementType, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { addDays, endOfMonth, endOfWeek, format, isBefore, startOfDay, startOfWeek } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import {
-  AlertTriangle,
-  ArrowRight,
-  Briefcase,
   Calendar,
-  CalendarDays,
-  CircleDollarSign,
-  ListTodo,
   Target,
-  TrendingUp,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { PageHero } from "@/components/patterns/page-hero"
 import { GoalsProvider } from "@/components/goals-provider"
 import { useDP } from "@/components/dp-context"
 import { GlassCard } from "@/components/ui/glass-card"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useGoals } from "@/contexts/goals-context"
@@ -39,7 +32,20 @@ import { useAllTasks } from "@/hooks/use-all-tasks"
 import { financialCollection } from "@/features/financial/lib/repositories"
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection"
 import { formatCurrency, toDate } from "@/features/financial/lib/utils"
-import { canViewTechnicalSheets } from "@/lib/commercial-permissions"
+import { ManagementDashboardBuilder } from "@/features/management-dashboard/builder-context"
+import { GoalsWidget } from "@/features/management-dashboard/widgets/goals-widget"
+import { HubWidget, type HubAttention, type HubKpi, type HubLink } from "@/features/management-dashboard/widgets/hub-widget"
+import { widgetIcons } from "@/features/management-dashboard/widgets/icons"
+import { PaymentsWidget, type PaymentRow } from "@/features/management-dashboard/widgets/payments-widget"
+import { RestockWidget, type RestockItem } from "@/features/management-dashboard/widgets/restock-widget"
+import { SalesWidget } from "@/features/management-dashboard/widgets/sales-widget"
+import { ScheduleWidget, type ScheduleDay } from "@/features/management-dashboard/widgets/schedule-widget"
+import { TasksWidget, type TaskItem } from "@/features/management-dashboard/widgets/tasks-widget"
+import { VacationsWidget, type VacationItem } from "@/features/management-dashboard/widgets/vacations-widget"
+import { MANAGEMENT_WIDGET_BY_ID } from "@/features/management-dashboard/catalog"
+import type { ManagementWidgetId } from "@/features/management-dashboard/types"
+import { MonthFilter } from "@/features/management-dashboard/widgets/month-filter"
+import { listRecentMonths, monthKeyOf, monthStartOf } from "@/features/management-dashboard/widgets/month-range"
 import { cn } from "@/lib/utils"
 import type { DPSchedule, DPShift, GoalPeriodDoc, Kiosk, SalesReport, User } from "@/types"
 
@@ -52,12 +58,14 @@ function isSameOrAfter(left: Date, right: Date) {
   return left.getTime() >= right.getTime()
 }
 
-function getCurrentGoalPeriods(periods: GoalPeriodDoc[], today: Date) {
+/** Metas que cobrem algum dia do mês (ativas ou já encerradas; canceladas ficam de fora). */
+function getGoalPeriodsForMonth(periods: GoalPeriodDoc[], monthStart: Date) {
+  const monthEndDate = endOfMonth(monthStart)
   return periods.filter((period) => {
-    if (period.status !== "active") return false
+    if (period.status === "cancelled") return false
     const start = toDate(period.startDate)
     const end = toDate(period.endDate)
-    return !!start && !!end && isSameOrBefore(startOfDay(start), today) && isSameOrAfter(startOfDay(end), today)
+    return !!start && !!end && isSameOrBefore(startOfDay(start), monthEndDate) && isSameOrAfter(startOfDay(end), monthStart)
   })
 }
 
@@ -65,56 +73,16 @@ function getKioskName(kiosks: Kiosk[], kioskId: string) {
   return kiosks.find((kiosk) => kiosk.id === kioskId)?.name ?? kioskId
 }
 
-function DashboardCard({
-  title,
-  description,
-  href,
-  icon: Icon,
-  className,
-  hideDetailsLink,
-  children,
-}: {
-  title: string
-  description: string
-  href: string
-  icon: ElementType
-  className?: string
-  hideDetailsLink?: boolean
-  children: ReactNode
-}) {
-  return (
-    <Card className={cn("overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm", className)}>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-zinc-100 px-4 py-3">
-        <div>
-          <CardTitle className="text-sm font-extrabold tracking-tight text-zinc-950">{title}</CardTitle>
-          <CardDescription className="mt-0.5 max-w-[320px] text-xs leading-snug text-zinc-400">{description}</CardDescription>
-        </div>
-        <div className="rounded-lg bg-pink-100/70 p-2 text-pink-500">
-          <Icon className="h-4 w-4" />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3 p-4">
-        {children}
-        {!hideDetailsLink ? (
-          <Link href={href} className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500">
-            Ver detalhes <ArrowRight className="h-4 w-4" />
-          </Link>
-        ) : null}
-      </CardContent>
-    </Card>
-  )
-}
-
 function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-xs text-zinc-400">{children}</p>
+  return <p className="rounded-ds-btn border border-dashed border-ds-border px-3 py-4 text-xs text-ds-ink-faint">{children}</p>
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
-      <p className="text-xs font-semibold text-zinc-400">{label}</p>
-      <p className="mt-0.5 text-xl font-black tracking-tight text-zinc-950">{value}</p>
-      {detail ? <p className="mt-0.5 text-[11px] font-medium text-zinc-400">{detail}</p> : null}
+    <div className="rounded-ds-btn border border-ds-border bg-ds-surface p-3 shadow-sm">
+      <p className="text-xs font-semibold text-ds-ink-faint">{label}</p>
+      <p className="mt-0.5 text-xl font-extrabold tracking-tight text-ds-ink">{value}</p>
+      {detail ? <p className="mt-0.5 text-[11px] font-medium text-ds-ink-faint">{detail}</p> : null}
     </div>
   )
 }
@@ -218,10 +186,12 @@ function getReportDateKey(report: { year: number; month: number; day?: number })
 }
 
 function ManagementDashboard() {
-  const { user, users, permissions } = useAuth()
+  const { firebaseUser, user, users, permissions } = useAuth()
   const router = useRouter()
   const canViewManagementDashboard = permissions.dashboard.view
   const canViewCollaboratorDashboard = permissions.dashboard.collaborator ?? permissions.dashboard.view
+  /** Cada widget só aparece para quem tem acesso ao módulo de origem (regra única no catálogo). */
+  const canShowWidget = (id: ManagementWidgetId) => MANAGEMENT_WIDGET_BY_ID.get(id)?.canView(permissions) ?? false
 
   const { kiosks } = useKiosks()
   const { periods, loading: goalsLoading } = useGoals()
@@ -239,6 +209,8 @@ function ManagementDashboard() {
   const [selectedScheduleUnitId, setSelectedScheduleUnitId] = useState("")
   const [monthlyScheduleUnitId, setMonthlyScheduleUnitId] = useState("")
   const [selectedSalesKioskId, setSelectedSalesKioskId] = useState("all")
+  const [salesMonth, setSalesMonth] = useState<string | null>(null)
+  const [goalsMonth, setGoalsMonth] = useState<string | null>(null)
   const [vacationStatusFilter, setVacationStatusFilter] = useState("all")
   const [goalsModalOpen, setGoalsModalOpen] = useState(false)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
@@ -283,53 +255,64 @@ function ManagementDashboard() {
   )
 
   const approvalTasks = pendingNewTasks.filter((task) => task.status === "awaiting_approval")
-  const visiblePendingTasks = pendingNewTasks.slice(0, 3)
 
   const salesFilteredByUnit = useMemo(
     () => salesReports.filter((report) => selectedSalesKioskId === "all" || report.kioskId === selectedSalesKioskId),
     [salesReports, selectedSalesKioskId]
   )
 
+  const currentMonthKey = monthKeyOf(today)
+  const monthChoices = useMemo(() => listRecentMonths(today, 13), [today])
+
   const currentReports = useMemo(
-    () => salesFilteredByUnit.filter((report) => report.month === today.getMonth() + 1 && report.year === today.getFullYear()),
-    [salesFilteredByUnit, today]
+    () => salesFilteredByUnit.filter((report) => monthKeyOf(new Date(report.year, report.month - 1, 1)) === (salesMonth ?? currentMonthKey)),
+    [salesFilteredByUnit, salesMonth, currentMonthKey]
   )
 
   const latestSalesPeriod = salesFilteredByUnit[0] ? { month: salesFilteredByUnit[0].month, year: salesFilteredByUnit[0].year } : null
   const visibleSalesReports = useMemo(() => {
-    if (currentReports.length > 0 || !latestSalesPeriod) return currentReports
+    // Sem escolha do usuário e sem vendas no mês atual, mostra o último mês com dados.
+    if (currentReports.length > 0 || salesMonth !== null || !latestSalesPeriod) return currentReports
     return salesFilteredByUnit.filter((report) => report.month === latestSalesPeriod.month && report.year === latestSalesPeriod.year)
-  }, [currentReports, latestSalesPeriod, salesFilteredByUnit])
+  }, [currentReports, latestSalesPeriod, salesFilteredByUnit, salesMonth])
+
+  const salesMonthValue = salesMonth ?? (visibleSalesReports[0] ? monthKeyOf(new Date(visibleSalesReports[0].year, visibleSalesReports[0].month - 1, 1)) : currentMonthKey)
+  const salesElapsedDay = salesMonthValue === currentMonthKey ? today.getDate() : 31
 
   const previousReports = useMemo(() => {
-    const reference = visibleSalesReports[0]
-    if (!reference) return []
-    const previousDate = new Date(reference.year, reference.month - 2, 1)
+    const previousDate = new Date(monthStartOf(salesMonthValue).getFullYear(), monthStartOf(salesMonthValue).getMonth() - 1, 1)
     return salesFilteredByUnit.filter((report) => report.month === previousDate.getMonth() + 1 && report.year === previousDate.getFullYear())
-  }, [salesFilteredByUnit, visibleSalesReports])
+  }, [salesFilteredByUnit, salesMonthValue])
 
   const sameElapsedCurrentReports = useMemo(
-    () => visibleSalesReports.filter((report) => reportBelongsToSameElapsedPeriod(report, today.getDate())),
-    [today, visibleSalesReports]
+    () => visibleSalesReports.filter((report) => reportBelongsToSameElapsedPeriod(report, salesElapsedDay)),
+    [salesElapsedDay, visibleSalesReports]
   )
 
   const sameElapsedPreviousReports = useMemo(
-    () => previousReports.filter((report) => reportBelongsToSameElapsedPeriod(report, today.getDate())),
-    [previousReports, today]
+    () => previousReports.filter((report) => reportBelongsToSameElapsedPeriod(report, salesElapsedDay)),
+    [previousReports, salesElapsedDay]
+  )
+
+  // Faturamento e metas: mês próprio, independente da unidade escolhida em "mais vendidas".
+  const goalsMonthValue = goalsMonth ?? currentMonthKey
+  const goalsMonthStart = monthStartOf(goalsMonthValue)
+  const goalsReports = useMemo(
+    () => salesReports.filter((report) => monthKeyOf(new Date(report.year, report.month - 1, 1)) === goalsMonthValue),
+    [salesReports, goalsMonthValue]
   )
 
   const currentRevenue = useMemo(
-    () =>
-      visibleSalesReports.reduce((sum, report) => sum + getSalesReportRevenue(report), 0),
-    [visibleSalesReports]
+    () => goalsReports.reduce((sum, report) => sum + getSalesReportRevenue(report), 0),
+    [goalsReports]
   )
 
   const projectedRevenue = useMemo(
-    () => getProjectedRevenue(visibleSalesReports, today),
-    [today, visibleSalesReports]
+    () => getProjectedRevenue(goalsReports, today),
+    [today, goalsReports]
   )
 
-  const currentGoals = useMemo(() => getCurrentGoalPeriods(periods, today), [periods, today])
+  const currentGoals = useMemo(() => getGoalPeriodsForMonth(periods, goalsMonthStart), [periods, goalsMonthValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const goalsByKiosk = useMemo(() => {
     return currentGoals
@@ -435,7 +418,6 @@ function ManagementDashboard() {
   }, [previousReports, sameElapsedCurrentReports, sameElapsedPreviousReports, visibleSalesReports])
 
   const bestSellers = allBestSellers.slice(0, 5)
-  const maxBestSellerQuantity = Math.max(...bestSellers.map((item) => item.quantity), 1)
   const maxAllBestSellerQuantity = Math.max(...allBestSellers.map((item) => item.quantity), 1)
 
   const currentSchedules = useMemo(
@@ -528,6 +510,199 @@ function ManagementDashboard() {
     [financialSummary]
   )
 
+  const daysInMonth = monthEnd.getDate()
+  const monthLabel = format(today, "MMMM 'de' yyyy", { locale: ptBR })
+  const goalsMonthLabel = format(goalsMonthStart, "MMMM 'de' yyyy", { locale: ptBR })
+  const monthProgress = goalsMonthValue === currentMonthKey ? today.getDate() / daysInMonth : 1
+  const dayDiff = (date: Date) => Math.round((startOfDay(date).getTime() - today.getTime()) / 86_400_000)
+
+  const toTaskItem = (task: (typeof pendingNewTasks)[number]): TaskItem => {
+    const dueDate = task.dueDate ? startOfDay(new Date(task.dueDate)) : null
+    return {
+      id: task.id,
+      title: task.title,
+      statusLabel: getTaskStatusLabel(task.status),
+      dueLabel: dueDate ? format(dueDate, "dd/MM") : "sem prazo",
+      overdue: !!dueDate && isBefore(dueDate, today),
+    }
+  }
+  const dueTime = (task: (typeof pendingNewTasks)[number]) => (task.dueDate ? new Date(task.dueDate).getTime() : Number.POSITIVE_INFINITY)
+  const taskItems = [...pendingNewTasks].sort((a, b) => dueTime(a) - dueTime(b)).map(toTaskItem)
+  const approvalTaskItems = approvalTasks.map(toTaskItem)
+  const overdueTaskItems = overdueTasks.map(toTaskItem)
+
+  const restockItems: RestockItem[] = criticalRestockItems.map(({ base, current, minimum, minimumLabel, leadTime, ruptureDate, orderLimitDate }) => ({
+    id: base.id,
+    name: base.name,
+    current,
+    minimumLabel: minimum === null ? minimumLabel : numberFormatter.format(minimum),
+    leadTime,
+    daysUntilRupture: ruptureDate ? Math.max(0, dayDiff(ruptureDate)) : null,
+    ruptureLabel: ruptureDate ? format(ruptureDate, "dd/MM") : "sem consumo médio",
+    orderLimitLabel: orderLimitDate ? format(orderLimitDate, "dd/MM") : "sem data",
+    coverage: minimum && minimum > 0 ? Math.min(1, current / minimum) : null,
+  }))
+  const restockUnavailable = !cdKiosk
+    ? "Centro de distribuição não identificado nos quiosques."
+    : policyEnabled === null && policyError
+      ? "Política de reposição indisponível. Mínimos não verificados."
+      : null
+
+  const salesTotalQuantity = allBestSellers.reduce((sum, item) => sum + item.quantity, 0)
+
+  const scheduleDays: ScheduleDay[] = weekDates.map((date) => {
+    const dateKey = format(date, "yyyy-MM-dd")
+    return {
+      key: dateKey,
+      weekday: format(date, "EEE", { locale: ptBR }),
+      dateLabel: format(date, "dd/MM"),
+      isToday: dateKey === format(today, "yyyy-MM-dd"),
+      shifts: weekShifts
+        .filter((shift) => shift.date === dateKey && shift.type !== "day_off")
+        .map((shift) => {
+          const name = getShiftUserName(selectedWeeklySchedule, shift, users)
+          return { id: shift.id, name, time: getShiftLabel(shift), initials: getInitials(name) }
+        }),
+    }
+  })
+  const scheduleEmptyMessage =
+    schedulesLoading && currentSchedules.length === 0
+      ? "Carregando escalas..."
+      : currentSchedules.length === 0
+        ? `Nenhuma escala encontrada para ${format(today, "MMMM/yyyy", { locale: ptBR })}.`
+        : weeklyScheduleLoading
+          ? "Carregando turnos da semana..."
+          : weekShifts.length === 0
+            ? "Nenhum turno cadastrado para esta semana."
+            : null
+  const scheduleUnitLabel = selectedWeeklySchedule
+    ? units.find((unit) => unit.id === selectedWeeklySchedule.unitId)?.name ?? selectedWeeklySchedule.name ?? ""
+    : ""
+
+  const vacationItems: VacationItem[] = upcomingVacations.map(({ vacation, start }) => {
+    const name = userNameById.get(vacation.userId) ?? vacation.userId
+    const end = vacation.endDate ? new Date(`${vacation.endDate}T12:00:00`) : null
+    const endDay = end ? (isSameOrAfter(end, monthEnd) ? daysInMonth : end.getDate()) : start.getDate()
+    return {
+      id: vacation.id,
+      name,
+      initials: getInitials(name),
+      rangeLabel: `${format(start, "dd/MM")} a ${end ? format(end, "dd/MM") : "sem fim"}`,
+      status: vacation.status,
+      statusLabel: getVacationStatusLabel(vacation.status),
+      startDay: start.getDate(),
+      endDay: Math.max(endDay, start.getDate()),
+    }
+  })
+
+  const paymentRows: PaymentRow[] = visiblePaymentDetails.map((expense) => {
+    const due = toDate(expense.dueDate)
+    const diff = due ? dayDiff(due) : 0
+    const overdue = !!due && diff < 0
+    return {
+      id: expense.id,
+      description: expense.description || expense.supplier || "Pagamento sem descrição",
+      dueDay: due ? format(due, "dd") : "--",
+      dueLabel: due ? format(due, "MMM", { locale: ptBR }) : "",
+      value: formatCurrency(Number(expense.totalValue || 0)),
+      overdue,
+      daysLabel: !due ? "sem vencimento" : overdue ? `Venceu há ${Math.abs(diff)} dia(s)` : diff === 0 ? "Vence hoje" : `Vence em ${diff} dia(s)`,
+    }
+  })
+
+  const pendingVacationCount = upcomingVacations.filter(({ vacation }) => vacation.status === "PENDING").length
+  const hubLink = (label: string, description: string, href: string, icon: HubLink["icon"], tone: HubLink["tone"], badge?: number | null): HubLink => ({ label, description, href, icon, tone, badge })
+  const financeHub = {
+    links: [
+      hubLink("Despesas", "Lançar e acompanhar vencimentos", "/dashboard/financial/expenses", widgetIcons.expenses, "danger", financialSummary.overdue.length + financialSummary.upcoming.length),
+      hubLink("Fluxo de caixa", "Entradas, saídas e recebíveis", "/dashboard/financial/cash-flow", widgetIcons.cash, "ok"),
+      hubLink("Conciliação", "Vendas, recebimentos e extratos", "/dashboard/financial/sales-reconciliation", widgetIcons.reconciliation, "warn"),
+      hubLink("DRE", "Resultado por centro", "/dashboard/financial/dre", widgetIcons.income, "info"),
+      hubLink("Fechamento de caixa", "Conferência diária", "/dashboard/financial/cash-closures", widgetIcons.wallet, "accent"),
+      hubLink("Depósitos", "Contagem e envio ao banco", "/dashboard/financial/cash-deposits", widgetIcons.financeHub, "ok"),
+      hubLink("Extratos", "Importar e auditar contas", "/dashboard/financial/reconciliation/bank-statements", widgetIcons.statements, "accent"),
+      hubLink("Faturas de cartão", "Cartões corporativos", "/dashboard/financial/reconciliation/card-statements", widgetIcons.payments, "info"),
+    ],
+    kpis: [
+      { label: "Vencidos", value: formatCurrency(financialSummary.overdueTotal), note: `${financialSummary.overdue.length} pagamento(s)`, tone: financialSummary.overdue.length > 0 ? "danger" : "muted", icon: widgetIcons.alerts },
+      { label: "A vencer no mês", value: formatCurrency(financialSummary.upcomingTotal), note: `${financialSummary.upcoming.length} pagamento(s)`, tone: "warn", icon: widgetIcons.workday },
+      { label: "Em aberto", value: formatCurrency(financialSummary.overdueTotal + financialSummary.upcomingTotal), icon: widgetIcons.wallet },
+    ] satisfies HubKpi[],
+    attention: [
+      ...(financialSummary.overdue.length > 0 ? [{ title: "Pagamentos vencidos", text: `${financialSummary.overdue.length} · ${formatCurrency(financialSummary.overdueTotal)}`, href: "/dashboard/financial/expenses", tone: "danger", icon: widgetIcons.alerts } satisfies HubAttention] : []),
+      ...(financialSummary.upcoming.length > 0 ? [{ title: "Vencem neste mês", text: `${financialSummary.upcoming.length} · ${formatCurrency(financialSummary.upcomingTotal)}`, href: "/dashboard/financial/expenses", tone: "warn", icon: widgetIcons.workday } satisfies HubAttention] : []),
+    ],
+    status: expensesLoading ? null : financialSummary.overdue.length > 0 ? { tone: "danger" as const, label: `${financialSummary.overdue.length} vencido(s)` } : { tone: "ok" as const, label: "Sem vencidos" },
+  }
+  const canSeeRestock = permissions.dashboard.operational && permissions.stock.analysis.restock
+  const stockHub = {
+    links: [
+      hubLink("Estoque", "Saldos, lotes e mínimos", "/dashboard/stock/inventory-control", widgetIcons.inventory, "warn", canSeeRestock ? restockItems.length : null),
+      hubLink("Compras", "Pedidos e recebimentos", "/dashboard/purchasing", widgetIcons.purchasing, "info"),
+      hubLink("Contagem", "Sessões e divergências", "/dashboard/stock/count", widgetIcons.counting, "ok"),
+      hubLink("Movimentações", "Entradas, saídas e transferências", "/dashboard/stock/analysis/movement-analysis", widgetIcons.movements, "accent"),
+      hubLink("Análises", "Reposição, consumo e vendas", "/dashboard/stock/analysis", widgetIcons.analysis, "info"),
+      hubLink("Avarias", "Devoluções e perdas", "/dashboard/stock/returns", widgetIcons.returns, "danger"),
+      hubLink("Uniformes", "Controle de uniformes", "/dashboard/stock/uniforms", widgetIcons.collaborators, "neutral"),
+      hubLink("Reposição", "Itens abaixo do mínimo", "/dashboard/stock/analysis/restock", widgetIcons.restock, "warn"),
+    ],
+    kpis: [
+      { label: "Itens críticos", value: canSeeRestock ? String(restockItems.length) : "—", note: "no CD", tone: restockItems.length > 0 ? "warn" : "muted", icon: widgetIcons.restock },
+      { label: "Ruptura hoje", value: canSeeRestock ? String(restockItems.filter((item) => item.daysUntilRupture === 0).length) : "—", tone: "danger", icon: widgetIcons.alerts },
+    ] satisfies HubKpi[],
+    attention: canSeeRestock && restockItems.length > 0
+      ? [{ title: `${restockItems.length} item(ns) no mínimo`, text: "Veja a reposição crítica do CD", href: "/dashboard/stock/analysis/restock", tone: "warn", icon: widgetIcons.restock } satisfies HubAttention]
+      : [],
+    status: canSeeRestock ? (restockItems.length > 0 ? { tone: "warn" as const, label: `${restockItems.length} abaixo do mínimo` } : { tone: "ok" as const, label: "Estoque em dia" }) : null,
+  }
+  const peopleHub = {
+    links: [
+      hubLink("Colaboradores", "Cadastro e contratos", "/dashboard/dp/collaborators", widgetIcons.collaborators, "info"),
+      hubLink("Escalas", "Turnos e folgas", "/dashboard/dp/schedules", widgetIcons.schedules, "accent"),
+      hubLink("Férias", "Planejamento e aprovações", "/dashboard/dp/ferias", widgetIcons.vacation, "warn", pendingVacationCount),
+      hubLink("Documentos", "Modelos e assinaturas", "/dashboard/documents", widgetIcons.documents, "danger"),
+      hubLink("Vagas", "Recrutamento e integração", "/dashboard/hr/recruitment", widgetIcons.admissions, "ok"),
+      hubLink("Desligamentos", "Processo e provisões", "/dashboard/dp/terminations", widgetIcons.termination, "neutral"),
+      hubLink("Organograma", "Estrutura da equipe", "/dashboard/hr/org-chart", widgetIcons.places, "info"),
+      hubLink("Painel DP", "Visão geral do departamento", "/dashboard/dp", widgetIcons.peopleHub, "accent"),
+    ],
+    kpis: [
+      { label: "Ausências no mês", value: String(upcomingVacations.length), icon: widgetIcons.absences, tone: "info" },
+      { label: "Férias pendentes", value: String(pendingVacationCount), tone: pendingVacationCount > 0 ? "warn" : "muted", icon: widgetIcons.workday },
+      { label: "Escalas do mês", value: String(currentSchedules.length), icon: widgetIcons.schedules },
+    ] satisfies HubKpi[],
+    attention: pendingVacationCount > 0
+      ? [{ title: "Férias aguardando aprovação", text: `${pendingVacationCount} solicitação(ões)`, href: "/dashboard/dp/ferias", tone: "warn", icon: widgetIcons.vacation } satisfies HubAttention]
+      : [],
+    status: pendingVacationCount > 0 ? { tone: "warn" as const, label: `${pendingVacationCount} aprovação(ões)` } : null,
+  }
+  const operationsHub = {
+    links: [
+      hubLink("Tarefas", "Demandas e prazos", "/dashboard/tasks", widgetIcons.tasks, "info", pendingTaskCount),
+      hubLink("Formulários", "Modelos e respostas", "/dashboard/forms", widgetIcons.forms, "accent"),
+      hubLink("Processos", "Fluxos com etapas", "/dashboard/processes", widgetIcons.processes, "danger"),
+      hubLink("Meus formulários", "O que falta responder", "/dashboard/forms/mine", widgetIcons.checklists, "ok"),
+      hubLink("Painel de operações", "Rotina das unidades", "/dashboard/operations", widgetIcons.operationsHub, "warn"),
+    ],
+    kpis: [
+      { label: "Pendentes", value: String(pendingTaskCount), icon: widgetIcons.tasks, tone: "info" },
+      { label: "Vencidas", value: String(overdueTasks.length), tone: overdueTasks.length > 0 ? "danger" : "muted", icon: widgetIcons.alerts },
+      { label: "Aprovações", value: String(approvalTasks.length), tone: approvalTasks.length > 0 ? "warn" : "muted", icon: widgetIcons.processes },
+    ] satisfies HubKpi[],
+    attention: [
+      ...(overdueTasks.length > 0 ? [{ title: "Tarefas vencidas", text: `${overdueTasks.length} com prazo anterior a hoje`, href: "/dashboard/tasks", tone: "danger", icon: widgetIcons.alerts } satisfies HubAttention] : []),
+      ...(approvalTasks.length > 0 ? [{ title: "Aprovações pendentes", text: `${approvalTasks.length} aguardando você`, href: "/dashboard/tasks", tone: "warn", icon: widgetIcons.processes } satisfies HubAttention] : []),
+    ],
+    status: overdueTasks.length > 0 ? { tone: "danger" as const, label: `${overdueTasks.length} vencida(s)` } : pendingTaskCount > 0 ? { tone: "info" as const, label: `${pendingTaskCount} pendente(s)` } : null,
+  }
+  const aiHub = {
+    links: [
+      hubLink("Créditos GPT", "Saldo e consumo da OpenAI", "/dashboard/settings", widgetIcons.gpt, "accent"),
+      hubLink("Google Cloud", "Custo e franquia", "/dashboard/settings", widgetIcons.cloud, "info"),
+      hubLink("Alertas", "Limites e avisos de consumo", "/dashboard/settings", widgetIcons.alerts, "warn"),
+    ],
+  }
+
   if (!canViewManagementDashboard) {
     if (canViewCollaboratorDashboard) {
       return null
@@ -547,426 +722,154 @@ function ManagementDashboard() {
   }
 
   return (
-    <div className="w-full space-y-3 pb-6">
-      <div className="flex flex-col justify-between gap-3 border-b border-zinc-200 pb-3 md:flex-row md:items-end">
-        <div className="min-w-0">
-          <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-2.5 py-1 text-[11px] font-extrabold text-pink-500">
-            <Target className="h-3 w-3" />
-            Painel da gestão
-          </div>
-          <h1 className="text-xl font-black tracking-tight text-zinc-950">Bem-vindo, {user?.username}!</h1>
-          <p className="mt-1 max-w-2xl text-xs font-medium text-zinc-400">
-            Dados operacionais, comerciais, DP e financeiro para acompanhamento diário.
-          </p>
-        </div>
-        <div className="hidden items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-500 shadow-sm sm:flex">
-          <Calendar className="h-4 w-4 text-zinc-400" />
-          {format(today, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-        </div>
-      </div>
+    <div className="w-full space-y-3 pb-8 font-ds">
+      <PageHero
+        kicker="Gestão"
+        title="Painel da gestão"
+        subtitle={`Olá, ${user?.username}. Organize os indicadores e atalhos mais importantes para sua rotina.`}
+        actions={<span className="hidden items-center gap-2 rounded-ds-btn border border-white/[.14] px-3 py-2 text-xs font-bold text-ds-on-dark-2 sm:inline-flex"><Calendar className="h-4 w-4" />{format(today, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>}
+      />
 
-      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
-        {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
-          <DashboardCard title="Metas e faturamento" description="Meta geral, projeção e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} className="order-1" hideDetailsLink>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={`${visibleSalesReports.length} relatório(s) em ${formatSalesPeriod(visibleSalesReports)}`} />
-              <Metric
-                label="Meta geral atual"
-                value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))}
-                detail={goalsLoading ? "Carregando metas..." : `${currentGoals.length} meta(s) ativa(s)`}
-              />
-              <Metric
-                label="Projetado"
-                value={compactCurrency(projectedRevenue.value)}
-                detail={projectedRevenue.detail}
-              />
-            </div>
-            {goalRows.length === 0 ? (
-              <EmptyState>Nenhuma meta ativa para hoje.</EmptyState>
-            ) : (
-              <div className="space-y-3">
-                {goalRows.slice(0, 5).map((goal) => (
-                  <div key={goal.kioskId} className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-3 text-xs">
-                      <span className="truncate font-bold text-zinc-800">{goal.name}</span>
-                      <span className="whitespace-nowrap font-semibold text-zinc-500">
-                        {formatCurrency(goal.current)} / {formatCurrency(goal.target)}
-                      </span>
-                      <span className={cn("w-10 text-right text-xs font-black", goal.progress >= 0.8 ? "text-zinc-900" : "text-amber-500")}>
-                        {Math.round(goal.progress * 100)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
-                      <div
-                        className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-pink-500" : "bg-amber-400")}
-                        style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setGoalsModalOpen(true)}>
-              Ver detalhes <ArrowRight className="h-4 w-4" />
-            </button>
-          </DashboardCard>
+      <ManagementDashboardBuilder firebaseUser={firebaseUser} userId={firebaseUser?.uid ?? user?.id ?? ""} userName={user?.username ?? "Usuário"} permissions={permissions}>
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-6 xl:grid-cols-12">
+        {canShowWidget("goals-revenue") && (
+          <GoalsWidget
+            revenue={currentRevenue}
+            targetTotal={currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0)}
+            projected={projectedRevenue}
+            rows={goalRows}
+            goalCount={currentGoals.length}
+            loading={goalsLoading}
+            monthProgress={monthProgress}
+            monthLabel={goalsMonthLabel}
+            monthFilter={<MonthFilter label="Mês e ano das metas" value={goalsMonthValue} months={monthChoices} onChange={setGoalsMonth} />}
+            formatMoney={formatCurrency}
+            formatCompact={compactCurrency}
+            onDetails={() => setGoalsModalOpen(true)}
+          />
         )}
 
-        <DashboardCard
-          title="Tarefas pendentes"
-          description="Demandas em aberto, aprovações e recebimentos."
-          href="/dashboard/tasks"
-          icon={ListTodo}
-          className="order-1"
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric
-              label="Pendentes"
-              value={tasksLoading ? "..." : numberFormatter.format(pendingTaskCount)}
-              detail={`${taskNotifications.length} tarefa(s), ${pendingReceipts.length} recebimento(s)`}
-            />
-            <Metric
-              label="Vencidas"
-              value={tasksLoading ? "..." : numberFormatter.format(overdueTasks.length)}
-              detail="Com prazo anterior a hoje"
-            />
-            <Metric
-              label="Aprovações"
-              value={tasksLoading ? "..." : numberFormatter.format(approvalTasks.length)}
-              detail={`${dueTodayTasks.length} vencendo hoje`}
-            />
-          </div>
-          {tasksLoading ? (
-            <EmptyState>Carregando tarefas...</EmptyState>
-          ) : pendingTaskCount === 0 ? (
-            <EmptyState>Nenhuma tarefa pendente no momento.</EmptyState>
-          ) : visiblePendingTasks.length === 0 ? (
-            <EmptyState>{pendingTaskCount} demanda(s) pendente(s) em fluxos operacionais.</EmptyState>
-          ) : (
-            <div className="space-y-3">
-              {visiblePendingTasks.map((task) => {
-                const dueDate = task.dueDate ? startOfDay(new Date(task.dueDate)) : null
-                const isOverdue = !!dueDate && isBefore(dueDate, today)
-                return (
-                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 text-xs shadow-sm">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-zinc-800">{task.title}</p>
-                      <p className="mt-0.5 text-xs font-semibold text-zinc-400">{getTaskStatusLabel(task.status)}</p>
-                    </div>
-                    <span
-                      className={cn(
-                        "whitespace-nowrap rounded-full px-3 py-1 text-xs font-black",
-                        isOverdue ? "bg-red-100 text-red-600" : "bg-pink-100 text-pink-600"
-                      )}
-                    >
-                      {dueDate ? format(dueDate, "dd/MM") : "sem prazo"}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </DashboardCard>
+        {canShowWidget("pending-tasks") && <TasksWidget
+          loading={tasksLoading}
+          pendingCount={pendingTaskCount}
+          overdueCount={overdueTasks.length}
+          approvalCount={approvalTasks.length}
+          dueTodayCount={dueTodayTasks.length}
+          taskCount={taskNotifications.length}
+          receiptCount={pendingReceipts.length}
+          pending={taskItems.slice(0, 4)}
+          approvals={approvalTaskItems.slice(0, 3)}
+          overdue={overdueTaskItems.slice(0, 3)}
+        />}
 
-        {permissions.dashboard.operational && (
-          <DashboardCard
-            title="Reposição crítica do CD"
-            description="Itens no mínimo, priorizando lead time."
-            href="/dashboard/stock/analysis/restock"
-            icon={AlertTriangle}
-            className="order-3"
-            hideDetailsLink
-          >
-            {!cdKiosk ? (
-              <EmptyState>Centro de distribuição não identificado nos quiosques.</EmptyState>
-            ) : policyEnabled === null && policyError ? (
-              <EmptyState>Política de reposição indisponível. Mínimos não verificados.</EmptyState>
-            ) : criticalRestockItems.length === 0 ? (
-              <EmptyState>Nenhum item crítico encontrado para {cdKiosk.name}.</EmptyState>
-            ) : (
-              <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
-                {criticalRestockItems.map(({ base, current, minimum, minimumLabel, leadTime, ruptureDate, orderLimitDate }) => (
-                  <div key={base.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3 text-xs">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-zinc-800">{base.name}</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-400">Atual {numberFormatter.format(current)} · mín. {minimum === null ? minimumLabel : numberFormatter.format(minimum)}</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-400">
-                        Ruptura: <span className={cn(!ruptureDate && "text-zinc-400", ruptureDate && isSameOrBefore(ruptureDate, today) && "text-pink-500")}>
-                          {ruptureDate ? format(ruptureDate, "dd/MM/yyyy") : "sem consumo médio"}
-                        </span>{" "}
-                        · pedido até{" "}
-                        {orderLimitDate ? format(orderLimitDate, "dd/MM/yyyy") : "sem data"}
-                      </p>
-                    </div>
-                    <span className="whitespace-nowrap rounded-full bg-pink-100 px-2.5 py-1 text-xs font-black text-pink-600">
-                      {leadTime ? `${leadTime}d` : "sem dia(s)"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </DashboardCard>
+        {canShowWidget("critical-restock") && (
+          <RestockWidget unitName={cdKiosk?.name ?? null} unavailableReason={restockUnavailable} items={restockItems} />
         )}
 
-        {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
-          <DashboardCard
-            title="Mercadorias mais vendidas"
-            description="Mês corrente, mês anterior e mesmo período."
-            href="/dashboard/stock/analysis/sales"
-            icon={TrendingUp}
-            className="order-4"
-            hideDetailsLink
-          >
-            <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
-              <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600">
-                <SelectValue placeholder="Filtrar unidade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as unidades</SelectItem>
-                {kiosks
-                  .filter((kiosk) => !/centro|distribui|matriz/i.test(kiosk.name))
-                  .map((kiosk) => (
-                    <SelectItem key={kiosk.id} value={kiosk.id}>
-                      {kiosk.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {bestSellers.length === 0 ? (
-              <EmptyState>Nenhuma venda consolidada para exibir.</EmptyState>
-            ) : (
-              <>
-                <div className="space-y-3">
-                  {bestSellers.map((item, index) => {
-                    const delta = item.quantity - item.previous
-                    const sameElapsedDelta = item.sameElapsedCurrent - item.sameElapsedPrevious
-                    return (
-                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <span
-                            className={cn(
-                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black",
-                              index === 0 && "bg-yellow-300 text-zinc-950",
-                              index === 1 && "bg-zinc-300 text-zinc-700",
-                              index === 2 && "bg-amber-500 text-white",
-                              index > 2 && "bg-zinc-100 text-zinc-400"
-                            )}
-                          >
-                            {index + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-black text-zinc-800">{item.name}</p>
-                            <div className="mt-1.5 h-1.5 max-w-[180px] overflow-hidden rounded-full bg-zinc-100">
-                              <div
-                                className="h-full rounded-full bg-pink-300"
-                                style={{ width: `${Math.max(12, Math.round((item.quantity / maxBestSellerQuantity) * 100))}%` }}
-                              />
-                            </div>
-                            <p className="mt-1 text-xs font-semibold text-zinc-400">
-                              mês ant. {numberFormatter.format(item.previous)} · período {numberFormatter.format(item.sameElapsedCurrent)} vs {numberFormatter.format(item.sameElapsedPrevious)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-base font-black text-zinc-800">{numberFormatter.format(item.quantity)}</p>
-                          <p className={cn("text-xs font-bold", delta >= 0 ? "text-emerald-600" : "text-red-500")}>
-                            {delta >= 0 ? "+" : ""}{numberFormatter.format(delta)}
-                          </p>
-                          <p className={cn("text-xs font-bold", sameElapsedDelta >= 0 ? "text-emerald-600" : "text-red-500")}>
-                            per. {sameElapsedDelta >= 0 ? "+" : ""}{numberFormatter.format(sameElapsedDelta)}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
-            {bestSellers.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setSalesModalOpen(true)}>
-                Ver lista completa <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : null}
-          </DashboardCard>
-        )}
-
-        {permissions.dp?.view && (
-          <DashboardCard title="Escala da semana" description="Selecione a unidade para ver os turnos desta semana." href="/dashboard/dp/schedules" icon={Briefcase} className="order-2 xl:col-span-2" hideDetailsLink>
-            {currentSchedules.length > 0 ? (
-              <Select value={selectedWeeklySchedule ? selectedWeeklySchedule.unitId ?? selectedWeeklySchedule.id : ""} onValueChange={setSelectedScheduleUnitId}>
-                <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600">
-                  <SelectValue placeholder="Selecionar unidade" />
+        {canShowWidget("best-sellers") && (
+          <SalesWidget
+            items={allBestSellers.slice(0, 8)}
+            totalQuantity={salesTotalQuantity}
+            periodLabel={formatSalesPeriod(visibleSalesReports)}
+            onDetails={() => setSalesModalOpen(true)}
+            unitFilter={
+              <div className="flex gap-2 [&>*]:min-w-0 [&>*]:flex-1">
+              <MonthFilter label="Mês e ano das vendas" value={salesMonthValue} months={monthChoices} onChange={setSalesMonth} />
+              <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
+                <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
+                  <SelectValue placeholder="Filtrar unidade" />
                 </SelectTrigger>
                 <SelectContent>
-                  {currentSchedules.map((schedule) => (
-                    <SelectItem key={schedule.id} value={schedule.unitId ?? schedule.id}>
-                      {units.find((unit) => unit.id === schedule.unitId)?.name ?? schedule.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">Todas as unidades</SelectItem>
+                  {kiosks
+                    .filter((kiosk) => !/centro|distribui|matriz/i.test(kiosk.name))
+                    .map((kiosk) => (
+                      <SelectItem key={kiosk.id} value={kiosk.id}>
+                        {kiosk.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
-            ) : null}
-            {schedulesLoading && currentSchedules.length === 0 ? (
-              <EmptyState>Carregando escalas...</EmptyState>
-            ) : currentSchedules.length === 0 ? (
-              <EmptyState>Nenhuma escala encontrada para {format(today, "MMMM/yyyy", { locale: ptBR })}.</EmptyState>
-            ) : weeklyScheduleLoading ? (
-              <EmptyState>Carregando turnos da semana...</EmptyState>
-            ) : weekShifts.length === 0 ? (
-              <EmptyState>Nenhum turno cadastrado para esta semana.</EmptyState>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-                {weekDates.map((date) => {
-                  const dateKey = format(date, "yyyy-MM-dd")
-                  const dayShifts = weekShifts.filter((shift) => shift.date === dateKey).slice(0, 3)
-                  const isToday = dateKey === format(today, "yyyy-MM-dd")
-                  return (
-                    <div
-                      key={dateKey}
-                      className={cn(
-                        "min-h-[96px] rounded-lg border bg-white p-2.5 text-center shadow-sm",
-                        isToday ? "border-pink-300 bg-pink-50/40" : "border-zinc-100"
-                      )}
-                    >
-                      <p className={cn("text-xs font-black uppercase", isToday ? "text-pink-500" : "text-zinc-400")}>
-                        {format(date, "EEE", { locale: ptBR })}
-                      </p>
-                      <p className={cn("text-xs font-bold", isToday ? "text-pink-400" : "text-zinc-300")}>{format(date, "dd/MM")}</p>
-                      {dayShifts.length === 0 ? (
-                        <p className="mt-3 rounded-md bg-zinc-50 px-2 py-2 text-xs font-bold text-zinc-300">FOLGA</p>
-                      ) : (
-                        <div className="mt-2 space-y-1.5">
-                          {dayShifts.map((shift) => (
-                            <div key={shift.id} className="rounded-md bg-zinc-50 px-2 py-1.5">
-                              <p className="truncate text-xs font-black text-zinc-700">{getShiftUserName(selectedWeeklySchedule, shift, users)}</p>
-                              <p className="text-[10px] font-semibold text-zinc-400">{getShiftLabel(shift)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
               </div>
-            )}
-            {currentSchedules.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setScheduleModalOpen(true)}>
-                Ver escala do mês <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : null}
-          </DashboardCard>
+            }
+          />
         )}
 
-        {permissions.dp?.view && (
-          <DashboardCard title="Calendário de ausências" description="Férias previstas até o fim do mês." href="/dashboard/dp/ferias" icon={CalendarDays} className="order-5" hideDetailsLink>
-            {vacationsLoading && upcomingVacations.length === 0 ? (
-              <EmptyState>Carregando férias...</EmptyState>
-            ) : upcomingVacations.length === 0 ? (
-              <EmptyState>Nenhuma ausência de férias prevista no mês corrente.</EmptyState>
-            ) : (
-              <div className="space-y-3">
-                {upcomingVacations.map(({ vacation, start }, index) => {
-                  const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
-                  return (
-                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 text-xs shadow-sm">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div
-                          className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black text-white",
-                            index % 3 === 0 && "bg-sky-500",
-                            index % 3 === 1 && "bg-violet-600",
-                            index % 3 === 2 && "bg-pink-500"
-                          )}
-                        >
-                          {getInitials(employeeName)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-zinc-800">{employeeName}</p>
-                          <p className="text-xs font-semibold text-zinc-400">
-                            {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={cn(
-                          "rounded-lg border px-2.5 py-1 text-xs font-bold",
-                          vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
-                          vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
-                          vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
-                        )}
-                      >
-                        {getVacationStatusLabel(vacation.status)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setVacationsModalOpen(true)}>
-              Ver detalhes <ArrowRight className="h-4 w-4" />
-            </button>
-          </DashboardCard>
+        {canShowWidget("weekly-schedule") && (
+          <ScheduleWidget
+            days={scheduleDays}
+            emptyMessage={scheduleEmptyMessage}
+            unitLabel={scheduleUnitLabel}
+            onMonth={() => setScheduleModalOpen(true)}
+            unitFilter={
+              currentSchedules.length > 0 ? (
+                <Select value={selectedWeeklySchedule ? selectedWeeklySchedule.unitId ?? selectedWeeklySchedule.id : ""} onValueChange={setSelectedScheduleUnitId}>
+                  <SelectTrigger className="h-8 rounded-lg border-ds-border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-muted">
+                    <SelectValue placeholder="Selecionar unidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currentSchedules.map((schedule) => (
+                      <SelectItem key={schedule.id} value={schedule.unitId ?? schedule.id}>
+                        {units.find((unit) => unit.id === schedule.unitId)?.name ?? schedule.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null
+            }
+          />
         )}
 
-        {permissions.financial?.view && (
-          <DashboardCard
-            title="Pagamentos vencidos e a vencer"
-            description="Todos os vencidos e próximos do mês corrente."
-            href="/dashboard/financial/expenses"
-            icon={CircleDollarSign}
-            className="order-6"
-            hideDetailsLink
-          >
-            {expensesLoading ? (
-              <EmptyState>Carregando pagamentos...</EmptyState>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-pink-500">Vencidos</p>
-                  <p className="mt-1 text-xl font-black text-red-600">{formatCurrency(financialSummary.overdueTotal)}</p>
-                  <p className="mt-1 text-xs font-semibold text-pink-400">{financialSummary.overdue.length} pagamento(s)</p>
-                </div>
-                <div className="rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-black uppercase tracking-wide text-zinc-500">A vencer no mês</p>
-                  <p className="mt-1 text-xl font-black text-zinc-800">{formatCurrency(financialSummary.upcomingTotal)}</p>
-                  <p className="mt-1 text-xs font-semibold text-zinc-400">{financialSummary.upcoming.length} pagamento(s)</p>
-                </div>
-              </div>
-            )}
-            {!expensesLoading ? (
-              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setPaymentsModalOpen(true)}>
-                Detalhar pagamentos <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : null}
-          </DashboardCard>
+        {canShowWidget("vacation-calendar") && (
+          <VacationsWidget loading={vacationsLoading} items={vacationItems} monthLabel={monthLabel} monthDays={daysInMonth} todayDay={today.getDate()} onDetails={() => setVacationsModalOpen(true)} />
         )}
+
+        {canShowWidget("pending-payments") && (
+          <PaymentsWidget
+            loading={expensesLoading}
+            overdueTotal={financialSummary.overdueTotal}
+            upcomingTotal={financialSummary.upcomingTotal}
+            overdueCount={financialSummary.overdue.length}
+            upcomingCount={financialSummary.upcoming.length}
+            rows={paymentRows}
+            formatMoney={formatCurrency}
+            onDetails={() => setPaymentsModalOpen(true)}
+          />
+        )}
+
+        {canShowWidget("financial-shortcuts") && <HubWidget widgetId="financial-shortcuts" title="Central financeira" compactTitle="Financeiro" subtitle="Caixa, despesas e DRE" href="/dashboard/financial" icon={widgetIcons.financeHub} tone="ok" {...financeHub} />}
+        {canShowWidget("stock-shortcuts") && <HubWidget widgetId="stock-shortcuts" title="Central de estoque" compactTitle="Estoque" subtitle="Controle, compras e análises" href="/dashboard/stock" icon={widgetIcons.stockHub} tone="warn" {...stockHub} />}
+        {canShowWidget("people-shortcuts") && <HubWidget widgetId="people-shortcuts" title="Central de pessoas" compactTitle="Pessoas" subtitle="Equipe, escalas, férias e documentos" href="/dashboard/dp" icon={widgetIcons.peopleHub} tone="info" {...peopleHub} />}
+        {canShowWidget("operations-shortcuts") && <HubWidget widgetId="operations-shortcuts" title="Central de operações" compactTitle="Operações" subtitle="Tarefas, formulários e rotinas" href="/dashboard/operations" icon={widgetIcons.operationsHub} tone="accent" {...operationsHub} />}
+        {canShowWidget("ai-costs-shortcuts") && <HubWidget widgetId="ai-costs-shortcuts" title="IA e infraestrutura" compactTitle="IA e infra" subtitle="Custos, limites e alertas dos serviços" href="/dashboard/settings" icon={widgetIcons.aiHub} tone="neutral" {...aiHub} />}
       </div>
+      </ManagementDashboardBuilder>
 
       <Dialog open={goalsModalOpen} onOpenChange={setGoalsModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">Detalhe das metas</div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Metas e faturamento</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">Progresso atual por quiosque e consolidado geral.</DialogDescription>
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Detalhe das metas</div>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Faturamento e metas</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">Progresso atual por quiosque e consolidado geral.</DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-6 grid gap-3 md:grid-cols-3">
-              <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={formatSalesPeriod(visibleSalesReports)} />
-              <Metric label="Meta geral atual" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))} detail={`${currentGoals.length} meta(s) ativa(s)`} />
+              <Metric label="Faturamento" value={compactCurrency(currentRevenue)} detail={goalsMonthLabel} />
+              <Metric label="Meta geral" value={compactCurrency(currentGoals.reduce((sum, goal) => sum + (goal.targetValue || 0), 0))} detail={`${currentGoals.length} meta(s) no mês`} />
               <Metric label="Projetado" value={compactCurrency(projectedRevenue.value)} detail={projectedRevenue.detail} />
             </div>
             <div className="space-y-5">
               {goalRows.map((goal) => (
-                <div key={goal.kioskId} className="space-y-2 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                <div key={goal.kioskId} className="space-y-2 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
                   <div className="grid grid-cols-[1fr_auto_48px] items-center gap-4 text-sm">
-                    <span className="truncate text-base font-black text-zinc-800">{goal.name}</span>
-                    <span className="font-semibold text-zinc-500">{formatCurrency(goal.current)} / {formatCurrency(goal.target)}</span>
-                    <span className={cn("text-right font-black", goal.progress >= 0.8 ? "text-zinc-900" : "text-amber-500")}>{Math.round(goal.progress * 100)}%</span>
+                    <span className="truncate text-base font-black text-ds-ink">{goal.name}</span>
+                    <span className="font-semibold text-ds-ink-muted">{formatCurrency(goal.current)} / {formatCurrency(goal.target)}</span>
+                    <span className={cn("text-right font-black", goal.progress >= 0.8 ? "text-ds-ink" : "text-ds-warn")}>{Math.round(goal.progress * 100)}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
-                    <div className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-pink-500" : "bg-amber-400")} style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }} />
+                  <div className="h-2 overflow-hidden rounded-full bg-ds-muted">
+                    <div className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-ds-accent" : "bg-ds-warn")} style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }} />
                   </div>
                 </div>
               ))}
@@ -976,23 +879,23 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={salesModalOpen} onOpenChange={setSalesModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">Ranking completo</div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Mercadorias mais vendidas</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Ranking completo</div>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Mercadorias mais vendidas</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">
                 {allBestSellers.length} produtos · {formatSalesPeriod(visibleSalesReports)} vs mês anterior
               </DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
-              <p className="text-sm font-semibold text-zinc-400">
+              <p className="text-sm font-semibold text-ds-ink-faint">
                 {allBestSellers.length} produtos · {formatSalesPeriod(visibleSalesReports)}
               </p>
               <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
-                <SelectTrigger className="h-10 w-[220px] rounded-lg border-zinc-200 bg-white px-4 font-semibold text-zinc-600">
+                <SelectTrigger className="h-10 w-[220px] rounded-lg border-ds-border bg-ds-surface px-4 font-semibold text-ds-ink-muted">
                   <SelectValue placeholder="Filtrar unidade" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1007,7 +910,7 @@ function ManagementDashboard() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-[48px_1fr_80px_80px_80px_140px] border-b border-zinc-100 px-3 pb-3 text-xs font-black uppercase tracking-wide text-zinc-400">
+            <div className="grid grid-cols-[48px_1fr_80px_80px_80px_140px] border-b border-ds-divider px-3 pb-3 text-xs font-black uppercase tracking-wide text-ds-ink-faint">
               <span>#</span>
               <span>Produto</span>
               <span className="text-right">Qtd</span>
@@ -1015,7 +918,7 @@ function ManagementDashboard() {
               <span className="text-right">Delta</span>
               <span>Proporção</span>
             </div>
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-ds-divider">
               {allBestSellers.map((item, index) => {
                 const delta = item.quantity - item.previous
                 return (
@@ -1023,23 +926,23 @@ function ManagementDashboard() {
                     <span
                       className={cn(
                         "flex h-7 w-7 items-center justify-center rounded-full text-xs font-black",
-                        index === 0 && "bg-yellow-300 text-zinc-950",
-                        index === 1 && "bg-zinc-300 text-zinc-700",
-                        index === 2 && "bg-amber-500 text-white",
-                        index > 2 && "bg-zinc-100 text-zinc-400"
+                        index === 0 && "bg-ds-warn-bg text-ds-warn",
+                        index === 1 && "bg-ds-neutral-bg text-ds-neutral",
+                        index === 2 && "bg-ds-accent-soft text-ds-accent-ink",
+                        index > 2 && "bg-ds-muted text-ds-ink-faint"
                       )}
                     >
                       {index + 1}
                     </span>
-                    <span className="truncate font-black text-zinc-800">{item.name}</span>
-                    <span className="text-right font-black text-zinc-800">{numberFormatter.format(item.quantity)}</span>
-                    <span className="text-right font-semibold text-zinc-400">{numberFormatter.format(item.previous)}</span>
-                    <span className={cn("text-right font-black", delta >= 0 ? "text-emerald-600" : "text-red-500")}>
+                    <span className="truncate font-black text-ds-ink">{item.name}</span>
+                    <span className="text-right font-black text-ds-ink">{numberFormatter.format(item.quantity)}</span>
+                    <span className="text-right font-semibold text-ds-ink-faint">{numberFormatter.format(item.previous)}</span>
+                    <span className={cn("text-right font-black", delta >= 0 ? "text-ds-ok" : "text-ds-danger")}>
                       {delta >= 0 ? "+" : ""}{numberFormatter.format(delta)}
                     </span>
-                    <span className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                    <span className="h-2 overflow-hidden rounded-full bg-ds-muted">
                       <span
-                        className="block h-full rounded-full bg-pink-300"
+                        className="block h-full rounded-full bg-ds-accent"
                         style={{ width: `${Math.max(6, Math.round((item.quantity / maxAllBestSellerQuantity) * 100))}%` }}
                       />
                     </span>
@@ -1052,7 +955,7 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={paymentsModalOpen} onOpenChange={setPaymentsModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Pagamentos vencidos e a vencer</DialogTitle>
             <DialogDescription>Vencidos em aberto e vencimentos restantes do mês corrente.</DialogDescription>
@@ -1070,7 +973,7 @@ function ManagementDashboard() {
                       <p className="truncate font-medium">{expense.description || expense.supplier || "Pagamento sem descrição"}</p>
                       <p className="text-xs text-muted-foreground">{expense.supplier || "Fornecedor não informado"}</p>
                     </div>
-                    <p className={cn("font-semibold", overdue && "text-red-600")}>{formatCurrency(Number(expense.totalValue || 0))}</p>
+                    <p className={cn("font-semibold", overdue && "text-ds-danger")}>{formatCurrency(Number(expense.totalValue || 0))}</p>
                     <p className="text-xs text-muted-foreground">{due ? format(due, "dd/MM/yyyy") : "sem vencimento"}</p>
                   </div>
                 )
@@ -1081,15 +984,15 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={vacationsModalOpen} onOpenChange={setVacationsModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-3xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">Calendário de ausências</div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Férias do mês</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">Ausências previstas até o fim do mês corrente.</DialogDescription>
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">Calendário de ausências</div>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Férias do mês</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">Ausências previstas até o fim do mês corrente.</DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-5 flex flex-wrap gap-2">
               {[
                 ["all", "Todos"],
@@ -1102,7 +1005,7 @@ function ManagementDashboard() {
                   type="button"
                   className={cn(
                     "rounded-full border px-4 py-2 text-sm font-black",
-                    vacationStatusFilter === value ? "border-pink-500 bg-pink-500 text-white" : "border-zinc-100 bg-white text-zinc-500"
+                    vacationStatusFilter === value ? "border-ds-accent bg-ds-accent text-white" : "border-ds-divider bg-ds-surface text-ds-ink-muted"
                   )}
                   onClick={() => setVacationStatusFilter(value)}
                 >
@@ -1117,32 +1020,32 @@ function ManagementDashboard() {
                 {filteredVacations.map(({ vacation, start }, index) => {
                   const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
                   return (
-                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
                       <div
                         className={cn(
                           "flex h-12 w-12 items-center justify-center rounded-full text-sm font-black text-white",
-                          index % 5 === 0 && "bg-sky-500",
-                          index % 5 === 1 && "bg-violet-600",
-                          index % 5 === 2 && "bg-pink-500",
-                          index % 5 === 3 && "bg-orange-500",
-                          index % 5 === 4 && "bg-lime-600"
+                          index % 5 === 0 && "bg-ds-info",
+                          index % 5 === 1 && "bg-ds-neutral",
+                          index % 5 === 2 && "bg-ds-accent",
+                          index % 5 === 3 && "bg-ds-warn",
+                          index % 5 === 4 && "bg-ds-ok"
                         )}
                       >
                         {getInitials(employeeName)}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-base font-black text-zinc-800">{employeeName}</p>
-                        <p className="text-sm font-semibold text-zinc-400">
+                        <p className="truncate text-base font-black text-ds-ink">{employeeName}</p>
+                        <p className="text-sm font-semibold text-ds-ink-faint">
                           {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
                         </p>
                       </div>
-                      <p className="hidden text-sm font-semibold text-zinc-400 sm:block">{vacation.days} dia(s)</p>
+                      <p className="hidden text-sm font-semibold text-ds-ink-faint sm:block">{vacation.days} dia(s)</p>
                       <span
                         className={cn(
                           "rounded-lg border px-3 py-1 text-sm font-bold",
-                          vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
-                          vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
-                          vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
+                          vacation.status === "APPROVED" && "border-ds-ok bg-ds-ok-bg text-ds-ok",
+                          vacation.status === "PLANNED" && "border-ds-info bg-ds-info-bg text-ds-info",
+                          vacation.status === "PENDING" && "border-ds-warn bg-ds-warn-bg text-ds-warn"
                         )}
                       >
                         {getVacationStatusLabel(vacation.status)}
@@ -1157,24 +1060,24 @@ function ManagementDashboard() {
       </Dialog>
 
       <Dialog open={scheduleModalOpen} onOpenChange={setScheduleModalOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0 shadow-2xl sm:max-w-4xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-ds-modal border border-ds-border bg-ds-surface p-0 shadow-ds-modal sm:max-w-4xl">
           <DialogHeader>
             <div className="px-6 pt-6">
-              <div className="mb-2 inline-flex rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-500">
+              <div className="mb-2 inline-flex rounded-full bg-ds-accent-soft px-3 py-1 text-xs font-black text-ds-accent-ink">
                 {selectedMonthlySchedule ? units.find((unit) => unit.id === selectedMonthlySchedule.unitId)?.name ?? selectedMonthlySchedule.name : "Unidade"}
               </div>
-              <DialogTitle className="text-2xl font-black text-zinc-950">Escala do mês</DialogTitle>
-              <DialogDescription className="text-base font-semibold text-zinc-400">Todos os turnos cadastrados · {format(today, "MMMM yyyy", { locale: ptBR })}</DialogDescription>
+              <DialogTitle className="text-2xl font-black text-ds-ink">Escala do mês</DialogTitle>
+              <DialogDescription className="text-base font-semibold text-ds-ink-faint">Todos os turnos cadastrados · {format(today, "MMMM yyyy", { locale: ptBR })}</DialogDescription>
             </div>
           </DialogHeader>
-          <div className="border-t border-zinc-100 p-6">
+          <div className="border-t border-ds-divider p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
-              <p className="text-sm font-semibold text-zinc-400">
+              <p className="text-sm font-semibold text-ds-ink-faint">
                 {new Set(monthlyScheduleShifts.map((shift) => shift.date)).size} dias com turnos · {format(today, "MMMM yyyy", { locale: ptBR })}
               </p>
               {currentSchedules.length > 0 ? (
                 <Select value={selectedMonthlySchedule ? selectedMonthlySchedule.unitId ?? selectedMonthlySchedule.id : ""} onValueChange={setMonthlyScheduleUnitId}>
-                  <SelectTrigger className="h-10 w-[220px] rounded-lg border-zinc-200 bg-white px-4 font-semibold text-zinc-600">
+                  <SelectTrigger className="h-10 w-[220px] rounded-lg border-ds-border bg-ds-surface px-4 font-semibold text-ds-ink-muted">
                     <SelectValue placeholder="Selecionar unidade" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1201,17 +1104,17 @@ function ManagementDashboard() {
                       .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""))
                     const date = new Date(`${dateKey}T12:00:00`)
                     return (
-                      <div key={dateKey} className="grid grid-cols-[72px_1fr] gap-5 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                      <div key={dateKey} className="grid grid-cols-[72px_1fr] gap-5 rounded-xl border border-ds-divider bg-ds-surface p-4 shadow-sm">
                         <div className="text-center">
-                          <p className="text-xs font-black uppercase text-zinc-400">{format(date, "EEE", { locale: ptBR })}</p>
-                          <p className="text-2xl font-black text-zinc-800">{format(date, "dd")}</p>
-                          <p className="text-sm font-bold text-zinc-300">{format(date, "MM")}</p>
+                          <p className="text-xs font-black uppercase text-ds-ink-faint">{format(date, "EEE", { locale: ptBR })}</p>
+                          <p className="text-2xl font-black text-ds-ink">{format(date, "dd")}</p>
+                          <p className="text-sm font-bold text-ds-ink-faint">{format(date, "MM")}</p>
                         </div>
                         <div className="flex flex-wrap gap-3">
                           {dayShifts.map((shift) => (
-                            <div key={shift.id} className="flex min-w-[140px] items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-2">
-                              <span className="truncate text-sm font-black text-zinc-800">{getShiftUserName(selectedMonthlySchedule, shift, users)}</span>
-                              <span className="text-xs font-bold text-zinc-400">{getShiftLabel(shift)}</span>
+                            <div key={shift.id} className="flex min-w-[140px] items-center justify-between gap-3 rounded-lg border border-ds-divider bg-ds-muted px-4 py-2">
+                              <span className="truncate text-sm font-black text-ds-ink">{getShiftUserName(selectedMonthlySchedule, shift, users)}</span>
+                              <span className="text-xs font-bold text-ds-ink-faint">{getShiftLabel(shift)}</span>
                             </div>
                           ))}
                         </div>

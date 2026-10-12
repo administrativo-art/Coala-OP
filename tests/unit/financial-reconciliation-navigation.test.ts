@@ -94,17 +94,17 @@ test("novas entradas reutilizam componentes protegidos e preservam rotas anterio
   const expensesPage = read("src/features/financial/pages/expenses-page.tsx");
   assert.match(expensesPage, /<FinancialImportPage/);
   assert.doesNotMatch(expensesPage, /<TabsList|Extratos bancários<\/span>/);
-  assert.match(expensesPage, /<PageHeader/);
-  assert.match(expensesPage, /<PageContainer variant="wide" surface/);
+  assert.match(expensesPage, /<PageHero/);
+  assert.match(expensesPage, /<PageContainer variant="wide"/);
   for (const label of ["Cobranças recebidas", "Autorizações bancárias", "Ações", "Orçamento × despesas", "Importar extrato", "Novo lançamento"]) assert.ok(expensesPage.includes(label));
   assert.doesNotMatch(expensesPage, /Acessos rápidos/);
-  assert.ok(expensesPage.indexOf("> Novo lançamento") < expensesPage.indexOf("<Menu className="));
+  assert.ok(expensesPage.indexOf("<Ellipsis") < expensesPage.indexOf("> Novo lançamento"), "ação principal fica por último, à direita do painel");
   assert.doesNotMatch(expensesPage, />\s*Faturas de cartão\s*</);
   const bankPage = read("src/features/financial/pages/bank-statements-page.tsx");
   assert.match(bankPage, /permissions\.financial\?\.audits\?\.view !== true/);
   assert.ok(bankPage.indexOf("FinancialAccessGuard title=") < bankPage.indexOf("<FinancialImportPage"));
   assert.match(bankPage, /<PageContainer variant="wide"/);
-  assert.match(bankPage, /back=\{\{/);
+  assert.match(bankPage, /<HeroBackButton fallbackHref=/);
   const importer = read("src/features/financial/pages/import-page.tsx");
   assert.match(importer, /url\.searchParams\.set\("session", sessionId\)/);
   assert.doesNotMatch(importer, /CardStatementsWorkspace/);
@@ -202,21 +202,18 @@ test("orçamento × despesas segue o padrão contextual de Despesas", () => {
 test("painel financeiro segue a superfície ampla sem duplicar a sidebar", () => {
   const page = read("src/features/financial/pages/financial-dashboard-page.tsx");
   assert.match(page, /<PageContainer variant="wide" surface/);
-  assert.match(page, /<PageHeader/);
+  assert.match(page, /<PageHero/);
+  assert.match(page, /scope="financial"/);
   assert.doesNotMatch(page, /function ShortcutCard|<ShortcutCard/);
-  assert.match(page, /rounded-\[18px\]/);
 });
 
 test("pendência de auditoria filtra Despesas sem abrir uma página dedicada", () => {
   const expensesPage = read("src/features/financial/pages/expenses-page.tsx");
-  const kpis = read("src/features/financial/components/expenses/kpi-flow-strip.tsx");
   const legacyRoute = read("src/app/dashboard/financial/expenses/pending-audit/page.tsx");
-  assert.match(expensesPage, /onAuditClick=\{\(\) => setStatusFilter\("pending_audit"\)\}/);
-  assert.match(expensesPage, /auditActive=\{statusFilter === "pending_audit"\}/);
-  assert.match(expensesPage, /periodLabel=\{activePeriodLabel\}/);
+  assert.match(expensesPage, /active=\{statusFilter === "pending_audit"\} onClick=\{\(\) => setStatusFilter\("pending_audit"\)\}/);
+  assert.match(expensesPage, /subtitle=\{activePeriodLabel\}/);
   assert.match(expensesPage, /const shouldGroupByDueWeek = Boolean\(dateFrom \|\| dateTo \|\| activeCompetenceLabel\)/);
-  assert.doesNotMatch(kpis, /auditHref|next\/link/);
-  assert.match(kpis, /onClick=\{onAuditClick\}/);
+  assert.doesNotMatch(expensesPage, /auditHref/);
   assert.match(legacyRoute, /redirect\(`\$\{FINANCIAL_ROUTES\.expenses\}\?status=pending_audit`\)/);
 });
 
@@ -228,13 +225,13 @@ test("Despesas oferece limpeza completa dos filtros e retorna ao mês atual", ()
   assert.match(expensesPageSource, /setDateTo\(format\(endOfMonth\(now\), "yyyy-MM-dd"\)\)/);
   assert.match(expensesPageSource, /setCompetenceMonth\("all"\)/);
   assert.match(expensesPageSource, /setUnitFilter\("all"\)/);
-  assert.match(expensesPageSource, />\s*Limpar filtros\s*</);
+  assert.match(expensesPageSource, /Limpar filtros/);
 });
 
 test("linhas semanais de Despesas usam colunas fixas para manter o alinhamento", () => {
-  const expensesPageSource = read("src/features/financial/pages/expenses-page.tsx");
-  assert.match(expensesPageSource, /grid-cols-\[16px_16px_210px_160px_120px_minmax\(160px,1fr\)\]/);
-  assert.match(expensesPageSource, /min-w-\[760px\]/);
+  const rows = read("src/features/financial/components/expenses/expense-list-rows.tsx");
+  assert.match(rows, /EXPENSE_LIST_COLUMNS =\s*"md:grid-cols-\[/);
+  assert.match(read("src/features/financial/pages/expenses-page.tsx"), /EXPENSE_LIST_COLUMNS/);
 });
 
 test("conciliação segue o contrato visual documentado", () => {
@@ -253,12 +250,12 @@ test("conciliação segue o contrato visual documentado", () => {
   assert.match(cards, /data-ui="financial-card-selector"/);
   assert.match(cards, /<PageContainer variant="wide"/);
   assert.doesNotMatch(cards, /max-w-\[1360px\]/);
-  assert.match(cards, /back=\{\{ fallbackHref: safeReturnHref, parentLabel: backParentLabel \}\}/);
+  assert.match(cards, /<HeroBackButton fallbackHref=\{safeReturnHref\} parentLabel=\{backParentLabel\} \/>/);
   assert.doesNotMatch(cards, /Voltar ao extrato/);
   assert.match(importer, /data-ui="statement-overview-grid"/);
   assert.match(importer, /onClick=\{\(\) => setImportDialogOpen\(true\)\}/);
   assert.match(importer, /Informe o formato do arquivo e a conta bancária/);
-  assert.match(bankStatements, /parentLabel: "Despesas"/);
+  assert.match(bankStatements, /parentLabel="Despesas"/);
   assert.match(bankStatements, /showImportControls=\{false\}/);
   assert.match(pageHeader, /data-ui="page-breadcrumb"/);
   assert.match(pageHeader, /<BackButton/);
@@ -283,7 +280,7 @@ test("conciliação segue o contrato visual documentado", () => {
   assert.match(guide, /texto-base em `14px`/);
   assert.match(guide, /Itens permanentes do módulo ficam na sidebar/);
   assert.match(deposits, /<PageContainer variant="wide" surface/);
-  assert.match(deposits, /<PageHeader[\s\S]*titleSize="compact"/);
+  assert.match(deposits, /<PageHero[\s\S]*title="Depósitos em dinheiro"/);
   assert.doesNotMatch(deposits, /Financeiro <span[^>]*>›<\/span> Depósitos em dinheiro/);
-  assert.match(deposits, /bg-zinc-900/);
+  assert.match(deposits, /label="Cédulas em blocos"/);
 });

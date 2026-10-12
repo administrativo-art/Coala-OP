@@ -1,96 +1,36 @@
 "use client";
 
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
+import { Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton } from '@/components/cadastros/cadastros-ui';
 import { useDP } from '@/components/dp-context';
-import type { DPShiftDefinition } from '@/types';
-import {
-  getShiftDefinitionUnitIds,
-  getShiftDefinitionUnitNames,
-} from '@/lib/dp-shift-definitions';
-import { activeOperationalUnits } from '@/lib/dp-units';
-
+import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
+import { Field, fieldInputClass } from '@/components/patterns/field';
+import { InlineConfirm } from '@/components/patterns/inline-confirm';
+import { PanelField, PanelSection, SidePanel } from '@/components/patterns/side-panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { Plus, Pencil, Trash2, Clock3 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { StatusPill } from '@/components/ui/status-pill';
+import { getShiftDefinitionUnitIds, getShiftDefinitionUnitNames } from '@/lib/dp-shift-definitions';
+import { activeOperationalUnits } from '@/lib/dp-units';
 import { cn } from '@/lib/utils';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+import type { DPShiftDefinition } from '@/types';
 
 const DOW_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const ROW_TEMPLATE = 'minmax(230px,1.5fr) 130px minmax(190px,1.2fr) minmax(190px,1.3fr) 16px';
 
-function getShiftAccent(name: string) {
+/** Período do dia deduzido do nome, só para rotular a linha. */
+function shiftPeriodLabel(name: string) {
   const normalized = name.toLowerCase();
-
-  if (normalized.includes('intermedi')) {
-    return {
-      label: 'Intermediário',
-      className:
-        'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200',
-    };
-  }
-
-  if (normalized.includes('manhã') || normalized.includes('manha')) {
-    return {
-      label: 'Manhã',
-      className:
-        'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200',
-    };
-  }
-
-  if (normalized.includes('tarde')) {
-    return {
-      label: 'Tarde',
-      className:
-        'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200',
-    };
-  }
-
-  if (normalized.includes('noite')) {
-    return {
-      label: 'Noite',
-      className:
-        'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200',
-    };
-  }
-
-  return {
-    label: 'Turno',
-    className:
-      'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-200',
-  };
+  if (normalized.includes('intermedi')) return 'Intermediário';
+  if (normalized.includes('manhã') || normalized.includes('manha')) return 'Manhã';
+  if (normalized.includes('tarde')) return 'Tarde';
+  if (normalized.includes('noite')) return 'Noite';
+  return null;
 }
 
 function getDisplayCode(def: DPShiftDefinition) {
@@ -99,10 +39,8 @@ function getDisplayCode(def: DPShiftDefinition) {
   return /^\d+$/.test(raw) ? `#${raw}` : raw;
 }
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
 const shiftDefSchema = z.object({
-  code: z.string().min(1, 'Informe o código.').max(10),
+  code: z.string().min(1, 'Informe o código.').max(10, 'Use até 10 caracteres.'),
   name: z.string().min(1, 'Informe o nome.'),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
@@ -115,53 +53,84 @@ const shiftDefSchema = z.object({
 
 type ShiftDefForm = z.infer<typeof shiftDefSchema>;
 
-// ─── Dialog ───────────────────────────────────────────────────────────────────
+function formValuesFor(def?: DPShiftDefinition | null): ShiftDefForm {
+  return {
+    code: def?.code ?? '',
+    name: def?.name ?? '',
+    startTime: def?.startTime ?? '',
+    endTime: def?.endTime ?? '',
+    breakStart: def?.breakStart ?? '',
+    breakEnd: def?.breakEnd ?? '',
+    unitIds: getShiftDefinitionUnitIds(def),
+    daysOfWeek: def?.daysOfWeek ?? [1, 2, 3, 4, 5],
+    bizneoTemplateId: def?.bizneoTemplateId ?? '',
+  };
+}
 
-function ShiftDefDialog({ def, open, onOpenChange, units }: {
-  def?: DPShiftDefinition | null;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  units: Array<{ id: string; name: string }>;
-}) {
-  const { addShiftDefinition, updateShiftDefinition } = useDP();
-  const { toast } = useToast();
+type PanelState = { mode: 'view'; def: DPShiftDefinition } | { mode: 'edit'; def: DPShiftDefinition } | { mode: 'create' };
 
-  const form = useForm<ShiftDefForm>({
-    resolver: zodResolver(shiftDefSchema),
-    defaultValues: {
-      code: def?.code ?? '',
-      name: def?.name ?? '',
-      startTime: def?.startTime ?? '',
-      endTime: def?.endTime ?? '',
-      breakStart: def?.breakStart ?? '',
-      breakEnd: def?.breakEnd ?? '',
-      unitIds: getShiftDefinitionUnitIds(def),
-      daysOfWeek: def?.daysOfWeek ?? [1, 2, 3, 4, 5],
-      bizneoTemplateId: def?.bizneoTemplateId ?? '',
-    },
-  });
+export function DPSettingsShifts() {
+  const {
+    addShiftDefinition,
+    updateShiftDefinition,
+    deleteShiftDefinition,
+    shiftDefinitions,
+    shiftDefsLoading,
+    units,
+    shiftDefsError,
+  } = useDP();
 
-  React.useEffect(() => {
-    if (open) {
-      form.reset({
-        code: def?.code ?? '',
-        name: def?.name ?? '',
-        startTime: def?.startTime ?? '',
-        endTime: def?.endTime ?? '',
-        breakStart: def?.breakStart ?? '',
-        breakEnd: def?.breakEnd ?? '',
-        unitIds: getShiftDefinitionUnitIds(def),
-        daysOfWeek: def?.daysOfWeek ?? [1, 2, 3, 4, 5],
-        bizneoTemplateId: def?.bizneoTemplateId ?? '',
-      });
-    }
-  }, [open, def]);
+  const [panel, setPanel] = useState<PanelState | null>(null);
+  const [search, setSearch] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const form = useForm<ShiftDefForm>({ resolver: zodResolver(shiftDefSchema), defaultValues: formValuesFor(null) });
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = form;
+
+  const editing = panel?.mode === 'edit' || panel?.mode === 'create';
+  const def = panel && panel.mode !== 'create' ? panel.def : null;
+
+  useEffect(() => {
+    setConfirmingDelete(false);
+    setSaveError(null);
+    if (panel?.mode === 'edit') reset(formValuesFor(panel.def));
+    if (panel?.mode === 'create') reset(formValuesFor(null));
+    // O formulário reinicia só quando o painel muda de turno ou de modo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel]);
+
+  const resolveUnitLabels = (item: DPShiftDefinition) => {
+    const linkedUnitIds = getShiftDefinitionUnitIds(item);
+    const linkedUnitNames = getShiftDefinitionUnitNames(item);
+    if (linkedUnitIds.length === 0) return linkedUnitNames;
+    return linkedUnitIds.map((unitId, index) => units.find((unit) => unit.id === unitId)?.name ?? linkedUnitNames[index] ?? unitId);
+  };
+
+  const visibleDefinitions = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase('pt-BR');
+    if (!term) return shiftDefinitions;
+    return shiftDefinitions.filter((item) =>
+      `${item.name} ${item.code ?? ''} ${resolveUnitLabels(item).join(' ')}`.toLocaleLowerCase('pt-BR').includes(term)
+    );
+    // resolveUnitLabels depende só de `units`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shiftDefinitions, search, units]);
 
   async function onSubmit(values: ShiftDefForm) {
+    setSaveError(null);
     try {
-      const selectedUnits = units.filter(u => (values.unitIds ?? []).includes(u.id));
-      const selectedUnitIds = selectedUnits.map(u => u.id);
-      const selectedUnitNames = selectedUnits.map(u => u.name);
+      const selectedUnits = units.filter((unit) => (values.unitIds ?? []).includes(unit.id));
+      const selectedUnitIds = selectedUnits.map((unit) => unit.id);
+      const selectedUnitNames = selectedUnits.map((unit) => unit.name);
       const data = {
         ...values,
         unitIds: selectedUnitIds.length > 0 ? selectedUnitIds : undefined,
@@ -172,305 +141,237 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
         breakStart: values.breakStart || undefined,
         breakEnd: values.breakEnd || undefined,
       };
-      if (def) {
-        await updateShiftDefinition({ ...def, ...data });
-        toast({ title: 'Turno atualizado.' });
-      } else {
-        await addShiftDefinition(data);
-        toast({ title: 'Turno criado.' });
-      }
-      onOpenChange(false);
+      if (panel?.mode === 'edit') await updateShiftDefinition({ ...panel.def, ...data });
+      else await addShiftDefinition(data);
+      setPanel(null);
     } catch {
-      toast({ title: 'Erro ao salvar.', variant: 'destructive' });
+      setSaveError('Não foi possível salvar o turno. Tente novamente.');
     }
   }
 
-  const selectedDays = form.watch('daysOfWeek') ?? [];
+  async function confirmDelete() {
+    if (!def) return;
+    setDeleting(true);
+    setSaveError(null);
+    try {
+      await deleteShiftDefinition(def.id);
+      setPanel(null);
+    } catch {
+      setConfirmingDelete(false);
+      setSaveError('Não foi possível excluir o turno. Tente novamente.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
-  function toggleDay(day: number) {
-    const current = form.getValues('daysOfWeek') ?? [];
-    form.setValue('daysOfWeek', current.includes(day) ? current.filter(d => d !== day) : [...current, day].sort());
+  if (shiftDefsLoading && shiftDefinitions.length === 0) {
+    return (
+      <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando turnos">
+        <ListSkeleton rows={5} />
+      </div>
+    );
+  }
+  if (shiftDefsError && shiftDefinitions.length === 0) {
+    return <p role="alert" className="text-sm font-semibold text-ds-danger">Erro ao carregar turnos: {shiftDefsError}</p>;
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{def ? 'Editar turno' : 'Novo turno'}</DialogTitle>
-          <DialogDescription>
-            Configure código, nome, horários e dias da semana do turno reutilizável.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+    <div className="space-y-5">
+      <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px]">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Turnos reutilizáveis</p>
+            <p className="mt-1 text-[44px] font-bold leading-none tracking-[-0.05em] font-ds-mono">{shiftDefinitions.length}</p>
+            <p className="mt-1 text-base font-extrabold">Definições de turno</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <ControlSearch value={search} onChange={setSearch} placeholder="Buscar turno, código ou unidade" />
+          <Button type="button" variant="primary-page" size="xl" onClick={() => setPanel({ mode: 'create' })}>
+            + Novo turno
+          </Button>
+        </div>
+      </ControlPanel>
+
+      <div className="flex items-baseline gap-2.5">
+        <span className="text-[28px] font-extrabold tracking-[-0.03em]">{visibleDefinitions.length}</span>
+        <span className="text-[13px] text-ds-ink-faint">de {shiftDefinitions.length} turnos</span>
+      </div>
+
+      <ListShell minWidth={840}>
+        <ListHead template={ROW_TEMPLATE}>
+          <span>Turno</span>
+          <span>Horário</span>
+          <span>Dias</span>
+          <span>Unidades</span>
+          <span />
+        </ListHead>
+        {visibleDefinitions.map((item) => {
+          const period = shiftPeriodLabel(item.name);
+          const unitLabels = resolveUnitLabels(item);
+          return (
+            <ListRow
+              key={item.id}
+              template={ROW_TEMPLATE}
+              isOpen={def?.id === item.id}
+              isSelected={false}
+              isMuted={false}
+              onOpen={() => setPanel({ mode: 'view', def: item })}
+              label={`Abrir turno ${item.name}`}
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-ds-mono text-xs font-bold text-ds-ink-faint">{getDisplayCode(item)}</span>
+                  {period ? <StatusPill variant="neutral">{period}</StatusPill> : null}
+                </div>
+                <p className="truncate text-[13.5px] font-bold">{item.name}</p>
+              </div>
+              <span className="font-ds-mono text-[13px] font-semibold">{item.startTime}–{item.endTime}</span>
+              <span className="text-xs text-ds-ink-muted">{item.daysOfWeek.map((day) => DOW_LABELS[day]).join(' · ')}</span>
+              <span className="truncate text-xs text-ds-ink-muted">{unitLabels.length > 0 ? unitLabels.join(', ') : 'Todas as unidades'}</span>
+              <Chevron />
+            </ListRow>
+          );
+        })}
+        {shiftDefinitions.length === 0 ? (
+          <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum turno cadastrado. Crie o primeiro com “Novo turno”.</p>
+        ) : visibleDefinitions.length === 0 ? (
+          <EmptyResults title="Nenhum turno encontrado com essa busca." onClear={() => setSearch('')} />
+        ) : null}
+      </ListShell>
+
+      <SidePanel
+        open={!!panel}
+        onOpenChange={(open) => { if (!open) setPanel(null); }}
+        kicker={panel?.mode === 'create' ? 'Novo turno' : panel?.mode === 'edit' ? 'Editar turno' : 'Turno'}
+        title={panel?.mode === 'create' ? 'Sem nome' : (def?.name ?? '')}
+        subtitle="Código, horários e dias da semana do turno reutilizável."
+      >
+        {panel && !editing && def ? (
+          <>
+            <PanelSection title="Horário">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+                <PanelField label="Código"><span className="font-ds-mono">{getDisplayCode(def)}</span></PanelField>
+                <PanelField label="Expediente"><span className="font-ds-mono">{def.startTime}–{def.endTime}</span></PanelField>
+                <PanelField label="Intervalo">
+                  {def.breakStart && def.breakEnd ? <span className="font-ds-mono">{def.breakStart}–{def.breakEnd}</span> : 'Sem intervalo'}
+                </PanelField>
+              </div>
+            </PanelSection>
+            <PanelSection title="Dias da semana">
+              <div className="flex flex-wrap gap-1.5">
+                {DOW_LABELS.map((label, index) => (
+                  <StatusPill key={label} variant={def.daysOfWeek.includes(index) ? 'ok' : 'neutral'}>{label}</StatusPill>
+                ))}
+              </div>
+            </PanelSection>
+            <PanelSection title="Vínculos">
+              <PanelField label="Unidades">{resolveUnitLabels(def).length > 0 ? resolveUnitLabels(def).join(', ') : 'Todas as unidades'}</PanelField>
+              <PanelField label="Modelo no Bizneo">{def.bizneoTemplateId ? <span className="font-ds-mono">{def.bizneoTemplateId}</span> : 'Sem vínculo'}</PanelField>
+            </PanelSection>
+            {saveError ? <p role="alert" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[12.5px] font-semibold text-ds-confirm-ink">{saveError}</p> : null}
+            <div className="mt-auto flex flex-col gap-3 border-t border-ds-divider pt-4">
+              {confirmingDelete ? (
+                <InlineConfirm
+                  message={`Excluir o turno “${def.name}”?`}
+                  loading={deleting}
+                  returnFocusRef={deleteTriggerRef}
+                  onCancel={() => setConfirmingDelete(false)}
+                  onConfirm={() => void confirmDelete()}
+                />
+              ) : (
+                <>
+                  <Button type="button" variant="primary-modal" size="md" onClick={() => setPanel({ mode: 'edit', def })}>Editar turno</Button>
+                  <div>
+                    <Button ref={deleteTriggerRef} type="button" variant="danger-link" size="xs" onClick={() => setConfirmingDelete(true)}>Excluir turno</Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        ) : null}
+
+        {panel && editing ? (
+          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-1 flex-col gap-5" noValidate>
             <div className="grid grid-cols-3 gap-3">
-              <FormField control={form.control} name="code" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Código</FormLabel>
-                  <FormControl><Input placeholder="Ex: T1" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem className="col-span-2">
-                  <FormLabel>Nome</FormLabel>
-                  <FormControl><Input placeholder="Ex: Turno da manhã" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <Field label="Código" htmlFor="shift-code" error={errors.code?.message}>
+                <Input id="shift-code" placeholder="Ex.: T1" aria-invalid={!!errors.code} className={cn(fieldInputClass, 'font-ds-mono')} {...register('code')} />
+              </Field>
+              <Field label="Nome" htmlFor="shift-name" error={errors.name?.message} className="col-span-2">
+                <Input id="shift-name" placeholder="Ex.: Turno da manhã" aria-invalid={!!errors.name} className={fieldInputClass} {...register('name')} />
+              </Field>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="startTime" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Início</FormLabel>
-                  <FormControl><Input type="time" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="endTime" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fim</FormLabel>
-                  <FormControl><Input type="time" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <Field label="Início" htmlFor="shift-start" error={errors.startTime?.message}>
+                <Input id="shift-start" type="time" aria-invalid={!!errors.startTime} className={fieldInputClass} {...register('startTime')} />
+              </Field>
+              <Field label="Fim" htmlFor="shift-end" error={errors.endTime?.message}>
+                <Input id="shift-end" type="time" aria-invalid={!!errors.endTime} className={fieldInputClass} {...register('endTime')} />
+              </Field>
+              <Field label="Início do intervalo" htmlFor="shift-break-start" requirement="opcional">
+                <Input id="shift-break-start" type="time" className={fieldInputClass} {...register('breakStart')} />
+              </Field>
+              <Field label="Fim do intervalo" htmlFor="shift-break-end" requirement="opcional">
+                <Input id="shift-break-end" type="time" className={fieldInputClass} {...register('breakEnd')} />
+              </Field>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="breakStart" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Início intervalo</FormLabel>
-                  <FormControl><Input type="time" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="breakEnd" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fim intervalo</FormLabel>
-                  <FormControl><Input type="time" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-
-            <FormField control={form.control} name="unitIds" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Unidades vinculadas (opcional)</FormLabel>
-                <FormControl>
+            <Field label="Dias da semana" error={errors.daysOfWeek?.message}>
+              <Controller
+                control={control}
+                name="daysOfWeek"
+                render={({ field }) => (
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Dias da semana">
+                    {DOW_LABELS.map((label, index) => {
+                      const selected = field.value.includes(index);
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => field.onChange(selected ? field.value.filter((day) => day !== index) : [...field.value, index].sort())}
+                          className={cn(
+                            'h-10 min-w-[56px] rounded-ds-md px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                            selected
+                              ? 'border-2 border-ds-modal bg-ds-modal-soft text-ds-modal-ink'
+                              : 'border border-ds-border-input bg-white text-ds-ink-2'
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              />
+            </Field>
+            <Field label="Unidades vinculadas" requirement="opcional" hint="Sem unidades, o turno vale para todas.">
+              <Controller
+                control={control}
+                name="unitIds"
+                render={({ field }) => (
                   <MultiSelect
-                    options={activeOperationalUnits(units).map(unit => ({ value: unit.id, label: unit.name }))}
+                    options={activeOperationalUnits(units).map((unit) => ({ value: unit.id, label: unit.name }))}
                     selected={field.value ?? []}
                     onChange={field.onChange}
                     placeholder="Selecione uma ou mais unidades"
                   />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+                )}
+              />
+            </Field>
+            <Field label="ID do modelo no Bizneo" htmlFor="shift-bizneo" requirement="opcional">
+              <Input id="shift-bizneo" placeholder="Ex.: 15693788" className={cn(fieldInputClass, 'font-ds-mono')} {...register('bizneoTemplateId')} />
+            </Field>
 
-            <FormField control={form.control} name="bizneoTemplateId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>ID do modelo no Bizneo</FormLabel>
-                <FormControl><Input placeholder="Ex: 15693788" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="daysOfWeek" render={() => (
-              <FormItem>
-                <FormLabel>Dias da semana</FormLabel>
-                <div className="flex gap-2 flex-wrap">
-                  {DOW_LABELS.map((label, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => toggleDay(i)}
-                      className={`h-8 w-10 rounded text-xs font-medium transition-colors ${
-                        selectedDays.includes(i)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Salvando...' : 'Salvar'}
+            {saveError ? <p role="alert" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[12.5px] font-semibold text-ds-confirm-ink">{saveError}</p> : null}
+            <div className="mt-auto grid grid-cols-2 gap-2 border-t border-ds-divider pt-4">
+              <Button type="button" variant="ds-secondary" size="md" disabled={isSubmitting} onClick={() => (def ? setPanel({ mode: 'view', def }) : setPanel(null))}>Cancelar</Button>
+              <Button type="submit" variant="primary-modal" size="md" loading={isSubmitting}>
+                {panel.mode === 'create' ? 'Criar turno' : 'Salvar turno'}
               </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-export function DPSettingsShifts() {
-  const {
-    deleteShiftDefinition,
-    shiftDefinitions,
-    shiftDefsLoading,
-    units,
-    shiftDefsError,
-  } = useDP();
-  const { toast } = useToast();
-
-  const [open, setOpen] = useState(false);
-  const [editDef, setEditDef] = useState<DPShiftDefinition | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DPShiftDefinition | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  const resolveUnitLabels = (def: DPShiftDefinition) => {
-    const linkedUnitIds = getShiftDefinitionUnitIds(def);
-    const linkedUnitNames = getShiftDefinitionUnitNames(def);
-
-    if (linkedUnitIds.length === 0) return linkedUnitNames;
-
-    return linkedUnitIds.map((unitId, index) => units.find(unit => unit.id === unitId)?.name ?? linkedUnitNames[index] ?? unitId);
-  };
-
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await deleteShiftDefinition(deleteTarget.id);
-      toast({ title: 'Turno excluído.' });
-    } catch {
-      toast({ title: 'Erro ao excluir.', variant: 'destructive' });
-    } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
-    }
-  }
-
-  if (shiftDefsLoading && shiftDefinitions.length === 0) return <p className="text-sm text-muted-foreground">Carregando...</p>;
-  if (shiftDefsError && shiftDefinitions.length === 0) return <p className="text-sm text-destructive">Erro ao carregar turnos: {shiftDefsError}</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="font-medium text-sm">Definições de turno</h3>
-          <Badge variant="secondary">{shiftDefinitions.length}</Badge>
-        </div>
-        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => { setEditDef(null); setOpen(true); }}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Novo
-        </Button>
-      </div>
-
-      {shiftDefinitions.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">Nenhum turno cadastrado.</p>
-      ) : (
-        <div className="space-y-3">
-          {shiftDefinitions.map(def => (
-            <div
-              key={def.id}
-              className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-muted/30 px-5 py-4 shadow-sm transition-colors hover:bg-muted/40 md:flex-row md:items-center md:justify-between"
-            >
-              <div className="flex min-w-0 flex-1 items-start gap-4">
-                <div
-                  className={cn(
-                    'inline-flex min-h-10 min-w-[112px] items-center justify-center rounded-2xl border px-4 py-2 text-sm font-semibold',
-                    getShiftAccent(def.name).className
-                  )}
-                >
-                  {getShiftAccent(def.name).label}
-                </div>
-
-                <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-base font-semibold tracking-tight text-muted-foreground/70">
-                      {getDisplayCode(def)}
-                    </span>
-                    <p className="truncate text-lg font-semibold leading-none tracking-tight">
-                      {def.name}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5 font-medium">
-                      <Clock3 className="h-4 w-4" />
-                      {def.startTime}–{def.endTime}
-                    </span>
-                    <span className="hidden text-muted-foreground/50 sm:inline">·</span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {def.daysOfWeek.map((day) => (
-                        <span
-                          key={`${def.id}-${day}`}
-                          className="rounded-lg border border-border/60 bg-background/70 px-2 py-1 text-xs font-medium text-muted-foreground"
-                        >
-                          {DOW_LABELS[day]}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {resolveUnitLabels(def).length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Unidades vinculadas: {resolveUnitLabels(def).join(', ')}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-end md:self-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-11 rounded-2xl border-border/70 bg-background/80"
-                  onClick={() => { setEditDef(def); setOpen(true); }}
-                  aria-label={`Editar turno ${def.name}`}
-                  title="Editar turno"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-11 w-11 rounded-2xl border-border/70 bg-background/80 text-destructive hover:text-destructive"
-                  onClick={() => setDeleteTarget(def)}
-                  aria-label={`Excluir turno ${def.name}`}
-                  title="Excluir turno"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      <ShiftDefDialog def={editDef} open={open} onOpenChange={setOpen} units={units} />
-
-      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir turno?</AlertDialogTitle>
-            <AlertDialogDescription>
-              O turno <strong>{deleteTarget?.name}</strong> será excluído.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {deleting ? 'Excluindo...' : 'Excluir'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </form>
+        ) : null}
+      </SidePanel>
     </div>
   );
 }

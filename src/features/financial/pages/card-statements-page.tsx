@@ -30,7 +30,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PageHeader } from "@/components/layout/page-header";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroBackButton } from "@/components/patterns/hero-back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FinancialCompetenceNavigator } from "@/features/financial/components/financial-competence-navigator";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
@@ -920,22 +921,22 @@ export function CardStatementsWorkspace({
         }}
       />
       {!embedded ? (
-        <PageHeader
+        <PageHero
+          kicker="Financeiro · Conciliação"
           title="Faturas de cartão de crédito"
-          description="Previsão mensal, conciliação das cobranças e do pagamento bancário."
-          back={{ fallbackHref: safeReturnHref, parentLabel: backParentLabel }}
-          actions={canImportCardStatements && selectedGroup ? (
+          subtitle="Previsão mensal, conciliação das cobranças e do pagamento bancário."
+          actions={<><HeroBackButton fallbackHref={safeReturnHref} parentLabel={backParentLabel} />{canImportCardStatements && selectedGroup ? (
             <Button
               type="button"
-              size="sm"
-              className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]"
+              variant="primary-page"
+              size="md"
               disabled={importingStatement}
               onClick={() => cardStatementFileRef.current?.click()}
             >
               {importingStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
               {importingStatement ? "Analisando fatura..." : "Importar fatura"}
             </Button>
-          ) : null}
+          ) : null}</>}
         />
       ) : null}
 
@@ -951,7 +952,7 @@ export function CardStatementsWorkspace({
                   <p className="truncate text-[11px] text-muted-foreground">
                     {selectedGroup.card.methodLabel} · {monthKey.split("-").reverse().join("/")}
                   </p>
-                  <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 text-[9.5px] font-medium text-violet-700">
+                  <span className="rounded-full border border-ds-border bg-ds-info-bg px-1.5 py-0 text-[9.5px] font-medium text-ds-info">
                     Fatura do cartão
                   </span>
                 </div>
@@ -980,10 +981,10 @@ export function CardStatementsWorkspace({
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
                 {([
-                  ["all", "Todos", selectedLineCounts.all, "border-zinc-300 bg-zinc-100 text-zinc-800", "bg-zinc-500"],
-                  ["pending", "Pendentes", pendingVisibleCount, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
-                  ["historical", "Histórico", selectedLineCounts.historical, "border-stone-300 bg-stone-100 text-stone-700", "bg-stone-500"],
-                  ["reconciled", "Conciliadas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
+                  ["all", "Todos", selectedLineCounts.all, "border-ds-border bg-ds-muted text-ds-ink-2", "bg-ds-neutral"],
+                  ["pending", "Pendentes", pendingVisibleCount, "border-ds-alert-border bg-ds-warn-bg text-ds-warn", "bg-ds-warn"],
+                  ["historical", "Histórico", selectedLineCounts.historical, "border-ds-border bg-ds-muted text-ds-ink-2", "bg-ds-neutral"],
+                  ["reconciled", "Conciliadas", selectedLineCounts.reconciled, "border-ds-border bg-ds-ok-bg text-ds-ok", "bg-ds-ok"],
                 ] as const).map(([value, label, count, activeClass, dotClass], index) => (
                   <div key={value} className="flex items-center gap-1.5">
                     {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" /> : null}
@@ -1057,11 +1058,11 @@ export function CardStatementsWorkspace({
               </div>
             ) : visibleCardLineGroups.map((group) => (
               <div key={format(group.date, "yyyy-MM-dd")}>
-                <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-[#fbfaf7]/95 px-4 py-2 backdrop-blur">
+                <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-ds-input px-4 py-2 backdrop-blur">
                   <span className="text-[11px] font-semibold text-foreground">{format(group.date, "dd/MM")}</span>
                   <span className="text-[10.5px] capitalize text-muted-foreground">{format(group.date, "EEEE", { locale: ptBR })}</span>
                   <span className="h-px flex-1 bg-border/60" />
-                  <span className="whitespace-nowrap font-mono text-[10.5px] font-medium text-rose-600">
+                  <span className="whitespace-nowrap font-mono text-[10.5px] font-medium text-ds-danger">
                     Total −{formatCurrency(group.total)}
                   </span>
                 </div>
@@ -1072,10 +1073,10 @@ export function CardStatementsWorkspace({
                   const installmentNumber = Number(line.installmentNumber || line.expense.installmentNumber || 0);
                   const installmentTotal = Number(line.installmentTotal || line.expense.installmentTotal || 0);
                   const statusMeta = status === "pending" || status === "audited"
-                    ? { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" }
+                    ? { label: "Pendente", className: "border-ds-alert-border bg-ds-warn-bg text-ds-warn" }
                     : status === "historical"
-                    ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
-                    : { label: "Conciliada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+                    ? { label: "Histórico", className: "border-ds-border bg-ds-muted text-ds-ink-2" }
+                    : { label: "Conciliada", className: "border-ds-border bg-ds-ok-bg text-ds-ok" };
                   return (
                     <div
                       key={line.lineId}
@@ -1098,12 +1099,12 @@ export function CardStatementsWorkspace({
                       <div className="hidden lg:block">
                         <span className={cn(
                           "rounded-full px-2 py-0.5 text-[9.5px] font-medium",
-                          forecast ? "bg-cyan-50 text-cyan-700" : "bg-violet-50 text-violet-700"
+                          forecast ? "bg-ds-info-bg text-ds-info" : "bg-ds-info-bg text-ds-info"
                         )}>
                           {forecast ? "Previsão" : "Lançada"}
                         </span>
                       </div>
-                      <p className="whitespace-nowrap text-right font-mono text-xs font-semibold text-rose-600">
+                      <p className="whitespace-nowrap text-right font-mono text-xs font-semibold text-ds-danger">
                         − {formatCurrency(line.value)}
                       </p>
                       <div className="flex items-center justify-end gap-1.5">
@@ -1151,12 +1152,12 @@ export function CardStatementsWorkspace({
           </div>
 
           {selectedStatement?.status === "paid" ? (
-            <div className="flex items-center gap-2 border-t border-emerald-200 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">
+            <div className="flex items-center gap-2 border-t border-ds-border bg-ds-ok-bg px-4 py-2 text-xs text-ds-ok">
               <CheckCircle2 className="h-4 w-4" />
               Pagamento conciliado em {toDate(selectedStatement.paidAt) ? format(toDate(selectedStatement.paidAt)!, "dd/MM/yyyy") : "data não informada"}.
             </div>
           ) : selectedStatement?.status === "closed" ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sky-200 bg-sky-50 px-4 py-2 text-xs text-sky-800">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ds-border bg-ds-info-bg px-4 py-2 text-xs text-ds-info">
               <span>
                 {historicalRegistration ? "Histórico anterior à DRE · conciliação dispensada. " : ""}
                 {paymentCandidates.length > 0 ? `${paymentCandidates.length} pagamento(s) compatível(is) encontrado(s) no extrato.` : "Nenhum pagamento compatível encontrado no extrato."}
@@ -1231,7 +1232,7 @@ export function CardStatementsWorkspace({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2.5">
-                        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-[10px]", selected ? "bg-pink-50 text-primary" : "bg-muted text-muted-foreground")}>
+                        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-[10px]", selected ? "bg-ds-accent-soft text-primary" : "bg-muted text-muted-foreground")}>
                           <CreditCard className="h-4 w-4" />
                         </span>
                         <div className="min-w-0">
@@ -1242,10 +1243,10 @@ export function CardStatementsWorkspace({
                       <span className={cn(
                         "shrink-0 rounded-full border px-2 py-0.5 text-[9.5px] font-extrabold",
                         status === "paid"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          ? "border-ds-border bg-ds-ok-bg text-ds-ok"
                           : status === "closed"
-                            ? "border-sky-200 bg-sky-50 text-sky-700"
-                            : "border-amber-200 bg-amber-50 text-amber-700"
+                            ? "border-ds-border bg-ds-info-bg text-ds-info"
+                            : "border-ds-alert-border bg-ds-warn-bg text-ds-warn"
                       )}>
                         {statusLabel(status)}
                       </span>
@@ -1257,7 +1258,7 @@ export function CardStatementsWorkspace({
                       </div>
                       <div className="text-right">
                         <p className="text-[10.5px] text-muted-foreground">Vence {format(group.dueDate, "dd/MM")}</p>
-                        <p className={cn("mt-0.5 text-[10.5px] font-extrabold", groupReconciledCount === group.lines.length && group.lines.length > 0 ? "text-emerald-700" : "text-amber-700")}>
+                        <p className={cn("mt-0.5 text-[10.5px] font-extrabold", groupReconciledCount === group.lines.length && group.lines.length > 0 ? "text-ds-ok" : "text-ds-warn")}>
                           {groupReconciledCount}/{group.lines.length} conciliadas
                         </p>
                       </div>
@@ -1276,7 +1277,7 @@ export function CardStatementsWorkspace({
                     <div className="flex shrink-0 items-center gap-2.5">
                       <span className={cn(
                         "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-extrabold text-white",
-                        step.done ? "bg-emerald-600" : step.current ? "bg-primary" : "bg-zinc-300"
+                        step.done ? "bg-ds-ok" : step.current ? "bg-primary" : "bg-ds-neutral"
                       )}>
                         {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
                       </span>
@@ -1294,7 +1295,7 @@ export function CardStatementsWorkspace({
 
           {selectedGroup && (
             <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_348px]">
-              <Card className="overflow-hidden rounded-2xl border-[#e9e5dc] shadow-sm">
+              <Card className="overflow-hidden rounded-2xl border-ds-border shadow-sm">
                 <div className="px-4 pt-4 sm:px-[18px]">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -1308,7 +1309,7 @@ export function CardStatementsWorkspace({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-9 rounded-xl border-violet-200 bg-violet-50/70 px-3.5 text-xs font-extrabold text-violet-700 hover:bg-violet-100 hover:text-violet-800"
+                        className="h-9 rounded-xl border-ds-border bg-ds-info-bg px-3.5 text-xs font-extrabold text-ds-info hover:bg-ds-info-bg hover:text-ds-info"
                         disabled={importingStatement}
                         onClick={() => cardStatementFileRef.current?.click()}
                       >
@@ -1327,10 +1328,10 @@ export function CardStatementsWorkspace({
                   <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
                     <span className="mr-0.5 text-[8.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Fluxo</span>
                     {([
-                      ["all", "Todos", selectedLineCounts.all, "border-zinc-300 bg-zinc-100 text-zinc-800", "bg-zinc-500"],
-                      ["pending", "Pendentes", pendingVisibleCount, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
-                      ["historical", "Histórico", selectedLineCounts.historical, "border-stone-300 bg-stone-100 text-stone-700", "bg-stone-500"],
-                      ["reconciled", "Conciliadas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
+                      ["all", "Todos", selectedLineCounts.all, "border-ds-border bg-ds-muted text-ds-ink-2", "bg-ds-neutral"],
+                      ["pending", "Pendentes", pendingVisibleCount, "border-ds-alert-border bg-ds-warn-bg text-ds-warn", "bg-ds-warn"],
+                      ["historical", "Histórico", selectedLineCounts.historical, "border-ds-border bg-ds-muted text-ds-ink-2", "bg-ds-neutral"],
+                      ["reconciled", "Conciliadas", selectedLineCounts.reconciled, "border-ds-border bg-ds-ok-bg text-ds-ok", "bg-ds-ok"],
                     ] as const).map(([value, label, count, activeClass, dotClass], index) => (
                       <div key={value} className="flex items-center gap-1.5">
                         {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" /> : null}
@@ -1374,9 +1375,9 @@ export function CardStatementsWorkspace({
                 </div>
 
                 {selectedCardLines.length > 0 ? (
-                  <div className="mx-4 mt-3 flex flex-wrap items-center gap-2.5 rounded-xl border border-pink-200 bg-pink-50/70 px-3 py-2.5 sm:mx-[18px]">
-                    <span className="text-xs font-extrabold text-pink-700">{selectedCardLines.length} cobrança(s) selecionada(s)</span>
-                    <span className="text-[11.5px] text-pink-700/70">
+                  <div className="mx-4 mt-3 flex flex-wrap items-center gap-2.5 rounded-xl border border-ds-accent-soft bg-ds-accent-soft px-3 py-2.5 sm:mx-[18px]">
+                    <span className="text-xs font-extrabold text-ds-accent-ink">{selectedCardLines.length} cobrança(s) selecionada(s)</span>
+                    <span className="text-[11.5px] text-ds-accent-ink">
                       {selectedReadyLines.length} apta(s) · {selectedCardLines.length - selectedReadyLines.length} precisam de revisão ou já foram conciliadas
                     </span>
                     <div className="ml-auto flex gap-2">
@@ -1393,7 +1394,7 @@ export function CardStatementsWorkspace({
 
                 <div className="mt-3 overflow-x-auto">
                   <div className="min-w-[760px]">
-                    <div className="grid grid-cols-[26px_minmax(0,1fr)_104px_118px_180px] items-center gap-3 border-y bg-[#faf9f6] px-[18px] py-2.5 text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+                    <div className="grid grid-cols-[26px_minmax(0,1fr)_104px_118px_180px] items-center gap-3 border-y bg-ds-input px-[18px] py-2.5 text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
                       <input
                         type="checkbox"
                         aria-label="Selecionar cobranças visíveis"
@@ -1421,11 +1422,11 @@ export function CardStatementsWorkspace({
                         </div>
                       ) : visibleCardLineGroups.map((group) => (
                         <div key={format(group.date, "yyyy-MM-dd")}>
-                          <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-[#fbfaf7]/95 px-[18px] py-2 backdrop-blur">
+                          <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-ds-input px-[18px] py-2 backdrop-blur">
                             <span className="font-mono text-[11.5px] font-bold">{format(group.date, "dd/MM")}</span>
                             <span className="text-[11px] capitalize text-muted-foreground">{format(group.date, "EEEE", { locale: ptBR })}</span>
                             <span className="h-px flex-1 bg-border/70" />
-                            <span className="font-mono text-[11px] font-bold text-rose-700">Total − {formatCurrency(group.total)}</span>
+                            <span className="font-mono text-[11px] font-bold text-ds-danger">Total − {formatCurrency(group.total)}</span>
                           </div>
                           {group.lines.map((line) => {
                             const status = getCardLineAuditStatus(line);
@@ -1437,16 +1438,16 @@ export function CardStatementsWorkspace({
                             const installmentTotal = Number(line.installmentTotal || line.expense.installmentTotal || 0);
                             const selected = selectedLineIdSet.has(line.lineId);
                             const statusMeta = status === "pending" || status === "audited"
-                              ? { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" }
+                              ? { label: "Pendente", className: "border-ds-alert-border bg-ds-warn-bg text-ds-warn" }
                               : status === "historical"
-                                  ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
-                                : { label: "Conciliada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+                                  ? { label: "Histórico", className: "border-ds-border bg-ds-muted text-ds-ink-2" }
+                                : { label: "Conciliada", className: "border-ds-border bg-ds-ok-bg text-ds-ok" };
                             return (
                               <div
                                 key={line.lineId}
                                 className={cn(
-                                  "group grid grid-cols-[26px_minmax(0,1fr)_104px_118px_180px] items-start gap-3 border-b px-[18px] py-3 transition-colors hover:bg-pink-50/40",
-                                  selected && "bg-pink-50/60"
+                                  "group grid grid-cols-[26px_minmax(0,1fr)_104px_118px_180px] items-start gap-3 border-b px-[18px] py-3 transition-colors hover:bg-ds-accent-soft",
+                                  selected && "bg-ds-accent-soft"
                                 )}
                               >
                                 <input
@@ -1463,24 +1464,24 @@ export function CardStatementsWorkspace({
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <span className="truncate text-[13px] font-bold tracking-tight">{line.expense.description || "Despesa sem descrição"}</span>
                                     {installmentTotal > 1 ? <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">{installmentNumber || 1}/{installmentTotal}</span> : null}
-                                    {recurring ? <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold text-violet-700"><Repeat2 className="h-2.5 w-2.5" />Recorrente</span> : null}
-                                    {imported ? <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700"><Sparkles className="h-2.5 w-2.5" />Importada</span> : null}
+                                    {recurring ? <span className="inline-flex items-center gap-1 rounded-md bg-ds-info-bg px-1.5 py-0.5 text-[9px] font-bold text-ds-info"><Repeat2 className="h-2.5 w-2.5" />Recorrente</span> : null}
+                                    {imported ? <span className="inline-flex items-center gap-1 rounded-md bg-ds-info-bg px-1.5 py-0.5 text-[9px] font-bold text-ds-info"><Sparkles className="h-2.5 w-2.5" />Importada</span> : null}
                                   </div>
                                   <p className="mt-1 truncate text-[11px] text-muted-foreground">{line.expense.supplier || "Sem favorecido"} · cobrança em {format(line.chargeDate, "dd/MM/yyyy")}</p>
                                   <UberRecognitionStatus record={line.expense} compact />
                                   {issues.length > 0 ? (
-                                    <p className="mt-1.5 inline-block rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10.5px] font-bold text-amber-700">⚠ Revisar {issues.join(", ")}</p>
+                                    <p className="mt-1.5 inline-block rounded-lg border border-ds-alert-border bg-ds-warn-bg px-2 py-1 text-[10.5px] font-bold text-ds-warn">⚠ Revisar {issues.join(", ")}</p>
                                   ) : null}
                                 </div>
                                 <div>
                                   <span className={cn(
                                     "rounded-full border px-2 py-0.5 text-[9.5px] font-extrabold",
-                                    forecast ? "border-cyan-200 bg-cyan-50 text-cyan-700" : "border-violet-200 bg-violet-50 text-violet-700"
+                                    forecast ? "border-ds-border bg-ds-info-bg text-ds-info" : "border-ds-border bg-ds-info-bg text-ds-info"
                                   )}>
                                     {forecast ? "Previsão" : "Lançada"}
                                   </span>
                                 </div>
-                                <span className="whitespace-nowrap text-right font-mono text-[13px] font-extrabold text-rose-700">− {formatCurrency(line.value)}</span>
+                                <span className="whitespace-nowrap text-right font-mono text-[13px] font-extrabold text-ds-danger">− {formatCurrency(line.value)}</span>
                                 <div className="flex items-center justify-end gap-1.5">
                                   {canAuditCardStatements && statementStatus !== "paid" && status !== "historical" ? (
                                     status === "pending" ? (
@@ -1510,11 +1511,11 @@ export function CardStatementsWorkspace({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 border-t bg-[#faf9f6] px-[18px] py-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 border-t bg-ds-input px-[18px] py-3 sm:grid-cols-4">
                   {[
                     ["Itens lançados", postedTotal, "text-foreground"],
-                    ["Provisionado", selectedGroup.provisionedTotal, "text-cyan-700"],
-                    ["Conciliado", reconciledTotal, "text-emerald-700"],
+                    ["Provisionado", selectedGroup.provisionedTotal, "text-ds-info"],
+                    ["Conciliado", reconciledTotal, "text-ds-ok"],
                     ["Total da fatura", officialTotal, "text-foreground"],
                   ].map(([label, value, color]) => (
                     <div key={String(label)}>
@@ -1526,15 +1527,15 @@ export function CardStatementsWorkspace({
               </Card>
 
               <div className="space-y-3.5">
-                <Card className="rounded-2xl border-[#e9e5dc] shadow-sm">
+                <Card className="rounded-2xl border-ds-border shadow-sm">
                   <CardContent className="p-[18px] sm:p-[18px]">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Reconciliação</CardTitle>
                       <span className={cn(
                         "rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold",
                         valuesBalanced
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-amber-200 bg-amber-50 text-amber-700"
+                          ? "border-ds-border bg-ds-ok-bg text-ds-ok"
+                          : "border-ds-alert-border bg-ds-warn-bg text-ds-warn"
                       )}>
                         {valuesBalanced
                           ? "Valores batem"
@@ -1549,9 +1550,9 @@ export function CardStatementsWorkspace({
                         <span className="text-[11.5px] text-muted-foreground">Itens lançados</span>
                         <span className="font-mono text-[13.5px] font-extrabold">{formatCurrency(postedTotal)}</span>
                       </div>
-                      <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-[#f0eae4]">
+                      <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-ds-muted">
                         <div
-                          className={cn("h-full", valuesBalanced ? "bg-emerald-500" : "bg-primary")}
+                          className={cn("h-full", valuesBalanced ? "bg-ds-ok" : "bg-primary")}
                           style={{ width: `${postedProgress}%` }}
                         />
                         <div
@@ -1561,7 +1562,7 @@ export function CardStatementsWorkspace({
                       </div>
                       <div className="mt-2 flex items-baseline justify-between gap-3">
                         <span className="text-[11.5px] text-muted-foreground">Créditos e estornos</span>
-                        <span className="font-mono text-[13.5px] font-extrabold text-emerald-700">− {formatCurrency(statementCreditTotal)}</span>
+                        <span className="font-mono text-[13.5px] font-extrabold text-ds-ok">− {formatCurrency(statementCreditTotal)}</span>
                       </div>
                       <div className="mt-2 flex items-baseline justify-between gap-3">
                         <span className="text-[11.5px] text-muted-foreground">Total oficial da fatura</span>
@@ -1571,9 +1572,9 @@ export function CardStatementsWorkspace({
 
                     <div className={cn(
                       "mt-3.5 rounded-xl border px-3.5 py-3",
-                      valuesBalanced ? "border-emerald-200 bg-emerald-50" : "border-violet-200 bg-violet-50/70"
+                      valuesBalanced ? "border-ds-border bg-ds-ok-bg" : "border-ds-border bg-ds-info-bg"
                     )}>
-                      <p className={cn("text-xs font-extrabold", valuesBalanced ? "text-emerald-700" : "text-violet-700")}>
+                      <p className={cn("text-xs font-extrabold", valuesBalanced ? "text-ds-ok" : "text-ds-info")}>
                         {valuesBalanced
                           ? "✓ Fatura reconciliada"
                           : difference === null
@@ -1582,7 +1583,7 @@ export function CardStatementsWorkspace({
                               ? `Faltam ${formatCurrency(Math.abs(difference))} em cobranças`
                               : `Os lançamentos excedem ${formatCurrency(Math.abs(difference))}`}
                       </p>
-                      <p className={cn("mt-1.5 text-[11.5px] leading-relaxed", valuesBalanced ? "text-emerald-700/80" : "text-violet-700/75")}>
+                      <p className={cn("mt-1.5 text-[11.5px] leading-relaxed", valuesBalanced ? "text-ds-ok" : "text-ds-info")}>
                         {valuesBalanced
                           ? "Os itens lançados somam exatamente o total oficial da fatura."
                           : difference === null
@@ -1592,7 +1593,7 @@ export function CardStatementsWorkspace({
                               : "A soma dos lançamentos está acima do total oficial. Revise duplicidades, créditos e estornos."}
                       </p>
                       {!valuesBalanced && canImportCardStatements ? (
-                        <Button variant="outline" size="sm" className="mt-2.5 h-8 rounded-lg border-violet-300 bg-white text-[11px] font-extrabold text-violet-700 hover:bg-violet-50 hover:text-violet-800" disabled={importingStatement} onClick={() => cardStatementFileRef.current?.click()}>
+                        <Button variant="outline" size="sm" className="mt-2.5 h-8 rounded-lg border-ds-border bg-white text-[11px] font-extrabold text-ds-info hover:bg-ds-info-bg hover:text-ds-info" disabled={importingStatement} onClick={() => cardStatementFileRef.current?.click()}>
                           {importingStatement ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
                           Analisar fatura com a Mel
                         </Button>
@@ -1602,8 +1603,8 @@ export function CardStatementsWorkspace({
                     <p className="mt-4 text-[8.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Para fechar a fatura</p>
                     <div className="mt-2">
                       {closeChecklist.map((item) => (
-                        <div key={item.label} className="flex items-start gap-2.5 border-b border-[#f7f4ee] py-2 last:border-b-0">
-                          <span className={cn("mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-extrabold text-white", item.done ? "bg-emerald-500" : "bg-amber-500")}>
+                        <div key={item.label} className="flex items-start gap-2.5 border-b border-ds-divider py-2 last:border-b-0">
+                          <span className={cn("mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-extrabold text-white", item.done ? "bg-ds-ok" : "bg-ds-warn")}>
                             {item.done ? "✓" : "!"}
                           </span>
                           <div className="min-w-0">
@@ -1618,8 +1619,8 @@ export function CardStatementsWorkspace({
                       <Button
                         className={cn(
                           "mt-3.5 h-11 w-full rounded-xl text-[13px] font-extrabold",
-                          statementStatus === "paid" && "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50",
-                          statementStatus === "closed" && "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50"
+                          statementStatus === "paid" && "border border-ds-border bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg",
+                          statementStatus === "closed" && "border border-ds-border bg-ds-info-bg text-ds-info hover:bg-ds-info-bg"
                         )}
                         disabled={statementStatus !== "open" || !canClose || working === "statement"}
                         onClick={() => void closeStatement()}
@@ -1633,7 +1634,7 @@ export function CardStatementsWorkspace({
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl border-[#e9e5dc] shadow-sm">
+                <Card className="rounded-2xl border-ds-border shadow-sm">
                   <CardContent className="p-[18px] sm:p-[18px]">
                     <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Pagamento no extrato</CardTitle>
                     <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
@@ -1647,7 +1648,7 @@ export function CardStatementsWorkspace({
                     </p>
 
                     {statementStatus === "paid" ? (
-                      <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-700">
+                      <div className="mt-3 rounded-xl border border-ds-border bg-ds-ok-bg p-3 text-ds-ok">
                         <p className="flex items-center gap-2 text-xs font-extrabold"><CheckCircle2 className="h-4 w-4" />Pagamento conciliado</p>
                         <p className="mt-1.5 text-[11.5px] leading-relaxed">
                           Conciliado em {toDate(selectedStatement?.paidAt) ? format(toDate(selectedStatement?.paidAt)!, "dd/MM/yyyy") : "data não informada"} · {selectedGroup.lines.length} despesas liquidadas pela fatura.
@@ -1656,7 +1657,7 @@ export function CardStatementsWorkspace({
                     ) : !canReconcileCardStatements ? (
                       <p className="mt-3 rounded-xl bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">Seu perfil pode consultar a fatura, mas não conciliar o pagamento bancário.</p>
                     ) : statementStatus !== "closed" ? null : paymentCandidates.length === 0 ? (
-                      <div className="mt-3 rounded-xl border bg-[#faf9f6] p-3 text-xs text-muted-foreground">
+                      <div className="mt-3 rounded-xl border bg-ds-input p-3 text-xs text-muted-foreground">
                         <RefreshCw className="mb-2 h-4 w-4" />
                         <p>Importe ou confira o extrato bancário para localizar o pagamento.</p>
                         {permissions.financial?.audits?.view ? (
@@ -1666,7 +1667,7 @@ export function CardStatementsWorkspace({
                         ) : null}
                       </div>
                     ) : paymentCandidates.slice(0, 3).map((candidate) => (
-                      <div key={candidate.transaction.id} className="mt-3 rounded-xl border bg-[#faf9f6] p-3">
+                      <div key={candidate.transaction.id} className="mt-3 rounded-xl border bg-ds-input p-3">
                         <div className="flex items-start justify-between gap-2.5">
                           <div className="min-w-0">
                             <p className="truncate text-xs font-extrabold">{String(candidate.transaction.description || "Pagamento da fatura")}</p>
@@ -1700,10 +1701,10 @@ export function CardStatementsWorkspace({
           setImportResolutionByLineId({});
         }
       }}>
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden rounded-[20px] border-[#e9e5dc] p-0 shadow-2xl sm:max-w-[820px]">
-          <DialogHeader className="shrink-0 border-b border-[#f0ece3] px-6 py-5 pr-14 text-left">
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden rounded-[20px] border-ds-border p-0 shadow-2xl sm:max-w-[820px]">
+          <DialogHeader className="shrink-0 border-b border-ds-divider px-6 py-5 pr-14 text-left">
             <DialogTitle className="flex items-center gap-2 text-[16.5px] font-extrabold tracking-tight">
-              <Sparkles className="h-4.5 w-4.5 text-violet-600" />
+              <Sparkles className="h-4.5 w-4.5 text-ds-info" />
               Revisar análise da Mel
             </DialogTitle>
             <DialogDescription className="mt-1.5 text-xs leading-relaxed">
@@ -1715,14 +1716,14 @@ export function CardStatementsWorkspace({
               <div className={cn(
                 "rounded-[13px] border px-[15px] py-[13px]",
                 importPreview.analysis.status === "ready"
-                  ? "border-emerald-200 bg-emerald-50/70"
+                  ? "border-ds-border bg-ds-ok-bg"
                   : importPreview.analysis.status === "blocked"
-                    ? "border-red-200 bg-red-50/70"
-                    : "border-amber-200 bg-amber-50/70",
+                    ? "border-ds-confirm-border bg-ds-danger-bg"
+                    : "border-ds-alert-border bg-ds-warn-bg",
               )}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="flex items-center gap-2 text-[12.5px] font-extrabold">
-                    <Sparkles className="h-4 w-4 text-violet-600" />
+                    <Sparkles className="h-4 w-4 text-ds-info" />
                     Análise da Mel
                   </p>
                   <span className="rounded-full border bg-white/80 px-2.5 py-0.5 text-[9.5px] font-extrabold">
@@ -1739,7 +1740,7 @@ export function CardStatementsWorkspace({
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[13px] border border-[#e9e5dc] bg-[#faf9f6] px-[15px] py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[13px] border border-ds-border bg-ds-input px-[15px] py-3">
                 <div className="min-w-0">
                   <p className="truncate text-[12.5px] font-extrabold">{importPreview.fileName}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -1749,7 +1750,7 @@ export function CardStatementsWorkspace({
                     {importPreview.cardLastDigits ? ` · cartão final ${importPreview.cardLastDigits}` : ""}
                   </p>
                   {importPreview.revision ? (
-                    <p className="mt-1 text-[10px] font-medium text-violet-700">
+                    <p className="mt-1 text-[10px] font-medium text-ds-info">
                       Versão {importPreview.revision.version} · arquivo original arquivado
                     </p>
                   ) : null}
@@ -1776,10 +1777,10 @@ export function CardStatementsWorkspace({
                 <div className={cn(
                   "rounded-xl border px-4 py-3 text-xs",
                   importPreview.revision.blockedReason === "paid_statement"
-                    ? "border-red-200 bg-red-50 text-red-800"
+                    ? "border-ds-confirm-border bg-ds-danger-bg text-ds-confirm-ink"
                     : importPreview.revision.requiresReopen
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : "border-violet-200 bg-violet-50/70 text-violet-900",
+                      ? "border-ds-alert-border bg-ds-warn-bg text-ds-alert-ink"
+                      : "border-ds-border bg-ds-info-bg text-ds-info",
                 )}>
                   <p className="font-extrabold">
                     {importPreview.revision.exactFileReimport && !importPreview.revision.hasChanges
@@ -1812,7 +1813,7 @@ export function CardStatementsWorkspace({
               ) : null}
 
               {importPreview.revision?.removed.length ? (
-                <details className="rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3 text-xs text-rose-900">
+                <details className="rounded-xl border border-ds-confirm-border bg-ds-danger-bg px-4 py-3 text-xs text-ds-confirm-ink">
                   <summary className="cursor-pointer font-semibold">
                     {importPreview.revision.removed.length} item(ns) ausente(s) na nova versão
                   </summary>
@@ -1820,7 +1821,7 @@ export function CardStatementsWorkspace({
                     {importPreview.revision.removed.slice(0, 20).map((line) => (
                       <p key={line.fingerprint}>{line.description} · {formatCurrency(line.amount)}</p>
                     ))}
-                    <p className="pt-1 text-rose-700">
+                    <p className="pt-1 text-ds-danger">
                       Se algum item novo substituir um destes, escolha a despesa anterior no vínculo para preservar o tratamento.
                     </p>
                   </div>
@@ -1828,13 +1829,13 @@ export function CardStatementsWorkspace({
               ) : null}
 
               {importPreview.warnings.length > 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                <div className="rounded-xl border border-ds-alert-border bg-ds-warn-bg px-4 py-3 text-xs text-ds-alert-ink">
                   {importPreview.warnings.map((warning) => <p key={warning}>• {warning}</p>)}
                 </div>
               ) : null}
 
               {historicalImportAvailable ? (
-                <div className="rounded-xl border border-stone-300 bg-stone-100/80 px-4 py-3 text-xs text-stone-800">
+                <div className="rounded-xl border border-ds-border bg-ds-muted px-4 py-3 text-xs text-ds-ink-2">
                   <p className="font-extrabold">Competência anterior ao início da DRE</p>
                   <p className="mt-1.5 leading-relaxed">
                     Esta fatura pode ser registrada integralmente como histórico, sem auditoria item a item. As compras permanecem em {format(new Date(`${selectedGroup!.monthKey}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })} e a série da DRE começa em {format(new Date(`${FINANCIAL_DRE_START_MONTH_KEY}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })}.
@@ -1842,8 +1843,8 @@ export function CardStatementsWorkspace({
                 </div>
               ) : null}
 
-              <div className="max-h-[380px] overflow-auto rounded-[13px] border border-[#e9e5dc]">
-                <div className="grid min-w-[750px] grid-cols-[26px_58px_minmax(0,1fr)_232px_92px] gap-2.5 border-b bg-[#faf9f6] px-[13px] py-2.5 text-[8.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="max-h-[380px] overflow-auto rounded-[13px] border border-ds-border">
+                <div className="grid min-w-[750px] grid-cols-[26px_58px_minmax(0,1fr)_232px_92px] gap-2.5 border-b bg-ds-input px-[13px] py-2.5 text-[8.5px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
                   <span />
                   <span>Data</span>
                   <span>Descrição</span>
@@ -1861,7 +1862,7 @@ export function CardStatementsWorkspace({
                   const match = importExpenseMatchByLineId.get(line.id);
                   const resolution = importResolutionByLineId[line.id] || "create";
                   return (
-                    <div key={line.id} className={cn("grid min-w-[750px] grid-cols-[26px_58px_minmax(0,1fr)_232px_92px] items-start gap-2.5 border-b px-[13px] py-3 text-xs last:border-b-0", duplicate ? "bg-muted/35 text-muted-foreground" : selected ? "bg-white" : "bg-[#fbfaf7] hover:bg-primary/[0.03]")}>
+                    <div key={line.id} className={cn("grid min-w-[750px] grid-cols-[26px_58px_minmax(0,1fr)_232px_92px] items-start gap-2.5 border-b px-[13px] py-3 text-xs last:border-b-0", duplicate ? "bg-muted/35 text-muted-foreground" : selected ? "bg-white" : "bg-ds-input hover:bg-primary/[0.03]")}>
                       <input
                         type="checkbox"
                         aria-label={`Selecionar ${line.description}`}
@@ -1886,14 +1887,14 @@ export function CardStatementsWorkspace({
                               ].filter(Boolean).join(" · ")}
                         </span>
                         {!duplicate && line.reviewNotes.length > 0 ? (
-                          <span className="mt-0.5 block truncate text-[10px] text-amber-700">{line.reviewNotes.join(" · ")}</span>
+                          <span className="mt-0.5 block truncate text-[10px] text-ds-warn">{line.reviewNotes.join(" · ")}</span>
                         ) : null}
                       </span>
                       <span className="min-w-0">
                         {duplicate ? (
                           <span className="text-[10px]">Já vinculada</span>
                         ) : revision?.status === "changed" && revision.previousExpenseId ? (
-                          <div className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-2 text-[10px] text-violet-800">
+                          <div className="rounded-lg border border-ds-border bg-ds-info-bg px-2.5 py-2 text-[10px] text-ds-info">
                             <p className="font-semibold">Reaproveitar tratamento anterior</p>
                             <p className="mt-0.5 truncate">
                               {revision.previousDescription || "Despesa vinculada"} · {formatCurrency(revision.previousAmount || 0)} → {formatCurrency(line.amount)}
@@ -1927,7 +1928,7 @@ export function CardStatementsWorkspace({
                             {match?.confidence ? (
                               <span className={cn(
                                 "mt-1 block truncate text-[9.5px]",
-                                match.ambiguous ? "text-amber-700" : match.confidence === "high" ? "text-emerald-700" : "text-sky-700",
+                                match.ambiguous ? "text-ds-warn" : match.confidence === "high" ? "text-ds-ok" : "text-ds-info",
                               )}>
                                 {match.ambiguous
                                   ? "Mais de uma correspondência possível"
@@ -1948,18 +1949,18 @@ export function CardStatementsWorkspace({
               </div>
 
               {importPreview.excludedEntries.length > 0 ? (
-                <details className="rounded-[13px] border border-[#e9e5dc] bg-[#fbfaf7] px-[15px] py-3 text-xs">
+                <details className="rounded-[13px] border border-ds-border bg-ds-input px-[15px] py-3 text-xs">
                   <summary className="cursor-pointer text-[11.5px] font-extrabold text-muted-foreground">
                     {importPreview.excludedEntries.length} movimento(s) separados das despesas
                   </summary>
                   {importCreditTotal > 0 ? (
-                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">
+                    <p className="mt-2 text-[10.5px] font-semibold text-ds-ok">
                       Créditos e estornos reduzirão o total da fatura em {formatCurrency(importCreditTotal)}.
                     </p>
                   ) : null}
                   <div className="mt-2.5 space-y-1.5">
                     {importPreview.excludedEntries.map((entry) => (
-                      <div key={entry.sourceReference} className="flex items-start justify-between gap-3 rounded-lg border border-[#f0ece3] bg-white px-3 py-2">
+                      <div key={entry.sourceReference} className="flex items-start justify-between gap-3 rounded-lg border border-ds-divider bg-white px-3 py-2">
                         <div className="min-w-0">
                           <p className="truncate text-[11.5px] font-bold">{entry.description}</p>
                           <p className="mt-0.5 text-[10px] text-muted-foreground">
@@ -1974,7 +1975,7 @@ export function CardStatementsWorkspace({
               ) : null}
             </div>
           ) : null}
-          <DialogFooter className="shrink-0 flex-col gap-3 border-t border-[#f0ece3] bg-[#faf9f6] px-6 py-[15px] sm:flex-row sm:items-center sm:justify-between">
+          <DialogFooter className="shrink-0 flex-col gap-3 border-t border-ds-divider bg-ds-input px-6 py-[15px] sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-md text-left text-[11.5px] leading-relaxed text-muted-foreground">
               No fluxo normal, os itens entram pendentes de revisão e conciliação. O registro histórico dispensa a conciliação, mas não efetua pagamentos.
             </p>
@@ -1983,7 +1984,7 @@ export function CardStatementsWorkspace({
               {historicalImportAvailable ? (
                 <Button
                   variant="outline"
-                  className="h-10 rounded-xl border-stone-400 bg-stone-100 px-4 text-[12.5px] font-extrabold text-stone-800 hover:bg-stone-200"
+                  className="h-10 rounded-xl border-ds-border bg-ds-muted px-4 text-[12.5px] font-extrabold text-ds-ink-2 hover:bg-ds-muted"
                   disabled={importingStatement || availableImportLines.length === 0 || importPreview?.analysis.status === "blocked" || importBlocked || importNeedsUnavailableReopen}
                   onClick={() => void confirmCardStatementImport("historical_before_dre")}
                 >

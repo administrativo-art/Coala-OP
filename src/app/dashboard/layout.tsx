@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { GlassSidebar } from '@/components/sidebar';
+import { NavTrailProvider } from '@/components/navigation/nav-trail';
 import { Header } from '@/components/header';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -280,9 +281,14 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[var(--bg)]">
+      <NavTrailProvider>
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
-      <div className="min-w-0 flex flex-1 flex-col lg:pl-[56px]">
-        <Header tasks={taskNotifications} onMenuClick={() => setIsSidebarOpen(true)} />
+      <div className="min-w-0 flex flex-1 flex-col lg:pl-[88px]">
+        <Header
+          tasks={taskNotifications}
+          onMenuClick={() => setIsSidebarOpen(true)}
+          gutterClassName={personalSection ? "mx-4" : "mx-4 md:mx-8"}
+        />
         <main
           className={`min-w-0 flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 ${personalSection ? 'personal-section-density' : ''}`}
           data-section={personalSection ? 'personal' : undefined}
@@ -315,6 +321,7 @@ export default function DashboardLayout({
           onLogout={logout}
         />
       )}
+      </NavTrailProvider>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Grip, Images, Loader2, Play, RefreshCw } from "lucide-react";
+import { Grip, Images, Play } from "lucide-react";
 
 import {
   instagramStatusLabels,
@@ -10,6 +10,12 @@ import {
   type InstagramPublicationFormat,
   type InstagramScheduleListItem,
 } from "./contracts";
+import { Segmented } from "@/components/patterns/segmented";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
+import { cn } from "@/lib/utils";
+import { HeroChip, PulseHero } from "./hero-panel";
+import { formatTone, publicationStatusVariant } from "./format-tone";
 import { ProtectedMedia } from "./protected-media";
 import {
   dateKeyInBelem,
@@ -122,61 +128,57 @@ export function FeedGridView({
     }
   }
 
+  const scheduledCount = gridItems.filter((entry) => entry.source === "schedule").length;
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="instagram-feed-grid-title">
-      <header className="flex flex-wrap items-center gap-3 border-b border-[#EADFD3] px-4 py-4 md:px-7">
-        <div>
-          <h1 id="instagram-feed-grid-title" className="text-[22px] font-extrabold tracking-tight text-[#4A1A04]">Grade do feed</h1>
-          <p className="text-[13px] text-[#7A5646]">Publicações atuais do Instagram e conteúdos já programados.</p>
-        </div>
-        <div className="ml-auto flex rounded-[9px] bg-[#F3E8DC] p-[3px] text-[13px]">
-          <button type="button" aria-pressed={showReels} onClick={() => setShowReels(true)} className={`rounded-[7px] px-3 py-1.5 ${showReels ? "bg-white font-extrabold shadow-sm" : "font-medium"}`}>
-            Feed + Reels
-          </button>
-          <button type="button" aria-pressed={!showReels} onClick={() => setShowReels(false)} className={`rounded-[7px] px-3 py-1.5 ${!showReels ? "bg-white font-extrabold shadow-sm" : "font-medium"}`}>
-            Só feed
-          </button>
-        </div>
-      </header>
+    <section className="flex min-h-0 flex-1 flex-col gap-5 bg-ds-warm px-4 py-5 font-ds text-ds-ink md:px-7" aria-labelledby="instagram-feed-grid-title">
+      <PulseHero
+        kicker="Programação do Instagram"
+        title="Grade do feed"
+        titleId="instagram-feed-grid-title"
+        subtitle="Publicações atuais do Instagram e conteúdos já programados."
+        actions={<Button type="button" variant="on-dark-secondary" size="xl" onClick={onRefreshLive} disabled={liveLoading} aria-label="Atualizar grade do Instagram">{liveLoading ? "Atualizando…" : "Atualizar grade"}</Button>}
+        compactActions={<Button type="button" variant="on-dark-secondary" size="md" onClick={onRefreshLive} disabled={liveLoading} aria-label="Atualizar grade do Instagram">{liveLoading ? "Atualizando…" : "Atualizar grade"}</Button>}
+        chips={(
+          <>
+            <HeroChip value={gridItems.length - scheduledCount} label="Já publicadas" />
+            <HeroChip value={scheduledCount} label="Na programação" tone="info" />
+            {mix.map(({ format, count }) => <HeroChip key={format} value={count} label={formatTheme[format].label} />)}
+          </>
+        )}
+      />
 
-      <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="overflow-auto px-4 py-6 md:px-7">
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmented
+          value={showReels ? "all" : "feed"}
+          onChange={(value) => setShowReels(value === "all")}
+          aria-label="Conteúdo da grade"
+          options={[{ value: "all", label: "Feed + Reels" }, { value: "feed", label: "Só feed" }]}
+        />
+        <span className="text-[13px] text-ds-ink-muted">
+          @{profile?.username || "coalashakes"} · {liveLoading ? "atualizando…" : `${publishedItems.length} publicações recentes carregadas`}
+        </span>
+      </div>
+
+      {liveError && (
+        <div role="status" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[12.5px] font-semibold text-ds-confirm-ink">
+          {liveError} A programação local continua disponível.
+        </div>
+      )}
+
+      <div className="grid min-h-0 flex-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 overflow-auto">
           <div className="mx-auto w-full max-w-[500px]">
-            <div className="mb-4 flex items-center gap-3 rounded-2xl border border-[#EADFD3] bg-white p-3 shadow-sm">
-              {profile?.profilePictureUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profile.profilePictureUrl} alt="" referrerPolicy="no-referrer" className="h-11 w-11 rounded-full object-cover" />
-              ) : (
-                <div className="grid h-11 w-11 place-items-center rounded-full bg-[#FDE3EF] text-sm font-extrabold text-[#D90F6F]">C</div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-extrabold text-[#4A1A04]">@{profile?.username || "coalashakes"}</div>
-                <div className="text-[12px] text-[#7A5646]">
-                  {liveLoading ? "Atualizando Instagram…" : `${publishedItems.length} publicações recentes carregadas`}
-                </div>
-              </div>
-              <button type="button" onClick={onRefreshLive} disabled={liveLoading} className="grid h-9 w-9 place-items-center rounded-lg border border-[#EADFD3] text-[#7A5646] hover:border-[#F462A7] disabled:opacity-50" aria-label="Atualizar grade do Instagram">
-                <RefreshCw className={`h-4 w-4 ${liveLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-              </button>
-            </div>
-
-            {liveError && (
-              <div role="status" className="mb-4 rounded-xl border border-[#E8B9B3] bg-[#FBE4E1] px-3 py-2 text-[12px] font-semibold text-[#A52E24]">
-                {liveError} A programação local continua disponível.
-              </div>
-            )}
-
             {gridItems.length === 0 ? (
-              <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-[#D9C8B6] bg-white px-8 text-center text-[14px] text-[#7A5646]">
-                {liveLoading ? <Loader2 className="h-6 w-6 animate-spin" aria-label="Carregando grade" /> : "Nenhuma publicação encontrada."}
+              <div className="grid min-h-72 place-items-center rounded-ds-card-lg border border-dashed border-ds-border-input px-8 text-center text-[14px] text-ds-ink-muted">
+                {liveLoading ? <span role="status">Carregando grade…</span> : "Nenhuma publicação encontrada."}
               </div>
             ) : (
-              <div className="grid h-fit w-full grid-cols-3 gap-[3px] bg-white" aria-busy={pending || liveLoading}>
+              <div className="grid h-fit w-full grid-cols-3 gap-[3px] overflow-hidden rounded-ds-card bg-white" aria-busy={pending || liveLoading}>
                 {gridItems.map((entry) => {
                   const selectedTile = selected?.key === entry.key;
                   const scheduled = entry.source === "schedule";
                   const editable = scheduled && isScheduleEditable(entry.item);
-                  const theme = formatTheme[entry.format];
                   return (
                     <button
                       key={entry.key}
@@ -193,13 +195,12 @@ export function FeedGridView({
                       onDragLeave={() => setOverKey((current) => current === entry.key ? null : current)}
                       onDrop={(event) => { event.preventDefault(); void dropOn(entry, event.dataTransfer.getData("text/plain")); }}
                       onClick={() => setSelectedKey(entry.key)}
-                      className="relative aspect-square overflow-hidden bg-[#F3E8DC] text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#D90F6F]"
-                      style={{
-                        outline: overKey === entry.key ? "3px dashed #D90F6F" : selectedTile ? "3px solid #D90F6F" : scheduled ? "1px solid #F4A6D0" : "none",
-                        outlineOffset: "-3px",
-                        opacity: draggedId === (scheduled ? entry.item.id : "") ? 0.5 : 1,
-                        background: theme.background,
-                      }}
+                      className={cn(
+                        "relative aspect-square -outline-offset-[3px] overflow-hidden text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ds-accent-ink",
+                        formatTone[entry.format].tile,
+                        overKey === entry.key ? "outline outline-[3px] outline-dashed outline-ds-accent-ink" : selectedTile ? "outline outline-[3px] outline-ds-accent-ink" : scheduled && "outline outline-1 outline-ds-accent",
+                        draggedId === (scheduled ? entry.item.id : "") && "opacity-50"
+                      )}
                     >
                       {scheduled ? (
                         <ProtectedMedia url={entry.item.media[0]?.previewUrl ?? null} kind={entry.item.media[0]?.kind ?? "image"} alt={`Prévia de ${entryTitle(entry)}`} />
@@ -211,11 +212,11 @@ export function FeedGridView({
                       {entry.format === "reel" && <Play className="absolute right-2 top-2 h-5 w-5 fill-white text-white drop-shadow" aria-label="Reel" />}
                       {scheduled && (
                         <>
-                          <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-[#4A1A04]/90 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                          <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-ds-sm bg-ds-dark/90 px-1.5 py-0.5 font-ds-mono text-[10px] font-bold text-white">
                             {editable && <Grip className="h-2.5 w-2.5" aria-hidden="true" />}
                             {shortDate(dateKeyInBelem(entry.item.scheduledAt))}
                           </span>
-                          <span className="absolute inset-x-1.5 bottom-1.5 line-clamp-2 rounded bg-white/95 px-1.5 py-1 text-[10px] font-bold leading-tight text-[#4A1A04]">{entryTitle(entry)}</span>
+                          <span className="absolute inset-x-1.5 bottom-1.5 line-clamp-2 rounded-ds-sm bg-white/95 px-1.5 py-1 text-[10px] font-bold leading-tight text-ds-ink">{entryTitle(entry)}</span>
                         </>
                       )}
                     </button>
@@ -223,59 +224,59 @@ export function FeedGridView({
                 })}
               </div>
             )}
-            <p className="mt-3 text-center text-[11px] leading-4 text-[#7A5646]">A Meta retorna as publicações por data. Fixações feitas no aplicativo podem aparecer em outra posição no perfil.</p>
+            <p className="mt-3 text-center text-[11px] leading-4 text-ds-ink-muted">A Meta retorna as publicações por data. Fixações feitas no aplicativo podem aparecer em outra posição no perfil.</p>
           </div>
         </div>
 
-        <aside className="border-t border-[#EADFD3] bg-white p-5 xl:border-l xl:border-t-0 xl:p-6">
+        <aside className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-5 xl:self-start xl:p-6">
           {selected ? (
             <div className="flex h-full flex-col gap-5">
               <div>
-                <div className="text-[10px] font-extrabold uppercase tracking-[0.09em] text-[#7A5646]">{selected.source === "instagram" ? "Já publicado" : "Na programação"}</div>
-                <h2 className="mt-1 text-[20px] font-extrabold leading-tight text-[#4A1A04]">{entryTitle(selected)}</h2>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-[#7A5646]">
-                  {longDate(dateKeyInBelem(selected.date))} {timeInBelem(selected.date)} · {formatTheme[selected.format].label}
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">{selected.source === "instagram" ? "Já publicado" : "Na programação"}</p>
+                <h2 className="mt-1 text-[20px] font-extrabold leading-tight">{entryTitle(selected)}</h2>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-ds-ink-muted">
+                  {longDate(dateKeyInBelem(selected.date))} <span className="font-ds-mono">{timeInBelem(selected.date)}</span> · {formatTheme[selected.format].label}
                   {selected.source === "schedule" && (
-                    <span className="rounded-full px-2 py-0.5 text-[11px] font-extrabold" style={{ background: formatTheme[selected.format].background, color: formatTheme[selected.format].ink }}>{instagramStatusLabels[selected.item.status]}</span>
+                    <StatusPill variant={publicationStatusVariant[selected.item.status]}>{instagramStatusLabels[selected.item.status]}</StatusPill>
                   )}
                 </div>
-                {selected.item.caption && <p className="mt-4 line-clamp-6 whitespace-pre-line text-[13px] leading-5 text-[#7A5646]">{selected.item.caption}</p>}
+                {selected.item.caption && <p className="mt-4 line-clamp-6 whitespace-pre-line text-[13px] leading-5 text-ds-ink-muted">{selected.item.caption}</p>}
               </div>
 
               <div className="space-y-2.5">
-                <h3 className="text-[15px] font-extrabold text-[#4A1A04]">Teste de vizinhança</h3>
-                <p className="text-[13px] leading-5 text-[#7A5646]">Compara a publicação com as seis anteriores. Evite três conteúdos do mesmo formato em sequência.</p>
+                <h3 className="text-[15px] font-extrabold">Teste de vizinhança</h3>
+                <p className="text-[13px] leading-5 text-ds-ink-muted">Compara a publicação com as seis anteriores. Evite três conteúdos do mesmo formato em sequência.</p>
                 <div className="flex gap-1" aria-label="Sequência de formatos">
                   {[selected, ...neighbors].map((entry) => (
-                    <span key={entry.key} className="h-11 flex-1 rounded" style={{ background: formatTheme[entry.format].background, outline: entry.key === selected.key ? "2px solid #D90F6F" : "none", outlineOffset: "2px" }} title={formatTheme[entry.format].label} />
+                    <span key={entry.key} className={cn("h-11 flex-1 rounded-ds-sm", formatTone[entry.format].tile, entry.key === selected.key && "outline outline-2 outline-offset-2 outline-ds-accent-ink")} title={formatTheme[entry.format].label} />
                   ))}
                 </div>
-                <div className={`rounded-[9px] px-3 py-2.5 text-[13px] font-extrabold ${repeatsFormat ? "bg-[#FCF1DD] text-[#B7791F]" : "bg-[#E2F4EA] text-[#1F8A5B]"}`}>
+                <div className={cn("rounded-ds-btn px-3 py-2.5 text-[13px] font-extrabold", repeatsFormat ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-ok-bg text-ds-ok")}>
                   {repeatsFormat ? `Atenção: 3 ${formatTheme[selected.format].label} seguidos` : "Passa: o formato varia das publicações vizinhas"}
                 </div>
               </div>
 
               <div className="space-y-2.5">
-                <h3 className="text-[15px] font-extrabold text-[#4A1A04]">Formatos na grade</h3>
+                <h3 className="text-[15px] font-extrabold">Formatos na grade</h3>
                 {mix.map(({ format, count }) => (
                   <div key={format} className="grid grid-cols-[90px_1fr_28px] items-center gap-2 text-[13px]">
                     <span>{formatTheme[format].label}</span>
-                    <span className="h-2 overflow-hidden rounded bg-[#F3E8DC]"><span className="block h-full rounded" style={{ width: `${gridItems.length ? count / gridItems.length * 100 : 0}%`, background: formatTheme[format].dot }} /></span>
-                    <strong className="text-right">{count}</strong>
+                    <span className="h-2 overflow-hidden rounded bg-ds-muted"><span className={cn("block h-full rounded", formatTone[format].dot)} style={{ width: `${gridItems.length ? count / gridItems.length * 100 : 0}%` }} /></span>
+                    <strong className="text-right font-ds-mono">{count}</strong>
                   </div>
                 ))}
               </div>
 
               {selected.source === "schedule" ? (
-                <button type="button" onClick={() => onOpen(selected.item)} className="mt-auto rounded-[9px] border border-[#EADFD3] bg-white px-3 py-2.5 text-[13px] font-bold hover:border-[#F462A7]">Abrir detalhes</button>
+                <Button type="button" variant="ds-secondary" size="md" onClick={() => onOpen(selected.item)} className="mt-auto">Abrir detalhes</Button>
               ) : (
-                <a href={selected.item.permalink} target="_blank" rel="noreferrer" className="mt-auto flex items-center justify-center gap-2 rounded-[9px] border border-[#EADFD3] bg-white px-3 py-2.5 text-[13px] font-bold hover:border-[#F462A7]">
-                  Ver no Instagram <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                </a>
+                <Button asChild variant="ds-secondary" size="md" className="mt-auto">
+                  <a href={selected.item.permalink} target="_blank" rel="noreferrer">Ver no Instagram ↗</a>
+                </Button>
               )}
             </div>
           ) : (
-            <div className="text-[14px] text-[#7A5646]">Selecione uma publicação para conferir a composição da grade.</div>
+            <div className="text-[14px] text-ds-ink-muted">Selecione uma publicação para conferir a composição da grade.</div>
           )}
         </aside>
       </div>

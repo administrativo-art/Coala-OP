@@ -30,7 +30,7 @@ function getAvatarUploadErrorMessage(error: unknown) {
   return 'Tente novamente.';
 }
 
-export function UserProfile() {
+export function UserProfile({ variant = "avatar", collapsed = false }: { variant?: "avatar" | "card"; collapsed?: boolean }) {
   const { user, logout, updateUser } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles } = useProfiles();
@@ -100,25 +100,53 @@ export function UserProfile() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="rounded-full" disabled={isUploadingPhoto}>
-            <Avatar className="h-8 w-8">
-              {isUploadingPhoto ? (
-                <AvatarFallback>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </AvatarFallback>
-              ) : user.avatarUrl ? (
-                <AvatarImage src={user.avatarUrl} alt={user.username} />
-              ) : (
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {user.username?.charAt(0).toUpperCase()}
-                </AvatarFallback>
+          {variant === "card" ? (
+            <button
+              type="button"
+              disabled={isUploadingPhoto}
+              title={collapsed ? `${user.username} · ${profileName}` : undefined}
+              className={`group/user flex w-full items-center gap-2.5 rounded-ds-btn-lg border border-white/10 bg-white/[0.06] text-left text-ds-on-dark transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker ${collapsed ? "justify-center p-1.5" : "p-2"}`}
+            >
+              <Avatar className={`shrink-0 ring-2 ring-white/10 transition-[width,height] duration-300 motion-reduce:transition-none ${collapsed ? "h-9 w-9" : "h-10 w-10"}`}>
+                {isUploadingPhoto ? (
+                  <AvatarFallback><Loader2 className="h-4 w-4 animate-spin" /></AvatarFallback>
+                ) : user.avatarUrl ? (
+                  <AvatarImage src={user.avatarUrl} alt={user.username} className="object-cover" />
+                ) : (
+                  <AvatarFallback className="bg-ds-accent text-[13px] font-extrabold text-ds-dark">
+                    {(user.username ?? "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("")}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              {!collapsed && (
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13.5px] font-extrabold leading-tight">{user.username}</span>
+                  <span className="block truncate text-[11.5px] text-ds-on-dark-muted">{user.jobRoleName || profileName}</span>
+                </span>
               )}
-            </Avatar>
-            <span className="sr-only">Menu do usuário</span>
-          </Button>
+              <span className="sr-only">Menu do usuário</span>
+            </button>
+          ) : (
+            <Button variant="ghost" size="icon" className="rounded-full" disabled={isUploadingPhoto}>
+              <Avatar className="h-8 w-8">
+                {isUploadingPhoto ? (
+                  <AvatarFallback>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </AvatarFallback>
+                ) : user.avatarUrl ? (
+                  <AvatarImage src={user.avatarUrl} alt={user.username} />
+                ) : (
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    {user.username?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              <span className="sr-only">Menu do usuário</span>
+            </Button>
+          )}
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent align={variant === "card" ? "start" : "end"} side={variant === "card" ? "right" : "bottom"} className="w-64">
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">{user.username}</p>

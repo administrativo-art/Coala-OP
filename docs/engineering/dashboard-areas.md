@@ -52,7 +52,7 @@ Navegação financeira: Despesas é entrada direta; **Conciliação e fechamento
 
 ### `stock` — menu de módulos
 
-[`stock/page.tsx`](../../src/app/dashboard/stock/page.tsx) renderiza [`stock-management.tsx`](../../src/components/stock-management.tsx). Esse componente decide quais atalhos aparecem por `permissions.stock.*`, `permissions.purchasing?.view` e `permissions.reposition.view`. Ele é navegação; transferência, contagem, devolução, reposição e análise são subfluxos. Confirme mutação na subrota, hook e API indicados em [compras e estoque](modules/commerce-stock.md).
+[`stock/page.tsx`](../../src/app/dashboard/stock/page.tsx) deixou de ser uma tela de atalhos (08/10/2026): o acesso ao estoque é pela barra lateral (grupo "Gestão de Estoque") e a rota apenas redireciona, por permissão, ao primeiro destino permitido (controle, contagem, reposição, análise, avarias, conversão ou compras), para não quebrar links antigos nem botões "Voltar". Transferência, contagem, devolução, reposição e análise são subfluxos. Confirme mutação na subrota, hook e API indicados em [compras e estoque](modules/commerce-stock.md).
 
 ### `audit` — auditoria de estoque
 
@@ -122,7 +122,7 @@ Navegação financeira: Despesas é entrada direta; **Conciliação e fechamento
 
 ### `settings` — configurações compostas
 
-[`settings/page.tsx`](../../src/app/dashboard/settings/page.tsx) agrupa cadastro, DP, perfis, metas, compras, finanças, IA e bio pública em abas/componentes. A página usa `PermissionGuard`, `DPRuntimeGuard` e múltiplas permissões `settings.*`, `dp.*`, `financial.*`, `pricing.*`. Escolha a aba efetiva e siga seu componente/rota; os dados não pertencem a uma coleção única. Consulte [plataforma e integrações](modules/platform-integrations.md) e o guia do domínio alterado.
+[`settings/page.tsx`](../../src/app/dashboard/settings/page.tsx) agrupa cadastro, DP, perfis, metas, compras, finanças e IA em abas/componentes (a bio pública fica em `/instagram-programacao`). A página usa `PermissionGuard`, `DPRuntimeGuard` e múltiplas permissões `settings.*`, `dp.*`, `financial.*`, `pricing.*`. Escolha a aba efetiva e siga seu componente/rota; os dados não pertencem a uma coleção única. Consulte [plataforma e integrações](modules/platform-integrations.md) e o guia do domínio alterado.
 
 ### `signage` — gestão de telas
 

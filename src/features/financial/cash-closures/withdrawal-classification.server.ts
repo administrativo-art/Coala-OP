@@ -12,12 +12,13 @@ import { canEditCashClosure } from "./state-machine";
 import type { CashClosure, CashClosureLine, CashClosureOperator } from "./types";
 import {
   MAX_WITHDRAWALS, assertEligibleWithdrawalExpense, assertWithdrawalSourceIntegrity,
-  sourceExpenseGuard, withdrawalClassificationSchema, withdrawalDocumentIdSchema,
+  changeReturnIsProven, preLinkedChangeCents, sourceExpenseGuard, withdrawalClassificationSchema, withdrawalDocumentIdSchema,
   withdrawalFailure, withdrawalSources,
   type WithdrawalClassification, type WithdrawalSource,
 } from "./withdrawal-classification";
 
 const COLLECTION = FINANCIAL_COLLECTIONS.sourceSettlements;
+export const LOCAL_PURCHASE_WITHDRAWAL_LINKS = "localPurchaseWithdrawalLinks";
 const EXPENSE_POSITIONS = new Set(["impostos_deducoes", "custos_variaveis", "pessoal", "despesas_operacionais", "ocupacao", "despesas_financeiras", "despesa_nao_operacional", "impostos_resultado"]);
 const MUTATED_FIELDS = ["workspaceId", "installments", "status", "paidAt", "paymentState", "settlementSummary", "plannedPaymentMethodType", "plannedPaymentMethodLabel", "sourceSettlement"];
 type Raw = Record<string, any>;
@@ -25,8 +26,19 @@ const closureRef = (id: string) => db.collection("cashClosures").doc(id);
 const claimRef = (id: string) => db.collection(COLLECTION).doc(id);
 const value = <T>(doc: FirebaseFirestore.DocumentSnapshot) => ({ ...doc.data(), id: doc.id }) as T;
 
-export function assertWithdrawalAccess(context: ServerUserContext, closure: CashClosure, action: "view" | "create" | "link" | "unlink") {
+/**
+ * `app-pre-link` é a conciliação automática: o operador escolheu a sangria no aplicativo e o
+ * sistema só confirma esse vínculo. Não exige permissão financeira de quem dispara, mas também
+ * não permite criar despesa, desvincular nem ligar qualquer outra despesa.
+ */
+export type WithdrawalAuthorization = "user" | "app-pre-link";
+
+export function assertWithdrawalAccess(context: ServerUserContext, closure: CashClosure, action: "view" | "create" | "link" | "unlink", authorization: WithdrawalAuthorization = "user") {
   if (closure.workspaceId !== context.workspace_id) withdrawalFailure("WORKSPACE", "Fechamento fora do workspace.", "AUTHORIZATION");
+  if (authorization === "app-pre-link") {
+    if (action !== "link") withdrawalFailure("FORBIDDEN", "A conciliação automática só confirma o vínculo feito no aplicativo.", "AUTHORIZATION");
+    return;
+  }
   if (!canUseCashClosure(context, action === "view" ? "view" : "edit", closure.kioskId)) {
     withdrawalFailure("FORBIDDEN", "Sem permissão para classificar sangrias nesta unidade.", "AUTHORIZATION");
   }
@@ -86,17 +98,35 @@ export async function assertNoOtherSettlement(transaction: Transaction, expenseI
   }
 }
 
+async function assertLocalPurchaseCandidate(transaction: Transaction, expenseId: string, expense: Raw, source: WithdrawalSource, changeReturnedCents: number) {
+  if (expense.originModule !== "local_purchase") return null;
+  const localPurchaseId = expense.localPurchaseId;
+  if (typeof localPurchaseId !== "string" || localPurchaseId !== expenseId || !withdrawalDocumentIdSchema.safeParse(localPurchaseId).success) {
+    withdrawalFailure("LOCAL_PURCHASE_INVALID", "A compra local não possui uma identidade financeira válida.");
+  }
+  const snapshot = await transaction.get(db.collection("localPurchases").doc(localPurchaseId));
+  const purchase = snapshot.data();
+  if (!snapshot.exists || purchase?.workspaceId !== source.workspaceId || purchase?.unitId !== source.unitId
+    || purchase?.status !== "awaiting_cash_withdrawal" || purchase?.fundingSource !== "cash_withdrawal"
+    || purchase?.withdrawalPreLink && purchase.withdrawalPreLink.sourceId !== source.sourceId
+    || !purchase?.withdrawalPreLink && purchase?.purchaseDate !== source.settledOn
+    || purchase?.totalCents !== source.amountCents - changeReturnedCents) {
+    withdrawalFailure("LOCAL_PURCHASE_STALE", "A compra local não está mais disponível para esta sangria.");
+  }
+  return snapshot.ref;
+}
+
 function assertOpenOperator(closure: CashClosure, operators: CashClosureOperator[], operatorId: string) {
   if (!canEditCashClosure(closure.status) || operators.some(operator => operator.operatorId === operatorId && operator.status === "approved")) {
     withdrawalFailure("REOPEN_REQUIRED", "Reabra a contagem deste operador antes de alterar a classificação da sangria.");
   }
 }
 
-async function loadTransactionClosure(transaction: Transaction, id: string, context: ServerUserContext, action: "view" | "create" | "link" | "unlink") {
+async function loadTransactionClosure(transaction: Transaction, id: string, context: ServerUserContext, action: "view" | "create" | "link" | "unlink", authorization: WithdrawalAuthorization = "user") {
   const ref = closureRef(id);
   const header = await transaction.get(ref);
   if (!header.exists) withdrawalFailure("NOT_FOUND", "Fechamento não encontrado.", "NOT_FOUND");
-  assertWithdrawalAccess(context, value<CashClosure>(header), action);
+  assertWithdrawalAccess(context, value<CashClosure>(header), action, authorization);
   const [lines, operators, classifications] = await Promise.all([
     transaction.get(ref.collection("lines").limit(351)),
     transaction.get(ref.collection("cashClosureOperators").limit(51)),
@@ -116,13 +146,29 @@ function publicClassification(row: WithdrawalClassification) {
     accountPlanId: row.accountPlanId, accountPlanName: row.accountPlanName,
     resultCenterId: row.resultCenterId, resultCenterName: row.resultCenterName,
     description: row.description, active: row.active, createdExpense: row.createdExpense,
+    changeReturnedCents: row.changeReturnedCents ?? 0,
     revision: row.revision, updatedAt: row.updatedAt };
+}
+
+/** Purchases the operator attached to a sangria in the app; a suggestion until the closure links it. */
+async function listWithdrawalPreLinks(sources: WithdrawalSource[]) {
+  if (!sources.length) return [];
+  const snapshots = await db.getAll(...sources.map(source => db.collection(LOCAL_PURCHASE_WITHDRAWAL_LINKS).doc(source.sourceId)));
+  return snapshots.flatMap(snapshot => {
+    const source = sources.find(row => row.sourceId === snapshot.id);
+    if (!snapshot.exists || !source || snapshot.get("workspaceId") !== source.workspaceId || snapshot.get("unitId") !== source.unitId) return [];
+    const totalCents = Number(snapshot.get("totalCents"));
+    return [{ sourceId: snapshot.id, expenseId: String(snapshot.get("purchaseId")),
+      supplierName: String(snapshot.get("supplierName") || "Compra local"),
+      resultCenterId: String(snapshot.get("resultCenterId") || ""),
+      totalCents, changeCents: source.amountCents - totalCents }];
+  });
 }
 
 export async function listWithdrawalClassifications(id: string, context: ServerUserContext) {
   if (!withdrawalDocumentIdSchema.safeParse(id).success) withdrawalFailure("ID_INVALID", "Fechamento inválido.", "VALIDATION");
   // Read-only transaction provides a coherent view without a GET write.
-  return db.runTransaction(async transaction => {
+  const listed = await db.runTransaction(async transaction => {
     const current = await loadTransactionClosure(transaction, id, context, "view");
     const result = withdrawalSources(current.closure, current.lines);
     return { closureId: id, sources: result.sources, issues: result.issues,
@@ -130,6 +176,7 @@ export async function listWithdrawalClassifications(id: string, context: ServerU
       limits: { withdrawals: MAX_WITHDRAWALS, candidatesPerPage: 25 },
     };
   }, { readOnly: true });
+  return { ...listed, preLinks: await listWithdrawalPreLinks(listed.sources) };
 }
 
 export async function listWithdrawalExpenseCandidates(id: string, sourceId: string, centerId: string, cursor: string | undefined, context: ServerUserContext) {
@@ -158,19 +205,20 @@ export async function listWithdrawalExpenseCandidates(id: string, sourceId: stri
       throw error;
     }
     return [{ id: doc.id, description: String(expense.description || "Despesa"), amountCents: source.amountCents,
+      localPurchase: expense.originModule === "local_purchase",
       competenceMonth: source.competenceMonth, accountPlanId: String(expense.accountPlan || expense.accountId || ""), resultCenterId: centerId }];
   });
   return { candidates, nextCursor: snapshot.size > 25 ? page.at(-1)!.id : null };
 }
 
-export async function classifyCashWithdrawal(id: string, raw: unknown, context: ServerUserContext) {
+export async function classifyCashWithdrawal(id: string, raw: unknown, context: ServerUserContext, authorization: WithdrawalAuthorization = "user") {
   const parsed = withdrawalClassificationSchema.safeParse(raw);
   if (!withdrawalDocumentIdSchema.safeParse(id).success || !parsed.success) {
     withdrawalFailure("INPUT_INVALID", "Dados de classificação inválidos.", "VALIDATION");
   }
   const input = parsed.data;
   return db.runTransaction(async transaction => {
-    const current = await loadTransactionClosure(transaction, id, context, input.action);
+    const current = await loadTransactionClosure(transaction, id, context, input.action, authorization);
     const { closure } = current;
     const reference = closureRef(id).collection("withdrawals").doc(input.sourceId);
     const previous = current.classifications.find(row => row.source.sourceId === input.sourceId);
@@ -197,6 +245,12 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
         withdrawalFailure("EXPENSE_CHANGED", "A despesa foi alterada por outro processo. Não é seguro desfazer automaticamente.");
       }
       await assertNoOtherSettlement(transaction, previous.expenseId, snapshot.data()!);
+      const localPurchaseRef = snapshot.get("originModule") === "local_purchase"
+        ? db.collection("localPurchases").doc(String(snapshot.get("localPurchaseId")))
+        : null;
+      if (localPurchaseRef && !(await transaction.get(localPurchaseRef)).exists) {
+        withdrawalFailure("LOCAL_PURCHASE_STALE", "A compra local vinculada não foi encontrada.");
+      }
       const inactive = { ...previous, active: false, updatedAt: now, updatedBy: context.decoded.uid };
       if (previous.createdExpense) {
         // Keep the protected origin and audit. A correction creates a new revision.
@@ -206,6 +260,13 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
         const restore: Raw = { ...previous.previousFields, updatedAt: Timestamp.now() };
         for (const key of previous.previousMissingFields) restore[key] = FieldValue.delete();
         transaction.update(expenseRef, restore);
+        if (localPurchaseRef) {
+          transaction.update(localPurchaseRef, {
+            status: "awaiting_cash_withdrawal",
+            withdrawalSettlement: FieldValue.delete(),
+            updatedAt: now,
+          });
+        }
       }
       transaction.set(reference, inactive);
       transaction.set(claimRef(input.sourceId), inactive);
@@ -237,10 +298,20 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
     const expenseRef = db.collection("expenses").doc(expenseId);
     const expenseSnapshot = await transaction.get(expenseRef);
     const oldExpense = expenseSnapshot.data() ?? {};
+    const changeReturnedCents = input.action === "link" ? preLinkedChangeCents(oldExpense, source) : 0;
     if (input.action === "link") {
       if (!expenseSnapshot.exists) withdrawalFailure("EXPENSE_NOT_FOUND", "Despesa não encontrada.", "NOT_FOUND");
-      assertEligibleWithdrawalExpense(oldExpense, source, WORKSPACE_ID);
+      if (authorization === "app-pre-link" && oldExpense.localPurchaseWithdrawalSourceId !== source.sourceId) {
+        withdrawalFailure("FORBIDDEN", "A conciliação automática só confirma o vínculo feito no aplicativo.", "AUTHORIZATION");
+      }
+      const acceptedWithSameChange = current.classifications.filter(row => row.active && row.source.sourceId !== source.sourceId
+        && (row.changeReturnedCents ?? 0) === changeReturnedCents).length;
+      if (changeReturnedCents > 0 && !changeReturnIsProven(current.lines, closure.date, changeReturnedCents, acceptedWithSameChange)) {
+        withdrawalFailure("CHANGE_NOT_RETURNED", `A nota é menor que a sangria: falta no PDV, neste dia, um suprimento de ${(changeReturnedCents / 100).toFixed(2).replace(".", ",")} devolvendo o troco ao caixa.`);
+      }
+      assertEligibleWithdrawalExpense(oldExpense, source, WORKSPACE_ID, changeReturnedCents);
       await assertNoOtherSettlement(transaction, expenseId, oldExpense);
+      await assertLocalPurchaseCandidate(transaction, expenseId, oldExpense, source, changeReturnedCents);
     } else if (expenseSnapshot.exists) withdrawalFailure("EXPENSE_COLLISION", "Já existe um registro para esta revisão; confira o vínculo.");
     const catalog = await readClassificationCatalog(transaction, source,
       input.action === "create" ? input.accountPlanId : String(oldExpense.accountPlan || oldExpense.accountId || ""),
@@ -248,7 +319,8 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
     const date = Timestamp.fromDate(new Date(`${source.settledOn}T12:00:00.000Z`));
     const patch: Raw = { workspaceId: source.workspaceId, status: "paid", paidAt: date, paymentState: "paid",
       plannedPaymentMethodType: "cash", plannedPaymentMethodLabel: "Dinheiro — sangria do PDV",
-      settlementSummary: sourceSettlementSummary(source.amountCents), sourceSettlement: source };
+      // The expense is what was actually spent; returned change is cash that went back to the till.
+      settlementSummary: sourceSettlementSummary(source.amountCents - changeReturnedCents), sourceSettlement: source };
     if (oldExpense.installments?.length === 1) {
       patch.installments = [{ ...oldExpense.installments[0], status: "paid", paidAt: date }];
     }
@@ -263,15 +335,32 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
       originModule: "cash_closure", supplier: "", createdBy: context.decoded.uid, createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     };
     const classification: WithdrawalClassification = { source, expenseId, ...catalog,
-      description: String(expense.description), createdExpense: input.action === "create", active: true, revision,
+      description: String(expense.description), createdExpense: input.action === "create", changeReturnedCents, active: true, revision,
       updatedAt: now, updatedBy: context.decoded.uid, expenseGuard: sourceExpenseGuard(expense),
       previousFields: Object.fromEntries(MUTATED_FIELDS.filter(key => key in oldExpense).map(key => [key, oldExpense[key]])),
       previousMissingFields: MUTATED_FIELDS.filter(key => !(key in oldExpense)) };
     transaction.set(expenseRef, expense);
+    if (input.action === "link" && oldExpense.originModule === "local_purchase"
+      && typeof oldExpense.localPurchaseId === "string"
+      && withdrawalDocumentIdSchema.safeParse(oldExpense.localPurchaseId).success) {
+      transaction.update(db.collection("localPurchases").doc(oldExpense.localPurchaseId), {
+        status: "reconciled",
+        withdrawalSettlement: {
+          sourceId: source.sourceId,
+          closureId: source.closureId,
+          expenseId,
+          settledOn: source.settledOn,
+          amountCents: source.amountCents - changeReturnedCents,
+          changeReturnedCents,
+        },
+        updatedAt: now,
+      });
+    }
     transaction.set(reference, classification);
     transaction.set(claimRef(source.sourceId), classification);
     transaction.update(closureRef(id), { withdrawalRevision: FieldValue.increment(1), updatedAt: now });
-    writeAudit(input.action === "create" ? "withdrawal_expense_created" : "withdrawal_expense_linked", expenseId);
+    writeAudit(input.action === "create" ? "withdrawal_expense_created"
+      : authorization === "app-pre-link" ? "withdrawal_expense_linked_by_app" : "withdrawal_expense_linked", expenseId);
     return { classification: publicClassification(classification), idempotent: false };
   });
 }
@@ -303,4 +392,35 @@ export async function assertWithdrawalsClassified(transaction: Transaction, clos
     }
     await readClassificationCatalog(transaction, source, classification.accountPlanId, classification.resultCenterId);
   }
+}
+
+/**
+ * Conciliação automática: transforma em vínculo definitivo cada pré-vínculo feito no aplicativo
+ * que o fechamento do dia já consegue comprovar. O que não passar (operador já aprovado, troco sem
+ * suprimento, sangria alterada) fica como está, para o financeiro resolver no painel.
+ */
+export async function autoLinkAppPreLinks(closureId: string, context: ServerUserContext) {
+  if (!withdrawalDocumentIdSchema.safeParse(closureId).success) return { linked: [] as string[], pending: [] as string[] };
+  const header = await closureRef(closureId).get();
+  if (!header.exists || header.get("workspaceId") !== context.workspace_id) return { linked: [], pending: [] };
+  const [lines, classifications] = await Promise.all([
+    closureRef(closureId).collection("lines").limit(351).get(),
+    closureRef(closureId).collection("withdrawals").limit(MAX_WITHDRAWALS + 1).get(),
+  ]);
+  const { sources } = withdrawalSources(value<CashClosure>(header), lines.docs.map(row => value<CashClosureLine>(row)));
+  const active = new Set(classifications.docs.filter(row => row.get("active") === true).map(row => row.id));
+  const open = sources.filter(source => source.identityVerified && !active.has(source.sourceId));
+  const preLinks = await listWithdrawalPreLinks(open);
+  const linked: string[] = [];
+  const pending: string[] = [];
+  for (const preLink of preLinks) {
+    const source = open.find(row => row.sourceId === preLink.sourceId)!;
+    await classifyCashWithdrawal(closureId, { action: "link", sourceId: source.sourceId, fingerprint: source.fingerprint, existingExpenseId: preLink.expenseId }, context, "app-pre-link")
+      .then(() => linked.push(preLink.expenseId))
+      .catch((error) => {
+        if (!(error instanceof Error) || error.name !== "AppError") throw error;
+        pending.push(preLink.expenseId);
+      });
+  }
+  return { linked, pending };
 }

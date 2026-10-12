@@ -54,7 +54,7 @@ export function ScheduleTimeInput({
           onChange(minimum);
         }
       }}
-      className={cn("h-10 w-full rounded-lg border border-[#EADFD3] bg-white px-3 text-[14px] text-[#4A1A04] outline-none placeholder:text-[#A58C7F] focus:border-[#F462A7] disabled:bg-[#F4ECE2] disabled:opacity-70", className)}
+      className={cn("h-10 w-full rounded-lg border border-ds-border-input bg-ds-input px-3 text-[14px] text-ds-ink outline-none placeholder:text-ds-ink-faint focus:border-ds-modal disabled:bg-ds-muted disabled:opacity-70", className)}
       aria-label="Horário no formato horas e minutos"
     />
   );
@@ -108,7 +108,7 @@ export function ScheduleDatePicker({
           type="button"
           variant="outline"
           disabled={disabled}
-          className={cn("h-10 w-full justify-start rounded-lg border-[#EADFD3] bg-white px-3 text-left text-[14px] font-normal text-[#4A1A04]", className)}
+          className={cn("h-10 w-full justify-start rounded-lg border-ds-border-input bg-ds-input px-3 text-left text-[14px] font-normal text-ds-ink", className)}
         >
           {selectedDate ? format(selectedDate, "PPP", { locale: ptBR }) : "Selecione a data"}
           <CalendarIcon className="ml-auto h-4 w-4 opacity-70" />

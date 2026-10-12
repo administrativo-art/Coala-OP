@@ -1,498 +1,79 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Building2,
-  CalendarClock,
-  Check,
-  ChevronDown,
-  Clock3,
-  Copy,
-  FolderTree,
-  Link2,
-  MapPin,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Store,
-  Trash2,
-  UserRound,
-} from "lucide-react";
+import React, { useMemo, useState } from "react";
 
+import {
+  CadastrosHero,
+  CadastrosTabs,
+  Chevron,
+  EmptyResults,
+  ListHead,
+  ListRow,
+  ListShell,
+  ListSkeleton,
+  Mono,
+  SoftPill,
+} from "@/components/cadastros/cadastros-ui";
+import { buildChips } from "@/components/cadastros/cadastros-utils";
 import { useDP } from "@/components/dp-context";
+import { Segmented } from "@/components/patterns/segmented";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useKiosks } from "@/hooks/use-kiosks";
-import { useToast } from "@/hooks/use-toast";
-import { extractBrazilianPostalCode } from "@/lib/brazilian-postal-code";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
-import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
+import { dpOperatingHoursSchema } from "@/lib/dp-operating-hours";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
-import {
-  DP_WEEKDAYS,
-  dpOperatingHoursSchema,
-  emptyOperatingHours,
-  formatOperatingHoursSummary,
-  normalizeOperatingHours,
-  type DPWeekdayKey,
-} from "@/lib/dp-operating-hours";
 import { activeOperationalUnits } from "@/lib/dp-units";
-import type {
-  DPCoverageMode,
-  DPOperatingHours,
-  DPShiftDefinition,
-  DPUnit,
-  DPUnitGroup,
-  DPUnitOrganization,
-  DPUnitResponsibility,
-  DPUnitStockRole,
-  JobFunction,
-  JobRole,
-  Kiosk,
-  User,
-} from "@/types";
-
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import type { DPUnit, DPUnitGroup, DPUnitOrganization } from "@/types";
+import {
+  GroupPanel,
+  OrganizationPanel,
+  type GroupPanelState,
+  type OrganizationPanelState,
+} from "./units/structure-panels";
+import { UnitDetailPanel } from "./units/unit-detail-panel";
+import { UnitWizardModal, type UnitDialogState } from "./units/unit-wizard-modal";
+import {
+  buildGroupedGroupEntries,
+  buildGroupedUnitEntries,
+  buildResponsibilityPayload,
+  coverageSummaryFor,
+  describeResponsibility,
+  matchUnitByName,
+  mergeOperationalUnits,
+  pluralize,
+  sortByName,
+  unitExternalLabel,
+  type GroupByMode,
+  type GroupForm,
+  type ListBand,
+  type MergedOperationalUnit,
+  type OrganizationForm,
+  type UnitForm,
+} from "./units/units-model";
 
-type OrganizationDialogState =
-  | { mode: "create"; organization?: null }
-  | { mode: "edit"; organization: DPUnitOrganization };
+type UnitsTab = "units" | "groups" | "organizations";
 
-type GroupDialogState =
-  | { mode: "create"; organizationId?: string; group?: null }
-  | { mode: "edit"; group: DPUnitGroup };
+const NO_GROUP = "__no_group__";
+const NO_ORGANIZATION = "__no_organization__";
 
-type UnitDialogState =
-  | { mode: "manual"; organizationId?: string; groupId?: string; unit?: null }
-  | { mode: "sync"; organizationId?: string; groupId?: string; kioskId?: string; unit?: null }
-  | { mode: "edit"; unit: DPUnit };
+const UNIT_TEMPLATE = "minmax(200px,1.5fr) minmax(150px,1fr) minmax(130px,0.9fr) minmax(190px,1.3fr) 120px 84px 16px";
+const GROUP_TEMPLATE = "minmax(220px,1.5fr) minmax(160px,1fr) 110px minmax(200px,1.3fr) 16px";
+const ORGANIZATION_TEMPLATE = "minmax(240px,1.6fr) 100px 110px minmax(200px,1.3fr) 16px";
 
-type DeleteTarget =
-  | { kind: "organization"; id: string; name: string }
-  | { kind: "group"; id: string; name: string }
-  | { kind: "unit"; id: string; name: string };
-
-type ResponsibilityForm = {
-  responsibleSourceType: "" | "job_role" | "job_function";
-  responsibleSourceId: string;
-  responsibleUserId: string;
-};
-
-type OrganizationForm = {
-  name: string;
-  description: string;
-} & ResponsibilityForm;
-
-type GroupForm = {
-  name: string;
-  organizationId: string;
-  suppliedGroupIds: string[];
-} & ResponsibilityForm;
-
-type UnitForm = {
-  name: string;
-  cnpj: string;
-  address: string;
-  unitType: string;
-  organizationId: string;
-  groupId: string;
-  kioskId: string;
-  pdvFilialId: string;
-  bizneoTaxonId: string;
-  coverageMode: DPCoverageMode;
-  operatingHours: DPOperatingHours;
-  stockRole: DPUnitStockRole;
-};
-
-type MergedOperationalUnit = {
-  key: string;
-  name: string;
-  dpUnit?: DPUnit;
-  kiosk?: Kiosk;
-  organizationId?: string;
-  groupId?: string;
-  pdvFilialId?: string;
-  bizneoTaxonId?: number;
-};
-
-type PdvLegalFilial = {
-  id: string;
-  name: string;
-  cnpj: string | null;
-  active: boolean | null;
-};
-
-const NONE = "__none__";
-
-// Documentos legados ou de integração podem chegar sem `name`; a tela não pode quebrar por isso.
-function sortByName<T extends { name?: string }>(items: T[]) {
-  return [...items].sort((left, right) => (left.name ?? "").localeCompare(right.name ?? "", "pt-BR"));
+/** Busca sem acento e sem caixa; não remove palavras como “quiosque”, ao contrário do casamento de nomes. */
+function searchKey(value: string | undefined) {
+  return (value ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-function normalizeName(value: string | undefined) {
-  return (value ?? "")
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/quiosque\s*/gi, "")
-    .replace(/quisque\s*/gi, "")
-    .replace(/centro de distribuicao\s*/gi, "")
-    .replace(/[-–_]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function maskCnpjInput(value: string) {
-  const digits = CnpjValidator.clean(value).slice(0, 14);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
-  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
-  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
-  return CnpjValidator.format(digits);
-}
-
-function editDistance(a: string, b: string) {
-  const rows = a.length + 1;
-  const columns = b.length + 1;
-  const matrix = Array.from({ length: rows }, (_, row) =>
-    Array.from({ length: columns }, (_, column) => {
-      if (row === 0) return column;
-      if (column === 0) return row;
-      return 0;
-    })
-  );
-
-  for (let row = 1; row < rows; row += 1) {
-    for (let column = 1; column < columns; column += 1) {
-      matrix[row][column] = a[row - 1] === b[column - 1]
-        ? matrix[row - 1][column - 1]
-        : 1 + Math.min(
-            matrix[row - 1][column],
-            matrix[row][column - 1],
-            matrix[row - 1][column - 1]
-          );
-    }
-  }
-
-  return matrix[a.length][b.length];
-}
-
-function matchUnitByName(kioskName: string | undefined, units: DPUnit[]) {
-  const normalizedKioskName = normalizeName(kioskName);
-  if (!normalizedKioskName) return undefined; // sem nome não há correspondência confiável
-  const exact = units.find((unit) => {
-    const normalizedUnitName = normalizeName(unit.name);
-    return (
-      normalizedKioskName === normalizedUnitName ||
-      normalizedKioskName.includes(normalizedUnitName) ||
-      normalizedUnitName.includes(normalizedKioskName)
-    );
-  });
-  if (exact) return exact;
-
-  let best: DPUnit | undefined;
-  let bestDistance = Infinity;
-  units.forEach((unit) => {
-    const normalizedUnitName = normalizeName(unit.name);
-    const distance = editDistance(normalizedKioskName, normalizedUnitName);
-    const threshold = Math.max(3, Math.floor(Math.max(normalizedKioskName.length, normalizedUnitName.length) * 0.25));
-    if (distance < bestDistance && distance <= threshold) {
-      best = unit;
-      bestDistance = distance;
-    }
-  });
-  return best;
-}
-
-function unitExternalLabel(unit: DPUnit) {
-  if (unit.externalSource === "kiosk") return "Sincronizada";
-  if (unit.externalSource === "pdvlegal") return "PDV Legal";
-  if (unit.externalSource === "bizneo") return "Bizneo";
-  return "Manual";
-}
-
-function emptyResponsibilityForm(): ResponsibilityForm {
-  return {
-    responsibleSourceType: "",
-    responsibleSourceId: "",
-    responsibleUserId: "",
-  };
-}
-
-function responsibilityFormFromEntity(entity?: DPUnitResponsibility): ResponsibilityForm {
-  return {
-    responsibleSourceType: entity?.responsibleSourceType ?? "",
-    responsibleSourceId: entity?.responsibleSourceId ?? "",
-    responsibleUserId: entity?.responsibleUserId ?? "",
-  };
-}
-
-function roleLabel(role: JobRole) {
-  return role.publicTitle || role.name;
-}
-
-function functionLabel(item: JobFunction) {
-  return item.publicTitle || item.name;
-}
-
-function userMatchesResponsibility(user: User, sourceType: ResponsibilityForm["responsibleSourceType"], sourceId: string) {
-  if (!sourceType || !sourceId) return false;
-  if (sourceType === "job_role") return user.jobRoleId === sourceId;
-  return user.jobFunctionIds?.includes(sourceId) === true;
-}
-
-async function writeClipboard(value: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-
-  const field = document.createElement("textarea");
-  field.value = value;
-  field.setAttribute("readonly", "");
-  field.style.position = "fixed";
-  field.style.opacity = "0";
-  document.body.appendChild(field);
-  field.select();
-  const copied = document.execCommand("copy");
-  document.body.removeChild(field);
-  if (!copied) throw new Error("Clipboard indisponível");
-}
-
-function useHoverPopover() {
-  const [open, setOpen] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cancelClose = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  }, []);
-  const show = useCallback(() => {
-    cancelClose();
-    setOpen(true);
-  }, [cancelClose]);
-  const scheduleClose = useCallback(() => {
-    cancelClose();
-    closeTimer.current = setTimeout(() => setOpen(false), 140);
-  }, [cancelClose]);
-
-  useEffect(() => cancelClose, [cancelClose]);
-  return { open, setOpen, show, scheduleClose, cancelClose };
-}
-
-function UnitAddressQuickFact({ address, unitName }: { address: string; unitName: string }) {
-  const { toast } = useToast();
-  const disclosure = useHoverPopover();
-  const [copiedTarget, setCopiedTarget] = useState<"address" | "postalCode" | null>(null);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const postalCode = extractBrazilianPostalCode(address);
-
-  useEffect(() => () => {
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-  }, []);
-
-  const copy = useCallback(async (value: string, target: "address" | "postalCode") => {
-    try {
-      await writeClipboard(value);
-      setCopiedTarget(target);
-      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-      feedbackTimer.current = setTimeout(() => setCopiedTarget(null), 1600);
-      toast({
-        title: target === "address" ? "Endereço copiado" : "CEP copiado",
-        description: target === "address" ? unitName : value,
-      });
-    } catch {
-      toast({
-        variant: "destructive",
-        title: "Não foi possível copiar",
-        description: "Copie o dado manualmente no cartão da unidade.",
-      });
-    }
-  }, [toast, unitName]);
-
-  const copyPostalCode = useCallback(async () => {
-    if (!postalCode) {
-      disclosure.show();
-      toast({ title: "CEP não identificado", description: "O endereço completo continua disponível para cópia." });
-      return;
-    }
-    await copy(postalCode, "postalCode");
-  }, [copy, disclosure, postalCode, toast]);
-
-  return (
-    <Popover open={disclosure.open} onOpenChange={disclosure.setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/70 bg-background text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={`Ver e copiar endereço de ${unitName}`}
-          onMouseEnter={disclosure.show}
-          onMouseLeave={disclosure.scheduleClose}
-          onFocus={disclosure.show}
-          onClick={() => void copy(address, "address")}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            void copyPostalCode();
-          }}
-        >
-          {copiedTarget ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> : <MapPin className="h-3.5 w-3.5" aria-hidden="true" />}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[min(22rem,calc(100vw-2rem))] space-y-3 p-3"
-        onMouseEnter={disclosure.cancelClose}
-        onMouseLeave={disclosure.scheduleClose}
-      >
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Endereço</p>
-          <p className="mt-1 text-sm leading-5">{address}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void copy(address, "address")}>
-            {copiedTarget === "address" ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-            Copiar endereço
-          </Button>
-          {postalCode ? (
-            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void copyPostalCode()}>
-              {copiedTarget === "postalCode" ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-              Copiar CEP
-            </Button>
-          ) : null}
-        </div>
-        <p className="text-[11px] leading-4 text-muted-foreground">
-          Clique no ícone para copiar o endereço. No computador, use o botão direito para copiar somente o CEP.
-        </p>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function UnitShiftsQuickFact({ shifts, unitName }: { shifts: DPShiftDefinition[]; unitName: string }) {
-  const disclosure = useHoverPopover();
-  const shiftLabel = `${shifts.length} ${shifts.length === 1 ? "turno" : "turnos"}`;
-
-  if (shifts.length === 0) {
-    return (
-      <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-dashed border-border/70 px-2 text-[11px] text-muted-foreground">
-        <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-        Sem turnos
-      </span>
-    );
-  }
-
-  return (
-    <Popover open={disclosure.open} onOpenChange={disclosure.setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/70 bg-background px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={`Ver ${shiftLabel} de ${unitName}`}
-          onMouseEnter={disclosure.show}
-          onMouseLeave={disclosure.scheduleClose}
-          onFocus={disclosure.show}
-        >
-          <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-          {shiftLabel}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-[min(23rem,calc(100vw-2rem))] p-3"
-        onMouseEnter={disclosure.cancelClose}
-        onMouseLeave={disclosure.scheduleClose}
-      >
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Turnos vinculados</p>
-        <ul className="mt-2 max-h-72 space-y-1.5 overflow-y-auto">
-          {shifts.map((shift) => (
-            <li key={shift.id} className="flex items-start justify-between gap-4 rounded-md bg-muted/60 px-2.5 py-2 text-xs">
-              <span className="font-medium leading-4">{shift.name}</span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">{shift.startTime}–{shift.endTime}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-[11px] text-muted-foreground">Consulta somente: nenhuma informação é copiada ou alterada.</p>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function UnitCreateMenu({
-  organizationId,
-  groupId,
-  onManual,
-  onSync,
-}: {
-  organizationId?: string;
-  groupId?: string;
-  onManual: (context: { organizationId?: string; groupId?: string }) => void;
-  onSync: (context: { organizationId?: string; groupId?: string }) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="outline" className="h-9 rounded-xl">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Nova unidade
-          <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onManual({ organizationId, groupId })}>
-          <Plus className="mr-2 h-3.5 w-3.5" />
-          Criar manualmente
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSync({ organizationId, groupId })}>
-          <RefreshCw className="mr-2 h-3.5 w-3.5" />
-          Criar via sincronização
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+function matchesSearch(query: string, ...fields: Array<string | undefined>) {
+  const needle = searchKey(query.trim());
+  if (!needle) return true;
+  return fields.some((field) => searchKey(field).includes(needle));
 }
 
 export function DPSettingsUnits() {
@@ -507,16 +88,9 @@ export function DPSettingsUnits() {
     updateUnitOrganization,
     deleteUnitOrganization,
   } = useDP();
-  const { permissions, activeUsers, firebaseUser } = useAuth();
+  const { permissions, activeUsers } = useAuth();
   const { roles, functions } = useHrBootstrap();
-  const {
-    units,
-    unitGroups,
-    unitOrganizations,
-    shiftDefinitions,
-    unitsLoading,
-    unitsError,
-  } = useDPBootstrap();
+  const { units, unitGroups, unitOrganizations, shiftDefinitions, unitsLoading, unitsError } = useDPBootstrap();
   const { kiosks } = useKiosks();
   const canManageUnits = !!(
     permissions.settings.manageUsers ||
@@ -524,441 +98,238 @@ export function DPSettingsUnits() {
     permissions.dp?.settings?.manageUnits
   );
 
-  const [organizationDialog, setOrganizationDialog] = useState<OrganizationDialogState | null>(null);
-  const [groupDialog, setGroupDialog] = useState<GroupDialogState | null>(null);
+  const [tab, setTab] = useState<UnitsTab>("units");
+  const [search, setSearch] = useState("");
+  const [chipByTab, setChipByTab] = useState<Record<UnitsTab, string>>({ units: "all", groups: "all", organizations: "all" });
+  const [groupBy, setGroupBy] = useState<Record<UnitsTab, GroupByMode>>({ units: "none", groups: "none", organizations: "none" });
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [selectedUnitKey, setSelectedUnitKey] = useState<string | null>(null);
   const [unitDialog, setUnitDialog] = useState<UnitDialogState | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [groupPanel, setGroupPanel] = useState<GroupPanelState | null>(null);
+  const [organizationPanel, setOrganizationPanel] = useState<OrganizationPanelState | null>(null);
   const [saving, setSaving] = useState<"organization" | "group" | "unit" | "delete" | null>(null);
-  const [pdvFiliais, setPdvFiliais] = useState<PdvLegalFilial[]>([]);
-  const [pdvFiliaisLoading, setPdvFiliaisLoading] = useState(false);
-  const [pdvFiliaisLoaded, setPdvFiliaisLoaded] = useState(false);
-  const [pdvFiliaisError, setPdvFiliaisError] = useState<string | null>(null);
 
-  const [organizationForm, setOrganizationForm] = useState<OrganizationForm>({
-    name: "",
-    description: "",
-    ...emptyResponsibilityForm(),
-  });
-  const [groupForm, setGroupForm] = useState<GroupForm>({
-    name: "",
-    organizationId: "",
-    suppliedGroupIds: [],
-    ...emptyResponsibilityForm(),
-  });
-  const [unitForm, setUnitForm] = useState<UnitForm>({
-    name: "",
-    cnpj: "",
-    address: "",
-    unitType: "",
-    organizationId: "",
-    groupId: "",
-    kioskId: "",
-    pdvFilialId: "",
-    bizneoTaxonId: "",
-    coverageMode: "fixed_hours",
-    operatingHours: emptyOperatingHours(),
-    stockRole: "commercial",
-  });
-  const unitCnpjValidation = unitForm.cnpj.trim()
-    ? CnpjValidator.validate(unitForm.cnpj)
-    : null;
-
-  const organizations = useMemo(
-    () => sortByName(activeOperationalUnits(unitOrganizations)),
-    [unitOrganizations]
-  );
+  const organizations = useMemo(() => sortByName(activeOperationalUnits(unitOrganizations)), [unitOrganizations]);
   const groups = useMemo(() => sortByName(unitGroups), [unitGroups]);
   const sortedUnits = useMemo(() => sortByName(activeOperationalUnits(units)), [units]);
-  const activeRoles = useMemo(() => sortByName(roles.filter((role) => role.isActive !== false)), [roles]);
-  const activeFunctions = useMemo(
-    () => sortByName(functions.filter((item) => item.isActive !== false)),
-    [functions]
+  const directory = useMemo(
+    () => ({
+      roles: sortByName(roles.filter((role) => role.isActive !== false)),
+      functions: sortByName(functions.filter((item) => item.isActive !== false)),
+      users: sortByName(activeUsers.filter((user) => user.isActive !== false).map((user) => ({ ...user, name: user.username }))),
+    }),
+    [roles, functions, activeUsers]
   );
-  const responsibilityUsers = useMemo(
-    () => sortByName(activeUsers.filter((user) => user.isActive !== false).map((user) => ({ ...user, name: user.username }))),
-    [activeUsers]
-  );
+  const organizationById = useMemo(() => new Map(organizations.map((item) => [item.id, item])), [organizations]);
+  const groupById = useMemo(() => new Map(groups.map((item) => [item.id, item])), [groups]);
+  const mergedUnits = useMemo(() => mergeOperationalUnits(sortedUnits, kiosks), [sortedUnits, kiosks]);
 
-  const organizationById = useMemo(
-    () => new Map(organizations.map((organization) => [organization.id, organization])),
-    [organizations]
+  const registeredKioskIds = useMemo(
+    () => new Set(mergedUnits.filter((unit) => unit.dpUnit).map((unit) => unit.kiosk?.id).filter(Boolean) as string[]),
+    [mergedUnits]
   );
-  const groupById = useMemo(
-    () => new Map(groups.map((group) => [group.id, group])),
-    [groups]
-  );
-  const kioskById = useMemo(
-    () => new Map(kiosks.map((kiosk) => [kiosk.id, kiosk])),
-    [kiosks]
+  const syncCandidates = useMemo(
+    () => sortByName(kiosks.filter((kiosk) => !registeredKioskIds.has(kiosk.id))),
+    [kiosks, registeredKioskIds]
   );
 
-  const mergedUnits = useMemo<MergedOperationalUnit[]>(() => {
-    const linkedKioskIds = new Set<string>();
+  /** Grupo e organização efetivos de uma unidade; vínculo para registro removido conta como ausente. */
+  function structureOf(unit: MergedOperationalUnit) {
+    const group = unit.groupId ? groupById.get(unit.groupId) : undefined;
+    const organizationId = group?.organizationId ?? unit.organizationId;
+    const organization = organizationId ? organizationById.get(organizationId) : undefined;
+    return { group, organization };
+  }
 
-    const registered = sortedUnits.map((unit) => {
-      const linkedKiosk =
-        unit.externalSource === "kiosk" && unit.externalId
-          ? kioskById.get(unit.externalId)
-          : kiosks.find((kiosk) => normalizeName(kiosk.name) === normalizeName(unit.name)) ??
-            kiosks.find((kiosk) => matchUnitByName(kiosk.name, [unit])?.id === unit.id);
+  function shiftsFor(unit: MergedOperationalUnit) {
+    const dpUnit = unit.dpUnit ?? (unit.kiosk ? matchUnitByName(unit.kiosk.name, units) : undefined);
+    return dpUnit ? shiftDefinitions.filter((shift) => shiftDefinitionMatchesUnit(shift, dpUnit.id)) : [];
+  }
 
-      if (linkedKiosk) linkedKioskIds.add(linkedKiosk.id);
+  function organizationOfGroup(group: DPUnitGroup) {
+    return group.organizationId ? organizationById.get(group.organizationId) : undefined;
+  }
 
-      return {
-        key: `unit-${unit.id}`,
-        name: unit.name,
-        dpUnit: unit,
-        kiosk: linkedKiosk,
-        organizationId: unit.organizationId,
-        groupId: unit.groupId,
-        pdvFilialId: unit.pdvFilialId ?? linkedKiosk?.pdvFilialId,
-        bizneoTaxonId:
-          typeof unit.bizneoTaxonId === "number"
-            ? unit.bizneoTaxonId
-            : linkedKiosk?.bizneoId && !Number.isNaN(Number(linkedKiosk.bizneoId))
-              ? Number(linkedKiosk.bizneoId)
-              : undefined,
-      };
+  function unitsOfGroup(groupId: string) {
+    return mergedUnits.filter((unit) => structureOf(unit).group?.id === groupId);
+  }
+
+  function unitsOfOrganization(organizationId: string) {
+    return mergedUnits.filter((unit) => structureOf(unit).organization?.id === organizationId);
+  }
+
+  const searchedUnits = useMemo(
+    () =>
+      mergedUnits.filter((unit) => {
+        const { group, organization } = structureOf(unit);
+        return matchesSearch(search, unit.name, group?.name, organization?.name, unit.dpUnit?.cnpj, unit.dpUnit?.unitType, unit.pdvFilialId);
+      }),
+    // structureOf depende só de mapas já listados.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mergedUnits, search, groupById, organizationById]
+  );
+  const searchedGroups = useMemo(
+    () => groups.filter((group) => matchesSearch(search, group.name, organizationOfGroup(group)?.name, group.responsibleUserName, group.responsibleSourceName)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [groups, search, organizationById]
+  );
+  const searchedOrganizations = useMemo(
+    () => organizations.filter((item) => matchesSearch(search, item.name, item.description, item.responsibleUserName, item.responsibleSourceName)),
+    [organizations, search]
+  );
+
+  const unitChips = useMemo(() => {
+    const entries = [
+      ...groups.map((group) => ({
+        id: group.id,
+        label: group.name,
+        count: searchedUnits.filter((unit) => structureOf(unit).group?.id === group.id).length,
+      })),
+      { id: NO_GROUP, label: "Sem grupo", count: searchedUnits.filter((unit) => !structureOf(unit).group).length },
+    ];
+    return buildChips(searchedUnits.length, entries, chipByTab.units, "Todas");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, searchedUnits, chipByTab.units]);
+
+  const groupChips = useMemo(() => {
+    const entries = [
+      ...organizations.map((organization) => ({
+        id: organization.id,
+        label: organization.name,
+        count: searchedGroups.filter((group) => group.organizationId === organization.id).length,
+      })),
+      {
+        id: NO_ORGANIZATION,
+        label: "Sem organização",
+        count: searchedGroups.filter((group) => !organizationOfGroup(group)).length,
+      },
+    ];
+    return buildChips(searchedGroups.length, entries, chipByTab.groups, "Todos");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organizations, searchedGroups, chipByTab.groups]);
+
+  const visibleUnits = useMemo(() => {
+    const chip = chipByTab.units;
+    if (chip === "all") return searchedUnits;
+    return searchedUnits.filter((unit) => {
+      const { group } = structureOf(unit);
+      return chip === NO_GROUP ? !group : group?.id === chip;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchedUnits, chipByTab.units, groupById, organizationById]);
 
-    const operationalOnly = kiosks
-      .filter((kiosk) => !linkedKioskIds.has(kiosk.id))
-      .map((kiosk) => ({
-        key: `kiosk-${kiosk.id}`,
-        name: kiosk.name || kiosk.id,
-        kiosk,
-        pdvFilialId: kiosk.pdvFilialId,
-        bizneoTaxonId:
-          kiosk.bizneoId && !Number.isNaN(Number(kiosk.bizneoId))
-            ? Number(kiosk.bizneoId)
-            : undefined,
-      }));
-
-    return sortByName([...registered, ...operationalOnly]);
-  }, [kioskById, kiosks, sortedUnits]);
-
-  const registeredKioskIds = useMemo(() => {
-    return new Set(
-      mergedUnits
-        .filter((unit) => unit.dpUnit)
-        .map((unit) => unit.kiosk?.id)
-        .filter(Boolean) as string[]
+  const visibleGroups = useMemo(() => {
+    const chip = chipByTab.groups;
+    if (chip === "all") return searchedGroups;
+    return searchedGroups.filter((group) =>
+      chip === NO_ORGANIZATION ? !organizationOfGroup(group) : group.organizationId === chip
     );
-  }, [mergedUnits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchedGroups, chipByTab.groups, organizationById]);
 
-  const syncCandidates = useMemo(() => {
-    return sortByName(kiosks.filter((kiosk) => !registeredKioskIds.has(kiosk.id)));
-  }, [kiosks, registeredKioskIds]);
-
-  const availableGroupsForUnitForm = useMemo(() => {
-    if (!unitForm.organizationId) return groups;
-    return groups.filter((group) => group.organizationId === unitForm.organizationId);
-  }, [groups, unitForm.organizationId]);
-
-  useEffect(() => {
-    if (!organizationDialog) return;
-    if (organizationDialog.mode === "edit") {
-      setOrganizationForm({
-        name: organizationDialog.organization.name,
-        description: organizationDialog.organization.description ?? "",
-        ...responsibilityFormFromEntity(organizationDialog.organization),
-      });
-      return;
-    }
-    setOrganizationForm({ name: "", description: "", ...emptyResponsibilityForm() });
-  }, [organizationDialog]);
-
-  useEffect(() => {
-    if (!groupDialog) return;
-    if (groupDialog.mode === "edit") {
-      setGroupForm({
-        name: groupDialog.group.name,
-        organizationId: groupDialog.group.organizationId ?? "",
-        suppliedGroupIds: groupDialog.group.suppliedGroupIds ?? [],
-        ...responsibilityFormFromEntity(groupDialog.group),
-      });
-      return;
-    }
-    setGroupForm({
-      name: "",
-      organizationId: groupDialog.organizationId ?? "",
-      suppliedGroupIds: [],
-      ...emptyResponsibilityForm(),
+  const unitEntries = useMemo(
+    () => buildGroupedUnitEntries(visibleUnits, groupBy.units, organizations, groups, structureOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleUnits, groupBy.units, organizations, groups, groupById, organizationById]
+  );
+  const groupEntries = useMemo(
+    () => buildGroupedGroupEntries(visibleGroups, groupBy.groups, organizations),
+    [visibleGroups, groupBy.groups, organizations]
+  );
+  const isHidden = (ancestors: string[]) => ancestors.some((key) => collapsed.has(key));
+  const toggleBand = (key: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
     });
-  }, [groupDialog]);
 
-  useEffect(() => {
-    if (!unitDialog) return;
+  const selectedUnit = selectedUnitKey ? mergedUnits.find((unit) => unit.key === selectedUnitKey) ?? null : null;
 
-    if (unitDialog.mode === "edit") {
-      const group = unitDialog.unit.groupId ? groupById.get(unitDialog.unit.groupId) : null;
-      setUnitForm({
-        name: unitDialog.unit.name,
-        cnpj: unitDialog.unit.cnpj ? CnpjValidator.format(unitDialog.unit.cnpj) : "",
-        address: unitDialog.unit.address ?? "",
-        unitType: unitDialog.unit.unitType ?? "",
-        organizationId: unitDialog.unit.organizationId ?? group?.organizationId ?? "",
-        groupId: unitDialog.unit.groupId ?? "",
-        kioskId: "",
-        pdvFilialId: unitDialog.unit.pdvFilialId ?? "",
-        bizneoTaxonId:
-          typeof unitDialog.unit.bizneoTaxonId === "number"
-            ? String(unitDialog.unit.bizneoTaxonId)
-            : "",
-        coverageMode: resolveDPCoverageMode(unitDialog.unit),
-        operatingHours: normalizeOperatingHours(unitDialog.unit.operatingHours),
-        stockRole: unitDialog.unit.stockRole ?? "commercial",
-      });
-      return;
-    }
+  /* ───────── gravações (mesma regra de antes; só a apresentação mudou) ───────── */
 
-    const firstCandidate = unitDialog.mode === "sync"
-      ? unitDialog.kioskId
-        ? kiosks.find((kiosk) => kiosk.id === unitDialog.kioskId) ?? syncCandidates[0]
-        : syncCandidates[0]
-      : null;
-    setUnitForm({
-      name: firstCandidate?.name ?? "",
-      cnpj: "",
-      address: "",
-      unitType: "",
-      organizationId: unitDialog.organizationId ?? "",
-      groupId: unitDialog.groupId ?? "",
-      kioskId: firstCandidate?.id ?? "",
-      pdvFilialId: firstCandidate?.pdvFilialId ?? "",
-      bizneoTaxonId:
-        firstCandidate?.bizneoId && !Number.isNaN(Number(firstCandidate.bizneoId))
-          ? String(Number(firstCandidate.bizneoId))
-          : "",
-      coverageMode: "fixed_hours",
-      operatingHours: emptyOperatingHours(),
-      stockRole: "commercial",
-    });
-  }, [groupById, kiosks, syncCandidates, unitDialog]);
-
-  const loadPdvFiliais = useCallback(async () => {
-    if (!firebaseUser) return;
-    setPdvFiliaisLoading(true);
-    setPdvFiliaisError(null);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const response = await fetch("/api/integrations/pdvlegal/filiais", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Falha ao consultar filiais do PDV Legal.");
-      }
-      setPdvFiliais(Array.isArray(payload?.filiais) ? payload.filiais : []);
-    } catch (error) {
-      setPdvFiliaisError(error instanceof Error ? error.message : "Falha ao consultar filiais do PDV Legal.");
-    } finally {
-      setPdvFiliaisLoaded(true);
-      setPdvFiliaisLoading(false);
-    }
-  }, [firebaseUser]);
-
-  useEffect(() => {
-    if (!unitDialog || pdvFiliaisLoaded || pdvFiliaisLoading) return;
-    void loadPdvFiliais();
-  }, [loadPdvFiliais, pdvFiliaisLoaded, pdvFiliaisLoading, unitDialog]);
-
-  function unitsForGroup(groupId: string) {
-    return mergedUnits.filter((unit) => unit.groupId === groupId);
-  }
-
-  function organizationGroups(organizationId: string) {
-    return groups.filter((group) => group.organizationId === organizationId);
-  }
-
-  const unorganizedGroups = useMemo(() => {
-    return groups.filter((group) => !group.organizationId || !organizationById.has(group.organizationId));
-  }, [groups, organizationById]);
-
-  const ungroupedUnits = useMemo(() => {
-    return mergedUnits.filter((unit) => {
-      const hasValidGroup = unit.groupId ? groupById.has(unit.groupId) : false;
-      const hasValidOrganization = unit.organizationId ? organizationById.has(unit.organizationId) : false;
-      return !hasValidGroup && !hasValidOrganization;
-    });
-  }, [groupById, mergedUnits, organizationById]);
-
-  function ungroupedUnitsForOrganization(organizationId: string) {
-    return mergedUnits.filter((unit) => {
-      const hasValidGroup = unit.groupId ? groupById.has(unit.groupId) : false;
-      return !hasValidGroup && unit.organizationId === organizationId;
-    });
-  }
-
-  function responsibilitySourceName(form: ResponsibilityForm) {
-    if (form.responsibleSourceType === "job_role") {
-      const role = activeRoles.find((item) => item.id === form.responsibleSourceId);
-      return role ? roleLabel(role) : undefined;
-    }
-
-    if (form.responsibleSourceType === "job_function") {
-      const item = activeFunctions.find((entry) => entry.id === form.responsibleSourceId);
-      return item ? functionLabel(item) : undefined;
-    }
-
-    return undefined;
-  }
-
-  function responsibilityCandidates(form: ResponsibilityForm) {
-    return responsibilityUsers.filter((user) =>
-      userMatchesResponsibility(user, form.responsibleSourceType, form.responsibleSourceId)
-    );
-  }
-
-  function buildResponsibilityPayload(form: ResponsibilityForm) {
-    const sourceName = responsibilitySourceName(form);
-    const responsibleUser = responsibilityUsers.find((user) => user.id === form.responsibleUserId);
-
-    if (!form.responsibleSourceType || !form.responsibleSourceId || !sourceName) {
-      return {
-        responsibleSourceType: undefined,
-        responsibleSourceId: undefined,
-        responsibleSourceName: undefined,
-        responsibleUserId: undefined,
-        responsibleUserName: undefined,
-      };
-    }
-
-    return {
-      responsibleSourceType: form.responsibleSourceType,
-      responsibleSourceId: form.responsibleSourceId,
-      responsibleSourceName: sourceName,
-      responsibleUserId: responsibleUser?.id,
-      responsibleUserName: responsibleUser?.username,
-    };
-  }
-
-  function updateOrganizationResponsibility(patch: Partial<ResponsibilityForm>) {
-    setOrganizationForm((current) => ({
-      ...current,
-      ...patch,
-      ...(patch.responsibleSourceType !== undefined
-        ? { responsibleSourceId: "", responsibleUserId: "" }
-        : patch.responsibleSourceId !== undefined
-          ? { responsibleUserId: "" }
-          : {}),
-    }));
-  }
-
-  function updateGroupResponsibility(patch: Partial<ResponsibilityForm>) {
-    setGroupForm((current) => ({
-      ...current,
-      ...patch,
-      ...(patch.responsibleSourceType !== undefined
-        ? { responsibleSourceId: "", responsibleUserId: "" }
-        : patch.responsibleSourceId !== undefined
-          ? { responsibleUserId: "" }
-          : {}),
-    }));
-  }
-
-  async function handleSaveOrganization() {
-    const name = organizationForm.name.trim();
+  async function saveOrganization(form: OrganizationForm, state: OrganizationPanelState) {
+    const name = form.name.trim();
     if (!name) return;
-
     setSaving("organization");
     try {
-      if (organizationDialog?.mode === "edit") {
-        await updateUnitOrganization({
-          ...organizationDialog.organization,
-          name,
-          description: organizationForm.description.trim() || undefined,
-          ...buildResponsibilityPayload(organizationForm),
-        });
-      } else {
-        await addUnitOrganization({
-          name,
-          description: organizationForm.description.trim() || undefined,
-          ...buildResponsibilityPayload(organizationForm),
-        });
-      }
-      setOrganizationDialog(null);
+      const payload = {
+        name,
+        description: form.description.trim() || undefined,
+        ...buildResponsibilityPayload(form, directory),
+      };
+      if (state.mode === "edit") await updateUnitOrganization({ ...state.organization, ...payload });
+      else await addUnitOrganization(payload);
+      setOrganizationPanel(null);
     } finally {
       setSaving(null);
     }
   }
 
-  async function handleSaveGroup() {
-    const name = groupForm.name.trim();
+  async function saveGroup(form: GroupForm, state: GroupPanelState) {
+    const name = form.name.trim();
     if (!name) return;
-
     setSaving("group");
     try {
-      if (groupDialog?.mode === "edit") {
-        await updateUnitGroup({
-          ...groupDialog.group,
-          name,
-          organizationId: groupForm.organizationId || undefined,
-          suppliedGroupIds: groupForm.suppliedGroupIds,
-          ...buildResponsibilityPayload(groupForm),
-        });
-      } else {
-        await addUnitGroup({
-          name,
-          organizationId: groupForm.organizationId || undefined,
-          suppliedGroupIds: groupForm.suppliedGroupIds,
-          ...buildResponsibilityPayload(groupForm),
-        });
-      }
-      setGroupDialog(null);
+      const payload = {
+        name,
+        organizationId: form.organizationId || undefined,
+        suppliedGroupIds: form.suppliedGroupIds,
+        ...buildResponsibilityPayload(form, directory),
+      };
+      if (state.mode === "edit") await updateUnitGroup({ ...state.group, ...payload });
+      else await addUnitGroup(payload);
+      setGroupPanel(null);
     } finally {
       setSaving(null);
     }
   }
 
-  async function handleSaveUnit() {
-    const name = unitForm.name.trim();
+  async function saveUnit(form: UnitForm, dialog: UnitDialogState) {
+    const name = form.name.trim();
     if (!name) return;
-    if (unitCnpjValidation && !unitCnpjValidation.valid) return;
-    if (!dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success) return;
+    const cnpj = form.cnpj.trim() ? CnpjValidator.validate(form.cnpj) : null;
+    if (cnpj && !cnpj.valid) return;
+    if (!dpOperatingHoursSchema.safeParse(form.operatingHours).success) return;
 
-    const selectedGroup = unitForm.groupId ? groupById.get(unitForm.groupId) : null;
-    const organizationId = selectedGroup?.organizationId ?? unitForm.organizationId;
-    const bizneoTaxonId = unitForm.bizneoTaxonId.trim()
-      ? Number(unitForm.bizneoTaxonId)
-      : undefined;
-    const selectedKiosk = unitForm.kioskId
-      ? kiosks.find((kiosk) => kiosk.id === unitForm.kioskId)
-      : null;
+    const selectedGroup = form.groupId ? groupById.get(form.groupId) : null;
+    const organizationId = selectedGroup?.organizationId ?? form.organizationId;
+    const bizneoTaxonId = form.bizneoTaxonId.trim() ? Number(form.bizneoTaxonId) : undefined;
+    const selectedKiosk = form.kioskId ? kiosks.find((kiosk) => kiosk.id === form.kioskId) : null;
 
     setSaving("unit");
     try {
-      if (unitDialog?.mode === "edit") {
+      if (dialog.mode === "edit") {
         await updateUnit({
-          ...unitDialog.unit,
+          ...dialog.unit,
           name,
-          cnpj: unitCnpjValidation?.clean,
-          address: unitForm.address.trim() || undefined,
-          unitType: unitForm.unitType.trim() || undefined,
+          cnpj: cnpj?.clean,
+          address: form.address.trim() || undefined,
+          unitType: form.unitType.trim() || undefined,
           organizationId: organizationId || undefined,
-          groupId: unitForm.groupId || undefined,
-          pdvFilialId: unitForm.pdvFilialId.trim() || undefined,
+          groupId: form.groupId || undefined,
+          pdvFilialId: form.pdvFilialId.trim() || undefined,
           bizneoTaxonId,
-          coverageMode: unitForm.coverageMode,
-          operatingHours: unitForm.operatingHours,
-          stockRole: unitForm.stockRole,
+          coverageMode: form.coverageMode,
+          operatingHours: form.operatingHours,
+          stockRole: form.stockRole,
         });
       } else {
         await addUnit({
           name,
-          cnpj: unitCnpjValidation?.clean,
-          address: unitForm.address.trim() || undefined,
-          unitType: unitForm.unitType.trim() || undefined,
+          cnpj: cnpj?.clean,
+          address: form.address.trim() || undefined,
+          unitType: form.unitType.trim() || undefined,
           organizationId: organizationId || undefined,
-          groupId: unitForm.groupId || undefined,
-          externalSource: unitDialog?.mode === "sync" ? "kiosk" : "manual",
-          externalId: unitDialog?.mode === "sync" ? selectedKiosk?.id : undefined,
-          pdvFilialId: unitForm.pdvFilialId.trim() || selectedKiosk?.pdvFilialId || undefined,
+          groupId: form.groupId || undefined,
+          externalSource: dialog.mode === "sync" ? "kiosk" : "manual",
+          externalId: dialog.mode === "sync" ? selectedKiosk?.id : undefined,
+          pdvFilialId: form.pdvFilialId.trim() || selectedKiosk?.pdvFilialId || undefined,
           bizneoTaxonId,
-          coverageMode: unitForm.coverageMode,
-          operatingHours: unitForm.operatingHours,
-          stockRole: unitForm.stockRole,
+          coverageMode: form.coverageMode,
+          operatingHours: form.operatingHours,
+          stockRole: form.stockRole,
         });
       }
       setUnitDialog(null);
@@ -967,29 +338,18 @@ export function DPSettingsUnits() {
     }
   }
 
-  async function handleDelete() {
-    if (!deleteTarget) return;
-
+  async function removeWith(action: () => Promise<unknown>, afterDelete: () => void) {
     setSaving("delete");
     try {
-      if (deleteTarget.kind === "organization") {
-        await deleteUnitOrganization(deleteTarget.id);
-      }
-      if (deleteTarget.kind === "group") {
-        await deleteUnitGroup(deleteTarget.id);
-      }
-      if (deleteTarget.kind === "unit") {
-        await deleteUnit(deleteTarget.id);
-      }
-      setDeleteTarget(null);
+      await action();
+      afterDelete();
     } finally {
       setSaving(null);
     }
   }
 
-  async function handleDetachUnitFromGroup(unit: DPUnit) {
+  async function detachUnitFromGroup(unit: DPUnit) {
     const currentGroup = unit.groupId ? groupById.get(unit.groupId) : null;
-
     setSaving("unit");
     try {
       await updateUnit({
@@ -1002,1105 +362,352 @@ export function DPSettingsUnits() {
     }
   }
 
-  function openManualUnit(context: { organizationId?: string; groupId?: string }) {
-    setUnitDialog({ mode: "manual", ...context });
-  }
-
-  function openSyncUnit(context: { organizationId?: string; groupId?: string; kioskId?: string }) {
-    setUnitDialog({ mode: "sync", ...context });
-  }
-
-  function handleSelectUnitOrganization(value: string) {
-    const organizationId = value === NONE ? "" : value;
-    setUnitForm((current) => {
-      const currentGroup = current.groupId ? groupById.get(current.groupId) : null;
-      return {
-        ...current,
-        organizationId,
-        groupId:
-          currentGroup && currentGroup.organizationId === organizationId
-            ? current.groupId
-            : "",
-      };
-    });
-  }
-
-  function handleSelectUnitGroup(value: string) {
-    const groupId = value === NONE ? "" : value;
-    const group = groupId ? groupById.get(groupId) : null;
-    setUnitForm((current) => ({
-      ...current,
-      groupId,
-      organizationId: group?.organizationId ?? current.organizationId,
-    }));
-  }
-
-  function handleSelectSyncCandidate(kioskId: string) {
-    if (kioskId === "__empty__") return;
-
-    const kiosk = kiosks.find((entry) => entry.id === kioskId);
-    setUnitForm((current) => ({
-      ...current,
-      kioskId,
-      name: kiosk?.name ?? current.name,
-      pdvFilialId: kiosk?.pdvFilialId ?? "",
-      bizneoTaxonId:
-        kiosk?.bizneoId && !Number.isNaN(Number(kiosk.bizneoId))
-          ? String(Number(kiosk.bizneoId))
-        : "",
-    }));
-  }
-
-  function updateOperatingDay(
-    weekday: DPWeekdayKey,
-    patch: { isOpen: boolean } | { startTime: string } | { endTime: string },
-  ) {
-    setUnitForm((current) => {
-      const existing = current.operatingHours[weekday];
-      let nextDay = existing;
-      if ("isOpen" in patch) {
-        nextDay = patch.isOpen
-          ? {
-              isOpen: true,
-              startTime: existing.isOpen ? existing.startTime : "09:00",
-              endTime: existing.isOpen ? existing.endTime : "21:00",
-            }
-          : { isOpen: false };
-      } else if (existing.isOpen) {
-        nextDay = { ...existing, ...patch };
-      }
-      return {
-        ...current,
-        operatingHours: { ...current.operatingHours, [weekday]: nextDay },
-      };
-    });
-  }
-
-  function renderResponsibilitySummary(entity: DPUnitResponsibility) {
-    if (!entity.responsibleSourceName && !entity.responsibleUserName) return null;
-
-    const sourceTypeLabel = entity.responsibleSourceType === "job_function" ? "Função" : "Cargo";
-    const activeResponsible = entity.responsibleUserId
-      ? responsibilityUsers.find((user) => user.id === entity.responsibleUserId)
-      : null;
-    const needsReplacement = entity.responsibilityStatus === "replacement_required"
-      || (!!entity.responsibleUserId && !activeResponsible);
-
-    return (
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <UserRound className="h-3.5 w-3.5" />
-        {activeResponsible ? (
-          <Badge variant="outline" className="rounded-full">
-            Responsável: {activeResponsible.username}
-          </Badge>
-        ) : null}
-        {needsReplacement ? (
-          <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-amber-700">
-            Definir novo responsável
-          </Badge>
-        ) : null}
-        {entity.responsibleSourceName ? (
-          <span>
-            {sourceTypeLabel}: {entity.responsibleSourceName}
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-
-  function renderResponsibilityFields(
-    form: ResponsibilityForm,
-    onPatch: (patch: Partial<ResponsibilityForm>) => void
-  ) {
-    const sourceOptions =
-      form.responsibleSourceType === "job_role"
-        ? activeRoles.map((role) => ({ id: role.id, label: roleLabel(role) }))
-        : form.responsibleSourceType === "job_function"
-          ? activeFunctions.map((item) => ({ id: item.id, label: functionLabel(item) }))
-          : [];
-    const candidates = responsibilityCandidates(form);
-
-    return (
-      <div className="space-y-3 rounded-2xl border bg-muted/10 p-3">
-        <div>
-          <p className="text-sm font-medium">Responsabilidade</p>
-          <p className="text-xs text-muted-foreground">
-            Vincule primeiro a um cargo ou função. Depois selecione a pessoa responsável entre os nomes compatíveis.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Tipo de vínculo</Label>
-            <Select
-              value={form.responsibleSourceType || NONE}
-              onValueChange={(value) =>
-                onPatch({
-                  responsibleSourceType:
-                    value === NONE ? "" : (value as ResponsibilityForm["responsibleSourceType"]),
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Sem responsavel</SelectItem>
-                <SelectItem value="job_role">Cargo</SelectItem>
-                <SelectItem value="job_function">Função</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>{form.responsibleSourceType === "job_function" ? "Função" : "Cargo"}</Label>
-            <Select
-              value={form.responsibleSourceId || NONE}
-              onValueChange={(value) =>
-                onPatch({ responsibleSourceId: value === NONE ? "" : value })
-              }
-              disabled={!form.responsibleSourceType}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>
-                  {form.responsibleSourceType ? "Selecione" : "Escolha o tipo primeiro"}
-                </SelectItem>
-                {sourceOptions.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-                {form.responsibleSourceType && sourceOptions.length === 0 ? (
-                  <SelectItem value="__empty_source__" disabled>
-                    Nenhuma opção disponível
-                  </SelectItem>
-                ) : null}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Pessoa responsável</Label>
-          <Select
-            value={form.responsibleUserId || NONE}
-            onValueChange={(value) =>
-              onPatch({ responsibleUserId: value === NONE ? "" : value })
-            }
-            disabled={!form.responsibleSourceId}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>
-                {form.responsibleSourceId ? "Sem responsável definido" : "Escolha cargo/função primeiro"}
-              </SelectItem>
-              {candidates.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.username}
-                </SelectItem>
-              ))}
-              {form.responsibleSourceId && candidates.length === 0 ? (
-                <SelectItem value="__empty_users__" disabled>
-                  Nenhum colaborador encontrado para este vínculo
-                </SelectItem>
-              ) : null}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-    );
-  }
-
-  function renderActionsForOrganization(organization: DPUnitOrganization) {
-    if (!canManageUnits) return null;
-
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setOrganizationDialog({ mode: "edit", organization })}>
-            <Pencil className="mr-2 h-3.5 w-3.5" />
-            Editar organização
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={() => setDeleteTarget({ kind: "organization", id: organization.id, name: organization.name })}
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" />
-            Excluir
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
-  function renderActionsForGroup(group: DPUnitGroup) {
-    if (!canManageUnits) return null;
-
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações do grupo ${group.name}`}>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setGroupDialog({ mode: "edit", group })}>
-            <Pencil className="mr-2 h-3.5 w-3.5" />
-            Editar grupo
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={() => setDeleteTarget({ kind: "group", id: group.id, name: group.name })}
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" />
-            Excluir
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
-  function renderActionsForUnit(unit: DPUnit) {
-    if (!canManageUnits) return null;
-
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações da unidade ${unit.name}`}>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setUnitDialog({ mode: "edit", unit })}>
-            <Pencil className="mr-2 h-3.5 w-3.5" />
-            Editar unidade
-          </DropdownMenuItem>
-          {unit.groupId ? (
-            <DropdownMenuItem onClick={() => void handleDetachUnitFromGroup(unit)}>
-              <Link2 className="mr-2 h-3.5 w-3.5" />
-              Remover do grupo
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={() => setDeleteTarget({ kind: "unit", id: unit.id, name: unit.name })}
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" />
-            Excluir
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
-  function shiftsForMergedUnit(unit: MergedOperationalUnit) {
-    const dpUnit = unit.dpUnit ?? (unit.kiosk ? matchUnitByName(unit.kiosk.name, units) : undefined);
-    if (!dpUnit) return [];
-    return shiftDefinitions.filter((shift) => shiftDefinitionMatchesUnit(shift, dpUnit.id));
-  }
-
-  function renderActionsForMergedUnit(unit: MergedOperationalUnit) {
-    if (unit.dpUnit) return renderActionsForUnit(unit.dpUnit);
-    if (!canManageUnits) return null;
-
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={() => openSyncUnit({ kioskId: unit.kiosk?.id })}
-          >
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            Cadastrar na estrutura
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
-  function renderUnitRow(unit: MergedOperationalUnit) {
-    const shifts = shiftsForMergedUnit(unit);
-    const isOperationalOnly = !unit.dpUnit;
-    // Metadados de integração viram uma linha calma separada por "·" em vez de
-    // uma enxurrada de pills; só a origem fica como marcador visível.
-    const metaParts = [
-      unit.dpUnit?.cnpj ? CnpjValidator.format(unit.dpUnit.cnpj) : null,
-      unit.dpUnit?.unitType || null,
-      unit.pdvFilialId ? `PDV ${unit.pdvFilialId}` : null,
-      typeof unit.bizneoTaxonId === "number"
-        ? `Bizneo ${unit.bizneoTaxonId}`
-        : "Sem Bizneo",
-    ].filter(Boolean) as string[];
-    const coverageMode = resolveDPCoverageMode(unit.dpUnit);
-    const operatingHoursSummary = formatOperatingHoursSummary(unit.dpUnit?.operatingHours);
-    const coverageSummary = coverageMode === "on_demand"
-      ? "Cobertura sob demanda · definida por data na escala mensal"
-      : coverageMode === "disabled"
-        ? "Controle de cobertura desativado"
-        : operatingHoursSummary
-          ? `Funcionamento: ${operatingHoursSummary}`
-          : "Horário de funcionamento não configurado";
-    const coverageNeedsConfiguration = coverageMode === "fixed_hours" && !operatingHoursSummary;
-
-    return (
-      <div
-        key={unit.key}
-        className="group/unit flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-muted/50"
-      >
-        <span
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
-            isOperationalOnly
-              ? "border-dashed border-border bg-transparent text-muted-foreground"
-              : "border-transparent bg-muted text-foreground"
-          )}
-        >
-          <Store className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium">{unit.name}</p>
-            <span
-              className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium",
-                isOperationalOnly
-                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  : "bg-muted text-muted-foreground"
-              )}
-            >
-              {unit.dpUnit ? unitExternalLabel(unit.dpUnit) : "Só operacional"}
-            </span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <span>{metaParts.join(" · ")}</span>
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {unit.dpUnit?.address ? <UnitAddressQuickFact address={unit.dpUnit.address} unitName={unit.name} /> : null}
-            <UnitShiftsQuickFact shifts={shifts} unitName={unit.name} />
-          </div>
-          <div className={cn(
-            "mt-1.5 flex items-start gap-1.5 text-xs leading-5",
-            coverageNeedsConfiguration ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground",
-          )}>
-            <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <p className="min-w-0">{coverageSummary}</p>
-          </div>
-        </div>
-        <div className="opacity-60 transition-opacity group-hover/unit:opacity-100">
-          {renderActionsForMergedUnit(unit)}
-        </div>
-      </div>
-    );
-  }
-
-  function renderGroupBlock(group: DPUnitGroup) {
-    const groupUnits = unitsForGroup(group.id);
-    const unitLabel = `${groupUnits.length} ${groupUnits.length === 1 ? "unidade" : "unidades"}`;
-
-    return (
-      <div key={group.id} className="px-4 py-3 first:pt-4 last:pb-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <FolderTree className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <p className="truncate text-sm font-semibold">{group.name}</p>
-              <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                {unitLabel}
-              </span>
-            </div>
-            {renderResponsibilitySummary(group)}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {renderActionsForGroup(group)}
-          </div>
-        </div>
-
-        {/* Trilho que costura as unidades sob o grupo. */}
-        <div className="ml-2 mt-2 border-l border-border/70 pl-3">
-          {groupUnits.length > 0 ? (
-            <div className="space-y-0.5">{groupUnits.map(renderUnitRow)}</div>
-          ) : (
-            <p className="px-3 py-3 text-sm text-muted-foreground">
-              Nenhuma unidade neste grupo ainda.
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  function renderOrganizationCard(organization: DPUnitOrganization) {
-    const orgGroups = organizationGroups(organization.id);
-    const orgUngroupedUnits = ungroupedUnitsForOrganization(organization.id);
-    const groupedUnitCount = orgGroups.reduce((total, group) => total + unitsForGroup(group.id).length, 0);
-    const unitCount = groupedUnitCount + orgUngroupedUnits.length;
-
-    const groupsLabel = `${orgGroups.length} ${orgGroups.length === 1 ? "grupo" : "grupos"}`;
-    const unitsLabel = `${unitCount} ${unitCount === 1 ? "unidade" : "unidades"}`;
-
-    return (
-      <section
-        key={organization.id}
-        className="overflow-hidden rounded-2xl border bg-card shadow-sm"
-      >
-        <div className="flex flex-col gap-3 border-b bg-primary/[0.04] px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Building2 className="h-[18px] w-[18px]" />
-              </span>
-              <div className="min-w-0">
-                <h3 className="truncate text-base font-semibold leading-tight">
-                  {organization.name}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {groupsLabel} · {unitsLabel}
-                </p>
-              </div>
-            </div>
-            {organization.description ? (
-              <p className="mt-2 text-sm text-muted-foreground">{organization.description}</p>
-            ) : null}
-            {renderResponsibilitySummary(organization)}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {canManageUnits ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 rounded-xl bg-background"
-                onClick={() => setGroupDialog({ mode: "create", organizationId: organization.id })}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Novo grupo
-              </Button>
-            ) : null}
-            {renderActionsForOrganization(organization)}
-          </div>
-        </div>
-
-        {orgGroups.length > 0 || orgUngroupedUnits.length > 0 ? (
-          <div className="divide-y">
-            {orgGroups.map((group) => renderGroupBlock(group))}
-            {orgUngroupedUnits.length > 0 ? (
-              <div>
-                <div className="px-4 pt-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Unidades sem grupo
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Vinculadas a esta organização, mas ainda sem grupo.
-                  </p>
-                </div>
-                <div className="px-4 pb-4 pt-2">
-                  <div className="space-y-0.5">{orgUngroupedUnits.map(renderUnitRow)}</div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            Nenhum grupo nesta organização ainda.
-          </div>
-        )}
-      </section>
-    );
-  }
+  /* ───────── apresentação ───────── */
 
   if (unitsLoading && units.length === 0 && groups.length === 0 && organizations.length === 0) {
-    return <p className="text-sm text-muted-foreground">Carregando...</p>;
+    return (
+      <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando unidades">
+        <ListSkeleton rows={6} />
+      </div>
+    );
   }
 
   if (unitsError && units.length === 0) {
-    return <p className="text-sm text-destructive">Erro ao carregar unidades: {unitsError}</p>;
+    return <p role="alert" className="text-sm font-semibold text-ds-danger">Erro ao carregar unidades: {unitsError}</p>;
   }
+
+  const tabItems = [
+    { id: "units", label: "Unidades", count: mergedUnits.length },
+    { id: "groups", label: "Grupos", count: groups.length },
+    { id: "organizations", label: "Organizações", count: organizations.length },
+  ];
+
+  const primary =
+    tab === "units"
+      ? { label: "Nova unidade", onClick: () => setUnitDialog({ mode: "manual" }) }
+      : tab === "groups"
+        ? { label: "Novo grupo", onClick: () => setGroupPanel({ mode: "create" }) }
+        : { label: "Nova organização", onClick: () => setOrganizationPanel({ mode: "create" }) };
+
+  const chips = tab === "units" ? unitChips : tab === "groups" ? groupChips : [];
+  const resultCount = tab === "units" ? visibleUnits.length : tab === "groups" ? visibleGroups.length : searchedOrganizations.length;
+  const totalCount = tab === "units" ? mergedUnits.length : tab === "groups" ? groups.length : organizations.length;
+  const noun = tab === "units" ? "unidades" : tab === "groups" ? "grupos" : "organizações";
+
+  function clearFilters() {
+    setSearch("");
+    setChipByTab((current) => ({ ...current, [tab]: "all" }));
+  }
+
+  const renderUnitRow = (unit: MergedOperationalUnit) => {
+    const { group, organization } = structureOf(unit);
+                const coverage = coverageSummaryFor(unit.dpUnit);
+                const shiftCount = shiftsFor(unit).length;
+                const meta = [unit.dpUnit?.cnpj ? CnpjValidator.format(unit.dpUnit.cnpj) : null, unit.dpUnit?.unitType || null].filter(Boolean).join(" · ");
+                return (
+                  <ListRow
+                    key={unit.key}
+                    template={UNIT_TEMPLATE}
+                    isOpen={selectedUnitKey === unit.key}
+                    isSelected={false}
+                    isMuted={false}
+                    onOpen={() => setSelectedUnitKey(unit.key)}
+                    label={`Abrir ${unit.name}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-[13.5px] font-bold">{unit.name}</p>
+                      {meta ? <p className="truncate text-xs text-ds-ink-muted">{meta}</p> : null}
+                    </div>
+                    <div className="min-w-0">
+                      {group ? <p className="truncate text-[13px] font-semibold">{group.name}</p> : <SoftPill isEmpty>Sem grupo</SoftPill>}
+                      {organization ? <p className="truncate text-xs text-ds-ink-muted">{organization.name}</p> : null}
+                    </div>
+                    <div className="min-w-0 text-xs text-ds-ink-muted">
+                      <p className="truncate">{unit.pdvFilialId ? <Mono>PDV {unit.pdvFilialId}</Mono> : "Sem PDV"}</p>
+                      <p className="truncate">{typeof unit.bizneoTaxonId === "number" ? <Mono>Bizneo {unit.bizneoTaxonId}</Mono> : "Sem Bizneo"}</p>
+                    </div>
+                    <p className={cn("min-w-0 text-xs leading-4", coverage.needsConfiguration ? "font-semibold text-ds-warn" : "text-ds-ink-muted")}>
+                      {coverage.text}
+                    </p>
+                    <div>
+                      <StatusPill variant={unit.dpUnit ? "neutral" : "warn"}>{unit.dpUnit ? unitExternalLabel(unit.dpUnit) : "Só operacional"}</StatusPill>
+                    </div>
+                    <span className="text-xs text-ds-ink-muted">{shiftCount > 0 ? pluralize(shiftCount, "turno", "turnos") : "Sem turnos"}</span>
+                    <Chevron />
+                  </ListRow>
+                );
+  };
+
+  const renderGroupRow = (group: DPUnitGroup) => {
+    const organization = organizationOfGroup(group);
+                return (
+                  <ListRow
+                    key={group.id}
+                    template={GROUP_TEMPLATE}
+                    isOpen={groupPanel?.mode !== "create" && groupPanel?.group.id === group.id}
+                    isSelected={false}
+                    isMuted={false}
+                    onOpen={() => setGroupPanel({ mode: "view", group })}
+                    label={`Abrir ${group.name}`}
+                  >
+                    <p className="truncate text-[13.5px] font-bold">{group.name}</p>
+                    {organization ? <p className="truncate text-[13px]">{organization.name}</p> : <SoftPill isEmpty>Sem organização</SoftPill>}
+                    <span className="text-xs text-ds-ink-muted">{unitsOfGroup(group.id).length}</span>
+                    {responsibilityCell(group)}
+                    <Chevron />
+                  </ListRow>
+                );
+  };
+
+  const renderBand = (band: ListBand) => {
+    if (isHidden(band.ancestors)) return null;
+    const isCollapsed = collapsed.has(band.key);
+    const responsibility = band.entity ? describeResponsibility(band.entity.value, directory.users) : null;
+    const note = responsibility ? `Responsável: ${responsibility.person ?? responsibility.source}` : null;
+    return (
+      <div
+        key={band.key}
+        data-ui="list-band"
+        className={cn(
+          "flex items-center gap-2 border-b border-ds-divider pr-3",
+          band.level === 0 ? "bg-ds-muted" : "bg-ds-page/60"
+        )}
+      >
+        <button
+          type="button"
+          aria-expanded={!isCollapsed}
+          onClick={() => toggleBand(band.key)}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2.5 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-inset",
+            band.level === 0 ? "pl-5" : "pl-10"
+          )}
+        >
+          <span aria-hidden="true" className="w-3 text-[11px] text-ds-ink-faint">{isCollapsed ? "▸" : "▾"}</span>
+          <span className={cn("truncate font-extrabold", band.level === 0 ? "text-[13.5px]" : "text-[12.5px]")}>{band.title}</span>
+          {band.subtitle ? <span className="truncate text-xs text-ds-ink-muted">{band.subtitle}</span> : null}
+          <span className="ml-auto shrink-0 text-xs text-ds-ink-faint">{[note, band.meta].filter(Boolean).join(" · ")}</span>
+        </button>
+        {band.entity ? (
+          <Button
+            type="button"
+            variant="ds-link"
+            size="xs"
+            aria-label={`Ver detalhes de ${band.title}`}
+            onClick={() =>
+              band.entity?.kind === "group"
+                ? setGroupPanel({ mode: "view", group: band.entity.value })
+                : band.entity && setOrganizationPanel({ mode: "view", organization: band.entity.value })
+            }
+          >
+            Ver
+          </Button>
+        ) : null}
+      </div>
+    );
+  };
+
+  const responsibilityCell = (entity: DPUnitOrganization | DPUnitGroup) => {
+    const info = describeResponsibility(entity, directory.users);
+    if (!info) return <SoftPill isEmpty>Não definido</SoftPill>;
+    return (
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="truncate text-[13px] font-semibold">{info.person ?? info.source}</span>
+          {info.needsReplacement ? <StatusPill variant="warn">Definir novo</StatusPill> : null}
+        </div>
+        {info.person && info.source ? <p className="truncate text-xs text-ds-ink-muted">{info.source}</p> : null}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold">Estrutura organizacional</h3>
-          <p className="text-sm text-muted-foreground">
-            Organizações reúnem grupos; grupos reúnem unidades.
-          </p>
+      <CadastrosHero
+        kicker="Estrutura organizacional"
+        tabs={<CadastrosTabs tabs={tabItems} active={tab} onChange={(id) => setTab(id as UnitsTab)} />}
+        search={{
+          value: search,
+          placeholder: tab === "units" ? "Buscar unidade, CNPJ, grupo ou PDV" : tab === "groups" ? "Buscar grupo, organização ou responsável" : "Buscar organização ou responsável",
+          onChange: setSearch,
+        }}
+        manage={
+          canManageUnits && tab === "units" && syncCandidates.length > 0
+            ? { label: "Criar via sincronização", onClick: () => setUnitDialog({ mode: "sync" }) }
+            : undefined
+        }
+        primary={canManageUnits ? primary : undefined}
+        chips={chips}
+        activeChip={chipByTab[tab]}
+        onChip={(id) => setChipByTab((current) => ({ ...current, [tab]: id }))}
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[28px] font-extrabold tracking-[-0.03em]">{resultCount}</span>
+          <span className="text-[13px] text-ds-ink-faint">de {totalCount} {noun}</span>
         </div>
-        {canManageUnits ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <UnitCreateMenu onManual={openManualUnit} onSync={openSyncUnit} />
-            <Button
-              variant="outline"
-              className="rounded-xl"
-              onClick={() => setOrganizationDialog({ mode: "create" })}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nova organização
-            </Button>
+        {tab !== "organizations" ? (
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-bold text-ds-ink-2">Agrupar por</span>
+            <Segmented<GroupByMode>
+              aria-label="Agrupar por"
+              value={groupBy[tab]}
+              onChange={(mode) => setGroupBy((current) => ({ ...current, [tab]: mode }))}
+              options={
+                tab === "units"
+                  ? [
+                      { value: "none", label: "Nenhum" },
+                      { value: "organization", label: "Organização" },
+                      { value: "group", label: "Grupo" },
+                    ]
+                  : [
+                      { value: "none", label: "Nenhum" },
+                      { value: "organization", label: "Organização" },
+                    ]
+              }
+            />
           </div>
         ) : null}
       </div>
 
-      <div className="space-y-4">
-        {organizations.length > 0 ? (
-          organizations.map(renderOrganizationCard)
-        ) : (
-          <div className="rounded-2xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-            Nenhuma organização cadastrada. Crie uma organização para começar a estruturar os grupos.
-          </div>
-        )}
-
-        <section className="overflow-hidden rounded-2xl border border-dashed bg-muted/20">
-          <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-dashed border-border bg-background text-muted-foreground">
-                  <Link2 className="h-[18px] w-[18px]" />
-                </span>
-                <div className="min-w-0">
-                  <h3 className="truncate text-base font-semibold leading-tight">Sem organização</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {unorganizedGroups.length}{" "}
-                    {unorganizedGroups.length === 1 ? "grupo" : "grupos"} ·{" "}
-                    {ungroupedUnits.length} sem grupo
-                  </p>
-                </div>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Itens ainda não vinculados a uma organização aparecem aqui.
-              </p>
-            </div>
-          </div>
-
-          {unorganizedGroups.length > 0 ? (
-            <div className="divide-y border-t border-dashed bg-background/60">
-              {unorganizedGroups.map((group) => renderGroupBlock(group))}
-            </div>
-          ) : null}
-
-          {ungroupedUnits.length > 0 ? (
-            <div className="border-t border-dashed bg-background/60">
-              <div className="px-4 pt-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Unidades sem grupo
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Inclui unidades cadastradas sem grupo e unidades só operacionais ainda não cadastradas na estrutura.
-                </p>
-              </div>
-              <div className="px-4 pb-4 pt-2">
-                <div className="space-y-0.5">{ungroupedUnits.map(renderUnitRow)}</div>
-              </div>
-            </div>
-          ) : unorganizedGroups.length === 0 ? (
-            <div className="border-t border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-              Nenhuma unidade sem organização.
-            </div>
-          ) : null}
-        </section>
-      </div>
-
-      <Dialog open={!!organizationDialog} onOpenChange={(open) => !open && setOrganizationDialog(null)}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {organizationDialog?.mode === "edit" ? "Editar organização" : "Nova organização"}
-            </DialogTitle>
-            <DialogDescription>
-              Uma organização agrupa os grupos de unidades da operação.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input
-                value={organizationForm.name}
-                onChange={(event) => setOrganizationForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Ex.: Grupo Elo"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea
-                value={organizationForm.description}
-                onChange={(event) => setOrganizationForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="Uso interno para contexto da organização."
-                className="min-h-24"
-              />
-            </div>
-            {renderResponsibilityFields(organizationForm, updateOrganizationResponsibility)}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOrganizationDialog(null)}>Cancelar</Button>
-            <Button
-              onClick={() => void handleSaveOrganization()}
-              disabled={saving === "organization" || !organizationForm.name.trim()}
-            >
-              {saving === "organization" ? "Salvando..." : "Salvar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!groupDialog} onOpenChange={(open) => !open && setGroupDialog(null)}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{groupDialog?.mode === "edit" ? "Editar grupo" : "Novo grupo"}</DialogTitle>
-            <DialogDescription>
-              O grupo fica dentro de uma organização e recebe as unidades vinculadas.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input
-                value={groupForm.name}
-                onChange={(event) => setGroupForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Ex.: Grupo Elo"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Organização</Label>
-              <Select
-                value={groupForm.organizationId || NONE}
-                onValueChange={(value) =>
-                  setGroupForm((current) => ({
-                    ...current,
-                    organizationId: value === NONE ? "" : value,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma organização" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Sem organização</SelectItem>
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {renderResponsibilityFields(groupForm, updateGroupResponsibility)}
-            {(() => {
-              const editingGroupId = groupDialog?.mode === "edit" ? groupDialog.group.id : null;
-              const candidates = groups.filter((group) => group.id !== editingGroupId);
-              if (candidates.length === 0) return null;
-              return (
-                <div className="space-y-3 rounded-xl border p-4" data-testid="group-supplied-groups">
-                  <div>
-                    <Label>Grupos que este grupo abastece</Label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Usado no estoque: o mínimo das unidades de abastecimento deste grupo (como o CD) soma o consumo
-                      das unidades comerciais dos grupos marcados. Deixe vazio se este grupo não abastece outros.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    {candidates.map((group) => {
-                      const checked = groupForm.suppliedGroupIds.includes(group.id);
-                      return (
-                        <label key={group.id} className="flex items-center gap-2 text-sm">
-                          <Checkbox
-                            checked={checked}
-                            aria-label={`Abastece ${group.name}`}
-                            onCheckedChange={(value) =>
-                              setGroupForm((current) => ({
-                                ...current,
-                                suppliedGroupIds: value === true
-                                  ? [...current.suppliedGroupIds.filter((id) => id !== group.id), group.id]
-                                  : current.suppliedGroupIds.filter((id) => id !== group.id),
-                              }))
-                            }
-                          />
-                          {group.name}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setGroupDialog(null)}>Cancelar</Button>
-            <Button
-              onClick={() => void handleSaveGroup()}
-              disabled={saving === "group" || !groupForm.name.trim()}
-            >
-              {saving === "group" ? "Salvando..." : "Salvar grupo"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!unitDialog} onOpenChange={(open) => !open && setUnitDialog(null)}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {unitDialog?.mode === "edit"
-                ? "Editar unidade"
-                : unitDialog?.mode === "sync"
-                  ? "Criar via sincronização"
-                  : "Criar unidade manualmente"}
-            </DialogTitle>
-            <DialogDescription>
-              {unitDialog?.mode === "sync"
-                ? "Selecione uma unidade operacional existente e revise o nome antes de salvar."
-                : "Defina os dados cadastrais, a organização, o grupo e as integrações da unidade."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {unitDialog?.mode === "sync" ? (
-              <div className="space-y-2">
-                <Label>Origem</Label>
-                <Select value={unitForm.kioskId} onValueChange={handleSelectSyncCandidate}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma unidade operacional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {syncCandidates.length > 0 ? (
-                      syncCandidates.map((kiosk) => (
-                        <SelectItem key={kiosk.id} value={kiosk.id}>
-                          {kiosk.name || kiosk.id}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="__empty__" disabled>
-                        Nenhuma unidade disponível para sincronizar
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  A cópia traz o vínculo da unidade operacional. O nome continua editável antes de salvar.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="space-y-2">
-              <Label>Nome da unidade</Label>
-              <Input
-                value={unitForm.name}
-                onChange={(event) => setUnitForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Ex.: Quiosque João Paulo"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>CNPJ</Label>
-                <Input
-                  value={unitForm.cnpj}
-                  onChange={(event) => setUnitForm((current) => ({
-                    ...current,
-                    cnpj: maskCnpjInput(event.target.value),
-                  }))}
-                  placeholder="00.000.000/0000-00"
-                  inputMode="numeric"
-                  aria-invalid={unitCnpjValidation ? !unitCnpjValidation.valid : undefined}
-                />
-                {unitCnpjValidation && !unitCnpjValidation.valid ? (
-                  <p className="text-xs text-destructive">
-                    {unitCnpjValidation.clean.length < 14
-                      ? "Informe os 14 dígitos do CNPJ."
-                      : unitCnpjValidation.message}
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo de unidade</Label>
-                <Input
-                  value={unitForm.unitType}
-                  onChange={(event) => setUnitForm((current) => ({ ...current, unitType: event.target.value }))}
-                  placeholder="Ex.: Quiosque pequeno"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Campo livre; as opções serão configuradas depois.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Endereço</Label>
-              <Textarea
-                value={unitForm.address}
-                onChange={(event) => setUnitForm((current) => ({ ...current, address: event.target.value }))}
-                placeholder="Rua, número, complemento, bairro, cidade e UF"
-                rows={2}
-              />
-            </div>
-
-            <div className="space-y-3 rounded-xl border p-4" data-testid="unit-stock-role">
-              <div>
-                <Label>Função no estoque</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Define como o estoque mínimo da unidade é calculado. Comercial usa o consumo da própria unidade;
-                  abastecimento e mista usam a soma do consumo das unidades atendidas (veja &quot;Grupos que este grupo abastece&quot;).
-                </p>
-              </div>
-              <Select
-                value={unitForm.stockRole}
-                onValueChange={(stockRole: DPUnitStockRole) => setUnitForm((current) => ({ ...current, stockRole }))}
-              >
-                <SelectTrigger aria-label="Função no estoque">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="commercial">Unidade comercial</SelectItem>
-                  <SelectItem value="mixed">Unidade mista (comercial e abastecimento)</SelectItem>
-                  <SelectItem value="supply">Unidade de abastecimento</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3 rounded-xl border p-4">
-              <div>
-                <Label>Modelo de cobertura</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Define como a escala identifica falta de pessoas na unidade.
-                </p>
-              </div>
-              <Select
-                value={unitForm.coverageMode}
-                onValueChange={(coverageMode: DPCoverageMode) => setUnitForm((current) => ({ ...current, coverageMode }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fixed_hours">Horário fixo</SelectItem>
-                  <SelectItem value="on_demand">Sob demanda</SelectItem>
-                  <SelectItem value="disabled">Sem controle de cobertura</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {unitForm.coverageMode === "fixed_hours" ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    A escala usará os intervalos abaixo para identificar períodos sem nenhum turno cobrindo a unidade.
-                  </p>
-                  <div className="divide-y rounded-lg border">
-                    {DP_WEEKDAYS.map(({ key, label }) => {
-                      const operatingDay = unitForm.operatingHours[key];
-                      return (
-                        <div key={key} className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3 px-3 py-2 sm:grid-cols-[minmax(150px,1fr)_auto_110px_110px]">
-                          <span className="text-sm font-medium">{label}</span>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={operatingDay.isOpen}
-                              onCheckedChange={(checked) => updateOperatingDay(key, { isOpen: checked })}
-                              aria-label={`${operatingDay.isOpen ? "Fechar" : "Abrir"} ${label}`}
-                            />
-                            <span className="w-14 text-xs text-muted-foreground">
-                              {operatingDay.isOpen ? "Aberta" : "Fechada"}
-                            </span>
-                          </div>
-                          <Input
-                            type="time"
-                            value={operatingDay.isOpen ? operatingDay.startTime : ""}
-                            onChange={(event) => updateOperatingDay(key, { startTime: event.target.value })}
-                            disabled={!operatingDay.isOpen}
-                            aria-label={`Abertura de ${label}`}
-                            className="tabular-nums"
-                          />
-                          <Input
-                            type="time"
-                            value={operatingDay.isOpen ? operatingDay.endTime : ""}
-                            onChange={(event) => updateOperatingDay(key, { endTime: event.target.value })}
-                            disabled={!operatingDay.isOpen}
-                            aria-label={`Encerramento de ${label}`}
-                            className="tabular-nums"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {!dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success ? (
-                    <p className="text-xs font-medium text-destructive">
-                      Em cada dia aberto, o encerramento deve ser posterior à abertura.
-                    </p>
-                  ) : null}
-                </>
-              ) : unitForm.coverageMode === "on_demand" ? (
-                <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
-                  Os intervalos e a quantidade mínima de pessoas serão definidos separadamente em cada data da escala mensal.
-                </p>
+      <ListShell minWidth={tab === "units" ? 1040 : 860}>
+        {tab === "units" ? (
+          <>
+            <ListHead template={UNIT_TEMPLATE}>
+              <span>Unidade</span>
+              <span>Estrutura</span>
+              <span>Integrações</span>
+              <span>Cobertura</span>
+              <span>Origem</span>
+              <span>Turnos</span>
+              <span />
+            </ListHead>
+            {unitEntries.map((entry) =>
+              entry.type === "band" ? renderBand(entry) : isHidden(entry.ancestors) ? null : renderUnitRow(entry.unit)
+            )}
+            {visibleUnits.length === 0 ? (
+              mergedUnits.length === 0 ? (
+                <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma unidade cadastrada. Crie a primeira com “Nova unidade”.</p>
               ) : (
-                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  A escala não exibirá alertas de cobertura para esta unidade.
-                </p>
-              )}
-            </div>
+                <EmptyResults title="Nenhuma unidade encontrada com esses filtros." onClear={clearFilters} />
+              )
+            ) : null}
+          </>
+        ) : null}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Organização</Label>
-                <Select value={unitForm.organizationId || NONE} onValueChange={handleSelectUnitOrganization}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma organização" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Sem organização</SelectItem>
-                    {organizations.map((organization) => (
-                      <SelectItem key={organization.id} value={organization.id}>
-                        {organization.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Grupo</Label>
-                <Select value={unitForm.groupId || NONE} onValueChange={handleSelectUnitGroup}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um grupo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Sem grupo</SelectItem>
-                    {availableGroupsForUnitForm.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+        {tab === "groups" ? (
+          <>
+            <ListHead template={GROUP_TEMPLATE}>
+              <span>Grupo</span>
+              <span>Organização</span>
+              <span>Unidades</span>
+              <span>Responsável</span>
+              <span />
+            </ListHead>
+            {groupEntries.map((entry) =>
+              entry.type === "band" ? renderBand(entry) : isHidden(entry.ancestors) ? null : renderGroupRow(entry.group)
+            )}
+            {visibleGroups.length === 0 ? (
+              groups.length === 0 ? (
+                <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum grupo cadastrado. Crie o primeiro com “Novo grupo”.</p>
+              ) : (
+                <EmptyResults title="Nenhum grupo encontrado com esses filtros." onClear={clearFilters} />
+              )
+            ) : null}
+          </>
+        ) : null}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <Label>Filial no PDV Legal</Label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Vínculo exclusivo com a unidade retornada pelo PDV.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => void loadPdvFiliais()}
-                    disabled={pdvFiliaisLoading}
-                    aria-label="Atualizar filiais do PDV Legal"
-                  >
-                    <RefreshCw className={cn("h-4 w-4", pdvFiliaisLoading && "animate-spin")} />
-                  </Button>
+        {tab === "organizations" ? (
+          <>
+            <ListHead template={ORGANIZATION_TEMPLATE}>
+              <span>Organização</span>
+              <span>Grupos</span>
+              <span>Unidades</span>
+              <span>Responsável</span>
+              <span />
+            </ListHead>
+            {searchedOrganizations.map((organization) => (
+              <ListRow
+                key={organization.id}
+                template={ORGANIZATION_TEMPLATE}
+                isOpen={organizationPanel?.mode !== "create" && organizationPanel?.organization.id === organization.id}
+                isSelected={false}
+                isMuted={false}
+                onOpen={() => setOrganizationPanel({ mode: "view", organization })}
+                label={`Abrir ${organization.name}`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-[13.5px] font-bold">{organization.name}</p>
+                  {organization.description ? <p className="truncate text-xs text-ds-ink-muted">{organization.description}</p> : null}
                 </div>
-                <Select
-                  value={unitForm.pdvFilialId || NONE}
-                  onValueChange={(value) => setUnitForm((current) => ({
-                    ...current,
-                    pdvFilialId: value === NONE ? "" : value,
-                  }))}
-                  disabled={pdvFiliaisLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={pdvFiliaisLoading ? "Buscando filiais..." : "Selecione a filial do PDV"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>Sem vínculo com o PDV</SelectItem>
-                    {unitForm.pdvFilialId && !pdvFiliais.some((filial) => filial.id === unitForm.pdvFilialId) ? (
-                      <SelectItem value={unitForm.pdvFilialId}>
-                        Vínculo atual não localizado · ID {unitForm.pdvFilialId}
-                      </SelectItem>
-                    ) : null}
-                    {pdvFiliais.map((filial) => (
-                      <SelectItem key={filial.id} value={filial.id}>
-                        {filial.name} · {filial.cnpj ?? "CNPJ não informado"} · ID {filial.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {pdvFiliaisError ? (
-                  <p className="text-xs font-medium text-destructive">{pdvFiliaisError}</p>
-                ) : unitForm.pdvFilialId ? (
-                  <p className="text-xs font-semibold text-sky-800">
-                    {pdvFiliais.find((filial) => filial.id === unitForm.pdvFilialId)
-                      ? "Filial validada na API do PDV Legal."
-                      : "Este ID ainda não foi validado na consulta atual."}
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
-                <div>
-                  <Label>ID da unidade no Bizneo</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Taxon do Bizneo. Este vínculo é independente do PDV Legal.
-                  </p>
-                </div>
-                <Input
-                  value={unitForm.bizneoTaxonId}
-                  onChange={(event) => setUnitForm((current) => ({ ...current, bizneoTaxonId: event.target.value }))}
-                  placeholder="ID/taxon do Bizneo"
-                  inputMode="numeric"
-                />
-              </div>
-            </div>
-          </div>
+                <span className="text-xs text-ds-ink-muted">{groups.filter((group) => group.organizationId === organization.id).length}</span>
+                <span className="text-xs text-ds-ink-muted">{unitsOfOrganization(organization.id).length}</span>
+                {responsibilityCell(organization)}
+                <Chevron />
+              </ListRow>
+            ))}
+            {searchedOrganizations.length === 0 ? (
+              organizations.length === 0 ? (
+                <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma organização cadastrada. Crie uma para começar a estruturar os grupos.</p>
+              ) : (
+                <EmptyResults title="Nenhuma organização encontrada com essa busca." onClear={clearFilters} />
+              )
+            ) : null}
+          </>
+        ) : null}
+      </ListShell>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUnitDialog(null)}>Cancelar</Button>
-            <Button
-              onClick={() => void handleSaveUnit()}
-              disabled={
-                saving === "unit" ||
-                !unitForm.name.trim() ||
-                (unitCnpjValidation !== null && !unitCnpjValidation.valid) ||
-                !dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success ||
-                (unitDialog?.mode === "sync" && !unitForm.kioskId)
-              }
-            >
-              {saving === "unit" ? "Salvando..." : "Salvar unidade"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UnitDetailPanel
+        unit={selectedUnit}
+        organization={selectedUnit ? structureOf(selectedUnit).organization : undefined}
+        group={selectedUnit ? structureOf(selectedUnit).group : undefined}
+        shifts={selectedUnit ? shiftsFor(selectedUnit) : []}
+        canManage={canManageUnits}
+        busy={saving === "unit" || saving === "delete"}
+        onClose={() => setSelectedUnitKey(null)}
+        onEdit={(unit) => { setSelectedUnitKey(null); setUnitDialog({ mode: "edit", unit }); }}
+        onRegister={(kioskId) => { setSelectedUnitKey(null); setUnitDialog({ mode: "sync", kioskId }); }}
+        onDetachFromGroup={(unit) => void detachUnitFromGroup(unit)}
+        onDelete={(unit) => removeWith(() => deleteUnit(unit.id), () => setSelectedUnitKey(null))}
+      />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir cadastro?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget?.kind === "organization"
-                ? "A organização será removida. Grupos e unidades vinculados serão preservados e aparecerão em Sem organização."
-                : deleteTarget?.kind === "group"
-                  ? "O grupo será removido. As unidades vinculadas serão preservadas e aparecerão em Sem organização."
-                  : "A unidade será removida do cadastro administrativo."}
-              <br />
-              <strong>{deleteTarget?.name}</strong>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={saving === "delete"}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void handleDelete()}
-              disabled={saving === "delete"}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {saving === "delete" ? "Excluindo..." : "Excluir"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <UnitWizardModal
+        dialog={unitDialog}
+        organizations={organizations}
+        groups={groups}
+        kiosks={kiosks}
+        syncCandidates={syncCandidates}
+        saving={saving === "unit"}
+        onClose={() => setUnitDialog(null)}
+        onSubmit={saveUnit}
+      />
+
+      <GroupPanel
+        state={groupPanel}
+        organizations={organizations}
+        groups={groups}
+        units={groupPanel && groupPanel.mode !== "create" ? unitsOfGroup(groupPanel.group.id) : []}
+        directory={directory}
+        canManage={canManageUnits}
+        saving={saving === "group" || saving === "delete"}
+        onClose={() => setGroupPanel(null)}
+        onMode={setGroupPanel}
+        onSave={saveGroup}
+        onDelete={(group) => removeWith(() => deleteUnitGroup(group.id), () => setGroupPanel(null))}
+      />
+
+      <OrganizationPanel
+        state={organizationPanel}
+        groups={groups}
+        units={organizationPanel && organizationPanel.mode !== "create" ? unitsOfOrganization(organizationPanel.organization.id) : []}
+        directory={directory}
+        canManage={canManageUnits}
+        saving={saving === "organization" || saving === "delete"}
+        onClose={() => setOrganizationPanel(null)}
+        onMode={setOrganizationPanel}
+        onSave={saveOrganization}
+        onDelete={(organization) => removeWith(() => deleteUnitOrganization(organization.id), () => setOrganizationPanel(null))}
+      />
     </div>
   );
 }

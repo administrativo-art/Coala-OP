@@ -558,3 +558,38 @@
     --ds-dur: .18s;
   }
 }
+
+
+/* Nome do sistema na barra da Programação do Instagram: batimento duplo e brilho rosa. */
+@keyframes coala-pulse-name {
+  0%, 100% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+  14% { transform: scale(1.06); text-shadow: 0 0 14px var(--ds-accent); }
+  28% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+  42% { transform: scale(1.04); text-shadow: 0 0 10px var(--ds-accent); }
+  70% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+}
+.coala-pulse-name {
+  display: inline-block;
+  transform-origin: left center;
+  animation: coala-pulse-name 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coala-pulse-name { animation: none; }
+}
+
+/* "One": um brilho percorre a palavra, passando a ideia de tudo conectado num só lugar. */
+@keyframes coala-shimmer-word {
+  0% { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+.coala-shimmer-word {
+  background: linear-gradient(110deg, var(--ds-accent-kicker-dark) 25%, #ffffff 45%, var(--ds-accent-kicker-dark) 65%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: coala-shimmer-word 3.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coala-shimmer-word { animation: none; background: none; color: var(--ds-accent-kicker-dark); -webkit-text-fill-color: currentColor; }
+}

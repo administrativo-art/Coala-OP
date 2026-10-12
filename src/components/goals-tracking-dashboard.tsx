@@ -2,6 +2,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { ControlPanel } from '@/components/patterns/control-panel';
+import { FilterChips } from '@/components/patterns/filter-chips';
+import { PanelStat } from '@/components/goals/goals-ui';
+import { useKioskGroups } from '@/hooks/use-kiosk-groups';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { db, functions } from '@/lib/firebase';
@@ -17,7 +21,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -417,7 +420,7 @@ const TIER_PALETTE = {
   top: { dot: 'bg-violet-400', text: 'text-violet-600', fill: 'bg-violet-500', track: 'bg-violet-100' },
 } as const;
 const TIER_REACHED = { dot: 'bg-emerald-500', text: 'text-emerald-600', fill: 'bg-emerald-500', track: 'bg-emerald-100' };
-const TIER_FUTURE = { dot: 'bg-zinc-300', text: 'text-zinc-400', fill: 'bg-zinc-300', track: 'bg-zinc-100' };
+const TIER_FUTURE = { dot: 'bg-zinc-300', text: 'text-ds-ink-faint', fill: 'bg-zinc-300', track: 'bg-ds-muted' };
 
 function tierStateStyle(tone: 'target' | 'up' | 'top', state: 'reached' | 'active' | 'future') {
   if (state === 'reached') return TIER_REACHED;
@@ -506,7 +509,7 @@ function GoalTierProgressRows({
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
                 <span className={`font-black ${style.text}`}>{tier.label}</span>
-                <span className="truncate font-semibold text-zinc-400">R$ {fmt(tier.amount)}</span>
+                <span className="truncate font-semibold text-ds-ink-faint">R$ {fmt(tier.amount)}</span>
               </span>
               <span className={`flex shrink-0 items-center gap-0.5 font-black ${style.text}`}>
                 {reached && <CheckCircle className={compact ? 'h-2.5 w-2.5' : 'h-3 w-3'} />}
@@ -580,17 +583,17 @@ function GoalTierDualProgress({ current, projection, target, up, top }: {
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
                 <span className={`font-black ${style.text}`}>{tier.label}</span>
-                <span className="truncate font-semibold text-zinc-400">R$ {fmt(tier.amount)}</span>
+                <span className="truncate font-semibold text-ds-ink-faint">R$ {fmt(tier.amount)}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2 font-black">
                 <span className={style.text}>{currentPct.toFixed(0)}%</span>
-                <span className={`flex items-center gap-0.5 ${projReached ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                <span className={`flex items-center gap-0.5 ${projReached ? 'text-emerald-600' : 'text-ds-ink-faint'}`}>
                   {projReached && <CheckCircle className="h-2.5 w-2.5" />}
                   {projPct.toFixed(0)}%
                 </span>
               </span>
             </div>
-            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
+            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-ds-muted">
               <div
                 className={`absolute inset-y-0 left-0 rounded-full ${projReached ? 'bg-emerald-200' : 'bg-zinc-200'}`}
                 style={{ width: `${projW}%` }}
@@ -609,7 +612,7 @@ function GoalTierDualProgress({ current, projection, target, up, top }: {
           </div>
         );
       })}
-      <div className="flex items-center gap-3 pt-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">
+      <div className="flex items-center gap-3 pt-0.5 text-[9px] font-bold uppercase tracking-wider text-ds-ink-faint">
         <span className="flex items-center gap-1"><span className={`h-1.5 w-3 rounded-full ${TIER_PALETTE[currentTone].fill}`} /> agora</span>
         <span className="flex items-center gap-1"><span className="h-1.5 w-3 rounded-full bg-emerald-300" /> projeção</span>
       </div>
@@ -826,8 +829,8 @@ function DailyStatusPill({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'na' }) {
   const config = {
     ok:   { label: '✓', cls: 'border-emerald-400 bg-emerald-500 text-white shadow-[0_6px_16px_-10px_rgba(34,197,94,0.8)]' },
     miss: { label: '✗', cls: 'border-amber-300 bg-amber-100 text-amber-700' },
-    zero: { label: '⚠', cls: 'border-zinc-300 bg-zinc-50 text-zinc-500' },
-    na:   { label: '—', cls: 'border-slate-200 bg-slate-100 text-slate-400' },
+    zero: { label: '⚠', cls: 'border-zinc-300 bg-ds-warm text-ds-ink-muted' },
+    na:   { label: '—', cls: 'border-ds-border bg-ds-muted text-ds-ink-faint' },
   }[tone];
 
   return (
@@ -841,8 +844,8 @@ function DailyReferenceStatus({ tone }: { tone: 'ok' | 'zero' | 'miss' | 'future
   const config = {
     ok: { label: '✓', cls: 'border-emerald-500 bg-emerald-500 text-white shadow-[0_7px_18px_-12px_rgba(16,185,129,0.9)]' },
     miss: { label: '×', cls: 'border-amber-300 bg-amber-50 text-amber-500' },
-    zero: { label: '△', cls: 'border-zinc-200 bg-white text-zinc-400' },
-    future: { label: '−', cls: 'border-slate-200 bg-slate-50 text-slate-300' },
+    zero: { label: '△', cls: 'border-ds-border bg-white text-ds-ink-faint' },
+    future: { label: '−', cls: 'border-ds-border bg-ds-warm text-slate-300' },
   }[tone];
 
   return (
@@ -857,7 +860,7 @@ function DailyBalanceBar({ balance, maxAbs, tone }: { balance: number; maxAbs: n
   const color = tone === 'ok' ? 'bg-emerald-500' : tone === 'zero' ? 'bg-rose-300' : tone === 'miss' ? 'bg-amber-400' : 'bg-slate-200';
 
   return (
-    <div className="relative h-2 w-full rounded-full bg-zinc-100">
+    <div className="relative h-2 w-full rounded-full bg-ds-muted">
       <span className="absolute left-1/2 top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-zinc-200" />
       {balance >= 0 ? (
         <span className={`absolute left-1/2 top-0 h-2 rounded-r-full ${color}`} style={{ width: `${width}%` }} />
@@ -1022,19 +1025,19 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[1200px] grid h-[min(92vh,1180px)] w-[min(94vw,1200px)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[30px] border border-zinc-200 bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
+      <DialogContent className="!max-w-[1200px] grid h-[min(92vh,1180px)] w-[min(94vw,1200px)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-ds-card-lg border border-ds-border bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
         <div className="px-5 pb-6 pt-8 sm:px-12 sm:pb-7 sm:pt-10">
           <div className="flex items-start gap-4 pr-4 sm:pr-12">
             <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-pink-500 text-white shadow-[0_10px_24px_-14px_rgba(236,72,153,0.8)]">
               <Flag className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-[13px] font-black uppercase tracking-[0.18em] text-zinc-400">{periodLabel}</p>
-              <DialogTitle className="mt-3 text-[2.15rem] font-black leading-none tracking-[-0.06em] text-zinc-900 md:text-[2.45rem]">
+              <p className="text-[13px] font-black uppercase tracking-[0.18em] text-ds-ink-faint">{periodLabel}</p>
+              <DialogTitle className="mt-3 text-[2.15rem] font-black leading-none tracking-[-0.06em] text-ds-ink md:text-[2.45rem]">
                 {titleLabel}
               </DialogTitle>
               {subjectName ? (
-                <DialogDescription className="mt-3 text-sm font-bold text-zinc-500">
+                <DialogDescription className="mt-3 text-sm font-bold text-ds-ink-muted">
                   {subjectName}
                 </DialogDescription>
               ) : (
@@ -1045,14 +1048,14 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
         </div>
 
         {scope === 'monthly' ? (
-          <div className="mx-4 grid items-stretch gap-4 rounded-[20px] border border-zinc-200 px-5 py-5 sm:mx-12 lg:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.28fr)]">
-            <div className="rounded-[16px] bg-pink-50 px-5 py-4">
+          <div className="mx-4 grid items-stretch gap-4 rounded-ds-card border border-ds-border px-5 py-5 sm:mx-12 lg:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.28fr)]">
+            <div className="rounded-ds-card bg-pink-50 px-5 py-4">
               <p className="text-[12px] font-black uppercase tracking-[0.12em] text-pink-500">Faturado no mês</p>
               <p className="mt-3 whitespace-nowrap text-[clamp(1.6rem,2.5vw,2.2rem)] font-black leading-none tracking-[-0.03em] text-pink-500">R$ {fmt(totalRealized)}</p>
               <p className="mt-3 text-sm font-semibold text-pink-700/70">{targetPct.toFixed(1)}% da Meta Alvo</p>
             </div>
-            <div className="rounded-[16px] bg-zinc-50 px-5 py-4">
-              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Metas do mês</p>
+            <div className="rounded-ds-card bg-ds-warm px-5 py-4">
+              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Metas do mês</p>
               <div className="mt-3 max-w-[640px]">
                 <GoalTierProgressRows
                   value={totalRealized}
@@ -1064,32 +1067,32 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
             </div>
           </div>
         ) : (
-          <div className="mx-4 grid grid-cols-2 items-start gap-5 rounded-[20px] border border-zinc-200 px-5 py-6 sm:mx-12 sm:grid-cols-4 sm:gap-10 sm:px-9 sm:py-7">
+          <div className="mx-4 grid grid-cols-2 items-start gap-5 rounded-ds-card border border-ds-border px-5 py-6 sm:mx-12 sm:grid-cols-4 sm:gap-10 sm:px-9 sm:py-7">
             <div className="min-w-0">
-              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Realizado</p>
+              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Realizado</p>
               <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-pink-500">R$ {fmt(totalRealized)}</p>
-              <p className="mt-3 text-sm font-semibold text-zinc-400">{targetPct.toFixed(0)}% da meta</p>
+              <p className="mt-3 text-sm font-semibold text-ds-ink-faint">{targetPct.toFixed(0)}% da meta</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">{targetCardLabel}</p>
-              <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-zinc-900">R$ {fmt(totalTarget)}</p>
-              <p className="mt-3 text-sm font-semibold text-zinc-400">{activeRows.length} de {days.length} dias</p>
+              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">{targetCardLabel}</p>
+              <p className="mt-3 whitespace-nowrap text-[clamp(1.25rem,2vw,1.8rem)] font-black leading-none tracking-[-0.02em] text-ds-ink">R$ {fmt(totalTarget)}</p>
+              <p className="mt-3 text-sm font-semibold text-ds-ink-faint">{activeRows.length} de {days.length} dias</p>
             </div>
             <div>
-              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Dias batidos</p>
+              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Dias batidos</p>
               <p className="mt-3 text-[clamp(1.35rem,2.1vw,1.95rem)] font-black leading-none tracking-[0.02em] text-emerald-600">
                 {hitCount}/{Math.max(elapsedRows.length, 0)}
               </p>
-              <p className="mt-3 text-sm font-semibold text-zinc-400">
+              <p className="mt-3 text-sm font-semibold text-ds-ink-faint">
                 {elapsedRows.length > 0 ? `${((hitCount / elapsedRows.length) * 100).toFixed(0)}% de acerto` : 'Sem dias apurados'}
               </p>
             </div>
             <div>
-              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">Melhor · Pior</p>
-              <p className="mt-3 text-[clamp(1.35rem,2.1vw,1.95rem)] font-black leading-none tracking-[0.02em] text-zinc-900">
+              <p className="text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Melhor · Pior</p>
+              <p className="mt-3 text-[clamp(1.35rem,2.1vw,1.95rem)] font-black leading-none tracking-[0.02em] text-ds-ink">
                 {bestRow ? format(bestRow.day, 'dd/MM', { locale: ptBR }) : '--/--'}
               </p>
-              <p className="mt-3 text-sm font-semibold text-zinc-400">
+              <p className="mt-3 text-sm font-semibold text-ds-ink-faint">
                 {worstRow ? format(worstRow.day, 'dd/MM', { locale: ptBR }) : '--/--'} foi o pior
               </p>
             </div>
@@ -1099,7 +1102,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
         <div className="min-h-0 overflow-x-auto px-4 py-5 sm:px-11">
           {scope === 'monthly' ? (
             <div className="flex h-full min-h-0 flex-col overflow-hidden">
-              <div className="grid min-w-[780px] shrink-0 grid-cols-[0.8fr_1fr_2.4fr] gap-6 border-b border-zinc-200 px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">
+              <div className="grid min-w-[780px] shrink-0 grid-cols-[0.8fr_1fr_2.4fr] gap-6 border-b border-ds-border px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">
                 <span>Mês</span>
                 <span className="text-right">Faturado</span>
                 <span>Metas e atingimento</span>
@@ -1109,10 +1112,10 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
                   return (
                     <div
                       key={row.label}
-                      className={`grid min-w-[780px] grid-cols-[0.8fr_1fr_2.4fr] items-center gap-6 border-b border-zinc-100 px-4 py-4 text-sm last:border-b-0 ${row.current ? 'bg-pink-50/60' : ''}`}
+                      className={`grid min-w-[780px] grid-cols-[0.8fr_1fr_2.4fr] items-center gap-6 border-b border-ds-divider px-4 py-4 text-sm last:border-b-0 ${row.current ? 'bg-pink-50/60' : ''}`}
                     >
-                      <span className={`font-black ${row.current ? 'text-pink-600' : 'text-zinc-800'}`}>{row.label}</span>
-                      <span className="text-right font-black tabular-nums text-zinc-900">R$ {fmt(row.value)}</span>
+                      <span className={`font-black ${row.current ? 'text-pink-600' : 'text-ds-ink'}`}>{row.label}</span>
+                      <span className="text-right font-black tabular-nums text-ds-ink">R$ {fmt(row.value)}</span>
                       <GoalTierProgressRows
                         value={row.value}
                         target={row.target}
@@ -1126,7 +1129,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
             </div>
           ) : scope === 'weekly' ? (
             <div className="flex h-full min-h-0 min-w-[620px] flex-col overflow-hidden">
-              <div className="grid shrink-0 grid-cols-[1.2fr_1fr_1.1fr_2fr_100px_70px] gap-7 border-b border-zinc-200 px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">
+              <div className="grid shrink-0 grid-cols-[1.2fr_1fr_1.1fr_2fr_100px_70px] gap-7 border-b border-ds-border px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">
                 <span>Semana</span>
                 <span className="text-right">{activeTierLabel}</span>
                 <span className="text-right">Realizado</span>
@@ -1144,9 +1147,9 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
                       key={row.key}
                       className="grid grid-cols-[1.2fr_1fr_1.1fr_2fr_100px_70px] items-center gap-7 rounded-[8px] px-4 py-3 text-[1.05rem]"
                     >
-                      <span className="font-bold text-zinc-800">{row.label}</span>
-                      <span className="text-right font-mono text-[1rem] font-medium tracking-[-0.04em] text-zinc-400">R$ {fmt(row.target)}</span>
-                      <span className="text-right font-mono text-[1.05rem] font-black tracking-[-0.04em] text-zinc-900">R$ {fmt(row.value)}</span>
+                      <span className="font-bold text-ds-ink">{row.label}</span>
+                      <span className="text-right font-mono text-[1rem] font-medium tracking-[-0.04em] text-ds-ink-faint">R$ {fmt(row.target)}</span>
+                      <span className="text-right font-mono text-[1.05rem] font-black tracking-[-0.04em] text-ds-ink">R$ {fmt(row.value)}</span>
                       <DailyBalanceBar balance={row.balance} maxAbs={maxWeeklyBalanceAbs} tone={row.statusTone} />
                       <span className={`text-right font-mono text-[1rem] font-black tracking-[-0.04em] ${row.balance >= 0 ? 'text-emerald-600' : row.value <= 0 ? 'text-rose-400' : 'text-amber-600'}`}>
                         {balanceText}
@@ -1161,7 +1164,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
             </div>
           ) : (
             <div className="flex h-full min-h-0 min-w-[620px] flex-col overflow-hidden">
-              <div className="grid shrink-0 grid-cols-[90px_1fr_1.1fr_2fr_100px_70px] gap-7 border-b border-zinc-200 px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-zinc-400">
+              <div className="grid shrink-0 grid-cols-[90px_1fr_1.1fr_2fr_100px_70px] gap-7 border-b border-ds-border px-4 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">
                 <span>Dia</span>
                 <span className="text-right">{activeTierLabel}</span>
                 <span className="text-right">Realizado</span>
@@ -1173,7 +1176,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                 {rowGroups.map(group => (
                   <div key={group.key} className="py-1">
-                    <div className="mb-1 rounded-[10px] bg-zinc-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-zinc-500">
+                    <div className="mb-1 rounded-[10px] bg-ds-warm px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-ds-ink-muted">
                       {group.label}
                     </div>
                     {group.rows.map(r => {
@@ -1183,12 +1186,12 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
                           key={r.key}
                           className={`grid grid-cols-[90px_1fr_1.1fr_2fr_100px_70px] items-center gap-7 rounded-[8px] px-4 py-2.5 text-[1.05rem] ${r.isToday ? 'bg-pink-50' : ''} ${!r.isPast ? 'opacity-50' : ''}`}
                         >
-                          <div className="flex items-center gap-2 font-bold text-zinc-800">
+                          <div className="flex items-center gap-2 font-bold text-ds-ink">
                             <span>{format(r.day, 'dd/MM', { locale: ptBR })}</span>
                             {r.isToday ? <span className="rounded-[5px] bg-pink-500 px-1.5 py-0.5 text-[10px] font-black uppercase text-white">Hoje</span> : null}
                           </div>
-                          <span className="text-right font-mono text-[1rem] font-medium tracking-[-0.04em] text-zinc-400">R$ {fmt(r.currentNeed)}</span>
-                          <span className="text-right font-mono text-[1.05rem] font-black tracking-[-0.04em] text-zinc-900">R$ {fmt(r.value)}</span>
+                          <span className="text-right font-mono text-[1rem] font-medium tracking-[-0.04em] text-ds-ink-faint">R$ {fmt(r.currentNeed)}</span>
+                          <span className="text-right font-mono text-[1.05rem] font-black tracking-[-0.04em] text-ds-ink">R$ {fmt(r.value)}</span>
                           <DailyBalanceBar balance={r.balance} maxAbs={maxBalanceAbs} tone={r.statusTone} />
                           <span className={`text-right font-mono text-[1rem] font-black tracking-[-0.04em] ${r.balance >= 0 ? 'text-emerald-600' : r.value <= 0 ? 'text-rose-400' : 'text-amber-600'}`}>
                             {balanceText}
@@ -1206,14 +1209,14 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
           )}
         </div>
 
-        <DialogFooter className="flex-col items-start gap-4 border-t border-zinc-100 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-11 sm:py-6">
+        <DialogFooter className="flex-col items-start gap-4 border-t border-ds-divider px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-11 sm:py-6">
           {scope === 'monthly' ? (
-            <p className="text-sm font-semibold text-zinc-500">
+            <p className="text-sm font-semibold text-ds-ink-muted">
               Comparativo dos últimos 3 meses cadastrados e do mês atual da unidade.
             </p>
           ) : (
-            <div className="flex flex-wrap items-center gap-6 text-sm font-semibold text-zinc-500">
-              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-black text-zinc-600">
+            <div className="flex flex-wrap items-center gap-6 text-sm font-semibold text-ds-ink-muted">
+              <span className="rounded-full border border-ds-border bg-ds-warm px-3 py-1 text-xs font-black text-ds-ink-2">
                 Faixa ativa: {activeTierLabel}
               </span>
               <span className="inline-flex items-center gap-2"><DailyReferenceStatus tone="ok" /> Bateu a faixa ativa</span>
@@ -1224,7 +1227,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
           )}
           <Button
             onClick={() => onOpenChange(false)}
-            className="h-14 rounded-[14px] bg-zinc-900 px-8 text-base font-bold text-white shadow-none hover:bg-zinc-800"
+            className="h-14 rounded-ds-md bg-zinc-900 px-8 text-base font-bold text-white shadow-none hover:bg-zinc-800"
           >
             Fechar
           </Button>
@@ -1331,14 +1334,14 @@ export function EmployeeDailyModal({
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!max-w-[1120px] w-[min(96vw,1120px)] overflow-hidden rounded-[22px] border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
-          <div className="flex items-center gap-4 border-b border-zinc-100 px-5 py-4">
+        <DialogContent className="!max-w-[1120px] w-[min(96vw,1120px)] overflow-hidden rounded-ds-card border border-ds-border bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+          <div className="flex items-center gap-4 border-b border-ds-divider px-5 py-4">
             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <DialogTitle className="truncate text-base font-bold tracking-tight text-zinc-900">{userName}</DialogTitle>
-              <DialogDescription className="text-[11px] font-medium text-slate-400">
+              <DialogTitle className="truncate text-base font-bold tracking-tight text-ds-ink">{userName}</DialogTitle>
+              <DialogDescription className="text-[11px] font-medium text-ds-ink-faint">
                 {format(periodStart, 'dd/MM/yyyy', { locale: ptBR })} a {format(periodEnd, 'dd/MM/yyyy', { locale: ptBR })}
               </DialogDescription>
             </div>
@@ -1348,21 +1351,21 @@ export function EmployeeDailyModal({
             <div className="space-y-4 px-5 py-4">
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 {[
-                  { label: 'Geral no período', value: `R$ ${fmt(period.currentValue)}`, hint: `${pct(period.currentValue, period.targetValue).toFixed(1)}% da meta geral`, color: 'text-zinc-900' },
+                  { label: 'Geral no período', value: `R$ ${fmt(period.currentValue)}`, hint: `${pct(period.currentValue, period.targetValue).toFixed(1)}% da meta geral`, color: 'text-ds-ink' },
                   { label: 'Colaborador', value: `R$ ${fmt(employeeGoal.currentValue)}`, hint: `${employeePeriodShare.toFixed(1)}% do geral`, color: 'text-blue-600' },
-                  { label: 'Hoje geral', value: `R$ ${fmt(generalToday)}`, hint: `Colaborador R$ ${fmt(employeeToday)}`, color: 'text-zinc-900' },
+                  { label: 'Hoje geral', value: `R$ ${fmt(generalToday)}`, hint: `Colaborador R$ ${fmt(employeeToday)}`, color: 'text-ds-ink' },
                   { label: 'Dias gerais batidos', value: `${generalHitCount}/${elapsedRowsDays.length}`, hint: 'status da unidade', color: 'text-emerald-600' },
                 ].map(({ label, value, hint, color }) => (
-                  <div key={label} className="rounded-[14px] border border-zinc-200 bg-zinc-50 px-3 py-2.5">
-                    <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">{label}</p>
+                  <div key={label} className="rounded-ds-md border border-ds-border bg-ds-warm px-3 py-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint">{label}</p>
                     <p className={`mt-1 text-sm font-extrabold tabular-nums ${color}`}>{value}</p>
-                    <p className="mt-1 text-[10px] font-semibold text-zinc-400">{hint}</p>
+                    <p className="mt-1 text-[10px] font-semibold text-ds-ink-faint">{hint}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-[14px] border border-zinc-200 bg-zinc-50 px-4 py-3">
-                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-400">Metas gerais do dia</p>
+              <div className="rounded-ds-md border border-ds-border bg-ds-warm px-4 py-3">
+                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Metas gerais do dia</p>
                 <GoalTierProgressPills
                   value={generalToday}
                   target={periodDailyTarget}
@@ -1373,16 +1376,16 @@ export function EmployeeDailyModal({
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-ds-ink-faint">
                     Detalhe por dia · {format(periodStart, 'dd/MM', { locale: ptBR })} - {format(periodEnd, 'dd/MM', { locale: ptBR })}
                   </p>
-                  <p className="text-[10px] text-zinc-400">
+                  <p className="text-[10px] text-ds-ink-faint">
                     Participação = colaborador ÷ geral do dia
                   </p>
                 </div>
 
-                <div className="overflow-x-auto rounded-[14px] border border-zinc-200 bg-white">
-                  <div className={`grid min-w-[920px] ${cols} border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-400`}>
+                <div className="overflow-x-auto rounded-ds-md border border-ds-border bg-white">
+                  <div className={`grid min-w-[920px] ${cols} border-b border-ds-divider bg-ds-warm px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint`}>
                     <span>Dia</span>
                     {hasShiftCol && <span>Turno</span>}
                     <span className="text-right">Colaborador</span>
@@ -1414,9 +1417,9 @@ export function EmployeeDailyModal({
                             ? 'Batida'
                             : 'Abaixo';
                     const statusClass = !isPastOrToday
-                      ? 'border-zinc-200 bg-zinc-50 text-zinc-400'
+                      ? 'border-ds-border bg-ds-warm text-ds-ink-faint'
                       : !isScheduledForEmployee
-                        ? 'border-slate-200 bg-slate-50 text-slate-500'
+                        ? 'border-ds-border bg-ds-warm text-ds-ink-muted'
                       : employeeValue <= 0
                         ? 'border-rose-200 bg-rose-50 text-rose-600'
                         : employeeHit
@@ -1426,20 +1429,20 @@ export function EmployeeDailyModal({
                     return (
                       <div
                         key={key}
-                        className={`grid min-w-[920px] ${cols} items-center border-b border-zinc-100 px-4 py-2.5 text-xs last:border-b-0 ${isToday ? 'bg-amber-50/60' : ''}`}
+                        className={`grid min-w-[920px] ${cols} items-center border-b border-ds-divider px-4 py-2.5 text-xs last:border-b-0 ${isToday ? 'bg-amber-50/60' : ''}`}
                       >
-                        <span className={`font-semibold ${isToday ? 'text-amber-600' : 'text-zinc-700'}`}>
+                        <span className={`font-semibold ${isToday ? 'text-amber-600' : 'text-ds-ink-2'}`}>
                           {format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
                         </span>
                         {hasShiftCol && (
-                          <span className="truncate text-[10px] font-medium text-zinc-400">
+                          <span className="truncate text-[10px] font-medium text-ds-ink-faint">
                             {shiftLabel ?? (isScheduledForEmployee ? '-' : 'Descanso')}
                           </span>
                         )}
                         <span className="text-right font-bold text-blue-600">R$ {fmt(employeeValue)}</span>
-                        <span className="text-right font-medium text-zinc-400">R$ {fmt(employeeTarget)}</span>
-                        <span className="text-right font-black text-zinc-700">{participation.toFixed(1)}%</span>
-                        <span className="text-right font-semibold text-zinc-500">R$ {fmt(generalValue)}</span>
+                        <span className="text-right font-medium text-ds-ink-faint">R$ {fmt(employeeTarget)}</span>
+                        <span className="text-right font-black text-ds-ink-2">{participation.toFixed(1)}%</span>
+                        <span className="text-right font-semibold text-ds-ink-muted">R$ {fmt(generalValue)}</span>
                         <div className="flex justify-center">
                           <span className={`inline-flex min-w-[62px] justify-center rounded-full border px-2 py-1 text-[10px] font-bold ${statusClass}`}>
                             {statusLabel}
@@ -1453,7 +1456,7 @@ export function EmployeeDailyModal({
             </div>
           </ScrollArea>
 
-          <div className="flex justify-end border-t border-zinc-100 bg-white px-5 py-3">
+          <div className="flex justify-end border-t border-ds-divider bg-white px-5 py-3">
             <Button onClick={() => onOpenChange(false)} variant="outline" className="h-9 rounded-full px-5 text-xs font-bold">
               Fechar
             </Button>
@@ -1465,15 +1468,15 @@ export function EmployeeDailyModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[620px] w-[min(96vw,620px)] overflow-hidden rounded-[22px] border border-zinc-200 bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+      <DialogContent className="!max-w-[620px] w-[min(96vw,620px)] overflow-hidden rounded-ds-card border border-ds-border bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
         {/* Cabeçalho */}
-        <div className="flex items-center gap-4 border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center gap-4 border-b border-ds-divider px-5 py-4">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-base font-bold tracking-tight text-zinc-900 truncate">{userName}</DialogTitle>
-            <DialogDescription className="text-[11px] font-medium text-slate-400">
+            <DialogTitle className="text-base font-bold tracking-tight text-ds-ink truncate">{userName}</DialogTitle>
+            <DialogDescription className="text-[11px] font-medium text-ds-ink-faint">
               {format(periodStart, 'dd/MM/yyyy', { locale: ptBR })} a {format(periodEnd, 'dd/MM/yyyy', { locale: ptBR })}
             </DialogDescription>
           </div>
@@ -1485,22 +1488,22 @@ export function EmployeeDailyModal({
             {/* KPIs compactos */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
-                { label: 'Acumulado', value: `R$ ${fmt(employeeGoal.currentValue)}`, color: 'text-zinc-900' },
+                { label: 'Acumulado', value: `R$ ${fmt(employeeGoal.currentValue)}`, color: 'text-ds-ink' },
                 { label: '% Meta', value: `${currentPct.toFixed(1)}%`, color: currentPct >= 100 ? 'text-emerald-600' : 'text-amber-500' },
                 { label: '% Meta UP', value: `${upPct.toFixed(1)}%`, color: upPct >= 100 ? 'text-emerald-600' : 'text-blue-500' },
-                { label: 'Dias batidos', value: `${hitCount}/${elapsedCount}`, color: 'text-zinc-700' },
+                { label: 'Dias batidos', value: `${hitCount}/${elapsedCount}`, color: 'text-ds-ink-2' },
               ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-[14px] border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">{label}</p>
+                <div key={label} className="rounded-ds-md border border-ds-border bg-ds-warm px-3 py-2.5 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint">{label}</p>
                   <p className={`mt-1 text-sm font-extrabold tabular-nums ${color}`}>{value}</p>
                 </div>
               ))}
             </div>
 
             {/* Barra de progresso única */}
-            <div className="rounded-[14px] border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-2">
+            <div className="rounded-ds-md border border-ds-border bg-ds-warm px-4 py-3 space-y-2">
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-bold text-zinc-500">
+                <div className="flex justify-between text-[10px] font-bold text-ds-ink-muted">
                   <span>Meta · R$ {fmt(employeeGoal.targetValue)}</span>
                   <span className={currentPct >= 100 ? 'text-emerald-600' : 'text-amber-500'}>{currentPct.toFixed(1)}%</span>
                 </div>
@@ -1509,7 +1512,7 @@ export function EmployeeDailyModal({
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-bold text-zinc-500">
+                <div className="flex justify-between text-[10px] font-bold text-ds-ink-muted">
                   <span>Meta UP · R$ {fmt(upTarget)}</span>
                   <span className="text-blue-500">{upPct.toFixed(1)}%</span>
                 </div>
@@ -1517,7 +1520,7 @@ export function EmployeeDailyModal({
                   <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(upPct, 100)}%` }} />
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1 text-[10px] font-semibold text-zinc-500">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-1 text-[10px] font-semibold text-ds-ink-muted">
                 <span>Ritmo atual: <span className={paceOk ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>R$ {fmt(currentPace)}/dia</span></span>
                 <span>Necessário: R$ {fmt(requiredPace)}/dia</span>
                 <span>Média: R$ {fmt(averagePerElapsedDay)}/dia</span>
@@ -1527,11 +1530,11 @@ export function EmployeeDailyModal({
             {/* Tabela semanal */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-ds-ink-faint">
                   Detalhe por dia · {format(periodStart, 'dd/MM', { locale: ptBR })} – {format(periodEnd, 'dd/MM', { locale: ptBR })}
                 </p>
-                <p className="text-[10px] text-zinc-400">
-                  Sem venda: <span className="font-bold text-zinc-700">{noSaleCount}</span> · Melhor: <span className="font-bold text-zinc-700">R$ {fmt(bestDayValue)}</span>
+                <p className="text-[10px] text-ds-ink-faint">
+                  Sem venda: <span className="font-bold text-ds-ink-2">{noSaleCount}</span> · Melhor: <span className="font-bold text-ds-ink-2">R$ {fmt(bestDayValue)}</span>
                 </p>
               </div>
 
@@ -1559,8 +1562,8 @@ export function EmployeeDailyModal({
                   : 'grid-cols-[1.3fr_0.85fr_0.85fr_1fr_56px]';
 
                 return (
-                  <div className="overflow-hidden rounded-[14px] border border-zinc-200 bg-white">
-                    <div className={`grid ${cols} border-b border-zinc-100 bg-zinc-50 px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-400`}>
+                  <div className="overflow-hidden rounded-ds-md border border-ds-border bg-white">
+                    <div className={`grid ${cols} border-b border-ds-divider bg-ds-warm px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint`}>
                       <span>Dia</span>
                       {hasShiftCol && <span>Turno</span>}
                       <span className="text-right">Alvo/dia</span>
@@ -1579,7 +1582,7 @@ export function EmployeeDailyModal({
                       const dayUpTarget = dayTarget * 1.2;
 
                       let statusLabel = isPastOrToday ? '⚠' : '—';
-                      let statusClass = isPastOrToday ? 'bg-zinc-50 border border-zinc-300 text-zinc-400' : 'text-zinc-300';
+                      let statusClass = isPastOrToday ? 'bg-ds-warm border border-zinc-300 text-ds-ink-faint' : 'text-ds-ink-faint';
                       if (isPastOrToday && value >= dayTarget) {
                         statusLabel = '✓';
                         statusClass = 'bg-emerald-500 text-white shadow-[0_4px_10px_-6px_rgba(34,197,94,0.8)]';
@@ -1591,24 +1594,24 @@ export function EmployeeDailyModal({
                       return (
                         <div
                           key={key}
-                          className={`grid ${cols} border-b border-zinc-100 px-4 py-2.5 text-xs last:border-b-0 ${isToday ? 'bg-pink-50/50' : ''}`}
+                          className={`grid ${cols} border-b border-ds-divider px-4 py-2.5 text-xs last:border-b-0 ${isToday ? 'bg-pink-50/50' : ''}`}
                         >
-                          <span className={`font-semibold ${isToday ? 'text-pink-500' : 'text-zinc-700'}`}>
+                          <span className={`font-semibold ${isToday ? 'text-pink-500' : 'text-ds-ink-2'}`}>
                             {format(day, "eee dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase())}
                             {isToday && <span className="ml-1.5 text-[9px] font-bold text-pink-400">hoje</span>}
                           </span>
                           {hasShiftCol && (
-                            <span className="text-[10px] font-medium text-zinc-400 truncate">
+                            <span className="text-[10px] font-medium text-ds-ink-faint truncate">
                               {shiftLabel ?? '—'}
                             </span>
                           )}
-                          <span className="text-right font-medium text-zinc-400">
+                          <span className="text-right font-medium text-ds-ink-faint">
                             R$ {fmt(dayTarget)}
                           </span>
                           <span className="text-right font-medium text-blue-400">
                             R$ {fmt(dayUpTarget)}
                           </span>
-                          <span className={`text-right font-bold ${!isPastOrToday ? 'text-zinc-300' : value > 0 ? 'text-zinc-800' : 'text-zinc-300'}`}>
+                          <span className={`text-right font-bold ${!isPastOrToday ? 'text-ds-ink-faint' : value > 0 ? 'text-ds-ink' : 'text-ds-ink-faint'}`}>
                             {!isPastOrToday ? '—' : `R$ ${fmt(value)}`}
                           </span>
                           <div className="flex justify-center">
@@ -1626,7 +1629,7 @@ export function EmployeeDailyModal({
           </div>
         </ScrollArea>
 
-        <div className="flex justify-end border-t border-zinc-100 bg-white px-5 py-3">
+        <div className="flex justify-end border-t border-ds-divider bg-white px-5 py-3">
           <Button onClick={() => onOpenChange(false)} variant="outline" className="h-9 rounded-full px-5 text-xs font-bold">
             Fechar
           </Button>
@@ -1640,8 +1643,8 @@ function WeekRow({ label, pctValue, barColor }: { label: string; pctValue: numbe
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-center">
-        <span className="text-[9px] font-black uppercase tracking-[0.12em] text-zinc-400">{label}</span>
-        <span className={`text-[10px] font-bold tabular-nums ${pctValue >= 100 ? 'text-emerald-500' : 'text-zinc-500'}`}>
+        <span className="text-[9px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">{label}</span>
+        <span className={`text-[10px] font-bold tabular-nums ${pctValue >= 100 ? 'text-emerald-500' : 'text-ds-ink-muted'}`}>
           {pctValue.toFixed(1)}%
         </span>
       </div>
@@ -1676,12 +1679,12 @@ function PeriodGoalCard({ label, value, target, up, top, showTiers = true, focus
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[18px] border border-[#edf1f6] bg-[#f8fafc] px-4 py-4 text-left transition-colors ${onClick ? 'hover:border-pink-200 hover:bg-pink-50/30' : ''}`}
+      className={`rounded-ds-card border border-[#edf1f6] bg-ds-warm px-4 py-4 text-left transition-colors ${onClick ? 'hover:border-pink-200 hover:bg-pink-50/30' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">{label}</p>
-          <p className="mt-2 text-xl font-black tracking-tight text-zinc-900">R$ {fmt(value)}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-ds-ink-muted">{label}</p>
+          <p className="mt-2 text-xl font-black tracking-tight text-ds-ink">R$ {fmt(value)}</p>
         </div>
         <Badge className={`rounded-full px-2.5 py-1 text-[11px] font-black ${showTiers ? activeTierBadgeClass(value, target, up, top) : tierBadgeClassByTone(displayTone)}`}>
           {activePercent.toFixed(1)}%
@@ -1693,7 +1696,7 @@ function PeriodGoalCard({ label, value, target, up, top, showTiers = true, focus
           <GoalTierProgressRows value={value} target={target} up={up} top={top} />
         </div>
       ) : (
-        <p className="mt-3 text-xs font-semibold text-zinc-500">{tierLabelByTone(displayTone)}: R$ {fmt(target)}</p>
+        <p className="mt-3 text-xs font-semibold text-ds-ink-muted">{tierLabelByTone(displayTone)}: R$ {fmt(target)}</p>
       )}
 
     </button>
@@ -1740,7 +1743,7 @@ function BonusCalculationDetails({
   return (
     <div className="space-y-3 rounded-b-[12px] border-t border-emerald-100 bg-emerald-50/60 px-4 py-3 text-[11px] text-emerald-950">
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
-        <div className="rounded-[12px] border border-emerald-100 bg-white/90 px-3 py-3">
+        <div className="rounded-ds-md border border-emerald-100 bg-white/90 px-3 py-3">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Resultado do cálculo</p>
           <p className="mt-1 text-sm font-black text-emerald-950">
             {row.name}: R$ {formatCurrencyBRL(row.prize)}
@@ -1752,7 +1755,7 @@ function BonusCalculationDetails({
             </p>
           ) : null}
         </div>
-        <div className="rounded-[12px] border border-emerald-100 bg-white/90 px-3 py-3">
+        <div className="rounded-ds-md border border-emerald-100 bg-white/90 px-3 py-3">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Base da equipe</p>
           <p className="mt-1 text-lg font-black text-emerald-950">R$ {formatCurrencyBRL(preview.totalTeamBonus)}</p>
           <p className="mt-1 font-semibold text-emerald-800">Soma das faixas alcançadas.</p>
@@ -1769,10 +1772,10 @@ function BonusCalculationDetails({
               ? 'border-emerald-200 bg-white text-emerald-950'
               : isNext
                 ? 'border-amber-200 bg-amber-50 text-amber-950'
-                : 'border-zinc-200 bg-white/70 text-zinc-500';
+                : 'border-ds-border bg-white/70 text-ds-ink-muted';
 
             return (
-              <div key={tier.id} className={`rounded-[12px] border px-3 py-3 ${stateClass}`}>
+              <div key={tier.id} className={`rounded-ds-md border px-3 py-3 ${stateClass}`}>
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-black">{tier.label}</p>
                   <span className="rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-black">
@@ -1804,7 +1807,7 @@ function BonusCalculationDetails({
       </div>
 
       {row.roleKey === 'leader' ? (
-        <div className={`rounded-[12px] border px-3 py-3 ${roleTone}`}>
+        <div className={`rounded-ds-md border px-3 py-3 ${roleTone}`}>
           <p className="text-[10px] font-black uppercase tracking-[0.16em]">Divisão para liderança</p>
           <p className="mt-2 font-semibold">
             A liderança é calculada separadamente sobre a base da equipe.
@@ -1818,7 +1821,7 @@ function BonusCalculationDetails({
           <p className="mt-2 font-black">Bonificação da liderança: R$ {formatCurrencyBRL(row.prize)}</p>
         </div>
       ) : row.roleKey === 'relief' && reliefSplit ? (
-        <div className={`rounded-[12px] border px-3 py-3 ${roleTone}`}>
+        <div className={`rounded-ds-md border px-3 py-3 ${roleTone}`}>
           <p className="text-[10px] font-black uppercase tracking-[0.16em]">Divisão para folguista</p>
           <p className="mt-1">
             Regra: a folguista recebe a parte proporcional aos turnos cobertos dentro do total de turnos do período.
@@ -1832,7 +1835,7 @@ function BonusCalculationDetails({
           <p className="mt-2 font-black">Bonificação da folguista: R$ {formatCurrencyBRL(row.prize)}</p>
         </div>
       ) : hasReliefSplit && reliefSplit ? (
-        <div className={`rounded-[12px] border px-3 py-3 ${roleTone}`}>
+        <div className={`rounded-ds-md border px-3 py-3 ${roleTone}`}>
           <p className="text-[10px] font-black uppercase tracking-[0.16em]">Divisão para colaborador fixo</p>
           <p className="mt-1 text-emerald-800">
             Primeiro o sistema separa a parte das folguistas: R$ {formatCurrencyBRL(reliefSplit.totalReliefWorkerBonus)}.
@@ -1846,7 +1849,7 @@ function BonusCalculationDetails({
           <p className="mt-2 font-black text-emerald-950">Bonificação de {row.name}: R$ {formatCurrencyBRL(row.prize)}</p>
         </div>
       ) : (
-        <div className={`rounded-[12px] border px-3 py-3 ${roleTone}`}>
+        <div className={`rounded-ds-md border px-3 py-3 ${roleTone}`}>
           <p className="text-[10px] font-black uppercase tracking-[0.16em]">Divisão para colaborador</p>
           <p className="mt-1 text-emerald-800">
             Sem folguista na divisão, a base da equipe é dividida igualmente entre os colaboradores elegíveis.
@@ -1866,27 +1869,27 @@ function SalesByHourPanel({ period, salesReports }: { period: GoalPeriodDoc; sal
   const maxHourValue = Math.max(...summary.chartHours.map(item => item.value), 1);
 
   return (
-    <div className="mt-4 rounded-[18px] border border-[#edf1f6] bg-white px-4 py-4">
+    <div className="mt-4 rounded-ds-card border border-[#edf1f6] bg-white px-4 py-4">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">Faturamento por hora</p>
-          <p className="mt-1 text-sm font-semibold text-zinc-500">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-ds-ink-muted">Faturamento por hora</p>
+          <p className="mt-1 text-sm font-semibold text-ds-ink-muted">
             Percentual de vendas por período do dia.
           </p>
         </div>
         <div className="text-left sm:text-right">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">Total com horário</p>
-          <p className="text-base font-black tabular-nums text-zinc-900">R$ {fmt(summary.total)}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ds-ink-faint">Total com horário</p>
+          <p className="text-base font-black tabular-nums text-ds-ink">R$ {fmt(summary.total)}</p>
         </div>
       </div>
 
       {summary.total <= 0 ? (
-        <div className="rounded-[14px] border border-dashed border-zinc-200 bg-[#f8fafc] px-4 py-6 text-center text-sm font-medium text-zinc-500">
+        <div className="rounded-ds-md border border-dashed border-ds-border bg-ds-warm px-4 py-6 text-center text-sm font-medium text-ds-ink-muted">
           Sem dados de faturamento por hora para este período.
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.9fr)]">
-          <div className="rounded-[14px] border border-zinc-100 bg-[#f8fafc] px-3 py-3">
+          <div className="rounded-ds-md border border-ds-divider bg-ds-warm px-3 py-3">
             <div className="flex h-36 items-end gap-1 overflow-x-auto pb-1">
               {summary.chartHours.map(item => (
                 <div key={item.hour} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
@@ -1897,11 +1900,11 @@ function SalesByHourPanel({ period, salesReports }: { period: GoalPeriodDoc; sal
                       title={`${item.label}: R$ ${fmt(item.value)} (${item.percent.toFixed(1)}%)`}
                     />
                   </div>
-                  <span className="text-[9px] font-bold text-zinc-400">{item.label}</span>
+                  <span className="text-[9px] font-bold text-ds-ink-faint">{item.label}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold text-zinc-500">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold text-ds-ink-muted">
               <span>Pico: {summary.peak.label} · R$ {fmt(summary.peak.value)}</span>
               {summary.estimated ? <span>Parte dos valores foi estimada pela curva de cupons.</span> : null}
             </div>
@@ -1911,14 +1914,14 @@ function SalesByHourPanel({ period, salesReports }: { period: GoalPeriodDoc; sal
             {summary.buckets
               .filter(bucket => bucket.value > 0 || summary.total > 0)
               .map(bucket => (
-                <div key={bucket.label} className="rounded-[12px] border border-zinc-100 bg-[#f8fafc] px-3 py-2.5">
+                <div key={bucket.label} className="rounded-ds-md border border-ds-divider bg-ds-warm px-3 py-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-xs font-black text-zinc-800">{bucket.label}</p>
-                      <p className="text-[10px] font-semibold text-zinc-400">{bucket.range}</p>
+                      <p className="text-xs font-black text-ds-ink">{bucket.label}</p>
+                      <p className="text-[10px] font-semibold text-ds-ink-faint">{bucket.range}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-black tabular-nums text-zinc-900">R$ {fmt(bucket.value)}</p>
+                      <p className="text-xs font-black tabular-nums text-ds-ink">R$ {fmt(bucket.value)}</p>
                       <p className="text-[10px] font-bold text-blue-500">{bucket.percent.toFixed(1)}%</p>
                     </div>
                   </div>
@@ -1991,7 +1994,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
   const topColor = topPct >= 100 ? 'text-emerald-600' : 'text-violet-500';
 
   return (
-    <div className="flex flex-col rounded-[18px] border border-[#dbe3ef] bg-white overflow-hidden shadow-[0_8px_30px_-20px_rgba(15,23,42,0.2)]">
+    <div className="flex flex-col rounded-ds-card border border-[#dbe3ef] bg-white overflow-hidden shadow-[0_8px_30px_-20px_rgba(15,23,42,0.2)]">
 
       {/* Cabeçalho */}
       <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
@@ -2000,15 +2003,15 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
             {initials}
           </div>
           <div className="min-w-0">
-            <span className="text-sm font-bold text-zinc-900 block truncate">{userName}</span>
-            <p className="text-[10px] text-zinc-500 mt-0.5 truncate">
+            <span className="text-sm font-bold text-ds-ink block truncate">{userName}</span>
+            <p className="text-[10px] text-ds-ink-muted mt-0.5 truncate">
               {isTeamGoalView ? (
                 <>
-                  Faturou <span className="font-semibold text-zinc-700">R$ {fmt(eg.currentValue)}</span>
+                  Faturou <span className="font-semibold text-ds-ink-2">R$ {fmt(eg.currentValue)}</span>
                 </>
               ) : (
                 <>
-                  Meta <span className="font-semibold text-zinc-700">R$ {fmt(eg.targetValue)}</span>
+                  Meta <span className="font-semibold text-ds-ink-2">R$ {fmt(eg.targetValue)}</span>
                   {' · '}
                   <span className="font-semibold text-blue-600">UP R$ {fmt(upTarget)}</span>
                 </>
@@ -2025,7 +2028,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
         )}
       </div>
 
-      <div className="mx-4 h-px bg-zinc-100" />
+      <div className="mx-4 h-px bg-ds-muted" />
 
       {!isTeamGoalView && (
         <>
@@ -2034,19 +2037,19 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <div className="h-2 w-2 rounded-full bg-zinc-400 shrink-0" />
-                <span className="text-[11px] font-semibold text-zinc-600">{targetLabel}</span>
+                <span className="text-[11px] font-semibold text-ds-ink-2">{targetLabel}</span>
               </div>
               <span className={`text-[11px] font-bold tabular-nums ${metaColor}`}>
                 {mPct.toFixed(1)}% · R$ {fmt(eg.targetValue)}
               </span>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-zinc-100">
+            <div className="h-2.5 overflow-hidden rounded-full bg-ds-muted">
               <div
                 className={`h-full rounded-full ${metaBarColor}`}
                 style={{ width: `${Math.min(mPct, 100)}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[9px] text-zinc-400 font-medium">
+            <div className="flex items-center justify-between text-[9px] text-ds-ink-faint font-medium">
               <span>R$ {fmt(eg.currentValue)} realizado</span>
               <span>R$ {fmt(eg.targetValue)} {targetLabel}</span>
             </div>
@@ -2066,7 +2069,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
             <div className="h-2 rounded-full bg-blue-100 overflow-hidden">
               <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(upPct, 100)}%` }} />
             </div>
-            <div className="flex items-center justify-between text-[9px] text-zinc-400 font-medium">
+            <div className="flex items-center justify-between text-[9px] text-ds-ink-faint font-medium">
               <span>R$ {fmt(eg.currentValue)} realizado</span>
               <span>R$ {fmt(upTarget)} {upLabel}</span>
             </div>
@@ -2086,7 +2089,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
               <div className="h-2 rounded-full bg-violet-100 overflow-hidden">
                 <div className="h-full rounded-full bg-violet-400 transition-all" style={{ width: `${Math.min(topPct, 100)}%` }} />
               </div>
-              <div className="flex items-center justify-between text-[9px] text-zinc-400 font-medium">
+              <div className="flex items-center justify-between text-[9px] text-ds-ink-faint font-medium">
                 <span>R$ {fmt(eg.currentValue)} realizado</span>
                 <span>R$ {fmt(topTarget)} {topLabel}</span>
               </div>
@@ -2095,7 +2098,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
         </>
       )}
 
-      <div className="mx-4 h-px bg-zinc-100" />
+      <div className="mx-4 h-px bg-ds-muted" />
 
       <div className="grid grid-cols-3 gap-1.5 px-4 py-3">
         {[
@@ -2103,10 +2106,10 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
           { label: 'Semana', value: weekStats.value, share: weekShare, suffix: 'da semana', target: activeWeekTarget },
           { label: 'Mês', value: eg.currentValue, share: monthShare, suffix: 'do mês', target: activeMonthTarget },
         ].map(item => (
-          <div key={item.label} className="rounded-[12px] border border-zinc-100 bg-[#f8fafc] px-2 py-2 text-center">
-            <p className="text-[8px] font-black uppercase tracking-[0.12em] text-zinc-400">{item.label}</p>
-            <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.08em] text-zinc-400">Faturado</p>
-            <p className="truncate text-[11px] font-black tabular-nums text-zinc-800">R$ {fmt(item.value)}</p>
+          <div key={item.label} className="rounded-ds-md border border-ds-divider bg-ds-warm px-2 py-2 text-center">
+            <p className="text-[8px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">{item.label}</p>
+            <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.08em] text-ds-ink-faint">Faturado</p>
+            <p className="truncate text-[11px] font-black tabular-nums text-ds-ink">R$ {fmt(item.value)}</p>
             {isTeamGoalView ? (
               <p className={`mt-1 rounded-full px-1.5 py-0.5 text-[8px] font-black tabular-nums ${tierToneClasses(teamActiveTone)}`}>
                 {tierLabelByTone(teamActiveTone)} R$ {fmt(item.target)} · {pct(item.value, item.target).toFixed(0)}%
@@ -2117,7 +2120,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
       </div>
 
       {estimatedBonus != null && estimatedBonus > 0 && (
-        <div className="mx-4 mb-3 rounded-[12px] border border-emerald-100 bg-emerald-50 px-3 py-2">
+        <div className="mx-4 mb-3 rounded-ds-md border border-emerald-100 bg-emerald-50 px-3 py-2">
           <p className="text-[8px] font-black uppercase tracking-[0.12em] text-emerald-700">Bonificação estimada</p>
           <p className="mt-0.5 text-sm font-black tabular-nums text-emerald-700">R$ {formatCurrencyBRL(estimatedBonus)}</p>
         </div>
@@ -2125,7 +2128,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
 
       {/* Semana atual */}
       <div className="px-4 pt-3 pb-4 space-y-2">
-        <span className="text-[10px] font-semibold text-zinc-500">Faturamento da semana</span>
+        <span className="text-[10px] font-semibold text-ds-ink-muted">Faturamento da semana</span>
 
         <div className="grid grid-cols-7 gap-1.5">
           {weekDays.map((day, i) => {
@@ -2135,7 +2138,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
             const isToday = isSameDay(day, refDate);
             const isPast = day <= refDate;
 
-            let boxClass = 'border-zinc-100 bg-zinc-50 text-zinc-400';
+            let boxClass = 'border-ds-divider bg-ds-warm text-ds-ink-faint';
             let dotTitle = '';
             if (isToday) {
               boxClass = 'border-amber-200 bg-amber-50 text-amber-700 ring-1 ring-amber-200';
@@ -2149,7 +2152,7 @@ function CollaboratorCard({ eg, shiftLabel, userName, refDate, periodEnd, period
                 dotTitle = 'Sem venda';
               }
             } else if (!isActive && isPast) {
-              boxClass = 'border-zinc-100 bg-white text-zinc-300';
+              boxClass = 'border-ds-divider bg-white text-ds-ink-faint';
               dotTitle = 'Folga';
             }
 
@@ -2322,12 +2325,12 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
 
             {/* ── KPI Cards ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Acumulado</p>
                 <p className="text-xl font-black tabular-nums">R$ {fmt(stats.value)}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">de R$ {fmt(stats.alvo)}</p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">% da Meta</p>
                 <p className={`text-xl font-black tabular-nums ${actualPct >= 100 ? 'text-green-500' : 'text-amber-500'}`}>{actualPct.toFixed(1)}%</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Esperado hoje: {expectedPct.toFixed(1)}%</p>
@@ -2335,7 +2338,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   {diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)} pp {diff >= 0 ? 'à frente' : 'atrás'}
                 </p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Projeção</p>
                 <p className={`text-xl font-black tabular-nums ${stats.projection >= stats.alvo ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(stats.projection)}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -2345,7 +2348,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   {pct(stats.projection, stats.alvo).toFixed(1)}% da meta
                 </p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Ritmo Necessário</p>
                 <p className={`text-xl font-black tabular-nums ${paceActual >= paceNeeded ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(paceNeeded)}/dia</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Atual: R$ {fmt(paceActual)}/dia</p>
@@ -2353,7 +2356,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   {paceActual >= paceNeeded ? '▲' : '▼'} R$ {fmt(Math.abs(paceActual - paceNeeded))}/dia
                 </p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Consistência</p>
                 <p className="text-xl font-black tabular-nums text-blue-500">{kioskDaysWithSale}/{activeDateKeys.length} dias</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Dias com venda</p>
@@ -2545,7 +2548,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                           </div>
                           <div>
                             <p className="text-muted-foreground text-[9px] uppercase font-bold">Média/dia</p>
-                            <p className="font-bold text-zinc-800">R$ {fmt(e.empPace)}/dia</p>
+                            <p className="font-bold text-ds-ink">R$ {fmt(e.empPace)}/dia</p>
                           </div>
                         </div>
                         <div>
@@ -2598,6 +2601,8 @@ export function GoalsTrackingDashboard() {
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const { groups: kioskGroups, groupOf, hasMultipleGroups } = useKioskGroups();
   const usersById = useMemo(
     () => Object.fromEntries(users.map(collaborator => [collaborator.id, collaborator])),
     [users]
@@ -2824,9 +2829,11 @@ export function GoalsTrackingDashboard() {
     periods.filter(p => {
       if (p.status !== 'active') return false;
       if (selectedKioskId !== 'all' && p.kioskId !== selectedKioskId) return false;
+      if (selectedGroupId !== null && groupOf(p.kioskId).id !== selectedGroupId) return false;
       return Boolean(user) && canAccessUnit(user!, p.kioskId, { isDefaultAdmin });
     }),
-    [isDefaultAdmin, periods, selectedKioskId, user]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isDefaultAdmin, periods, selectedKioskId, selectedGroupId, user, kioskGroups]
   );
 
   useEffect(() => {
@@ -2917,62 +2924,65 @@ export function GoalsTrackingDashboard() {
   );
 
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
-  const isCardOpen = (id: string) => openCards[id] !== false; // default: open
+  const isCardOpen = (id: string) => openCards[id] === true; // default: recolhido
 
   if (loading) return <Skeleton className="h-64 w-full" />;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
-        <div>
-          <h1 className="text-[2.15rem] font-bold tracking-[-0.04em] text-zinc-900">Metas de Faturamento</h1>
-          <p className="text-sm text-zinc-500">Acompanhamento em tempo real de performance e projeções.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
-            <SelectTrigger className="h-10 w-[230px] rounded-full bg-white">
-              <Store className="mr-2 h-4 w-4 text-zinc-400" />
-              <SelectValue placeholder="Unidade" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as unidades</SelectItem>
-              {availableKiosks.map(kiosk => (
-                <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 pb-12 font-ds">
+      <ControlPanel>
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Metas de vendas</p>
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold">Acompanhamento</h1>
+            <p className="mt-1 text-[13px] font-semibold text-ds-on-dark-sub">Performance e projeção das metas de faturamento em tempo real.</p>
+          </div>
           {isManager && (
-            <Button size="sm" onClick={() => setNewMetaOpen(true)} className="h-10 rounded-full bg-primary px-5 hover:bg-primary/90">
-              <Plus className="mr-2 h-4 w-4" /> Nova Meta
+            <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
+              <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
             </Button>
           )}
         </div>
-      </div>
 
-      {periodGroups.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-1">
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Total Acumulado</p>
-            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">R$ {fmt(globalRevenueStats.totalAcumulado)}</p>
+        {periodGroups.length > 0 && (
+          <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <PanelStat label="Total acumulado" value={`R$ ${fmt(globalRevenueStats.totalAcumulado)}`} />
+            <PanelStat label="Atingimento médio" value={`${globalRevenueStats.avgAting.toFixed(1)}%`} tone={globalRevenueStats.avgAting >= 100 ? 'text-ds-ok' : 'text-ds-warn'} />
+            <PanelStat label="Unidades ativas" value={globalRevenueStats.activeCount} />
+            <PanelStat label="Projeção total" value={`R$ ${fmt(globalRevenueStats.totalProjection)}`} tone={globalRevenueStats.totalProjection >= globalRevenueStats.totalTarget ? 'text-ds-ok' : 'text-ds-danger'} />
           </div>
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Atingimento Médio</p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${globalRevenueStats.avgAting >= 100 ? 'text-emerald-600' : 'text-amber-500'}`}>
-              {globalRevenueStats.avgAting.toFixed(1)}%
-            </p>
+        )}
+
+        {hasMultipleGroups && (
+          <div className="mt-5">
+            <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Grupo</p>
+            <FilterChips
+              value={selectedGroupId}
+              onChange={value => {
+                setSelectedGroupId(value);
+                const group = kioskGroups.find(item => item.id === value);
+                if (group && selectedKioskId !== 'all' && !group.kioskIds.includes(selectedKioskId)) setSelectedKioskId('all');
+              }}
+              allLabel="Todos os grupos"
+              chips={kioskGroups.map(group => ({ value: group.id, label: group.name, count: group.kioskIds.length }))}
+            />
           </div>
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Unidades Ativas</p>
-            <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">{globalRevenueStats.activeCount}</p>
+        )}
+
+        {availableKiosks.length > 1 && (
+          <div className={hasMultipleGroups ? 'mt-4' : 'mt-5'}>
+            {hasMultipleGroups && <p className="mb-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Unidade</p>}
+            <FilterChips
+              value={selectedKioskId === 'all' ? null : selectedKioskId}
+              onChange={value => setSelectedKioskId(value ?? 'all')}
+              allLabel={selectedGroupId ? 'Todas do grupo' : 'Todas as unidades'}
+              chips={availableKiosks
+                .filter(kiosk => selectedGroupId === null || groupOf(kiosk.id).id === selectedGroupId)
+                .map(kiosk => ({ value: kiosk.id, label: kiosk.name }))}
+            />
           </div>
-          <div className="rounded-[18px] border border-[#cfd9e6] bg-[#eef3f9] px-4 py-3">
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-500">Projeção Total</p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${globalRevenueStats.totalProjection >= globalRevenueStats.totalTarget ? 'text-emerald-600' : 'text-rose-500'}`}>
-              R$ {fmt(globalRevenueStats.totalProjection)}
-            </p>
-          </div>
-        </div>
-      )}
+        )}
+      </ControlPanel>
 
       {!loading && periodGroups.length === 0 && (
          <Card className="p-20 text-center bg-card/50 border-dashed border-2">
@@ -2997,26 +3007,26 @@ export function GoalsTrackingDashboard() {
             onOpenChange={(v) => setOpenCards(prev => ({ ...prev, [group.groupKey]: v }))}
             className="space-y-4"
           >
-            <Card className="overflow-hidden rounded-[24px] border border-[#cfd9e6] bg-[#eef3f9] shadow-[0_28px_70px_-52px_rgba(15,23,42,0.45)] transition-all">
+            <Card className="overflow-hidden rounded-ds-card-lg border border-ds-border bg-ds-muted shadow-none transition-all">
               <CollapsibleTrigger asChild>
-                <div className="flex cursor-pointer items-center gap-4 px-6 py-5 transition-colors hover:bg-white/25">
+                <div className="flex cursor-pointer items-center gap-4 px-6 py-5 transition-colors hover:bg-ds-surface/60">
                   <div className="rounded-full bg-primary/10 p-2.5 shrink-0">
                     <Target className="h-5 w-5 text-primary" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-[1.08rem] font-bold tracking-[-0.03em] text-zinc-900 truncate">{kioskName}</h2>
+                    <h2 className="text-[1.08rem] font-bold tracking-[-0.03em] text-ds-ink truncate">{kioskName}</h2>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <Badge variant="outline" className="h-5 rounded-full bg-white/80 px-2 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-500">
+                      <Badge variant="outline" className="h-5 rounded-full bg-white/80 px-2 text-[9px] font-black uppercase tracking-[0.12em] text-ds-ink-muted">
                         {goalPeriodKindLabel(group.periodKind)}
                       </Badge>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">{group.monthLabel}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-ds-ink-muted">{group.monthLabel}</p>
                     </div>
                   </div>
                   <div className="flex flex-col items-center shrink-0">
                     <span className={`text-[1.55rem] font-black leading-none ${pctPrincipal >= 100 ? 'text-emerald-500' : 'text-amber-500'}`}>
                       {pctPrincipal.toFixed(1)}%
                     </span>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-400 mt-0.5">da meta</p>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-ds-ink-faint mt-0.5">da meta</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
@@ -3034,7 +3044,7 @@ export function GoalsTrackingDashboard() {
                             variant="outline"
                             size="sm"
                             onClick={(event) => event.stopPropagation()}
-                            className="h-9 rounded-full border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-700 hover:bg-zinc-50"
+                            className="h-9 rounded-full border-ds-border bg-white px-3 text-xs font-bold text-ds-ink-2 hover:bg-ds-warm"
                           >
                             <Menu className="h-4 w-4" />
                           </Button>
@@ -3084,17 +3094,17 @@ export function GoalsTrackingDashboard() {
                       </DropdownMenu>
                     )}
                     <div className={`rounded-full bg-white/80 p-1.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
-                      <ChevronDown className="h-5 w-5 text-zinc-500" />
+                      <ChevronDown className="h-5 w-5 text-ds-ink-muted" />
                     </div>
                   </div>
                 </div>
               </CollapsibleTrigger>
 
               <CollapsibleContent>
-                <div className="space-y-8 border-t border-white/70 px-6 pb-7 pt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="space-y-8 border-t border-ds-divider px-6 pb-7 pt-3 animate-in fade-in slide-in-from-top-2 duration-300">
                   {/* ── Resumo do Período ── */}
                   <div className="space-y-4">
-                    <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Visão Geral</h3>
+                    <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.32em] text-ds-ink-muted">Visão Geral</h3>
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                        {revenuePeriods.map(period => {
                          const stats = calcMonthlyStats(period, distributionSnapshot);
@@ -3153,14 +3163,14 @@ export function GoalsTrackingDashboard() {
                              <button
                                type="button"
                                onClick={openMonthlyDetail}
-                               className="rounded-[22px] border border-white/80 bg-white px-5 py-5 text-left shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)] transition-shadow hover:shadow-[0_18px_50px_-38px_rgba(15,23,42,0.65)] md:col-span-2"
+                               className="rounded-ds-card border border-ds-border bg-white px-5 py-5 text-left shadow-none transition-shadow hover:shadow-ds-lift md:col-span-2"
                              >
                                <div className="flex items-end justify-between gap-3">
                                  <div className="min-w-0">
                                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Acumulado</span>
                                    <p className="text-2xl font-bold tabular-nums">R$ {fmt(stats.value)}</p>
                                  </div>
-                                 <span className="mb-2 shrink-0 text-lg font-black text-zinc-300">→</span>
+                                 <span className="mb-2 shrink-0 text-lg font-black text-ds-ink-faint">→</span>
                                  <div className="min-w-0 text-right">
                                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Projeção</span>
                                    <p className={`text-2xl font-bold tabular-nums ${stats.projection >= stats.alvo ? 'text-emerald-600' : ''}`}>R$ {fmt(stats.projection)}</p>
@@ -3174,13 +3184,13 @@ export function GoalsTrackingDashboard() {
                                </div>
                              </button>
                              <div className="flex flex-col gap-5">
-                               <div className="rounded-[22px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_50px_-44px_rgba(15,23,42,0.45)]">
+                               <div className="rounded-ds-card border border-ds-border bg-white px-5 py-5 shadow-none">
                                  <StatItem
                                    title="Ritmo Atual"
                                    value={fmt(stats.currentPace)}
                                    valueSuffix="/dia"
                                    subLabel={(
-                                     <span className="rounded-full border border-zinc-100 bg-zinc-50 px-2 py-0.5 text-[10px] font-black text-zinc-500">
+                                     <span className="rounded-full border border-ds-divider bg-ds-warm px-2 py-0.5 text-[10px] font-black text-ds-ink-muted">
                                        {hasActiveTierRemaining
                                          ? `Necessário p/ ${activeTierLabel} R$ ${fmt(neededDailyForActiveTier)}/dia`
                                          : `${activeTierLabel} batida`}
@@ -3298,24 +3308,24 @@ export function GoalsTrackingDashboard() {
 
                     return (
                       <div key={period.id} className="space-y-8">
-                        <Card className="relative overflow-hidden rounded-[24px] border border-white/80 bg-white p-7 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.45)]">
+                        <Card className="relative overflow-hidden rounded-ds-card-lg border border-ds-border bg-white p-7 shadow-none">
                           {(bonusPreview || rankingRows.length > 0) && (
                             <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.85fr)]">
                               {bonusPreview && (
-                                <div className="rounded-[18px] border border-emerald-100 bg-emerald-50 px-4 py-3">
+                                <div className="rounded-ds-card border border-emerald-100 bg-emerald-50 px-4 py-3">
                                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div className="min-w-0">
                                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Bonificação estimada</p>
                                       <p className="truncate text-sm font-semibold text-emerald-900">{period.goalMethodSnapshot?.name}</p>
                                     </div>
-                                    <div className="shrink-0 rounded-[12px] bg-white/80 px-4 py-2 text-right">
+                                    <div className="shrink-0 rounded-ds-md bg-white/80 px-4 py-2 text-right">
                                       <p className="text-[11px] font-semibold text-emerald-700/75">Bonificação total</p>
                                       <p className="text-lg font-black text-emerald-900">R$ {formatCurrencyBRL(totalPrize)}</p>
                                     </div>
                                   </div>
 
                                   {participantRows.length > 0 && (
-                                    <div className="mt-3 overflow-x-auto rounded-[12px] bg-white/70">
+                                    <div className="mt-3 overflow-x-auto rounded-ds-md bg-white/70">
                                       <div className="grid min-w-[520px] grid-cols-[minmax(170px,1.35fr)_minmax(140px,1fr)_110px] gap-3 border-b border-emerald-100 px-3 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700/80">
                                         <span>Colaborador</span>
                                         <span>Cargo/função</span>
@@ -3356,7 +3366,7 @@ export function GoalsTrackingDashboard() {
                                     </div>
                                   )}
                                   {bonusPreview.incentiveMessage && (
-                                    <div className="mt-3 rounded-[12px] bg-white/75 px-3 py-2 text-xs font-semibold text-emerald-800">
+                                    <div className="mt-3 rounded-ds-md bg-white/75 px-3 py-2 text-xs font-semibold text-emerald-800">
                                       {bonusPreview.incentiveMessage.message.replace('Prêmio', 'Bonificação').replace('prêmio', 'bonificação')}
                                     </div>
                                   )}
@@ -3364,18 +3374,18 @@ export function GoalsTrackingDashboard() {
                               )}
 
                               {rankingRows.length > 0 && (
-                                <div className="rounded-[18px] border border-zinc-100 bg-white px-4 py-3">
+                                <div className="rounded-ds-card border border-ds-divider bg-white px-4 py-3">
                                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">Ranking de contribuição</p>
-                                      <h3 className="mt-0.5 text-base font-black tracking-[-0.03em] text-zinc-900">Gamificação do quiosque</h3>
+                                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-ds-ink-muted">Ranking de contribuição</p>
+                                      <h3 className="mt-0.5 text-base font-black tracking-[-0.03em] text-ds-ink">Gamificação do quiosque</h3>
                                     </div>
-                                    <p className="max-w-[250px] text-[11px] font-semibold leading-snug text-zinc-400 sm:text-right">
+                                    <p className="max-w-[250px] text-[11px] font-semibold leading-snug text-ds-ink-faint sm:text-right">
                                       Ordem por faturamento no período da meta. Uso visual e motivacional.
                                     </p>
                                   </div>
-                                  <div className="mt-3 overflow-x-auto rounded-[12px] border border-zinc-100">
-                                    <div className="grid min-w-[620px] grid-cols-[54px_minmax(150px,1.25fr)_minmax(120px,0.9fr)_110px_70px] gap-3 bg-zinc-50 px-3 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-zinc-400">
+                                  <div className="mt-3 overflow-x-auto rounded-ds-md border border-ds-divider">
+                                    <div className="grid min-w-[620px] grid-cols-[54px_minmax(150px,1.25fr)_minmax(120px,0.9fr)_110px_70px] gap-3 bg-ds-warm px-3 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-ds-ink-faint">
                                       <span>Rank</span>
                                       <span>Colaborador</span>
                                       <span>Cargo/função</span>
@@ -3383,12 +3393,12 @@ export function GoalsTrackingDashboard() {
                                       <span className="text-right">Part.</span>
                                     </div>
                                     {rankingRows.map((row, index) => (
-                                      <div key={row.id} className="grid min-w-[620px] grid-cols-[54px_minmax(150px,1.25fr)_minmax(120px,0.9fr)_110px_70px] items-center gap-3 border-t border-zinc-100 px-3 py-2.5 text-xs">
+                                      <div key={row.id} className="grid min-w-[620px] grid-cols-[54px_minmax(150px,1.25fr)_minmax(120px,0.9fr)_110px_70px] items-center gap-3 border-t border-ds-divider px-3 py-2.5 text-xs">
                                         <span className="w-fit rounded-full border border-pink-100 bg-pink-50 px-2 py-0.5 text-[10px] font-black text-pink-600">
                                           #{index + 1}
                                         </span>
                                         <span className="flex min-w-0 items-center gap-2">
-                                          <span className="truncate font-black text-zinc-900">{row.name}</span>
+                                          <span className="truncate font-black text-ds-ink">{row.name}</span>
                                           {row.roleKey !== 'fixed' ? (
                                             <Badge
                                               variant="outline"
@@ -3402,8 +3412,8 @@ export function GoalsTrackingDashboard() {
                                             </Badge>
                                           ) : null}
                                         </span>
-                                        <span className="min-w-0 truncate font-semibold text-zinc-500">{row.jobLabel}</span>
-                                        <span className="text-right font-black tabular-nums text-zinc-900">R$ {fmt(row.currentValue)}</span>
+                                        <span className="min-w-0 truncate font-semibold text-ds-ink-muted">{row.jobLabel}</span>
+                                        <span className="text-right font-black tabular-nums text-ds-ink">R$ {fmt(row.currentValue)}</span>
                                         <span className="text-right font-black tabular-nums text-blue-600">{row.share.toFixed(1)}%</span>
                                       </div>
                                     ))}
@@ -3419,8 +3429,8 @@ export function GoalsTrackingDashboard() {
                         {/* ── Por Colaborador ── */}
                         <div className="space-y-4">
                           <div className="px-1">
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.32em] text-zinc-500">Resultado por colaborador</h3>
-                            <p className="mt-1 text-xs font-semibold text-zinc-400">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.32em] text-ds-ink-muted">Resultado por colaborador</h3>
+                            <p className="mt-1 text-xs font-semibold text-ds-ink-faint">
                               Acompanhamento individual de faturamento, participação no geral e dias trabalhados.
                             </p>
                           </div>
@@ -3428,8 +3438,8 @@ export function GoalsTrackingDashboard() {
                             const periodEgs = employeeGoals.filter(eg => eg.periodId === period.id);
                             if (periodEgs.length === 0) {
                               return (
-                                <div className="rounded-[18px] border border-dashed border-[#cfd9e6] bg-[#f8fafc] px-5 py-8 text-center">
-                                  <p className="text-sm font-medium text-zinc-500">Sem meta cadastrada para este período</p>
+                                <div className="rounded-ds-card border border-dashed border-ds-border bg-ds-warm px-5 py-8 text-center">
+                                  <p className="text-sm font-medium text-ds-ink-muted">Sem meta cadastrada para este período</p>
                                   {isManager && (
                                     <Button
                                       size="sm"
@@ -3509,7 +3519,7 @@ export function GoalsTrackingDashboard() {
                           const { value, alvo } = calcMonthlyStats(period, distributionSnapshot);
                           const pPct = pct(value, alvo);
                           return (
-                            <Card key={period.id} className="p-5 border-slate-300/60 dark:border-border/40 bg-slate-100 dark:bg-slate-800/40 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors shadow-sm rounded-2xl">
+                            <Card key={period.id} className="p-5 border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors shadow-sm rounded-2xl">
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2">
                                   <div className={`h-2 w-2 rounded-full ${typeStyle.dot} animate-pulse`} />

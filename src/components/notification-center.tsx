@@ -17,10 +17,13 @@ type TabKey = "all" | "task";
 
 interface NotificationCenterProps {
   tasks: LegacyTask[];
+  /** `dark`: botão para o cabeçalho escuro flutuante. */
+  tone?: "light" | "dark";
 }
 
 export function NotificationCenter({
   tasks,
+  tone = "light",
 }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -71,15 +74,19 @@ export function NotificationCenter({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`relative flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border transition-colors ${
-          open
-            ? "border-rose-200 bg-rose-50 text-rose-500 dark:border-rose-800 dark:bg-rose-950/40"
-            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+          tone === "dark"
+            ? open
+              ? "border-white/20 bg-white/15 text-white"
+              : "border-white/10 bg-white/[0.07] text-ds-on-dark-2 hover:bg-white/10 hover:text-white"
+            : open
+              ? "border-rose-200 bg-rose-50 text-rose-500 dark:border-rose-800 dark:bg-rose-950/40"
+              : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
         aria-label="Notificações"
       >
         <Bell className="h-4 w-4" />
         {totalUnread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-background bg-destructive px-[3px] text-[8px] font-bold text-white">
+          <span className={`absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 ${tone === "dark" ? "border-ds-dark" : "border-background"} bg-destructive px-[3px] text-[8px] font-bold text-white`}>
             {totalUnread > 99 ? "99+" : totalUnread}
           </span>
         )}

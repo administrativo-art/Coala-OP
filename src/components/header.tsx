@@ -6,11 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Search, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { UserProfile } from "./user-profile";
 import { type LegacyTask, NotificationCenter } from "./notification-center";
-import { GlobalBarcodeScanner } from "./global-barcode-scanner";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { cn } from "@/lib/utils";
+import { useNavTrail } from "@/components/navigation/nav-trail";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -145,24 +144,111 @@ function getBreadcrumb(pathname: string): { section: string | null; current: str
   return { section: null, current: "Dashboard" };
 }
 
-// ── Status bar ────────────────────────────────────────────────────────────────
+// ── Pendências (só aparecem quando existem) e relógio ─────────────────────────
 
-function StatusBar({ tasks }: { tasks: LegacyTask[] }) {
+function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
   const { lots } = useExpiryProducts();
-  const [clock, setClock] = useState("");
 
   const now = Date.now();
   const in48h = now + 48 * 60 * 60 * 1000;
   const expiringLots = lots
     .filter((l) => {
-    if (!l.expiryDate || (l.quantity ?? 0) <= 0) return false;
-    const d = new Date(l.expiryDate).getTime();
-    return d >= now && d <= in48h;
+      if (!l.expiryDate || (l.quantity ?? 0) <= 0) return false;
+      const d = new Date(l.expiryDate).getTime();
+      return d >= now && d <= in48h;
     })
     .sort((a, b) => new Date(a.expiryDate ?? 0).getTime() - new Date(b.expiryDate ?? 0).getTime());
   const expiringCount = expiringLots.length;
   const taskCount = tasks.length;
 
+  if (expiringCount === 0 && taskCount === 0) return null;
+
+  const chip = "inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full bg-white/[0.07] px-3 text-[12px] font-semibold text-ds-on-dark-2 ring-1 ring-inset ring-white/10";
+  const see = "ml-0.5 font-extrabold text-ds-accent-kicker hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
+
+  return (
+    <div className="flex items-center gap-2" aria-label="Pendências">
+      {expiringCount > 0 ? (
+        <div className={chip}>
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-ds-danger" />
+          <strong className="font-extrabold text-white">{expiringCount} {expiringCount === 1 ? "validade" : "validades"}</strong>
+          <span className="hidden xl:inline">{expiringCount === 1 ? "vence" : "vencem"} em 48h</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className={see}>Ver →</button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[340px] p-0">
+              <div className="border-b p-3">
+                <p className="text-sm font-semibold text-foreground">Validades próximas</p>
+                <p className="text-xs text-muted-foreground">Lotes com estoque e vencimento nas próximas 48h.</p>
+              </div>
+              <div className="max-h-64 overflow-y-auto p-2">
+                {expiringLots.slice(0, 6).map((lot) => (
+                  <div key={lot.id} className="rounded-lg px-2 py-2 text-xs hover:bg-muted/60">
+                    <p className="truncate font-medium text-foreground">{lot.productName}</p>
+                    <p className="mt-0.5 text-muted-foreground">
+                      {lot.kioskId || "Sem unidade"} · {lot.quantity} un · vence em{" "}
+                      {lot.expiryDate ? new Date(lot.expiryDate).toLocaleDateString("pt-BR") : "—"}
+                    </p>
+                  </div>
+                ))}
+                {expiringCount > 6 ? (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">+{expiringCount - 6} validade(s) na página completa.</p>
+                ) : null}
+              </div>
+              <div className="border-t p-2">
+                <Button asChild size="sm" className="h-8 w-full rounded-lg text-xs">
+                  <Link href="/dashboard/expiry">Abrir controle de validades</Link>
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      ) : null}
+      {taskCount > 0 ? (
+        <div className={chip}>
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-ds-warn" />
+          <strong className="font-extrabold text-white">{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</strong>
+          <span className="hidden xl:inline">pendente{taskCount !== 1 && "s"}</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className={see}>Ver →</button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[340px] p-0">
+              <div className="border-b p-3">
+                <p className="text-sm font-semibold text-foreground">Tarefas pendentes</p>
+                <p className="text-xs text-muted-foreground">Resumo das pendências operacionais atribuídas.</p>
+              </div>
+              <div className="max-h-64 overflow-y-auto p-2">
+                {tasks.slice(0, 6).map((task) => (
+                  <Link
+                    key={task.id}
+                    href={task.link || "/dashboard/tasks"}
+                    className="block rounded-lg px-2 py-2 text-xs hover:bg-muted/60"
+                  >
+                    <p className="truncate font-medium text-foreground">{task.title}</p>
+                    <p className="mt-0.5 truncate text-muted-foreground">{task.type} · {task.description}</p>
+                  </Link>
+                ))}
+                {taskCount > 6 ? (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">+{taskCount - 6} tarefa(s) na página completa.</p>
+                ) : null}
+              </div>
+              <div className="border-t p-2">
+                <Button asChild size="sm" className="h-8 w-full rounded-lg text-xs">
+                  <Link href="/dashboard/tasks">Abrir central de tarefas</Link>
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Clock() {
+  const [clock, setClock] = useState("");
   useEffect(() => {
     function tick() {
       const d = new Date();
@@ -174,104 +260,8 @@ function StatusBar({ tasks }: { tasks: LegacyTask[] }) {
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
-
-  if (expiringCount === 0 && taskCount === 0 && !clock) return null;
-
-  return (
-    <div className="flex h-[30px] items-center overflow-hidden border-t border-border/50 bg-muted/30 px-4 lg:px-6">
-      <div className="flex min-w-0 flex-1 items-center gap-0">
-        {expiringCount > 0 ? (
-          <div
-            className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground"
-            style={{
-              paddingRight: 14,
-              marginRight: 14,
-              borderRight: taskCount > 0 ? "1px solid var(--border)" : undefined,
-            }}
-          >
-            <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-500" />
-            <strong className="font-semibold text-foreground">{expiringCount} {expiringCount === 1 ? "validade" : "validades"}</strong>
-            {" "}{expiringCount === 1 ? "vence" : "vencem"} em 48h
-            <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" className="ml-1 font-semibold text-primary hover:underline">
-                  Ver →
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-[340px] p-0">
-                <div className="border-b p-3">
-                  <p className="text-sm font-semibold text-foreground">Validades próximas</p>
-                  <p className="text-xs text-muted-foreground">Lotes com estoque e vencimento nas próximas 48h.</p>
-                </div>
-                <div className="max-h-64 overflow-y-auto p-2">
-                  {expiringLots.slice(0, 6).map((lot) => (
-                    <div key={lot.id} className="rounded-lg px-2 py-2 text-xs hover:bg-muted/60">
-                      <p className="truncate font-medium text-foreground">{lot.productName}</p>
-                      <p className="mt-0.5 text-muted-foreground">
-                        {lot.kioskId || "Sem unidade"} · {lot.quantity} un · vence em{" "}
-                        {lot.expiryDate ? new Date(lot.expiryDate).toLocaleDateString("pt-BR") : "—"}
-                      </p>
-                    </div>
-                  ))}
-                  {expiringCount > 6 ? (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">+{expiringCount - 6} validade(s) na página completa.</p>
-                  ) : null}
-                </div>
-                <div className="border-t p-2">
-                  <Button asChild size="sm" className="h-8 w-full rounded-lg text-xs">
-                    <Link href="/dashboard/expiry">Abrir controle de validades</Link>
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-        ) : null}
-        {taskCount > 0 ? (
-          <div className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
-            <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
-            <strong className="font-semibold text-foreground">{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</strong>
-            {" "}pendente{taskCount !== 1 && "s"}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" className="ml-1 font-semibold text-primary hover:underline">
-                  Ver →
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-[340px] p-0">
-                <div className="border-b p-3">
-                  <p className="text-sm font-semibold text-foreground">Tarefas pendentes</p>
-                  <p className="text-xs text-muted-foreground">Resumo das pendências operacionais atribuídas.</p>
-                </div>
-                <div className="max-h-64 overflow-y-auto p-2">
-                  {tasks.slice(0, 6).map((task) => (
-                    <Link
-                      key={task.id}
-                      href={task.link || "/dashboard/tasks"}
-                      className="block rounded-lg px-2 py-2 text-xs hover:bg-muted/60"
-                    >
-                      <p className="truncate font-medium text-foreground">{task.title}</p>
-                      <p className="mt-0.5 truncate text-muted-foreground">{task.type} · {task.description}</p>
-                    </Link>
-                  ))}
-                  {taskCount > 6 ? (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">+{taskCount - 6} tarefa(s) na página completa.</p>
-                  ) : null}
-                </div>
-                <div className="border-t p-2">
-                  <Button asChild size="sm" className="h-8 w-full rounded-lg text-xs">
-                    <Link href="/dashboard/tasks">Abrir central de tarefas</Link>
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-        ) : null}
-      </div>
-      {clock && (
-        <span className="flex-shrink-0 font-mono text-[10px] text-muted-foreground/70">{clock}</span>
-      )}
-    </div>
-  );
+  if (!clock) return null;
+  return <span className="hidden whitespace-nowrap font-ds-mono text-[11px] text-ds-on-dark-muted xl:inline">{clock}</span>;
 }
 
 // ── Search items (all navigable pages) ───────────────────────────────────────
@@ -281,7 +271,6 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Painel de operações", href: "/dashboard/operations", section: "Departamento operacional" },
   { label: "Tarefas gerais", href: "/dashboard/tasks", section: "Departamento operacional" },
   { label: "Formulários", href: "/dashboard/forms", section: "Departamento operacional" },
-  { label: "Gestão de estoque", href: "/dashboard/stock", section: "Departamento operacional" },
   { label: "Validades", href: "/dashboard/expiry", section: "Departamento operacional" },
   { label: "Reposição", href: "/dashboard/stock/restock", section: "Departamento operacional" },
   { label: "Histórico de movimentos", href: "/dashboard/stock/movement", section: "Departamento operacional" },
@@ -389,15 +378,15 @@ function HeaderSearch() {
   }
 
   return (
-    <div ref={containerRef} className="relative ml-4 hidden max-w-[260px] flex-1 lg:flex">
+    <div ref={containerRef} className="relative ml-2 hidden max-w-[360px] flex-1 lg:flex">
       <label className={cn(
-        "flex h-8 w-full cursor-text items-center gap-2 rounded-lg border bg-muted/50 px-3 text-xs text-muted-foreground transition-colors",
-        open ? "border-primary ring-2 ring-primary/20" : "border-border"
+        "flex h-8 w-full cursor-text items-center gap-2 rounded-full border bg-white/[0.07] px-3.5 text-xs text-ds-on-dark-muted transition-[border-color,box-shadow,background] duration-200",
+        open ? "border-ds-accent-kicker bg-white/10 ring-2 ring-ds-accent-kicker/30" : "border-white/10 hover:bg-white/10"
       )}>
-        <Search className="h-3 w-3 flex-shrink-0" />
+        <Search className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
         <input
           ref={inputRef}
-          className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+          className="flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-ds-on-dark-muted"
           placeholder="Buscar…"
           value={query}
           onChange={e => { setQuery(e.target.value); setCursor(0); setOpen(true); }}
@@ -406,7 +395,7 @@ function HeaderSearch() {
           autoComplete="off"
         />
         {!open && (
-          <kbd className="rounded bg-border px-1 py-px font-mono text-[9px] text-muted-foreground">
+          <kbd className="rounded-md border border-white/15 px-1.5 py-px font-ds-mono text-[10px] text-ds-on-dark-muted">
             ⌘K
           </kbd>
         )}
@@ -448,56 +437,51 @@ function HeaderSearch() {
 interface HeaderProps {
   onMenuClick: () => void;
   tasks: LegacyTask[];
+  /** Margem lateral igual à do conteúdo da página, para a barra e a tela terem as mesmas bordas. */
+  gutterClassName?: string;
 }
 
-export function Header({ onMenuClick, tasks }: HeaderProps) {
+export function Header({ onMenuClick, tasks, gutterClassName = "mx-4 md:mx-8" }: HeaderProps) {
   const pathname = usePathname();
-  const { section, current } = getBreadcrumb(pathname ?? "");
+  const { trail } = useNavTrail();
+  const fallback = getBreadcrumb(pathname ?? "");
+  const crumbs = trail.length > 0 ? trail : [fallback.section, fallback.current].filter((item): item is string => Boolean(item));
+  const parents = crumbs.slice(0, -1);
+  const current = crumbs[crumbs.length - 1] ?? fallback.current;
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-sm">
-      {/* Main bar */}
-      <div className="flex h-14 items-center gap-3 px-4 lg:h-[56px] lg:px-6">
+    <header className={cn("sticky top-3 z-30 mt-3", gutterClassName)}>
+      {/* Barra fina e flutuante, no mesmo desenho da barra lateral */}
+      <div className="flex h-11 items-center gap-3 rounded-ds-card-lg bg-ds-dark px-3 text-ds-on-dark shadow-ds-panel ring-1 ring-white/10 lg:px-4">
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 flex-shrink-0 lg:hidden"
+          className="h-8 w-8 flex-shrink-0 text-ds-on-dark-2 hover:bg-white/10 hover:text-white lg:hidden"
           onClick={onMenuClick}
           aria-label="Abrir menu"
         >
           <Menu className="h-5 w-5" />
         </Button>
 
-        {/* Divider (only between menu btn and breadcrumb on mobile) */}
-        <div className="hidden h-5 w-px bg-border" />
-
-        {/* Breadcrumb */}
-        <nav className="hidden items-center gap-1.5 text-sm lg:flex">
-          {section && (
-            <>
-              <span className="text-muted-foreground">{section}</span>
-              <span className="text-muted-foreground/40">/</span>
-            </>
-          )}
-          <span className="font-semibold text-foreground">{current}</span>
+        {/* Caminho da tela, gerado a partir do menu lateral */}
+        <nav aria-label="Caminho" className="flex min-w-0 items-center gap-1.5 text-[13px]">
+          {parents.map((label) => (
+            <span key={label} className="hidden items-center gap-1.5 lg:flex">
+              <span className="whitespace-nowrap text-ds-on-dark-muted">{label}</span>
+              <span aria-hidden="true" className="text-ds-on-dark-muted/60">›</span>
+            </span>
+          ))}
+          <span className="truncate font-extrabold text-white">{current}</span>
         </nav>
 
-        {/* Search */}
         <HeaderSearch />
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-1.5">
-          <GlobalBarcodeScanner />
-          <NotificationCenter
-            tasks={tasks}
-          />
-          <UserProfile />
-        </div>
+        <PendingChips tasks={tasks} />
+        <Clock />
+        <NotificationCenter tasks={tasks} tone="dark" />
       </div>
-
-      {/* Status bar */}
-      <StatusBar tasks={tasks} />
     </header>
   );
 }

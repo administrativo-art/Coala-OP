@@ -39,19 +39,22 @@ async function runUnitsFlow(page: Page, db: ReturnType<typeof adminDb>) {
 
   await page.goto('/dashboard/settings?department=operacional&tab=units', { waitUntil: 'domcontentloaded' });
 
-  await page.getByRole('button', { name: 'Ações do grupo Grupo CD E2E' }).click();
-  await page.getByRole('menuitem', { name: 'Editar grupo' }).click();
+  await page.getByRole('tab', { name: /Grupos/ }).click();
+  await page.getByRole('button', { name: 'Abrir Grupo CD E2E' }).click();
+  await page.getByRole('button', { name: 'Editar grupo' }).click();
   await expect(page.getByTestId('group-supplied-groups')).toBeVisible({ timeout: 60_000 });
   await page.getByRole('checkbox', { name: 'Abastece Grupo Lojas E2E' }).click();
   await page.getByRole('button', { name: 'Salvar grupo' }).click();
-  await expect(page.getByRole('button', { name: 'Salvar grupo' })).toBeHidden({ timeout: 60_000 });
+  await expect(page.getByTestId('group-supplied-groups')).toBeHidden({ timeout: 60_000 });
 
-  await page.getByRole('button', { name: 'Ações da unidade CD E2E' }).click();
-  await page.getByRole('menuitem', { name: 'Editar unidade' }).click();
+  await page.getByRole('tab', { name: /Unidades/ }).click();
+  await page.getByRole('button', { name: 'Abrir CD E2E' }).click();
+  await page.getByRole('button', { name: 'Editar unidade' }).click();
+  await page.getByRole('button', { name: /Estrutura/ }).click();
   await expect(page.getByTestId('unit-stock-role')).toBeVisible({ timeout: 60_000 });
-  await page.getByRole('combobox', { name: 'Função no estoque' }).click();
-  await page.getByRole('option', { name: 'Unidade de abastecimento' }).click();
-  await page.getByRole('button', { name: /^Salvar unidade$|^Salvar$/ }).click();
+  await page.getByRole('radio', { name: 'Unidade de abastecimento' }).click();
+  await page.getByRole('button', { name: /Integrações/ }).click();
+  await page.getByRole('button', { name: 'Salvar unidade' }).click();
   await expect(page.getByTestId('unit-stock-role')).toBeHidden({ timeout: 60_000 });
 
   await expect.poll(async () => (await db.collection('dp_unitGroups').doc(E2E_STOCK_MIN.cdGroupId).get()).get('suppliedGroupIds'))

@@ -1,16 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, ExternalLink, Heart, Loader2, MapPin, Megaphone, MessageCircle, NotebookText, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, Heart, MapPin, Megaphone, MessageCircle, NotebookText, Sparkles, Trash2 } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
 
+import { CadastrosTabs, ListSkeleton } from "@/components/cadastros/cadastros-ui";
+import { Field, fieldInputClass } from "@/components/patterns/field";
+import { PanelSelectField } from "@/components/patterns/panel-form";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { PulseHero } from "@/features/instagram-scheduler/hero-panel";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
-import { type BioImage, type BioLink, type BioMomentProduct, type BioPage, defaultBioPage, MAX_BIO_IMAGES, uploadedBioProductImageId, validateBioForPublish } from "@/lib/public-bio";
+import { BIO_SITE_URL, type BioImage, type BioLink, type BioMomentProduct, type BioPage, defaultBioPage, MAX_BIO_IMAGES, uploadedBioProductImageId, validateBioForPublish } from "@/lib/public-bio";
 
 const kinds: Array<{ value: BioLink["kind"]; label: string; symbol: string }> = [
   { value: "menu", label: "Cardápio", symbol: "✦" },
@@ -22,7 +29,7 @@ const kinds: Array<{ value: BioLink["kind"]; label: string; symbol: string }> = 
   { value: "other", label: "Outro", symbol: "↗" },
 ];
 
-const publicUrl = process.env.NEXT_PUBLIC_BIO_SITE_URL || "https://bio.coalashakes.com";
+const publicUrl = BIO_SITE_URL;
 
 function productPreviewSrc(image: string, mediaUrls: Record<string, string>): string | null {
   if (image.startsWith("builtin:")) return `/images/bio-products/${image.slice(8)}.webp`;
@@ -107,6 +114,7 @@ export function PublicBioSettings() {
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<"menuImages" | "promotionImages" | null>(null);
   const [uploadingProduct, setUploadingProduct] = useState<number | null>(null);
+  const [section, setSection] = useState<"content" | "galleries" | "links">("content");
   const [previewGallery, setPreviewGallery] = useState<"page" | "menuImages" | "promotionImages">("page");
   const mediaIds = [...new Set([...draft.menuImages, ...draft.promotionImages].map((item) => item.id)
     .concat(draft.momentProducts.map((product) => uploadedBioProductImageId(product.image)).filter((id): id is string => Boolean(id))))]
@@ -289,144 +297,192 @@ export function PublicBioSettings() {
     }
   };
 
-  if (loading) return <div className="flex min-h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  const filledProducts = draft.momentProducts.filter((product) => product.name || product.image).length;
+  const imageCount = draft.menuImages.length + draft.promotionImages.length;
+  const activeLinks = draft.links.filter((link) => link.enabled).length;
+  const busy = !!saving || !!uploading || uploadingProduct !== null;
+  const galleryTitle = (gallery: "menuImages" | "promotionImages") => (gallery === "menuImages" ? "Imagens do cardápio" : "Imagens das promoções");
+  const card = "rounded-ds-card-lg border border-ds-border bg-ds-surface p-5";
+  const uploadLabel = "inline-flex h-9 cursor-pointer items-center rounded-ds-btn border border-ds-border-input bg-white px-3 text-[13px] font-bold text-ds-ink hover:bg-ds-muted focus-within:ring-2 focus-within:ring-ds-accent-ink";
+  const publication = publishedAt
+    ? dirty ? "Publicada, com alterações não salvas" : "Publicada"
+    : dirty ? "Rascunho com alterações não salvas" : "Ainda não publicada";
+
+  if (loading) {
+    return (
+      <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando a página da bio">
+        <ListSkeleton rows={5} />
+      </div>
+    );
+  }
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_390px]">
-      <div className="min-w-0 space-y-6">
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h3 className="text-base font-bold">Identidade da página</h3>
-          <p className="mt-1 text-sm text-muted-foreground">A logo oficial aparece no topo. Ajuste a frase de apresentação abaixo.</p>
-          <div className="mt-5 grid gap-4">
-            <label className="space-y-1.5 text-sm font-medium">Descrição curta
-              <Textarea value={draft.description} maxLength={160} rows={2} onChange={(event) => setDraft((page) => ({ ...page, description: event.target.value }))} />
+    <div className="space-y-5">
+      <PulseHero
+        stack
+        kicker="Relacionar"
+        title="Link na bio"
+        titleId="bio-title"
+        subtitle={<StatusPill variant={publishedAt && !dirty ? "ok" : "warn"}>{publication}</StatusPill>}
+        compactInfo={publication}
+        compactActions={<Button type="button" variant="primary-page" size="md" disabled={busy} loading={saving === "publish"} loadingLabel="Publicando…" onClick={() => void submit("publish")} className="whitespace-nowrap">Publicar página</Button>}
+        actions={(
+          <>
+            <Button type="button" variant="on-dark-secondary" size="xl" disabled={busy || !dirty} loading={saving === "save"} loadingLabel="Salvando…" onClick={() => void submit("save")}>Salvar rascunho</Button>
+            <Button type="button" variant="primary-page" size="xl" disabled={busy} loading={saving === "publish"} loadingLabel="Publicando…" onClick={() => void submit("publish")} className="whitespace-nowrap">Publicar página</Button>
+          </>
+        )}
+        footer={(
+          <>
+            <p className="text-[13px] text-ds-on-dark-sub">
+              Edite, visualize e publique a página oficial sem sair da programação. {publishedAt ? `Última publicação: ${new Date(publishedAt).toLocaleString("pt-BR")}.` : "O visitante só vê a versão publicada."}
+            </p>
+            <CadastrosTabs
+              tabs={[
+                { id: "content", label: "Página e produtos", count: filledProducts },
+                { id: "galleries", label: "Cardápio e promoções", count: imageCount },
+                { id: "links", label: "Botões", count: activeLinks },
+              ]}
+              active={section}
+              onChange={(id) => setSection(id as typeof section)}
+            />
+          </>
+        )}
+      />
+
+      {message ? (
+        <p role={message.type === "error" ? "alert" : "status"} className={cn("rounded-ds-btn border px-3.5 py-3 text-[12.5px] font-semibold",
+          message.type === "error" ? "border-ds-confirm-border bg-ds-confirm-bg text-ds-confirm-ink" : "border-ds-border bg-ds-ok-bg text-ds-ok")}>{message.text}</p>
+      ) : null}
+
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_390px]">
+        <div className="min-w-0 space-y-5">
+          {section === "content" ? <>
+            <section className={card}>
+              <h2 className="text-base font-extrabold">Identidade da página</h2>
+              <p className="mt-1 text-[13px] text-ds-ink-muted">A logo oficial aparece no topo. Ajuste a frase de apresentação abaixo.</p>
+              <div className="mt-4">
+                <Field label="Descrição curta" htmlFor="bio-description" hint={`${draft.description.length}/160`}>
+                  <Textarea id="bio-description" value={draft.description} maxLength={160} rows={2} onChange={(event) => setDraft((page) => ({ ...page, description: event.target.value }))} className={cn(fieldInputClass, "h-auto py-2.5")} />
+                </Field>
+              </div>
+            </section>
+
+            <section className={card}>
+              <h2 className="text-base font-extrabold">Produtos do momento</h2>
+              <p className="mt-1 text-[13px] text-ds-ink-muted">Oito posições para foto e nome. As fotos enviadas já estão preenchidas; você pode trocar, esvaziar ou mudar a ordem.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {draft.momentProducts.map((product, index) => <div key={index} className="rounded-ds-btn-lg border border-ds-border bg-white p-3">
+                  <div className="mb-2 flex items-center gap-2"><strong className="flex-1 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-ink-faint">Posição {index + 1}</strong>
+                    <Button type="button" variant="ghost" size="icon" aria-label={`Subir produto ${index + 1}`} disabled={index === 0 || uploadingProduct !== null} onClick={() => moveMomentProduct(index, -1)}><ArrowUp className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" aria-label={`Descer produto ${index + 1}`} disabled={index === 7 || uploadingProduct !== null} onClick={() => moveMomentProduct(index, 1)}><ArrowDown className="h-4 w-4" /></Button></div>
+                  <div className="flex gap-3"><div className="h-28 w-24 shrink-0 overflow-hidden rounded-ds-btn bg-ds-muted">{productPreviewSrc(product.image, mediaUrls) ? <Image src={productPreviewSrc(product.image, mediaUrls)!} alt={product.name || `Produto ${index + 1}`} width={96} height={112} unoptimized className="h-full w-full object-contain" /> : null}</div>
+                    <div className="min-w-0 flex-1 space-y-2"><Input aria-label={`Nome do produto ${index + 1}`} placeholder="Nome do produto" maxLength={64} value={product.name} onChange={(event) => updateMomentProduct(index, { name: event.target.value })} className={fieldInputClass} />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className={cn(uploadLabel, uploadingProduct !== null && "pointer-events-none opacity-50")}>
+                          {uploadingProduct === index ? "Enviando…" : "Trocar foto"}
+                          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploadingProduct !== null || !!uploading} onChange={(event) => { void uploadMomentProduct(index, event.target.files?.[0]); event.target.value = ""; }} />
+                        </label>
+                        <Button type="button" variant="danger-link" size="xs" disabled={uploadingProduct !== null || (!product.name && !product.image)} onClick={() => updateMomentProduct(index, { name: "", image: "" })}>Esvaziar</Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>)}
+              </div>
+            </section>
+          </> : null}
+
+          {section === "galleries" ? (["menuImages", "promotionImages"] as const).map((gallery) => <section key={gallery} className={card}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><h2 className="text-base font-extrabold">{galleryTitle(gallery)}</h2>
+                <p className="mt-1 text-[13px] text-ds-ink-muted">Envie JPG, PNG ou WebP (até 8 MB). Otimizamos cada imagem para o celular. Use as setas para definir a ordem.</p></div>
+              <span className="font-ds-mono text-xs text-ds-ink-faint">{draft[gallery].length}/{MAX_BIO_IMAGES}</span>
+            </div>
+            {gallery === "menuImages" ? <p className="mt-3 rounded-ds-btn border border-ds-alert-border bg-ds-alert-bg px-3 py-2 text-xs text-ds-alert-ink">Ao abrir o cardápio, o visitante verá o aviso: “A disponibilidade dos produtos pode variar conforme a unidade.”</p> : null}
+            {gallery === "promotionImages" ? <div className="mt-4 rounded-ds-btn-lg border border-ds-border bg-white p-4">
+              <h3 className="text-sm font-extrabold">Texto da faixa de promoção</h3>
+              <p className="mt-1 text-xs text-ds-ink-muted">Sem imagens de promoção publicadas, a faixa mostra um aviso de novidades em breve. Com imagens e o link ativo, ela usa os textos e o símbolo abaixo.</p>
+              {promotionDraftLink ? <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <PanelSelectField id="bio-promo-icon" label="Símbolo na frente" value={draft.promotionIcon} onChange={(value) => setDraft((page) => ({ ...page, promotionIcon: value as BioPage["promotionIcon"] }))}
+                  options={[{ id: "heart", name: "Coração" }, { id: "megaphone", name: "Megafone" }, { id: "sparkles", name: "Brilhos" }]} />
+                <Field label="Título pequeno" htmlFor="bio-promo-title">
+                  <Input id="bio-promo-title" value={promotionDraftLink.label} maxLength={48} onChange={(event) => updateLink(promotionDraftLink.id, { label: event.target.value })} className={fieldInputClass} />
+                </Field>
+                <Field label="Chamada da promoção" htmlFor="bio-promo-subtitle" className="sm:col-span-2">
+                  <Textarea id="bio-promo-subtitle" value={promotionDraftLink.subtitle} maxLength={80} rows={2} onChange={(event) => updateLink(promotionDraftLink.id, { subtitle: event.target.value })} className={cn(fieldInputClass, "h-auto py-2.5")} />
+                </Field>
+              </div> : <p className="mt-3 text-xs text-ds-ink-muted">Adicione um link do tipo “Promoções” em Botões para configurar esta faixa.</p>}
+            </div> : null}
+            <label className={cn(uploadLabel, "mt-4", (uploading || draft[gallery].length >= MAX_BIO_IMAGES) && "pointer-events-none opacity-50")}>
+              {uploading === gallery ? "Enviando…" : "+ Adicionar imagens"}
+              <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={!!uploading || draft[gallery].length >= MAX_BIO_IMAGES} onChange={(event) => { void uploadImages(gallery, event.target.files); event.target.value = ""; }} />
             </label>
-          </div>
-        </div>
+            <div className="mt-4 space-y-3">{draft[gallery].map((item, index) => <div key={item.id} className="flex flex-col gap-3 rounded-ds-btn-lg border border-ds-border bg-white p-3 sm:flex-row sm:items-center">
+              <div className="h-24 w-20 shrink-0 overflow-hidden rounded-ds-btn bg-ds-muted">{mediaUrls[item.id] ? <Image src={mediaUrls[item.id]} alt={item.alt} width={160} height={192} unoptimized className="h-full w-full object-cover" /> : null}</div>
+              <div className="min-w-0 flex-1"><Field label={`Imagem ${index + 1}`} htmlFor={`bio-image-${gallery}-${index}`}><Input id={`bio-image-${gallery}-${index}`} aria-label={`Descrição da imagem ${index + 1}`} value={item.alt} maxLength={100} onChange={(event) => updateImage(gallery, item.id, { alt: event.target.value })} className={fieldInputClass} /></Field></div>
+              <div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label="Mover imagem para cima" disabled={index === 0} onClick={() => moveImage(gallery, index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Mover imagem para baixo" disabled={index === draft[gallery].length - 1} onClick={() => moveImage(gallery, index, 1)}><ArrowDown className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Remover imagem" onClick={() => removeImage(gallery, item.id)}><Trash2 className="h-4 w-4" /></Button></div>
+            </div>)}</div>
+          </section>) : null}
 
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h3 className="text-base font-bold">Produtos do momento</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Oito posições para foto e nome. As fotos enviadas já estão preenchidas; você pode trocar, esvaziar ou mudar a ordem.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {draft.momentProducts.map((product, index) => <div key={index} className="rounded-xl border bg-[#fdfbfc] p-3">
-              <div className="mb-2 flex items-center gap-2"><strong className="flex-1 text-xs">Posição {index + 1}</strong><Button type="button" variant="ghost" size="icon" aria-label={`Subir produto ${index + 1}`} disabled={index === 0 || uploadingProduct !== null} onClick={() => moveMomentProduct(index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Descer produto ${index + 1}`} disabled={index === 7 || uploadingProduct !== null} onClick={() => moveMomentProduct(index, 1)}><ArrowDown className="h-4 w-4" /></Button></div>
-              <div className="flex gap-3"><div className="h-28 w-24 shrink-0 overflow-hidden rounded-lg bg-white">{productPreviewSrc(product.image, mediaUrls) ? <Image src={productPreviewSrc(product.image, mediaUrls)!} alt={product.name || `Produto ${index + 1}`} width={96} height={112} unoptimized className="h-full w-full object-contain" /> : null}</div>
-                <div className="min-w-0 flex-1 space-y-2"><Input aria-label={`Nome do produto ${index + 1}`} placeholder="Nome do produto" maxLength={64} value={product.name} onChange={(event) => updateMomentProduct(index, { name: event.target.value })} />
-                  <label className={`inline-flex cursor-pointer items-center rounded-md border px-2 py-1.5 text-xs font-semibold ${uploadingProduct !== null ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
-                    {uploadingProduct === index ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1 h-3.5 w-3.5" />}Trocar foto
-                    <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploadingProduct !== null || !!uploading} onChange={(event) => { void uploadMomentProduct(index, event.target.files?.[0]); event.target.value = ""; }} />
-                  </label>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" disabled={uploadingProduct !== null || (!product.name && !product.image)} onClick={() => updateMomentProduct(index, { name: "", image: "" })}>Esvaziar</Button>
+          {section === "links" ? <section className={card}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><h2 className="text-base font-extrabold">Botões da página</h2><p className="mt-1 text-[13px] text-ds-ink-muted">Use as setas para ordenar e ative só os links que quer mostrar.</p></div>
+              <Button type="button" variant="ds-secondary" size="md" disabled={draft.links.length >= 12} onClick={() => setDraft((page) => ({ ...page, links: [...page.links, { id: crypto.randomUUID(), kind: "other", label: "Novo link", subtitle: "", placement: "quick", url: "", enabled: false }] }))}>+ Adicionar botão</Button>
+            </div>
+            <div className="mt-5 space-y-3">
+              {draft.links.map((link, index) => (
+                <div key={link.id} className={cn("rounded-ds-btn-lg border border-ds-border bg-white p-4", !link.enabled && "opacity-80")}>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={link.enabled} onCheckedChange={(checked) => updateLink(link.id, { enabled: checked })} aria-label={`Mostrar ${link.label}`} />
+                    <span className="flex-1 text-sm font-bold">{link.label || "Novo link"}</span>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Mover para cima" disabled={index === 0} onClick={() => moveLink(index, -1)}><ArrowUp className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Mover para baixo" disabled={index === draft.links.length - 1} onClick={() => moveLink(index, 1)}><ArrowDown className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Remover link" onClick={() => setDraft((page) => ({ ...page, links: page.links.filter((entry) => entry.id !== link.id) }))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-[180px_1fr]">
+                    <PanelSelectField id={`bio-kind-${link.id}`} label="Tipo" value={link.kind} onChange={(value) => updateLink(link.id, { kind: value as BioLink["kind"] })} options={kinds.map((kind) => ({ id: kind.value, name: kind.label }))} />
+                    {link.kind === "promotions" ? <p className="self-end text-xs text-ds-ink-muted">Edite o símbolo, o título pequeno e a chamada em “Cardápio e promoções”.</p> : <Field label="Texto do botão" htmlFor={`bio-label-${link.id}`}>
+                      <Input id={`bio-label-${link.id}`} value={link.label} maxLength={48} onChange={(event) => updateLink(link.id, { label: event.target.value })} className={fieldInputClass} />
+                    </Field>}
+                  </div>
+                  {link.kind !== "promotions" ? <div className="mt-4 grid gap-4 sm:grid-cols-[180px_1fr]">
+                    <PanelSelectField id={`bio-placement-${link.id}`} label="Exibição" value={link.placement} onChange={(value) => updateLink(link.id, { placement: value as BioLink["placement"] })} options={[{ id: "featured", name: "Botão principal" }, { id: "quick", name: "Acesso rápido" }]} />
+                    {link.placement === "quick" ? <Field label="Texto complementar" htmlFor={`bio-subtitle-${link.id}`}>
+                      <Input id={`bio-subtitle-${link.id}`} value={link.subtitle} maxLength={80} onChange={(event) => updateLink(link.id, { subtitle: event.target.value })} className={fieldInputClass} />
+                    </Field> : null}
+                  </div> : null}
+                  {link.kind === "menu" || link.kind === "promotions" ? <p className="mt-4 text-xs text-ds-ink-muted">Abre a galeria de {link.kind === "menu" ? "cardápio" : "promoções"} nesta página. Envie ao menos uma imagem para ativar.</p> : <div className="mt-4"><Field label="Endereço público (https://)" htmlFor={`bio-url-${link.id}`}>
+                    <Input id={`bio-url-${link.id}`} type="url" inputMode="url" placeholder="https://" value={link.url} maxLength={2048} onChange={(event) => updateLink(link.id, { url: event.target.value })} className={fieldInputClass} />
+                  </Field></div>}
                 </div>
-              </div>
-            </div>)}
-          </div>
+              ))}
+            </div>
+          </section> : null}
         </div>
 
-        {(["menuImages", "promotionImages"] as const).map((gallery) => <div key={gallery} className="rounded-2xl border bg-white p-5 shadow-sm">
-          <h3 className="text-base font-bold">{gallery === "menuImages" ? "Imagens do cardápio" : "Imagens das promoções"}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Envie JPG, PNG ou WebP (até 8 MB). Otimizamos cada imagem para o celular. Use as setas para definir a ordem.</p>
-          {gallery === "menuImages" ? <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Ao abrir o cardápio, o visitante verá o aviso: “A disponibilidade dos produtos pode variar conforme a unidade.”</p> : null}
-          {gallery === "promotionImages" ? <div className="mt-4 rounded-xl border border-[#f5dbe7] bg-[#fff8fb] p-4">
-            <h4 className="text-sm font-bold">Texto da faixa de promoção</h4>
-            <p className="mt-1 text-xs text-muted-foreground">Sem imagens de promoção publicadas, a faixa mostra um aviso de novidades em breve. Com imagens e o link ativo, ela usa os textos e o símbolo abaixo.</p>
-            {promotionDraftLink ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-xs font-medium text-muted-foreground">Símbolo na frente
-                <select value={draft.promotionIcon} onChange={(event) => setDraft((page) => ({ ...page, promotionIcon: event.target.value as BioPage["promotionIcon"] }))} className="flex h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground">
-                  <option value="heart">Coração</option><option value="megaphone">Megafone</option><option value="sparkles">Brilhos</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-xs font-medium text-muted-foreground">Título pequeno
-                <Input value={promotionDraftLink.label} maxLength={48} onChange={(event) => updateLink(promotionDraftLink.id, { label: event.target.value })} />
-              </label>
-              <label className="space-y-1 text-xs font-medium text-muted-foreground sm:col-span-2">Chamada da promoção
-                <Textarea value={promotionDraftLink.subtitle} maxLength={80} rows={2} onChange={(event) => updateLink(promotionDraftLink.id, { subtitle: event.target.value })} />
-              </label>
-            </div> : <p className="mt-3 text-xs text-muted-foreground">Adicione um link do tipo “Promoções” em Botões da página para configurar esta faixa.</p>}
-          </div> : null}
-          <label className={`mt-4 inline-flex cursor-pointer items-center rounded-md border px-3 py-2 text-sm font-medium ${uploading || draft[gallery].length >= MAX_BIO_IMAGES ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}>
-            {uploading === gallery ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}Adicionar imagens
-            <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={!!uploading || draft[gallery].length >= MAX_BIO_IMAGES} onChange={(event) => { void uploadImages(gallery, event.target.files); event.target.value = ""; }} />
-          </label>
-          <span className="ml-3 text-xs text-muted-foreground">{draft[gallery].length}/{MAX_BIO_IMAGES}</span>
-          <div className="mt-4 space-y-3">{draft[gallery].map((item, index) => <div key={item.id} className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center">
-            <div className="h-24 w-20 shrink-0 overflow-hidden rounded-lg bg-muted">{mediaUrls[item.id] ? <Image src={mediaUrls[item.id]} alt={item.alt} width={160} height={192} unoptimized className="h-full w-full object-cover" /> : null}</div>
-            <div className="min-w-0 flex-1"><span className="text-xs font-semibold text-muted-foreground">Imagem {index + 1}</span><Input aria-label={`Descrição da imagem ${index + 1}`} value={item.alt} maxLength={100} className="mt-1" onChange={(event) => updateImage(gallery, item.id, { alt: event.target.value })} /></div>
-            <div className="flex gap-1"><Button type="button" variant="ghost" size="icon" aria-label="Mover imagem para cima" disabled={index === 0} onClick={() => moveImage(gallery, index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Mover imagem para baixo" disabled={index === draft[gallery].length - 1} onClick={() => moveImage(gallery, index, 1)}><ArrowDown className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Remover imagem" onClick={() => removeImage(gallery, item.id)}><Trash2 className="h-4 w-4" /></Button></div>
-          </div>)}</div>
-        </div>)}
-
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><h3 className="text-base font-bold">Botões da página</h3><p className="mt-1 text-sm text-muted-foreground">Use as setas para ordenar e ative só os links que quer mostrar.</p></div>
-            <Button type="button" size="sm" variant="outline" disabled={draft.links.length >= 12} onClick={() => setDraft((page) => ({ ...page, links: [...page.links, { id: crypto.randomUUID(), kind: "other", label: "Novo link", subtitle: "", placement: "quick", url: "", enabled: false }] }))}><Plus className="mr-1 h-4 w-4" />Adicionar</Button>
+        <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+          <div className="flex items-center justify-between gap-3">
+            <div><p className="text-sm font-extrabold">Prévia ao vivo</p><p className="text-xs text-ds-ink-muted">O visitante só vê a versão publicada.</p></div>
           </div>
-          <div className="mt-5 space-y-3">
-            {draft.links.map((link, index) => (
-              <div key={link.id} className="rounded-xl border bg-[#fdfbfc] p-4">
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" checked={link.enabled} onChange={(event) => updateLink(link.id, { enabled: event.target.checked })} aria-label={`Mostrar ${link.label}`} className="h-4 w-4 accent-[#e84f96]" />
-                  <span className="flex-1 text-sm font-semibold">{link.label || "Novo link"}</span>
-                  <Button type="button" variant="ghost" size="icon" aria-label="Mover para cima" disabled={index === 0} onClick={() => moveLink(index, -1)}><ArrowUp className="h-4 w-4" /></Button>
-                  <Button type="button" variant="ghost" size="icon" aria-label="Mover para baixo" disabled={index === draft.links.length - 1} onClick={() => moveLink(index, 1)}><ArrowDown className="h-4 w-4" /></Button>
-                  <Button type="button" variant="ghost" size="icon" aria-label="Remover link" onClick={() => setDraft((page) => ({ ...page, links: page.links.filter((entry) => entry.id !== link.id) }))}><Trash2 className="h-4 w-4" /></Button>
-                </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-[160px_1fr]">
-                  <label className="space-y-1 text-xs font-medium text-muted-foreground">Tipo
-                    <select value={link.kind} onChange={(event) => updateLink(link.id, { kind: event.target.value as BioLink["kind"] })} className="flex h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground">
-                      {kinds.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
-                    </select>
-                  </label>
-                  {link.kind === "promotions" ? <p className="self-end text-xs text-muted-foreground">Edite o símbolo, o título pequeno e a chamada em “Imagens das promoções”.</p> : <label className="space-y-1 text-xs font-medium text-muted-foreground">Texto do botão
-                    <Input value={link.label} maxLength={48} onChange={(event) => updateLink(link.id, { label: event.target.value })} />
-                  </label>}
-                </div>
-                {link.kind !== "promotions" ? <div className="mt-3 grid gap-3 sm:grid-cols-[160px_1fr]">
-                  <label className="space-y-1 text-xs font-medium text-muted-foreground">Exibição
-                    <select value={link.placement} onChange={(event) => updateLink(link.id, { placement: event.target.value as BioLink["placement"] })} className="flex h-10 w-full rounded-md border bg-white px-3 text-sm text-foreground">
-                      <option value="featured">Botão principal</option><option value="quick">Acesso rápido</option>
-                    </select>
-                  </label>
-                  {link.placement === "quick" ? <label className="space-y-1 text-xs font-medium text-muted-foreground">Texto complementar
-                    <Input value={link.subtitle} maxLength={80} onChange={(event) => updateLink(link.id, { subtitle: event.target.value })} />
-                  </label> : null}
-                </div> : null}
-                {link.kind === "menu" || link.kind === "promotions" ? <p className="mt-3 text-xs text-muted-foreground">Abre a galeria de {link.kind === "menu" ? "cardápio" : "promoções"} nesta página. Envie ao menos uma imagem para ativar.</p> : <label className="mt-3 block space-y-1 text-xs font-medium text-muted-foreground">Endereço público (https://)
-                  <Input type="url" inputMode="url" placeholder="https://" value={link.url} maxLength={2048} onChange={(event) => updateLink(link.id, { url: event.target.value })} />
-                </label>}
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Prévia">{([["page", "Página"], ["menuImages", "Cardápio"], ["promotionImages", "Promoções"]] as const).map(([value, label]) => (
+            <Button key={value} type="button" size="sm" variant={previewGallery === value ? "primary-modal" : "ds-secondary"} aria-pressed={previewGallery === value} onClick={() => setPreviewGallery(value)}>{label}</Button>
+          ))}</div>
+          <BioPreview page={draft} mediaUrls={mediaUrls} gallery={previewGallery} />
+          <div className={card}>
+            <h2 className="text-sm font-extrabold">Link da página</h2>
+            <p className="mt-1 break-all font-ds-mono text-[13px]">{publicUrl}</p>
+            <p className="mt-1 text-xs text-ds-ink-muted">O endereço curto fica ativo após a publicação e a conexão do domínio.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" size="md" variant="ds-secondary" onClick={() => void copyPublicUrl()}>Copiar link</Button>
+              <Button asChild size="md" variant="ds-secondary"><a href={publicUrl} target="_blank" rel="noopener noreferrer">Acessar página</a></Button>
+            </div>
+            {qrDataUrl ? <div className="mt-5 flex flex-col items-center border-t border-ds-divider pt-4">
+              <Image src={qrDataUrl} alt="QR Code da página pública Coala Shakes" width={180} height={180} unoptimized />
+              <a className="mt-2 text-sm font-bold text-ds-accent-ink underline underline-offset-2" href={qrDataUrl} download="coala-shakes-bio-qr.png">Baixar QR Code</a>
+            </div> : null}
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="outline" disabled={!!saving || !!uploading || uploadingProduct !== null || !dirty} onClick={() => void submit("save")}>{saving === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Salvar rascunho</Button>
-          <Button type="button" disabled={!!saving || !!uploading || uploadingProduct !== null} onClick={() => void submit("publish")}>{saving === "publish" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Publicar página</Button>
-          <span className="text-xs text-muted-foreground">{publishedAt ? `Última publicação: ${new Date(publishedAt).toLocaleString("pt-BR")}` : "Ainda não publicada"}</span>
-        </div>
-        {message ? <p role="status" className={`rounded-lg border px-4 py-3 text-sm ${message.type === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-green-200 bg-green-50 text-green-800"}`}>{message.text}</p> : null}
+        </aside>
       </div>
-
-      <aside className="xl:sticky xl:top-6 xl:self-start">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div><p className="text-sm font-bold">Prévia ao vivo</p><p className="text-xs text-muted-foreground">O visitante só vê a versão publicada.</p></div>
-        </div>
-        <div className="mb-3 flex flex-wrap gap-2">{([ ["page", "Página"], ["menuImages", "Cardápio"], ["promotionImages", "Promoções"] ] as const).map(([value, label]) => <Button key={value} type="button" size="sm" variant={previewGallery === value ? "default" : "outline"} onClick={() => setPreviewGallery(value)}>{label}</Button>)}</div>
-        <BioPreview page={draft} mediaUrls={mediaUrls} gallery={previewGallery} />
-        <div className="mt-5 rounded-2xl border bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-bold">Link da página</h3>
-          <p className="mt-1 break-all text-sm text-[#173768]">{publicUrl}</p>
-          <p className="mt-1 text-xs text-muted-foreground">O endereço curto fica ativo após a publicação e a conexão do domínio.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => void copyPublicUrl()}><Copy className="mr-1.5 h-4 w-4" />Copiar link</Button>
-            <Button asChild size="sm" variant="outline"><a href={publicUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-1.5 h-4 w-4" />Acessar página</a></Button>
-          </div>
-          {qrDataUrl ? <div className="mt-5 flex flex-col items-center border-t pt-4">
-            <Image src={qrDataUrl} alt="QR Code da página pública Coala Shakes" width={180} height={180} unoptimized />
-            <a className="mt-2 text-sm font-semibold text-[#087fa2] underline underline-offset-2" href={qrDataUrl} download="coala-shakes-bio-qr.png">Baixar QR Code</a>
-          </div> : null}
-        </div>
-      </aside>
     </div>
   );
 }

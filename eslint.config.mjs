@@ -66,6 +66,7 @@ export default defineConfig([
     name: "coala/design-guide-no-loose-hex",
     files: [
       "src/components/patterns/**/*.{ts,tsx}",
+      "src/components/cadastros/**/*.{ts,tsx}",
       "src/components/design/**/*.{ts,tsx}",
       "src/components/ui/status-pill.tsx",
     ],

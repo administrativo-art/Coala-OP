@@ -1,0 +1,38 @@
+package com.coalaone.go.auth
+
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
+import javax.inject.Inject
+import javax.inject.Singleton
+
+data class Identity(val uid: String, val email: String?)
+interface AuthGateway {
+    val identities: Flow<Identity?>
+    val current: Identity?
+    suspend fun login(email: String, password: String): Identity
+    suspend fun reauthenticate(password: String)
+    suspend fun token(forceRefresh: Boolean = false): String
+    fun signOut()
+}
+@Singleton class FirebaseGateway @Inject constructor(private val firebase: FirebaseAuth) : AuthGateway {
+    override val identities = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.let { user -> Identity(user.uid, user.email) }) }
+        firebase.addAuthStateListener(listener)
+        awaitClose { firebase.removeAuthStateListener(listener) }
+    }
+    override val current get() = firebase.currentUser?.let { Identity(it.uid, it.email) }
+    override suspend fun login(email: String, password: String): Identity {
+        val user = firebase.signInWithEmailAndPassword(email.trim(), password).await().user ?: error("Login não confirmado")
+        return Identity(user.uid, user.email)
+    }
+    override suspend fun reauthenticate(password: String) {
+        val user = firebase.currentUser ?: error("Sessão expirada")
+        user.reauthenticate(EmailAuthProvider.getCredential(user.email ?: error("Conta sem e-mail"), password)).await()
+    }
+    override suspend fun token(forceRefresh: Boolean) = firebase.currentUser?.getIdToken(forceRefresh)?.await()?.token ?: error("Sessão expirada")
+    override fun signOut() = firebase.signOut()
+}

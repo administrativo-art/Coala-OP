@@ -60,7 +60,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [inline-confirm.tsx](../../src/components/patterns/inline-confirm.tsx), [employee-document-options.ts](../../src/lib/hr/employee-document-options.ts) |
 | `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | [user-management.tsx](../../src/components/user-management.tsx) |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
-| `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [dp-units.ts](../../src/lib/dp-units.ts) |
+| `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [index.ts](../../src/types/index.ts) |
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
 | `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx), [page-header.tsx](../../src/components/layout/page-header.tsx) |
@@ -140,7 +140,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/goals/analysis` | [page.tsx](../../src/app/dashboard/goals/analysis/page.tsx) | [goals-analysis-dashboard.tsx](../../src/components/goals-analysis-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
-| `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | [goals-context.tsx](../../src/contexts/goals-context.tsx), [use-kiosks.ts](../../src/hooks/use-kiosks.ts) |
+| `dashboard/goals/history` | [page.tsx](../../src/app/dashboard/goals/history/page.tsx) | Redireciona para `/dashboard/goals/analysis?tab=closures` |
 | `dashboard/goals` | [page.tsx](../../src/app/dashboard/goals/page.tsx) | Redireciona para `/dashboard/goals/tracking` |
 | `dashboard/goals/registration` | [page.tsx](../../src/app/dashboard/goals/registration/page.tsx) | [goals-registration-dashboard.tsx](../../src/components/goals-registration-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 | `dashboard/goals/tracking` | [page.tsx](../../src/app/dashboard/goals/tracking/page.tsx) | [goals-tracking-dashboard.tsx](../../src/components/goals-tracking-dashboard.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
@@ -212,8 +212,8 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/pricing/competitors` | [page.tsx](../../src/app/dashboard/pricing/competitors/page.tsx) | Redireciona para `/dashboard/pricing/price-comparison` |
 | `dashboard/pricing/cost-analysis` | [page.tsx](../../src/app/dashboard/pricing/cost-analysis/page.tsx) | [pricing-simulator.tsx](../../src/components/pricing-simulator.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
-| `dashboard/pricing` | [page.tsx](../../src/app/dashboard/pricing/page.tsx) | Ler a própria página |
-| `dashboard/pricing/price-comparison` | [page.tsx](../../src/app/dashboard/pricing/price-comparison/page.tsx) | [price-comparison-table.tsx](../../src/components/price-comparison-table.tsx), [competitor-management-modal.tsx](../../src/components/competitor-management-modal.tsx) |
+| `dashboard/pricing` | [page.tsx](../../src/app/dashboard/pricing/page.tsx) | Redireciona para `/dashboard/pricing/cost-analysis` |
+| `dashboard/pricing/price-comparison` | [page.tsx](../../src/app/dashboard/pricing/price-comparison/page.tsx) | [competitors-workspace.tsx](../../src/components/competitors/competitors-workspace.tsx), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 
 ## processes (1)
 
@@ -229,7 +229,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/purchasing/financial` | [page.tsx](../../src/app/dashboard/purchasing/financial/page.tsx) | Redireciona para `/dashboard/financial/expenses?origin=purchasing&status=pending_audit` |
 | `dashboard/purchasing/orders/[orderId]` | [page.tsx](../../src/app/dashboard/purchasing/orders/[orderId]/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [account-plan-tree-select.tsx](../../src/components/purchasing/account-plan-tree-select.tsx) |
 | `dashboard/purchasing/orders/[orderId]/receipt` | [page.tsx](../../src/app/dashboard/purchasing/orders/[orderId]/receipt/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [receipt-workspace.tsx](../../src/components/purchasing/receipt-workspace.tsx) |
-| `dashboard/purchasing/orders` | [page.tsx](../../src/app/dashboard/purchasing/orders/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [use-purchase-orders.ts](../../src/hooks/use-purchase-orders.ts) |
+| `dashboard/purchasing/orders` | [page.tsx](../../src/app/dashboard/purchasing/orders/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/purchasing` | [page.tsx](../../src/app/dashboard/purchasing/page.tsx) | Redireciona para `/dashboard/purchasing/orders` |
 | `dashboard/purchasing/quotations/[quotationId]/confirm-purchase` | [page.tsx](../../src/app/dashboard/purchasing/quotations/[quotationId]/confirm-purchase/page.tsx) | [account-plan-tree-select.tsx](../../src/components/purchasing/account-plan-tree-select.tsx), [result-center-select.tsx](../../src/components/purchasing/result-center-select.tsx) |
 | `dashboard/purchasing/quotations/[quotationId]` | [page.tsx](../../src/app/dashboard/purchasing/quotations/[quotationId]/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [quotation-workspace.tsx](../../src/components/purchasing/quotation-workspace.tsx) |
@@ -241,7 +241,7 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
-| `dashboard` | [page.tsx](../../src/app/dashboard/page.tsx) | [goals-provider.tsx](../../src/components/goals-provider.tsx), [dp-context.tsx](../../src/components/dp-context.tsx) |
+| `dashboard` | [page.tsx](../../src/app/dashboard/page.tsx) | [page-hero.tsx](../../src/components/patterns/page-hero.tsx), [goals-provider.tsx](../../src/components/goals-provider.tsx) |
 
 ## registration (4)
 
@@ -306,16 +306,16 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/stock/inventory-control` | [page.tsx](../../src/app/dashboard/stock/inventory-control/page.tsx) | [expiry-control.tsx](../../src/components/expiry-control.tsx), [stock-write-down.tsx](../../src/components/stock-write-down.tsx) |
 | `dashboard/stock/item-requests` | [page.tsx](../../src/app/dashboard/stock/item-requests/page.tsx) | [item-addition-request-management.tsx](../../src/components/item-addition-request-management.tsx) |
 | `dashboard/stock/movement-history` | [page.tsx](../../src/app/dashboard/stock/movement-history/page.tsx) | Retorna `null` |
-| `dashboard/stock` | [page.tsx](../../src/app/dashboard/stock/page.tsx) | [stock-management.tsx](../../src/components/stock-management.tsx) |
+| `dashboard/stock` | [page.tsx](../../src/app/dashboard/stock/page.tsx) | [cadastros-ui.tsx](../../src/components/cadastros/cadastros-ui.tsx) |
 | `dashboard/stock/purchasing/history` | [page.tsx](../../src/app/dashboard/stock/purchasing/history/page.tsx) | [purchase-history-dashboard.tsx](../../src/components/purchase-history-dashboard.tsx) |
 | `dashboard/stock/purchasing` | [page.tsx](../../src/app/dashboard/stock/purchasing/page.tsx) | [use-purchase.ts](../../src/hooks/use-purchase.ts), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 | `dashboard/stock/purchasing/sessions/[sessionId]` | [page.tsx](../../src/app/dashboard/stock/purchasing/sessions/[sessionId]/page.tsx) | [use-purchase.ts](../../src/hooks/use-purchase.ts), [purchase-session-card.tsx](../../src/components/purchase-session-card.tsx) |
 | `dashboard/stock/purchasing/sessions` | [page.tsx](../../src/app/dashboard/stock/purchasing/sessions/page.tsx) | Redireciona para `/dashboard/stock/purchasing` |
 | `dashboard/stock/purchasing/suggestion` | [page.tsx](../../src/app/dashboard/stock/purchasing/suggestion/page.tsx) | Retorna `null` |
 | `dashboard/stock/reposition` | [page.tsx](../../src/app/dashboard/stock/reposition/page.tsx) | [reposition-management.tsx](../../src/components/reposition-management.tsx), [use-reposition.ts](../../src/hooks/use-reposition.ts) |
-| `dashboard/stock/returns` | [page.tsx](../../src/app/dashboard/stock/returns/page.tsx) | [return-request-management.tsx](../../src/components/return-request-management.tsx), [add-return-request-modal.tsx](../../src/components/add-return-request-modal.tsx) |
+| `dashboard/stock/returns` | [page.tsx](../../src/app/dashboard/stock/returns/page.tsx) | [page-hero.tsx](../../src/components/patterns/page-hero.tsx), [return-request-management.tsx](../../src/components/return-request-management.tsx) |
 | `dashboard/stock/transfer` | [page.tsx](../../src/app/dashboard/stock/transfer/page.tsx) | Redireciona para `/dashboard/stock/inventory-control` |
-| `dashboard/stock/uniforms` | [page.tsx](../../src/app/dashboard/stock/uniforms/page.tsx) | [uniform-management.tsx](../../src/components/uniform-management.tsx) |
+| `dashboard/stock/uniforms` | [page.tsx](../../src/app/dashboard/stock/uniforms/page.tsx) | [uniform-management.tsx](../../src/components/uniform-management.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/stock/write-down` | [page.tsx](../../src/app/dashboard/stock/write-down/page.tsx) | Redireciona para `/dashboard/stock/inventory-control` |
 
 ## tasks (1)

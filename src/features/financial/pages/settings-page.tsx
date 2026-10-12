@@ -3,11 +3,9 @@
 import { BookMarked, Building2, Layers3, Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
-import AccountPlansManagement from "@/features/financial/components/settings/account-plans-management";
+import { AccountingSettings } from "@/features/financial/components/settings/accounting-settings";
 import BankAccountsManagement from "@/features/financial/components/settings/bank-accounts-management";
-import ExpenseDescriptionsManagement from "@/features/financial/components/settings/expense-descriptions-management";
 import ImportAliasesManagement from "@/features/financial/components/settings/import-aliases-management";
-import ResultCentersManagement from "@/features/financial/components/settings/result-centers-management";
 import BudgetsManagement from "@/features/financial/components/settings/budgets-management";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -52,12 +50,14 @@ export function FinancialSettingsPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="accounting" className="mt-4 space-y-6">
-          <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
-          <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
-          {permissions.financial?.settings?.manageExpenseDescriptions ? (
-            <ExpenseDescriptionsManagement canManage={permissions.financial?.settings?.manageExpenseDescriptions} />
-          ) : null}
+        <TabsContent value="accounting" className="mt-4">
+          <AccountingSettings
+            permissions={{
+              manageAccountPlans: permissions.financial?.settings?.manageAccountPlans,
+              manageResultCenters: permissions.financial?.settings?.manageResultCenters,
+              manageExpenseDescriptions: permissions.financial?.settings?.manageExpenseDescriptions,
+            }}
+          />
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
           <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />

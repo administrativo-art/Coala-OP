@@ -31,6 +31,8 @@ export type WithdrawalClassification = {
   resultCenterName: string;
   description: string;
   createdExpense: boolean;
+  /** Troco devolvido ao caixa por suprimento: a despesa quitada é a sangria menos este valor. */
+  changeReturnedCents?: number;
   active: boolean;
   revision: number;
   updatedAt: string;
@@ -49,8 +51,13 @@ export function withdrawalHash(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function eligibleMovement(movement: CashClosureCashMovement) {
+export function eligibleMovement(movement: CashClosureCashMovement) {
   return movement.kind === "withdrawal" && movement.isCash && !movement.cancelled && movement.amountCents > 0;
+}
+
+/** Same identity for the closure and for the live PDV list shown in the app. */
+export function withdrawalSourceId(scope: { workspaceId: string; unitId: string; pdvFilialId: string }, movementId: string) {
+  return withdrawalHash(["cash_withdrawal", scope.workspaceId, scope.unitId, scope.pdvFilialId, movementId]);
 }
 
 export function withdrawalSources(closure: CashClosure, lines: CashClosureLine[]) {
@@ -68,7 +75,7 @@ export function withdrawalSources(closure: CashClosure, lines: CashClosureLine[]
       const identityVerified = movement.identitySource === "provider";
       if (!Number.isSafeInteger(movement.amountCents) || movement.operatorId !== line.operatorId
         || movement.date !== closure.date || !movement.id) issues.push("movement_scope_invalid");
-      const id = withdrawalHash(["cash_withdrawal", closure.workspaceId, closure.kioskId, closure.pdvFilialId, movement.id]);
+      const id = withdrawalSourceId({ workspaceId: closure.workspaceId, unitId: closure.kioskId, pdvFilialId: closure.pdvFilialId }, movement.id);
       if (seen.has(id)) issues.push("duplicate_movement_identity");
       seen.add(id);
       sources.push({ version: 1, kind: "cash_withdrawal", sourceId: id,
@@ -87,13 +94,46 @@ export function assertWithdrawalSourceIntegrity(result: ReturnType<typeof withdr
   if (result.issues.length) withdrawalFailure("SOURCE_INCOMPLETE", "As sangrias do PDV precisam de conferência: há movimento sem operador, repetido ou total divergente. Sincronize e corrija a origem.");
 }
 
-export function assertEligibleWithdrawalExpense(expense: Record<string, any>, source: WithdrawalSource, configuredWorkspaceId?: string) {
+/**
+ * Troco de uma compra que o operador vinculou a esta sangria no aplicativo: a nota
+ * custou menos que o dinheiro retirado e a diferença precisa ter voltado ao caixa.
+ */
+export function preLinkedChangeCents(expense: Record<string, any>, source: WithdrawalSource) {
+  if (expense.originModule !== "local_purchase" || expense.localPurchaseWithdrawalSourceId !== source.sourceId) return 0;
+  const totalCents = Math.round(Number(expense.totalValue) * 100);
+  return Number.isSafeInteger(totalCents) && totalCents > 0 && totalCents < source.amountCents ? source.amountCents - totalCents : 0;
+}
+
+/**
+ * O PDV não liga um suprimento a uma sangria, então a prova do troco é por dia e valor:
+ * cada troco já aceito no fechamento consome um suprimento em dinheiro daquele valor.
+ */
+export function changeReturnIsProven(lines: CashClosureLine[], closureDate: string, changeCents: number, alreadyAccepted: number) {
+  const supplies = lines.flatMap(line => line.metadata.cashMovements ?? [])
+    .filter(movement => movement.kind === "supply" && !movement.cancelled && movement.date === closureDate && movement.amountCents === changeCents);
+  return supplies.length > alreadyAccepted;
+}
+
+export function assertEligibleWithdrawalExpense(expense: Record<string, any>, source: WithdrawalSource, configuredWorkspaceId?: string, changeReturnedCents = 0) {
+  const settledCents = source.amountCents - changeReturnedCents;
+  if (changeReturnedCents !== 0 && changeReturnedCents !== preLinkedChangeCents(expense, source)) {
+    withdrawalFailure("EXPENSE_AMOUNT_MONTH", "Somente a compra vinculada a esta sangria no aplicativo pode ser conciliada com troco.");
+  }
   if ((expense.workspaceId ?? configuredWorkspaceId) !== source.workspaceId
     || (expense.kioskId && expense.kioskId !== source.unitId)
     || (expense.unitId && expense.unitId !== source.unitId)) withdrawalFailure("EXPENSE_SCOPE", "A despesa não pertence ao workspace/unidade desta sangria.");
   if (financialExpenseCompetenceMonth(expense) !== source.competenceMonth
-    || !Number.isFinite(expense.totalValue) || Math.round(expense.totalValue * 100) !== source.amountCents) {
+    || !Number.isFinite(expense.totalValue) || Math.round(expense.totalValue * 100) !== settledCents) {
     withdrawalFailure("EXPENSE_AMOUNT_MONTH", "Escolha uma despesa com o mesmo valor e competência da sangria.");
+  }
+  // The operator may pre-link the purchase to one sangria in the app; that choice replaces the same-day heuristic.
+  const preLinkedSourceId = expense.originModule === "local_purchase" ? expense.localPurchaseWithdrawalSourceId : undefined;
+  if (preLinkedSourceId && preLinkedSourceId !== source.sourceId) {
+    withdrawalFailure("EXPENSE_PRELINKED", "Esta compra local foi pré-vinculada a outra sangria pelo aplicativo.");
+  }
+  if (expense.originModule === "local_purchase"
+    && (expense.localPurchaseFundingSource !== "cash_withdrawal" || !preLinkedSourceId && expense.localPurchaseDate !== source.settledOn)) {
+    withdrawalFailure("EXPENSE_DATE", "A compra local precisa estar marcada como sangria e ter a mesma data do movimento.");
   }
   if (expense.status !== "pending" || expense.provisionType === "forecast" || expense.budgetMigration
     || expense.sourceSettlement || expense.paymentState && expense.paymentState !== "open"
@@ -106,12 +146,12 @@ export function assertEligibleWithdrawalExpense(expense: Record<string, any>, so
     || expense.hasPersonAllocations || (expense.personAllocations?.length ?? 0) > 0
     || expense.isApportioned || (expense.apportionments?.length ?? 0) > 0
     || expense.plannedBankAccountId || expense.plannedPaymentMethodType && expense.plannedPaymentMethodType !== "cash"
-    || expense.originModule && expense.originModule !== "manual") {
+    || expense.originModule && !["manual", "local_purchase"].includes(expense.originModule)) {
     withdrawalFailure("EXPENSE_INELIGIBLE", "Vincule apenas despesa avulsa em aberto, sem rateio, previsão, cartão ou outro pagamento/vínculo. Não é possível transformar pagamento bancário em sangria.");
   }
   const installment = expense.installments?.[0];
   if (installment && (installment.status !== "pending" || installment.number !== 1
-    || !Number.isFinite(installment.value) || Math.round(installment.value * 100) !== source.amountCents
+    || !Number.isFinite(installment.value) || Math.round(installment.value * 100) !== settledCents
     || installment.paidAt || installment.paymentRequestId || installment.paymentId || installment.financialInboxMessageId
     || installment.linkedBankTransactionId || installment.settlementSummary
     || sourceExpenseGuard({ dueDate: installment.dueDate }) !== sourceExpenseGuard({ dueDate: expense.dueDate }))) {

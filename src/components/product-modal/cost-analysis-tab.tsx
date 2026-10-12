@@ -351,15 +351,15 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Tabs defaultValue="cost" className="flex flex-1 flex-col overflow-hidden">
-        <div className="overflow-x-auto border-b border-[#eeece7] px-6 py-3">
+        <div className="overflow-x-auto border-b border-ds-divider px-6 py-3">
           <TabsList className="h-auto gap-1 bg-transparent p-0">
-            <TabsTrigger value="cost" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-slate-400 data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
+            <TabsTrigger value="cost" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-ds-ink-faint data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
               Custo &amp; preço
             </TabsTrigger>
-            <TabsTrigger value="contexts" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-slate-400 data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
+            <TabsTrigger value="contexts" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-ds-ink-faint data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
               Preços por canal
             </TabsTrigger>
-            <TabsTrigger value="ficha" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-slate-400 data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
+            <TabsTrigger value="ficha" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-ds-ink-faint data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
               Ficha técnica
             </TabsTrigger>
           </TabsList>
@@ -368,7 +368,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
         <TabsContent value="cost" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
           <Form {...form}>
             <form id="product-modal-form" onSubmit={form.handleSubmit(onSubmit)} className="flex w-full h-full">
-              <ScrollArea className="flex-1 bg-white p-6">
+              <ScrollArea className="flex-1 bg-ds-surface p-6">
                 <div className="space-y-6">
                   {/* Categorização */}
                   <div className="grid gap-4 md:grid-cols-3">
@@ -377,7 +377,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                       name="kioskIds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs font-semibold uppercase text-gray-500">Unidades</FormLabel>
+                          <FormLabel className="text-xs font-semibold uppercase text-ds-ink-muted">Unidades</FormLabel>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="outline" className="w-full justify-between text-xs font-normal">
@@ -409,7 +409,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                       name="categoryIds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs font-semibold text-gray-500 uppercase">Categorias</FormLabel>
+                          <FormLabel className="text-xs font-semibold text-ds-ink-muted uppercase">Categorias</FormLabel>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="outline" className="w-full justify-between text-xs font-normal">
@@ -441,7 +441,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                       name="lineId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs font-semibold text-gray-500 uppercase">Linha</FormLabel>
+                          <FormLabel className="text-xs font-semibold text-ds-ink-muted uppercase">Linha</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || "none"}>
                             <SelectTrigger className="text-xs">
                               <SelectValue placeholder="Selecione" />
@@ -458,14 +458,14 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
 
                   {/* Dados Fiscais */}
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Dados Fiscais</h4>
+                    <h4 className="text-xs font-bold text-ds-ink-faint uppercase tracking-wider">Dados Fiscais</h4>
                     <div className="grid gap-4 md:grid-cols-3">
                       <FormField
                         control={form.control}
                         name="ncm"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs font-medium text-gray-600">NCM</FormLabel>
+                            <FormLabel className="text-xs font-medium text-ds-ink-2">NCM</FormLabel>
                             <Input 
                               {...field} 
                               placeholder="0000.00.00" 
@@ -480,7 +480,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                         name="cest"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs font-medium text-gray-600">CEST</FormLabel>
+                            <FormLabel className="text-xs font-medium text-ds-ink-2">CEST</FormLabel>
                             <Input 
                               {...field} 
                               placeholder="00.000.00" 
@@ -495,7 +495,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                         name="cfop"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-xs font-medium text-gray-600">CFOP</FormLabel>
+                            <FormLabel className="text-xs font-medium text-ds-ink-2">CFOP</FormLabel>
                             <Input 
                               {...field} 
                               placeholder="5102" 
@@ -509,34 +509,34 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-[#eeece7] bg-[#faf9f6] p-5">
+                  <div className="rounded-ds-card border border-ds-divider bg-ds-warm p-5">
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <div>
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Composição do CMV</h4>
-                        <p className="mt-1 text-xs text-slate-500">Participação de cada insumo no custo total.</p>
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-ds-ink-faint">Composição do CMV</h4>
+                        <p className="mt-1 text-xs text-ds-ink-muted">Participação de cada insumo no custo total.</p>
                       </div>
-                      <p className="text-lg font-black text-slate-900">{formatCurrency(cmv)}</p>
+                      <p className="text-lg font-black text-ds-ink">{formatCurrency(cmv)}</p>
                     </div>
                     <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
                       {cmvComposition.length ? cmvComposition.map((item) => (
                         <div key={item.id}>
-                          <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-semibold text-slate-600">{item.name}</span><span className="shrink-0 font-bold text-slate-500">{formatCurrency(item.cost)} · {item.share.toFixed(0)}%</span></div>
+                          <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-semibold text-ds-ink-2">{item.name}</span><span className="shrink-0 font-bold text-ds-ink-muted">{formatCurrency(item.cost)} · {item.share.toFixed(0)}%</span></div>
                           <div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
                         </div>
-                      )) : <p className="text-xs text-slate-400">Nenhum insumo vinculado à ficha.</p>}
+                      )) : <p className="text-xs text-ds-ink-faint">Nenhum insumo vinculado à ficha.</p>}
                     </div>
                   </div>
 
                   {/* Definição de Preço */}
-                  <div className="space-y-4 rounded-2xl border border-[#eeece7] bg-white p-5">
+                  <div className="space-y-4 rounded-ds-card border border-ds-divider bg-ds-surface p-5">
                     <div className="flex justify-between items-center gap-4">
                       <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Definição de preço por unidade</h4>
-                        <p className="mt-1 text-xs text-gray-500">Preço balcão individual por unidade comercial.</p>
+                        <h4 className="text-xs font-bold text-ds-ink-faint uppercase tracking-wider">Definição de preço por unidade</h4>
+                        <p className="mt-1 text-xs text-ds-ink-muted">Preço balcão individual por unidade comercial.</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-semibold text-gray-400">CMV</p>
-                        <p className="text-lg font-bold text-gray-900">{formatCurrency(cmv)}</p>
+                        <p className="text-xs font-semibold text-ds-ink-faint">CMV</p>
+                        <p className="text-lg font-bold text-ds-ink">{formatCurrency(cmv)}</p>
                       </div>
                     </div>
 
@@ -550,20 +550,20 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                         const commercialStatus = getPricingCommercialStatus(unitPrice, cmv, goal);
 
                         return (
-                          <div key={kiosk.id} className="rounded-2xl border border-[#e6e3dd] bg-white p-4">
+                          <div key={kiosk.id} className="rounded-ds-card border border-ds-border bg-ds-surface p-4">
                             <div className="mb-3 flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-gray-900">{kiosk.name}</p>
-                                <p className="mt-0.5 text-xs text-gray-400">Preço balcão da unidade</p>
+                                <p className="truncate text-sm font-bold text-ds-ink">{kiosk.name}</p>
+                                <p className="mt-0.5 text-xs text-ds-ink-faint">Preço balcão da unidade</p>
                               </div>
-                              <Badge variant="outline" className={cn("rounded-full text-[9px] font-black uppercase", commercialStatus === 'met' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : commercialStatus === 'loss' ? 'border-red-200 bg-red-50 text-red-700' : commercialStatus === 'none' ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-orange-200 bg-orange-50 text-orange-700')}>{commercialStatus === 'met' ? 'Na meta' : commercialStatus === 'loss' ? 'Prejuízo' : commercialStatus === 'none' ? 'Sem meta' : 'Abaixo'}</Badge>
+                              <Badge variant="outline" className={cn("rounded-full text-[9px] font-black uppercase", commercialStatus === 'met' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : commercialStatus === 'loss' ? 'border-red-200 bg-red-50 text-red-700' : commercialStatus === 'none' ? 'border-ds-border bg-ds-warm text-ds-ink-2' : 'border-orange-200 bg-orange-50 text-orange-700')}>{commercialStatus === 'met' ? 'Na meta' : commercialStatus === 'loss' ? 'Prejuízo' : commercialStatus === 'none' ? 'Sem meta' : 'Abaixo'}</Badge>
                             </div>
 
                             <div className="relative mb-4">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium">R$</span>
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ds-ink-faint text-xs font-medium">R$</span>
                               <Input
                                 inputMode="decimal"
-                                className="pl-8 text-right font-bold text-gray-900 focus:ring-pink-200"
+                                className="pl-8 text-right font-bold text-ds-ink focus:ring-pink-200"
                                 value={unitPriceDrafts[kiosk.id] ?? ''}
                                 onChange={(event) =>
                                   setUnitPriceDrafts((current) => ({
@@ -575,33 +575,33 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                             </div>
 
                             <div className="space-y-2 text-xs">
-                              <div className="flex justify-between text-gray-400">
+                              <div className="flex justify-between text-ds-ink-faint">
                                 <span>Impostos {tax}% + Taxas {fee}%</span>
                                 <span className="font-medium">({formatCurrency(unitPrice * ((tax + fee) / 100))})</span>
                               </div>
-                              <Separator className="bg-gray-100" />
+                              <Separator className="bg-ds-muted" />
                               <div className="flex justify-between">
                                 <span className="font-bold text-green-700">Margem de Contribuição</span>
                                 <div className="text-right">
                                   <p className="font-bold text-green-700">{formatCurrency(metrics.profitValue)}</p>
-                                  <p className="text-green-600">{metrics.profitPercentage.toFixed(1)}%</p>
+                                  <p className="text-ds-ok">{metrics.profitPercentage.toFixed(1)}%</p>
                                 </div>
                               </div>
                               <div className="flex justify-between">
-                                <span className="font-bold text-gray-700">Margem Bruta</span>
+                                <span className="font-bold text-ds-ink-2">Margem Bruta</span>
                                 <div className="text-right">
                                   <p className={cn(
                                     "text-lg font-black",
-                                    metrics.grossMarginPct >= (goal ?? 0) ? "text-green-600" : "text-orange-500"
+                                    metrics.grossMarginPct >= (goal ?? 0) ? "text-ds-ok" : "text-ds-warn"
                                   )}>
                                     {metrics.grossMarginPct.toFixed(1)}%
                                   </p>
-                                  <p className="text-gray-400">{goal ? `Meta: ${goal}%` : 'Sem meta'}</p>
+                                  <p className="text-ds-ink-faint">{goal ? `Meta: ${goal}%` : 'Sem meta'}</p>
                                 </div>
                               </div>
                               <div className="flex justify-between">
-                                <span className="font-medium text-gray-500">Markup</span>
-                                <span className="font-bold text-gray-700">{metrics.markup.toFixed(2)}x</span>
+                                <span className="font-medium text-ds-ink-muted">Markup</span>
+                                <span className="font-bold text-ds-ink-2">{metrics.markup.toFixed(2)}x</span>
                               </div>
                             </div>
                           </div>
@@ -615,7 +615,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                     name="notes"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-xs font-semibold text-gray-500 uppercase">Observações</FormLabel>
+                        <FormLabel className="text-xs font-semibold text-ds-ink-muted uppercase">Observações</FormLabel>
                         <FormControl>
                           <Input placeholder="Notas sobre esta mercadoria..." {...field} className="text-xs" />
                         </FormControl>
@@ -630,10 +630,10 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
         </TabsContent>
 
         <TabsContent value="contexts" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
-          <ScrollArea className="flex-1 bg-[#faf9f6] p-6">
+          <ScrollArea className="flex-1 bg-ds-warm p-6">
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-semibold text-gray-900">Preços por canal de venda</h4>
+                <h4 className="text-sm font-semibold text-ds-ink">Preços por canal de venda</h4>
                 <p className="text-xs text-muted-foreground mt-1">
                   O balcão vem da definição por unidade. Use esta etapa para cadastrar preços dos demais canais.
                 </p>
@@ -641,10 +641,10 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
 
               <div className="grid gap-4">
                 {scopedKiosks.map((unit) => (
-                  <div key={unit.id} className="overflow-hidden rounded-2xl border border-[#e6e3dd] bg-white">
+                  <div key={unit.id} className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <h5 className="px-4 pt-4 text-sm font-black text-gray-900">{unit.name}</h5>
-                      <Badge variant="outline" className="mr-4 mt-4 rounded-full bg-gray-50 text-[9px] font-black uppercase">Unidade comercial</Badge>
+                      <h5 className="px-4 pt-4 text-sm font-black text-ds-ink">{unit.name}</h5>
+                      <Badge variant="outline" className="mr-4 mt-4 rounded-full bg-ds-warm text-[9px] font-black uppercase">Unidade comercial</Badge>
                     </div>
                     <div className="grid border-t md:grid-cols-2 xl:grid-cols-3">
                       {activeChannels.map((channel) => {
@@ -662,16 +662,16 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                         return (
                           <div
                             key={`${unit.id}:${channel.id}`}
-                            className="border-b border-r border-[#f1efe9] p-4 text-left transition-colors hover:bg-pink-50/30"
+                            className="border-b border-r border-ds-divider p-4 text-left transition-colors hover:bg-ds-accent-row"
                           >
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <button type="button" onClick={() => openOverrideEditor(unit.id, channel.id)} className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-gray-800 hover:text-pink-600">
+                              <button type="button" onClick={() => openOverrideEditor(unit.id, channel.id)} className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-ds-ink hover:text-ds-accent-ink">
                                 {channel.name}
                               </button>
                               <div className="flex items-center gap-2">
                                 <span className={cn(
                                   "text-[10px] font-bold",
-                                  resolution.available ? "text-emerald-600" : "text-rose-600"
+                                  resolution.available ? "text-ds-ok" : "text-rose-600"
                                 )}>
                                   {resolution.available ? 'Ativo' : 'Inativo'}
                                 </span>
@@ -683,17 +683,17 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                             </div>
                             <button type="button" onClick={() => openOverrideEditor(unit.id, channel.id)} className="flex w-full items-end justify-between gap-3 text-left">
                               <div>
-                                <p className="text-base font-black text-gray-900">
+                                <p className="text-base font-black text-ds-ink">
                                   {resolution.price === null ? 'Indisponível' : formatCurrency(resolution.price)}
                                 </p>
                                 <p className="mt-1 text-[11px] text-muted-foreground">{sourceLabels[resolution.source] ?? resolution.source}</p>
                               </div>
-                              <div className="text-right"><p className={cn("text-sm font-black", metrics.grossMarginPct < 0 ? 'text-red-600' : metrics.grossMarginPct < (form.getValues('profitGoal') ?? 0) ? 'text-orange-600' : 'text-emerald-600')}>{resolution.available ? `${metrics.grossMarginPct.toFixed(1)}%` : '—'}</p>{exactOverride ? <span className="text-[9px] font-bold uppercase text-pink-600">Específico</span> : null}</div>
+                              <div className="text-right"><p className={cn("text-sm font-black", metrics.grossMarginPct < 0 ? 'text-ds-danger' : metrics.grossMarginPct < (form.getValues('profitGoal') ?? 0) ? 'text-orange-600' : 'text-ds-ok')}>{resolution.available ? `${metrics.grossMarginPct.toFixed(1)}%` : '—'}</p>{exactOverride ? <span className="text-[9px] font-bold uppercase text-ds-accent-ink">Específico</span> : null}</div>
                             </button>
                           </div>
                         );
                       })}
-                      {activeChannels.length === 0 ? <p className="col-span-full p-5 text-xs text-slate-400">Nenhum canal adicional ativo. O preço de balcão permanece configurado na aba anterior.</p> : null}
+                      {activeChannels.length === 0 ? <p className="col-span-full p-5 text-xs text-ds-ink-faint">Nenhum canal adicional ativo. O preço de balcão permanece configurado na aba anterior.</p> : null}
                     </div>
                   </div>
                 ))}

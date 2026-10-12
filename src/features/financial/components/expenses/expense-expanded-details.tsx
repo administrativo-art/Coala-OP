@@ -58,6 +58,8 @@ type ExpenseExpandedDetailsProps = {
   onFinalizeAudit: () => void;
   onPay: () => void;
   onDelete: () => void;
+  /** Uma coluna, com o resumo e as ações no topo; usado dentro do SidePanel. */
+  stacked?: boolean;
 };
 
 type PurchaseOrderWithDocument = PurchaseOrder & {
@@ -81,7 +83,7 @@ function DetailField({ label, value, mono = false }: { label: string; value: str
   return (
     <div className="min-w-0">
       <p className={KICKER_CLASS}>{label}</p>
-      <p className={cn("mt-[3px] break-words text-[12.5px] font-semibold text-[#1a1b1f] dark:text-foreground", mono && "font-mono")}>
+      <p className={cn("mt-[3px] break-words text-[12.5px] font-semibold text-ds-ink dark:text-foreground", mono && "font-mono")}>
         {value || "—"}
       </p>
     </div>
@@ -220,6 +222,7 @@ export function ExpenseExpandedDetails({
   onFinalizeAudit,
   onPay,
   onDelete,
+  stacked = false,
 }: ExpenseExpandedDetailsProps) {
   const { orders } = usePurchaseOrders();
   const purchaseOrder = useMemo(
@@ -296,9 +299,15 @@ export function ExpenseExpandedDetails({
   return (
     <div
       data-testid="expense-expanded-details"
-      className="grid overflow-hidden rounded-[14px] border border-[#eeeae1] bg-white dark:border-border dark:bg-background lg:grid-cols-[minmax(0,1fr)_300px]"
+      className={cn(
+        "overflow-hidden rounded-[14px] border border-[#eeeae1] bg-white dark:border-border dark:bg-background",
+        stacked ? "flex flex-col" : "grid lg:grid-cols-[minmax(0,1fr)_300px]",
+      )}
     >
-      <div className="flex min-w-0 flex-col gap-[17px] border-b border-[#f1ede4] px-[18px] py-[17px] dark:border-border lg:border-b-0 lg:border-r">
+      <div className={cn(
+        "flex min-w-0 flex-col gap-[17px] px-[18px] py-[17px]",
+        stacked ? "order-2" : "border-b border-[#f1ede4] dark:border-border lg:border-b-0 lg:border-r",
+      )}>
         <section aria-label="Origem da despesa">
           <div className="mb-[11px] flex items-center gap-[9px]">
             <p className={cn(KICKER_CLASS, "shrink-0")}>{originLabel}</p>
@@ -314,7 +323,7 @@ export function ExpenseExpandedDetails({
               </a>
             ) : null}
           </div>
-          <div className="grid grid-cols-2 gap-x-[18px] gap-y-[14px] xl:grid-cols-4">
+          <div className={cn("grid grid-cols-2 gap-x-[18px] gap-y-[14px]", !stacked && "xl:grid-cols-4")}>
             <DetailField label="Emissão" value={invoiceIssueDate ? format(invoiceIssueDate, "dd/MM/yyyy") : "—"} mono />
             <DetailField label="Série" value={invoiceSeries} mono />
             <DetailField label="Emitente" value={fiscal?.issuerName || expense.supplier || "—"} />
@@ -360,7 +369,7 @@ export function ExpenseExpandedDetails({
                   key={`${installment?.number || index + 1}-${installmentDueDate?.getTime() || index}`}
                   className={cn(
                     "grid grid-cols-[52px_minmax(110px,1fr)_minmax(100px,1fr)_130px] items-center gap-[10px] bg-[#fffdf7] px-3 py-[9px] dark:bg-background",
-                    index > 0 && "border-t border-[#f4f1ea] dark:border-border",
+                    index > 0 && "border-t border-ds-divider dark:border-border",
                   )}
                 >
                   <span className="font-mono text-[12.5px] font-bold text-[#5f646c] dark:text-muted-foreground">
@@ -407,7 +416,7 @@ export function ExpenseExpandedDetails({
                 const percentage = Number(allocation?.percentage) || 0;
                 const value = (Number(expense.totalValue) || 0) * percentage / 100;
                 return (
-                  <div key={`${allocation?.resultCenter || "centro"}-${index}`} className={cn("flex items-center justify-between gap-4 px-3 py-2.5 text-xs", index > 0 && "border-t border-[#f4f1ea] dark:border-border")}>
+                  <div key={`${allocation?.resultCenter || "centro"}-${index}`} className={cn("flex items-center justify-between gap-4 px-3 py-2.5 text-xs", index > 0 && "border-t border-ds-divider dark:border-border")}>
                     <span className="min-w-0 truncate">{resolveResultCenterName(allocation?.resultCenter, resultCenterNameById) || "Centro pendente"}</span>
                     <span className="flex shrink-0 items-center gap-4 font-mono">
                       <span className="text-muted-foreground">{percentage.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%</span>
@@ -437,7 +446,7 @@ export function ExpenseExpandedDetails({
                     key={allocation.id || `${allocation.employeeId}-${index}`}
                     className={cn(
                       "grid grid-cols-[minmax(145px,1.15fr)_minmax(125px,1fr)_minmax(120px,.9fr)_minmax(110px,.8fr)_100px] gap-3 px-3 py-2.5 text-xs",
-                      index > 0 && "border-t border-[#f4f1ea] dark:border-border",
+                      index > 0 && "border-t border-ds-divider dark:border-border",
                     )}
                   >
                     <div className="min-w-0">
@@ -531,7 +540,10 @@ export function ExpenseExpandedDetails({
         ) : null}
       </div>
 
-      <aside className="flex min-w-0 flex-col gap-[15px] bg-[#fbfaf7] px-[18px] py-[17px] dark:bg-muted/10">
+      <aside className={cn(
+        "flex min-w-0 flex-col gap-[15px] bg-[#fbfaf7] px-[18px] py-[17px] dark:bg-muted/10",
+        stacked && "order-1 border-b border-[#f1ede4]",
+      )}>
         <div>
           <p className={KICKER_CLASS}>Valor total</p>
           <p className="mt-1 font-mono text-[25px] font-extrabold tracking-[-0.02em]">{formatCurrency(Number(expense.totalValue) || 0)}</p>

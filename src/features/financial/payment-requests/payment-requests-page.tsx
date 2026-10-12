@@ -1,28 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowLeftRight,
-  CheckCircle2,
-  ExternalLink,
-  Loader2,
-  RefreshCw,
-  Search,
-  Target,
-} from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/features/financial/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet";
+import { Button, buttonVariants } from "@/components/ui/button";
+import Link from "next/link";
+import { BulkBar } from "@/components/patterns/bulk-bar";
+import { ControlSearch } from "@/components/patterns/control-panel";
+import { FilterChips } from "@/components/patterns/filter-chips";
+import { HeroChip } from "@/components/patterns/hero-chip";
+import { LiftRow } from "@/components/patterns/lift-row";
+import { PageHero } from "@/components/patterns/page-hero";
+import { SidePanel } from "@/components/patterns/side-panel";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,7 +28,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PageContainer } from "@/components/layout/page-container";
-import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import type { BankPaymentRequest, BankPaymentRequestStatus } from "./types";
@@ -82,34 +75,18 @@ function statusLabel(item: BankPaymentRequest) {
   return requiresBeneficiaryReview(item) ? "Pago · revisar favorecido" : STATUS_LABEL[item.status];
 }
 
-const GROUP_META: Record<
-  StageGroup,
-  { chip: string; dot: string; kpiValue: string; kpiLabel: string }
-> = {
-  you: {
-    chip: "border-primary/30 bg-primary/10 text-primary",
-    dot: "bg-primary",
-    kpiValue: "text-primary",
-    kpiLabel: "text-primary",
-  },
-  risk: {
-    chip: "border-rose-200 bg-rose-50 text-rose-700",
-    dot: "bg-rose-500",
-    kpiValue: "text-rose-700",
-    kpiLabel: "text-rose-600",
-  },
-  bank: {
-    chip: "border-blue-200 bg-blue-50 text-blue-700",
-    dot: "bg-blue-500",
-    kpiValue: "text-foreground",
-    kpiLabel: "text-blue-600",
-  },
-  done: {
-    chip: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    dot: "bg-emerald-500",
-    kpiValue: "text-emerald-700",
-    kpiLabel: "text-emerald-600",
-  },
+const GROUP_PILL: Record<StageGroup, StatusPillVariant> = {
+  you: "warn",
+  risk: "danger",
+  bank: "info",
+  done: "ok",
+};
+
+const GROUP_TONE: Record<StageGroup, "warning" | "danger" | "info" | "neutral"> = {
+  you: "warning",
+  risk: "danger",
+  bank: "info",
+  done: "neutral",
 };
 
 const TABS: { key: PaymentRequestFilter; label: string }[] = [
@@ -442,108 +419,65 @@ export function PaymentRequestsPage() {
     );
   }
 
-  const kpis: { group: StageGroup; icon: typeof Target; title: string; list: BankPaymentRequest[]; note: string }[] = [
-    { group: "you", icon: Target, title: "Aguardando você", list: groupItems("you"), note: "autorização financeira" },
-    { group: "bank", icon: ArrowLeftRight, title: "No banco", list: groupItems("bank"), note: "aguardando ou agendado" },
-    { group: "done", icon: CheckCircle2, title: "Liquidado (7 dias)", list: paidLast7d, note: "comprovantes disponíveis" },
-    { group: "risk", icon: AlertTriangle, title: "Precisa de atenção", list: groupItems("risk"), note: "falha, recusa ou expirado" },
+  const kpis: { group: StageGroup; title: string; list: BankPaymentRequest[]; note: string; filter?: PaymentRequestFilter }[] = [
+    { group: "you", title: "Aguardando você", list: groupItems("you"), note: "autorização financeira", filter: "you" },
+    { group: "bank", title: "No banco", list: groupItems("bank"), note: "aguardando ou agendado", filter: "bank" },
+    { group: "done", title: "Liquidado (7 dias)", list: paidLast7d, note: "comprovantes disponíveis" },
+    { group: "risk", title: "Precisa de atenção", list: groupItems("risk"), note: "falha, recusa ou expirado", filter: "risk" },
   ];
 
+  function changeTab(next: PaymentRequestFilter) {
+    setTab(next);
+    setSelected([]);
+  }
+
   return (
-    <PageContainer variant="compact" surface className="space-y-5 pb-24">
-      {/* Cabeçalho */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Autorizações bancárias</h1>
-          <p className="text-sm text-muted-foreground">
-            Autorização, aprovação bancária, conciliação e comprovantes Pix.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <BackButton fallbackHref={FINANCIAL_ROUTES.expenses} label="Voltar às despesas" />
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+    <PageContainer variant="compact" className="space-y-5 pb-24">
+      <PageHero
+        kicker="Financeiro · Despesas"
+        title="Autorizações bancárias"
+        subtitle="Autorização, aprovação bancária, conciliação e comprovantes Pix."
+        actions={<>
+          <Button variant="on-dark-secondary" size="md" asChild>
+            <Link href={FINANCIAL_ROUTES.expenses}><ArrowLeft aria-hidden="true" className="mr-2 h-4 w-4" />Despesas</Link>
+          </Button>
+          <Button variant="on-dark-secondary" size="md" onClick={() => void load()} disabled={loading}>
+            <RefreshCw aria-hidden="true" className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
             Atualizar lista
           </Button>
-        </div>
-      </div>
-
-      {/* KPIs por estágio */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map(({ group, icon: Icon, title, list, note }) => {
-          const meta = GROUP_META[group];
-          const hero = group === "you";
-          return (
-            <div
-              key={group}
-              className={cn(
-                "rounded-2xl border p-4 shadow-sm",
-                hero ? "border-primary/40 bg-primary/[0.04]" : "border-border/70 bg-card",
-              )}
-            >
-              <span className={cn("flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em]", meta.kpiLabel)}>
-                <Icon className="h-3.5 w-3.5" />
-                {title}
-              </span>
-              <p className={cn("mt-2.5 font-mono text-[26px] font-bold leading-none tracking-tight", meta.kpiValue)}>
-                {formatCurrency(sumOf(list))}
-              </p>
-              <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-                {list.length} {list.length === 1 ? "solicitação" : "solicitações"} · {note}
-              </p>
-            </div>
-          );
-        })}
-      </div>
+        </>}
+        chips={<>
+          {kpis.map(({ group, title, list, note, filter }) => (
+            <span key={group} title={`${list.length} ${list.length === 1 ? "solicitação" : "solicitações"} · ${note}`}>
+              <HeroChip
+                value={formatCurrency(sumOf(list))}
+                label={`${title} · ${list.length}`}
+                tone={GROUP_TONE[group]}
+                active={filter ? tab === filter : undefined}
+                onClick={filter ? () => changeTab(filter) : undefined}
+              />
+            </span>
+          ))}
+        </>}
+      >
+        <ControlSearch value={query} onChange={setQuery} placeholder="Buscar por descrição, beneficiário ou valor…" />
+        <FilterChips
+          allLabel={TABS[0].label}
+          allCount={items.filter((item) => matchesPaymentRequestFilter(item, TABS[0].key)).length}
+          value={tab === TABS[0].key ? null : tab}
+          onChange={(value) => changeTab((value ?? TABS[0].key) as PaymentRequestFilter)}
+          chips={TABS.slice(1).map((entry) => ({
+            value: entry.key,
+            label: entry.label,
+            count: items.filter((item) => matchesPaymentRequestFilter(item, entry.key)).length,
+          }))}
+        />
+      </PageHero>
 
       {/* Lista */}
-      <Card className="overflow-hidden">
-        {/* Busca + abas */}
-        <div className="flex flex-wrap items-center gap-2 border-b p-3">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por descrição, beneficiário ou valor…"
-              className="h-9 pl-9"
-            />
-          </div>
-          {TABS.map((entry) => {
-            const active = tab === entry.key;
-            const count = items.filter((item) => matchesPaymentRequestFilter(item, entry.key)).length;
-            return (
-              <button
-                key={entry.key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => {
-                  setTab(entry.key);
-                  setSelected([]);
-                }}
-                className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-semibold transition-colors",
-                  active
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {entry.label}
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-px text-[10px] font-bold",
-                    active ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
+      <div className="rounded-[18px] border border-ds-border bg-ds-surface">
         {/* Cabeçalho da tabela */}
-        <div className="hidden grid-cols-[28px_minmax(0,1fr)_72px_140px_104px_160px_150px] gap-3 border-b bg-muted/40 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground lg:grid">
+        <div className="hidden grid-cols-[28px_minmax(0,1fr)_72px_140px_104px_160px_150px] gap-3 border-b border-ds-divider px-[18px] py-3 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint lg:grid">
           <span />
           <span>Solicitação</span>
           <span>Trilho</span>
@@ -555,17 +489,17 @@ export function PaymentRequestsPage() {
 
         {/* Linhas */}
         {loading ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-14 w-full rounded-xl" />)}
           </div>
         ) : visible.length === 0 ? (
-          <CardContent className="p-14 text-center text-sm text-muted-foreground">
+          <div className="m-4 rounded-[18px] border border-dashed border-ds-border px-6 py-14 text-center text-sm text-ds-ink-muted">
             {items.length === 0
               ? "Nenhuma solicitação bancária foi criada."
               : "Nenhuma solicitação neste estágio."}
-          </CardContent>
+          </div>
         ) : (
-          <ul className="divide-y">
+          <ul>
             {visible.map((item) => (
               <RequestRow
                 key={item.id}
@@ -581,60 +515,47 @@ export function PaymentRequestsPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </div>
 
       {/* Barra de ações em lote */}
-      {selected.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-4 rounded-2xl bg-foreground px-5 py-3 text-background shadow-xl">
-          <span className="text-sm font-semibold">
-            {selected.length} {selected.length === 1 ? "solicitação selecionada" : "solicitações selecionadas"}
-          </span>
-          <span className="font-mono text-sm font-bold text-primary-foreground/90">
-            {formatCurrency(sumOf(selectedItems))}
-          </span>
-          <Separator orientation="vertical" className="h-5 bg-background/25" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-background hover:bg-background/10 hover:text-background"
-            onClick={() => setSelected([])}
-            disabled={batchWorking}
-          >
-            Limpar
-          </Button>
-          <Button size="sm" onClick={() => setBatchOpen(true)} disabled={batchWorking}>
-            {batchWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Autorizar selecionados
-          </Button>
-        </div>
-      )}
+      <BulkBar
+        count={selected.length}
+        summary={`${selected.length} ${selected.length === 1 ? "solicitação selecionada" : "solicitações selecionadas"} · ${formatCurrency(sumOf(selectedItems))}`}
+        actions={[{ label: batchWorking ? "Autorizando…" : "Autorizar selecionados", onClick: () => { if (!batchWorking) setBatchOpen(true); } }]}
+        onClear={() => { if (!batchWorking) setSelected([]); }}
+      />
 
       {/* Painel lateral */}
-      <Sheet open={Boolean(drawerItem)} onOpenChange={(open) => !open && setDrawerId(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-[460px]">
-          {drawerItem ? (
-            <DetailDrawer
-              item={drawerItem}
-              action={rowAction(drawerItem, permissions)}
-              busy={working?.startsWith(`${drawerItem.id}:`) ?? false}
-              canViewProof={!!pr?.viewProof}
-              onAction={(kind) => void runAction(drawerItem, kind)}
-              onProof={() => void openProof(drawerItem.id)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      {drawerItem ? (
+        <SidePanel
+          open
+          onOpenChange={(open) => { if (!open) setDrawerId(null); }}
+          kicker={sourceLabel(drawerItem.sourceType)}
+          title={drawerItem.description}
+          subtitle={partyName(drawerItem)}
+          highlights={<span className="font-mono">{formatCurrency(drawerItem.amount)}</span>}
+        >
+          <DetailDrawer
+            item={drawerItem}
+            action={rowAction(drawerItem, permissions)}
+            busy={working?.startsWith(`${drawerItem.id}:`) ?? false}
+            canViewProof={!!pr?.viewProof}
+            onAction={(kind) => void runAction(drawerItem, kind)}
+            onProof={() => void openProof(drawerItem.id)}
+          />
+        </SidePanel>
+      ) : null}
 
       {/* Confirmação — autorizar uma */}
       <AlertDialog open={Boolean(authorizeTarget)} onOpenChange={(open) => !open && setAuthorizeTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-ds-modal border-ds-border bg-ds-surface font-ds shadow-ds-modal">
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            <AlertDialogTitle className="text-[17px] font-extrabold text-ds-ink">
               {authorizeTarget?.sourceType === "financial_inbox" && pr?.submit
                 ? "Autorizar e enviar ao Banco Inter?"
                 : "Autorizar este pagamento?"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-[13px] leading-relaxed text-ds-ink-muted">
               {authorizeTarget
                 ? `${authorizeTarget.description} · ${formatCurrency(authorizeTarget.amount)}.`
                 : ""}
@@ -644,8 +565,9 @@ export function PaymentRequestsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogCancel className={buttonVariants({ variant: "ds-secondary", size: "md" })}>Voltar</AlertDialogCancel>
             <AlertDialogAction
+              className={buttonVariants({ variant: "primary-modal", size: "md" })}
               onClick={() => {
                 const target = authorizeTarget;
                 setAuthorizeTarget(null);
@@ -660,18 +582,19 @@ export function PaymentRequestsPage() {
 
       {/* Confirmação — enviar uma */}
       <AlertDialog open={Boolean(submitTarget)} onOpenChange={(open) => !open && setSubmitTarget(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-ds-modal border-ds-border bg-ds-surface font-ds shadow-ds-modal">
           <AlertDialogHeader>
-            <AlertDialogTitle>Enviar a solicitação ao Banco Inter?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-[17px] font-extrabold text-ds-ink">Enviar a solicitação ao Banco Inter?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[13px] leading-relaxed text-ds-ink-muted">
               {submitTarget ? `${submitTarget.description} · ${formatCurrency(submitTarget.amount)}.` : ""} Esta ação
               pode efetuar ou agendar o pagamento. Em contas com dupla aprovação, a confirmação final continuará no
               Inter.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogCancel className={buttonVariants({ variant: "ds-secondary", size: "md" })}>Voltar</AlertDialogCancel>
             <AlertDialogAction
+              className={buttonVariants({ variant: "primary-modal", size: "md" })}
               onClick={() => {
                 const target = submitTarget;
                 setSubmitTarget(null);
@@ -686,10 +609,10 @@ export function PaymentRequestsPage() {
 
       {/* Confirmação — autorizar lote */}
       <AlertDialog open={batchOpen} onOpenChange={(open) => !batchWorking && setBatchOpen(open)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-ds-modal border-ds-border bg-ds-surface font-ds shadow-ds-modal">
           <AlertDialogHeader>
-            <AlertDialogTitle>Autorizar os pagamentos selecionados?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-[17px] font-extrabold text-ds-ink">Autorizar os pagamentos selecionados?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[13px] leading-relaxed text-ds-ink-muted">
               {`${selectedItems.length} ${selectedItems.length === 1 ? "solicitação" : "solicitações"} · ${formatCurrency(
                 sumOf(selectedItems),
               )}.`}{" "}
@@ -698,8 +621,9 @@ export function PaymentRequestsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={batchWorking}>Voltar</AlertDialogCancel>
+            <AlertDialogCancel disabled={batchWorking} className={buttonVariants({ variant: "ds-secondary", size: "md" })}>Voltar</AlertDialogCancel>
             <AlertDialogAction
+              className={buttonVariants({ variant: "primary-modal", size: "md" })}
               disabled={batchWorking}
               onClick={(event) => {
                 event.preventDefault();
@@ -721,21 +645,11 @@ export function PaymentRequestsPage() {
 /* -------------------------------------------------------------------------- */
 
 function StatusChip({ item, className }: { item: BankPaymentRequest; className?: string }) {
-  const group = stageGroup(item);
-  const meta = GROUP_META[group];
   const label = statusLabel(item);
   return (
-    <span
-      className={cn(
-        "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold",
-        meta.chip,
-        className,
-      )}
-      title={label}
-    >
-      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
-      <span className="truncate">{label}</span>
-    </span>
+    <StatusPill variant={GROUP_PILL[stageGroup(item)]} className={cn("max-w-full truncate", className)} title={label}>
+      {label}
+    </StatusPill>
   );
 }
 
@@ -759,76 +673,76 @@ function RequestRow({
   onAction: (kind: RowActionKind) => void;
 }) {
   const schedule = paymentSchedulePresentation(item);
+  const paid = item.status === "paid";
 
   return (
     <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onOpen}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onOpen();
-          }
-        }}
-        className={cn(
-          "grid cursor-pointer grid-cols-[28px_minmax(0,1fr)] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 lg:grid-cols-[28px_minmax(0,1fr)_72px_140px_104px_160px_150px]",
-          selected && "bg-primary/[0.06]",
-        )}
+      <LiftRow
+        interactive={false}
+        selected={selected}
+        className="group/row grid grid-cols-[28px_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[28px_minmax(0,1fr)_72px_140px_104px_160px_150px]"
       >
-        {/* checkbox */}
-        <div
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
+        {/* seleção em lote */}
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={`Selecionar ${item.description}`}
+          disabled={!selectable}
+          onClick={onToggle}
           className={cn(
-            "flex h-[18px] w-[18px] items-center justify-center rounded border text-[11px] font-bold text-primary-foreground",
+            "relative z-[1] flex h-[18px] w-[18px] items-center justify-center rounded border text-[11px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
             selectable
               ? selected
-                ? "cursor-pointer border-primary bg-primary"
-                : "cursor-pointer border-input bg-background"
-              : "border-dashed border-muted bg-muted/40",
+                ? "border-ds-accent bg-ds-accent"
+                : "border-ds-border-input bg-ds-surface"
+              : "cursor-not-allowed border-dashed border-ds-border bg-ds-muted",
           )}
         >
           {selected ? "✓" : ""}
-        </div>
+        </button>
 
-        {/* descrição */}
+        {/* descrição: o botão cobre a linha inteira e os demais controles ficam acima dele */}
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-tight">{item.description}</p>
-          <p className="truncate text-[11.5px] text-muted-foreground">
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-haspopup="dialog"
+            className="block max-w-full text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+          >
+            <span className="block truncate text-sm font-bold tracking-tight text-ds-ink">{item.description}</span>
+          </button>
+          <p className="truncate text-xs text-ds-ink-faint">
             {sourceLabel(item.sourceType)} · {partyName(item)}
           </p>
           {/* meta empilhada no mobile */}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] lg:hidden">
-            <span className="font-mono font-bold">{formatCurrency(item.amount)}</span>
+            <span className="font-mono font-bold text-ds-ink">{formatCurrency(item.amount)}</span>
             <StatusChip item={item} />
           </div>
         </div>
 
         {/* trilho */}
         <div className="hidden lg:block">
-          <span className="inline-flex items-center rounded-md border bg-muted/40 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+          <span className="inline-flex h-[21px] items-center rounded-full bg-ds-neutral-bg px-2.5 text-[11.5px] font-bold text-ds-neutral">
             {railLabel(item)}
           </span>
         </div>
 
         {/* pagamento realizado ou previsto, visível também no mobile */}
         <div className="col-start-2 lg:col-start-auto">
-          <p className={cn("text-[9.5px] font-bold uppercase tracking-[0.1em]", item.status === "paid" ? "text-emerald-700" : "text-muted-foreground")}>{schedule.label}</p>
+          <p className={cn("text-[10.5px] font-extrabold uppercase tracking-[0.12em]", paid ? "text-ds-ok" : "text-ds-ink-faint")}>{schedule.label}</p>
           {schedule.date ? (
-            <p className={cn("mt-0.5 font-mono text-[12.5px] font-bold", item.status === "paid" && "text-emerald-700")}>{schedule.date}</p>
+            <p className={cn("mt-0.5 font-mono text-[12.5px] font-bold text-ds-ink", paid && "text-ds-ok")}>{schedule.date}</p>
           ) : null}
-          {schedule.timing ? <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">{schedule.timing}</p> : null}
+          {schedule.timing ? <p className="mt-0.5 text-[11px] font-semibold text-ds-ink-muted">{schedule.timing}</p> : null}
           {schedule.dueDate ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">Vencimento: {schedule.dueDate}</p>
+            <p className="mt-1 text-[11px] text-ds-ink-faint">Vencimento: {schedule.dueDate}</p>
           ) : null}
         </div>
 
         {/* valor */}
-        <p className="hidden text-right font-mono text-sm font-bold tracking-tight lg:block">
+        <p className="hidden text-right font-mono text-sm font-extrabold tracking-tight text-ds-ink lg:block">
           {formatCurrency(item.amount)}
         </p>
 
@@ -838,45 +752,39 @@ function RequestRow({
         </div>
 
         {/* próxima ação */}
-        <div className="hidden min-w-0 justify-end lg:flex">
+        <div className="relative z-[1] hidden min-w-0 justify-end lg:flex">
           {action ? (
             <Button
-              size="sm"
-              variant={action.primary ? "default" : "outline"}
+              size="xs"
+              variant={action.primary ? "primary-page" : "ds-secondary"}
               disabled={busy}
-              onClick={(event) => {
-                event.stopPropagation();
-                onAction(action.kind);
-              }}
+              onClick={() => onAction(action.kind)}
             >
               {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-              {action.label === "Ver comprovante" ? <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> : null}
+              {action.label === "Ver comprovante" ? <ExternalLink aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" /> : null}
               {action.label}
             </Button>
           ) : (
-            <span className="text-[11px] text-muted-foreground">—</span>
+            <span className="text-[11px] text-ds-ink-faint">—</span>
           )}
         </div>
 
         {/* ação no mobile */}
         {action ? (
-          <div className="col-span-2 lg:hidden">
+          <div className="relative z-[1] col-span-2 lg:hidden">
             <Button
-              size="sm"
-              variant={action.primary ? "default" : "outline"}
+              size="xs"
+              variant={action.primary ? "primary-page" : "ds-secondary"}
               disabled={busy}
               className="w-full"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAction(action.kind);
-              }}
+              onClick={() => onAction(action.kind)}
             >
               {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
               {action.label}
             </Button>
           </div>
         ) : null}
-      </div>
+      </LiftRow>
     </li>
   );
 }
@@ -888,8 +796,8 @@ function RequestRow({
 function InfoRow({ label, value, valueClassName }: { label: string; value: string; valueClassName?: string }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={cn("max-w-[240px] truncate text-right text-xs font-semibold", valueClassName)}>{value}</span>
+      <span className="text-xs text-ds-ink-muted">{label}</span>
+      <span className={cn("max-w-[240px] truncate text-right text-xs font-semibold text-ds-ink", valueClassName)}>{value}</span>
     </div>
   );
 }
@@ -925,21 +833,13 @@ function DetailDrawer({
         : "—";
 
   return (
-    <div className="flex h-full flex-col">
-      {/* topo */}
-      <div className="border-b p-6 pr-12">
+    <>
+      <div>
         <StatusChip item={item} />
-        <h2 className="mt-3 text-lg font-bold leading-tight tracking-tight">{item.description}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {sourceLabel(item.sourceType)} · {partyName(item)}
-        </p>
-        <p className="mt-4 font-mono text-3xl font-bold tracking-tight">{formatCurrency(item.amount)}</p>
       </div>
-
-      {/* corpo */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Destino</p>
-        <div className="mt-2.5 flex flex-col gap-2.5 rounded-xl border bg-muted/30 p-3.5">
+      <div>
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Destino</p>
+        <div className="mt-2.5 flex flex-col gap-2.5 rounded-ds-btn-lg border border-ds-border bg-ds-surface p-3.5">
           <InfoRow label="Trilho" value={railLabel(item, true)} />
           <InfoRow label="Chave / código" value={destination(item)} valueClassName="font-mono" />
           <InfoRow label="Pagamento" value={schedule} />
@@ -948,12 +848,12 @@ function DetailDrawer({
             <InfoRow
               label="Pago em"
               value={paidFull}
-              valueClassName="font-mono text-emerald-700"
+              valueClassName="font-mono text-ds-ok"
             />
           ) : null}
         </div>
 
-        <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Linha do tempo</p>
+        <p className="mt-6 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Linha do tempo</p>
         <ol className="mt-3">
           {timeline.map((step, index) => (
             <li key={step.title} className="grid grid-cols-[20px_minmax(0,1fr)] gap-3">
@@ -962,10 +862,10 @@ function DetailDrawer({
                   className={cn(
                     "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
                     step.state === "fail"
-                      ? "bg-rose-500 text-white"
+                      ? "bg-ds-danger text-white"
                       : step.state === "done"
-                        ? "bg-emerald-600 text-white"
-                        : "border-[1.5px] border-muted bg-background text-muted-foreground",
+                        ? "bg-ds-ok text-white"
+                        : "border-[1.5px] border-ds-border-input bg-ds-surface text-ds-ink-faint",
                   )}
                 >
                   {step.state === "fail" ? "!" : step.state === "done" ? "✓" : ""}
@@ -974,7 +874,7 @@ function DetailDrawer({
                   <span
                     className={cn(
                       "w-px flex-1",
-                      step.state === "done" ? "bg-emerald-200" : "bg-border",
+                      step.state === "done" ? "bg-ds-ok" : "bg-ds-border",
                     )}
                     style={{ minHeight: 16 }}
                   />
@@ -985,21 +885,21 @@ function DetailDrawer({
                   className={cn(
                     "text-[12.5px] font-semibold",
                     step.state === "fail"
-                      ? "text-rose-600"
+                      ? "text-ds-danger"
                       : step.state === "done"
-                        ? "text-foreground"
-                        : "text-muted-foreground",
+                        ? "text-ds-ink"
+                        : "text-ds-ink-faint",
                   )}
                 >
                   {step.title}
                 </p>
-                <p className="mt-0.5 text-[11.5px] text-muted-foreground">{step.meta}</p>
+                <p className="mt-0.5 text-[11.5px] text-ds-ink-muted">{step.meta}</p>
               </div>
             </li>
           ))}
         </ol>
 
-        <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Rastreabilidade</p>
+        <p className="mt-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Rastreabilidade</p>
         <div className="mt-2.5 flex flex-col gap-2">
           <InfoRow label="ID no Inter" value={item.interRequestId ?? "—"} valueClassName="font-mono font-normal text-muted-foreground" />
           <InfoRow
@@ -1007,24 +907,24 @@ function DetailDrawer({
             value={item.statementReconciliationStatus ? RECON_LABEL[item.statementReconciliationStatus] : "—"}
             valueClassName={
               item.statementReconciliationStatus === "divergent"
-                ? "text-rose-600"
+                ? "text-ds-danger"
                 : item.statementReconciliationStatus === "matched"
-                  ? "text-emerald-700"
+                  ? "text-ds-ok"
                   : undefined
             }
           />
         </div>
 
         {item.lastError ? (
-          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3.5">
-            <p className="text-[11.5px] font-bold text-rose-700">Último erro do banco</p>
-            <p className="mt-1 text-xs leading-relaxed text-rose-900/80">{item.lastError.safeMessage}</p>
+          <div className="mt-4 rounded-ds-btn-lg bg-ds-danger-bg p-3.5">
+            <p className="text-[11.5px] font-extrabold text-ds-danger">Último erro do banco</p>
+            <p className="mt-1 text-xs leading-relaxed text-ds-danger">{item.lastError.safeMessage}</p>
           </div>
         ) : null}
         {item.beneficiaryVerificationStatus === "divergent" ? (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
-            <p className="text-[11.5px] font-bold text-amber-800">Pagamento confirmado · favorecido em revisão</p>
-            <p className="mt-1 text-xs leading-relaxed text-amber-950/80">
+          <div className="mt-4 rounded-ds-btn-lg bg-ds-warn-bg p-3.5">
+            <p className="text-[11.5px] font-extrabold text-ds-warn">Pagamento confirmado · favorecido em revisão</p>
+            <p className="mt-1 text-xs leading-relaxed text-ds-warn">
               {item.beneficiaryVerificationWarning
                 ?? "O extrato confirmou a liquidação, mas o documento retornado pelo banco divergiu do cadastro."}
             </p>
@@ -1032,10 +932,10 @@ function DetailDrawer({
         ) : null}
       </div>
 
-      {/* rodapé */}
-      <div className="flex gap-2.5 border-t p-4">
+      {/* ações */}
+      <div className="flex gap-2.5 border-t border-ds-divider pt-4">
         {item.proofStoragePath && canViewProof ? (
-          <Button variant="outline" className="flex-1" onClick={onProof}>
+          <Button variant="ds-secondary" size="md" className="flex-1" onClick={onProof}>
             Comprovante
             <ExternalLink className="ml-2 h-4 w-4" />
           </Button>
@@ -1043,7 +943,8 @@ function DetailDrawer({
         {action && action.kind !== "proof" ? (
           <Button
             className="flex-1"
-            variant={action.primary ? "default" : "outline"}
+            size="md"
+            variant={action.primary ? "primary-modal" : "ds-secondary"}
             disabled={busy}
             onClick={() => onAction(action.kind)}
           >
@@ -1052,9 +953,9 @@ function DetailDrawer({
           </Button>
         ) : null}
         {!action && !(item.proofStoragePath && canViewProof) ? (
-          <p className="flex-1 text-center text-xs text-muted-foreground">Nenhuma ação disponível neste estágio.</p>
+          <p className="flex-1 text-center text-xs text-ds-ink-muted">Nenhuma ação disponível neste estágio.</p>
         ) : null}
       </div>
-    </div>
+    </>
   );
 }

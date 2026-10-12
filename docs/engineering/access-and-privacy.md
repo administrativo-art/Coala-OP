@@ -1,5 +1,15 @@
 # Acesso, privacidade e entradas compartilhadas
 
+## Coala Go e coexistência do mobile legado
+
+O Android nativo usa `coalaone.go`, único cliente mobile após retirada expressamente autorizada do Expo (não havia usuários). `/api/mobile/app-attestation` mantém compatibilidade de transporte: `packageName` opcional estrito na allowlist Go/legado (ausência conserva o legado). O servidor seleciona decode Google após validação e exige correspondência exata no request/appIntegrity, nonce vinculado ao UID, frescor, PLAY_RECOGNIZED e integridade do aparelho. O passe assinado continua vinculado ao UID/expiração; não muda permissões de negócio. Aceitar o formato antigo não mantém um instalador antigo disponível.
+
+`GET /api/app/version` seleciona Go por padrão ou com `?packageName=coalaone.go`, com versão4/0.2.0 e `/app/CoalaGo.apk` preparados localmente. Query explícita do package retirado devolve instalador nulo, nunca APK Go. Apps desconhecidos/campos extras são rejeitados pelo enforcer. Não há consulta/gravação Firestore nessas mudanças; publicação permanece sem autorização. Ver [primeira instalação](coala-go-device-migration.md). Testes: `mobile-app-attestation.test.ts`, `mobile-app-release.test.ts`, `coala-go-release.test.ts` e `ApiContractTest` Kotlin. IDs históricos `coala-notas-android` em metadados de negócio não foram renomeados/migrados.
+
+## Painel de gestão personalizado
+
+Os layouts do painel de gestão são gravados somente pela API autenticada em `managementDashboardLayouts`; o cliente não acessa essa coleção diretamente. Painéis pessoais usam o UID verificado no token como `ownerId`, são listados apenas para o próprio UID e não podem ser alterados ou excluídos por outro usuário, inclusive por chamada direta com um ID conhecido. A seleção ativa fica em `managementDashboardPreferences/{uid}`. Modelos `shared` ou `template` podem ser publicados apenas por administrador padrão ou perfil com `settings.manageProfiles`; a personalização sempre gera uma cópia `personal` antes da gravação.
+
 ## Contrato estrutural das APIs
 
 Rotas novas ou qualquer arquivo de rota alterado passam a declarar identidade, autorização, escopo, entrada, efeitos, auditoria e exposição de erros pelo [contrato executável de segurança](security-contract.md). O gate preserva as rotas legadas intactas por hash para permitir migração progressiva; isso não valida os controles existentes nem altera seu comportamento. Nesta entrega de infraestrutura, nenhuma rota foi migrada e nenhum achado de segurança foi corrigido.

@@ -1,19 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ShieldCheck, UsersRound } from "lucide-react";
 
-import { useProfiles } from "@/hooks/use-profiles";
-import { Button } from "@/components/ui/button";
+import { EmptyResults, ListHead, ListShell, ListSkeleton } from "@/components/cadastros/cadastros-ui";
+import { ControlPanel, ControlSearch } from "@/components/patterns/control-panel";
+import { LiftRow } from "@/components/patterns/lift-row";
 import { ProfileManagementModal } from "@/components/profile-management-modal";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
+import { useProfiles } from "@/hooks/use-profiles";
 
 type AccessProfilesSettingsProps = {
   canEdit: boolean;
 };
 
+const ROW_TEMPLATE = "minmax(240px,1.6fr) minmax(200px,1fr)";
+
 export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps) {
   const { profiles, loading, adminProfileId } = useProfiles();
   const [managerOpen, setManagerOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const sortedProfiles = useMemo(
     () => [...profiles].sort((left, right) => {
@@ -23,92 +29,65 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
     }),
     [adminProfileId, profiles],
   );
+  const visibleProfiles = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("pt-BR");
+    return term ? sortedProfiles.filter((profile) => profile.name.toLocaleLowerCase("pt-BR").includes(term)) : sortedProfiles;
+  }, [sortedProfiles, search]);
 
   return (
-    <>
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-pink-50 text-pink-600">
-              <ShieldCheck className="h-5 w-5" />
-            </span>
-            <div className="min-w-0">
-              <h3 className="text-base font-black text-slate-950">Perfis de permissão</h3>
-              <p className="mt-1 max-w-2xl text-sm text-slate-500">
-                Defina quais módulos, informações e ações ficam disponíveis para cada perfil de acesso do Coala One.
-              </p>
-            </div>
-          </div>
-          <Button
-            type="button"
-            onClick={() => setManagerOpen(true)}
-            disabled={!canEdit}
-            className="shrink-0 rounded-xl"
-          >
-            <ShieldCheck className="mr-2 h-4 w-4" />
+    <div className="space-y-5">
+      <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px]">
+        <div>
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Perfis de permissão</p>
+          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-[-0.05em]">{loading ? "—" : profiles.length}</p>
+          <p className="mt-1 text-base font-extrabold">{profiles.length === 1 ? "Perfil disponível" : "Perfis disponíveis"}</p>
+          <p className="mt-2 max-w-2xl text-[13px] text-ds-on-dark-2">
+            Defina quais módulos, informações e ações ficam disponíveis para cada perfil de acesso do Coala One.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <ControlSearch value={search} onChange={setSearch} placeholder="Buscar perfil" />
+          <Button type="button" variant="primary-page" size="xl" disabled={!canEdit} onClick={() => setManagerOpen(true)}>
             Gerenciar perfis
           </Button>
         </div>
+      </ControlPanel>
 
-        <div className="p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-wider text-slate-400">Perfis cadastrados</p>
-              <p className="mt-1 text-sm font-semibold text-slate-600">
-                {loading
-                  ? "Carregando perfis..."
-                  : profiles.length === 1
-                    ? "1 perfil disponível"
-                    : `${profiles.length} perfis disponíveis`}
-              </p>
-            </div>
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-500">
-              <UsersRound className="h-5 w-5" />
-            </span>
-          </div>
+      {!canEdit ? (
+        <p role="note" className="rounded-ds-btn border border-ds-alert-border bg-ds-alert-bg px-3.5 py-[11px] text-[12.5px] leading-normal text-ds-alert-ink">
+          Você pode consultar os perfis, mas não tem permissão para gerenciá-los.
+        </p>
+      ) : null}
 
-          {loading ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {[0, 1, 2].map((item) => (
-                <div key={item} className="h-16 animate-pulse rounded-xl bg-slate-100" />
-              ))}
-            </div>
-          ) : sortedProfiles.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {sortedProfiles.map((profile) => {
-                const isAdministrator = profile.id === adminProfileId || profile.isDefaultAdmin === true;
-                return (
-                  <div key={profile.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${isAdministrator ? "bg-pink-100 text-pink-700" : "bg-white text-slate-500"}`}>
-                      <ShieldCheck className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-slate-900">{profile.name}</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                        {isAdministrator ? "Perfil administrador do sistema" : "Perfil personalizado"}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-medium text-slate-500">
-              Nenhum perfil de permissão cadastrado.
-            </div>
-          )}
+      <ListShell minWidth={520}>
+        <ListHead template={ROW_TEMPLATE}>
+          <span>Perfil</span>
+          <span>Tipo</span>
+        </ListHead>
+        {loading ? <ListSkeleton rows={3} /> : null}
+        {visibleProfiles.map((profile) => {
+          const isAdministrator = profile.id === adminProfileId || profile.isDefaultAdmin === true;
+          return (
+            <LiftRow key={profile.id} interactive={false} className="grid items-center gap-3.5 px-5 py-[11px] last:border-b-0" style={{ gridTemplateColumns: ROW_TEMPLATE }}>
+              <p className="truncate text-[13.5px] font-bold">{profile.name}</p>
+              <div className="flex items-center gap-2">
+                <StatusPill variant={isAdministrator ? "info" : "neutral"}>{isAdministrator ? "Administrador do sistema" : "Personalizado"}</StatusPill>
+              </div>
+            </LiftRow>
+          );
+        })}
+        {!loading && profiles.length === 0 ? (
+          <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum perfil de permissão cadastrado.</p>
+        ) : !loading && visibleProfiles.length === 0 ? (
+          <EmptyResults title="Nenhum perfil encontrado com essa busca." onClear={() => setSearch("")} />
+        ) : null}
+      </ListShell>
 
-          <p className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-xs font-semibold leading-relaxed text-blue-800">
-            O perfil é aplicado ao colaborador conforme o cargo e a função configurados em “Cargos e funções”.
-          </p>
-        </div>
-      </section>
+      <p role="note" className="rounded-ds-btn border border-ds-info/20 bg-ds-info-bg px-4 py-3 text-xs font-semibold leading-relaxed text-ds-info">
+        O perfil é aplicado ao colaborador conforme o cargo e a função configurados em “Cargos e funções”.
+      </p>
 
-      <ProfileManagementModal
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        canEdit={canEdit}
-      />
-    </>
+      <ProfileManagementModal open={managerOpen} onOpenChange={setManagerOpen} canEdit={canEdit} />
+    </div>
   );
 }

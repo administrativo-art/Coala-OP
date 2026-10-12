@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, BrainCircuit, Check, ChevronDown, ChevronRight, Group, Loader2, Menu, Settings2, SlidersHorizontal, Users2 } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Check, ChevronDown, ChevronRight, Loader2, Settings2 } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
 import { DPRuntimeGuard } from "@/components/dp-runtime-guard";
 import dynamic from "next/dynamic";
@@ -39,14 +39,6 @@ const AccessProfilesSettings = dynamic(
   () => import("@/components/access-profiles-settings").then((m) => m.AccessProfilesSettings),
   { ssr: false }
 );
-const DPLoginAccessDiagnostic = dynamic(
-  () => import("@/components/dp/dp-login-access-diagnostic").then((m) => m.DPLoginAccessDiagnostic),
-  { ssr: false }
-);
-const DPLoginAccessAudit = dynamic(
-  () => import("@/components/dp/dp-login-access-audit").then((m) => m.DPLoginAccessAudit),
-  { ssr: false }
-);
 const ProfileComplianceOverview = dynamic(
   () => import("@/components/dp/profile-compliance-overview").then((m) => m.ProfileComplianceOverview),
   { ssr: false }
@@ -55,20 +47,12 @@ const DPSettingsCalendars = dynamic(
   () => import("@/components/dp/dp-settings-calendars").then((m) => m.DPSettingsCalendars),
   { ssr: false }
 );
-const AccountPlansManagement = dynamic(
-  () => import("@/features/financial/components/settings/account-plans-management"),
-  { ssr: false }
-);
-const ResultCentersManagement = dynamic(
-  () => import("@/features/financial/components/settings/result-centers-management"),
+const AccountingSettings = dynamic(
+  () => import("@/features/financial/components/settings/accounting-settings").then((m) => m.AccountingSettings),
   { ssr: false }
 );
 const BankAccountsManagement = dynamic(
   () => import("@/features/financial/components/settings/bank-accounts-management"),
-  { ssr: false }
-);
-const ExpenseDescriptionsManagement = dynamic(
-  () => import("@/features/financial/components/settings/expense-descriptions-management"),
   { ssr: false }
 );
 const ImportAliasesManagement = dynamic(
@@ -79,36 +63,8 @@ const BudgetsManagement = dynamic(
   () => import("@/features/financial/components/settings/budgets-management"),
   { ssr: false }
 );
-const PricingSimulator = dynamic(
-  () => import("@/components/pricing-simulator").then((m) => m.PricingSimulator),
-  { ssr: false }
-);
-const PriceComparisonTable = dynamic(
-  () => import("@/components/price-comparison-table").then((m) => m.PriceComparisonTable),
-  { ssr: false }
-);
-const CompetitorManagementModal = dynamic(
-  () => import("@/components/competitor-management-modal").then((m) => m.CompetitorManagementModal),
-  { ssr: false }
-);
-const CompetitorProductManagementModal = dynamic(
-  () => import("@/components/competitor-product-management-modal").then((m) => m.CompetitorProductManagementModal),
-  { ssr: false }
-);
-const CompetitorSelectionModal = dynamic(
-  () => import("@/components/competitor-selection-modal").then((m) => m.CompetitorSelectionModal),
-  { ssr: false }
-);
-const GoalsTrackingDashboard = dynamic(
-  () => import("@/components/goals-tracking-dashboard").then((m) => m.GoalsTrackingDashboard),
-  { ssr: false }
-);
-const GoalsRegistrationDashboard = dynamic(
-  () => import("@/components/goals-registration-dashboard").then((m) => m.GoalsRegistrationDashboard),
-  { ssr: false }
-);
-const GoalsProvider = dynamic(
-  () => import("@/components/goals-provider").then((m) => m.GoalsProvider),
+const CompetitorsWorkspace = dynamic(
+  () => import("@/components/competitors/competitors-workspace").then((m) => m.CompetitorsWorkspace),
   { ssr: false }
 );
 const DPSettingsUnits = dynamic(
@@ -123,12 +79,12 @@ const CatalogoQRPanel = dynamic(
   () => import("@/components/catalogo/catalogo-qr-panel").then((m) => m.CatalogoQRPanel),
   { ssr: false }
 );
-const PublicBioSettings = dynamic(
-  () => import("@/components/settings/public-bio-settings").then((m) => m.PublicBioSettings),
-  { ssr: false }
-);
 const PurchasingAccountingSettings = dynamic(
   () => import("@/components/purchasing/purchasing-accounting-settings").then((m) => m.PurchasingAccountingSettings),
+  { ssr: false }
+);
+const DPLoginAccessSettings = dynamic(
+  () => import("@/components/dp/dp-login-access-settings").then((m) => m.DPLoginAccessSettings),
   { ssr: false }
 );
 const InternalPrivacySettings = dynamic(
@@ -220,63 +176,7 @@ function OperationalCadastrosPanel() {
 }
 
 function CommercialCompetitorsPanel() {
-  const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
-  const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <Menu className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
-              <SlidersHorizontal className="mr-2 h-4 w-4" />
-              Selecionar concorrentes
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
-              <Group className="mr-2 h-4 w-4" />
-              Mercadorias dos concorrentes
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setIsCompetitorModalOpen(true)}>
-              <Users2 className="mr-2 h-4 w-4" />
-              Gerenciar concorrentes
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <PriceComparisonTable selectedCompetitorIds={selectedCompetitorIds} />
-
-      <CompetitorManagementModal
-        isOpen={isCompetitorModalOpen}
-        onClose={() => setIsCompetitorModalOpen(false)}
-      />
-      <CompetitorProductManagementModal
-        isOpen={isProductModalOpen}
-        onClose={() => setIsProductModalOpen(false)}
-      />
-      <CompetitorSelectionModal
-        isOpen={isSelectionModalOpen}
-        onClose={() => setIsSelectionModalOpen(false)}
-        selectedCompetitorIds={selectedCompetitorIds}
-        setSelectedCompetitorIds={setSelectedCompetitorIds}
-      />
-    </div>
-  );
-}
-
-function CommercialGoalsPanel({ canManage }: { canManage: boolean }) {
-  return (
-    <GoalsProvider>
-      {canManage ? <GoalsRegistrationDashboard /> : <GoalsTrackingDashboard />}
-    </GoalsProvider>
-  );
+  return <CompetitorsWorkspace />;
 }
 
 function SettingsLaunchPanel({
@@ -542,16 +442,8 @@ export default function SettingsPage() {
       description: "Centralize QR codes, etiquetas e códigos usados em catálogo, patrimônio, estoque e leitura por scanner.",
       content: <CatalogoQRPanel />,
     },
-    {
-      value: "public-bio",
-      label: "Página da bio",
-      title: "Página pública da bio",
-      description: "Configure os links do Instagram e veja a prévia antes de publicar.",
-      content: <PublicBioSettings />,
-    },
   ].filter((tab) => {
     if (tab.value === "cadastros") return !!permissions.registration.view;
-    if (tab.value === "public-bio") return !!permissions.settings.managePublicBio;
     return true;
   });
 
@@ -564,38 +456,18 @@ export default function SettingsPage() {
       content: <PurchasingAccountingSettings />,
     },
     {
-      value: "pricing",
-      label: "Precificação",
-      title: "Precificação",
-      description: "Parâmetros e rotinas ligadas a preços, margens e simulações.",
-      content: <PricingSimulator />,
-    },
-    {
       value: "competitors",
       label: "Concorrentes",
       title: "Concorrentes",
       description: "Gestão de grupos, unidades e produtos monitorados da concorrência.",
       content: <CommercialCompetitorsPanel />,
     },
-    {
-      value: "goals",
-      label: "Metas",
-      title: "Metas",
-      description: "Templates e acompanhamento das metas do departamento comercial.",
-      content: <CommercialGoalsPanel canManage={!!permissions.goals?.manage} />,
-    },
   ].filter((tab) => {
     if (tab.value === "purchasing") {
       return !!permissions.purchasing?.view;
     }
-    if (tab.value === "pricing") {
-      return !!(permissions.pricing.view || permissions.pricing.manageParameters || permissions.dashboard.pricing);
-    }
     if (tab.value === "competitors") {
       return !!permissions.pricing.view;
-    }
-    if (tab.value === "goals") {
-      return !!(permissions.goals?.view || permissions.goals?.manage);
     }
     return false;
   });
@@ -627,15 +499,7 @@ export default function SettingsPage() {
       label: "Acesso por escala",
       title: "Acesso por escala",
       description: "Diagnóstico e auditoria da política de acesso vinculada à escala.",
-      content: (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Esta área reúne o diagnóstico da regra atual e a auditoria das justificativas já registradas.
-          </p>
-          <DPLoginAccessDiagnostic />
-          <DPLoginAccessAudit />
-        </div>
-      ),
+      content: <DPLoginAccessSettings />,
     },
     {
       value: "privacy",
@@ -803,13 +667,13 @@ export default function SettingsPage() {
       title: "Cadastros contábeis",
       description: "Plano de contas e centros de resultado do módulo financeiro.",
       content: (
-        <div className="space-y-6">
-          <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
-          <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
-          {permissions.financial?.settings?.manageExpenseDescriptions ? (
-            <ExpenseDescriptionsManagement canManage={permissions.financial?.settings?.manageExpenseDescriptions} />
-          ) : null}
-        </div>
+        <AccountingSettings
+          permissions={{
+            manageAccountPlans: permissions.financial?.settings?.manageAccountPlans,
+            manageResultCenters: permissions.financial?.settings?.manageResultCenters,
+            manageExpenseDescriptions: permissions.financial?.settings?.manageExpenseDescriptions,
+          }}
+        />
       ),
     },
     {

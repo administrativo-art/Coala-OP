@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Settings2,
   Sparkles,
-  Store,
   Users,
   XCircle,
 } from 'lucide-react';
@@ -21,9 +20,11 @@ import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { type GoalPeriod, type GoalPeriodDoc } from '@/types';
-import { Card, CardContent } from '@/components/ui/card';
+import { ControlPanel } from '@/components/patterns/control-panel';
+import { FilterChips } from '@/components/patterns/filter-chips';
+import { DarkField, EmptyBox, PanelStat, darkControlClass, kickerClass } from '@/components/goals/goals-ui';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -52,7 +53,7 @@ function fmt(value: number) {
 }
 
 function periodKindLabel(period: GoalPeriod) {
-  if (period === 'daily') return 'Diaria';
+  if (period === 'daily') return 'Diária';
   if (period === 'weekly') return 'Semanal';
   return 'Mensal';
 }
@@ -98,7 +99,7 @@ export function GoalsRegistrationDashboard() {
       if (syncFilialId.trim()) payload.pdvFilialId = syncFilialId.trim();
       const result = await fn(payload) as { data: { results: { date: string; revenue?: number; error?: string }[] } };
       setSyncResults(result.data.results);
-      toast({ title: 'Sync concluido', description: `${result.data.results.length} dias processados.` });
+      toast({ title: 'Sincronização concluída', description: `${result.data.results.length} dias processados.` });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Falha ao sincronizar metas.';
       toast({ title: 'Erro no sync', description: message, variant: 'destructive' });
@@ -131,9 +132,9 @@ export function GoalsRegistrationDashboard() {
 
   const typeLabels: Record<string, string> = {
     revenue: 'Faturamento',
-    ticket: 'Ticket Medio',
+    ticket: 'Ticket médio',
     product_line: 'Linha de Produto',
-    product_specific: 'Produto Especifico',
+    product_specific: 'Produto específico',
   };
 
   const summary = useMemo(() => {
@@ -147,218 +148,133 @@ export function GoalsRegistrationDashboard() {
     return { activeCount: filteredPeriods.length, totalTarget, totalCollaborators, unitCount };
   }, [filteredPeriods, employeeGoals]);
 
-  if (loading) return <Skeleton className="h-64 w-full rounded-2xl" />;
+  if (loading) return <Skeleton className="h-64 w-full rounded-ds-card" />;
+
+  const sectionTab = (key: 'goals' | 'methods', label: string, Icon: typeof CalendarRange) => (
+    <button
+      type="button"
+      aria-pressed={activeSection === key}
+      onClick={() => setActiveSection(key)}
+      className={cn(
+        'inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark',
+        activeSection === key ? 'border-ds-accent bg-ds-accent text-white' : 'border-white/[.12] text-ds-on-dark-2 hover:bg-white/[.06]',
+      )}
+    >
+      <Icon aria-hidden="true" className="h-3.5 w-3.5" />{label}
+    </button>
+  );
 
   return (
-    <div className="space-y-5">
-      <Card className="rounded-2xl border-slate-200 bg-white shadow-sm dark:border-border/40 dark:bg-card/60">
-        <CardContent className="space-y-5 p-5 lg:p-6">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-pink-200 bg-pink-50 text-pink-600">Gestao</Badge>
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Cadastro de Metas</span>
-              </div>
-              <h2 className="text-xl font-black tracking-tight">Gestao de metas</h2>
-              <p className="max-w-3xl text-sm text-muted-foreground">
-                Cadastre metas e configure as formas de calculo usadas nas metas de faturamento.
-              </p>
-            </div>
-
-            {activeSection === 'goals' && (
-              <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
-                {isAdmin && (
-                  <Button variant="outline" onClick={() => { setSyncOpen(true); setSyncResults(null); }}>
-                    <RefreshCw className="mr-2 h-4 w-4" /> Sincronizar Metas
-                  </Button>
-                )}
-                <Button onClick={() => setNewMetaOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Nova Meta
-                </Button>
-              </div>
-            )}
+    <div className="space-y-5 font-ds">
+      <ControlPanel>
+        <p className={cn(kickerClass, 'text-ds-accent-kicker')}>Metas de vendas</p>
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold">Cadastro de metas</h1>
+            <p className="mt-1 max-w-2xl text-[13px] font-semibold text-ds-on-dark-sub">Cadastre metas e configure as formas de cálculo usadas nas metas de faturamento.</p>
           </div>
-
-          <div className="flex">
-            <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
-              <button
-                type="button"
-                onClick={() => setActiveSection('goals')}
-                className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-bold transition ${
-                  activeSection === 'goals'
-                    ? 'bg-white text-pink-700 shadow-sm'
-                    : 'text-muted-foreground hover:bg-white/70 hover:text-slate-900'
-                }`}
-              >
-                <CalendarRange className="mr-2 h-4 w-4" />
-                Metas
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveSection('methods')}
-                className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-bold transition ${
-                  activeSection === 'methods'
-                    ? 'bg-white text-pink-700 shadow-sm'
-                    : 'text-muted-foreground hover:bg-white/70 hover:text-slate-900'
-                }`}
-              >
-                <Settings2 className="mr-2 h-4 w-4" />
-                Formas de meta
-              </button>
-            </div>
-          </div>
-
           {activeSection === 'goals' && (
-            <>
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:bg-slate-900/30">
-                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-muted-foreground">Metas ativas</div>
-                  <div className="mt-1 text-xl font-black">{summary.activeCount}</div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:bg-slate-900/30">
-                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-muted-foreground">Meta cadastrada</div>
-                  <div className="mt-1 text-xl font-black">R$ {fmt(summary.totalTarget)}</div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:bg-slate-900/30">
-                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-muted-foreground">Unidades</div>
-                  <div className="mt-1 text-xl font-black">{summary.unitCount}</div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:bg-slate-900/30">
-                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-muted-foreground">Colaboradores vinculados</div>
-                  <div className="mt-1 text-xl font-black text-blue-600">{summary.totalCollaborators}</div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:bg-slate-900/30">
-                <div className="min-w-[240px] space-y-1">
-                  <Label className="flex items-center gap-2 text-xs font-semibold">
-                    <Store className="h-3.5 w-3.5" /> Quiosque
-                  </Label>
-                  <Select value={filterKioskId} onValueChange={setFilterKioskId}>
-                    <SelectTrigger className="bg-white dark:bg-card/60">
-                      <SelectValue placeholder="Todos os quiosques" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os quiosques</SelectItem>
-                      {availableKiosks.map(kiosk => <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="min-w-[180px] space-y-1">
-                  <Label className="flex items-center gap-2 text-xs font-semibold">
-                    <CalendarRange className="h-3.5 w-3.5" /> Periodo
-                  </Label>
-                  <Select value={filterPeriod} onValueChange={value => setFilterPeriod(value as GoalPeriod | 'all')}>
-                    <SelectTrigger className="bg-white dark:bg-card/60">
-                      <SelectValue placeholder="Todos os periodos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="daily">Diarias</SelectItem>
-                      <SelectItem value="weekly">Semanais</SelectItem>
-                      <SelectItem value="monthly">Mensais</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="pb-2 text-sm text-muted-foreground">
-                  {filteredPeriods.length} meta(s) ativa(s) no filtro
-                </div>
-              </div>
-            </>
+            <div className="flex flex-wrap gap-2">
+              {isAdmin && (
+                <Button variant="ds-secondary" size="md" onClick={() => { setSyncOpen(true); setSyncResults(null); }}>
+                  <RefreshCw aria-hidden="true" className="mr-2 h-4 w-4" />Sincronizar metas
+                </Button>
+              )}
+              <Button variant="primary-page" size="md" onClick={() => setNewMetaOpen(true)}>
+                <Plus aria-hidden="true" className="mr-2 h-4 w-4" />Nova meta
+              </Button>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {sectionTab('goals', 'Metas', CalendarRange)}
+          {sectionTab('methods', 'Formas de meta', Settings2)}
+        </div>
+
+        {activeSection === 'goals' && (
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <PanelStat label="Metas ativas" value={summary.activeCount} />
+              <PanelStat label="Meta cadastrada" value={`R$ ${fmt(summary.totalTarget)}`} />
+              <PanelStat label="Unidades" value={summary.unitCount} />
+              <PanelStat label="Colaboradores vinculados" value={summary.totalCollaborators} tone="text-ds-info" />
+            </div>
+            <div className="mt-5 flex flex-wrap items-end gap-4 border-t border-white/10 pt-5">
+              <FilterChips
+                className="flex-1"
+                value={filterKioskId === 'all' ? null : filterKioskId}
+                onChange={value => setFilterKioskId(value ?? 'all')}
+                allLabel="Todos os quiosques"
+                chips={availableKiosks.map(kiosk => ({ value: kiosk.id, label: kiosk.name }))}
+              />
+              <div className="w-48">
+                <DarkField label="Periodicidade">
+                  <select className={darkControlClass} value={filterPeriod} onChange={event => setFilterPeriod(event.target.value as GoalPeriod | 'all')}>
+                    <option value="all">Todas</option>
+                    <option value="daily">Diárias</option>
+                    <option value="weekly">Semanais</option>
+                    <option value="monthly">Mensais</option>
+                  </select>
+                </DarkField>
+              </div>
+            </div>
+            <p className="mt-3 text-[12.5px] font-bold text-ds-on-dark-muted">{filteredPeriods.length} meta(s) ativa(s) no filtro</p>
+          </>
+        )}
+      </ControlPanel>
 
       {activeSection === 'methods' ? (
         <GoalMethodSettings canManage={canManageGoalMethods} />
+      ) : filteredPeriods.length === 0 ? (
+        <EmptyBox>Nenhuma meta ativa para esses filtros.</EmptyBox>
       ) : (
-        <>
-          {filteredPeriods.length === 0 ? (
-            <Card className="rounded-2xl border-2 border-dashed">
-              <CardContent className="py-16 text-center text-muted-foreground">Nenhuma meta ativa.</CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {filteredPeriods.map(period => {
-                const templatePeriod = getTemplatePeriod(period.templateId);
-                const collaborators = employeeGoals.filter(goal => goal.periodId === period.id).length;
-                const type = getTemplateType(period.templateId);
+        <div className="space-y-3">
+          {filteredPeriods.map(period => {
+            const templatePeriod = getTemplatePeriod(period.templateId);
+            const collaborators = employeeGoals.filter(goal => goal.periodId === period.id).length;
+            const type = getTemplateType(period.templateId);
 
-                return (
-                  <Card
-                    key={period.id}
-                    className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-border/40 dark:bg-card/60"
-                  >
-                    <CardContent className="p-5 lg:p-6">
-                      <div className="grid gap-5 xl:grid-cols-[minmax(220px,0.85fr)_minmax(340px,1.15fr)_minmax(240px,0.85fr)_auto] xl:items-center">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="border-pink-200 bg-pink-50 text-pink-600">
-                              {typeLabels[type] ?? type}
-                            </Badge>
-                            <Badge variant="secondary">{periodKindLabel(templatePeriod)}</Badge>
-                          </div>
-                          <h3 className="mt-3 truncate text-lg font-black tracking-tight text-slate-950">
-                            {getKioskName(period.kioskId)}
-                          </h3>
-                          <p className="mt-0.5 text-sm text-muted-foreground">
-                            {formatPeriodLabel(period, templatePeriod)}
-                          </p>
-                        </div>
+            return (
+              <article
+                key={period.id}
+                className="rounded-ds-card border border-ds-border bg-ds-surface p-5 transition-[transform,box-shadow] duration-[180ms] ease-ds-lift hover:-translate-y-[2px] hover:shadow-ds-lift motion-reduce:hover:translate-y-0"
+              >
+                <div className="grid gap-5 xl:grid-cols-[minmax(200px,0.8fr)_minmax(320px,1.2fr)_minmax(200px,0.7fr)_auto] xl:items-center">
+                  <div className="min-w-0">
+                    <p className={cn(kickerClass, 'text-ds-accent-ink')}>{typeLabels[type] ?? type} · {periodKindLabel(templatePeriod)}</p>
+                    <h3 className="mt-1 truncate text-[18px] font-extrabold text-ds-ink">{getKioskName(period.kioskId)}</h3>
+                    <p className="mt-0.5 text-[13px] font-semibold capitalize text-ds-ink-muted">{formatPeriodLabel(period, templatePeriod)}</p>
+                  </div>
 
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-muted-foreground">Valores da meta</p>
-                          <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-                            <div>
-                              <p className="text-[10px] text-muted-foreground">Alvo</p>
-                              <p className="font-black">R$ {fmt(period.targetValue)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-muted-foreground">UP</p>
-                              <p className="font-black">R$ {fmt(period.upValue ?? 0)}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-muted-foreground">TOP</p>
-                              <p className="font-black">{period.topValue ? `R$ ${fmt(period.topValue)}` : '-'}</p>
-                            </div>
-                          </div>
-                        </div>
+                  <dl className="grid grid-cols-3 gap-3 rounded-ds-md bg-ds-warm px-4 py-3">
+                    <div><dt className={cn(kickerClass, 'text-ds-ink-faint')}>Alvo</dt><dd className="mt-0.5 text-[14px] font-extrabold text-ds-ink">R$ {fmt(period.targetValue)}</dd></div>
+                    <div><dt className={cn(kickerClass, 'text-ds-ink-faint')}>UP</dt><dd className="mt-0.5 text-[14px] font-extrabold text-ds-ink">R$ {fmt(period.upValue ?? 0)}</dd></div>
+                    <div><dt className={cn(kickerClass, 'text-ds-ink-faint')}>TOP</dt><dd className="mt-0.5 text-[14px] font-extrabold text-ds-ink">{period.topValue ? `R$ ${fmt(period.topValue)}` : '—'}</dd></div>
+                  </dl>
 
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-muted-foreground">Estrutura</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Badge variant="outline">{period.shifts?.length ? `${period.shifts.length} turno(s)` : 'Sem turnos'}</Badge>
-                            <Badge variant="secondary">{collaborators} colaborador(es)</Badge>
-                          </div>
-                        </div>
+                  <div className="text-[13px] font-semibold text-ds-ink-2">
+                    <p className={cn(kickerClass, 'text-ds-ink-faint')}>Estrutura</p>
+                    <p className="mt-0.5">{period.shifts?.length ? `${period.shifts.length} turno(s)` : 'Sem turnos'}</p>
+                    <p className="text-ds-ink-muted">{collaborators} colaborador(es)</p>
+                  </div>
 
-                        <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
-                          <Button size="sm" variant="outline" onClick={() => { setEmployeeGoalPeriod(period); setEmployeeGoalOpen(true); }}>
-                            <Users className="mr-1.5 h-3.5 w-3.5" />
-                            Equipe
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => { setClosingPeriod(period); setCloseGoalOpen(true); }}
-                          >
-                            <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                            Encerrar
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setNewMetaOpen(true)}>
-                            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                            Copiar
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </>
+                  <div className="flex flex-wrap gap-2 xl:justify-end">
+                    <Button size="sm" variant="ds-secondary" onClick={() => { setEmployeeGoalPeriod(period); setEmployeeGoalOpen(true); }}>
+                      <Users aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />Equipe
+                    </Button>
+                    <Button size="sm" variant="ds-secondary" onClick={() => setNewMetaOpen(true)}>
+                      <Sparkles aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />Copiar
+                    </Button>
+                    <Button size="sm" variant="danger-link" onClick={() => { setClosingPeriod(period); setCloseGoalOpen(true); }}>
+                      <XCircle aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />Encerrar
+                    </Button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       )}
 
       <GoalTemplateFormModal open={newMetaOpen} onOpenChange={setNewMetaOpen} />

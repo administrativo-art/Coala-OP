@@ -2,115 +2,124 @@
 
 import { useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
+import { format } from 'date-fns';
 import { functions } from '@/lib/firebase';
 import { useKiosks } from '@/hooks/use-kiosks';
-import { useToast } from '@/hooks/use-toast';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Field, fieldInputClass } from '@/components/patterns/field';
+import { Segmented } from '@/components/patterns/segmented';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { RefreshCw, CheckCircle2, AlertCircle, AlertTriangle, Calendar as CalendarIcon, Loader2, PlayCircle } from 'lucide-react';
-import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval, startOfYear } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { resolvePdvFilialId } from '@/lib/kiosk-identifiers';
+import {
+  SYNC_PRESETS,
+  formatBRL,
+  logHasIssue,
+  summarizeSyncLogs,
+  syncPresetRange,
+  syncRangeDays,
+  validateSyncRange,
+  type SyncLog,
+} from '@/lib/pdv-sync-view';
+import { cn } from '@/lib/utils';
 
-type SyncDiagnostics = {
-  couponsReceived: number;
-  couponsCancelled: number;
-  couponsWithoutItems: number;
-  itemsSeen: number;
-  itemsCancelled: number;
-  itemsMapped: number;
-  itemsUnmapped: number;
-  itemsZeroValue: number;
-  unmappedSkus: { sku: string; name: string; count: number }[];
-};
+type LogFilter = 'all' | 'issues';
 
-type SyncLog = {
-  date: string;
-  kioskName: string;
-  status: 'pending' | 'loading' | 'success' | 'error';
-  revenue?: number;
-  errorMessage?: string;
-  errorCode?: string;
-  diagnostics?: SyncDiagnostics;
-  warnings?: string[];
-};
+function statusOf(log: SyncLog): { variant: StatusPillVariant; label: string } {
+  if (log.status === 'pending') return { variant: 'neutral', label: 'Na fila' };
+  if (log.status === 'loading') return { variant: 'info', label: 'Processando' };
+  if (log.status === 'error') return { variant: 'danger', label: 'Falha' };
+  return log.warnings?.length ? { variant: 'warn', label: 'Alerta' } : { variant: 'ok', label: 'Concluído' };
+}
+
+function SyncLogRow({ log }: { log: SyncLog }) {
+  const status = statusOf(log);
+  const d = log.diagnostics;
+  return (
+    <li className="grid grid-cols-[96px_44px_minmax(0,1fr)_auto] items-start gap-3 border-b border-ds-divider px-4 py-2.5 last:border-b-0">
+      <span><StatusPill variant={status.variant}>{status.label}</StatusPill></span>
+      <span className="pt-0.5 font-ds-mono text-xs text-ds-ink-muted">{format(new Date(`${log.date}T12:00:00Z`), 'dd/MM')}</span>
+      <div className="min-w-0 space-y-0.5">
+        <p className="truncate text-[13px] font-bold">{log.kioskName}</p>
+        {log.status === 'success' && d ? (
+          <p className="text-xs text-ds-ink-muted">
+            {d.couponsReceived} cupons · {d.itemsMapped} itens mapeados{d.itemsUnmapped > 0 ? ` · ${d.itemsUnmapped} sem ficha técnica` : ''}
+          </p>
+        ) : null}
+        {log.warnings?.map((warning) => (
+          <p key={warning} className="text-xs font-semibold text-ds-warn">{warning}</p>
+        ))}
+        {log.status === 'success' && d && log.warnings?.length && d.unmappedSkus.length > 0 ? (
+          <p className="text-xs text-ds-ink-muted">
+            SKUs sem ficha: {d.unmappedSkus.slice(0, 3).map((sku) => sku.sku).join(', ')}
+            {d.unmappedSkus.length > 3 ? ` e mais ${d.unmappedSkus.length - 3}` : ''}
+          </p>
+        ) : null}
+        {log.status === 'error' ? (
+          <p className="text-xs font-semibold text-ds-danger">
+            {log.errorCode ? `(${log.errorCode}) ` : ''}{log.errorMessage ?? 'Falha ao sincronizar este dia.'}
+          </p>
+        ) : null}
+      </div>
+      <span className="pt-0.5 text-right font-ds-mono text-[13px] font-bold">
+        {log.status === 'success' ? formatBRL(log.revenue ?? 0) : ''}
+      </span>
+    </li>
+  );
+}
 
 export function PdvSyncManagement() {
   const { kiosks } = useKiosks();
-  const { toast } = useToast();
-  
+
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  
+  const [startDate, setStartDate] = useState(() => syncPresetRange('week', new Date()).start);
+  const [endDate, setEndDate] = useState(() => syncPresetRange('week', new Date()).end);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [progress, setProgress] = useState(0);
+  const [logFilter, setLogFilter] = useState<LogFilter>('all');
 
-  // Atalhos
-  const handleSetPreset = (type: 'week' | 'month' | 'year' | '90days') => {
-    const now = new Date();
-    if (type === 'week') {
-      setStartDate(format(subDays(now, 7), 'yyyy-MM-dd'));
-      setEndDate(format(now, 'yyyy-MM-dd'));
-    } else if (type === 'month') {
-      setStartDate(format(startOfMonth(now), 'yyyy-MM-dd'));
-      setEndDate(format(endOfMonth(now), 'yyyy-MM-dd'));
-    } else if (type === 'year') {
-      setStartDate(format(startOfYear(now), 'yyyy-MM-dd'));
-      setEndDate(format(now, 'yyyy-MM-dd'));
-    } else if (type === '90days') {
-      setStartDate(format(subDays(now, 90), 'yyyy-MM-dd'));
-      setEndDate(format(now, 'yyyy-MM-dd'));
-    }
+  const resolvedKiosks = kiosks.map((k) => ({ ...k, pdvFilialId: resolvePdvFilialId(k) }));
+  const linkedKiosks = resolvedKiosks.filter((k) => !!k.pdvFilialId);
+  const targetKiosks = selectedKioskId === 'all' ? linkedKiosks : linkedKiosks.filter((k) => k.id === selectedKioskId);
+  const previewRangeError = validateSyncRange(startDate, endDate);
+  const operationCount = previewRangeError ? 0 : targetKiosks.length * syncRangeDays(startDate, endDate).length;
+
+  const applyPreset = (id: (typeof SYNC_PRESETS)[number]['id']) => {
+    const range = syncPresetRange(id, new Date());
+    setStartDate(range.start);
+    setEndDate(range.end);
+    setRangeError(null);
   };
 
-  const resolvedKiosks = kiosks.map(k => ({
-    ...k,
-    pdvFilialId: resolvePdvFilialId(k),
-  }));
-
   async function startSync() {
-    if (!startDate || !endDate) return;
-
-    const start = new Date(startDate + 'T12:00:00Z');
-    const end = new Date(endDate + 'T12:00:00Z');
-
-    if (start > end) {
-      toast({ title: 'Erro', description: 'Data de início não pode ser maior que o fim.', variant: 'destructive' });
-      return;
-    }
-
-    const targetKiosks = selectedKioskId === 'all'
-      ? resolvedKiosks.filter(k => !!k.pdvFilialId)
-      : resolvedKiosks.filter(k => k.id === selectedKioskId && !!k.pdvFilialId);
+    const invalid = validateSyncRange(startDate, endDate);
+    setRangeError(invalid);
+    setStartError(null);
+    if (invalid) return;
 
     if (targetKiosks.length === 0) {
-      toast({ title: 'Atenção', description: 'Nenhum quiosque configurado com ID PDV Legal.' });
+      setStartError('Nenhum quiosque configurado com ID do PDV Legal. Vincule a filial na aba Unidades.');
       return;
     }
 
-    const days = eachDayOfInterval({ start, end });
+    const days = syncRangeDays(startDate, endDate);
     const totalOperations = targetKiosks.length * days.length;
-    
+
     setIsSyncing(true);
     setProgress(0);
-    setLogs([]);
+    setLogFilter('all');
 
     const newLogs: SyncLog[] = [];
-    targetKiosks.forEach(k => {
-      days.forEach(d => {
-        newLogs.push({
-          date: format(d, 'yyyy-MM-dd'),
-          kioskName: k.name,
-          status: 'pending'
-        });
+    targetKiosks.forEach((k) => {
+      days.forEach((d) => {
+        newLogs.push({ date: format(d, 'yyyy-MM-dd'), kioskName: k.name, status: 'pending' });
       });
     });
     setLogs(newLogs);
@@ -120,7 +129,7 @@ export function PdvSyncManagement() {
 
     // Processamento sequencial por quiosque para não estourar a API do PDV Legal
     for (const kiosk of targetKiosks) {
-      // Processamos em pequenos blocos de 7 dias para evitar timeouts longos na Cloud Function
+      // Blocos de 7 dias evitam timeouts longos na Cloud Function
       const chunks = [];
       for (let i = 0; i < days.length; i += 7) {
         chunks.push(days.slice(i, i + 7));
@@ -131,47 +140,52 @@ export function PdvSyncManagement() {
         const chunkEnd = format(chunk[chunk.length - 1], 'yyyy-MM-dd');
 
         try {
-          // Atualiza status local para 'loading'
-          setLogs(prev => prev.map(l => 
-            l.kioskName === kiosk.name && chunk.some(d => format(d, 'yyyy-MM-dd') === l.date)
-              ? { ...l, status: 'loading' } : l
-          ));
+          setLogs((prev) =>
+            prev.map((l) =>
+              l.kioskName === kiosk.name && chunk.some((d) => format(d, 'yyyy-MM-dd') === l.date)
+                ? { ...l, status: 'loading' }
+                : l
+            )
+          );
 
-          const result = await syncFn({
+          const result = (await syncFn({
             kioskId: kiosk.id,
             startDate: chunkStart,
             endDate: chunkEnd,
-          }) as any;
+          })) as any;
 
           const resultsData = result.data.results || [];
 
-          // Atualiza status local com resultados reais
-          setLogs(prev => prev.map(l => {
-            const resMatch = resultsData.find((r: any) => r.date === l.date && l.kioskName === kiosk.name);
-            if (resMatch) {
-              const hasWarnings = Array.isArray(resMatch.warnings) && resMatch.warnings.length > 0;
-              return {
-                ...l,
-                status: resMatch.error ? 'error' : 'success',
-                revenue: resMatch.revenue,
-                errorMessage: resMatch.error,
-                errorCode: resMatch.errorCode,
-                diagnostics: resMatch.diagnostics,
-                warnings: hasWarnings ? resMatch.warnings : undefined,
-              };
-            }
-            return l;
-          }));
+          setLogs((prev) =>
+            prev.map((l) => {
+              const resMatch = resultsData.find((r: any) => r.date === l.date && l.kioskName === kiosk.name);
+              if (resMatch) {
+                const hasWarnings = Array.isArray(resMatch.warnings) && resMatch.warnings.length > 0;
+                return {
+                  ...l,
+                  status: resMatch.error ? 'error' : 'success',
+                  revenue: resMatch.revenue,
+                  errorMessage: resMatch.error,
+                  errorCode: resMatch.errorCode,
+                  diagnostics: resMatch.diagnostics,
+                  warnings: hasWarnings ? resMatch.warnings : undefined,
+                };
+              }
+              return l;
+            })
+          );
 
           completed += chunk.length;
           setProgress(Math.round((completed / totalOperations) * 100));
-
         } catch (e: any) {
           console.error(`Erro no chunk ${chunkStart}-${chunkEnd}:`, e);
-          setLogs(prev => prev.map(l => 
-            l.kioskName === kiosk.name && chunk.some(d => format(d, 'yyyy-MM-dd') === l.date)
-              ? { ...l, status: 'error', errorMessage: e.message } : l
-          ));
+          setLogs((prev) =>
+            prev.map((l) =>
+              l.kioskName === kiosk.name && chunk.some((d) => format(d, 'yyyy-MM-dd') === l.date)
+                ? { ...l, status: 'error', errorMessage: e.message }
+                : l
+            )
+          );
           completed += chunk.length;
           setProgress(Math.round((completed / totalOperations) * 100));
         }
@@ -179,171 +193,149 @@ export function PdvSyncManagement() {
     }
 
     setIsSyncing(false);
-    toast({ title: 'Sincronização Finalizada', description: `${completed} operações concluídas.` });
   }
 
+  const summary = summarizeSyncLogs(logs);
+  const visibleLogs = (logFilter === 'issues' ? logs.filter(logHasIssue) : logs).slice().reverse();
+  const issueCount = logs.filter(logHasIssue).length;
+
   return (
-    <Card className="border-border/60 bg-card/50 backdrop-blur-sm">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <RefreshCw className={`h-5 w-5 text-blue-500 ${isSyncing ? 'animate-spin' : ''}`} />
-          <CardTitle>Central de Sincronização PDV</CardTitle>
-        </div>
-        <CardDescription>
-          Reprocesse dados históricos do PDV Legal para atualizar faturamento, metas e estoque.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Quiosque</Label>
-              <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={isSyncing}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o quiosque" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Quiosques</SelectItem>
-                  {resolvedKiosks.filter(k => !!k.pdvFilialId).map(k => (
-                    <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+    <div className="grid gap-5 lg:grid-cols-[minmax(320px,400px)_minmax(0,1fr)]">
+      <section className="space-y-5 self-start rounded-ds-card-lg border border-ds-border bg-ds-warm p-6">
+        <header>
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">Reprocessar PDV Legal</p>
+          <h2 className="mt-1 text-xl font-extrabold tracking-[-0.02em]">Parâmetros</h2>
+          <p className="mt-1 text-[13px] text-ds-ink-muted">
+            Atualiza faturamento, metas e estoque a partir dos cupons do período.
+          </p>
+        </header>
+
+        <Field label="Quiosque" htmlFor="sync-kiosk">
+          <Select value={selectedKioskId} onValueChange={setSelectedKioskId} disabled={isSyncing}>
+            <SelectTrigger id="sync-kiosk" className={fieldInputClass}>
+              <SelectValue placeholder="Selecione o quiosque" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os quiosques</SelectItem>
+              {linkedKiosks.map((k) => (
+                <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field label="Período" error={rangeError}>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="date"
+              aria-label="Data inicial"
+              value={startDate}
+              onChange={(e) => { setStartDate(e.target.value); setRangeError(null); }}
+              disabled={isSyncing}
+              aria-invalid={!!rangeError}
+              className={fieldInputClass}
+            />
+            <Input
+              type="date"
+              aria-label="Data final"
+              value={endDate}
+              onChange={(e) => { setEndDate(e.target.value); setRangeError(null); }}
+              disabled={isSyncing}
+              aria-invalid={!!rangeError}
+              className={fieldInputClass}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {SYNC_PRESETS.map((preset) => (
+              <Button key={preset.id} type="button" variant="ds-secondary" size="xs" onClick={() => applyPreset(preset.id)} disabled={isSyncing}>
+                {preset.label(new Date())}
+              </Button>
+            ))}
+          </div>
+        </Field>
+
+        <p className="rounded-ds-btn bg-ds-muted px-3.5 py-2.5 text-xs text-ds-ink-2">
+          {operationCount > 0
+            ? <>Serão processadas <strong className="font-extrabold">{operationCount}</strong> operações ({targetKiosks.length} {targetKiosks.length === 1 ? 'quiosque' : 'quiosques'} × {operationCount / targetKiosks.length} dias), em blocos de 7 dias por quiosque.</>
+            : 'Escolha quiosque e período para ver quantas operações serão processadas.'}
+        </p>
+
+        {startError ? (
+          <p role="alert" className="rounded-ds-btn border border-ds-alert-border bg-ds-alert-bg px-3.5 py-[11px] text-[12.5px] leading-normal text-ds-alert-ink">
+            {startError}
+          </p>
+        ) : null}
+
+        <Button type="button" variant="primary-page" size="xl" className="w-full" loading={isSyncing} loadingLabel={`Sincronizando… ${progress}%`} onClick={() => void startSync()}>
+          Iniciar sincronização
+        </Button>
+      </section>
+
+      <section className="rounded-ds-card-lg border border-ds-border bg-ds-warm">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ds-divider px-6 py-4">
+          <div>
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Andamento</p>
+            <h2 className="mt-1 text-xl font-extrabold tracking-[-0.02em]">Resultado por dia</h2>
+          </div>
+          {logs.length > 0 ? (
+            <Segmented<LogFilter>
+              aria-label="Filtrar resultado"
+              value={logFilter}
+              onChange={setLogFilter}
+              options={[
+                { value: 'all', label: `Todos ${logs.length}` },
+                { value: 'issues', label: `Com pendências ${issueCount}` },
+              ]}
+            />
+          ) : null}
+        </header>
+
+        {logs.length === 0 ? (
+          <div className="m-6 rounded-ds-card border border-dashed border-ds-border-input px-5 py-14 text-center">
+            <p className="text-sm font-bold">Nenhuma sincronização nesta sessão.</p>
+            <p className="mt-1 text-xs text-ds-ink-muted">Os resultados aparecem aqui enquanto são processados e não ficam guardados ao sair da página.</p>
+          </div>
+        ) : (
+          <div className="space-y-4 p-6">
+            <div className="space-y-1.5" role="status" aria-live="polite">
+              <div className="flex items-center justify-between text-xs font-bold text-ds-ink-2">
+                <span>{isSyncing ? 'Processando' : 'Concluído'} · {summary.finished} de {logs.length} dias</span>
+                <span className="font-ds-mono">{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+            </div>
+
+            {summary.finished > 0 ? (
+              <div
+                className={cn(
+                  'flex flex-wrap items-center gap-x-4 gap-y-1 rounded-ds-btn border px-3.5 py-2.5 text-xs',
+                  summary.healthy ? 'border-ds-ok/25 bg-ds-ok-bg text-ds-ok' : 'border-ds-alert-border bg-ds-alert-bg text-ds-alert-ink'
+                )}
+              >
+                <strong className="font-extrabold">{summary.healthy ? 'Dados íntegros' : 'Verificar pendências'}</strong>
+                <span>Faturamento <strong className="font-extrabold">{formatBRL(summary.revenue)}</strong></span>
+                <span>{summary.coupons} cupons</span>
+                <span>{summary.mapped} itens mapeados</span>
+                {summary.unmapped > 0 ? <span className="font-bold">{summary.unmapped} sem ficha técnica</span> : null}
+                {summary.errorDays > 0 ? <span className="font-bold text-ds-danger">{summary.errorDays} dia(s) com erro</span> : null}
+                {summary.warnDays > 0 ? <span className="font-bold">{summary.warnDays} dia(s) com alerta</span> : null}
+              </div>
+            ) : null}
+
+            <ScrollArea className="h-[26rem] rounded-ds-btn-lg border border-ds-border bg-ds-surface">
+              {visibleLogs.length > 0 ? (
+                <ul className="m-0 list-none p-0">
+                  {visibleLogs.map((log, index) => (
+                    <SyncLogRow key={`${log.kioskName}-${log.date}-${index}`} log={log} />
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Intervalo de Datas</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={isSyncing} />
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} disabled={isSyncing} />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <Label>Atalhos de Período</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleSetPreset('week')} disabled={isSyncing}>
-                Últimos 7 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleSetPreset('month')} disabled={isSyncing}>
-                Mês Atual
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleSetPreset('90days')} disabled={isSyncing}>
-                Últimos 90 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleSetPreset('year')} disabled={isSyncing}>
-                Desde Jan/2026
-              </Button>
-            </div>
-            
-            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={startSync} disabled={isSyncing}>
-              {isSyncing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sincronizando... {progress}%
-                </>
+                </ul>
               ) : (
-                <>
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                  Iniciar sincronização
-                </>
+                <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum dia com pendência até agora.</p>
               )}
-            </Button>
-          </div>
-        </div>
-
-        {isSyncing || logs.length > 0 ? (
-          <div className="space-y-3 pt-4 border-t border-border/40">
-            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-              <span>Progresso total</span>
-              <span>{progress}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
-
-            {(() => {
-              const done = logs.filter(l => l.status === 'success' || l.status === 'error');
-              if (done.length === 0) return null;
-              const totalRevenue = done.reduce((s, l) => s + (l.revenue ?? 0), 0);
-              const totalCoupons = done.reduce((s, l) => s + (l.diagnostics?.couponsReceived ?? 0), 0);
-              const totalMapped = done.reduce((s, l) => s + (l.diagnostics?.itemsMapped ?? 0), 0);
-              const totalUnmapped = done.reduce((s, l) => s + (l.diagnostics?.itemsUnmapped ?? 0), 0);
-              const errorDays = done.filter(l => l.status === 'error').length;
-              const warnDays = done.filter(l => !!l.warnings?.length).length;
-              const healthy = errorDays === 0 && warnDays === 0;
-              return (
-                <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border p-2 text-[11px] ${healthy ? 'border-green-500/30 bg-green-500/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
-                  <span className="flex items-center gap-1 font-medium">
-                    {healthy ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                    {healthy ? 'Dados íntegros' : 'Verificar pendências'}
-                  </span>
-                  <span>Faturamento: <strong>R$ {totalRevenue.toFixed(2)}</strong></span>
-                  <span>{totalCoupons} cupons</span>
-                  <span>{totalMapped} itens mapeados</span>
-                  {totalUnmapped > 0 && <span className="text-amber-600">{totalUnmapped} sem ficha técnica</span>}
-                  {errorDays > 0 && <span className="text-destructive">{errorDays} dia(s) com erro</span>}
-                  {warnDays > 0 && <span className="text-amber-600">{warnDays} dia(s) com alerta</span>}
-                </div>
-              );
-            })()}
-
-            <ScrollArea className="h-48 rounded-md border border-border/40 bg-muted/20 p-2">
-              <div className="space-y-1.5">
-                {logs.slice().reverse().map((log, i) => {
-                  const hasWarn = !!log.warnings?.length;
-                  const d = log.diagnostics;
-                  return (
-                  <div key={`${log.kioskName}-${log.date}-${i}`} className="flex items-start justify-between text-[11px] py-1 border-b border-border/10 last:border-0">
-                    <div className="flex items-center gap-2 pt-0.5">
-                      {log.status === 'success' && !hasWarn && <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />}
-                      {log.status === 'success' && hasWarn && <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500" />}
-                      {log.status === 'error' && <AlertCircle className="h-3 w-3 shrink-0 text-destructive" />}
-                      {log.status === 'loading' && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-blue-500" />}
-                      {log.status === 'pending' && <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                      <span className="font-mono text-muted-foreground">{format(new Date(log.date + 'T12:00:00Z'), 'dd/MM')}</span>
-                      <span className="font-medium">{log.kioskName}</span>
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5 max-w-[220px]">
-                      {log.status === 'success' && (
-                        <>
-                          <span className={`font-bold ${hasWarn ? 'text-amber-600' : 'text-green-600'}`}>R$ {log.revenue?.toFixed(2) ?? '0.00'}</span>
-                          {d && (
-                            <span className="text-[9px] text-muted-foreground" title={`${d.couponsReceived} cupons recebidos · ${d.itemsMapped} itens mapeados · ${d.itemsUnmapped} sem ficha técnica`}>
-                              {d.couponsReceived}c · {d.itemsMapped}m{d.itemsUnmapped > 0 ? ` · ${d.itemsUnmapped} s/ficha` : ''}
-                            </span>
-                          )}
-                          {hasWarn && (
-                            <span className="text-[9px] text-amber-600/80 text-right" title={log.warnings!.join('\n')}>
-                              {log.warnings![0]}
-                            </span>
-                          )}
-                          {hasWarn && d && d.unmappedSkus.length > 0 && (
-                            <span className="text-[9px] text-amber-600/60 text-right truncate w-full" title={d.unmappedSkus.map(s => `${s.sku} — ${s.name} (${s.count})`).join('\n')}>
-                              SKUs: {d.unmappedSkus.slice(0, 3).map(s => s.sku).join(', ')}{d.unmappedSkus.length > 3 ? '…' : ''}
-                            </span>
-                          )}
-                        </>
-                      )}
-                      {log.status === 'error' && (
-                        <>
-                          <span className="text-destructive font-bold">Falha{log.errorCode ? ` (${log.errorCode})` : ''}</span>
-                          {log.errorMessage && (
-                            <span className="text-[9px] text-destructive/70 truncate w-full text-right" title={log.errorMessage}>
-                              {log.errorMessage}
-                            </span>
-                          )}
-                        </>
-                      )}
-                      {log.status === 'loading' && <span className="text-blue-500 animate-pulse">Processando...</span>}
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
             </ScrollArea>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+        )}
+      </section>
+    </div>
   );
 }
