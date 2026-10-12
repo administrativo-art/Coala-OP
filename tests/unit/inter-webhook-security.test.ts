@@ -53,6 +53,16 @@ test("Inter receipt retention is 30 days", () => {
   assert.equal(interWebhookExpiry(now).getTime() - now, 30 * 24 * 60 * 60 * 1_000);
 });
 
+test("financial Firestore configuration keeps webhook receipt TTL enabled", async () => {
+  const config = JSON.parse(await readFile("firestore.financial.indexes.json", "utf8")) as {
+    fieldOverrides?: Array<{ collectionGroup?: string; fieldPath?: string; ttl?: boolean }>;
+  };
+  assert.ok(config.fieldOverrides?.some((field) =>
+    field.collectionGroup === "interWebhookRawEvents"
+    && field.fieldPath === "expiresAt"
+    && field.ttl === true));
+});
+
 test("Inter callback URL is HTTPS and contains no secret-bearing query", () => {
   assert.equal(cleanInterCobrancaWebhookUrl("https://coala.example/base?old=1").toString(), "https://coala.example/api/webhooks/inter/cobranca");
   assert.throws(() => cleanInterCobrancaWebhookUrl("http://coala.example"));
