@@ -132,7 +132,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Brand(compact = true, small = true)
                 Text("$greeting, ${state?.profile?.name?.substringBefore(' ') ?: "humano"}", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 30.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text(state?.profile?.email?.takeIf(String::isNotBlank) ?: state?.profile?.role.orEmpty(), color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(homeRoleSubtitle(state?.profile?.role), color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             ProfileAvatar(state?.profile?.name.orEmpty(), state?.profile?.avatarUrl) { navigate("profile") }
         }

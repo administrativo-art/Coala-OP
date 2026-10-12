@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { parseSchedulePeriod, safeAvatarUrl, safePersonColor, toMobileSchedule } from "../../src/features/collaborator-schedule/mobile-schedule";
+import { mobileProfileRole, parseSchedulePeriod, safeAvatarUrl, safePersonColor, toMobileSchedule, visibleTeamUnitIds } from "../../src/features/collaborator-schedule/mobile-schedule";
 import { goalDistributionDays, mobileGoalDays, mobileGoalSummary, type MobileGoalPeriodInput } from "../../src/features/goals/mobile-goals";
 import { defaultAdminPermissions, defaultGuestPermissions } from "../../src/types";
 
@@ -115,4 +115,29 @@ test("the schedule of other units needs its own app permission and stays inside 
   // O portal do colaborador continua sem unidades extras.
   const portal = readFileSync("src/features/collaborator-schedule/server.ts", "utf8");
   assert.match(portal, /extraTeamUnitIds: string\[\] \| "all" = \[\]/);
+});
+
+test("an admin without linked units keeps every unit with team shifts", () => {
+  const teamUnitIds = visibleTeamUnitIds(["dp-norte", "dp-sul"], new Set<string>(), "all");
+  assert.deepEqual(teamUnitIds, ["dp-norte", "dp-sul"]);
+  const mobile = toMobileSchedule({
+    year: 2026, month: 10, published: true,
+    teamUnits: teamUnitIds.map((id) => ({ id, name: id, shifts: [shift("u-ana", "2026-10-09")] })),
+  }, new Map());
+  assert.deepEqual(mobile.units.map((unit) => unit.id), ["dp-norte", "dp-sul"]);
+});
+
+test("a restricted user keeps only permitted team units", () => {
+  assert.deepEqual(
+    visibleTeamUnitIds(["dp-norte", "dp-sul"], new Set(["dp-norte"]), ["dp-norte"]),
+    ["dp-norte"],
+  );
+  assert.deepEqual(visibleTeamUnitIds(["dp-norte", "dp-sul"], new Set(), []), []);
+});
+
+test("the app profile prefers a registered function and falls back to the role", () => {
+  assert.equal(mobileProfileRole({ jobFunctionNames: [" Líder de loja "], jobRoleName: "Gerente" }), "Líder de loja");
+  assert.equal(mobileProfileRole({ jobFunctionNames: ["", "Atendente"], jobRoleName: "Gerente" }), "Atendente");
+  assert.equal(mobileProfileRole({ jobFunctionNames: [], jobRoleName: " Gerente " }), "Gerente");
+  assert.equal(mobileProfileRole({ jobFunctionNames: [""], jobRoleName: "" }), null);
 });
