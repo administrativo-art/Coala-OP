@@ -49,7 +49,7 @@ export function CentsInput({ value, onChange, disabled, className, ariaLabel }: 
           onChange(cents);
         }}
         className={cn(
-          "h-10 w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-right text-sm tabular-nums ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+          "h-10 w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-right text-sm tabular-nums ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
           className,
         )}
       />

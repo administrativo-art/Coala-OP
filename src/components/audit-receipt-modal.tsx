@@ -182,7 +182,7 @@ export function AuditReceiptModal({ activity, onOpenChange }: AuditReceiptModalP
           <TableCell colSpan={3}>
               <div className="flex gap-4 items-start">
                   {product.imageUrl && <Image src={product.imageUrl} alt={product.baseName} width={64} height={64} className="rounded-md object-cover"/>}
-                  <div className="flex-grow space-y-3">
+                  <div className="grow space-y-3">
                       <div>
                           <p className="font-semibold">{lot.productName}</p>
                           <p className="text-xs text-muted-foreground">Lote: {lot.lotNumber}</p>

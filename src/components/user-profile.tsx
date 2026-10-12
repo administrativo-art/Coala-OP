@@ -105,7 +105,7 @@ export function UserProfile({ variant = "avatar", collapsed = false }: { variant
               type="button"
               disabled={isUploadingPhoto}
               title={collapsed ? `${user.username} · ${profileName}` : undefined}
-              className={`group/user flex w-full items-center gap-2.5 rounded-ds-btn-lg border border-white/10 bg-white/[0.06] text-left text-ds-on-dark transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker ${collapsed ? "justify-center p-1.5" : "p-2"}`}
+              className={`group/user flex w-full items-center gap-2.5 rounded-ds-btn-lg border border-white/10 bg-white/6 text-left text-ds-on-dark transition-colors hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker ${collapsed ? "justify-center p-1.5" : "p-2"}`}
             >
               <Avatar className={`shrink-0 ring-2 ring-white/10 transition-[width,height] duration-300 motion-reduce:transition-none ${collapsed ? "h-9 w-9" : "h-10 w-10"}`}>
                 {isUploadingPhoto ? (

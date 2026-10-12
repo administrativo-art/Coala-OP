@@ -299,8 +299,8 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               className={cn(
-                'inline-flex h-[34px] items-center whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark',
-                tab === key ? 'border-ds-accent bg-ds-accent text-white' : 'border-white/[.12] text-ds-on-dark-2 hover:bg-white/[.06]',
+                'inline-flex h-[34px] items-center whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark',
+                tab === key ? 'border-ds-accent bg-ds-accent text-white' : 'border-white/12 text-ds-on-dark-2 hover:bg-white/6',
               )}
             >
               {label}
@@ -417,7 +417,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                               aria-expanded={open}
                               aria-label={`${open ? 'Recolher' : 'Expandir'} unidades de ${monthLabel(row.key)}`}
                               onClick={() => setExpandedMonths(prev => { const next = new Set(prev); if (next.has(row.key)) next.delete(row.key); else next.add(row.key); return next; })}
-                              className="inline-flex items-center gap-1.5 rounded-ds-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                              className="inline-flex items-center gap-1.5 rounded-ds-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
                             >
                               <ChevronRight aria-hidden="true" className={cn('h-4 w-4 text-ds-ink-faint transition-transform motion-reduce:transition-none', open && 'rotate-90')} />
                               {monthLabel(row.key)}
@@ -503,7 +503,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                       aria-checked={perfView === key}
                       onClick={() => { setPerfView(key); setPerfTarget('all'); }}
                       className={cn(
-                        'h-8 rounded-[9px] px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
+                        'h-8 rounded-[9px] px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
                         perfView === key ? 'bg-ds-surface text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-ds-ink-muted hover:text-ds-ink',
                       )}
                     >
@@ -516,7 +516,7 @@ export function GoalsAnalysisDashboard({ initialTab = 'overview' }: { initialTab
                     aria-label={perfView === 'group' ? 'Escolher grupo' : 'Escolher unidade'}
                     value={perfTarget}
                     onChange={event => setPerfTarget(event.target.value)}
-                    className="h-9 rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-bold text-ds-ink outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                    className="h-9 rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-[13px] font-bold text-ds-ink outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
                   >
                     <option value="all">{perfView === 'group' ? 'Todos os grupos' : 'Todas as unidades'}</option>
                     {perfTargets.map(target => <option key={target.id} value={target.id}>{target.name}</option>)}

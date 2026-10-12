@@ -1,12 +1,12 @@
 # Tokens
 
-Definidos em `src/app/globals.css` (bloco “Guia de design do Coala”) e expostos no `tailwind.config.ts`.
+Definidos e expostos ao Tailwind CSS 4 em `src/app/globals.css`, no bloco “Guia de design do Coala” e em `@theme`.
 
 ## Namespace
 
 Todos os tokens do guia usam o prefixo **`--ds-`**. O projeto já tem tokens shadcn em HSL com nomes como `--accent`, `--border` e `--background`; o guia não sobrescreve esses nomes.
 
-No Tailwind (`theme.extend.colors.ds`), as chaves são curtas e não repetem o nome completo da variável:
+No Tailwind (variáveis de tema `--color-ds-*`), as chaves são curtas e não repetem o nome completo da variável:
 
 | Variável CSS | Classe Tailwind |
 |---|---|

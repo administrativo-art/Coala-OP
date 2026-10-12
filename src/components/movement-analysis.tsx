@@ -175,7 +175,7 @@ function TransferCard({ data }: { data: TransferCardModel }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold leading-tight line-clamp-2">{data.name}</CardTitle>
       </CardHeader>
-      <CardContent className="flex-grow">
+      <CardContent className="grow">
         <div className={cn("text-4xl font-bold flex items-center gap-2", periodColor)}>
           <PeriodIcon className="h-8 w-8" />
           <span>{data.periodChangePct.toFixed(0)}%</span>
@@ -298,7 +298,7 @@ function SummaryMetricCard({
   }[tone];
 
   return (
-    <Card className={cn("shadow-sm", toneClasses)}>
+    <Card className={cn("shadow-xs", toneClasses)}>
       <CardContent className="flex items-start justify-between gap-3 p-4">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -352,7 +352,7 @@ function ComparisonRowCard({
   const status = getComparisonStatusMeta(row.divergence);
 
   return (
-    <Card className="shadow-sm">
+    <Card className="shadow-xs">
       <CardHeader className="space-y-3 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
@@ -545,7 +545,7 @@ function BalanceAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDate 
        ) : (
         <div className="space-y-6">
           {balancesData.map(balanceData => (
-            <div key={balanceData.baseProductId} className="rounded-xl border bg-card p-4 shadow-sm">
+            <div key={balanceData.baseProductId} className="rounded-xl border bg-card p-4 shadow-xs">
               <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                 <h3 className="text-lg font-semibold">{balanceData.baseProductName}</h3>
                 <Badge variant="outline">{balanceData.unit}</Badge>
@@ -864,7 +864,7 @@ function ComparisonAnalysisView({ kioskId, startPeriod, endPeriod, systemStartDa
         />
       </div>
 
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="rounded-xl border bg-card p-4 shadow-xs">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2 lg:flex-1 lg:min-w-0">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -1350,7 +1350,7 @@ export function MovementAnalysis() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border bg-card p-4 shadow-sm">
+                  <div className="rounded-2xl border bg-card p-4 shadow-xs">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                       <div className="grid flex-1 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                         <div className="flex flex-col gap-1.5">

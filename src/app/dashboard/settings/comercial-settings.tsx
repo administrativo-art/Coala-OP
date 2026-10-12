@@ -137,9 +137,9 @@ export function ComercialSettings() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue={defaultTab} className="space-y-6">
-        <TabsList className="flex h-auto w-full overflow-x-auto rounded-2xl border bg-background p-1 shadow-sm">
+        <TabsList className="flex h-auto w-full overflow-x-auto rounded-2xl border bg-background p-1 shadow-xs">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="flex-shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold">
+            <TabsTrigger key={tab.value} value={tab.value} className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold">
               <span className="inline-flex items-center gap-2">
                 {tab.value === "pricing" ? <Tags className="h-4 w-4" /> : tab.value === "competitors" ? <ScanSearch className="h-4 w-4" /> : <Goal className="h-4 w-4" />}
                 {tab.label}

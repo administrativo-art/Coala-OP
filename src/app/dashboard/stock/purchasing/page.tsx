@@ -77,7 +77,7 @@ export default function PurchasingHubPage() {
                         <CardTitle className="text-xl mb-2">Registrar Nova Compra</CardTitle>
                         <CardDescription className="text-sm">Crie uma nova pesquisa de preços em branco.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <div className="text-primary font-semibold flex items-center h-10">
                             {isCreating ? (
                                 <>
@@ -99,7 +99,7 @@ export default function PurchasingHubPage() {
                             Pesquisas em Andamento ({openSessions.length})
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0 flex-grow">
+                    <CardContent className="p-0 grow">
                         <ScrollArea className="h-48">
                             <div className="p-4 space-y-2">
                             {purchaseLoading ? <Skeleton className="h-24 w-full" /> : 

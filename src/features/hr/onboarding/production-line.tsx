@@ -209,9 +209,9 @@ export function OnboardingProductionLine({
 
   return (
     <div className="min-w-0 space-y-4 text-slate-950">
-      <header className="sticky top-[-1px] z-20 -mx-3 flex flex-wrap items-center gap-3 border-b border-[#e0dcd4] bg-[#f5f3ee]/95 px-3 py-3 backdrop-blur-xl">
+      <header className="sticky -top-px z-20 -mx-3 flex flex-wrap items-center gap-3 border-b border-[#e0dcd4] bg-[#f5f3ee]/95 px-3 py-3 backdrop-blur-xl">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="text-[11px] font-black uppercase tracking-[0.1em] text-[#df2f78]">Pessoal</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-[#df2f78]">Pessoal</span>
           <span className="h-1 w-1 rounded-full bg-[#c9c3b8]" />
           <span className="text-[13px] font-bold text-[#57534a]">Integração</span>
         </div>
@@ -238,10 +238,10 @@ export function OnboardingProductionLine({
         <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2 lg:flex-none">
           <label className="relative min-w-[230px] flex-1 lg:w-[270px] lg:flex-none">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Buscar candidato, cargo ou unidade…" className="h-10 w-full rounded-xl border border-[#dad5cb] bg-white pl-9 pr-3 text-xs font-medium outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100" />
+            <input value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Buscar candidato, cargo ou unidade…" className="h-10 w-full rounded-xl border border-[#dad5cb] bg-white pl-9 pr-3 text-xs font-medium outline-hidden focus:border-pink-300 focus:ring-2 focus:ring-pink-100" />
           </label>
           <label className="relative">
-            <select value={processStateFilter} onChange={(event) => onProcessStateFilterChange(event.target.value as ProcessStateFilter)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-none">
+            <select value={processStateFilter} onChange={(event) => onProcessStateFilterChange(event.target.value as ProcessStateFilter)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-hidden">
               <option value="active">Em andamento</option>
               <option value="completed">Concluídas</option>
               <option value="cancelled">Encerradas</option>
@@ -249,7 +249,7 @@ export function OnboardingProductionLine({
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
           </label>
           <label className="relative">
-            <select value={phaseFilter} onChange={(event) => onPhaseFilterChange(event.target.value)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-none">
+            <select value={phaseFilter} onChange={(event) => onPhaseFilterChange(event.target.value)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-hidden">
               <option value="all">Todas as fases</option>
               {FUNNEL_STAGES.filter((stage) => stage.filterId).map((stage) => <option key={stage.id} value={stage.filterId}>{stage.short}</option>)}
             </select>
@@ -257,7 +257,7 @@ export function OnboardingProductionLine({
           </label>
           {processStateFilter === "active" ? (
             <label className="relative">
-              <select value={healthFilter} onChange={(event) => onHealthFilterChange(event.target.value as "all" | OnboardingHealth)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-none">
+              <select value={healthFilter} onChange={(event) => onHealthFilterChange(event.target.value as "all" | OnboardingHealth)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-hidden">
                 <option value="all">Todas as situações</option>
                 <option value="overdue">Atrasados</option><option value="blocked">Bloqueados</option><option value="hr_action">Ação do RH</option><option value="waiting_person">Aguardando pessoa</option><option value="on_track">Em dia</option>
               </select>
@@ -265,7 +265,7 @@ export function OnboardingProductionLine({
             </label>
           ) : null}
           <label className="relative">
-            <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as OnboardingSortMode)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-none">
+            <select value={sortMode} onChange={(event) => onSortModeChange(event.target.value as OnboardingSortMode)} className="h-10 appearance-none rounded-xl border border-[#dad5cb] bg-white pl-3 pr-8 text-xs font-bold text-stone-600 outline-hidden">
               <option value="priority">Prioridade</option><option value="admission">Admissão</option><option value="stalled">Tempo parado</option><option value="name">Nome</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
@@ -274,7 +274,7 @@ export function OnboardingProductionLine({
         </div>
       </div>
 
-      <section className="rounded-[20px] border border-[#e2ded6] bg-white p-4 shadow-sm md:p-5">
+      <section className="rounded-[20px] border border-[#e2ded6] bg-white p-4 shadow-xs md:p-5">
         <div className="flex flex-wrap items-baseline gap-3">
           <p className="text-[10px] font-black uppercase tracking-[0.11em] text-[#8a857b]">Onde as pessoas estão paradas</p>
           <span className="flex-1" />
@@ -301,11 +301,11 @@ export function OnboardingProductionLine({
       {groups.map((group) => (
         <section key={group.id} className="space-y-2.5">
           <div className="flex items-center gap-3">
-            <span className={`rounded-lg px-3 py-1.5 text-[10.5px] font-black uppercase tracking-[0.05em] ${group.badgeClass}`}>{group.label}</span>
+            <span className={`rounded-lg px-3 py-1.5 text-[10.5px] font-black uppercase tracking-wider ${group.badgeClass}`}>{group.label}</span>
             <span className="text-xs font-semibold text-stone-400">{group.processes.length} pessoa{group.processes.length === 1 ? "" : "s"} · {group.meta}</span>
             <span className="h-px flex-1 bg-[#e2ded6]" />
           </div>
-          <div className="overflow-x-auto rounded-[18px] border border-[#e2ded6] bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-[18px] border border-[#e2ded6] bg-white shadow-xs">
             <div className="min-w-[930px]">
               {group.processes.map((process, processIndex) => {
                 const operational = resolveOnboardingOperationalStatus(process, nowDate);
@@ -325,7 +325,7 @@ export function OnboardingProductionLine({
                       <span className="min-w-0"><span className="block truncate text-[13.5px] font-bold tracking-[-0.01em]">{process.candidateName ?? "Pessoa sem nome"}</span><span className="mt-0.5 block truncate text-[11px] font-medium text-stone-400">{process.functionName ?? process.jobRoleName ?? "Função não informada"} · {process.unitName ?? "Unidade não informada"}</span></span>
                     </span>
                     <span className="min-w-0">
-                      <span className="flex gap-1">{FUNNEL_STAGES.map((stage, index) => <span key={stage.id} className={`relative grid h-[22px] flex-1 place-items-center overflow-hidden rounded-md font-mono text-[9.5px] font-bold ${index < currentIndex ? "bg-emerald-100 text-emerald-700" : index === currentIndex ? "bg-pink-600 text-white" : "bg-stone-100 text-stone-400"}`}>{index + 1}{index === currentIndex && process.status !== "completed" ? <span className="absolute inset-y-0 left-0 w-1/3 animate-pulse bg-gradient-to-r from-transparent via-white/50 to-transparent" /> : null}</span>)}</span>
+                      <span className="flex gap-1">{FUNNEL_STAGES.map((stage, index) => <span key={stage.id} className={`relative grid h-[22px] flex-1 place-items-center overflow-hidden rounded-md font-mono text-[9.5px] font-bold ${index < currentIndex ? "bg-emerald-100 text-emerald-700" : index === currentIndex ? "bg-pink-600 text-white" : "bg-stone-100 text-stone-400"}`}>{index + 1}{index === currentIndex && process.status !== "completed" ? <span className="absolute inset-y-0 left-0 w-1/3 animate-pulse bg-linear-to-r from-transparent via-white/50 to-transparent" /> : null}</span>)}</span>
                       <span className="mt-1.5 flex items-center gap-2"><span className={`truncate text-[11.5px] font-bold ${health.textClass}`}>{progress.label}</span><span className="h-1 w-1 rounded-full bg-stone-300" /><span className="text-[11px] font-semibold text-stone-400">{operational.daysInStage}d · {docs.approved}/{docs.total} docs</span></span>
                     </span>
                     <span className="min-w-0"><span className={`inline-flex rounded-lg border px-2.5 py-1 text-[9.5px] font-black uppercase tracking-[0.03em] ${health.badgeClass}`}>{health.label}</span><span className="mt-1 block line-clamp-2 text-xs font-semibold leading-snug text-stone-600">{operational.headline}</span><span className="mt-0.5 block text-[10px] font-bold text-stone-400">Responsável: {responsibilityLabel(operational.responsible)}</span></span>
@@ -340,7 +340,7 @@ export function OnboardingProductionLine({
 
       {hasMore && onLoadMore ? (
         <div className="flex justify-center pt-1">
-          <button type="button" disabled={loadingMore} onClick={onLoadMore} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#d8d3c9] bg-white px-4 text-xs font-black text-stone-700 shadow-sm hover:border-pink-300 hover:text-pink-700 disabled:opacity-60">
+          <button type="button" disabled={loadingMore} onClick={onLoadMore} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#d8d3c9] bg-white px-4 text-xs font-black text-stone-700 shadow-xs hover:border-pink-300 hover:text-pink-700 disabled:opacity-60">
             {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             {loadingMore ? "Carregando…" : "Carregar mais integrações"}
           </button>

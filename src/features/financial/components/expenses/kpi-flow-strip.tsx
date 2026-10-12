@@ -115,7 +115,7 @@ export function KpiFlowStrip({
           aria-pressed={auditActive}
           title="Filtrar a lista por pendências de auditoria"
           className={cn(
-            "flex min-h-[190px] w-full flex-col border-t border-ds-divider bg-ds-warn-bg px-5 py-[18px] text-left text-inherit transition-colors hover:bg-ds-warn-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink lg:border-l lg:border-t-0",
+            "flex min-h-[190px] w-full flex-col border-t border-ds-divider bg-ds-warn-bg px-5 py-[18px] text-left text-inherit transition-colors hover:bg-ds-warn-bg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent-ink lg:border-l lg:border-t-0",
             auditActive && "bg-ds-warn-bg shadow-[inset_0_0_0_2px_var(--ds-warn)]",
           )}
         >

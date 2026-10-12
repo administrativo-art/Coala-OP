@@ -41,8 +41,8 @@ export function ControlIndicator({ value, label, tone, active, onClick }: Indica
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "border-b-2 border-transparent px-4 py-3 text-left transition-colors hover:bg-white/[.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark",
-        active && ["bg-white/[.05]", toneClasses.border]
+        "border-b-2 border-transparent px-4 py-3 text-left transition-colors hover:bg-white/5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark",
+        active && ["bg-white/5", toneClasses.border]
       )}
     >
       <div className={cn("text-[34px] font-extrabold leading-none tracking-[-0.04em]", zero ? "text-ds-indicator-zero" : toneClasses.value)}>
@@ -81,7 +81,7 @@ export function ControlSearch({ value, onChange, placeholder, onSubmit, classNam
         }}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-none placeholder:text-ds-on-dark-muted"
+        className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-hidden placeholder:text-ds-on-dark-muted"
       />
       {value ? (
         <button type="button" onClick={() => onChange("")} aria-label="Limpar busca" className="text-ds-on-dark-muted hover:text-white">

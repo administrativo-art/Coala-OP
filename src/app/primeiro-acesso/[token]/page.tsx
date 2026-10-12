@@ -123,7 +123,7 @@ export default function FirstAccessPage() {
   return (
     <main className="min-h-screen bg-[#F4ECD8] px-5 py-10 text-[#241A24]">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-xl items-center">
-        <div className="w-full rounded-2xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
+        <div className="w-full rounded-2xl border border-black/10 bg-white p-6 shadow-xs sm:p-8">
           <div className="mb-6 flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-pink-50 text-pink-600">
               <KeyRound className="h-5 w-5" />
@@ -241,7 +241,7 @@ export default function FirstAccessPage() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="new-password"
-                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm font-semibold outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm font-semibold outline-hidden focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
                   />
                   <button
                     type="button"
@@ -264,7 +264,7 @@ export default function FirstAccessPage() {
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
-                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-hidden focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
                 />
               </div>
 

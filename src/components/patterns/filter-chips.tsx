@@ -34,10 +34,10 @@ export function FilterChips({ chips, value, onChange, allLabel = "Todas", allCou
             aria-pressed={active}
             onClick={() => onChange(c.value || null)}
             className={cn(
-              "inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark",
+              "inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-ds-pill border px-[14px] text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark",
               active
                 ? "border-ds-accent bg-ds-accent text-white"
-                : "border-white/[.12] text-ds-on-dark-2 hover:bg-white/[.06]"
+                : "border-white/12 text-ds-on-dark-2 hover:bg-white/6"
             )}
           >
             {c.label}

@@ -62,13 +62,13 @@ function ProductCard({ product, lineName, selected, onOpen }: { product: Product
       aria-pressed={selected}
       data-ui="product-card"
       className={cn(
-        'flex flex-col overflow-hidden rounded-ds-card border bg-ds-surface text-left outline-none',
-        'transition-[transform,box-shadow] duration-[180ms] ease-ds-lift hover:-translate-y-[3px] hover:shadow-ds-lift',
+        'flex flex-col overflow-hidden rounded-ds-card border bg-ds-surface text-left outline-hidden',
+        'transition-[transform,box-shadow] duration-180 ease-ds-lift hover:translate-y-[-3px] hover:shadow-ds-lift',
         'focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2 motion-reduce:hover:translate-y-0',
         selected ? 'border-ds-accent-ink bg-ds-accent-row' : 'border-ds-border',
       )}
     >
-      <SheetThumb imageUrl={product.imageUrl} name={product.name} className="aspect-[4/3] w-full" sizes="(min-width:1280px) 20vw, (min-width:768px) 28vw, 50vw" />
+      <SheetThumb imageUrl={product.imageUrl} name={product.name} className="aspect-4/3 w-full" sizes="(min-width:1280px) 20vw, (min-width:768px) 28vw, 50vw" />
       <div className="flex flex-1 flex-col gap-2 p-3">
         {lineName && <p className={kicker}>{lineName}</p>}
         <p className="line-clamp-2 text-[14px] font-extrabold leading-tight text-ds-ink">{product.name}</p>
@@ -103,7 +103,7 @@ function ProductSummaryPanel({ product, lineName, onClose, onOpenSheet }: { prod
     >
       {product && (
         <>
-          <SheetThumb imageUrl={product.imageUrl} name={product.name} className="aspect-[16/10] w-full rounded-ds-card border border-ds-border" sizes="460px" />
+          <SheetThumb imageUrl={product.imageUrl} name={product.name} className="aspect-16/10 w-full rounded-ds-card border border-ds-border" sizes="460px" />
           <div className="grid grid-cols-2 gap-4">
             <PanelField label="Tolerância">{product.portionTolerance ? `±${product.portionTolerance} g` : '—'}</PanelField>
             <PanelField label="Alergênicos">{allergenText}</PanelField>
@@ -180,7 +180,7 @@ function ExpandedPanel({ product, lineName, origin, onClose }: { product: Produc
             type="button"
             onClick={handleClose}
             aria-label="Voltar para as fichas técnicas"
-            className="flex h-9 w-9 items-center justify-center rounded-ds-btn border border-white/[.12] text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+            className="flex h-9 w-9 items-center justify-center rounded-ds-btn border border-white/12 text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
           >
             <ChevronLeft aria-hidden="true" size={18} />
           </button>
@@ -314,10 +314,10 @@ export function CatalogoView({ embedded = false }: { embedded?: boolean } = {}) 
                 placeholder="Buscar em todas as mercadorias..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="h-11 w-full rounded-ds-btn border border-white/[.12] bg-white/[.06] pl-9 pr-10 text-[14px] font-semibold text-ds-on-dark outline-none placeholder:text-ds-on-dark-muted focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                className="h-11 w-full rounded-ds-btn border border-white/12 bg-white/6 pl-9 pr-10 text-[14px] font-semibold text-ds-on-dark outline-hidden placeholder:text-ds-on-dark-muted focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
               />
               {search && (
-                <button type="button" aria-label="Limpar busca" onClick={() => setSearch('')} className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-ds-sm text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker">
+                <button type="button" aria-label="Limpar busca" onClick={() => setSearch('')} className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-ds-sm text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker">
                   <X aria-hidden="true" size={14} />
                 </button>
               )}
@@ -327,7 +327,7 @@ export function CatalogoView({ embedded = false }: { embedded?: boolean } = {}) 
 
           {loading && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5" aria-busy="true">
-              {Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-[4/5] animate-pulse rounded-ds-card bg-ds-muted" />)}
+              {Array.from({ length: 10 }).map((_, i) => <div key={i} className="aspect-4/5 animate-pulse rounded-ds-card bg-ds-muted" />)}
             </div>
           )}
 

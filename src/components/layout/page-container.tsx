@@ -34,7 +34,7 @@ export function PageContainer<TElement extends ElementType = "div">({
       className={cn(
         "mx-auto w-full min-w-0",
         PAGE_CONTAINER_WIDTH_CLASS[variant],
-        surface && "financial-page-surface rounded-[22px] bg-[#f4f2ec] p-4 shadow-sm sm:p-6",
+        surface && "financial-page-surface rounded-[22px] bg-[#f4f2ec] p-4 shadow-xs sm:p-6",
         className
       )}
       {...props}

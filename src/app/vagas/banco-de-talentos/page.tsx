@@ -404,7 +404,7 @@ export default function BancoDeTalentosPage() {
     <div className="talentos-publico min-h-screen bg-[#F4ECD8] text-[#2A1F2A]">
       <PageStyles />
 
-      <header className="sticky top-0 z-40 border-b border-[#2A1F2A]/10 bg-[#F4ECD8]/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-[#2A1F2A]/10 bg-[#F4ECD8]/95 backdrop-blur-sm">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center gap-4 px-5">
           <Link href="/vagas" className="flex shrink-0 items-center gap-1.5 text-[13px] font-bold text-[#5B4C5B] transition hover:text-[#EE6FA8]">
             <ChevronRight className="h-4 w-4" /> Início

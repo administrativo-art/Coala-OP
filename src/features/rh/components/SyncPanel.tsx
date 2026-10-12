@@ -43,7 +43,7 @@ export function SyncPanel() {
       </div>
 
       {/* Log history */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-gray-100 bg-white shadow-xs overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-50">
           <h2 className="text-sm font-semibold text-gray-800">Histórico de sincronizações</h2>
         </div>

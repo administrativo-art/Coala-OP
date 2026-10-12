@@ -57,7 +57,7 @@ function InactiveUserRow({
   saving: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <div
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -139,7 +139,7 @@ export function InactiveUsersScreen() {
   if (!canView) {
     return (
       <div className="mx-auto w-full max-w-3xl">
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-xs">
           <h1 className="text-lg font-semibold">Acesso negado</h1>
           <p className="mt-1 text-sm text-slate-500">Você não tem permissão para visualizar os usuários.</p>
         </div>

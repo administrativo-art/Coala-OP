@@ -288,7 +288,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
             <div className="space-y-2">
               {task.status === 'awaiting_approval' ? (
                 <div className="flex justify-end gap-2">
-                  <div className="flex-grow"><Textarea placeholder="Justificativa (obrigatório para rejeitar)" value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} /></div>
+                  <div className="grow"><Textarea placeholder="Justificativa (obrigatório para rejeitar)" value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} /></div>
                   <Button variant="destructive" onClick={handleReject} disabled={!rejectionNotes}><X className="mr-2"/> Rejeitar</Button>
                   <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleApprove}><Check className="mr-2"/> Aprovar</Button>
                 </div>

@@ -114,15 +114,15 @@ export function MyProfilePage() {
   return (
     <div className="max-w-2xl space-y-4">
       {/* Header card */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm p-5">
+      <div className="rounded-xl border border-gray-100 bg-white shadow-xs p-5">
         <div className="flex items-start gap-4">
           <div className="shrink-0">
             {employee.photo_url ? (
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-white shadow">
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-white shadow-sm">
                 <Image src={employee.photo_url} alt={employee.name} width={64} height={64} className="object-cover w-full h-full" />
               </div>
             ) : (
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center ring-2 ring-white shadow">
+              <div className="w-16 h-16 rounded-full bg-linear-to-br from-violet-400 to-violet-600 flex items-center justify-center ring-2 ring-white shadow-sm">
                 <span className="text-white text-lg font-semibold">{initials}</span>
               </div>
             )}

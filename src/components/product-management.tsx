@@ -227,7 +227,7 @@ export function ItemManagement() {
             <Button onClick={handleAddNewClick} className="w-full sm:w-auto">
               <PlusCircle className="mr-2 h-4 w-4" /> Adicionar insumo
             </Button>
-            <div className="relative flex-grow">
+            <div className="relative grow">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por insumo, marca, cód. de barras..."

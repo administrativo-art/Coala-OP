@@ -419,8 +419,8 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="grid gap-3 bg-transparent px-6 py-3 sm:grid-cols-[minmax(260px,360px)_1fr] sm:items-center sm:px-10">
-          <div className="rounded-xl border border-ds-border bg-white p-4 shadow-sm">
-            <label><span className="mb-2 block text-[11px] font-bold uppercase tracking-[.1em] text-muted-foreground">Data impressa no malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
+          <div className="rounded-xl border border-ds-border bg-white p-4 shadow-xs">
+            <label><span className="mb-2 block text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Data impressa no malote</span><Input type="date" max={todayInClosureTimezone()} value={date} disabled={!editable || changingDate || !!working} onChange={(event) => void changeDate(event.target.value)} className="h-11 bg-white" /></label>
           </div>
           <div className="flex min-h-8 items-center gap-2 text-xs text-ds-ink-muted sm:justify-end">
             {changingDate && <><Loader2 className="h-4 w-4 animate-spin" />Abrindo a data…</>}

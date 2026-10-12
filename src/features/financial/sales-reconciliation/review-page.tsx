@@ -460,7 +460,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
               className="flex w-[38px] items-center justify-center border-r border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronLeft className="h-4 w-4" /></button>
             <input type="date" aria-label="Dia das vendas" required disabled={busy} value={date} max={publishedThrough}
               onChange={event => changeDate(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-none" />
+              className="min-w-0 flex-1 bg-transparent px-2.5 text-[13.5px] font-semibold outline-hidden" />
             <button type="button" aria-label="Próximo dia" disabled={nextDayDisabled} onClick={() => changeDate(addDays(date, 1))}
               className="flex w-[38px] items-center justify-center border-l border-ds-border text-ds-ink-muted hover:bg-ds-muted disabled:opacity-35"><ChevronRight className="h-4 w-4" /></button>
           </div>
@@ -606,7 +606,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
                   { id: "all", icon: "", text: "Todas", count: view.inChannel.length, tone: "bg-ds-muted text-ds-ink-muted" },
                   { id: "auto", icon: "✓ ", text: "Conferidas", count: view.auto, tone: "bg-ds-ok-bg text-ds-ok" },
                 ] as const).map(tab => <button key={tab.id} type="button" aria-pressed={caseFilter === tab.id} onClick={() => pickCaseFilter(tab.id)}
-                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-bold", caseFilter === tab.id ? "bg-white text-ds-ink shadow-sm" : "text-ds-ink-faint")}>
+                  className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-bold", caseFilter === tab.id ? "bg-white text-ds-ink shadow-xs" : "text-ds-ink-faint")}>
                   {tab.icon}{tab.text}
                   <span className={cn("inline-flex h-[18px] min-w-5 items-center justify-center rounded-full px-1.5 text-[10.5px]", tab.tone)}>{tab.count}</span>
                 </button>)}
@@ -632,7 +632,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           {rows.length ? <>
             <div className="overflow-x-auto">
               <div role="table" aria-label="Comparação de pagamentos do PDV com capturas Stone">
-                <div role="row" className={cn(rowGrid, "h-[34px] bg-ds-input text-[10px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint")}>
+                <div role="row" className={cn(rowGrid, "h-[34px] bg-ds-input text-[10px] font-extrabold uppercase tracking-widest text-ds-ink-faint")}>
                   <span role="columnheader">Hora</span><span role="columnheader">Meio</span><span role="columnheader">PDV</span><span role="columnheader">Stone</span>
                   <span role="columnheader" className="text-right">Diferença</span><span role="columnheader">Situação</span>
                 </div>
@@ -704,7 +704,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
             <p className="text-[12.5px] leading-[1.55] text-ds-ink-faint">Os dados recebidos ficam armazenados no Coala; a tela não solicita novamente um arquivo já processado. Sem arquivo íntegro e vínculo por StoneCode, pagamentos Pix não são classificados como ausentes na Stone.</p>
             <p className={cn(label, "mb-0 mt-1")}>PDV não comparado ({uncompared.length}){uncompared.length ? ` · ${money(uncomparedSum)}` : ""}</p>
             {uncompared.length ? <div className="overflow-x-auto rounded-xl border border-ds-border"><div className="min-w-[640px]">
-              <div className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint">
+              <div className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-widest text-ds-ink-faint">
                 <span>Hora</span><span>Cupom</span><span>ID da evidência</span><span>Situação</span><span className="text-right">Valor</span>
               </div>
               {(showAllUncompared ? uncompared : uncompared.slice(0, UNCOMPARED_PREVIEW)).map(fact => <div key={fact.id} className="grid grid-cols-[80px_120px_minmax(0,1fr)_160px_120px] items-center gap-3 border-t border-ds-divider px-3.5 py-2 text-xs">
@@ -723,7 +723,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           {coverageTab === "issues" ? <div className="flex flex-col gap-1.5">
             {issues.slice(currentIssuePage * ISSUE_PAGE_SIZE, (currentIssuePage + 1) * ISSUE_PAGE_SIZE).map((issue, index) =>
               <div key={`${currentIssuePage}:${index}`} className="grid items-center gap-x-3 gap-y-1 rounded-[10px] border border-ds-alert-border bg-ds-warn-bg px-3 py-[9px] text-[12.5px] text-ds-alert-ink sm:grid-cols-[62px_minmax(0,260px)_minmax(0,1fr)]">
-                <span className="rounded-md bg-ds-warn-bg py-[3px] text-center text-[10px] font-extrabold tracking-[0.1em]">{issue.source.toUpperCase()}</span>
+                <span className="rounded-md bg-ds-warn-bg py-[3px] text-center text-[10px] font-extrabold tracking-widest">{issue.source.toUpperCase()}</span>
                 <span className="break-all font-mono text-[11.5px]">{issue.reference}</span>
                 <span>{issueReasons[issue.reason]}</span>
               </div>)}
@@ -738,7 +738,7 @@ export function SalesReviewPage({ initialDate = "", initialMonth = "", initialMa
           {coverageTab === "events" ? <>
             <p className="mb-2.5 text-[12.5px] text-ds-ink-faint">Decimais originais da fonte, sem arredondamento.</p>
             <div className="max-h-[360px] overflow-auto rounded-xl border border-ds-border"><div className="min-w-[760px]">
-              <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint">
+              <div className="sticky top-0 grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] gap-3 bg-ds-input px-3.5 py-2 text-[10px] font-extrabold uppercase tracking-widest text-ds-ink-faint">
                 <span>Seção</span><span>Transação</span><span className="text-right">Bruto original</span><span className="text-right">Cancelado original</span><span>Contadores</span>
               </div>
               {result.stoneEvents.map(event => <div key={`${event.sourceSection}:${event.transactionId}`} className="grid grid-cols-[170px_minmax(0,1fr)_130px_130px_minmax(0,1.2fr)] items-center gap-3 border-t border-ds-divider px-3.5 py-[7px] text-[11.5px]">

@@ -105,7 +105,7 @@ function PriceHistoryList() {
     return (
         <div className="space-y-4">
              <div className="flex flex-col sm:flex-row items-center gap-2 p-3 border rounded-lg bg-muted/50">
-                <div className="relative flex-grow w-full">
+                <div className="relative grow w-full">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                         placeholder="Buscar no histórico..."

@@ -386,7 +386,7 @@ function EscalaGrid({ dias, visibleCols, holidayMap }: EscalaGridProps) {
 
 function EscalaTopbar({ onExport }: { onExport: () => void }) {
   return (
-    <header className="sticky top-0 z-50 h-14 flex items-center gap-3 border-b bg-background/95 backdrop-blur-sm px-6 shrink-0">
+    <header className="sticky top-0 z-50 h-14 flex items-center gap-3 border-b bg-background/95 backdrop-blur-xs px-6 shrink-0">
       <span
         className="rounded-full px-3 py-1 text-[13px] font-semibold text-white tracking-tight select-none"
         style={{ backgroundColor: CLR_GREEN }}

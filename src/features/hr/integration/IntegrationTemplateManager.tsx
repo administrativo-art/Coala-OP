@@ -440,7 +440,7 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
           <div className="border-b p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar modelo..." className="h-10 w-full rounded-xl border bg-slate-50 pl-9 pr-3 text-sm outline-none" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar modelo..." className="h-10 w-full rounded-xl border bg-slate-50 pl-9 pr-3 text-sm outline-hidden" />
             </div>
           </div>
           <div className="max-h-[680px] space-y-1 overflow-y-auto p-2">
@@ -559,7 +559,7 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
                         </div>
                         <div className="rounded-xl bg-slate-100 p-4">
                           <p className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Prévia simplificada</p>
-                          <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+                          <div className="overflow-hidden rounded-xl bg-white shadow-xs">
                             <div className="bg-emerald-800 px-5 py-4 font-black text-white">{isStart ? "Coala Shakes" : "Coala One"}</div>
                             <div className="space-y-4 p-5">
                               <p className="text-lg font-black text-slate-950">{communication.title}</p>
@@ -582,9 +582,9 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
                 <div className="space-y-5 rounded-xl border bg-white p-5">
                   <div className="flex items-start gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700"><Clock3 className="h-5 w-5" /></span><div><h3 className="font-black">Período de experiência</h3><p className="text-sm text-slate-500">A admissão calculará períodos, avaliações, alertas e decisão automaticamente.</p></div></div>
                   <div className="grid gap-4 md:grid-cols-3">
-                    <label className="text-xs font-bold text-slate-500">Primeiro período<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min="1" max={PROBATION_TOTAL_DAYS - 1} value={probationConfig.firstPeriodDays} disabled={!canManage} onChange={(event) => { const firstPeriodDays = Number(event.target.value); patchDraft({ probation: { ...probationConfig, firstPeriodDays, secondPeriodDays: PROBATION_TOTAL_DAYS - firstPeriodDays } }); }} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
-                    <label className="text-xs font-bold text-slate-500">Prorrogação automática<div className="mt-1 flex items-center rounded-lg border bg-slate-50"><input type="number" value={probationConfig.secondPeriodDays} disabled className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm font-black text-slate-500 outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
-                    <label className="text-xs font-bold text-slate-500">Janela de avaliação<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min="1" max="90" value={probationConfig.evaluationWindowDays} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, evaluationWindowDays: Number(event.target.value) } })} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
+                    <label className="text-xs font-bold text-slate-500">Primeiro período<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min="1" max={PROBATION_TOTAL_DAYS - 1} value={probationConfig.firstPeriodDays} disabled={!canManage} onChange={(event) => { const firstPeriodDays = Number(event.target.value); patchDraft({ probation: { ...probationConfig, firstPeriodDays, secondPeriodDays: PROBATION_TOTAL_DAYS - firstPeriodDays } }); }} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-hidden" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
+                    <label className="text-xs font-bold text-slate-500">Prorrogação automática<div className="mt-1 flex items-center rounded-lg border bg-slate-50"><input type="number" value={probationConfig.secondPeriodDays} disabled className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm font-black text-slate-500 outline-hidden" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
+                    <label className="text-xs font-bold text-slate-500">Janela de avaliação<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min="1" max="90" value={probationConfig.evaluationWindowDays} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, evaluationWindowDays: Number(event.target.value) } })} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-hidden" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="text-xs font-bold text-slate-500">Alertas antes do fim de cada período<input value={probationConfig.alertsBeforeDays.join(', ')} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, alertsBeforeDays: event.target.value.split(',').map(Number).filter(Number.isFinite) } })} placeholder="10, 5, 1" className="mt-1 h-10 w-full rounded-lg border px-3 text-sm" /></label>

@@ -395,7 +395,7 @@ function Panel({ title, icon: Icon, children, className = "", action }: {
   action?: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-xl border border-[#dedfe4] bg-white shadow-sm ${className}`}>
+    <section className={`rounded-xl border border-[#dedfe4] bg-white shadow-xs ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fff0f6] text-[#df2f78]">
@@ -946,7 +946,7 @@ function EmployeeFamilySalaryPanel({
               <button
                 type="button"
                 onClick={startEditing}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-xs ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 Editar filhos
@@ -976,7 +976,7 @@ function EmployeeFamilySalaryPanel({
                   max={12}
                   value={drafts.length}
                   onChange={(event) => updateChildCount(Number(event.target.value))}
-                  className="mt-1 h-11 w-full rounded-xl border border-[#dedfe4] bg-[#fbfbfc] px-3 text-sm font-black text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                  className="mt-1 h-11 w-full rounded-xl border border-[#dedfe4] bg-[#fbfbfc] px-3 text-sm font-black text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                 />
               </div>
               <p className="text-xs font-semibold text-[#777784]">
@@ -1005,7 +1005,7 @@ function EmployeeFamilySalaryPanel({
                           <input
                             value={draft.name}
                             onChange={(event) => updateDraft(index, { name: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                         <label className="text-xs font-black text-[#777784]">
@@ -1014,7 +1014,7 @@ function EmployeeFamilySalaryPanel({
                             type="date"
                             value={draft.birthDate}
                             onChange={(event) => updateDraft(index, { birthDate: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                         <label className="text-xs font-black text-[#777784]">
@@ -1022,7 +1022,7 @@ function EmployeeFamilySalaryPanel({
                           <input
                             value={draft.cpf}
                             onChange={(event) => updateDraft(index, { cpf: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                         <label className="text-xs font-black text-[#777784]">
@@ -1030,7 +1030,7 @@ function EmployeeFamilySalaryPanel({
                           <input
                             value={draft.rg}
                             onChange={(event) => updateDraft(index, { rg: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                       </div>
@@ -1146,7 +1146,7 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-700 shadow-xs ring-1 ring-slate-200 hover:bg-slate-50"
         >
           12 meses
         </button>
@@ -1237,7 +1237,7 @@ function EmployeeProfileFields({
         </aside>
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, sectionIndex) => (
-            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-[#dedfe4] bg-white shadow-sm">
+            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-[#dedfe4] bg-white shadow-xs">
               <div className="flex items-center gap-3 border-b border-[#e8e8ec] px-3 py-2">
                 <div className="h-6 w-6 animate-pulse rounded-md bg-[#fff0f6]" />
                 <div className="h-3 w-32 animate-pulse rounded bg-slate-100" />
@@ -1700,7 +1700,7 @@ function EmployeeProfileFields({
               <button
                 type="button"
                 onClick={() => setEditKey(key)}
-                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-xs ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
               >
                 Editar
               </button>
@@ -1778,7 +1778,7 @@ function EmployeeProfileFields({
             const sectionFields = sections[section] ?? [];
             const sectionVisibility = getVisibilitySummary(sectionFields.map(({ entry }) => entry));
             return (
-              <section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-[#dedfe4] bg-white shadow-sm">
+              <section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-[#dedfe4] bg-white shadow-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2">
                   <div className="flex items-center gap-3">
                     <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#fff0f6] text-[#df2f78]">
@@ -1834,7 +1834,7 @@ function EmployeeProfileFields({
                                         type="button"
                                         disabled={Boolean(systemActionSaving)}
                                         onClick={() => void openPdvEditor(access)}
-                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-sky-700 shadow-sm ring-1 ring-sky-100 hover:bg-sky-50 disabled:opacity-50"
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-sky-700 shadow-xs ring-1 ring-sky-100 hover:bg-sky-50 disabled:opacity-50"
                                       >
                                         Alterar unidade/perfil
                                       </button>
@@ -1842,7 +1842,7 @@ function EmployeeProfileFields({
                                         type="button"
                                         disabled={Boolean(systemActionSaving)}
                                         onClick={() => void removePdvAccess(access)}
-                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-rose-700 shadow-sm ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-50"
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-rose-700 shadow-xs ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-50"
                                       >
                                         Remover acesso
                                       </button>
@@ -1904,7 +1904,7 @@ function EmployeeProfileFields({
                 <select
                   value={pdvUnitId}
                   onChange={(event) => setPdvUnitId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
                 >
                   <option value="">Selecione a unidade</option>
                   {pdvUnits.map((unit) => (
@@ -1920,7 +1920,7 @@ function EmployeeProfileFields({
                   value={pdvProfileId}
                   disabled={pdvCatalogLoading}
                   onChange={(event) => setPdvProfileId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-none focus:border-[#ec2f78] disabled:opacity-60"
+                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-hidden focus:border-[#ec2f78] disabled:opacity-60"
                 >
                   <option value="">{pdvCatalogLoading ? "Carregando perfis..." : "Selecione o perfil"}</option>
                   {pdvProfileId && !pdvProfiles.some((profile) => profile.id === pdvProfileId) ? (
@@ -2161,7 +2161,7 @@ function TerminationDialog({
               value={employerUnitId}
               onChange={(event) => setEmployerUnitId(event.target.value)}
               required
-              className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+              className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
             >
               <option value="">Selecione a empresa responsável pelo vínculo</option>
               {employerUnits.map((unit) => (
@@ -2177,7 +2177,7 @@ function TerminationDialog({
                 type="date"
                 value={terminationDate}
                 onChange={(event) => setTerminationDate(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
               />
             </label>
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
@@ -2189,7 +2189,7 @@ function TerminationDialog({
                   setTerminationReason(nextReason);
                   if (!requiresTerminationSubtype(nextReason)) setTerminationCause("");
                 }}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
                 {availableReasons.map((reason) => (
@@ -2205,7 +2205,7 @@ function TerminationDialog({
               <select
                 value={terminationCause}
                 onChange={(event) => setTerminationCause(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
                 {JUST_CAUSE_TYPES.map((cause) => (
@@ -2224,22 +2224,22 @@ function TerminationDialog({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Data e hora da comunicação
-                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
                 </label>
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Local
-                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
                 </label>
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Aviso-prévio
-                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]">
+                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]">
                     <option value="indemnified">Indenizado</option>
                     <option value="worked">Trabalhado</option>
                   </select>
                 </label>
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Outros participantes
-                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
                 </label>
               </div>
               <label className="flex items-start gap-3 rounded-xl border border-pink-200 bg-white p-3 text-sm font-bold text-slate-800">
@@ -2847,7 +2847,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <button
                       type="button"
                       onClick={openTransportVoucherEditor}
-                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-primary-foreground shadow-sm hover:bg-primary/90"
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-primary-foreground shadow-xs hover:bg-primary/90"
                     >
                       {transportVoucherStatus === "none" ? "Configurar vale-transporte" : "Editar vale-transporte"}
                     </button>
@@ -2869,7 +2869,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <button
                       type="button"
                       onClick={() => setTransportVoucherHistoryOpen(true)}
-                      className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+                      className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-xs ring-1 ring-slate-200 hover:bg-slate-50"
                     >
                       Ver histórico
                     </button>
@@ -2899,7 +2899,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   }
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] bg-[var(--bg)] p-2 text-[#1d1d26] md:p-3">
+    <div className="min-h-[calc(100vh-6rem)] bg-(--bg) p-2 text-[#1d1d26] md:p-3">
       <div className="w-full space-y-2.5">
         <TerminationDialog
           user={collaborator}
@@ -2916,7 +2916,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             ariaLabel="Voltar à página anterior"
             iconOnly
             variant="ghost"
-            className="h-8 w-8 rounded-lg bg-white p-0 text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
+            className="h-8 w-8 rounded-lg bg-white p-0 text-[#777784] shadow-xs ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
             iconClassName="h-5 w-5"
           />
           <span className="text-xs font-black text-[#8f8f9b]">Departamento pessoal</span>
@@ -2926,7 +2926,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           </h1>
         </div>
 
-        <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur lg:top-[76px]">
+        <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur-sm lg:top-[76px]">
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_320px_40px] md:items-center">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
@@ -2943,7 +2943,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             </div>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="min-w-0 break-words text-base font-black leading-tight text-[#181820]">{user.username}</h2>
+                <h2 className="min-w-0 wrap-break-word text-base font-black leading-tight text-[#181820]">{user.username}</h2>
                 <span
                   className="inline-flex max-w-full items-center rounded-full bg-[#eafaf2] px-2 py-0.5 text-[10px] font-black text-[#008963] sm:max-w-[220px]"
                   title={roleFunctionLabel}
@@ -2995,7 +2995,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#dedfe4] bg-white text-[#777784] shadow-sm hover:text-[#df2f78]"
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#dedfe4] bg-white text-[#777784] shadow-xs hover:text-[#df2f78]"
                     title="Ações do colaborador"
                   >
                     <Menu className="h-5 w-5" />
@@ -3118,7 +3118,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   <select
                     value={transportVoucherStatusDraft}
                     onChange={(event) => setTransportVoucherStatusDraft(event.target.value as "active" | "suspended")}
-                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
                   >
                     <option value="active">Ativo</option>
                     <option value="suspended">Suspenso</option>
@@ -3131,7 +3131,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <CurrencyInput
                       value={transportVoucherValueDraft}
                       onChange={setTransportVoucherValueDraft}
-                      className="h-8 rounded-lg border-[#dedfe4] bg-white pl-8 text-xs font-bold outline-none focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="h-8 rounded-lg border-[#dedfe4] bg-white pl-8 text-xs font-bold outline-hidden focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
                       placeholder="0,00"
                     />
                   </label>
@@ -3143,7 +3143,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     type="date"
                     value={transportVoucherEffectiveDate}
                     onChange={(event) => setTransportVoucherEffectiveDate(event.target.value)}
-                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
                   />
                 </label>
 
@@ -3152,7 +3152,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   <textarea
                     value={transportVoucherReason}
                     onChange={(event) => setTransportVoucherReason(event.target.value)}
-                    className="min-h-16 rounded-lg border border-[#dedfe4] bg-white px-2.5 py-2 text-xs font-semibold outline-none focus:border-[#ec2f78]"
+                    className="min-h-16 rounded-lg border border-[#dedfe4] bg-white px-2.5 py-2 text-xs font-semibold outline-hidden focus:border-[#ec2f78]"
                     placeholder="Descreva o motivo da alteração."
                   />
                 </label>
@@ -3174,7 +3174,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   type="button"
                   disabled={transportVoucherSaving}
                   onClick={() => void saveTransportVoucher()}
-                  className="h-8 rounded-lg bg-[#ec2f78] px-3 text-xs font-black text-white shadow-sm hover:bg-[#d92b6e] disabled:opacity-60"
+                  className="h-8 rounded-lg bg-[#ec2f78] px-3 text-xs font-black text-white shadow-xs hover:bg-[#d92b6e] disabled:opacity-60"
                 >
                   {transportVoucherSaving ? "Salvando..." : "Salvar alteração"}
                 </button>

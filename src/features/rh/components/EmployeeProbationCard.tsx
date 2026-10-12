@@ -25,7 +25,7 @@ function dateLabel(value?: string | null) {
 export function EmployeeProbationCard({ probation }: { probation: ProbationProcessState | null }) {
   if (!probation) {
     return (
-      <div className="rounded-xl border border-gray-100 bg-white p-6 text-center text-sm text-gray-400 shadow-sm">
+      <div className="rounded-xl border border-gray-100 bg-white p-6 text-center text-sm text-gray-400 shadow-xs">
         Nenhum período de experiência vinculado a este perfil.
       </div>
     );
@@ -33,7 +33,7 @@ export function EmployeeProbationCard({ probation }: { probation: ProbationProce
 
   const schedule = probation.schedule;
   return (
-    <section className="rounded-xl border border-amber-100 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-amber-100 bg-white p-5 shadow-xs">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700">

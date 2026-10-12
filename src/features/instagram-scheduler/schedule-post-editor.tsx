@@ -231,7 +231,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     type="button"
                     aria-pressed={activeMediaIndex === index}
                     onClick={() => setActiveMediaIndex(index)}
-                    className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                    className="block w-full text-left outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
                   >
                     <div className="relative" style={{ aspectRatio: mediaRatio(media) ?? 1 }}>
                       {media.previewUrl || media.kind === "video" ? (
@@ -292,7 +292,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
               <textarea aria-labelledby="editor-caption-title" value={caption}
                 onChange={(event) => setCaption(event.target.value)} disabled={!editable || saving}
                 maxLength={2_200} rows={7} placeholder="Sem legenda."
-                className="w-full resize-y rounded-ds-md border border-ds-border-input bg-ds-input p-4 text-[14px] leading-6 text-ds-ink placeholder:text-ds-ink-faint focus-visible:border-ds-modal focus-visible:bg-white focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft disabled:opacity-75" />
+                className="w-full resize-y rounded-ds-md border border-ds-border-input bg-ds-input p-4 text-[14px] leading-6 text-ds-ink placeholder:text-ds-ink-faint focus-visible:border-ds-modal focus-visible:bg-white focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft disabled:opacity-75" />
             </section>
           )}
 
@@ -361,7 +361,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
             <div className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Prévia · {theme.label}</div>
             <div className="w-full rounded-[34px] bg-[#283137] p-2.5 shadow-[0_20px_40px_rgba(74,26,4,.18)]">
               {item.format === "story" ? (
-                <div className="relative aspect-[9/16] overflow-hidden rounded-[27px] bg-[#181818] text-white">
+                <div className="relative aspect-9/16 overflow-hidden rounded-[27px] bg-[#181818] text-white">
                   <ProtectedMedia
                     url={activeMedia?.previewUrl ?? null}
                     kind={activeMedia?.kind ?? "image"}
@@ -371,7 +371,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     previewVideo
                     eager
                   />
-                  <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/55 to-transparent px-3 pb-12 pt-3">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 bg-linear-to-b from-black/55 to-transparent px-3 pb-12 pt-3">
                     <div className="flex gap-1">
                       {orderedMedia.map((media, index) => (
                         <span key={`${media.fileName}-story-progress`} className="h-0.5 flex-1 rounded bg-white/45">
@@ -386,7 +386,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                       <MoreHorizontal className="ml-auto h-4 w-4" aria-hidden="true" />
                     </div>
                   </div>
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent px-3 pb-4 pt-14">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 bg-linear-to-t from-black/60 to-transparent px-3 pb-4 pt-14">
                     <span className="flex-1 rounded-full border border-white/80 px-3 py-2 text-[10px] font-semibold">Enviar mensagem</span>
                     <Heart className="h-5 w-5" aria-hidden="true" />
                     <Send className="h-5 w-5" aria-hidden="true" />
@@ -411,7 +411,7 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                   )}
                 </div>
               ) : item.format === "reel" ? (
-                <div className="relative aspect-[9/16] overflow-hidden rounded-[27px] bg-[#181818] text-white">
+                <div className="relative aspect-9/16 overflow-hidden rounded-[27px] bg-[#181818] text-white">
                   <ProtectedMedia
                     url={activeMedia?.previewUrl ?? null}
                     kind={activeMedia?.kind ?? "video"}
@@ -421,11 +421,11 @@ export function SchedulePostEditor({ item, onClose, onUpdate, onCancel }: Schedu
                     previewVideo
                     eager
                   />
-                  <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent px-4 pb-12 pt-4 text-[15px] font-extrabold">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-linear-to-b from-black/50 to-transparent px-4 pb-12 pt-4 text-[15px] font-extrabold">
                     <span>Reels</span>
                     <Volume2 className="h-4 w-4" aria-hidden="true" />
                   </div>
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 grid grid-cols-[1fr_auto] items-end gap-3 bg-gradient-to-t from-black/75 to-transparent px-3 pb-4 pt-24">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 grid grid-cols-[1fr_auto] items-end gap-3 bg-linear-to-t from-black/75 to-transparent px-3 pb-4 pt-24">
                     <div className="min-w-0 text-[10px] leading-[1.4]">
                       <div className="mb-2 flex items-center gap-2 font-extrabold">
                         <span className="h-7 w-7 rounded-full border border-white bg-[#FDE3EF]" />

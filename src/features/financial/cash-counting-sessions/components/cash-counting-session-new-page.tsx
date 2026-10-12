@@ -100,7 +100,7 @@ export function CashCountingSessionNewPage() {
         const disabled = !!lockedBy;
         return <label key={unit.id} className={cn(
           "flex min-h-20 items-center gap-3 rounded-xl border p-3.5 transition-all motion-reduce:transform-none motion-reduce:transition-none",
-          disabled ? "cursor-not-allowed border-ds-border bg-ds-muted opacity-70" : "cursor-pointer border-ds-border hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-sm",
+          disabled ? "cursor-not-allowed border-ds-border bg-ds-muted opacity-70" : "cursor-pointer border-ds-border hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-xs",
           checked && "border-ds-accent-soft bg-ds-accent-soft ring-2 ring-ds-accent",
         )}>
           <Checkbox checked={checked} disabled={disabled} onCheckedChange={(next) => setSelectedUnits((current) => next ? [...current, unit.id] : current.filter((id) => id !== unit.id))} />
@@ -112,7 +112,7 @@ export function CashCountingSessionNewPage() {
 
     <div className="flex items-center gap-3 rounded-[18px] border border-ds-border bg-ds-warm px-5 py-4">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ds-info-bg text-sm font-black text-ds-info">{countingUserInitials || "U"}</span>
-      <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-[.1em] text-ds-ink-faint">Contagem realizada por</span><strong className="mt-1 block truncate text-sm font-extrabold">{countingUserName}</strong><span className="mt-0.5 block text-xs font-semibold text-ds-ink-faint">Financeiro</span></span>
+      <span className="min-w-0"><span className="block text-[11px] font-black uppercase tracking-widest text-ds-ink-faint">Contagem realizada por</span><strong className="mt-1 block truncate text-sm font-extrabold">{countingUserName}</strong><span className="mt-0.5 block text-xs font-semibold text-ds-ink-faint">Financeiro</span></span>
     </div>
 
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-ds-dark px-5 py-4 text-white">

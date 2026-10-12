@@ -35,7 +35,7 @@ export function TechnicalSheetCard({ simulation, onViewSheet, onViewAssembly }: 
   const tags = [simCategory?.name, ...simGroups.map(group => group.name)].filter(Boolean) as string[];
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface font-ds transition-[transform,box-shadow] duration-[180ms] ease-ds-lift hover:-translate-y-[3px] hover:shadow-ds-lift motion-reduce:hover:translate-y-0">
+    <article className="flex h-full flex-col overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface font-ds transition-[transform,box-shadow] duration-180 ease-ds-lift hover:translate-y-[-3px] hover:shadow-ds-lift motion-reduce:hover:translate-y-0">
       <div className="flex flex-1 items-start gap-4 p-4">
         {simulation.ppo?.referenceImageUrl ? (
           <Image src={simulation.ppo.referenceImageUrl} alt={simulation.name} width={96} height={96} className="aspect-square shrink-0 rounded-ds-md border border-ds-border object-cover" />
