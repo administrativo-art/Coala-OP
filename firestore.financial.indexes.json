@@ -493,6 +493,12 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "interWebhookRawEvents",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "lines",
       "fieldPath": "workspaceId",
       "indexes": [
