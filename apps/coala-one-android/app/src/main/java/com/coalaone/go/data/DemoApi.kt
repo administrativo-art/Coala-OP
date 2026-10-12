@@ -67,5 +67,5 @@ class DemoApi @Inject constructor() : ApiService {
             Prize("Simulação", listOf(PrizeTier("Meta", target, 300.0, 2.0, current >= target), PrizeTier("UP", target * 1.2, 600.0, 2.5, current >= target * 1.2)), highestTierLabel = if (current >= target * 1.2) "UP" else if (current >= target) "Meta" else null, totalTeamBonus = if (current >= target) 300.0 + (current - target) * .02 else 0.0, leadershipBonus = 0.0))))
     }
     override suspend fun signage() = SignageUnits(units.mapIndexed { index, row -> SignageUnit(row.id, row.name, if (index % 3 == 2) emptyList() else listOf(SignageScreen(row.id, "Tela 1", if (index % 2 == 0) "landscape" else "portrait", index % 2 == 0)), if (index % 3 == 2) "Tela 1" else "Tela 2", false) })
-    override suspend fun pair(request: PairScreen) = PairResponse(PairedScreen(request.screenId ?: "simulation-screen", "Tela 2", unit.name, request.orientation), request.screenId == null)
+    override suspend fun pair(request: PairScreen) = PairResponse(PairedScreen(request.screenId ?: "simulation-screen", if (request.screenId == null) "Tela 2" else "Tela 1", unitOf(request.kioskId).name, request.orientation), request.screenId == null)
 }

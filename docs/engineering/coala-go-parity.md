@@ -86,6 +86,20 @@ própria). O teste de fluxos alterado (compra com escolha de unidade) não foi
 executado depois da alteração. Biometria, tela de
 bloqueio, sem conexão e calendário do mês não foram exercitados em execução.
 
+### Verificação da 0.3.4 (Signage em três níveis)
+
+Signage reorganizado: lista de unidades, painel da unidade (cada tela com estado
+e posição, "Trocar monitor") e passo a passo de quatro etapas para adicionar
+tela ou ligar outro monitor (endereço com ilustração animada, espera da
+instalação, tela nova ou substituição com a posição escolhida por desenho,
+leitura do QR). Mesmas rotas e contratos (`/api/signage/mobile` e
+`/api/signage/mobile/screens`). 35 testes JVM e lint Android aprovados. O teste
+de capturas foi ajustado ao fluxo novo, mas não pôde ser executado: o emulador
+falhou na captura de imagem (PixelCopy) antes de chegar ao Signage. O fluxo foi
+conferido pelo responsável no emulador. As instruções das etapas 1 e 2 seguem o
+que a página `/app` descreve para monitores profissionais e não foram
+confirmadas em monitor físico.
+
 ## Entrega por etapa
 
 | Etapa | Feito | Verificação local | Pendente |
