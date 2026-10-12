@@ -67,12 +67,19 @@ expandem suavemente. Escala zero desliga movimentos decorativos e mostra o
 progresso final. Animações nunca simulam resposta de servidor.
 
 Home usa hero de compra e grid filtrado pelas permissões reais, preservando
-Signage. Metas oferece Dias/Equipe/Prêmio; Escala seleciona um dia da semana
+Signage. O resumo de hoje na barra escura abre ao arrastar a alça para baixo e
+fecha ao arrastá-la para cima; toque simples não alterna o estado. A simulação
+guarda `Heucilene Oliveira Ribeiro`, enquanto a interface mostra somente
+primeiro e último nomes (`Heucilene Ribeiro`) nos espaços compactos do app.
+Na Escala, o cartão mantém nome e cargo em uma linha, destaca o horário com
+ícone de relógio, reduz rótulos técnicos de turno (por exemplo, `CS · Líder`),
+alinha o conteúdo pelo topo e reserva larguras estáveis para identidade e turno.
+Metas oferece Dias/Equipe/Prêmio; Escala seleciona um dia da semana
 e Equipe/Só minha, sem perder a navegação semanal. Compra, contagem e
 recebimento mantêm seus ViewModels, validações, confirmações e contratos.
 Limites/estados reais prevalecem sobre números, timers e sucessos do protótipo.
 
-`DesignMotionTest` verifica movimento, redução e fonte ampliada;
+`DesignMotionTest` verifica movimento, redução, fonte ampliada e o gesto vertical do resumo;
 `DesignScreensTest` captura telas nativas em simulação e navega nas novas abas;
 `ComposeFlowsTest` continua cobrindo as ações de negócio. As capturas liberam
 FLAG_SECURE somente na janela de teste, nunca no aplicativo distribuído.

@@ -12,10 +12,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
@@ -131,7 +138,8 @@ private fun installUpdate(context: android.content.Context, file: File) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Brand(compact = true, small = true)
-                Text("$greeting, ${state?.profile?.name?.substringBefore(' ') ?: "humano"}", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 30.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                val greetingName = state?.profile?.name?.let(::personDisplayName)?.takeIf(String::isNotBlank)
+                Text("$greeting, ${greetingName ?: "humano"}", color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 30.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Text(state?.profile?.email?.takeIf(String::isNotBlank) ?: state?.profile?.role.orEmpty(), color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             ProfileAvatar(state?.profile?.name.orEmpty(), state?.profile?.avatarUrl) { navigate("profile") }
@@ -162,9 +170,9 @@ private fun installUpdate(context: android.content.Context, file: File) {
 }
 /**
  * "Hoje" as a continuation of the dark bar: a handle on its lower edge and nothing else;
- * tapping it opens the detail (shift, the unit's goal for the day, what is waiting), each line leading to its module.
+ * dragging it vertically opens or closes the detail (shift, the unit's goal for the day, what is waiting), each line leading to its module.
  */
-@Composable private fun ColumnScope.TodayHeader(today: HomeToday, pendingNotes: Int, navigate: (String) -> Unit) {
+@Composable internal fun ColumnScope.TodayHeader(today: HomeToday, pendingNotes: Int, navigate: (String) -> Unit) {
     val whole = java.text.NumberFormat.getIntegerInstance(java.util.Locale.forLanguageTag("pt-BR"))
     val lines = listOfNotNull(
         if (today.hasSchedule) Triple("Seu turno", today.shift?.let { shift -> today.shiftUnit?.let { "$shift · $it" } ?: shift } ?: "Sem turno hoje", "schedule") else null,
@@ -174,6 +182,11 @@ private fun installUpdate(context: android.content.Context, file: File) {
         pendingNotes.takeIf { it > 0 }?.let { Triple("Notas no aparelho", if (it == 1) "1 nota aguardando envio ou revisão" else "$it notas aguardando envio ou revisão", "purchase") })
     if (lines.isEmpty()) return
     var open by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var dragDistance by remember { mutableFloatStateOf(0f) }
+    val dragThreshold = with(LocalDensity.current) { 24.dp.toPx() }
+    val dragState = rememberDraggableState { delta ->
+        dragDistance += if (open) delta.coerceAtMost(0f) else delta.coerceAtLeast(0f)
+    }
     val motion = LocalMotionEnabled.current
     androidx.compose.animation.AnimatedVisibility(open, enter = androidx.compose.animation.expandVertically(tween(if (motion) 220 else 0)) + fadeIn(tween(if (motion) 220 else 0)), exit = androidx.compose.animation.shrinkVertically(tween(if (motion) 160 else 0)) + fadeOut(tween(if (motion) 160 else 0))) {
         Column {
@@ -189,8 +202,23 @@ private fun installUpdate(context: android.content.Context, file: File) {
             }
         }
     }
-    // Only the handle on the lower edge of the bar, with no text: tapping it opens or closes the detail.
-    Box(Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = if (open) "Recolher o resumo de hoje" else "Ver o resumo de hoje") { open = !open }.padding(top = 14.dp, bottom = 2.dp), contentAlignment = Alignment.Center) {
+    // A tap does nothing: direct manipulation of the handle is the only visual gesture.
+    val dragInstruction = if (open) "Deslize para cima para fechar o resumo de hoje" else "Deslize para baixo para abrir o resumo de hoje"
+    Box(Modifier.fillMaxWidth().height(44.dp)
+        .semantics {
+            contentDescription = dragInstruction
+            stateDescription = if (open) "Resumo de hoje aberto" else "Resumo de hoje fechado"
+        }
+        .draggable(
+            state = dragState,
+            orientation = Orientation.Vertical,
+            onDragStarted = { dragDistance = 0f },
+            onDragStopped = {
+                if (!open && dragDistance >= dragThreshold) open = true
+                else if (open && dragDistance <= -dragThreshold) open = false
+                dragDistance = 0f
+            },
+        ), contentAlignment = Alignment.Center) {
         Box(Modifier.size(36.dp, 4.dp).background(Tokens.onDark.copy(alpha = .28f), RoundedCornerShape(4.dp)))
     }
 }
@@ -202,7 +230,7 @@ private fun installUpdate(context: android.content.Context, file: File) {
     val context = androidx.compose.ui.platform.LocalContext.current
     Page("Perfil", feedback, onBack, onRefresh = { vm.refresh() }) {
         CardBlock {
-            Text(state?.profile?.name.orEmpty(), style = MaterialTheme.typography.titleLarge)
+            Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
             Text(listOfNotNull(state?.profile?.role?.takeIf(String::isNotBlank), state?.profile?.email?.takeIf(String::isNotBlank)).joinToString(" · "), color = Tokens.muted)
         }
         CardBlock { CaptureButtons("Foto de perfil", !feedback.busy, imagesOnly = true, onDocument = vm::avatar) }

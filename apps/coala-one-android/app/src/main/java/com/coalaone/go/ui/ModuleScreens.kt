@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
@@ -31,6 +32,15 @@ import java.time.format.DateTimeFormatter
 
 private val ptBR = java.util.Locale.forLanguageTag("pt-BR")
 private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerInstance(ptBR).format(Math.round(value))
+@Composable private fun ClockGlyph(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier.size(14.dp)) {
+        val stroke = 1.4.dp.toPx()
+        val center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+        drawCircle(Tokens.muted, radius = size.minDimension / 2 - stroke / 2, center = center, style = Stroke(stroke))
+        drawLine(Tokens.muted, center, androidx.compose.ui.geometry.Offset(center.x, center.y - 3.dp.toPx()), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(Tokens.muted, center, androidx.compose.ui.geometry.Offset(center.x + 2.5.dp.toPx(), center.y + 1.5.dp.toPx()), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    }
+}
 @Composable private fun NavSquare(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
         Box(Modifier.size(34.dp).background(Tokens.surface, RoundedCornerShape(10.dp)).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(glyph, style = MaterialTheme.typography.titleMedium) }
@@ -117,14 +127,23 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             rows.forEach { (unit, shift) ->
                 val person = unit.people.getOrNull(shift.person)
                 HorizontalDivider(color = Tokens.border)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PersonBadge(person?.name.orEmpty(), person?.avatarUrl, shift.person, person?.color, 38)
-                    Column(Modifier.weight(1f)) {
-                        Text("${person?.name.orEmpty()}${if (person?.isMe == true) " · você" else ""}", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-                        Text(if (state.onlyMine && units.size > 1) unit.name else person?.role.orEmpty(), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.padding(top = 1.dp)) { PersonBadge(person?.name.orEmpty(), person?.avatarUrl, shift.person, person?.color, 38) }
+                    Column(Modifier.weight(1f).widthIn(max = 190.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(personDisplayName(person?.name.orEmpty()), style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            if (person?.isMe == true) Text("VOCÊ", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.ExtraBold))
+                        }
+                        Text(if (state.onlyMine && units.size > 1) unit.name else person?.role.orEmpty(), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
-                    if (shift.type == "day_off") Text("Folga", color = Tokens.faint, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp))
-                    else Column(horizontalAlignment = Alignment.End) { Text("${shift.startTime}–${shift.endTime}", style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp)); Text(shift.shiftName, color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+                    if (shift.type == "day_off") Text("Folga", color = Tokens.faint, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp), modifier = Modifier.padding(top = 2.dp))
+                    else Column(Modifier.widthIn(min = 112.dp, max = 172.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            ClockGlyph()
+                            Text("${shift.startTime}–${shift.endTime}", style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold), maxLines = 1)
+                        }
+                        Text(scheduleShiftDisplayName(shift.shiftName), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp), textAlign = TextAlign.End, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -294,7 +313,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
                         Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 PersonBadge(member.name, member.avatarUrl, index, member.color, 32)
-                                Text("${member.name}${if (member.isMe) " · você" else ""}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                Text("${personDisplayName(member.name)}${if (member.isMe) " · você" else ""}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                                 Text(percentText(Math.round(member.percent).toDouble()), style = MaterialTheme.typography.titleMedium)
                             }
                             AnimatedProgress((member.percent / 100).toFloat(), duration = 1000, height = 6, fill = androidx.compose.ui.graphics.SolidColor(if (member.percent >= 100) Tokens.ok else Tokens.accent))

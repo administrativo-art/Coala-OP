@@ -1,6 +1,8 @@
 package com.coalaone.go
 
 import com.coalaone.go.ui.profileInitials
+import com.coalaone.go.ui.personDisplayName
+import com.coalaone.go.ui.scheduleShiftDisplayName
 import com.coalaone.go.ui.unitInitials
 import com.coalaone.go.ui.personColor
 import androidx.compose.ui.graphics.Color
@@ -12,8 +14,18 @@ class PresentationTest {
     @Test fun avatarUsesLettersInsteadOfPunctuation() {
         assertEquals("AS", profileInitials("Ana (simulação)"))
         assertEquals("AM", profileInitials(" Ana   Maria "))
+        assertEquals("HR", profileInitials(personDisplayName("Heucilene Oliveira Ribeiro")))
         assertEquals("CG", profileInitials("🐨 Coala Go"))
         assertEquals("H", profileInitials("  ! "))
+    }
+    @Test fun personNameUsesOnlyFirstAndLastNames() {
+        assertEquals("Heucilene Ribeiro", personDisplayName("Heucilene Oliveira Ribeiro"))
+        assertEquals("Heucilene", personDisplayName(" Heucilene "))
+        assertEquals("", personDisplayName("   "))
+    }
+    @Test fun scheduleShiftNameKeepsOnlyUsefulContext() {
+        assertEquals("CS · Líder", scheduleShiftDisplayName("CS | Turno - Líder - ADM/CD/QUIOSQUES"))
+        assertEquals("Manhã", scheduleShiftDisplayName("Manhã"))
     }
     @Test fun unitBadgeSkipsGenericWordsAndUsesTwoLetters() {
         assertEquals("TR", unitInitials("Unidade Tirirical"))
