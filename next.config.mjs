@@ -88,11 +88,9 @@ const nextConfig = {
     // React reconciler. The browser renderer remains transpiled normally.
     'react-pdf-renderer-server',
     'react-pdf-react-server',
-    '@genkit-ai/core',
-    '@genkit-ai/google-genai',
-    '@genkit-ai/next',
+    '@google/genai',
+    'handlebars',
     'express',
-    'genkit',
   ],
   images: {
     remotePatterns: [
