@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { useForm, type FieldPath, type FieldValues, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -41,7 +42,30 @@ type ProfileManagementModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
+  initialAction?: 'manage' | 'create' | 'edit' | 'duplicate';
+  initialProfile?: Profile | null;
 };
+
+export async function logProfileAudit(
+  firebaseUser: FirebaseUser | null,
+  action: string,
+  target: Pick<Profile, 'id' | 'name'> | null,
+  metadata: Record<string, unknown> = {},
+) {
+  if (!firebaseUser) return;
+  try {
+    await createAuditLog(firebaseUser, {
+      module: 'settings.profiles',
+      action,
+      targetType: 'profile',
+      targetId: target?.id,
+      targetName: target?.name,
+      metadata,
+    });
+  } catch (error) {
+    console.warn('[ProfileManagementModal] Falha ao registrar auditoria.', error);
+  }
+}
 
 function flattenPermissions(value: unknown, prefix = ""): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -85,10 +109,14 @@ function DuplicateProfileModal({
   profileToDuplicate,
   onClose,
   onConfirm,
+  error,
+  saving,
 }: {
   profileToDuplicate: Profile | null;
   onClose: () => void;
   onConfirm: (newName: string) => void;
+  error: string | null;
+  saving: boolean;
 }) {
   const [newName, setNewName] = useState('');
 
@@ -115,10 +143,11 @@ function DuplicateProfileModal({
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Nome do novo perfil"
           />
+          {error ? <p role="alert" className="mt-2 text-xs text-ds-danger">{error}</p> : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => onConfirm(newName)} disabled={!newName.trim()}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={() => onConfirm(newName)} disabled={!newName.trim() || saving} loading={saving}>
             Criar Duplicata
           </Button>
         </DialogFooter>
@@ -127,13 +156,15 @@ function DuplicateProfileModal({
   );
 }
 
-export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileManagementModalProps) {
+export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAction = 'manage', initialProfile = null }: ProfileManagementModalProps) {
   const { profiles, addProfile, updateProfile, deleteProfile, adminProfileId } = useProfiles();
   const { firebaseUser } = useAuth();
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
   const [profileToDuplicate, setProfileToDuplicate] = useState<Profile | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -147,16 +178,25 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     if (open) {
       setShowForm(false);
       setEditingProfile(null);
+      setActionError(null);
+      if (!canEdit) return;
+      if (initialAction === 'create') handleAddNew();
+      if (initialAction === 'edit' && initialProfile) handleEdit(initialProfile);
+      if (initialAction === 'duplicate' && initialProfile) setProfileToDuplicate(initialProfile);
     }
+  // The opening action is captured once; profile updates from the listener must not reset a form in progress.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleAddNew = () => {
+    setActionError(null);
     setEditingProfile(null);
     form.reset({ name: '', permissions: defaultGuestPermissions });
     setShowForm(true);
   };
 
   const handleEdit = (profile: Profile) => {
+    setActionError(null);
     setEditingProfile(profile);
     
     const mergeRecursive = (target: Record<string, any>, source: Record<string, any>) => {
@@ -202,73 +242,76 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
   const handleDeleteConfirm = async () => {
     if (profileToDelete) {
-      await deleteProfile(profileToDelete.id);
-      await logProfileAudit('profile_deleted', profileToDelete, {
-        name: profileToDelete.name,
-        is_default_admin: profileToDelete.isDefaultAdmin === true,
-      });
+      try {
+        await deleteProfile(profileToDelete.id);
+        await logProfileAudit(firebaseUser, 'profile_deleted', profileToDelete, {
+          name: profileToDelete.name,
+          is_default_admin: profileToDelete.isDefaultAdmin === true,
+        });
+      } catch {
+        setActionError('Não foi possível excluir o perfil. Tente novamente.');
+      }
       setProfileToDelete(null);
     }
   };
 
   const handleDuplicateClick = (profile: Profile) => {
+    setActionError(null);
     setProfileToDuplicate(profile);
   };
 
   const handleDuplicateConfirm = async (newName: string) => {
-    if (profileToDuplicate) {
+    if (!profileToDuplicate || saving) return;
+    setSaving(true);
+    setActionError(null);
+    try {
       await addProfile({
         name: newName,
         permissions: profileToDuplicate.permissions,
       });
-      await logProfileAudit('profile_duplicated', profileToDuplicate, {
+      await logProfileAudit(firebaseUser, 'profile_duplicated', profileToDuplicate, {
         source_profile_id: profileToDuplicate.id,
         source_profile_name: profileToDuplicate.name,
         new_name: newName,
       });
       setProfileToDuplicate(null);
-    }
-  };
-
-  const logProfileAudit = async (
-    action: string,
-    target: Pick<Profile, 'id' | 'name'> | null,
-    metadata: Record<string, unknown> = {}
-  ) => {
-    if (!firebaseUser) return;
-    try {
-      await createAuditLog(firebaseUser, {
-        module: 'settings.profiles',
-        action,
-        targetType: 'profile',
-        targetId: target?.id,
-        targetName: target?.name,
-        metadata,
-      });
-    } catch (error) {
-      console.warn('[ProfileManagementModal] Falha ao registrar auditoria.', error);
+      if (initialAction === 'duplicate') onOpenChange(false);
+    } catch {
+      setActionError('Não foi possível copiar o perfil. Confira suas permissões e tente novamente.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const onSubmit = async (values: ProfileFormValues) => {
-    if (editingProfile) {
-      const changes = permissionDiff(editingProfile.permissions, values.permissions);
-      await updateProfile({ ...editingProfile, permissions: values.permissions, name: values.name });
-      await logProfileAudit('profile_updated', editingProfile, {
-        before_name: editingProfile.name,
-        after_name: values.name,
-        changed_permissions: Object.keys(changes),
-        permission_changes: changes,
-      });
-    } else {
-      await addProfile(values);
-      await logProfileAudit('profile_created', { id: '', name: values.name }, {
-        name: values.name,
-        permission_count: Object.keys(flattenPermissions(values.permissions)).length,
-      });
+    if (saving) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      if (editingProfile) {
+        const changes = permissionDiff(editingProfile.permissions, values.permissions);
+        await updateProfile({ ...editingProfile, permissions: values.permissions, name: values.name });
+        await logProfileAudit(firebaseUser, 'profile_updated', editingProfile, {
+          before_name: editingProfile.name,
+          after_name: values.name,
+          changed_permissions: Object.keys(changes),
+          permission_changes: changes,
+        });
+      } else {
+        await addProfile(values);
+        await logProfileAudit(firebaseUser, 'profile_created', { id: '', name: values.name }, {
+          name: values.name,
+          permission_count: Object.keys(flattenPermissions(values.permissions)).length,
+        });
+      }
+      setShowForm(false);
+      setEditingProfile(null);
+      if (initialAction !== 'manage') onOpenChange(false);
+    } catch {
+      setActionError('Não foi possível salvar o perfil. Confira suas permissões e tente novamente.');
+    } finally {
+      setSaving(false);
     }
-    setShowForm(false);
-    setEditingProfile(null);
   };
 
   const renderPermissionSwitch = (
@@ -433,10 +476,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open && initialAction !== 'duplicate'} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Gerenciar perfis</DialogTitle>
+            <DialogTitle>{initialAction === 'create' ? 'Novo perfil' : initialAction === 'edit' ? `Editar perfil ${initialProfile?.name ?? ''}` : 'Gerenciar perfis'}</DialogTitle>
             <DialogDescription>Crie perfis de permissão para atribuir aos usuários.</DialogDescription>
           </DialogHeader>
           
@@ -1018,13 +1061,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     </ScrollArea>
                 </div>
                 <DialogFooter className="pt-4 border-t shrink-0">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProfile ? 'Salvar alterações' : 'Criar perfil'}</Button>
+                  {actionError ? <p role="alert" className="mr-auto text-xs text-ds-danger">{actionError}</p> : null}
+                  <Button type="button" variant="outline" disabled={saving} onClick={() => initialAction === 'manage' ? setShowForm(false) : onOpenChange(false)}>Cancelar</Button>
+                  <Button type="submit" loading={saving}>{editingProfile ? 'Salvar alterações' : 'Criar perfil'}</Button>
                 </DialogFooter>
               </form>
             </Form>
           ) : (
             <>
+              {actionError ? <p role="alert" className="text-sm text-ds-danger">{actionError}</p> : null}
               {canEdit && (
                 <Button onClick={handleAddNew} className="w-full">
                   <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo perfil
@@ -1040,7 +1085,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         {canEdit && <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin || profile.id === adminProfileId}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>}
@@ -1068,7 +1113,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
       <DuplicateProfileModal
         profileToDuplicate={profileToDuplicate}
-        onClose={() => setProfileToDuplicate(null)}
+        error={actionError}
+        saving={saving}
+        onClose={() => {
+          setProfileToDuplicate(null);
+          if (initialAction === 'duplicate') onOpenChange(false);
+        }}
         onConfirm={handleDuplicateConfirm}
       />
     </>
