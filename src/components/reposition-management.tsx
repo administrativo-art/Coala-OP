@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { canAccessUnit } from '@/lib/unit-access';
 import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot, type Product } from '@/types';
 import { cn } from '@/lib/utils';
+import { safeInternalPath } from '@/lib/safe-return-path';
 import { useProducts } from '@/hooks/use-products';
 import SignatureCanvas from "react-signature-canvas";
 import {
@@ -965,7 +966,8 @@ export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
     // Veio do painel do colaborador (deep-link de recebimento): volta pra lá,
     // onde a tarefa já aparece como concluída.
     if (returnTo) {
-      router.push(returnTo);
+      const destination = safeInternalPath(returnTo);
+      if (destination) router.push(destination);
     }
   };
 

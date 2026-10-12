@@ -7,7 +7,7 @@ import { canAccessUnit } from "@/lib/unit-access";
 import { AppError } from "@/lib/observability/app-error";
 import type { DPUnit } from "@/types";
 import { buildCollaboratorSchedulePayload } from "./server";
-import { safeAvatarUrl, toMobileSchedule } from "./mobile-schedule";
+import { safeAvatarUrl, safePersonColor, toMobileSchedule } from "./mobile-schedule";
 
 function failure(code: string, safeMessage: string): never {
   throw new AppError({ code: `MOBILE_SCHEDULE_${code}`, kind: "AUTHORIZATION", safeMessage });
@@ -19,15 +19,18 @@ export function assertCanViewMobileSchedule(actor: ServerUserContext) {
 }
 
 /**
- * The published schedule of the units this person belongs to, by the same rule as the web
- * collaborator schedule: only locked schedules, units linked to the person or to their own shifts.
+ * The month's schedule of the units this person belongs to, by the same rule as the web
+ * collaborator schedule: the schedule as it stands (locked or not), units linked to the person or
+ * to their own shifts.
  */
 export async function loadMobileSchedule(actor: ServerUserContext, year: number, month: number) {
   assertCanViewMobileSchedule(actor);
   const payload = await buildCollaboratorSchedulePayload(actor, year, month, await extraScheduleUnits(actor));
   const userIds = [...new Set(payload.teamUnits.flatMap((unit) => unit.shifts.map((shift) => shift.userId)).filter(Boolean))];
   const snapshots = userIds.length ? await dbAdmin.getAll(...userIds.map((id) => dbAdmin.collection("users").doc(id))) : [];
-  return toMobileSchedule(payload, new Map(snapshots.map((snapshot) => [snapshot.id, safeAvatarUrl(snapshot.get("avatarUrl"))])));
+  return toMobileSchedule(payload,
+    new Map(snapshots.map((snapshot) => [snapshot.id, safeAvatarUrl(snapshot.get("avatarUrl"))])),
+    new Map(snapshots.map((snapshot) => [snapshot.id, safePersonColor(snapshot.get("color"))])));
 }
 
 /**

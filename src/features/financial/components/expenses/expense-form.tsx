@@ -60,6 +60,7 @@ import {
 } from "@/features/financial/lib/expense-reference-center";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 import type { FinancialInboxBillingIdentity } from "@/features/financial/inbox/types";
 import { Badge } from "@/components/ui/badge";
 import { WizardModal, type WizardStep } from "@/components/patterns/wizard-modal";
@@ -1749,12 +1750,13 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   }
 
   function leaveExpenseForm(destination = returnTo || FINANCIAL_ROUTES.expenses) {
+    const safeDestination = resolveSafeReturnPath(destination, FINANCIAL_ROUTES.expenses);
     if (presentation === "modal") {
-      window.location.assign(destination);
+      window.location.assign(safeDestination);
       return;
     }
 
-    router.push(destination);
+    router.push(safeDestination);
     router.refresh();
   }
 

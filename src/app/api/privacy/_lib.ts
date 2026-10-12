@@ -2,8 +2,9 @@ import { Timestamp } from "firebase-admin/firestore";
 import type { NextRequest } from "next/server";
 
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
+import { AppError } from "@/lib/observability/app-error";
 
-export function canUsePrivacy(context: ServerUserContext) {
+export function canViewPrivacy(context: ServerUserContext) {
   return Boolean(
     context.isDefaultAdmin ||
       context.permissions.settings.view ||
@@ -14,12 +15,28 @@ export function canUsePrivacy(context: ServerUserContext) {
   );
 }
 
-export async function requirePrivacyUser(request: NextRequest) {
-  const context = await requireUser(request);
-  if (!canUsePrivacy(context)) {
-    throw new Error("Sem permissao para acessar privacidade.");
-  }
-  return context;
+export function canManagePrivacy(context: ServerUserContext) {
+  return Boolean(
+    context.isDefaultAdmin ||
+      context.permissions.settings.manageUsers ||
+      context.permissions.settings.manageProfiles ||
+      context.permissions.dp?.collaborators?.edit ||
+      context.permissions.dp?.collaborators?.terminate
+  );
+}
+
+export async function authenticatePrivacyUser(request: NextRequest) {
+  return requireUser(request).catch((cause) => {
+    throw new AppError({ code: "PRIVACY_AUTH_REQUIRED", kind: "AUTHENTICATION", cause });
+  });
+}
+
+export function requirePrivacyView(context: ServerUserContext) {
+  if (!canViewPrivacy(context)) throw new AppError({ code: "PRIVACY_VIEW_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para visualizar dados de privacidade." });
+}
+
+export function requirePrivacyManage(context: ServerUserContext) {
+  if (!canManagePrivacy(context)) throw new AppError({ code: "PRIVACY_MANAGE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para alterar dados de privacidade." });
 }
 
 export function ttlFrom(date: Date, days: number) {
@@ -44,4 +61,3 @@ export function cleanText(value: unknown, max = 1000) {
 export function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T) {
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
-

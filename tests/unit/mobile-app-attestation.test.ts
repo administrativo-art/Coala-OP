@@ -14,6 +14,22 @@ import {
 
 const secret = "s".repeat(40);
 
+test("Coala Go selects its own verified package without weakening legacy checks", () => {
+  const now = 1_800_000_000_000;
+  const requestHash = mobileIntegrityRequestHash("user-a", "d033b3e8-dbc4-4c34-8cb7-0cdb5f61293e");
+  const verdict = {
+    requestDetails: { requestPackageName: "coalaone.go", requestHash, timestampMillis: String(now) },
+    appIntegrity: { appRecognitionVerdict: "PLAY_RECOGNIZED", packageName: "coalaone.go" },
+    deviceIntegrity: { deviceRecognitionVerdict: ["MEETS_DEVICE_INTEGRITY"] },
+  };
+  assert.equal(mobileIntegrityRejection(verdict, { requestHash, now, packageName: "coalaone.go" }), null);
+  assert.equal(mobileIntegrityRejection(verdict, { requestHash, now }), "package");
+  assert.equal(mobileIntegrityRejection({ ...verdict, requestDetails: { ...verdict.requestDetails, requestPackageName: "com.coalaone.notas" } }, { requestHash, now, packageName: "coalaone.go" }), "package");
+  const request = { integrityToken: "t".repeat(200), nonce: "d033b3e8-dbc4-4c34-8cb7-0cdb5f61293e" };
+  assert.equal(mobileAttestationRequestSchema.safeParse({ ...request, packageName: "coalaone.go" }).success, true);
+  assert.equal(mobileAttestationRequestSchema.safeParse({ ...request, packageName: "com.evil" }).success, false);
+});
+
 test("attestation pass is bound to the user, expires and cannot be forged", () => {
   const now = 1_800_000_000_000;
   const { token, expiresAt } = signMobileAttestation(secret, "user-a", now);

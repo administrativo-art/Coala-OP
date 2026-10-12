@@ -683,24 +683,30 @@ export async function handleInterWebhookItem(input: {
     .update(input.item.dataHoraSituacao)
     .digest("hex");
   const existing = await financialDbAdmin.collection(EVENTS).doc(eventId).get();
-  if (existing.exists) return { idempotent: true, refreshed: false };
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS)
     .where("codigoSolicitacao", "==", input.item.codigoSolicitacao)
     .limit(1)
     .get();
   const cobrancaId = cobrancaSnapshot.empty ? null : cobrancaSnapshot.docs[0].id;
-  await writeEvent({
-    id: eventId,
-    workspaceId: input.workspaceId,
-    interCobrancaId: cobrancaId,
-    codigoSolicitacao: input.item.codigoSolicitacao,
-    kind: "webhook",
-    idempotencyKey: input.idempotencyKey,
-    rawPayload: input.item,
-  });
-  if (!cobrancaId) return { idempotent: false, refreshed: false };
+  if (!existing.exists) {
+    await writeEvent({
+      id: eventId,
+      workspaceId: input.workspaceId,
+      interCobrancaId: cobrancaId,
+      codigoSolicitacao: input.item.codigoSolicitacao,
+      kind: "webhook",
+      idempotencyKey: input.idempotencyKey,
+      rawPayload: {
+        codigoSolicitacao: input.item.codigoSolicitacao,
+        situacaoDeclarada: input.item.situacao,
+        dataHoraSituacaoDeclarada: input.item.dataHoraSituacao,
+        trustSource: "client-declared",
+      },
+    });
+  }
+  if (!cobrancaId) return { idempotent: existing.exists, refreshed: false };
   await refreshInterCobranca(cobrancaId);
-  return { idempotent: false, refreshed: true };
+  return { idempotent: existing.exists, refreshed: true };
 }
 
 export async function cancelInterCobrancaForBatch(input: {

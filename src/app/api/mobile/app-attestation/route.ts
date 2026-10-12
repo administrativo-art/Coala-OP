@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { AppError } from "@/lib/observability/app-error";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
-import { mobileAttestationRequestSchema } from "@/lib/security/mobile-app-attestation";
+import { mobileAttestationRequestSchema, type MobilePackage } from "@/lib/security/mobile-app-attestation";
 import { currentMobileAttestationMode, issueMobileAttestation } from "@/lib/security/mobile-app-attestation.server";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
@@ -12,12 +12,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type StaticRouteContext = { params: Promise<Record<string, never>> };
-type AttestationInput = { integrityToken: string; nonce: string };
+type AttestationInput = { integrityToken: string; nonce: string; packageName?: MobilePackage };
 
 const contract = defineSecurityContract({
   schemaVersion: 1,
   id: "mobile.app-attestation.exchange",
-  version: 1,
+  version: 2,
   surface: { method: "POST", path: "/api/mobile/app-attestation" },
   exposure: "authenticated",
   identity: { kind: "active-user" },
