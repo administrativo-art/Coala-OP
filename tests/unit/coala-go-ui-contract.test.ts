@@ -8,7 +8,7 @@ const components = readFileSync(`${native}ui/Components.kt`, 'utf8');
 const activity = readFileSync(`${native}MainActivity.kt`, 'utf8');
 const schedule = screens.split('@Composable fun ScheduleScreen')[1]?.split('@Composable fun GoalsScreen')[0] ?? '';
 const goals = screens.split('@Composable fun GoalsScreen')[1]?.split('@Composable fun SignageScreen')[0] ?? '';
-const home = activity.split('@Composable private fun HomeScreen')[1]?.split('@Composable private fun ColumnScope.TodayHeader')[0] ?? '';
+const home = activity.split('@Composable private fun HomeScreen')[1]?.split(/@Composable (?:private|internal) fun ColumnScope\.TodayHeader/)[0] ?? '';
 
 test('Escala e Metas usam o mesmo seletor de unidade acessível no cabeçalho', () => {
   assert.match(components, /fun UnitPickerHeader\([\s\S]*?PickerSheet\("Unidade", values, selected, onSelect\)/);

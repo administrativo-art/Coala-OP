@@ -114,6 +114,18 @@ assinada final, e `coalaone.go/com.coalaone.go.MainActivity` ficou em primeiro
 plano; dados reais, aparelho físico e sensor biométrico permanecem fora da
 homologação desta rodada.
 
+### Verificação da 0.3.6 (identidade compacta e resumo por arrasto)
+
+A interface preserva o nome completo recebido pela API, mas apresenta somente
+primeiro e último nomes nos espaços compactos do aplicativo. Na Escala, a
+identidade e o cargo ficam em uma linha cada, o horário recebe destaque e ícone,
+o rótulo técnico do turno é reduzido ao contexto útil e as colunas mantêm
+alinhamento e largura estáveis. Na home, toque simples na alça não alterna o
+resumo: arrastar para baixo abre e arrastar para cima fecha. Testes JVM cobrem
+a apresentação dos nomes e do turno; o teste Compose do gesto foi compilado.
+O emulador permaneceu encerrado a pedido do responsável durante a preparação
+do release 0.3.6/code11.
+
 ## Entrega por etapa
 
 | Etapa | Feito | Verificação local | Pendente |
