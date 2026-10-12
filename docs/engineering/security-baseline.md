@@ -29,6 +29,8 @@ Os arquivos `config/vulnerability-baseline.root.json` e `config/vulnerability-ba
 
 Novos achados `low` ou `moderate` transitivos e alterações não relacionadas à severidade são informados para triagem sem esconder a dívida. Vulnerabilidades removidas aparecem como melhoria e não reescrevem o baseline.
 
+Remediação de 2026-10-12: uma instalação limpa atualizou `firebase-admin` para 14.5, `firebase-functions` para 7.4, Firebase CLI para 15.33 e transitivas compatíveis. O pacote `functions` removeu `firebase-functions-test`, que não possuía consumidores no repositório e prendia um grafo Jest vulnerável; `npm audit` passou a reportar zero achados totais nesse pacote. Na raiz, o total caiu de 101 (1 crítica, 15 altas, 82 moderadas e 3 baixas) para 73 (0 críticas, 14 altas e 59 moderadas); produção ficou em 71 (0 críticas, 11 altas e 60 moderadas). As altas restantes estão nos grafos de Tailwind 3, lint e Genkit/OpenTelemetry e exigem migrações funcionais próprias. O ratchet passou sem alterar baseline ou exceções.
+
 Exceções ficam em `config/vulnerability-exceptions.json`. Cada exceção deve identificar exatamente o `findingKey`, ter justificativa e data de expiração. Exceção expirada, duplicada ou incompleta invalida a execução. Alterar baseline ou exceção exige revisão humana explícita; o CI nunca os regenera.
 
 Uma falha de rede ou resposta inválida do registry é falha operacional distinta, não aprovação silenciosa.

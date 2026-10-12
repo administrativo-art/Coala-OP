@@ -27,4 +27,20 @@ O comando `npm run check:error-contract` falha somente quando uma combinação c
 - job/integração: `POST /api/jobs/inter/cobrancas/reconcile`;
 - ingestão: `POST /api/observability/client-errors`.
 
+## Lote sensível de 2026-10-12
+
+O primeiro lote priorizado depois dos pilotos migrou as escritas autenticadas
+`POST /api/auth/last-login` e `POST /api/auth/password-changed`. Ambas agora usam
+`secureRoute`, exigem usuário ativo, limitam a escrita ao documento do próprio
+usuário e expõem apenas erros sanitizados.
+
+O mesmo contrato cobre as superfícies do Inter alteradas no lote: recebimento de
+cobranças, recebimento bancário, configuração administrativa do callback e o job
+de reconciliação. Esses endpoints não devolvem `error.message` bruto; os callbacks
+públicos tratam o conteúdo como sinal declarado pelo cliente e confirmam estados
+financeiros pela API autenticada do provedor.
+
+O lote é protegido por testes de origem e pelos ratchets de contratos de erro e
+segurança. A baseline histórica continua representando backlog e não foi ampliada.
+
 As demais superfícies permanecem backlog de migração. A baseline não as transforma em bugs confirmados nem autoriza alterar comportamento sem caracterização.
