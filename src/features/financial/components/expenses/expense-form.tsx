@@ -2247,7 +2247,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                 <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">
                   Despesas / {editId ? "Editar" : "Lançar nova"}
                 </p>
-                <h2 className="mt-2 break-words text-[26px] font-extrabold leading-tight tracking-[-0.03em]">
+                <h2 className="mt-2 wrap-break-word text-[26px] font-extrabold leading-tight tracking-[-0.03em]">
                   {descriptionValue || "Descrição da despesa"}
                 </h2>
                 <p className="mt-1 text-[13px] text-ds-on-dark-sub">{supplierValue || "Sem fornecedor"}</p>
@@ -2257,7 +2257,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                 </div>
               </div>
 
-              <div className="rounded-ds-btn-lg bg-white/[.06] p-4">
+              <div className="rounded-ds-btn-lg bg-white/6 p-4">
                 <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted">Como aparecerá na fila</p>
                 <p className="mt-1 font-mono text-[26px] font-extrabold">{formatCurrency(totalValue || 0)}</p>
                 <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]">
@@ -2672,7 +2672,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                           ) : accountAllocationFields.map((allocationField, index) => (
                             <div
                               key={allocationField.id}
-                              className="grid gap-3 rounded-lg border bg-muted/15 p-3 md:grid-cols-[minmax(220px,1fr),180px,auto,40px]"
+                              className="grid gap-3 rounded-lg border bg-muted/15 p-3 md:grid-cols-[minmax(220px,1fr)_180px_auto_40px]"
                             >
                               <FormField
                                 control={form.control}
@@ -2901,7 +2901,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                           )}
 
                           {apportionmentFields.map((field, index) => (
-                            <div key={field.id} className="grid gap-4 rounded-lg border bg-muted/15 p-3 lg:grid-cols-[minmax(180px,1fr),160px,160px,minmax(180px,220px),48px]">
+                            <div key={field.id} className="grid gap-4 rounded-lg border bg-muted/15 p-3 lg:grid-cols-[minmax(180px,1fr)_160px_160px_minmax(180px,220px)_48px]">
                               <FormField
                                 control={form.control}
                                 name={`apportionments.${index}.resultCenter`}

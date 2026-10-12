@@ -254,7 +254,7 @@ function SectionVisibilitySelect({
       <select
         value={visibility}
         onChange={(event) => onChange(event.target.value as FieldVisibility)}
-        className="h-7 rounded-lg border border-[#dedfe4] bg-white px-1.5 text-[11.5px] font-extrabold text-[#1d1d26] outline-none"
+        className="h-7 rounded-lg border border-[#dedfe4] bg-white px-1.5 text-[11.5px] font-extrabold text-[#1d1d26] outline-hidden"
         title="Altera a visibilidade de todos os campos deste card"
       >
         {mixed ? <option value={visibility}>Visibilidade mista</option> : null}
@@ -1275,7 +1275,7 @@ export function FieldConfigPage() {
   });
 
   return (
-    <div className="personal-field-config-density space-y-3 bg-[var(--bg)] px-3 py-3 text-[#1d1d26] md:px-4">
+    <div className="personal-field-config-density space-y-3 bg-(--bg) px-3 py-3 text-[#1d1d26] md:px-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-black tracking-[-.02em] text-[#181820]">Campos do Perfil</h1>
@@ -1300,7 +1300,7 @@ export function FieldConfigPage() {
                 <DialogDescription className="mt-1 max-w-[640px] text-xs leading-5 text-[#6a707a]">
                   O que cada perfil pode fazer em campos e cards. Vínculos de cargo, função e pessoa ficam na coluna Exceção.
                 </DialogDescription>
-                <div className="!mt-3.5 inline-flex w-fit items-center gap-[7px] rounded-full border border-[#df2f78]/[.16] bg-[#df2f78]/[.07] py-1.5 pl-2.5 pr-3 text-[12.5px] font-semibold text-[#df2f78]">
+                <div className="mt-3.5! inline-flex w-fit items-center gap-[7px] rounded-full border border-[#df2f78]/16 bg-[#df2f78]/[.07] py-1.5 pl-2.5 pr-3 text-[12.5px] font-semibold text-[#df2f78]">
                   <span className="h-[7px] w-[7px] rounded-full bg-[#df2f78]" />
                   Base do perfil
                 </div>
@@ -1358,7 +1358,7 @@ export function FieldConfigPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="h-11 w-full rounded-xl border-0 bg-[#f6f5f2] pl-10 pr-4 text-sm font-medium text-[#4f4f5b] outline-none placeholder:text-[#9d9da9]"
+              className="h-11 w-full rounded-xl border-0 bg-[#f6f5f2] pl-10 pr-4 text-sm font-medium text-[#4f4f5b] outline-hidden placeholder:text-[#9d9da9]"
               placeholder="Buscar campo por nome ou chave..."
             />
           </div>
@@ -1392,7 +1392,7 @@ export function FieldConfigPage() {
                     style={active && tone ? { background: '#ffffffaa', color: tone.fg } : undefined}
                     className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${
                       active && !tone
-                        ? 'bg-white/[.18] text-white'
+                        ? 'bg-white/18 text-white'
                         : active
                           ? ''
                           : 'bg-[#eceae4] text-[#8a8a94]'
@@ -1407,7 +1407,7 @@ export function FieldConfigPage() {
         </div>
       </div>
 
-      {message ? <p className="rounded-2xl bg-white px-5 py-4 text-sm font-black text-[#6f6f7c] shadow-sm ring-1 ring-[#dedfe4]">{message}</p> : null}
+      {message ? <p className="rounded-2xl bg-white px-5 py-4 text-sm font-black text-[#6f6f7c] shadow-xs ring-1 ring-[#dedfe4]">{message}</p> : null}
 
       {visibleSectionContainers.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-[#cfd0d8] bg-white px-5 py-10 text-center text-sm font-black text-[#777784]">
@@ -1600,7 +1600,7 @@ export function FieldConfigPage() {
                 type="button"
                 onClick={discard}
                 disabled={saving}
-                className="h-[38px] rounded-xl bg-white/[.12] px-[15px] text-[13px] font-bold text-[#e7e7ea] transition hover:bg-white/20 disabled:opacity-60"
+                className="h-[38px] rounded-xl bg-white/12 px-[15px] text-[13px] font-bold text-[#e7e7ea] transition hover:bg-white/20 disabled:opacity-60"
               >
                 Descartar
               </button>
@@ -1631,23 +1631,23 @@ export function FieldConfigPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Nome
-                <input value={editing.label} onChange={(event) => updateField(editingKey, { label: event.target.value })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
+                <input value={editing.label} onChange={(event) => updateField(editingKey, { label: event.target.value })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden" />
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Seção
-                <input value={editing.section} onChange={(event) => updateField(editingKey, { section: event.target.value })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
+                <input value={editing.section} onChange={(event) => updateField(editingKey, { section: event.target.value })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden" />
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Grupo
-                <input value={editing.group?.label ?? ''} onChange={(event) => updateFieldGroup(editingKey, event.target.value)} placeholder="Ex.: CNH, Dependente" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
+                <input value={editing.group?.label ?? ''} onChange={(event) => updateFieldGroup(editingKey, event.target.value)} placeholder="Ex.: CNH, Dependente" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden" />
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Subgrupo
-                <input value={editing.subgroup?.label ?? ''} onChange={(event) => updateFieldSubgroup(editingKey, event.target.value)} disabled={!editing.group} placeholder="Ex.: Validade da CNH" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]" />
+                <input value={editing.subgroup?.label ?? ''} onChange={(event) => updateFieldSubgroup(editingKey, event.target.value)} disabled={!editing.group} placeholder="Ex.: Validade da CNH" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]" />
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Tipo
-                <select value={editing.type} onChange={(event) => updateField(editingKey, { type: event.target.value as FieldType })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
+                <select value={editing.type} onChange={(event) => updateField(editingKey, { type: event.target.value as FieldType })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden">
                   {FIELD_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
                 </select>
               </label>
@@ -1656,35 +1656,35 @@ export function FieldConfigPage() {
                 <select value={normalizeFieldVisibility(editing.visibility)} onChange={(event) => {
                   const visibility = event.target.value as NormalizedFieldVisibility;
                   updateField(editingKey, { visibility, lgpd: defaultLgpd(editing.section, visibility) });
-                }} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
+                }} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden">
                   {VISIBILITIES.map((visibility) => <option key={visibility} value={visibility}>{VISIBILITY_LABELS[visibility]}</option>)}
                 </select>
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Categoria LGPD
-                <select value={editing.lgpd?.category ?? 'personal'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, category: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
+                <select value={editing.lgpd?.category ?? 'personal'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, category: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden">
                   {Object.entries(LGPD_CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Base legal
-                <select value={editing.lgpd?.legal_basis ?? 'legal_obligation'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, legal_basis: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
+                <select value={editing.lgpd?.legal_basis ?? 'legal_obligation'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, legal_basis: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden">
                   {Object.entries(LEGAL_BASIS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Retenção
-                <select value={editing.lgpd?.retention ?? 'employment_plus_5y'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, retention: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
+                <select value={editing.lgpd?.retention ?? 'employment_plus_5y'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, retention: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden">
                   {Object.entries(RETENTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Opções
-                <input value={editing.options?.join(', ') ?? ''} onChange={(event) => updateField(editingKey, { options: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="Separadas por vírgula" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
+                <input value={editing.options?.join(', ') ?? ''} onChange={(event) => updateField(editingKey, { options: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="Separadas por vírgula" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden" />
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Aparece quando
-                <select value={showIfRule?.field ?? ''} onChange={(event) => updateShowIf(editingKey, event.target.value, 'true')} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
+                <select value={showIfRule?.field ?? ''} onChange={(event) => updateShowIf(editingKey, event.target.value, 'true')} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden">
                   <option value="">Sempre aparece</option>
                   {controllerOptions.map(([key, entry]) => <option key={key} value={key}>{entry.label}</option>)}
                 </select>
@@ -1692,12 +1692,12 @@ export function FieldConfigPage() {
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Valor da condição
                 {fields[showIfRule?.field ?? '']?.type === 'boolean' ? (
-                  <select value={showIfValue || 'true'} disabled={!showIfRule} onChange={(event) => updateShowIf(editingKey, showIfRule?.field ?? '', event.target.value)} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]">
+                  <select value={showIfValue || 'true'} disabled={!showIfRule} onChange={(event) => updateShowIf(editingKey, showIfRule?.field ?? '', event.target.value)} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]">
                     <option value="true">Sim</option>
                     <option value="false">Não</option>
                   </select>
                 ) : (
-                  <input value={showIfValue} disabled={!showIfRule} onChange={(event) => updateShowIf(editingKey, showIfRule?.field ?? '', event.target.value)} placeholder="Deixe vazio para preenchido" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]" />
+                  <input value={showIfValue} disabled={!showIfRule} onChange={(event) => updateShowIf(editingKey, showIfRule?.field ?? '', event.target.value)} placeholder="Deixe vazio para preenchido" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-hidden disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]" />
                 )}
               </label>
             </div>

@@ -89,7 +89,7 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
 <PageHero kicker="Financeiro · Fechamento do caixa" title={monthLabel} subtitle={<>{kioskName}{countingSessionId && <span className="ml-2 rounded-full bg-ds-accent-soft px-2 py-1 text-[10px] font-bold uppercase text-ds-accent-ink">Sessão ativa</span>}</>} actions={<>{countingSessionId && <Button asChild variant="on-dark-secondary" size="md"><Link href={`/dashboard/financial/cash-closures/sessions/${countingSessionId}`}>Voltar à sessão</Link></Button>}<Button variant="on-dark-secondary" size="md" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></>} />
     <div className="grid gap-3">
       <Card className="overflow-hidden rounded-2xl border-ds-border bg-ds-warm shadow-[0_2px_10px_rgba(15,23,42,.04)]">
-        <CardContent className="!p-0">
+        <CardContent className="p-0!">
           <p className="px-[18px] pt-3 text-[9.5px] font-extrabold uppercase tracking-[.08em] text-ds-ink-faint">Fechamento</p>
           <div className="grid min-h-[54px] grid-cols-3 items-center px-[18px] pb-3 pt-1.5">{[
             ["Esperado para conferência", formatBRL(totals.expected), ""],

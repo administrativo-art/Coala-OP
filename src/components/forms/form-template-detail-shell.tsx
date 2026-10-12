@@ -2016,7 +2016,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-xs">
                 <MapPin className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -2241,7 +2241,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
         <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-xs">
                 <ClipboardList className="h-5 w-5" />
               </div>
               <div className="min-w-0">

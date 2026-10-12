@@ -76,7 +76,7 @@ function ConsumptionCard({ data }: { data: CardModel }) {
             {data.abcClass && <Badge variant="outline">{`Curva ${data.abcClass}`}</Badge>}
         </div>
       </CardHeader>
-      <CardContent className="flex-grow">
+      <CardContent className="grow">
         <div className={cn("text-4xl font-bold flex items-center gap-2", color)}>
           <Icon className="h-8 w-8" />
           <span>{data.changePct.toFixed(0)}%</span>

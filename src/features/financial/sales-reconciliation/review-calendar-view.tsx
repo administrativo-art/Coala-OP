@@ -54,7 +54,7 @@ function MiniDay({ day, href }: { day: SalesReviewCalendarDay; href: string }) {
   const label = `${day.day}: ${salesReviewDayLabels[day.state]}`;
   if (!isClickable(day)) return <span aria-label={label} className={cn("flex h-8 items-center justify-center gap-1 rounded-lg text-[11px] font-bold", statusStyles[day.state])}>{content}</span>;
   return <Link href={href} aria-label={label} title={salesReviewDayLabels[day.state]}
-    className={cn("flex h-8 items-center justify-center gap-1 rounded-lg border text-[11px] font-bold transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent", statusStyles[day.state])}>
+    className={cn("flex h-8 items-center justify-center gap-1 rounded-lg border text-[11px] font-bold transition hover:-translate-y-0.5 hover:shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent", statusStyles[day.state])}>
     {content}
   </Link>;
 }
@@ -146,7 +146,7 @@ function MonthCalendar({ month, yearHref, previousHref, nextHref, dayHref }: {
           const className = cn("flex min-h-24 flex-col border-0 p-2 text-left sm:min-h-28 sm:p-2.5", statusStyles[day.state]);
           if (!isClickable(day)) return <div key={day.date} aria-label={`${day.date}: ${salesReviewDayLabels[day.state]}`} className={className}>{content}</div>;
           return <Link key={day.date} href={dayHref(day.date)} aria-label={`${day.date}: ${salesReviewDayLabels[day.state]}`}
-            className={cn(className, "transition hover:relative hover:z-10 hover:brightness-[.97] focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent")}>
+            className={cn(className, "transition hover:relative hover:z-10 hover:brightness-[.97] focus-visible:relative focus-visible:z-10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent")}>
             {content}
           </Link>;
         })}

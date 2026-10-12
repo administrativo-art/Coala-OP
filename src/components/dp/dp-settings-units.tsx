@@ -478,7 +478,7 @@ export function DPSettingsUnits() {
           aria-expanded={!isCollapsed}
           onClick={() => toggleBand(band.key)}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2.5 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-inset",
+            "flex min-w-0 flex-1 items-center gap-2.5 py-2.5 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-inset",
             band.level === 0 ? "pl-5" : "pl-10"
           )}
         >

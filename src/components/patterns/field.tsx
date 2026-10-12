@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 
 /** Caixa de campo do guia (docs/design/campos.md): 40px, raio 11, foco índigo de modal. */
 export const fieldInputClass =
-  "h-10 w-full rounded-ds-md border border-ds-border-input bg-ds-input px-3 text-[13px] text-ds-ink placeholder:text-ds-ink-faint focus-visible:border-ds-modal focus-visible:bg-white focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft focus-visible:ring-offset-0 aria-[invalid=true]:border-[1.5px] aria-[invalid=true]:border-ds-danger"
+  "h-10 w-full rounded-ds-md border border-ds-border-input bg-ds-input px-3 text-[13px] text-ds-ink placeholder:text-ds-ink-faint focus-visible:border-ds-modal focus-visible:bg-white focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft focus-visible:ring-offset-0 aria-invalid:border-[1.5px] aria-invalid:border-ds-danger"
 
 export interface FieldProps {
   label: string

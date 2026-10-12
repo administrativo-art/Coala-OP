@@ -176,7 +176,7 @@ export function OnboardingDocumentWorkbench({
   const selectedPreviewKind = selected ? onboardingDocumentPreviewKind(selected) : "unknown";
 
   return (
-    <section className="overflow-hidden rounded-[20px] border border-[#e2ded6] bg-white shadow-sm">
+    <section className="overflow-hidden rounded-[20px] border border-[#e2ded6] bg-white shadow-xs">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f3f1ec] px-4 py-3.5">
         <div><p className="text-[10px] font-black uppercase tracking-[0.09em] text-stone-500">Documentação obrigatória</p><h4 className="mt-1 text-sm font-black tracking-[-0.02em] text-slate-950">Conferência do RH</h4></div>
         <span className={`rounded-xl px-3 py-1.5 text-[11px] font-black ${approved === documents.length ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{approved}/{documents.length} aprovados</span>
@@ -221,7 +221,7 @@ export function OnboardingDocumentWorkbench({
         {selected ? (
           <div className="space-y-3 bg-[#faf9f6] p-3.5">
             <div className="flex items-center gap-2"><h5 className="min-w-0 flex-1 truncate text-xs font-black text-slate-900">{selected.label}</h5>{selected.fileUrl ? <><a href={selected.fileUrl} target="_blank" rel="noreferrer" className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600" aria-label="Abrir documento em nova aba"><ExternalLink className="h-3.5 w-3.5" /></a><a href={selected.fileUrl} download className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600" aria-label="Baixar documento"><Download className="h-3.5 w-3.5" /></a></> : null}</div>
-            <div className="min-h-[260px] overflow-hidden rounded-xl border border-stone-200 bg-stone-100 shadow-sm">
+            <div className="min-h-[260px] overflow-hidden rounded-xl border border-stone-200 bg-stone-100 shadow-xs">
               {selected.fileUrl ? selectedPreviewKind === "image" ? (
                 <img src={selected.fileUrl} alt={`Pré-visualização de ${selected.label}`} className="block h-[420px] w-full object-contain p-3" />
               ) : (
@@ -277,7 +277,7 @@ export function OnboardingDocumentWorkbench({
                           </div>
                         ) : (
                           <>
-                            <span className="mt-1 flex items-start gap-2"><span className="min-w-0 flex-1 break-words font-mono text-[11px] font-bold text-slate-800">{valueText(value)}</span>{editable && canReview && !disabled ? <button type="button" disabled={Boolean(busyAction)} onClick={() => { setEditingFieldKey(key); setFieldDraft(String(value)); }} className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-blue-100 px-1.5 text-[9px] font-black text-blue-700 disabled:opacity-50"><Pencil className="h-2.5 w-2.5" />Corrigir</button> : null}</span>
+                            <span className="mt-1 flex items-start gap-2"><span className="min-w-0 flex-1 wrap-break-word font-mono text-[11px] font-bold text-slate-800">{valueText(value)}</span>{editable && canReview && !disabled ? <button type="button" disabled={Boolean(busyAction)} onClick={() => { setEditingFieldKey(key); setFieldDraft(String(value)); }} className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-blue-100 px-1.5 text-[9px] font-black text-blue-700 disabled:opacity-50"><Pencil className="h-2.5 w-2.5" />Corrigir</button> : null}</span>
                             {corrected ? <span className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] font-black text-blue-700"><Pencil className="h-3 w-3" />Corrigido pelo RH</span> : lowConfidence ? confirmed ? <span className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] font-black text-emerald-700"><CheckCircle2 className="h-3 w-3" />Valor confirmado pelo RH</span> : <button type="button" disabled={!canReview || disabled || Boolean(busyAction)} onClick={() => void onConfirmField(selected.id, key)} className="mt-2 h-7 w-full rounded-lg border border-amber-300 bg-amber-50 text-[9.5px] font-black uppercase tracking-wide text-amber-700 disabled:opacity-50">Confirmar valor</button> : null}
                           </>
                         )}

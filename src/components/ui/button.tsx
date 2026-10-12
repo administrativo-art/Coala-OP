@@ -6,14 +6,14 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-[background-color,box-shadow,transform,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:shadow-none active:scale-[0.985] disabled:opacity-60",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-[background-color,box-shadow,transform,color] duration-150 ease-out focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:shadow-none active:scale-[0.985] disabled:opacity-60",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md active:shadow-sm",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm hover:shadow-md",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm hover:shadow-md",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm hover:shadow-md",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs hover:shadow-md active:shadow-xs",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-xs hover:shadow-md",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-xs hover:shadow-md",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-xs hover:shadow-md",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         // Guia de design (docs/design/botoes.md). Não animam escala.
@@ -24,8 +24,8 @@ const buttonVariants = cva(
         "ds-link": "font-bold text-ds-accent-ink hover:text-ds-accent-ink-hover hover:underline active:scale-100",
         "danger-link": "font-bold text-ds-danger hover:underline active:scale-100",
         danger: "bg-ds-danger font-extrabold text-white hover:brightness-90 active:scale-100",
-        "on-dark-secondary": "border border-white/[.14] font-bold text-ds-on-dark hover:bg-white/[.06] active:scale-100",
-        "on-dark-icon": "bg-white/[.08] text-ds-on-dark-2 hover:bg-white/[.14] active:scale-100",
+        "on-dark-secondary": "border border-white/[.14] font-bold text-ds-on-dark hover:bg-white/6 active:scale-100",
+        "on-dark-icon": "bg-white/8 text-ds-on-dark-2 hover:bg-white/[.14] active:scale-100",
       },
       size: {
         default: "h-10 px-4 py-2",

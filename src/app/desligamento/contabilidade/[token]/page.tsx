@@ -73,7 +73,7 @@ export default function AccountantTerminationPage() {
     <main className="min-h-screen bg-[#f0eee9] p-4 md:p-10">
       <div className="mx-auto max-w-3xl space-y-5">
         <header>
-          <p className="text-xs font-black uppercase tracking-[0.1em] text-pink-600">Portal seguro da contabilidade</p>
+          <p className="text-xs font-black uppercase tracking-widest text-pink-600">Portal seguro da contabilidade</p>
           <h1 className="mt-2 text-2xl font-black text-slate-950">Documentos do desligamento</h1>
           <p className="mt-2 text-sm font-medium text-slate-500">Envie o TRCT, o demonstrativo e confirme os valores usados no pagamento.</p>
         </header>

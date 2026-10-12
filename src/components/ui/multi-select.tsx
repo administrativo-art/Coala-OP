@@ -114,7 +114,7 @@ export function MultiSelect({
                 <Badge key={value} variant="secondary" className="hover:bg-secondary/80">
                   {option?.label || value}
                   <button
-                    className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="ml-1 ring-offset-background rounded-full outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleUnselect(value)}
                   >
@@ -130,14 +130,14 @@ export function MultiSelect({
               onBlur={() => setTimeout(() => setOpen(false), 100)} // Delay blur to allow click
               onFocus={() => setOpen(true)}
               placeholder={selected.length === 0 ? placeholder : ""}
-              className="ml-2 bg-transparent outline-none placeholder:text-muted-foreground flex-1 min-w-[120px]"
+              className="ml-2 bg-transparent outline-hidden placeholder:text-muted-foreground flex-1 min-w-[120px]"
             />
           </div>
         </div>
         
         {open && (
             <div 
-              className="absolute top-full z-50 w-full mt-2 bg-popover text-popover-foreground rounded-md border shadow-md outline-none animate-in fade-in-0 zoom-in-95"
+              className="absolute top-full z-50 w-full mt-2 bg-popover text-popover-foreground rounded-md border shadow-md outline-hidden animate-in fade-in-0 zoom-in-95"
               onMouseDown={(e) => e.preventDefault()}
             >
             <div ref={parentRef} className="max-h-[300px] overflow-auto p-1">
@@ -152,8 +152,8 @@ export function MultiSelect({
                         data-value={option.value}
                         onMouseDown={() => handleSelect(option.value)}
                         className={cn(
-                          "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none",
-                          "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                          "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-hidden",
+                          "data-disabled:pointer-events-none data-disabled:opacity-50",
                           activeIndex === virtualItem.index ? "bg-accent text-accent-foreground" : ""
                         )}
                         style={{

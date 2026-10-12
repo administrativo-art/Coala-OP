@@ -181,7 +181,7 @@ export function DPSettingsShifts() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Turnos reutilizáveis</p>
-            <p className="mt-1 text-[44px] font-bold leading-none tracking-[-0.05em] font-ds-mono">{shiftDefinitions.length}</p>
+            <p className="mt-1 text-[44px] font-bold leading-none tracking-tighter font-ds-mono">{shiftDefinitions.length}</p>
             <p className="mt-1 text-base font-extrabold">Definições de turno</p>
           </div>
         </div>
@@ -330,7 +330,7 @@ export function DPSettingsShifts() {
                           aria-pressed={selected}
                           onClick={() => field.onChange(selected ? field.value.filter((day) => day !== index) : [...field.value, index].sort())}
                           className={cn(
-                            'h-10 min-w-[56px] rounded-ds-md px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                            'h-10 min-w-[56px] rounded-ds-md px-3 text-sm font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
                             selected
                               ? 'border-2 border-ds-modal bg-ds-modal-soft text-ds-modal-ink'
                               : 'border border-ds-border-input bg-white text-ds-ink-2'

@@ -247,7 +247,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
                 </div>
               </div>
 
-              <div className="border rounded-ds-md overflow-hidden bg-ds-surface shadow-sm">
+              <div className="border rounded-ds-md overflow-hidden bg-ds-surface shadow-xs">
                 <Table>
                   <TableHeader className="bg-ds-warm">
                     <TableRow className="hover:bg-transparent">
@@ -313,7 +313,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
                     </div>
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
                   <Command>
                     <CommandInput placeholder="Digite para buscar..." />
                     <CommandList>
@@ -363,7 +363,7 @@ export function ProductSheetTab({ simulation, onOpenChange }: { simulation: Prod
 
               <div className="space-y-4">
                 {phaseFields.map((phase, phaseIndex) => (
-                  <div key={phase.id} className="border rounded-ds-md overflow-hidden bg-ds-surface shadow-sm">
+                  <div key={phase.id} className="border rounded-ds-md overflow-hidden bg-ds-surface shadow-xs">
                     <div className="flex items-center gap-3 bg-ds-warm px-4 py-2 border-b">
                       <span className="text-[10px] font-black text-ds-ink-faint uppercase">Fase {phaseIndex + 1}</span>
                       <Input 

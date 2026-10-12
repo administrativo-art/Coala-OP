@@ -98,7 +98,7 @@ export function DPVacationTimeline({ users, vacations, onSelectUser }: Props) {
           <div className="flex w-max">
             {/* Sticky name column */}
             <div
-              className="sticky left-0 z-[2] flex-shrink-0 border-r bg-card"
+              className="sticky left-0 z-2 shrink-0 border-r bg-card"
               style={{ width: NAME_COL }}
             >
               <div style={{ height: HEAD_H }} className="border-b" />
@@ -110,7 +110,7 @@ export function DPVacationTimeline({ users, vacations, onSelectUser }: Props) {
                   className="flex w-full items-center gap-3.5 border-b px-4 text-left transition-colors hover:bg-muted/40"
                 >
                   <span
-                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     style={{ background: user.color || '#8B5CF6' }}
                   >
                     {initials(user.username)}
@@ -121,13 +121,13 @@ export function DPVacationTimeline({ users, vacations, onSelectUser }: Props) {
             </div>
 
             {/* Lanes */}
-            <div className="relative flex-shrink-0" style={{ width: laneWidth }}>
+            <div className="relative shrink-0" style={{ width: laneWidth }}>
               <div className="flex border-b" style={{ height: HEAD_H }}>
                 {months.map(m => (
                   <div
                     key={m.toISOString()}
                     style={{ width: getDaysInMonth(m) * DAY_WIDTH }}
-                    className="flex flex-shrink-0 items-center justify-center border-r text-sm font-bold uppercase tracking-wider text-muted-foreground"
+                    className="flex shrink-0 items-center justify-center border-r text-sm font-bold uppercase tracking-wider text-muted-foreground"
                   >
                     {capitalize(format(m, 'MMMM yyyy', { locale: ptBR }))}
                   </div>
@@ -136,7 +136,7 @@ export function DPVacationTimeline({ users, vacations, onSelectUser }: Props) {
 
               {todayInWindow && (
                 <div
-                  className="absolute bottom-0 top-0 z-[1] w-0.5 bg-primary"
+                  className="absolute bottom-0 top-0 z-1 w-0.5 bg-primary"
                   style={{ left: todayOffset }}
                 />
               )}

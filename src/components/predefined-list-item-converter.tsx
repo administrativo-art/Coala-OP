@@ -66,12 +66,12 @@ export function PredefinedListItemConverter({ item, products, value, onValueChan
         <p className="font-medium mb-2">{getProductFullName(selectedProduct)}</p>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
             <div className="flex items-center gap-2">
-                <Input type="number" value={value} onChange={(e) => onValueChange(e.target.value, result)} className="flex-grow bg-background" />
+                <Input type="number" value={value} onChange={(e) => onValueChange(e.target.value, result)} className="grow bg-background" />
                 <span className="text-sm font-semibold">{item.fromUnit}</span>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
             <div className="flex items-center gap-2 p-2 rounded-md bg-background">
-                <p className="text-xl font-bold text-primary font-headline flex-grow text-center">{result}</p>
+                <p className="text-xl font-bold text-primary font-headline grow text-center">{result}</p>
                  <span className="text-sm font-semibold">{item.toUnit}</span>
             </div>
         </div>

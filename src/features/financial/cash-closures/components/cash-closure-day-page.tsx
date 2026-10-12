@@ -625,7 +625,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-0 !p-0">
+        <CardContent className="space-y-0 p-0!">
           <div className="hidden grid-cols-[14px_minmax(170px,1.5fr)_150px_150px_150px_minmax(150px,190px)] gap-3 border-b border-ds-border bg-ds-muted px-5 py-2.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-ds-ink-faint lg:grid"><span /><span className="pl-[29px]">Canal</span><span className="text-right">PDV · esperado</span><span className="text-center">Caixa · contado</span><span className="text-center">Financeiro · conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
             const result = resultText(line.differenceCents);
@@ -650,7 +650,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
 
     {requiresSeniorApproval && <div className="flex items-start gap-3 rounded-[14px] border border-ds-confirm-border bg-ds-danger-bg px-4 py-3 text-[13px] leading-5 text-ds-confirm-ink"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" /><span><strong>Finalização sênior necessária.</strong> Uma diferença entre PDV, Caixa e Financeiro ultrapassa {formatBRL(seniorDivergenceCents)}; a finalização exige também permissão de reabertura.</span></div>}
 
-    <Card className="overflow-hidden border-0 bg-ds-neutral text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-stretch !p-0 sm:grid-cols-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_.9fr_.9fr]">
+    <Card className="overflow-hidden border-0 bg-ds-neutral text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-stretch p-0! sm:grid-cols-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_.9fr_.9fr]">
       <SummaryMetric label="Total PDV" value={formatBRL(liveSummary.expected)} prominent />
       <SummaryMetric label="Informado Caixa" value={liveSummary.unreported > 0 ? "—" : formatBRL(liveSummary.reported)} />
       <SummaryMetric label="Conferido Financeiro" value={liveSummary.pending > 0 ? "—" : formatBRL(liveSummary.counted)} />

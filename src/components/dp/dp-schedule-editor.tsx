@@ -339,8 +339,8 @@ function ShiftDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideClose
-        overlayClassName="!bg-[#0f172a]/[0.42]"
-        className="max-h-[86vh] !max-w-[430px] gap-0 overflow-y-auto !rounded-[18px] border-0 bg-white !p-5 shadow-[0_40px_80px_-30px_rgba(15,23,42,0.6)]"
+        overlayClassName="bg-[#0f172a]/42!"
+        className="max-h-[86vh] max-w-[430px]! gap-0 overflow-y-auto rounded-[18px]! border-0 bg-white p-5! shadow-[0_40px_80px_-30px_rgba(15,23,42,0.6)]"
       >
         <DialogHeader className="relative space-y-0 pr-10 text-left">
           <DialogTitle className="text-[16.5px] font-black leading-tight tracking-[-0.015em] text-[#0f172a]">
@@ -349,7 +349,7 @@ function ShiftDialog({
           <DialogDescription className="mt-1 text-[12.5px] font-semibold leading-[1.45] text-[#7d8a9d]">
             {modalUnitName} · colaboradora e faixa de horário.
           </DialogDescription>
-          <DialogClose className="absolute -right-0 -top-0 grid h-7 w-7 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#94a3b8] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] hover:text-[#475569] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9]">
+          <DialogClose className="absolute right-0 top-0 grid h-7 w-7 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#94a3b8] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] hover:text-[#475569] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#0ea5e9]">
             <X className="h-[13px] w-[13px]" strokeWidth={2.6} />
             <span className="sr-only">Fechar</span>
           </DialogClose>
@@ -451,7 +451,7 @@ function ShiftDialog({
               </div>
             )}
 
-            <DialogFooter className="!mt-6 !flex !flex-row !items-center !justify-between gap-3 sm:!justify-between sm:!space-x-0">
+            <DialogFooter className="mt-6! flex! flex-row! items-center! justify-between! gap-3 sm:justify-between! sm:space-x-0!">
               {isEdit && shift && onDelete ? (
                 <Button type="button" variant="outline" onClick={() => onDelete(shift)} className="h-[34px] rounded-[10px] border-[#fbd0da] px-[13px] text-[12.5px] font-extrabold text-[#be123c] hover:border-[#f7a9bc] hover:bg-[#fef2f4] hover:text-[#be123c]">
                   Remover
@@ -623,7 +623,7 @@ function ShiftCard({
 
       <div className="flex-1 min-w-0">
         <p className="font-semibold truncate text-foreground leading-tight">{userName}</p>
-        <p className="mt-px whitespace-normal break-words text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
+        <p className="mt-px whitespace-normal wrap-break-word text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
           {shiftLabel}
         </p>
       </div>
@@ -654,10 +654,10 @@ function ShiftCard({
 
       {canEdit && !selectionMode && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-end gap-0.5 rounded-lg bg-background/90 pr-1.5 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-          <button type="button" aria-label={`Editar turno de ${userName}`} onClick={() => onEdit(shift)} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" aria-label={`Editar turno de ${userName}`} onClick={() => onEdit(shift)} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <Pencil className="h-3 w-3" />
           </button>
-          <button type="button" aria-label={`Remover turno de ${userName}`} onClick={() => onDelete(shift)} className="flex h-6 w-6 items-center justify-center rounded text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" aria-label={`Remover turno de ${userName}`} onClick={() => onDelete(shift)} className="flex h-6 w-6 items-center justify-center rounded text-destructive hover:bg-destructive/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
@@ -811,7 +811,7 @@ function DayOffBadge({
             type="button"
             onClick={onPublish}
             className={cn(
-              'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-semibold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               hasFailed
                 ? 'border-destructive/30 hover:bg-destructive/10'
                 : 'border-border/60 bg-background/70 hover:bg-background',
@@ -829,7 +829,7 @@ function DayOffBadge({
           <button
             type="button"
             onClick={onRemove}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label={removalFailed ? `Tentar remover novamente a folga de ${user.username}` : `Remover folga de ${user.username}`}
             title={removalFailed ? 'Tentar remover novamente' : 'Remover folga'}
           >
@@ -2199,7 +2199,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
             type="button"
             onClick={onBack}
             aria-label="Voltar para todos os meses"
-            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-none transition hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-hidden transition hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
           >
             <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.4} />
           </button>

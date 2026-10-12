@@ -196,9 +196,9 @@ export function FeedGridView({
                       onDrop={(event) => { event.preventDefault(); void dropOn(entry, event.dataTransfer.getData("text/plain")); }}
                       onClick={() => setSelectedKey(entry.key)}
                       className={cn(
-                        "relative aspect-square -outline-offset-[3px] overflow-hidden text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ds-accent-ink",
+                        "relative aspect-square outline-offset-[-3px] overflow-hidden text-left focus-visible:z-10 focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-ds-accent-ink",
                         formatTone[entry.format].tile,
-                        overKey === entry.key ? "outline outline-[3px] outline-dashed outline-ds-accent-ink" : selectedTile ? "outline outline-[3px] outline-ds-accent-ink" : scheduled && "outline outline-1 outline-ds-accent",
+                        overKey === entry.key ? "outline-solid outline-[3px] outline-dashed outline-ds-accent-ink" : selectedTile ? "outline-solid outline-[3px] outline-ds-accent-ink" : scheduled && "outline-solid outline-1 outline-ds-accent",
                         draggedId === (scheduled ? entry.item.id : "") && "opacity-50"
                       )}
                     >
@@ -208,8 +208,8 @@ export function FeedGridView({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={entry.item.previewUrl} alt={`Publicação de @${profile?.username || "coalashakes"}`} referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                       )}
-                      {entry.format === "carousel" && <Images className="absolute right-2 top-2 h-5 w-5 text-white drop-shadow" aria-label="Carrossel" />}
-                      {entry.format === "reel" && <Play className="absolute right-2 top-2 h-5 w-5 fill-white text-white drop-shadow" aria-label="Reel" />}
+                      {entry.format === "carousel" && <Images className="absolute right-2 top-2 h-5 w-5 text-white drop-shadow-sm" aria-label="Carrossel" />}
+                      {entry.format === "reel" && <Play className="absolute right-2 top-2 h-5 w-5 fill-white text-white drop-shadow-sm" aria-label="Reel" />}
                       {scheduled && (
                         <>
                           <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded-ds-sm bg-ds-dark/90 px-1.5 py-0.5 font-ds-mono text-[10px] font-bold text-white">
@@ -248,7 +248,7 @@ export function FeedGridView({
                 <p className="text-[13px] leading-5 text-ds-ink-muted">Compara a publicação com as seis anteriores. Evite três conteúdos do mesmo formato em sequência.</p>
                 <div className="flex gap-1" aria-label="Sequência de formatos">
                   {[selected, ...neighbors].map((entry) => (
-                    <span key={entry.key} className={cn("h-11 flex-1 rounded-ds-sm", formatTone[entry.format].tile, entry.key === selected.key && "outline outline-2 outline-offset-2 outline-ds-accent-ink")} title={formatTheme[entry.format].label} />
+                    <span key={entry.key} className={cn("h-11 flex-1 rounded-ds-sm", formatTone[entry.format].tile, entry.key === selected.key && "outline-solid outline-2 outline-offset-2 outline-ds-accent-ink")} title={formatTheme[entry.format].label} />
                   ))}
                 </div>
                 <div className={cn("rounded-ds-btn px-3 py-2.5 text-[13px] font-extrabold", repeatsFormat ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-ok-bg text-ds-ok")}>

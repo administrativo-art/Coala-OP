@@ -74,7 +74,7 @@ export function ImageVoiceConsentCard({
     ?? undefined;
 
   return (
-    <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-xs">
       <div className="mb-4">
         <h2 className="text-sm font-semibold text-gray-900">Privacidade e autorizações</h2>
         <p className="mt-1 text-xs leading-relaxed text-gray-500">

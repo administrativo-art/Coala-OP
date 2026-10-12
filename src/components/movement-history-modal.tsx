@@ -214,7 +214,7 @@ export function MovementHistoryModal({
     { key: 'quantityChange', label: 'Qtd.', className: 'text-right' },
     { key: 'username', label: 'Usuário' },
   ];
-  const DARK_SELECT = 'h-[42px] rounded-xl border border-white/10 bg-white/[.07] px-3 text-[13px] font-semibold text-white outline-none focus:border-[#f08bb1] [&>option]:text-[#1a1b1f]';
+  const DARK_SELECT = 'h-[42px] rounded-xl border border-white/10 bg-white/[.07] px-3 text-[13px] font-semibold text-white outline-hidden focus:border-[#f08bb1] [&>option]:text-[#1a1b1f]';
   const totals = [
     { label: 'Total de entradas', hint: 'Compras + divergência acréscimo + estorno (devolve)', value: totalEntradas, color: '#4ade80' },
     { label: 'Total em transferências', hint: 'Movido entre unidades', value: totalTransferencias, color: '#93b4ff' },
@@ -255,7 +255,7 @@ export function MovementHistoryModal({
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Buscar produto, lote, usuário, observação…"
-                className="min-w-0 flex-1 border-none bg-transparent text-[13.5px] text-white outline-none placeholder:text-[#8e8d99]"
+                className="min-w-0 flex-1 border-none bg-transparent text-[13.5px] text-white outline-hidden placeholder:text-[#8e8d99]"
               />
             </div>
             <Popover>
@@ -285,7 +285,7 @@ export function MovementHistoryModal({
             <div className="py-4"><Skeleton className="h-64 w-full" /></div>
           ) : (
             <div className="min-w-[860px]">
-              <div className={cn(GRID, 'sticky top-0 z-10 border-b border-[#e3dfd6] bg-[#faf9f6] py-3 text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]')}>
+              <div className={cn(GRID, 'sticky top-0 z-10 border-b border-[#e3dfd6] bg-[#faf9f6] py-3 text-[10.5px] font-extrabold uppercase tracking-widest text-[#9a9ba1]')}>
                 {SORTABLE.map(column => (
                   <button key={column.key} type="button" onClick={() => handleSort(column.key)} className={cn('flex items-center gap-1 text-left uppercase', column.className === 'text-right' && 'justify-end')}>
                     {column.label}

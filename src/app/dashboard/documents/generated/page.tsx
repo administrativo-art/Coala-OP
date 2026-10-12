@@ -541,7 +541,7 @@ export default function GeneratedDocumentsPage() {
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos gerados.</p>;
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border bg-white shadow-xs">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-teal-700">
@@ -803,7 +803,7 @@ export default function GeneratedDocumentsPage() {
                                 <span className="block font-semibold text-slate-800">{AUDIT_FIELD_LABELS[key] ?? key}</span>
                                 <span className="mt-0.5 block break-all font-mono text-[9px] text-slate-400">{key}</span>
                               </span>
-                              <span className="whitespace-pre-line break-words">
+                              <span className="whitespace-pre-line wrap-break-word">
                                 {value.sensitive && value.renderedValue == null
                                   ? "Dado sensível protegido"
                                   : auditValueText(key, value.renderedValue)}

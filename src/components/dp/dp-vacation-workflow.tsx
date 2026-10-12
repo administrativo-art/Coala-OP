@@ -221,12 +221,12 @@ function SignatureParticipantCard({
   return (
     <div className={`overflow-hidden rounded-2xl border bg-white ${failed ? 'border-rose-200' : signed ? 'border-emerald-200' : 'border-slate-200'}`}>
       <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-        <Avatar className="h-10 w-10 shrink-0 ring-2 ring-white shadow-sm">
+        <Avatar className="h-10 w-10 shrink-0 ring-2 ring-white shadow-xs">
           <AvatarImage src={participant.avatarUrl ?? undefined} />
           <AvatarFallback>{participantInitials(participant.name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className={`text-[9px] font-black uppercase tracking-[0.1em] ${tone === 'violet' ? 'text-violet-700' : 'text-sky-700'}`}>
+          <p className={`text-[9px] font-black uppercase tracking-widest ${tone === 'violet' ? 'text-violet-700' : 'text-sky-700'}`}>
             {participant.party === 'employee' ? 'Colaborador(a)' : 'Empregadora'}
           </p>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2">
@@ -495,7 +495,7 @@ function EmptyWorkflow({
   if (!cycle || balance <= 0) {
     return (
       <section className="rounded-[18px] border border-[#e9edf4] bg-card p-[18px]">
-        <Badge variant="outline" className="rounded-full bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-700">
+        <Badge variant="outline" className="rounded-full bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-700">
           Ficha informativa
         </Badge>
         <h2 className="mt-2 text-lg font-black tracking-tight">Nenhum ciclo disponível para registro</h2>
@@ -528,7 +528,7 @@ function EmptyWorkflow({
     <section className="rounded-[18px] border border-[#e9edf4] bg-card p-[18px]">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-[260px] flex-1">
-          <Badge className="rounded-full bg-pink-100 text-[10px] font-black uppercase tracking-[0.1em] text-pink-800 hover:bg-pink-100">
+          <Badge className="rounded-full bg-pink-100 text-[10px] font-black uppercase tracking-widest text-pink-800 hover:bg-pink-100">
             Passo 1 de 3 · registro
           </Badge>
           <h2 className="mt-2 text-lg font-black tracking-tight">
@@ -640,7 +640,7 @@ export function DPVacationAuditTimeline({
   }, [load, version]);
 
   return (
-    <div className={embedded ? 'overflow-hidden bg-white' : 'overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'}>
+    <div className={embedded ? 'overflow-hidden bg-white' : 'overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs'}>
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
         <div>
           <div className="flex items-center gap-2">
@@ -817,7 +817,7 @@ export function DPVacationWorkflowPanel({
 
   return (
     <section className="space-y-4 text-slate-950">
-      <div className="rounded-[18px] border border-[#e2ded6] bg-white p-4 shadow-sm">
+      <div className="rounded-[18px] border border-[#e2ded6] bg-white p-4 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.09em] text-[#df2f78]">Trilha de férias</p>
@@ -867,7 +867,7 @@ export function DPVacationWorkflowPanel({
                 aria-pressed={selected}
                 aria-label={`Ver etapa ${index + 1}: ${meta.label}`}
                 onClick={() => setStageSelection({ recordId: record.id, stage: meta.id })}
-                className={`min-w-[124px] flex-1 rounded-[13px] border-b-[3px] px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]/50 ${stepClasses(step)} ${selected ? 'ring-2 ring-[#df2f78]/35 shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                className={`min-w-[124px] flex-1 rounded-[13px] border-b-[3px] px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#df2f78]/50 ${stepClasses(step)} ${selected ? 'ring-2 ring-[#df2f78]/35 shadow-xs' : 'opacity-80 hover:opacity-100'}`}
               >
                 <span className="flex items-center gap-2">
                   <span className="font-mono text-[9px] font-bold opacity-70">0{index + 1}</span>
@@ -927,7 +927,7 @@ export function DPVacationWorkflowPanel({
 
       <div className="space-y-4">
         {selectedStage === 'scheduling' ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
           <div className="border-b border-slate-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-[#df2f78]" />
@@ -957,7 +957,7 @@ export function DPVacationWorkflowPanel({
         ) : null}
 
         {selectedStage === 'notice' ? (
-        <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-xs">
           <div className="border-b border-violet-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-violet-600" />
@@ -1078,7 +1078,7 @@ export function DPVacationWorkflowPanel({
         ) : null}
 
         {selectedStage === 'accountant' ? (
-        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-xs">
           <div className="border-b border-emerald-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
               {workflow.currentStage === 'receipt_review' ? <FileCheck2 className="h-4 w-4 text-emerald-600" /> : <Upload className="h-4 w-4 text-emerald-600" />}
@@ -1344,7 +1344,7 @@ export function DPVacationWorkflowPanel({
         ) : null}
 
         {selectedStage === 'payment' || selectedStage === 'receipt_signature' || selectedStage === 'closure' ? (
-        <div className="overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-xs">
           <div className="border-b border-sky-100 px-4 py-3.5">
             <div className="flex items-center gap-2">
               {selectedStage === 'payment' ? <Landmark className="h-4 w-4 text-sky-600" /> : selectedStage === 'receipt_signature' ? <UserRoundCheck className="h-4 w-4 text-sky-600" /> : <CheckCircle2 className="h-4 w-4 text-sky-600" />}

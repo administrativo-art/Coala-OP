@@ -239,7 +239,7 @@ export function DPCalendarHolidays({ calendar, onBack }: DPCalendarHolidaysProps
             return (
               <div
                 key={holiday.id}
-                className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/30 px-4 py-4 shadow-sm transition-colors hover:bg-muted/40"
+                className="flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/30 px-4 py-4 shadow-xs transition-colors hover:bg-muted/40"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

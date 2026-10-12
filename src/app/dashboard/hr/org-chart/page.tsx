@@ -160,7 +160,7 @@ function RecruitmentStageModelEditor({
               <input
                 value={stage.label}
                 onChange={(event) => updateStage(stage.id, { label: event.target.value })}
-                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-hidden focus:ring-2 ${accentClass}`}
               />
               <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{STAGE_LABELS[stage.id]}</p>
             </div>
@@ -172,7 +172,7 @@ function RecruitmentStageModelEditor({
                 value={stage.dueDays ?? ""}
                 onChange={(event) => updateStage(stage.id, { dueDays: event.target.value === "" ? null : Number(event.target.value) })}
                 placeholder="dias"
-                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:ring-2 ${accentClass}`}
               />
             </label>
             <div className="flex justify-end gap-1">
@@ -253,7 +253,7 @@ function OnboardingModelEditor({
             <input
               value={stage.label}
               onChange={(event) => updateStage(stage.id, { label: event.target.value })}
-              className={`mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              className={`mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-hidden focus:ring-2 ${accentClass}`}
             />
             <label className="mt-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Prazo em dias
@@ -262,7 +262,7 @@ function OnboardingModelEditor({
                 min="0"
                 value={stage.dueDays ?? ""}
                 onChange={(event) => updateStage(stage.id, { dueDays: event.target.value === "" ? null : Number(event.target.value) })}
-                className={`mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+                className={`mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:ring-2 ${accentClass}`}
               />
             </label>
           </div>
@@ -282,7 +282,7 @@ function OnboardingModelEditor({
               <input
                 value={document.label}
                 onChange={(event) => updateDocument(document.id, { label: event.target.value })}
-                className={`h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+                className={`h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-hidden focus:ring-2 ${accentClass}`}
               />
               <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                 <input
@@ -505,9 +505,9 @@ function RoleDetailModal({
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600">
-                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.visibleQuestions}/{summary.questions} campos</span>
-                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.pipelineStages} etapas</span>
-                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.integrationDocuments} docs</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-xs">{summary.visibleQuestions}/{summary.questions} campos</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-xs">{summary.pipelineStages} etapas</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-xs">{summary.integrationDocuments} docs</span>
                       </div>
                     </div>
                   );
@@ -672,7 +672,7 @@ function RoleEditModal({
               <input
                 value={values.name}
                 onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                 required
               />
             </label>
@@ -691,7 +691,7 @@ function RoleEditModal({
                 maxLength={7}
                 pattern="\d{4}-\d{2}"
                 placeholder="Ex.: 5134-15"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
               <span className="text-xs text-slate-500">
                 Herdado por todas as funções vinculadas a este cargo e usado nos documentos.
@@ -704,7 +704,7 @@ function RoleEditModal({
             <input
               value={values.publicTitle}
               onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             />
           </label>
 
@@ -714,7 +714,7 @@ function RoleEditModal({
               <select
                 value={values.departmentId}
                 onChange={(event) => setValues((current) => ({ ...current, departmentId: event.target.value }))}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-indigo-400"
               >
                 <option value="">Sem departamento</option>
                 {departments.filter((item) => item.isActive !== false).map((department) => (
@@ -727,7 +727,7 @@ function RoleEditModal({
               <select
                 value={values.parentId}
                 onChange={(event) => setValues((current) => ({ ...current, parentId: event.target.value }))}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-indigo-400"
               >
                 <option value="">Cargo raiz</option>
                 {parentOptions.map((item) => (
@@ -742,7 +742,7 @@ function RoleEditModal({
             <select
               value={values.defaultProfileId}
               onChange={(event) => setValues((current) => ({ ...current, defaultProfileId: event.target.value }))}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-indigo-400"
               required={values.isActive}
             >
               <option value="">Selecione um perfil</option>
@@ -893,25 +893,25 @@ function FunctionEditModal({
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5 text-sm">
               <span className="font-semibold text-slate-700">Nome da função</span>
-              <input value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
+              <input value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-sky-400 focus:ring-2 focus:ring-sky-100" required />
             </label>
             <label className="space-y-1.5 text-sm">
               <span className="font-semibold text-slate-700">Título público</span>
-              <input value={values.publicTitle} onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
+              <input value={values.publicTitle} onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
             </label>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5 text-sm">
               <span className="font-semibold text-slate-700">Departamento</span>
-              <select value={values.departmentId} onChange={(event) => setValues((current) => ({ ...current, departmentId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-sky-400">
+              <select value={values.departmentId} onChange={(event) => setValues((current) => ({ ...current, departmentId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-sky-400">
                 <option value="">Sem departamento</option>
                 {departments.filter((department) => department.isActive !== false).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
               </select>
             </label>
             <label className="space-y-1.5 text-sm">
               <span className="font-semibold text-slate-700">Perfil de acesso padrão</span>
-              <select value={values.defaultProfileId} onChange={(event) => setValues((current) => ({ ...current, defaultProfileId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-sky-400">
+              <select value={values.defaultProfileId} onChange={(event) => setValues((current) => ({ ...current, defaultProfileId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-hidden focus:border-sky-400">
                 <option value="">Sem perfil automático</option>
                 {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </select>
@@ -1026,12 +1026,12 @@ function DraggableDroppableCard({
           : "border-slate-200 hover:border-pink-300"
       }`}
     >
-      <div className="h-2 bg-gradient-to-r from-pink-500 via-sky-400 to-emerald-400" />
+      <div className="h-2 bg-linear-to-r from-pink-500 via-sky-400 to-emerald-400" />
       {canDrag && (
         <div
           {...listeners}
           {...attributes}
-          className="absolute bottom-4 right-4 z-10 cursor-grab rounded-full bg-white p-2 text-slate-400 opacity-0 shadow-sm transition-opacity hover:text-slate-900 active:cursor-grabbing group-hover/card:opacity-100"
+          className="absolute bottom-4 right-4 z-10 cursor-grab rounded-full bg-white p-2 text-slate-400 opacity-0 shadow-xs transition-opacity hover:text-slate-900 active:cursor-grabbing group-hover/card:opacity-100"
           title="Arrastar cargo"
         >
           <GripVertical className="h-4 w-4" />
@@ -1079,7 +1079,7 @@ function DraggableDroppableCard({
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-sm">
+        <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xs">
           <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
             <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Campos</p>
             <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.visibleQuestions}/{modelSummary.questions}</p>
@@ -1097,7 +1097,7 @@ function DraggableDroppableCard({
         <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Colaboradores</span>
-            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 shadow-sm">{node.employees.length}</span>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-700 shadow-xs">{node.employees.length}</span>
           </div>
           <div className="space-y-2">
             {node.employees.length > 0 ? (
@@ -1108,7 +1108,7 @@ function DraggableDroppableCard({
                   <div
                     key={emp.id}
                     className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ${
-                      hasFunction ? "border border-sky-200 bg-white shadow-sm ring-2 ring-sky-100" : ""
+                      hasFunction ? "border border-sky-200 bg-white shadow-xs ring-2 ring-sky-100" : ""
                     }`}
                   >
                     <div
@@ -1145,7 +1145,7 @@ function DraggableDroppableCard({
           <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[10px] font-black uppercase tracking-[0.16em] text-sky-600">Funções</span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-sky-700 shadow-sm">{functions.length}</span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-sky-700 shadow-xs">{functions.length}</span>
             </div>
             <div className="space-y-1.5">
               {functions.slice(0, FUNC_LIMIT).map((item) => (
@@ -1520,14 +1520,14 @@ export default function OrgChartPage() {
               <button
                 type="button"
                 onClick={handleExpandAll}
-                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
+                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-xs transition-colors hover:bg-slate-50 hover:text-pink-600"
               >
                 Expandir todos
               </button>
               <button
                 type="button"
                 onClick={handleCollapseAll}
-                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
+                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-xs transition-colors hover:bg-slate-50 hover:text-pink-600"
               >
                 Recolher todos
               </button>
@@ -1546,7 +1546,7 @@ export default function OrgChartPage() {
                 placeholder="Buscar cargo ou colaborador..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-8 w-56 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 shadow-sm placeholder-slate-400 transition-all focus:border-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-100"
+                className="h-8 w-56 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 shadow-xs placeholder-slate-400 transition-all focus:border-pink-300 focus:outline-hidden focus:ring-2 focus:ring-pink-100"
               />
               {search && (
                 <button
@@ -1558,7 +1558,7 @@ export default function OrgChartPage() {
               )}
             </div>
 
-            <div className="flex h-8 items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+            <div className="flex h-8 items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-xs">
               <button
                 onClick={() => setZoom((z) => Math.min(z + 0.15, 2))}
                 className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
@@ -1643,8 +1643,8 @@ export default function OrgChartPage() {
       {/* Drag overlay — matches real card style */}
       <DragOverlay>
         {activeRole && (
-          <div className="w-80 overflow-hidden rounded-[2rem] border border-pink-300 bg-white shadow-2xl ring-4 ring-pink-100/60">
-            <div className="h-2 bg-gradient-to-r from-pink-500 via-sky-400 to-emerald-400" />
+          <div className="w-80 overflow-hidden rounded-4xl border border-pink-300 bg-white shadow-2xl ring-4 ring-pink-100/60">
+            <div className="h-2 bg-linear-to-r from-pink-500 via-sky-400 to-emerald-400" />
             <div className="flex items-center gap-3 p-5">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-pink-100 bg-pink-50 text-pink-500">
                 <Briefcase className="h-5 w-5" />

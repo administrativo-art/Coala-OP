@@ -242,7 +242,7 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
     ["expense_average", "Média de meses", "Use a média de meses fechados."],
     ["consumption_price", "Consumo e preços", "Estime a compra pelos insumos, estoque e preços médios."],
   ] as const;
-  const darkField = "h-12 rounded-ds-btn-lg border border-white/10 bg-white/[0.07] px-4 text-[14px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
+  const darkField = "h-12 rounded-ds-btn-lg border border-white/10 bg-white/[0.07] px-4 text-[14px] font-semibold text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
   const checkItem = "flex cursor-pointer items-start gap-2.5 rounded-ds-btn bg-white px-2.5 py-2 text-[13px] font-semibold";
 
   return <div className="space-y-5">
@@ -261,7 +261,7 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
         </div>
         <div className="space-y-1.5">
           <label htmlFor="budget-list-month" className="block text-xs font-bold text-ds-on-dark-sub">Competência</label>
-          <input id="budget-list-month" disabled={saving} aria-label="Mês dos orçamentos" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className={cn(darkField, "w-44 [color-scheme:dark]")} />
+          <input id="budget-list-month" disabled={saving} aria-label="Mês dos orçamentos" type="month" value={month} onChange={(event) => setMonth(event.target.value)} className={cn(darkField, "w-44 scheme-dark")} />
         </div>
         <Button type="button" variant="on-dark-secondary" size="xl" disabled={saving || loading || !scopeAllowed} onClick={() => void refresh()}>Atualizar</Button>
         {canManage && <Button type="button" variant="primary-page" size="xl" disabled={saving || !scopeAllowed} onClick={() => setFormOpen(!formOpen)} className="whitespace-nowrap">{formOpen ? "Fechar cadastro" : "+ Novo orçamento"}</Button>}
@@ -307,7 +307,7 @@ export default function BudgetsManagement({ canManage }: { canManage: boolean })
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {MODE_OPTIONS.map(([value, title, detail]) => <button key={value} type="button" disabled={saving || (composed && value !== "manual" && value !== "fixed") || (Boolean(resultCenterId) && value === "consumption_price")} onClick={() => setMode(value)}
             aria-pressed={mode === value}
-            className={cn("rounded-ds-btn-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink disabled:opacity-50",
+            className={cn("rounded-ds-btn-lg border p-3 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink disabled:opacity-50",
               mode === value ? "border-ds-modal bg-ds-modal-soft" : "border-ds-border bg-white hover:bg-ds-warm")}>
             <span className="block text-[13px] font-bold">{title}</span><span className="mt-1 block text-xs text-ds-ink-muted">{detail}</span>
           </button>)}

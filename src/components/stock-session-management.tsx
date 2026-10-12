@@ -122,7 +122,7 @@ function JustificationSection({ itemIndex, control, type, unit }: { itemIndex: n
         <h4 className="font-semibold flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4"/>{title}</h4>
         <div className="space-y-2">
             {fields.map((field, divIndex) => (
-                <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-sm">
+                <div key={field.id} className="p-3 border rounded-md space-y-2 bg-background/50 relative shadow-xs">
                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive h-7 w-7" onClick={() => remove(divIndex)}><Trash2 className="h-4 w-4"/></Button>
                     <div className="grid grid-cols-2 gap-2 items-start">
                         <FormField control={control} name={`${name}.${divIndex}.quantity`} render={({ field: qtyField }) => (

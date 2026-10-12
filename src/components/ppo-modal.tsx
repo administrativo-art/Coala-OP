@@ -268,7 +268,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                       <div key={phase.id} className="p-4 border rounded-lg space-y-3">
                         <div className="flex items-center gap-2">
                           <FormField control={form.control} name={`assemblyInstructions.${phaseIndex}.name`} render={({ field }) => (
-                            <FormItem className="flex-grow"><FormLabel>Nome da Fase</FormLabel><FormControl><Input placeholder="Ex: Preparo da base" {...field} /></FormControl><FormMessage /></FormItem>
+                            <FormItem className="grow"><FormLabel>Nome da Fase</FormLabel><FormControl><Input placeholder="Ex: Preparo da base" {...field} /></FormControl><FormMessage /></FormItem>
                           )}/>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive mt-7" onClick={() => removePhase(phaseIndex)}><Trash2 className="h-4 w-4"/></Button>
                         </div>
@@ -293,7 +293,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                         {qualityFields.map((field, index) => (
                           <div key={field.id} className="flex items-center gap-2">
                               <FormField control={form.control} name={`qualityStandard.${index}.text`} render={({ field: stepField }) => (
-                                  <FormItem className="flex-grow"><FormControl><Input placeholder="Ex: Borda do copo limpa" {...stepField} /></FormControl><FormMessage /></FormItem>
+                                  <FormItem className="grow"><FormControl><Input placeholder="Ex: Borda do copo limpa" {...stepField} /></FormControl><FormMessage /></FormItem>
                               )}/>
                               <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeQuality(index)}><Trash2 className="h-4 w-4"/></Button>
                           </div>
@@ -308,7 +308,7 @@ export function PpoModal({ open, onOpenChange, simulation }: PpoModalProps) {
                     {allergenFields.map((field, index) => (
                       <div key={field.id} className="flex items-center gap-2">
                           <FormField control={form.control} name={`allergens.${index}.text`} render={({ field: stepField }) => (
-                              <FormItem className="flex-grow"><FormControl><Input placeholder="Ex: Leite" {...stepField} /></FormControl><FormMessage /></FormItem>
+                              <FormItem className="grow"><FormControl><Input placeholder="Ex: Leite" {...stepField} /></FormControl><FormMessage /></FormItem>
                           )}/>
                           <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removeAllergen(index)}><Trash2 className="h-4 w-4"/></Button>
                       </div>
@@ -366,7 +366,7 @@ function PhaseEtapas({ control, phaseIndex, form }: { control: any, phaseIndex: 
            <div className="flex items-start gap-2">
                 <span className="font-semibold text-muted-foreground pt-2">{etapaIndex + 1}.</span>
                 <FormField control={control} name={`assemblyInstructions.${phaseIndex}.etapas.${etapaIndex}.text`} render={({ field }) => (
-                    <FormItem className="flex-grow">
+                    <FormItem className="grow">
                         <FormControl><Input placeholder="Descrição da etapa..." {...field} /></FormControl>
                         <FormMessage />
                     </FormItem>

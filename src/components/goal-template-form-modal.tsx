@@ -1152,7 +1152,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
             {revenueConfigError && <p className="text-xs text-destructive">{revenueConfigError}</p>}
 
             {selectedGoalMethodConfig && revenueMethodPreview && (
-              <div className="rounded-[20px] border border-pink-100 bg-gradient-to-br from-pink-50 via-white to-slate-50 p-4 text-sm shadow-sm">
+              <div className="rounded-[20px] border border-pink-100 bg-linear-to-br from-pink-50 via-white to-slate-50 p-4 text-sm shadow-xs">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-pink-600">Prévia da bonificação</p>
@@ -1245,7 +1245,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
               {leadershipRecipients.length > 0 ? (
                 <div className="mt-2 flex max-w-full flex-wrap gap-2">
                   {leadershipRecipients.map(recipient => (
-                    <Badge key={recipient.userId} variant="outline" className="max-w-full whitespace-normal break-words border-blue-200 bg-white text-left text-blue-800">
+                    <Badge key={recipient.userId} variant="outline" className="max-w-full whitespace-normal wrap-break-word border-blue-200 bg-white text-left text-blue-800">
                       {recipient.userName} · {recipient.sourceLabel}
                     </Badge>
                   ))}
@@ -1323,7 +1323,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start" sideOffset={4}>
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-2" align="start" sideOffset={4}>
                     <div className="relative mb-2">
                       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input

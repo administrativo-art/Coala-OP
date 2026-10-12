@@ -133,7 +133,7 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
 
   return (
     <>
-      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="grid size-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">

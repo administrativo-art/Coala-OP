@@ -25,7 +25,7 @@ export function FinancialSettingsPage() {
     <div className="space-y-6">
       <Tabs defaultValue="accounting" className="w-full">
         <div className="flex justify-end">
-          <TabsList className="grid h-auto w-full max-w-[680px] grid-cols-4 rounded-2xl border bg-background p-1 shadow-sm">
+          <TabsList className="grid h-auto w-full max-w-[680px] grid-cols-4 rounded-2xl border bg-background p-1 shadow-xs">
             <TabsTrigger value="accounting" className="rounded-xl px-4 py-2.5 text-sm font-semibold">
               <span className="inline-flex items-center gap-2">
                 <BookMarked className="h-4 w-4" />

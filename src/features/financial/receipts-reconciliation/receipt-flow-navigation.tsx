@@ -42,7 +42,7 @@ export function StoneReceiptFlowNavigation({ current, mappingId, stoneCode }: St
         href={stoneReceiptFlowHref(step.id, mappingId, stoneCode)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "group rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-ds-border-input hover:bg-ds-warm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent focus-visible:ring-offset-2",
+          "group rounded-2xl border bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:border-ds-border-input hover:bg-ds-warm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent focus-visible:ring-offset-2",
           active && "border-ds-accent bg-ds-accent-row shadow-[0_10px_24px_-18px_#df2f78]"
         )}
       >

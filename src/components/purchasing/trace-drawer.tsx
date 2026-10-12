@@ -48,7 +48,7 @@ function StepRow({
     <div className="relative pl-8">
       <span className="absolute left-0 top-1 flex h-5 w-5 items-center justify-center rounded-full border-4 border-violet-100 bg-violet-600" />
       <div className="absolute bottom-[-16px] left-[9px] top-6 w-px bg-violet-200" />
-      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">
+      <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-violet-700">
         {label}
       </p>
       <div className="mb-4">{children}</div>
@@ -122,7 +122,7 @@ export function TraceDrawer({ open, onOpenChange, entry }: Props) {
       <SheetContent className="font-purchasing flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         <SheetHeader className="shrink-0 border-b border-violet-200 bg-violet-50/80 px-6 py-5 pr-12 text-left">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs">
               <Route className="h-4 w-4" />
             </span>
             <div className="min-w-0">

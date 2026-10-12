@@ -798,8 +798,8 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
                                         <span className="truncate font-mono text-xs text-[#c8c7d0]">{documentWatch || (isPF ? 'CPF não informado' : 'CNPJ não informado')}</span>
                                     </div>
                                 </div>
-                                <h2 className="break-words text-[26px] font-extrabold leading-[1.08] tracking-[-.03em]">{heroName}</h2>
-                                {!isPF && fantasyWatch ? <span className="-mt-1.5 break-words text-[12.5px] text-[#a3a2ad]">{fantasyWatch}</span> : null}
+                                <h2 className="wrap-break-word text-[26px] font-extrabold leading-[1.08] tracking-[-.03em]">{heroName}</h2>
+                                {!isPF && fantasyWatch ? <span className="-mt-1.5 wrap-break-word text-[12.5px] text-[#a3a2ad]">{fantasyWatch}</span> : null}
                             </div>
 
                             <div className="flex flex-col rounded-2xl border border-white/10 bg-white/5">
@@ -822,9 +822,9 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
                                             type="button"
                                             aria-current={isActive ? 'step' : undefined}
                                             onClick={() => goToStep(step.id)}
-                                            className={cn('flex items-center gap-3 rounded-xl px-2.5 py-[9px] text-left', isActive ? 'bg-white/[.08] text-white' : 'text-[#c8c7d0] hover:bg-white/5')}
+                                            className={cn('flex items-center gap-3 rounded-xl px-2.5 py-[9px] text-left', isActive ? 'bg-white/8 text-white' : 'text-[#c8c7d0] hover:bg-white/5')}
                                         >
-                                            <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-xs font-extrabold', isActive ? 'bg-[#b9b9ff] text-[#15151c]' : 'bg-white/[.08] text-[#c8c7d0]')}>
+                                            <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-xs font-extrabold', isActive ? 'bg-[#b9b9ff] text-[#15151c]' : 'bg-white/8 text-[#c8c7d0]')}>
                                                 {isDone ? <Check className="h-3.5 w-3.5" /> : step.id}
                                             </span>
                                             <span className="flex min-w-0 flex-col gap-px">
@@ -1208,7 +1208,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit, initialStep = 1,
                             {formError ? (
                                 <div role="alert" className="flex items-start gap-2 border-t border-[#f3c2c8] bg-[#fdecee] px-5 py-2.5 text-[12.5px] font-semibold text-[#8f1d28] sm:px-7">
                                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                                    <span className="min-w-0 break-words">{formError}</span>
+                                    <span className="min-w-0 wrap-break-word">{formError}</span>
                                 </div>
                             ) : null}
                             <footer className="flex items-center justify-between gap-3 border-t border-[#e6e2da] bg-[#faf9f6] px-5 py-4 sm:px-7">
@@ -1419,7 +1419,7 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
                     </span>
                   </div>
                   <div className="flex min-w-0 flex-col gap-[3px]">
-                    <span className="break-words text-[18px] font-extrabold leading-[1.15] tracking-[-0.02em]">{displayName(entity)}</span>
+                    <span className="wrap-break-word text-[18px] font-extrabold leading-[1.15] tracking-[-0.02em]">{displayName(entity)}</span>
                     {entity.fantasyName ? <span className="truncate text-[11.5px] text-[#8a8f99]">{entity.name}</span> : null}
                   </div>
                   {tags.length > 0 ? (

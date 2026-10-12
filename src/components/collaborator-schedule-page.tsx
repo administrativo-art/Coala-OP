@@ -649,7 +649,7 @@ export function CollaboratorSchedulePage() {
         className="-ml-2"
       />
 
-      <section className="overflow-hidden rounded-3xl border bg-white shadow-sm">
+      <section className="overflow-hidden rounded-3xl border bg-white shadow-xs">
         <header className="flex flex-col gap-5 border-b px-5 py-6 sm:px-7 lg:flex-row lg:items-end lg:justify-between lg:px-8">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.14em] text-pink-600">
@@ -963,7 +963,7 @@ export function CollaboratorSchedulePage() {
                     </div>
 
                     <div className="rounded-3xl border bg-white p-5">
-                      <p className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">
                         Dia selecionado
                       </p>
                       <h3 className="mt-1 text-lg font-black text-slate-950">
@@ -1341,7 +1341,7 @@ export function CollaboratorSchedulePage() {
                 </div>
 
                 <aside className="self-start rounded-3xl border bg-white p-5 lg:sticky lg:top-4">
-                  <p className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-400">
                     {formatShortWeekday(selectedDateValue)}
                   </p>
                   <h3 className="mt-1 text-xl font-black text-slate-950">
@@ -1382,7 +1382,7 @@ export function CollaboratorSchedulePage() {
                       onChange={(event) =>
                         setSelectedTeamUnitId(event.target.value)
                       }
-                      className="mt-1 block h-10 min-w-56 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                      className="mt-1 block h-10 min-w-56 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-hidden focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
                     >
                       {teamUnits.map((unit) => (
                         <option key={unit.id} value={unit.id}>
@@ -1598,7 +1598,7 @@ export function CollaboratorSchedulePage() {
 
                 {selectedTeamDaysOff.length > 0 ? (
                   <div className="mt-5 border-t border-slate-200 pt-4">
-                    <p className="text-xs font-black uppercase tracking-[0.1em] text-slate-400">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">
                       De folga
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">

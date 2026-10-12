@@ -146,7 +146,7 @@ export default function RepositionHubPage() {
                 </div>
             </div>
 
-            <section className="space-y-4 rounded-3xl border bg-card p-5 shadow-sm">
+            <section className="space-y-4 rounded-3xl border bg-card p-5 shadow-xs">
                 <div className="flex flex-wrap items-center gap-3">
                     <ClipboardList className="h-5 w-5 text-[#5147e8]" />
                     <h2 className="text-lg font-semibold">Solicitações pendentes</h2>
@@ -173,7 +173,7 @@ export default function RepositionHubPage() {
                             const remainingItems = request.items.length > 2 ? ` +${request.items.length - 2}` : '';
 
                             return (
-                                <div key={request.id} className="flex flex-col gap-4 rounded-2xl border bg-background/70 p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+                                <div key={request.id} className="flex flex-col gap-4 rounded-2xl border bg-background/70 p-4 shadow-xs md:flex-row md:items-center md:justify-between">
                                     <div className="flex min-w-0 items-center gap-4">
                                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#9554e8] text-white">
                                             <Package className="h-6 w-6" />
@@ -233,7 +233,7 @@ export default function RepositionHubPage() {
                 </div>
             </section>
 
-            <section className="space-y-5 rounded-3xl border bg-card p-5 shadow-sm">
+            <section className="space-y-5 rounded-3xl border bg-card p-5 shadow-xs">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pipeline ativo</p>

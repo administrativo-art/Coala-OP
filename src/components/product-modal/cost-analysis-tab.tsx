@@ -512,7 +512,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                   <div className="rounded-ds-card border border-ds-divider bg-ds-warm p-5">
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <div>
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-ds-ink-faint">Composição do CMV</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-ds-ink-faint">Composição do CMV</h4>
                         <p className="mt-1 text-xs text-ds-ink-muted">Participação de cada insumo no custo total.</p>
                       </div>
                       <p className="text-lg font-black text-ds-ink">{formatCurrency(cmv)}</p>
@@ -521,7 +521,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                       {cmvComposition.length ? cmvComposition.map((item) => (
                         <div key={item.id}>
                           <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-semibold text-ds-ink-2">{item.name}</span><span className="shrink-0 font-bold text-ds-ink-muted">{formatCurrency(item.cost)} · {item.share.toFixed(0)}%</span></div>
-                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-linear-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
                         </div>
                       )) : <p className="text-xs text-ds-ink-faint">Nenhum insumo vinculado à ficha.</p>}
                     </div>

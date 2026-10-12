@@ -108,7 +108,7 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
       <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px]">
         <div>
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Perfis de permissão</p>
-          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-[-0.05em]">{loading ? "—" : profiles.length}</p>
+          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{loading ? "—" : profiles.length}</p>
           <p className="mt-1 text-base font-extrabold">{profiles.length === 1 ? "Perfil disponível" : "Perfis disponíveis"}</p>
           <p className="mt-2 max-w-2xl text-[13px] text-ds-on-dark-2">
             Defina quais módulos, informações e ações ficam disponíveis para cada perfil de acesso do Coala One.

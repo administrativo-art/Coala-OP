@@ -719,7 +719,7 @@ function StatCard({
   }[tone];
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{title}</p>
         <p className={cn("mt-1 text-3xl font-bold leading-none", toneClass)}>{value}</p>
@@ -746,7 +746,7 @@ function CollaboratorPill({
   const unitNames = units ? getUserUnitNames(user, units) : [];
   const content = (
     <>
-      <Avatar className="h-10 w-10 shrink-0 border-2 border-white shadow-sm">
+      <Avatar className="h-10 w-10 shrink-0 border-2 border-white shadow-xs">
         <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
         <AvatarFallback className="bg-amber-100 text-xs font-bold text-amber-600">{initials(user.username)}</AvatarFallback>
       </Avatar>
@@ -767,7 +767,7 @@ function CollaboratorPill({
 
   if (!onSelect) {
     return (
-      <div className="flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+      <div className="flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-xs">
         {content}
       </div>
     );
@@ -778,7 +778,7 @@ function CollaboratorPill({
       type="button"
       onClick={() => onSelect(user)}
       className={cn(
-        "flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border bg-white px-3 py-2.5 text-left shadow-sm transition",
+        "flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border bg-white px-3 py-2.5 text-left shadow-xs transition",
         selected
           ? "border-pink-300 ring-2 ring-pink-100"
           : "border-slate-200 hover:border-pink-200 hover:bg-pink-50/30"
@@ -822,7 +822,7 @@ function PersonTreeCard({
         onClick={() => node.user && onSelect(node.user)}
         disabled={!node.user}
         className={cn(
-          "w-48 overflow-hidden rounded-2xl border bg-white text-center shadow-sm transition",
+          "w-48 overflow-hidden rounded-2xl border bg-white text-center shadow-xs transition",
           selected
             ? "border-pink-400 shadow-pink-100 ring-2 ring-pink-300"
             : node.user
@@ -832,7 +832,7 @@ function PersonTreeCard({
       >
         <div className={cn("flex h-12 items-center justify-center border-b", tone.header)}>
           {node.user ? (
-            <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+            <Avatar className="h-9 w-9 border-2 border-white shadow-xs">
               <AvatarImage src={node.user.avatarUrl || undefined} alt={node.user.username} />
               <AvatarFallback
                 className="text-xs font-bold"
@@ -842,7 +842,7 @@ function PersonTreeCard({
               </AvatarFallback>
             </Avatar>
           ) : (
-            <span className="grid h-9 w-9 place-items-center rounded-full border-2 border-white bg-white text-[10px] font-bold text-slate-400 shadow-sm">
+            <span className="grid h-9 w-9 place-items-center rounded-full border-2 border-white bg-white text-[10px] font-bold text-slate-400 shadow-xs">
               Vago
             </span>
           )}
@@ -884,7 +884,7 @@ function PersonTreeCard({
         <button
           type="button"
           onClick={onToggle}
-          className="absolute -bottom-3 grid h-6 w-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:border-pink-200 hover:text-pink-600"
+          className="absolute -bottom-3 grid h-6 w-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-xs transition hover:border-pink-200 hover:text-pink-600"
           aria-label={expanded ? "Recolher reportes" : "Expandir reportes"}
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -984,7 +984,7 @@ function UserDetailPanel({
       : [];
 
   return (
-    <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
+    <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <h3 className="text-sm font-bold text-slate-950">Detalhe</h3>
         <button
@@ -998,7 +998,7 @@ function UserDetailPanel({
       </div>
 
       <div className="bg-pink-50 px-5 py-6 text-center">
-        <Avatar className="mx-auto h-16 w-16 border-4 border-white shadow-sm">
+        <Avatar className="mx-auto h-16 w-16 border-4 border-white shadow-xs">
           <AvatarImage src={detail.user.avatarUrl || undefined} alt={detail.user.username} />
           <AvatarFallback
             className="text-lg font-bold"
@@ -1544,7 +1544,7 @@ export function DPOrgChart() {
               className={cn(
                 "rounded-xl px-4 py-2 text-sm font-semibold transition",
                 viewMode === item.value
-                  ? "bg-white text-slate-950 shadow-sm"
+                  ? "bg-white text-slate-950 shadow-xs"
                   : "text-slate-500 hover:bg-white/70 hover:text-slate-900"
               )}
             >
@@ -1558,7 +1558,7 @@ export function DPOrgChart() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar pessoa ou cargo."
-            className="h-11 rounded-xl border-slate-200 bg-white pl-9 shadow-sm placeholder:text-slate-400 focus-visible:ring-pink-200"
+            className="h-11 rounded-xl border-slate-200 bg-white pl-9 shadow-xs placeholder:text-slate-400 focus-visible:ring-pink-200"
           />
         </div>
       </div>
@@ -1593,8 +1593,8 @@ export function DPOrgChart() {
       <div className={cn("grid gap-4", selectedUserDetail && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
         <div className="min-w-0 space-y-4">
           {viewMode === "tree" && (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -1612,7 +1612,7 @@ export function DPOrgChart() {
                   </button>
                   <p className="text-sm text-slate-400">scroll para zoom · arraste para mover · clique num cartão para detalhe</p>
                 </div>
-                <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-xs">
                   <button
                     type="button"
                     onClick={() => setZoom((current) => Math.max(current - 0.1, 0.45))}
@@ -1642,7 +1642,7 @@ export function DPOrgChart() {
                 </div>
               </div>
               <div
-                className="min-h-[640px] cursor-grab overflow-hidden bg-[#f8fafc] bg-[radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.14)_1px,transparent_0)] bg-[length:24px_24px] p-10 active:cursor-grabbing xl:min-h-[720px]"
+                className="min-h-[640px] cursor-grab overflow-hidden bg-[#f8fafc] bg-[radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.14)_1px,transparent_0)] bg-size-[24px_24px] p-10 active:cursor-grabbing xl:min-h-[720px]"
                 onWheel={handleTreeWheel}
                 onPointerDown={handlePanPointerDown}
                 onPointerMove={handlePanPointerMove}
@@ -1681,7 +1681,7 @@ export function DPOrgChart() {
           )}
 
           {viewMode === "list" && (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
               <div className="border-b border-slate-100 px-4 py-3">
                 <h3 className="text-sm font-bold text-slate-950">Lista hierárquica</h3>
                 <p className="mt-1 text-xs text-slate-500">Cargos ordenados por profundidade e reporting line.</p>
@@ -1699,7 +1699,7 @@ export function DPOrgChart() {
               {departmentGroups.map((group, groupIndex) => {
                 const tone = ORG_TONES[groupIndex % ORG_TONES.length];
                 return (
-                  <section key={group.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <section key={group.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                     <div className={cn("flex items-center justify-between gap-3 border-b px-5 py-4", tone.header)}>
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-sm font-bold text-white", tone.dot)}>
@@ -1716,7 +1716,7 @@ export function DPOrgChart() {
                       {group.items.map(({ node }) => {
                         const roleFunctions = functionsByRoleId.get(node.role.id) ?? [];
                         return (
-                          <div key={node.role.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <div key={node.role.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-slate-950">{node.role.name}</p>
@@ -1777,7 +1777,7 @@ export function DPOrgChart() {
                 const tone = ORG_TONES[groupIndex % ORG_TONES.length];
                 const percent = usersInScope.length > 0 ? Math.round((group.userCount / usersInScope.length) * 100) : 0;
                 return (
-                  <section key={group.depth} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <section key={group.depth} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                     <div className={cn("flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4", tone.header)}>
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white", tone.dot)}>
@@ -1801,7 +1801,7 @@ export function DPOrgChart() {
                           ? node.user.jobFunctionNames ?? []
                           : functionsByRoleId.get(node.role.id) ?? [];
                         return (
-                          <div key={node.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                          <div key={node.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-slate-950">{node.user?.username ?? "Cargo vago"}</p>
@@ -1852,7 +1852,7 @@ export function DPOrgChart() {
             </div>
           )}
 
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
             <div className="border-b border-slate-100 px-4 py-3">
               <h3 className="text-sm font-bold text-slate-950">Colaboradores sem cargo</h3>
               <p className="mt-1 text-xs text-slate-500">Eles continuam operando normalmente, mas ainda não aparecem no organograma.</p>

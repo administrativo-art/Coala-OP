@@ -130,7 +130,7 @@ export function DPVacationEditorPanel({
     }
   }
 
-  const inputClass = 'mt-1.5 h-10 w-full rounded-[10px] border bg-background px-3 text-[12.5px] font-semibold outline-none transition-colors focus:border-primary';
+  const inputClass = 'mt-1.5 h-10 w-full rounded-[10px] border bg-background px-3 text-[12.5px] font-semibold outline-hidden transition-colors focus:border-primary';
   const labelClass = 'text-[10.5px] font-extrabold text-slate-600 dark:text-slate-300';
 
   return (
