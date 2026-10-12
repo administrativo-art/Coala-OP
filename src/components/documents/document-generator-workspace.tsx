@@ -175,7 +175,7 @@ function PartySearchSelect(props: {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] min-w-[min(92vw,560px)] p-0"
+        className="w-(--radix-popover-trigger-width) min-w-[min(92vw,560px)] p-0"
       >
         <Command>
           <CommandInput placeholder="Buscar por nome, CPF, CNPJ ou e-mail..." />
@@ -647,7 +647,7 @@ export function DocumentGeneratorWorkspace(props: {
         ? "grid min-h-[680px] lg:grid-cols-[280px_minmax(0,1fr)]"
         : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]"
       }>
-        <section className={props.embedded ? "border-r bg-white" : "rounded-lg border bg-white shadow-sm"}>
+        <section className={props.embedded ? "border-r bg-white" : "rounded-lg border bg-white shadow-xs"}>
           <header className="border-b px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-black text-slate-900">Modelos</h2>
@@ -692,7 +692,7 @@ export function DocumentGeneratorWorkspace(props: {
           </div>
         </section>
 
-        <section className={props.embedded ? "bg-[#fbfaf8]" : "rounded-lg border bg-white shadow-sm"}>
+        <section className={props.embedded ? "bg-[#fbfaf8]" : "rounded-lg border bg-white shadow-xs"}>
           <header className="border-b px-4 py-3">
             <h2 className="text-sm font-black text-slate-900">2. Dados e geração</h2>
           </header>

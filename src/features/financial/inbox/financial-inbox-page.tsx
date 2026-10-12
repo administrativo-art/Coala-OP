@@ -935,7 +935,7 @@ export function FinancialInboxPage() {
                       aria-label={`Abrir cobrança ${message.subject}`}
                       aria-haspopup="dialog"
                       onClick={() => setSelectedId(message.id)}
-                      className="group/row grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 text-left focus-visible:outline-none md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_auto_auto_16px]"
+                      className="group/row grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 text-left focus-visible:outline-hidden md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_auto_auto_16px]"
                     >
                       <p className="truncate text-sm font-bold text-ds-ink">{senderLabel(message)}</p>
                       <span className="font-mono text-sm font-extrabold text-ds-ink md:order-3">{formatAmount(message.classification.amountCents)}</span>

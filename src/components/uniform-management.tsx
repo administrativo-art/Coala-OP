@@ -658,22 +658,22 @@ export function UniformManagement() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as UniformTab)} className="space-y-3">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <TabsList className="h-auto w-fit rounded-lg bg-white/70 p-1 shadow-sm">
+          <TabsList className="h-auto w-fit rounded-lg bg-white/70 p-1 shadow-xs">
             <TabsTrigger
               value="stock"
-              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-xs"
             >
               Estoque
             </TabsTrigger>
             <TabsTrigger
               value="possession"
-              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-xs"
             >
               Em posse
             </TabsTrigger>
             <TabsTrigger
               value="history"
-              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-xs"
             >
               Histórico
             </TabsTrigger>
@@ -686,7 +686,7 @@ export function UniformManagement() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar peça ou colaborador..."
-                className="h-8 w-full rounded-lg border border-[#dfdfe7] bg-white pl-9 pr-3 text-xs font-semibold text-[#1c1c25] outline-none transition focus:border-[#e8327c] focus:ring-2 focus:ring-[#e8327c]/10"
+                className="h-8 w-full rounded-lg border border-[#dfdfe7] bg-white pl-9 pr-3 text-xs font-semibold text-[#1c1c25] outline-hidden transition focus:border-[#e8327c] focus:ring-2 focus:ring-[#e8327c]/10"
               />
             </div>
             <Button

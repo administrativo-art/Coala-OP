@@ -58,7 +58,7 @@ export function InlineConfirm({
           ref={cancelRef}
           onClick={onCancel}
           disabled={loading}
-          className="h-8 rounded-ds-sm border border-ds-confirm-border bg-white px-3 text-xs font-bold text-ds-confirm-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+          className="h-8 rounded-ds-sm border border-ds-confirm-border bg-white px-3 text-xs font-bold text-ds-confirm-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
         >
           {cancelLabel}
         </button>

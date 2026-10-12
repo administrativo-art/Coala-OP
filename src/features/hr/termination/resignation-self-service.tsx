@@ -68,7 +68,7 @@ function fileSizeLabel(size: number) {
 
 function WizardProgress({ current }: { current: WizardStep }) {
   return (
-    <div className="rounded-2xl border border-[#e5e3de] bg-white px-4 py-4 shadow-sm sm:px-5">
+    <div className="rounded-2xl border border-[#e5e3de] bg-white px-4 py-4 shadow-xs sm:px-5">
       <div className="flex items-center justify-between gap-2">
         {WIZARD_STEPS.map((item, index) => {
           const completed = item.id < current;
@@ -161,7 +161,7 @@ function ActiveResignation({
         </Button>
 
         <section className="overflow-hidden rounded-[24px] border border-[#e2e0da] bg-white shadow-[0_16px_40px_-28px_rgba(15,23,42,0.4)]">
-          <div className="border-b border-[#efede8] bg-gradient-to-br from-white to-pink-50/70 px-5 py-6 sm:px-7">
+          <div className="border-b border-[#efede8] bg-linear-to-br from-white to-pink-50/70 px-5 py-6 sm:px-7">
             <span className="text-[10px] font-black uppercase tracking-[0.12em] text-pink-600">Meu pedido de demissão</span>
             <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Pedido recebido</h1>
             <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
@@ -416,7 +416,7 @@ export function ResignationSelfService() {
   if (!eligible) {
     return (
       <div className="min-h-full bg-[#f0eee9] p-4 sm:p-8">
-        <div className="mx-auto max-w-xl rounded-[24px] border border-[#e2e0da] bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto max-w-xl rounded-[24px] border border-[#e2e0da] bg-white p-6 text-center shadow-xs">
           <AlertTriangle className="mx-auto h-9 w-9 text-amber-500" />
           <h1 className="mt-3 text-xl font-black text-slate-950">Pedido indisponível</h1>
           <p className="mt-2 text-sm font-medium text-slate-500">Este fluxo está disponível somente para colaboradores com vínculo CLT ativo.</p>
@@ -469,7 +469,7 @@ export function ResignationSelfService() {
         <section className="overflow-hidden rounded-[24px] border border-[#e2e0da] bg-white shadow-[0_16px_40px_-28px_rgba(15,23,42,0.4)]">
           {step === 1 ? (
             <div>
-              <div className="border-b border-[#efede8] bg-gradient-to-br from-white to-pink-50/60 px-5 py-6 sm:px-8">
+              <div className="border-b border-[#efede8] bg-linear-to-br from-white to-pink-50/60 px-5 py-6 sm:px-8">
                 <span className="grid h-11 w-11 place-items-center rounded-2xl bg-pink-100 text-pink-700"><FilePenLine className="h-5 w-5" /></span>
                 <p className="mt-5 text-[10px] font-black uppercase tracking-[0.11em] text-pink-600">Passo 1 de 5</p>
                 <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Antes de começar</h2>
@@ -585,7 +585,7 @@ export function ResignationSelfService() {
               <div className="space-y-5 px-5 py-6 sm:px-8">
                 {!letter ? (
                   <label className="flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-pink-200 bg-pink-50/50 p-6 text-center transition hover:border-pink-400 hover:bg-pink-50">
-                    <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-pink-600 shadow-sm"><UploadCloud className="h-6 w-6" /></span>
+                    <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-pink-600 shadow-xs"><UploadCloud className="h-6 w-6" /></span>
                     <span className="mt-4 text-sm font-black text-slate-900">Fotografar ou selecionar a carta</span>
                     <span className="mt-1 text-xs font-medium text-slate-500">PDF, JPG ou PNG · máximo de 12 MB</span>
                     <input

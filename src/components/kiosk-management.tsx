@@ -116,7 +116,7 @@ function KioskRow({
   return (
     <div
       className={cn(
-        'rounded-2xl border border-border/70 bg-card/40 shadow-sm transition-colors hover:bg-card/55',
+        'rounded-2xl border border-border/70 bg-card/40 shadow-xs transition-colors hover:bg-card/55',
         compact ? 'px-5 py-4' : 'px-6 py-5'
       )}
     >

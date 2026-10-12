@@ -668,7 +668,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
                   isMuted={!!product.isArchived}
                   onOpen={() => setOpenId(product.id)}
                 >
-                  <div className="relative -mx-[18px] -mt-[18px] flex h-[110px] items-end justify-between overflow-hidden rounded-t-[20px] bg-[repeating-linear-gradient(135deg,#f1efe9_0_10px,#e9e6df_10px_20px)] px-3.5 py-3">
+                  <div className="relative mx-[-18px] mt-[-18px] flex h-[110px] items-end justify-between overflow-hidden rounded-t-[20px] bg-[repeating-linear-gradient(135deg,#f1efe9_0_10px,#e9e6df_10px_20px)] px-3.5 py-3">
                     {product.imageUrl ? (
                       <Image src={product.imageUrl} alt="" fill sizes="270px" className="object-cover" />
                     ) : null}
@@ -682,7 +682,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
                     </span>
                   </div>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="break-words text-[17px] font-extrabold leading-[1.2] tracking-[-0.02em]">{product.baseName}</span>
+                    <span className="wrap-break-word text-[17px] font-extrabold leading-[1.2] tracking-[-0.02em]">{product.baseName}</span>
                     <span className="truncate text-xs text-[#8a8f99]">{subOf(product)}</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">

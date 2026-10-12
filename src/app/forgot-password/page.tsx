@@ -87,7 +87,7 @@ export default function ForgotPasswordPage() {
               <div className="pt-4">
                 <Button
                     type="submit"
-                    className="h-12 w-full rounded-full bg-gradient-to-r from-primary to-[#FF5A8A] text-white text-lg shadow-lg transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-px"
+                    className="h-12 w-full rounded-full bg-linear-to-r from-primary to-[#FF5A8A] text-white text-lg shadow-lg transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-px"
                     disabled={isSubmitting}
                   >
                     {isSubmitting && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}

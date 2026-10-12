@@ -588,7 +588,7 @@ export function FormsAnalyticsOverview({
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : null}
               </div>
-              <div className="max-h-[28rem] overflow-auto">
+              <div className="max-h-112 overflow-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>

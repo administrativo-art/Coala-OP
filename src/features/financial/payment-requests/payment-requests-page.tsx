@@ -691,7 +691,7 @@ function RequestRow({
           disabled={!selectable}
           onClick={onToggle}
           className={cn(
-            "relative z-[1] flex h-[18px] w-[18px] items-center justify-center rounded border text-[11px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
+            "relative z-1 flex h-[18px] w-[18px] items-center justify-center rounded border text-[11px] font-bold text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2",
             selectable
               ? selected
                 ? "border-ds-accent bg-ds-accent"
@@ -708,7 +708,7 @@ function RequestRow({
             type="button"
             onClick={onOpen}
             aria-haspopup="dialog"
-            className="block max-w-full text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+            className="block max-w-full text-left after:absolute after:inset-0 after:content-[''] focus-visible:outline-hidden"
           >
             <span className="block truncate text-sm font-bold tracking-tight text-ds-ink">{item.description}</span>
           </button>
@@ -752,7 +752,7 @@ function RequestRow({
         </div>
 
         {/* próxima ação */}
-        <div className="relative z-[1] hidden min-w-0 justify-end lg:flex">
+        <div className="relative z-1 hidden min-w-0 justify-end lg:flex">
           {action ? (
             <Button
               size="xs"
@@ -771,7 +771,7 @@ function RequestRow({
 
         {/* ação no mobile */}
         {action ? (
-          <div className="relative z-[1] col-span-2 lg:hidden">
+          <div className="relative z-1 col-span-2 lg:hidden">
             <Button
               size="xs"
               variant={action.primary ? "primary-page" : "ds-secondary"}

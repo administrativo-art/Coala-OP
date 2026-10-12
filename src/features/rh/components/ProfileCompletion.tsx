@@ -63,7 +63,7 @@ export function ProfileCompletion({ pct, fieldMap, fieldValues }: Props) {
   ];
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-xs">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-medium text-gray-700">Perfil completo</span>
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>

@@ -1171,7 +1171,7 @@ export default function DocumentTemplateDetailPage() {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-2 z-20 flex flex-col gap-4 rounded-2xl border bg-white/95 px-4 py-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky top-2 z-20 flex flex-col gap-4 rounded-2xl border bg-white/95 px-4 py-4 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <button className="mb-1 inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900" onClick={() => router.push("/dashboard/documents/templates")}>
             <ArrowLeft className="h-3.5 w-3.5" />Modelos
@@ -1273,7 +1273,7 @@ export default function DocumentTemplateDetailPage() {
 
       {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
       {notice ? <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{notice}</div> : null}
-      <nav className="flex flex-wrap gap-1 rounded-xl border bg-white p-1 shadow-sm" aria-label="Áreas do modelo">
+      <nav className="flex flex-wrap gap-1 rounded-xl border bg-white p-1 shadow-xs" aria-label="Áreas do modelo">
         {([
           ["overview", "Visão geral"],
           ["text", "Texto integral"],
@@ -1284,7 +1284,7 @@ export default function DocumentTemplateDetailPage() {
           <button
             key={view}
             className={`rounded-lg px-4 py-2 text-xs font-extrabold transition ${
-              activeView === view ? "bg-violet-700 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              activeView === view ? "bg-violet-700 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
             }`}
             onClick={() => setActiveView(view)}
           >
@@ -1326,8 +1326,8 @@ export default function DocumentTemplateDetailPage() {
       ) : null}
 
       {officialTemplate && activeView === "overview" ? (
-        <section className="overflow-hidden rounded-xl border border-violet-100 bg-white shadow-sm">
-          <header className="border-b border-violet-100 bg-gradient-to-b from-violet-50/60 to-white px-5 py-4">
+        <section className="overflow-hidden rounded-xl border border-violet-100 bg-white shadow-xs">
+          <header className="border-b border-violet-100 bg-linear-to-b from-violet-50/60 to-white px-5 py-4">
             <h2 className="text-[15px] font-black text-slate-950">
               {visualTestComplete
                 ? template.isSystem ? "Modelo oficial" : "Aprovação da nova versão oficial"
@@ -1480,7 +1480,7 @@ export default function DocumentTemplateDetailPage() {
       ) : null}
 
       {activeView === "history" ? (
-        <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border bg-white shadow-xs">
           <header className="border-b px-5 py-4">
             <h2 className="text-sm font-black text-slate-950">Histórico da versão</h2>
             <p className="mt-1 text-xs text-slate-500">Transições, responsáveis, decisões e ressalvas ficam preservados nesta versão.</p>
@@ -1515,7 +1515,7 @@ export default function DocumentTemplateDetailPage() {
       ) : null}
 
       {activeView === "text" ? (
-        <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border bg-white shadow-xs">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
             <div>
               <h2 className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -1560,7 +1560,7 @@ export default function DocumentTemplateDetailPage() {
       ) : null}
 
       {contentEditable && activeView === "fields" && template.storagePath ? (
-        <section id="ai-preparation-phase" className="rounded-lg border border-violet-100 bg-white shadow-sm">
+        <section id="ai-preparation-phase" className="rounded-lg border border-violet-100 bg-white shadow-xs">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-100 px-4 py-3">
             <div>
               <h2 className="flex items-center gap-2 text-sm font-black text-slate-900">
@@ -1687,7 +1687,7 @@ export default function DocumentTemplateDetailPage() {
           <CollectiveAgreementsPanel canManage={canManage} />
         ) : null}
 
-      {activeView === "fields" ? <section id="template-fields-phase" className={`rounded-lg border bg-white shadow-sm ${
+      {activeView === "fields" ? <section id="template-fields-phase" className={`rounded-lg border bg-white shadow-xs ${
         variableWizardOpen || (contentEditable && !aiPlan?.reviewed) ? "hidden" : ""
       }`}>
         <header className="border-b px-4 py-3">
@@ -1839,7 +1839,7 @@ export default function DocumentTemplateDetailPage() {
         </div>
       </section> : null}
 
-      {activeView === "generated" ? <section className="rounded-lg border bg-white shadow-sm">
+      {activeView === "generated" ? <section className="rounded-lg border bg-white shadow-xs">
         <header className="border-b px-4 py-3">
           <h2 className="text-sm font-black text-slate-900">Documentos gerados</h2>
           <p className="text-xs text-slate-500">Prévias ficam em conferência até serem finalizadas.</p>

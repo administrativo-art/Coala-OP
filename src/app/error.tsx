@@ -22,7 +22,7 @@ export default function AppErrorBoundary({ error, reset }: { error: Error & { di
 
   return (
     <PageContainer variant="compact" className="py-16">
-      <section className="rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-xs">
         <p className="text-sm font-semibold uppercase tracking-wide text-pink-600">Falha inesperada</p>
         <h1 className="mt-2 text-2xl font-bold">Não foi possível carregar esta área.</h1>
         <p className="mt-3 text-slate-600">Tente novamente. Se o problema continuar, informe a referência abaixo ao suporte.</p>

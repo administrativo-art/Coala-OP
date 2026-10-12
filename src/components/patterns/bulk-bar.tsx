@@ -35,7 +35,7 @@ export function BulkBar({ count, summary, actions, onClear }: BulkBarProps) {
           type="button"
           onClick={action.onClick}
           className={cn(
-            "h-9 whitespace-nowrap rounded-ds-md px-3.5 text-[12.5px] font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+            "h-9 whitespace-nowrap rounded-ds-md px-3.5 text-[12.5px] font-bold text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
             action.isDanger ? "bg-ds-danger hover:brightness-90" : "bg-white/10 hover:bg-white/20"
           )}
         >
@@ -45,7 +45,7 @@ export function BulkBar({ count, summary, actions, onClear }: BulkBarProps) {
       <button
         type="button"
         onClick={onClear}
-        className="h-9 rounded-ds-md px-2.5 text-[12.5px] font-semibold text-ds-on-dark-sub hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+        className="h-9 rounded-ds-md px-2.5 text-[12.5px] font-semibold text-ds-on-dark-sub hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
       >
         Limpar
       </button>

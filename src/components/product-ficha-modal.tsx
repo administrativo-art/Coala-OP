@@ -67,9 +67,9 @@ function DetailGroup({
       </header>
       <div className="grid grid-cols-1 sm:grid-cols-2">
         {rows.map((row) => (
-          <div key={row.label} className="min-w-0 border-t border-[#f6f4ef] px-4 py-3 first:border-t-0 sm:[&:nth-child(2)]:border-t-0">
+          <div key={row.label} className="min-w-0 border-t border-[#f6f4ef] px-4 py-3 first:border-t-0 sm:nth-2:border-t-0">
             <p className="text-[11.5px] text-[#8a8f99]">{row.label}</p>
-            <div className={cn('mt-1 break-words text-[13.5px] font-bold text-[#1a1b1f]', row.mono && 'font-mono text-[13px]')}>{row.value || '—'}</div>
+            <div className={cn('mt-1 wrap-break-word text-[13.5px] font-bold text-[#1a1b1f]', row.mono && 'font-mono text-[13px]')}>{row.value || '—'}</div>
           </div>
         ))}
       </div>
@@ -124,7 +124,7 @@ export function ProductFichaModal({ open, onOpenChange, product, baseProduct, on
 
               <div className="flex flex-col gap-2.5">
                 <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">Ficha cadastral · insumo derivado</span>
-                <h2 className="break-words text-[30px] font-extrabold leading-[1.05] tracking-[-.03em]">{product.baseName.toLocaleUpperCase('pt-BR')}</h2>
+                <h2 className="wrap-break-word text-[30px] font-extrabold leading-[1.05] tracking-[-.03em]">{product.baseName.toLocaleUpperCase('pt-BR')}</h2>
                 <div className="flex flex-wrap gap-1.5">
                   <span className="rounded-full bg-[rgba(185,185,255,.14)] px-2.5 py-[3px] text-[11.5px] font-bold text-[#d4d4ff]">{product.operationalCategoryName || 'Sem categoria'}</span>
                   <span className="rounded-full border border-white/15 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#c8c7d0]">{product.brand || 'Sem marca'}</span>

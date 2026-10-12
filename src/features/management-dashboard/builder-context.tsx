@@ -115,7 +115,7 @@ export function ManagementDashboardBuilder({ firebaseUser, userId, userName, per
 
   return (
     <BuilderContext.Provider value={{ layout, editing, selectedId, select: setSelectedId, openSettings: () => setPanel("settings") }}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3 py-2 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-ds-btn-lg border border-ds-border bg-ds-surface px-3 py-2 shadow-xs">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Select value={store.activeLayout.id} onValueChange={(value) => void store.activate(value)} disabled={editing}>
             <SelectTrigger className="h-9 w-[220px] border-ds-border-input bg-ds-surface text-xs font-bold"><SelectValue /></SelectTrigger>

@@ -399,7 +399,7 @@ export function CashFlowPage() {
             <SelectTrigger aria-label="Período" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker"><CalendarRange className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
             <SelectContent>{PERIOD_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
           </Select>
-          <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap text-[13px] font-bold text-ds-on-dark-2">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker [color-scheme:dark]" value={endingMonth} onChange={(event) => {
+          <div className="flex items-center gap-2"><Label htmlFor="cash-ending-month" className="whitespace-nowrap text-[13px] font-bold text-ds-on-dark-2">Até o mês</Label><Input id="cash-ending-month" aria-label="Mês final da consulta" type="month" className="w-44 h-10 rounded-ds-btn border-white/10 bg-white/[0.07] px-3 text-[13px] font-semibold text-white shadow-none hover:bg-white/10 hover:text-white focus:ring-ds-accent-kicker scheme-dark" value={endingMonth} onChange={(event) => {
             if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setEndingMonth(event.target.value);
           }} /></div>
         </div>

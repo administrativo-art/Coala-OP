@@ -322,7 +322,7 @@ export function PdvSyncManagement() {
               </div>
             ) : null}
 
-            <ScrollArea className="h-[26rem] rounded-ds-btn-lg border border-ds-border bg-ds-surface">
+            <ScrollArea className="h-104 rounded-ds-btn-lg border border-ds-border bg-ds-surface">
               {visibleLogs.length > 0 ? (
                 <ul className="m-0 list-none p-0">
                   {visibleLogs.map((log, index) => (

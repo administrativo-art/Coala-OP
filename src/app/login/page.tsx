@@ -125,14 +125,14 @@ export default function LoginPage() {
           src={brand.loginBg}
           alt=""
           aria-hidden
-          className="h-full w-full scale-[1.18] -translate-x-[10%] object-cover object-center"
+          className="h-full w-full scale-[1.18] translate-x-[-10%] object-cover object-center"
         />
         <div className="absolute inset-0 bg-white/18" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.42),transparent_28%),radial-gradient(circle_at_80%_25%,rgba(255,255,255,0.22),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.02))]" />
       </div>
 
       <div className="relative min-h-screen">
-        <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[34rem] bg-gradient-to-l from-white/16 via-white/6 to-transparent lg:block" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-136 bg-linear-to-l from-white/16 via-white/6 to-transparent lg:block" />
 
         <div className="relative flex min-h-screen items-center justify-center px-5 py-8 sm:px-8 lg:justify-end lg:px-12 xl:px-0">
           <div
@@ -182,7 +182,7 @@ export default function LoginPage() {
                   </Label>
                   <Link
                     href="/forgot-password"
-                    className="rounded-sm text-xs font-semibold text-[#C4187A] transition-colors hover:text-[#9E145F] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E91E8C]/40 focus-visible:ring-offset-2"
+                    className="rounded-sm text-xs font-semibold text-[#C4187A] transition-colors hover:text-[#9E145F] hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#E91E8C]/40 focus-visible:ring-offset-2"
                   >
                     Esqueci minha senha
                   </Link>

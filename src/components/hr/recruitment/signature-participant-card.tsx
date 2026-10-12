@@ -247,7 +247,7 @@ export function SignatureParticipantCard({
       </article>
 
       {replaceOpen ? (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-label="Alterar e-mail do signatário">
+        <div className="fixed inset-0 z-100 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-label="Alterar e-mail do signatário">
           <form onSubmit={replaceEmail} className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -269,7 +269,7 @@ export function SignatureParticipantCard({
               maxLength={254}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+              className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-800 outline-hidden focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
             />
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setReplaceOpen(false)} className="h-9 rounded-xl border border-slate-200 px-3 text-[11px] font-black text-slate-600">Cancelar</button>

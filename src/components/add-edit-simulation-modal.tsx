@@ -405,7 +405,7 @@ useEffect(() => {
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[90vh] w-[calc(100vw-2rem)] max-w-[980px] flex-col overflow-hidden rounded-[22px] border-0 p-0 shadow-2xl sm:max-w-[980px]">
-        <DialogHeader className="flex-shrink-0 border-b border-[#eeece7] px-6 py-5 pr-14">
+        <DialogHeader className="shrink-0 border-b border-[#eeece7] px-6 py-5 pr-14">
           <DialogTitle className="text-xl font-black tracking-tight text-slate-950">{simulationToEdit ? 'Editar mercadoria' : 'Nova mercadoria'}</DialogTitle>
           <DialogDescription>Cadastre a composição, o preço e as unidades em que a mercadoria estará disponível.</DialogDescription>
         </DialogHeader>
@@ -468,7 +468,7 @@ useEffect(() => {
                                             </Button>
                                         </FormControl>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                    <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                                         <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
                                         <DropdownMenuSeparator />
                                         {kiosks.map((k) => (
@@ -508,7 +508,7 @@ useEffect(() => {
                                       </Button>
                                   </FormControl>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                  <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                                   <DropdownMenuLabel>Categorias disponíveis</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
                                   {mainCategories.map((cat) => (
@@ -562,7 +562,7 @@ useEffect(() => {
                                             </Button>
                                         </FormControl>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                                    <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                                         <DropdownMenuLabel>Grupos disponíveis</DropdownMenuLabel>
                                         <DropdownMenuSeparator />
                                         {groups.map(group => (
@@ -616,7 +616,7 @@ useEffect(() => {
                           return (
                               <div key={item.id} className="flex flex-col gap-3 border-b p-3 last:border-b-0 md:grid md:grid-cols-[1fr_auto_1fr_auto] md:items-center md:gap-x-2 md:p-2">
                                   <div className="space-y-1 self-center">
-                                      <p className="font-medium text-sm break-words">{baseProduct?.name}</p>
+                                      <p className="font-medium text-sm wrap-break-word">{baseProduct?.name}</p>
                                       <div className="flex justify-start">
                                       <FormField
                                           control={form.control}
@@ -651,7 +651,7 @@ useEffect(() => {
                                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:gap-x-2 md:col-span-2">
                                       <div className="flex items-start gap-1">
                                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
-                                          <FormItem className="flex-grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
+                                          <FormItem className="grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
                                           )}/>
                                           
                                           <FormField

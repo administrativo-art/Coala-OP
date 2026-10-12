@@ -94,7 +94,7 @@ export function PricingHistoryAnalysis({ simulations, priceHistory }: PricingHis
                 <div className="rounded-2xl border border-red-200 bg-red-50 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-red-500">Em prejuízo</p><p className="mt-1 text-2xl font-black text-red-600">{commercialSummary.lossCount}</p><p className="text-[11px] text-red-500">exige reajuste</p></div>
             </div>
             <div className="grid gap-4 xl:grid-cols-[1.6fr_.7fr]">
-        <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border bg-white shadow-xs">
             {/* Toolbar */}
             <div className="p-4 border-b bg-gray-50/30 flex flex-wrap gap-3 items-center">
                 <div className="relative flex-1 min-w-[200px]">
@@ -210,8 +210,8 @@ export function PricingHistoryAnalysis({ simulations, priceHistory }: PricingHis
                 </Table>
             </ScrollArea>
         </div>
-        <aside className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Maiores riscos de margem</h3>
+        <aside className="rounded-2xl border bg-white p-4 shadow-xs">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Maiores riscos de margem</h3>
             <div className="mt-3 space-y-2">
                 {commercialSummary.risks.map(({ simulation, margin, status }) => <div key={simulation.id} className={cn('flex items-center justify-between gap-3 rounded-xl border border-l-4 p-3', status === 'loss' ? 'border-red-200 border-l-red-500 bg-red-50' : status === 'below' ? 'border-orange-200 border-l-orange-500 bg-orange-50' : 'border-emerald-200 border-l-emerald-500 bg-emerald-50')}><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800">{simulation.name}</p><p className="text-[10px] text-slate-500">{status === 'loss' ? 'Prejuízo' : status === 'below' ? 'Abaixo da meta' : status === 'met' ? 'Na meta' : 'Sem meta'}</p></div><strong className={cn('text-sm', status === 'loss' ? 'text-red-600' : status === 'below' ? 'text-orange-600' : 'text-emerald-600')}>{margin.toFixed(1)}%</strong></div>)}
                 {!commercialSummary.risks.length ? <p className="py-8 text-center text-xs text-slate-400">Sem mercadorias ativas.</p> : null}

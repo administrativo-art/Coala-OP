@@ -176,7 +176,7 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
     >
       <div className="flex items-center gap-3">
         <span
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: item.user.color || '#8B5CF6' }}
         >
           {initials(item.user.username)}
@@ -184,7 +184,7 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-sm font-semibold">{item.user.username}</span>
-            <span className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
+            <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
               {risk === 'VENCIDA' && <span className="h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />}
               {cfg.label}
             </span>
@@ -217,7 +217,7 @@ function ScheduledCard({ item, onOpen }: { item: Enriched; onOpen: () => void })
     >
       <div className="flex items-center gap-3">
         <span
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: item.user.color || '#8B5CF6' }}
         >
           {initials(item.user.username)}
@@ -253,7 +253,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
     >
       <div className="flex items-center gap-3">
         <span
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: item.user.color || '#8B5CF6' }}
         >
           {initials(item.user.username)}
@@ -263,7 +263,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
           {meta && <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{meta}</div>}
         </div>
       </div>
-      <Progress value={progress} className="mt-3 h-[5px] [&>*]:bg-slate-400" />
+      <Progress value={progress} className="mt-3 h-[5px] *:bg-slate-400" />
       <div className="mt-2 text-[11px] text-muted-foreground">
         Aquisição até {format(end, 'dd/MM/yyyy', { locale: ptBR })}
       </div>
@@ -274,7 +274,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
 function CardSkeleton() {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-l-4 border-l-muted bg-card px-4 py-3.5 animate-pulse">
-      <div className="h-9 w-9 flex-shrink-0 rounded-full bg-muted" />
+      <div className="h-9 w-9 shrink-0 rounded-full bg-muted" />
       <div className="flex-1 space-y-2">
         <div className="h-3.5 w-3/5 rounded bg-muted" />
         <div className="h-[5px] w-full rounded bg-muted" />
@@ -420,7 +420,7 @@ function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void })
           {period} · {record.days}d
         </span>
         <span className="mt-2 flex items-center gap-2">
-          <Progress value={progress} className="h-1.5 flex-1 [&>*]:bg-sky-600" />
+          <Progress value={progress} className="h-1.5 flex-1 *:bg-sky-600" />
           <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{completedSteps}/{VACATION_WORKFLOW_DISPLAY_STAGE_META.length}</span>
         </span>
       </span>
@@ -702,7 +702,7 @@ export function DPFeriasManager() {
       )}
 
       {riskFilter === 'ALL' && awaitingApproval.length > 0 && (
-        <section className="rounded-[18px] border border-amber-300 bg-gradient-to-b from-amber-50 to-card p-4 dark:border-amber-900 dark:from-amber-950/25">
+        <section className="rounded-[18px] border border-amber-300 bg-linear-to-b from-amber-50 to-card p-4 dark:border-amber-900 dark:from-amber-950/25">
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-amber-200 text-xs font-black text-amber-900 dark:bg-amber-900 dark:text-amber-200">!</span>
             <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-amber-900 dark:text-amber-200">Aguardando aprovação</h2>
@@ -725,7 +725,7 @@ export function DPFeriasManager() {
       )}
 
       {activeTrails.length > 0 && (
-        <section className="rounded-[18px] border border-sky-200 bg-gradient-to-b from-sky-50/80 to-card p-4 dark:border-sky-900 dark:from-sky-950/20">
+        <section className="rounded-[18px] border border-sky-200 bg-linear-to-b from-sky-50/80 to-card p-4 dark:border-sky-900 dark:from-sky-950/20">
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-sky-200 text-xs font-black text-sky-900 dark:bg-sky-900 dark:text-sky-200">→</span>
             <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-sky-900 dark:text-sky-200">Trilhas em andamento</h2>
@@ -870,7 +870,7 @@ export function DPFeriasManager() {
               monthVacations.map(v => (
                 <div key={v.id} className="flex items-center gap-3 rounded-xl border p-2.5">
                   <span
-                    className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                    className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     style={{ background: v.color }}
                   >
                     {initials(v.name)}

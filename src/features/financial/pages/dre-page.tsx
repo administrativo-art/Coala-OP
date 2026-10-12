@@ -673,7 +673,7 @@ export function DrePage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Month nav */}
-          <div className="flex items-center gap-1 rounded-xl border bg-background px-1 shadow-sm">
+          <div className="flex items-center gap-1 rounded-xl border bg-background px-1 shadow-xs">
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(-1)} disabled={selectedMonth <= FINANCIAL_DRE_START_MONTH_KEY}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -682,7 +682,7 @@ export function DrePage() {
               min={FINANCIAL_DRE_START_MONTH_KEY}
               value={selectedMonth}
               onChange={(e) => e.target.value && setSelectedMonth(e.target.value < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : e.target.value)}
-              className="w-36 bg-transparent py-1.5 text-center text-sm font-medium focus:outline-none"
+              className="w-36 bg-transparent py-1.5 text-center text-sm font-medium focus:outline-hidden"
             />
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(1)} disabled={isFutureMonth}>
               <ChevronRight className="h-4 w-4" />
@@ -722,18 +722,18 @@ export function DrePage() {
           </Button>
 
           {/* View toggle */}
-          <div className="flex rounded-xl border bg-background p-1 shadow-sm">
+          <div className="flex rounded-xl border bg-background p-1 shadow-xs">
             <button type="button" onClick={() => setViewMode("dashboard")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "dashboard" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "dashboard" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}>
               <LayoutDashboard className="h-3.5 w-3.5" /> Resumo
             </button>
             <button type="button" onClick={() => setViewMode("classic")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "classic" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "classic" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}>
               <Table2 className="h-3.5 w-3.5" /> DRE Clássica
             </button>
             {canViewPersonnelCosts ? (
               <button type="button" onClick={() => setViewMode("people")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "people" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "people" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}>
                 <UsersRound className="h-3.5 w-3.5" /> Por colaborador
               </button>
             ) : null}
@@ -805,7 +805,7 @@ export function DrePage() {
         </div>
       )}
 
-      <div className="rounded-xl border bg-background p-4 shadow-sm">
+      <div className="rounded-xl border bg-background p-4 shadow-xs">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div>
             <p className="text-sm font-semibold">Critério dos insumos na DRE</p>
@@ -1160,7 +1160,7 @@ export function DrePage() {
                               {canExpandDetails && detailsKey ? (
                                 <button
                                   type="button"
-                                  className="flex w-full items-center gap-2 px-6 py-2.5 pl-10 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                                  className="flex w-full items-center gap-2 px-6 py-2.5 pl-10 text-left hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                                   aria-expanded={isExpanded}
                                   aria-controls={detailRegionId}
                                   onClick={() => setExpandedDreRows((current) => ({

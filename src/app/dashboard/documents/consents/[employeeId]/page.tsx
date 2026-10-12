@@ -109,7 +109,7 @@ export default function ImageVoiceConsentManagementPage() {
       {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
       {notice ? <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{notice}</div> : null}
 
-      <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-xs sm:grid-cols-2 lg:grid-cols-4">
         <div><p className="text-[10px] font-bold uppercase text-slate-400">Estado</p><p className="mt-1 font-black text-slate-900">{consent ? STATUS_LABELS[consent.status] : "—"}</p></div>
         <div><p className="text-[10px] font-bold uppercase text-slate-400">Decisão</p><p className="mt-1 text-sm font-semibold">{formatDate(consent?.decisionAt)}</p></div>
         <div><p className="text-[10px] font-bold uppercase text-slate-400">Canal</p><p className="mt-1 text-sm font-semibold">{consent?.decisionChannel || "—"}</p></div>
@@ -119,7 +119,7 @@ export default function ImageVoiceConsentManagementPage() {
       </section>
 
       {canManage ? (
-        <section className="rounded-xl border bg-white shadow-sm">
+        <section className="rounded-xl border bg-white shadow-xs">
           <header className="border-b px-4 py-3"><h2 className="flex items-center gap-2 text-sm font-black"><Plus className="h-4 w-4 text-teal-700" />Registrar publicação</h2></header>
           <div className="grid gap-3 p-4 md:grid-cols-4">
             <Input value={channel} onChange={(event) => setChannel(event.target.value)} placeholder="Canal: Instagram, site..." />
@@ -134,7 +134,7 @@ export default function ImageVoiceConsentManagementPage() {
         </section>
       ) : null}
 
-      <section className="rounded-xl border bg-white shadow-sm">
+      <section className="rounded-xl border bg-white shadow-xs">
         <header className="border-b px-4 py-3"><h2 className="flex items-center gap-2 text-sm font-black"><ShieldCheck className="h-4 w-4 text-violet-700" />Inventário de usos</h2></header>
         {!consent?.usages.length ? (
           <p className="p-6 text-center text-xs text-slate-500">Nenhum uso registrado.</p>

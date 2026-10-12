@@ -159,9 +159,9 @@ export function WizardModal({
           aria-current={current ? "step" : undefined}
           onClick={() => requestStepChange(index)}
           className={cn(
-            "w-full rounded-ds-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2",
+            "w-full rounded-ds-md text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker focus-visible:ring-offset-2",
             placement === "sidebar" && "flex items-start gap-3 px-3 py-2.5 focus-visible:ring-offset-ds-dark",
-            placement === "sidebar" && current && "bg-white/[.08]",
+            placement === "sidebar" && current && "bg-white/8",
             placement === "sidebar" && blocked && "cursor-not-allowed opacity-45",
             placement === "top" && "block"
           )}
@@ -195,11 +195,11 @@ export function WizardModal({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(nextOpen) => { if (!nextOpen) requestClose() }}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[var(--ds-scrim)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-(--ds-scrim) data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
           data-ui="wizard-modal"
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 grid w-[min(1080px,calc(100vw-48px))] -translate-x-1/2 -translate-y-1/2 grid-cols-1 overflow-hidden rounded-ds-modal bg-ds-input font-ds shadow-ds-modal outline-none",
+            "fixed left-1/2 top-1/2 z-50 grid w-[min(1080px,calc(100vw-48px))] -translate-x-1/2 -translate-y-1/2 grid-cols-1 overflow-hidden rounded-ds-modal bg-ds-input font-ds shadow-ds-modal outline-hidden",
             sidebarGridClasses[sidebarWidth],
             modalHeightClasses[height]
           )}
@@ -232,7 +232,7 @@ export function WizardModal({
                   type="button"
                   aria-label="Fechar"
                   onClick={requestClose}
-                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+                  className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
                 >
                   <X aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -251,7 +251,7 @@ export function WizardModal({
                       type="button"
                       aria-label="Fechar"
                       onClick={requestClose}
-                      className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+                      className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-ds-pill bg-ds-muted text-ds-ink-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
                     >
                       <X aria-hidden="true" className="h-4 w-4" />
                     </button>

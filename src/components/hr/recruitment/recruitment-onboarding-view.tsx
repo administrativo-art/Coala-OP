@@ -717,7 +717,7 @@ function OnboardingFinalizationControls({
               }}
               disabled={disabled || transportVoucherMode === 'summary'}
               inputMode="decimal"
-              className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
+              className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
               placeholder="R$ 0,00"
             />
           </label>
@@ -729,7 +729,7 @@ function OnboardingFinalizationControls({
             value={value.shiftDefinitionId ?? ''}
             onChange={event => patch({ shiftDefinitionId: event.target.value || null })}
             disabled={disabled}
-            className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
+            className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
           >
             <option value="">Sem turno definido</option>
             {availableShiftDefinitions.map(definition => (
@@ -1134,7 +1134,7 @@ function StartOnboardingModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-xs">
       <div className="flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div>
@@ -1265,26 +1265,26 @@ function StartOnboardingModal({
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Nome da pessoa
-                    <input value={candidateName} onChange={event => setCandidateName(event.target.value)} onBlur={event => setCandidateName(formatPersonName(event.target.value))} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Nome completo" />
+                    <input value={candidateName} onChange={event => setCandidateName(event.target.value)} onBlur={event => setCandidateName(formatPersonName(event.target.value))} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Nome completo" />
                     <span className="mt-1.5 block text-xs font-medium leading-snug text-slate-500">Use o nome completo com iniciais maiúsculas.</span>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     E-mail para envio
-                    <input type="email" value={candidateEmail} onChange={event => setCandidateEmail(event.target.value)} onBlur={event => setCandidateEmail(event.target.value.trim().toLowerCase())} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="nome@email.com" />
+                    <input type="email" value={candidateEmail} onChange={event => setCandidateEmail(event.target.value)} onBlur={event => setCandidateEmail(event.target.value.trim().toLowerCase())} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="nome@email.com" />
                   </label>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Cargo
-                    <select value={jobRoleId} onChange={event => setJobRoleId(event.target.value)} required disabled={integrationMode === 'import'} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-600">
+                    <select value={jobRoleId} onChange={event => setJobRoleId(event.target.value)} required disabled={integrationMode === 'import'} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-600">
                       <option value="">Selecione o cargo</option>
                       {activeRoles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
                     </select>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     Função
-                    <select value={functionId} onChange={event => setFunctionId(event.target.value)} required disabled={integrationMode === 'import' && Boolean(selectedIntegrationTemplate?.functionId)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-600">
+                    <select value={functionId} onChange={event => setFunctionId(event.target.value)} required disabled={integrationMode === 'import' && Boolean(selectedIntegrationTemplate?.functionId)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-600">
                       <option value="">Selecione a função</option>
                       {availableFunctions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
@@ -1299,14 +1299,14 @@ function StartOnboardingModal({
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Unidade <span className="text-rose-500">*</span>
-                    <select value={unitId} onChange={event => setUnitId(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+                    <select value={unitId} onChange={event => setUnitId(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
                       <option value="">Selecione a unidade</option>
                       {activeUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                     </select>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     CNPJ responsável pela contratação <span className="text-rose-500">*</span>
-                    <select value={employerUnitId} onChange={event => setEmployerUnitId(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+                    <select value={employerUnitId} onChange={event => setEmployerUnitId(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
                       <option value="">Selecione a empresa responsável</option>
                       {employerUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</option>)}
                     </select>
@@ -1317,12 +1317,12 @@ function StartOnboardingModal({
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Data prevista de admissão <span className="text-rose-500">*</span>
-                    <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
+                    <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-hidden focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     1º período de experiência <span className="text-rose-500">*</span>
                     <div className="mt-1.5 flex h-10 items-center rounded-xl border border-slate-200 bg-white focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100">
-                      <input type="number" min="1" max="89" step="1" value={probationFirstPeriodDays} onChange={event => setProbationFirstPeriodDays(event.target.value)} required className="h-full min-w-0 flex-1 rounded-xl bg-transparent px-3 text-sm text-slate-900 outline-none" />
+                      <input type="number" min="1" max="89" step="1" value={probationFirstPeriodDays} onChange={event => setProbationFirstPeriodDays(event.target.value)} required className="h-full min-w-0 flex-1 rounded-xl bg-transparent px-3 text-sm text-slate-900 outline-hidden" />
                       <span className="pr-3 text-xs font-bold text-slate-400">dias</span>
                     </div>
                   </label>
@@ -1697,7 +1697,7 @@ function IntegrationV2Runner({ process, getToken, canManage, onRefresh }: { proc
   }
 
   return (
-    <section className="mx-6 mt-5 overflow-hidden rounded-2xl border border-indigo-200 bg-indigo-50/30 shadow-sm">
+    <section className="mx-6 mt-5 overflow-hidden rounded-2xl border border-indigo-200 bg-indigo-50/30 shadow-xs">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-indigo-100 bg-white/80 p-4">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
@@ -1778,7 +1778,7 @@ function IntegrationV2Runner({ process, getToken, canManage, onRefresh }: { proc
         {error ? <div className="mb-3"><ErrorLine msg={error} /></div> : null}
         <div className="grid gap-3 md:grid-cols-2">
           {blocks.map(block => (
-            <div key={block.id} className="relative rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700 shadow-sm">
+            <div key={block.id} className="relative rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700 shadow-xs">
               <span className="mb-1.5 block pr-6">{block.label}{simulation.requiredBlockIds.includes(block.id) ? <b className="text-rose-500"> *</b> : null}</span>
               {field(block)}
               {block.helpText ? <span className="mt-1 block font-medium text-slate-400">{block.helpText}</span> : null}
@@ -2823,11 +2823,11 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
       ?? selectedProcess.currentStage
       ?? 'Etapa não informada';
   const cancellationModal = showCancelModal ? (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-150 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]">
       <div role="dialog" aria-modal="true" aria-labelledby="cancel-onboarding-title" className="w-full max-w-lg overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.1em] text-rose-600">Encerramento sem finalização</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-rose-600">Encerramento sem finalização</p>
             <h2 id="cancel-onboarding-title" className="mt-1 text-xl font-black text-slate-950">Encerrar integração</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{selectedProcess.candidateName ?? 'Candidato'} · {cancellationStage}</p>
           </div>
@@ -2848,7 +2848,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
               onChange={event => setCancelReasonDraft(event.target.value.slice(0, 2000))}
               rows={5}
               placeholder="Explique por que esta integração está sendo encerrada sem chegar à finalização."
-              className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+              className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-hidden placeholder:text-slate-400 focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
             />
             <span className={`mt-1.5 flex justify-between text-[11px] font-bold ${cancelReasonDraft.trim().length > 0 && cancelReasonDraft.trim().length < 10 ? 'text-rose-600' : 'text-slate-400'}`}>
               <span>{cancelReasonDraft.trim().length < 10 ? 'Informe pelo menos 10 caracteres.' : 'O motivo ficará no histórico do processo.'}</span>
@@ -2872,11 +2872,11 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
     </div>
   ) : null;
   const asoStartResultModal = asoStartResult ? (
-    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-160 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]">
       <div role="dialog" aria-modal="true" aria-labelledby="aso-start-result-title" className="w-full max-w-2xl overflow-hidden rounded-3xl border border-cyan-100 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.1em] text-cyan-700">Processo do ASO</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-cyan-700">Processo do ASO</p>
             <h2 id="aso-start-result-title" className="mt-1 text-xl font-black text-slate-950">Ações realizadas pelo sistema</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">{selectedProcess.candidateName ?? 'Colaboradora'}</p>
           </div>
@@ -2908,7 +2908,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
         {selectedProcess.status === 'cancelled' ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3.5">
             <p className="text-xs font-black uppercase tracking-wide text-rose-700">Integração encerrada sem finalização</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
+            <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
             <p className="mt-2 text-[11px] font-bold text-rose-600">
               {selectedProcess.cancelledAt ? `Encerrada em ${formatOnboardingDate(selectedProcess.cancelledAt)}` : 'Data não registrada'}
               {selectedProcess.cancelledByEmail ? ` · por ${selectedProcess.cancelledByEmail}` : ''}
@@ -3460,7 +3460,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                 <Archive className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
                 <div className="min-w-0">
                   <p className="text-xs font-black uppercase tracking-wide text-rose-700">Integração encerrada sem finalização</p>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
+                  <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
                   <p className="mt-2 text-[11px] font-bold text-rose-600">
                     {selectedProcess.cancelledAt ? `Encerrada em ${formatOnboardingDate(selectedProcess.cancelledAt)}` : 'Data não registrada'}
                     {selectedProcess.cancelledByEmail ? ` · por ${selectedProcess.cancelledByEmail}` : ''}
@@ -3530,7 +3530,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
           {/* phase panel */}
           <div className="min-w-0 flex-1">
             {isFuturePhase ? (
-              <div role="alert" className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950 shadow-sm">
+              <div role="alert" className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950 shadow-xs">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
                   <AlertTriangle className="h-4 w-4" />
                 </span>
@@ -3547,7 +3547,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
             {(activeKind === 'coleta' || activeKind === 'revisao') && (
               <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
                 <div className="order-2 flex min-w-0 flex-col gap-4 lg:col-start-2">
-                <section className="order-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <section className="order-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
                 <button
                   type="button"
                   onClick={() => setCandidateDataCollapsed(current => !current)}
@@ -3567,11 +3567,11 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                   </span>
                 </button>
                 {!candidateDataCollapsed ? <>
-                <div className="mt-3 grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+                <div className="mt-3 grid gap-2.5 grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
                   {formRows.map(([label, value]) => (
                     <div key={label} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-                      <div className="break-words text-[10.5px] font-black uppercase leading-tight tracking-wide text-slate-400 [overflow-wrap:anywhere]">{label}</div>
-                      <div className="mt-1 whitespace-pre-wrap break-words text-[13px] font-bold text-slate-700">{value}</div>
+                      <div className="wrap-break-word text-[10.5px] font-black uppercase leading-tight tracking-wide text-slate-400 wrap-anywhere">{label}</div>
+                      <div className="mt-1 whitespace-pre-wrap wrap-break-word text-[13px] font-bold text-slate-700">{value}</div>
                     </div>
                   ))}
                 </div>
@@ -3594,7 +3594,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                 </> : null}
                 </section>
 
-                {canViewAso ? <div className="order-1 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm">
+                {canViewAso ? <div className="order-1 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-xs">
                   <button
                     type="button"
                     onClick={() => setAsoCollapsed(current => !current)}
@@ -3617,7 +3617,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                   </button>
 
                   {asoCollapsed ? (
-                    <div className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(112px,1fr))]" aria-label={`${asoCompletedStepCount} de ${asoProgressSteps.length} etapas do ASO concluídas`}>
+                    <div className="mt-3 grid gap-2 grid-cols-[repeat(auto-fit,minmax(112px,1fr))]" aria-label={`${asoCompletedStepCount} de ${asoProgressSteps.length} etapas do ASO concluídas`}>
                       {asoStepLabels.map((label, index) => {
                         const state = asoStepStates[index];
                         const stateLabel = state === 'done' ? 'Concluído' : state === 'current' ? 'Em andamento' : 'Pendente';
@@ -3806,7 +3806,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                             includeReply: false,
                             appointmentControls: false,
                           },
-                        ].map(item => <div key={item.label} className={`rounded-xl border p-3 ${item.failed ? 'border-rose-200 bg-rose-50' : item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-start gap-2">{item.failed ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"/> : item.done ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"/> : <Clock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"/>}<div className="min-w-0"><p className="text-[11px] font-black text-slate-800">{item.label}</p><p className="mt-0.5 break-words text-[10.5px] font-semibold leading-relaxed text-slate-500">{item.detail}</p></div></div>{item.tracking ? <AsoEmailTrackingMilestones communication={item.tracking} includeReply={item.includeReply} /> : null}{item.appointmentControls ? <div className="mt-3 border-t border-slate-200 pt-3"><p className="text-[9px] font-black uppercase tracking-wide text-violet-700">Retorno e confirmação</p><p className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">O link enviado à clínica preenche data e horário automaticamente. Se necessário, o RH pode informar os dados antes de confirmar.</p><div className="mt-2 grid gap-2 sm:grid-cols-2"><input type="date" value={asoAppointmentDraft.date} onChange={event => setAsoAppointmentDraft(current => ({ ...current, date: event.target.value }))} className="h-9 min-w-0 rounded-lg border bg-white px-3 text-xs"/><input type="time" value={asoAppointmentDraft.time} onChange={event => setAsoAppointmentDraft(current => ({ ...current, time: event.target.value }))} className="h-9 min-w-0 rounded-lg border bg-white px-3 text-xs"/></div><div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-violet-100 bg-white px-3 py-2"><p className="text-[9px] font-black uppercase tracking-wide text-violet-600">Local do exame</p>{asoClinicLocationText ? <TooltipProvider delayDuration={150}><Tooltip><TooltipTrigger asChild><button type="button" aria-label="Ver endereço completo da clínica" className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-300"><Info className="h-3 w-3"/></button></TooltipTrigger><TooltipContent side="top" align="end" className="max-w-[320px] text-xs font-semibold leading-relaxed"><p>{asoClinicLocationText}</p></TooltipContent></Tooltip></TooltipProvider> : null}</div>{asoAppointmentDraftAfterAdmission ? <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/><p className="text-[10px] font-bold leading-relaxed">O exame está depois da admissão prevista para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. O registro será permitido, mas o RH deverá revisar o cronograma.</p></div> : null}{canManageAsoProcess ? <div className="mt-2 flex justify-end"><button type="button" disabled={!!asoActionBusy || !asoAppointmentDraft.date || !asoAppointmentDraft.time} onClick={() => void asoAction('confirm_appointment', asoAppointmentDraft)} className="h-8 rounded-md bg-violet-700 px-2.5 text-[9px] font-black text-white disabled:opacity-50">{asoActionBusy === 'confirm_appointment' ? 'Enviando aviso...' : 'Confirmar e avisar candidato(a)'}</button></div> : null}</div> : null}</div>)}
+                        ].map(item => <div key={item.label} className={`rounded-xl border p-3 ${item.failed ? 'border-rose-200 bg-rose-50' : item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-start gap-2">{item.failed ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"/> : item.done ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"/> : <Clock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"/>}<div className="min-w-0"><p className="text-[11px] font-black text-slate-800">{item.label}</p><p className="mt-0.5 wrap-break-word text-[10.5px] font-semibold leading-relaxed text-slate-500">{item.detail}</p></div></div>{item.tracking ? <AsoEmailTrackingMilestones communication={item.tracking} includeReply={item.includeReply} /> : null}{item.appointmentControls ? <div className="mt-3 border-t border-slate-200 pt-3"><p className="text-[9px] font-black uppercase tracking-wide text-violet-700">Retorno e confirmação</p><p className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">O link enviado à clínica preenche data e horário automaticamente. Se necessário, o RH pode informar os dados antes de confirmar.</p><div className="mt-2 grid gap-2 sm:grid-cols-2"><input type="date" value={asoAppointmentDraft.date} onChange={event => setAsoAppointmentDraft(current => ({ ...current, date: event.target.value }))} className="h-9 min-w-0 rounded-lg border bg-white px-3 text-xs"/><input type="time" value={asoAppointmentDraft.time} onChange={event => setAsoAppointmentDraft(current => ({ ...current, time: event.target.value }))} className="h-9 min-w-0 rounded-lg border bg-white px-3 text-xs"/></div><div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-violet-100 bg-white px-3 py-2"><p className="text-[9px] font-black uppercase tracking-wide text-violet-600">Local do exame</p>{asoClinicLocationText ? <TooltipProvider delayDuration={150}><Tooltip><TooltipTrigger asChild><button type="button" aria-label="Ver endereço completo da clínica" className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50 focus:outline-hidden focus:ring-2 focus:ring-violet-300"><Info className="h-3 w-3"/></button></TooltipTrigger><TooltipContent side="top" align="end" className="max-w-[320px] text-xs font-semibold leading-relaxed"><p>{asoClinicLocationText}</p></TooltipContent></Tooltip></TooltipProvider> : null}</div>{asoAppointmentDraftAfterAdmission ? <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/><p className="text-[10px] font-bold leading-relaxed">O exame está depois da admissão prevista para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. O registro será permitido, mas o RH deverá revisar o cronograma.</p></div> : null}{canManageAsoProcess ? <div className="mt-2 flex justify-end"><button type="button" disabled={!!asoActionBusy || !asoAppointmentDraft.date || !asoAppointmentDraft.time} onClick={() => void asoAction('confirm_appointment', asoAppointmentDraft)} className="h-8 rounded-md bg-violet-700 px-2.5 text-[9px] font-black text-white disabled:opacity-50">{asoActionBusy === 'confirm_appointment' ? 'Enviando aviso...' : 'Confirmar e avisar candidato(a)'}</button></div> : null}</div> : null}</div>)}
                       </div>
                       {asoAppointmentAfterAdmission ? <div role="alert" className="mt-3 flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600"/><div><p className="text-xs font-black">Exame marcado depois da data de admissão</p><p className="mt-1 text-[11px] font-semibold leading-relaxed">A clínica informou {formatOnboardingDateOnly(asoWorkflow?.appointment?.date)}, mas a empresa definiu a admissão para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. Revise a admissão ou solicite um exame anterior.</p></div></div> : null}
                     </>}
@@ -3860,7 +3860,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                   </>}
                 </div> : null}
 
-                <div className="order-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
+                <div className="order-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-xs">
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-black text-slate-900">Link do formulário público</div>
                     <div className={`mt-0.5 text-xs font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
@@ -3992,7 +3992,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                         aria-current={selected ? 'step' : undefined}
                         className={`min-w-0 flex-1 rounded-xl border border-b-[3px] px-3 py-3 text-left transition ${
                           selected
-                            ? 'border-slate-900 border-b-slate-900 bg-white shadow-sm'
+                            ? 'border-slate-900 border-b-slate-900 bg-white shadow-xs'
                             : step.done
                               ? 'border-emerald-100 border-b-emerald-400 bg-emerald-50/50 hover:bg-emerald-50'
                               : 'border-stone-200 border-b-stone-200 bg-stone-50/70 hover:bg-white'
@@ -4016,7 +4016,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                   })}
                 </div>
 
-                {accountantActiveStep === 1 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                {accountantActiveStep === 1 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Formulário admissional</p>
                     <h4 className="mt-1 text-sm font-black text-slate-900">Dados que vão para o contador</h4>
@@ -4050,7 +4050,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                   </div>
                 </div> : null}
 
-                  {accountantActiveStep === 2 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                  {accountantActiveStep === 2 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
                     <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Pacote admissional</p>
                     <h4 className="mt-1 text-sm font-black text-slate-900">O que vai no e-mail do contador</h4>
                     <p className="mt-1 text-xs font-semibold text-slate-600">O formulário, o ASO, a identificação da candidata e os documentos dos filhos são anexos automáticos. O RH seleciona abaixo somente os demais documentos; itens ainda não aprovados ficam visíveis, mas bloqueados.</p>
@@ -4111,7 +4111,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                     </section>
                   </div> : null}
 
-                  {accountantActiveStep === 3 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                  {accountantActiveStep === 3 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Envio ao contador</p>
                       <h4 className="mt-1 text-sm font-black text-slate-900">E-mail com o pacote admissional</h4>
@@ -4227,7 +4227,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
             {/* INTEGRACAO */}
             {activeKind === 'integracao' && (
               <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-black uppercase tracking-wide text-slate-700">Cadastro e primeiro acesso</p>
@@ -4285,7 +4285,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                   ) : null}
                 </section>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                 <div className="border-b border-slate-100 px-4 py-3.5">
                   <p className="text-[14px] font-black text-slate-950">Integrações externas</p>
                   <p className="mt-0.5 text-[11.5px] font-semibold text-slate-500">
@@ -4295,7 +4295,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                 <div className="space-y-3 p-4">
                 <div className={`rounded-2xl border px-4 py-3.5 ${okAlert ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                   {!okAlert ? ([bizneoAlert, pdvDisplayAlert].filter(Boolean) as NonNullable<typeof bizneoAlert>[]).map(alert => (
-                    <div key={alert.id} className="[&:not(:first-child)]:mt-2">
+                    <div key={alert.id} className="not-first:mt-2">
                       <p className={`text-[13px] font-black ${alert.status === 'resolved' ? 'text-emerald-800' : 'text-amber-800'}`}>{alert.label}</p>
                       <p className={`mt-1 text-[11.5px] font-semibold ${alert.status === 'resolved' ? 'text-emerald-700' : 'text-amber-700'}`}>{alert.message ?? 'Verificação pendente.'}</p>
                     </div>
@@ -4306,7 +4306,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                     </>
                   )}
                   {!bizneoAlert || !pdvAlert ? (
-                    <div className="[&:not(:first-child)]:mt-2">
+                    <div className="not-first:mt-2">
                       <p className="text-[13px] font-black text-amber-800">Verificação necessária</p>
                       <p className="mt-1 text-[11.5px] font-semibold text-amber-700">Procure os cadastros antes de avançar.</p>
                     </div>
@@ -4434,7 +4434,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
             {/* ASSINATURA */}
             {activeKind === 'assinatura' && (
               <div className="mt-4 space-y-4">
-                <div className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
+                <div className="rounded-2xl border border-violet-200 bg-white p-4 shadow-xs">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-black uppercase tracking-wide text-violet-800">Documentação admissional</p>
@@ -4575,7 +4575,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                                 type="button"
                                 disabled={!!signatureBusy}
                                 onClick={() => void openSignaturePlacement()}
-                                className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl px-4 text-[11px] font-black disabled:opacity-50 ${signatureWorkflow?.signaturePackage?.placementReady ? 'border border-pink-200 bg-white text-pink-700 hover:bg-pink-50' : 'bg-pink-600 text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700'}`}
+                                className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl px-4 text-[11px] font-black disabled:opacity-50 ${signatureWorkflow?.signaturePackage?.placementReady ? 'border border-pink-200 bg-white text-pink-700 hover:bg-pink-50' : 'bg-pink-600 text-white shadow-xs shadow-pink-600/20 hover:bg-pink-700'}`}
                               >
                                 {signatureBusy === 'prepare_positions' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
                                 {signatureWorkflow?.signaturePackage?.placementReady ? 'Ajustar posições' : 'Posicionar assinaturas'}
@@ -4585,7 +4585,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                                   type="button"
                                   disabled={!!signatureBusy}
                                   onClick={() => void sendPreparedSignaturePackage()}
-                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-xs shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
                                 >
                                   {signatureBusy === 'send' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                                   Enviar para assinatura
@@ -4610,7 +4610,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
                         <RotateCw className={`h-3.5 w-3.5 ${signatureBusy === 'reconcile' ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
                       {signatureWorkflow?.signaturePackage?.sandbox ? (
                         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
                           Documento de teste (sandbox). Ele não aparece no painel de produção do Autentique e não possui validade para o fluxo oficial.
@@ -4678,7 +4678,7 @@ export function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, j
 
             {/* GENERICO */}
             {activeKind === 'generico' && activePhaseId === 'done' ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center shadow-xs">
                 <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-emerald-600">
                   <CheckCircle2 className="h-7 w-7" />
                 </span>

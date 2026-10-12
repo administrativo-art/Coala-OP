@@ -27,7 +27,7 @@ export function HeroChip({ value, label, tone = "neutral", active, onClick }: He
     </>
   );
   const base = "inline-flex h-9 items-center gap-2 rounded-full px-3.5 ring-1 ring-inset transition-[background,box-shadow,transform] duration-150 motion-reduce:transition-none";
-  if (!onClick) return <span className={cn(base, "bg-white/[0.05] ring-white/10")}>{content}</span>;
+  if (!onClick) return <span className={cn(base, "bg-white/5 ring-white/10")}>{content}</span>;
   return (
     <button
       type="button"
@@ -35,8 +35,8 @@ export function HeroChip({ value, label, tone = "neutral", active, onClick }: He
       onClick={onClick}
       className={cn(
         base,
-        "hover:-translate-y-px hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:hover:translate-y-0",
-        active ? "bg-white/10 ring-2 ring-ds-accent-kicker" : "bg-white/[0.05] ring-white/10",
+        "hover:-translate-y-px hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:hover:translate-y-0",
+        active ? "bg-white/10 ring-2 ring-ds-accent-kicker" : "bg-white/5 ring-white/10",
       )}
     >
       {content}

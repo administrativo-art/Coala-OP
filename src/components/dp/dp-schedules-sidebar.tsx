@@ -83,7 +83,7 @@ export function DPSchedulesSidebar({
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Buscar unidade"
           aria-label="Buscar unidade"
-          className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-semibold text-slate-200 outline-none placeholder:text-[#5b6a83] focus:ring-0"
+          className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-semibold text-slate-200 outline-hidden placeholder:text-[#5b6a83] focus:ring-0"
         />
       </label>
 
@@ -101,7 +101,7 @@ export function DPSchedulesSidebar({
           <p className="px-2 py-6 text-center text-[11px] text-[#5b6a83]">{emptyLabel}</p>
         ) : groups.map((group) => (
           <section key={group.state} className="mb-2">
-            <div className="sticky top-0 z-[2] mb-0.5 flex items-center gap-[7px] rounded-[9px] bg-[#182337] p-2">
+            <div className="sticky top-0 z-2 mb-0.5 flex items-center gap-[7px] rounded-[9px] bg-[#182337] p-2">
               <span className="grid h-[18px] min-w-6 shrink-0 place-items-center rounded-[5px] bg-[#db2777] px-1.5 text-[9.5px] font-black uppercase tracking-[0.06em] text-white">
                 {group.stateCode}
               </span>
@@ -114,7 +114,7 @@ export function DPSchedulesSidebar({
             {group.cities.map((city) => (
               <div key={city.city} className="mb-0.5 ml-[9px] border-l border-[#22304a] pl-[7px]">
                 <div className="flex items-baseline gap-[5px] px-2 pb-1 pt-1.5">
-                  <span className="truncate text-[9.5px] font-extrabold uppercase tracking-[0.1em] text-[#5b6a83]">{city.city}</span>
+                  <span className="truncate text-[9.5px] font-extrabold uppercase tracking-widest text-[#5b6a83]">{city.city}</span>
                   <span className="shrink-0 text-[9.5px] font-bold text-[#3f4d66]">· {city.units.length}</span>
                 </div>
 
@@ -135,7 +135,7 @@ export function DPSchedulesSidebar({
                         aria-current={unit.selected ? 'page' : undefined}
                         onClick={unit.onClick}
                         className={cn(
-                          'w-full rounded-[11px] px-[10px] py-[9px] text-left outline-none focus-visible:ring-2 focus-visible:ring-[#db2777]',
+                          'w-full rounded-[11px] px-[10px] py-[9px] text-left outline-hidden focus-visible:ring-2 focus-visible:ring-[#db2777]',
                           unit.onDelete && 'pr-8',
                         )}
                       >
@@ -168,7 +168,7 @@ export function DPSchedulesSidebar({
                           type="button"
                           aria-label={`Excluir escala de ${unit.name}`}
                           onClick={unit.onDelete}
-                          className="pointer-events-none absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-md text-[#67758c] opacity-0 outline-none transition hover:bg-[#243249] hover:text-rose-400 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#db2777] group-hover:pointer-events-auto group-hover:opacity-100"
+                          className="pointer-events-none absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-md text-[#67758c] opacity-0 outline-hidden transition hover:bg-[#243249] hover:text-rose-400 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#db2777] group-hover:pointer-events-auto group-hover:opacity-100"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>

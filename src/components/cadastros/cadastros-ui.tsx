@@ -62,13 +62,13 @@ export function CadastrosTabs({
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'flex flex-col gap-1.5 border-b-4 px-1 pb-4 pt-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
+              'flex flex-col gap-1.5 border-b-4 px-1 pb-4 pt-1.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
               isActive ? 'border-ds-accent text-white' : 'border-transparent text-ds-indicator-zero hover:text-ds-on-dark-2'
             )}
           >
             <span
               className={cn(
-                'font-ds-mono text-[44px] font-bold leading-none tracking-[-0.05em]',
+                'font-ds-mono text-[44px] font-bold leading-none tracking-tighter',
                 isActive ? 'text-ds-accent-kicker' : 'text-ds-indicator-zero opacity-60'
               )}
             >
@@ -133,7 +133,7 @@ export function CadastrosHero({
               aria-pressed={status.value === value}
               onClick={() => status.onChange(value)}
               className={cn(
-                'h-[42px] whitespace-nowrap rounded-ds-md px-4 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
+                'h-[42px] whitespace-nowrap rounded-ds-md px-4 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
                 status.value === value ? 'bg-ds-on-dark text-ds-dark' : 'text-ds-on-dark-sub hover:text-white'
               )}
             >
@@ -244,7 +244,7 @@ export function ListShell({ children, minWidth = 860 }: { children: React.ReactN
 export function ListHead({ template, children }: { template: string; children: React.ReactNode }) {
   return (
     <div
-      className="grid items-center gap-3.5 border-b border-ds-divider px-5 py-2.5 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-ds-ink-faint"
+      className="grid items-center gap-3.5 border-b border-ds-divider px-5 py-2.5 text-[10.5px] font-extrabold uppercase tracking-widest text-ds-ink-faint"
       style={{ gridTemplateColumns: template }}
     >
       {children}
@@ -363,7 +363,7 @@ export function GridCard({
         }
       }}
       className={cn(
-        'flex cursor-pointer flex-col gap-3 rounded-ds-card-lg bg-ds-surface p-[18px] outline-none transition-[transform,box-shadow] duration-150 ease-ds-lift',
+        'flex cursor-pointer flex-col gap-3 rounded-ds-card-lg bg-ds-surface p-[18px] outline-hidden transition-[transform,box-shadow] duration-150 ease-ds-lift',
         'hover:-translate-y-0.5 hover:shadow-ds-lift focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2 motion-reduce:hover:translate-y-0',
         isOpen ? 'border-2 border-ds-accent-ink' : isSelected ? 'border-2 border-ds-accent/40' : 'border border-ds-border',
         isMuted && 'opacity-60'
@@ -484,7 +484,7 @@ export function DetailDrawer({
       <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
         {fields.map(([key, value]) => (
           <PanelField key={key} label={key}>
-            <span className="break-words">{value}</span>
+            <span className="wrap-break-word">{value}</span>
           </PanelField>
         ))}
       </div>

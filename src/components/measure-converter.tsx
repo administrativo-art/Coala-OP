@@ -107,7 +107,7 @@ export function MeasureConverter() {
             <div className="space-y-2">
               <Label htmlFor="to-unit">Para</Label>
               <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary">
-                <p className="text-2xl font-bold text-primary font-headline flex-grow">{result}</p>
+                <p className="text-2xl font-bold text-primary font-headline grow">{result}</p>
                 <Select value={toUnit} onValueChange={setToUnit}>
                   <SelectTrigger id="to-unit" className="w-1/3">
                     <SelectValue />

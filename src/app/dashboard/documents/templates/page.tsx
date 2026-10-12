@@ -237,10 +237,10 @@ export default function DocumentTemplatesPage() {
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar modelos.</p>;
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border bg-white shadow-xs">
       <div className="flex flex-col gap-3 border-b px-5 py-5 sm:flex-row sm:items-end sm:justify-between lg:px-6">
         <div><p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p><h1 className="text-xl font-black text-slate-950">Modelos</h1></div>
-        {canManage ? <Button size="sm" className="h-10 gap-2 rounded-xl px-4 shadow-sm" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" />Novo modelo</Button> : null}
+        {canManage ? <Button size="sm" className="h-10 gap-2 rounded-xl px-4 shadow-xs" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" />Novo modelo</Button> : null}
       </div>
       <div className="space-y-3 px-5 pb-2 pt-4 lg:px-6">
         <div className="relative">
@@ -254,7 +254,7 @@ export default function DocumentTemplatesPage() {
               type="button"
               className={`h-8 rounded-full border px-3.5 text-xs font-bold transition ${
                 listCategory === item
-                  ? "border-violet-600 bg-violet-600 text-white shadow-sm"
+                  ? "border-violet-600 bg-violet-600 text-white shadow-xs"
                   : "border-slate-200 bg-white text-slate-500 hover:border-violet-200 hover:text-violet-700"
               }`}
               onClick={() => setListCategory(item)}

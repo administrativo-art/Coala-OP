@@ -571,7 +571,7 @@ export function CollaboratorUniforms({
               {availableLots.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-5">
                   <div className="flex gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-xs">
                       <PackageSearch className="h-6 w-6" />
                     </div>
                     <div className="min-w-0">
@@ -623,7 +623,7 @@ export function CollaboratorUniforms({
                         }}
                         className={`rounded-2xl border p-3 text-left transition ${
                           selected
-                            ? "border-[#df2f78] bg-[#fff0f6] shadow-sm ring-2 ring-[#df2f78]/15"
+                            ? "border-[#df2f78] bg-[#fff0f6] shadow-xs ring-2 ring-[#df2f78]/15"
                             : "border-slate-200 bg-white hover:border-[#df2f78]/40 hover:bg-[#fff8fb]"
                         }`}
                       >

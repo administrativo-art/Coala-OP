@@ -119,7 +119,7 @@ function StockProductCombobox({
           className={cn('w-full font-normal', invalid && !value && 'border-amber-400')}
         />
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[min(92vw,520px)] p-0" align="start">
+      <PopoverContent className="w-(--radix-popover-trigger-width) min-w-[min(92vw,520px)] p-0" align="start">
         <div className="max-h-[300px] overflow-y-auto p-1">
           {filtered.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">Nenhum item encontrado.</div>
@@ -1655,7 +1655,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           </div>
 
           {isDivergenceTreatment && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 shadow-sm dark:border-rose-900 dark:bg-rose-950/20">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 shadow-xs dark:border-rose-900 dark:bg-rose-950/20">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
@@ -1868,7 +1868,7 @@ export function ReceiptWorkspace({ receipt }: Props) {
           )}
 
           {(isInConference || isInStockEntry) && (
-            <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-2xl border bg-background/95 px-5 py-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:flex-row sm:items-center sm:justify-between">
+            <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-2xl border bg-background/95 px-5 py-3 shadow-lg backdrop-blur-sm supports-backdrop-filter:bg-background/80 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 text-sm">
                 {actionPendingReasons.length > 0 ? (
                   <div className="flex items-start gap-2 text-amber-700 dark:text-amber-400">

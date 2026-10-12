@@ -118,7 +118,7 @@ export function PhotoCaptureModal({ open, onOpenChange, onPhotoCaptured }: Photo
                         />
 
                         {permissionState === 'loading' && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-xs">
                             <Loader2 className="h-8 w-8 animate-spin mb-4 text-muted-foreground" />
                             <p className="text-muted-foreground">Acessando a câmera...</p>
                         </div>
