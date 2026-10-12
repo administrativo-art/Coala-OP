@@ -78,9 +78,13 @@ class ComposeFlowsTest {
             compose.onNodeWithText("Arquivo").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodes(hasText("1 DE 2")).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Analisar e continuar").performClick()
+            // Several units in the simulation: a purchase without a withdrawal has its unit chosen here.
+            compose.onNodeWithText("Unidade").performScrollTo().performClick()
+            compose.onNodeWithText("Unidade de simulação").performClick()
             compose.onNodeWithText("Total (R$)").performScrollTo().apply { performTextReplacement(""); performTextInput("12,50"); assertTextContains("12,50") }
             compose.onNodeWithText("Pagamento").performScrollTo().performClick()
             compose.onNodeWithText("Insumos").performScrollTo().performClick()
+            compose.onNodeWithText("Unidade de simulação").performScrollTo().performClick()
             compose.onNodeWithText("Itens").performScrollTo().performClick()
             compose.onNodeWithText("Descrição").assertExists()
             compose.onNodeWithText("Total do item (R$)").performScrollTo().apply { performTextReplacement(""); performTextInput("12,50"); assertTextContains("12,50") }

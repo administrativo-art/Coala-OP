@@ -30,7 +30,7 @@ import com.coalaone.go.domain.Rules
 }
 /** Unit row of the prototype: name, what is going on there and the action in words; the badge carries the unit initials. */
 @Composable private fun UnitRow(name: String, meta: String, action: String, highlight: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Color.White, disabledContainerColor = Color.White)) {
+    Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(44.dp).background(if (highlight) Tokens.accentSoft else Tokens.soft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Text(unitInitials(name), color = if (highlight) Tokens.wine else Tokens.ink, style = MaterialTheme.typography.titleMedium) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -75,6 +75,26 @@ import com.coalaone.go.domain.Rules
                 context.openSessions.forEach { row -> UnitRow(row.kioskName, listOfNotNull("Contagem em andamento", shortDate(row.startedAt)?.let { "iniciada em $it" }, "${row.itemCount} lotes").joinToString(" · "), "Continuar", true, !feedback.busy) { vm.open(row.kioskId) } }
                 context.units.filter { it.id !in open }.forEach { unit -> UnitRow(unit.name, "Nenhuma contagem em andamento", "Iniciar", false, !feedback.busy) { vm.open(unit.id) } }
             }
+        } else if (confirm) {
+            // Everything that will change in stock, in one list, before the count is concluded.
+            val changed = session.items.mapNotNull { item -> state.drafts[item.lotId]?.takeIf(Rules::changed)?.let { item to it } }
+            Text("Resumo da contagem", style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
+            Text(if (changed.isEmpty()) "Nenhum lote foi alterado. Concluir registra que o estoque confere com o sistema." else "Confira os ${changed.size} ${if (changed.size == 1) "lote alterado" else "lotes alterados"} antes de concluir. Para corrigir, toque em Voltar.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+            if (changed.isNotEmpty()) Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(1.dp, Tokens.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 2.dp)) {
+                changed.forEachIndexed { index, (item, draft) ->
+                    val exit = Rules.quantity(draft.exit); val entry = Rules.quantity(draft.entry)
+                    if (index > 0) HorizontalDivider(color = Tokens.border)
+                    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(item.productName, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp), modifier = Modifier.weight(1f))
+                            Text("${Rules.quantityText(item.systemQuantity)} → ${Rules.quantityText(item.systemQuantity - exit + entry)} ${item.displayUnit}", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+                        }
+                        Text("Lote ${item.lotNumber}", color = Tokens.faint, style = MaterialTheme.typography.bodySmall.copy(fontFamily = CodeFont, fontSize = 11.sp))
+                        if (exit > 0) Text("Saída de ${Rules.quantityText(exit)} ${item.displayUnit} · ${state.context?.exitReasons?.firstOrNull { it.value == draft.reason }?.label ?: "motivo não informado"}${draft.exitNotes.takeIf(String::isNotBlank)?.let { " · $it" } ?: ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+                        if (entry > 0) Text("Sobra de ${Rules.quantityText(entry)} ${item.displayUnit}${draft.entryNotes.takeIf(String::isNotBlank)?.let { " · $it" } ?: ""}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+                    }
+                }
+            }
         } else {
             if (step == 0) Text("Confira cada insumo. Se a quantidade bater com a do sistema, só avance; se não, lance a saída do turno (com o motivo) ou a sobra encontrada.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
             LabeledInput("", state.search, placeholder = "Buscar insumo ou lote") { vm.filters(it, state.onlyChanged) }
@@ -85,7 +105,7 @@ import com.coalaone.go.domain.Rules
             if (groups.isEmpty()) Text(if (state.onlyChanged) "Nenhum lote com lançamento ainda." else "Nenhum insumo encontrado com essa busca.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
             groups.drop(step * 3).take(3).forEach { (name, items) ->
                 val photo = items.firstOrNull { it.imageUrl != null }?.imageUrl
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(18.dp)).border(1.dp, Tokens.border, RoundedCornerShape(18.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(18.dp)).border(1.dp, Tokens.border, RoundedCornerShape(18.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = photo != null, role = Role.Button, onClickLabel = "Ampliar a foto") { enlarged = if (enlarged == name) "" else name }) { ProductPhoto(photo, name, 64) }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -156,7 +176,7 @@ import com.coalaone.go.domain.Rules
             Text("A quantidade recebida já vem igual à enviada. Altere só o que chegou diferente e explique o motivo.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             groups.drop(step * 3).take(3).forEach { (name, rows) ->
                 val differs = rows.any { row -> Rules.quantity(state.drafts.getValue(Rules.receiptKey(row)).first) != row.sentQuantity }
-                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).border(if (differs) 2.dp else 1.dp, if (differs) Tokens.warning else Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().background(Tokens.surface, RoundedCornerShape(16.dp)).border(if (differs) 2.dp else 1.dp, if (differs) Tokens.warning else Tokens.border, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         ProductPhoto(rows.firstOrNull { it.imageUrl != null }?.imageUrl, name)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {

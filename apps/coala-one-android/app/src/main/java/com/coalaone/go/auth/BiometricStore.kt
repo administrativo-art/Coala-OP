@@ -18,8 +18,8 @@ interface BiometricPreferences {
     override fun enabled(uid: String) = prefs.contains(vault.owner(uid))
     override fun ready(uid: String): Boolean = runCatching {
         val encoded = prefs.getString(vault.owner(uid), null) ?: return false
-        val time = vault.open(uid, "biometric", Base64.decode(encoded, Base64.NO_WRAP)).decodeToString().toLong()
-        System.currentTimeMillis() - time in 0 until 7 * 86_400_000L
+        // No expiry, by decision of the product owner: the opt-in lasts until sign-out or a different account.
+        vault.open(uid, "biometric", Base64.decode(encoded, Base64.NO_WRAP)).decodeToString().toLong() > 0
     }.getOrDefault(false)
     override fun record(uid: String, enabled: Boolean) {
         if (enabled) prefs.edit().putString(vault.owner(uid), Base64.encodeToString(vault.seal(uid, "biometric", System.currentTimeMillis().toString().toByteArray()), Base64.NO_WRAP)).apply()

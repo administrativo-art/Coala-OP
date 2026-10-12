@@ -102,7 +102,8 @@ class ViewModelsTest {
         val repo = object : MobileRepository by repository(auth) { override suspend fun receive(input: ReceiveRequest): Received { sends++; if (fail) throw IOException(); return Received("Recebido sem divergência", false, false) } }
         val vm = ReceiveViewModel(repo); runCurrent(); val activity = vm.state.value.list!!.activities.first(); vm.open(activity)
         vm.confirm(); advanceUntilIdle(); assertNotNull(vm.state.value.activity); assertEquals(activity.rows.size, vm.state.value.drafts.size)
-        fail = false; vm.confirm(); advanceUntilIdle(); assertNull(vm.state.value.activity); assertTrue(vm.state.value.list!!.activities.isEmpty()); assertEquals(2, sends)
+        val before = vm.state.value.list!!.activities.size
+        fail = false; vm.confirm(); advanceUntilIdle(); assertNull(vm.state.value.activity); assertTrue(vm.state.value.list!!.activities.none { it.id == activity.id }); assertEquals(before - 1, vm.state.value.list!!.activities.size); assertEquals(2, sends)
     }
     @Test fun receiptUnexplainedDivergenceDoesNotReachServer() = runTest {
         var sends = 0
@@ -123,7 +124,8 @@ class ViewModelsTest {
         val repo = repository(auth, api); val vm = PurchaseViewModel(repo, mode, queue, QueueSync(auth, queue, repo), scheduler)
         runCurrent(); vm.select("cash_withdrawal"); val id = vm.state.value.selected!!.submissionId; vm.attach(pending().receipts.single(), false); vm.upload(); advanceUntilIdle()
         assertEquals(id, sentId); assertEquals("UPLOADED", queue.rows.value.single().state); assertNotNull(vm.state.value.review)
-        vm.review(vm.state.value.review!!.copy(accountPlanId = "account", resultCenterId = "center")); vm.confirm(); advanceUntilIdle()
+        // The simulation has several units, so a purchase without a withdrawal needs the unit chosen in the review.
+        vm.review(vm.state.value.review!!.copy(unitId = "simulation-unit", accountPlanId = "account", resultCenterId = "center")); vm.confirm(); advanceUntilIdle()
         assertEquals(2, confirms); assertTrue(queue.rows.value.isEmpty()); assertNull(vm.state.value.review)
     }
     @Test fun failedUploadIsRetainedAndResumesWithSameId() = runTest {
