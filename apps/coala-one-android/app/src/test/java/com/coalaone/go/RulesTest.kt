@@ -84,4 +84,9 @@ class RulesTest {
         // A tiny photo never yields an empty or out-of-bounds square.
         assertEquals(CropSquare(1, 0, 1), PhotoCrop.square(3, 1, 5f, 900f, 0f, 0f))
     }
+    @Test fun allUnitsChoiceAppearsOnlyWithSeveralUnits() {
+        val one = listOf("a" to "Centro"); val two = one + ("b" to "Orla")
+        assertEquals(one, Rules.unitChoices(one)); assertEquals(emptyList<Pair<String, String>>(), Rules.unitChoices(emptyList()))
+        assertEquals(listOf(Rules.ALL_UNITS to "Todas as unidades") + two, Rules.unitChoices(two))
+    }
 }

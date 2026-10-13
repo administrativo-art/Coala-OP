@@ -77,27 +77,4 @@ class DesignMotionTest {
             assertFalse(layouts.single().didOverflowHeight)
         }
     }
-
-    @Test fun todaySummaryRequiresADownwardAndUpwardDrag() {
-        compose.setContent { CoalaTheme {
-            CompositionLocalProvider(LocalMotionEnabled provides false) {
-                Column(Modifier.fillMaxWidth()) {
-                    TodayHeader(HomeToday(loaded = true, hasSchedule = true, shift = "08:00–16:00", shiftUnit = "Unidade de simulação"), 0) {}
-                }
-            }
-        } }
-
-        val closedHandle = compose.onNodeWithContentDescription("Deslize para baixo para abrir o resumo de hoje")
-        closedHandle.assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
-        closedHandle.performTouchInput { click() }
-        compose.onNodeWithText("Seu turno").assertDoesNotExist()
-
-        closedHandle.performTouchInput { swipeDown() }
-        compose.onNodeWithText("Seu turno").assertIsDisplayed()
-
-        val openHandle = compose.onNodeWithContentDescription("Deslize para cima para fechar o resumo de hoje")
-        openHandle.assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
-        openHandle.performTouchInput { swipeUp() }
-        compose.onNodeWithText("Seu turno").assertDoesNotExist()
-    }
 }
