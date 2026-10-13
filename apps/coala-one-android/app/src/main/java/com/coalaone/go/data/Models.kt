@@ -35,7 +35,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class ReceiveRequest(val activityId: String, val rows: List<ReceiptRow>)
 @Serializable data class Received(val status: String, val hasDivergence: Boolean, val alreadyReceived: Boolean)
 
-@Serializable data class Withdrawal(val sourceId: String, val unitId: String, val unitName: String, val date: String, val time: String? = null, val amountCents: Long, val operatorName: String? = null)
+@Serializable data class Withdrawal(val sourceId: String, val unitId: String, val unitName: String, val date: String, val time: String? = null, val amountCents: Long, val operatorName: String? = null, val reason: String? = null)
 @Serializable data class AwaitingPurchase(val id: String, val unitId: String, val supplierName: String, val purchaseDate: String, val totalCents: Long)
 @Serializable data class DateWindow(val from: String, val to: String)
 @Serializable data class Withdrawals(val withdrawals: List<Withdrawal>, val awaitingPurchases: List<AwaitingPurchase> = emptyList(), val window: DateWindow, val partial: Boolean)
