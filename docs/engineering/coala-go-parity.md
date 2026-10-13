@@ -164,7 +164,7 @@ Após autorização para retirar o antigo e atualizar download, versão sem par�
 
 Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. A publicação para teste foi posteriormente autorizada e realizada; não equivale a paridade final comprovada.
 
-### Pendente de release: motivo da sangria e "Todas as unidades"
+### Verificação da 0.3.8 (motivo da sangria, "Todas as unidades", barra sem deslize)
 
 A lista de sangrias e a revisão da compra mostram o motivo digitado no PDV,
 quando o PDV o envia. Escala (visão Equipe) e Metas ganham "Todas as unidades"
@@ -173,4 +173,5 @@ no seletor, apenas com mais de uma unidade; em Metas a opção abre o resumo de
 gesto de arrastar removidos por decisão do responsável); a barra mostra só os
 dados dela e os selos dos cartões continuam. Testes JVM cobrem a regra do seletor (`RulesTest`); as telas não
 têm teste de tela e não foram vistas em emulador nem aparelho. O motivo vem do
-campo `descricao` do PDV, confirmado na resposta real em 2026-10-12.
+campo `descricao` do PDV, confirmado na resposta real em 2026-10-12. O emulador
+permaneceu encerrado durante a preparação do release 0.3.8/code13.
