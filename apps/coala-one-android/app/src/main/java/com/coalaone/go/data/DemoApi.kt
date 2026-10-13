@@ -52,6 +52,11 @@ class DemoApi @Inject constructor() : ApiService {
         })
     }
     override suspend fun goalUnits() = GoalUnits(units)
+    override suspend fun goalsOverview(): GoalsOverview {
+        val rows = units.map { unit -> OverviewUnit(unit.id, unit.name, goals(unit.id).goals.map { OverviewGoal(it.id, it.typeLabel, it.startDate, it.endDate, it.summary.cumulative, it.summary.currentValue, it.summary.levels.first().amount, it.summary.percentOfTarget) }) }
+        val all = rows.flatMap { it.goals }; val current = all.sumOf { it.currentValue }; val target = all.sumOf { it.targetValue }
+        return GoalsOverview(LocalDate.now().toString(), OverviewTotal(current, target, Math.round(current / target * 1000) / 10.0, rows.count { it.goals.isNotEmpty() }), rows)
+    }
     override suspend fun goals(kioskId: String): UnitGoals {
         val index = units.indexOfFirst { it.id == kioskId }.coerceAtLeast(0)
         // One unit without a goal under way, to show the empty state.
