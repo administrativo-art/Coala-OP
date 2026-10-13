@@ -23,3 +23,7 @@ test('Subtítulo inicial usa a função ou cargo do perfil sem mostrar e-mail', 
   assert.match(home, /Text\(homeRoleSubtitle\(state\?\.profile\?\.role\)/);
   assert.doesNotMatch(home, /profile\?\.email|profile\.email/);
 });
+
+test('Barra do início não tem resumo deslizante: só os dados da própria barra', () => {
+  assert.doesNotMatch(activity, /TodayHeader|draggable|Deslize para/);
+});

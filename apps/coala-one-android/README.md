@@ -67,8 +67,8 @@ expandem suavemente. Escala zero desliga movimentos decorativos e mostra o
 progresso final. Animações nunca simulam resposta de servidor.
 
 Home usa hero de compra e grid filtrado pelas permissões reais, preservando
-Signage. O resumo de hoje na barra escura abre ao arrastar a alça para baixo e
-fecha ao arrastá-la para cima; toque simples não alterna o estado. A simulação
+Signage. A barra escura do início mostra só os dados dela, sem alça nem resumo
+deslizante; o que há para hoje aparece nos selos dos cartões. A simulação
 guarda `Heucilene Oliveira Ribeiro`, enquanto a interface mostra somente
 primeiro e último nomes (`Heucilene Ribeiro`) nos espaços compactos do app.
 O subtítulo da saudação mostra a função recebida do perfil, ou o cargo quando
