@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parsePdvCashMovements } from "../../src/features/financial/cash-closures/pdv-cash-movements";
+import { parsePdvCashMovements, parsePdvWithdrawalReasons } from "../../src/features/financial/cash-closures/pdv-cash-movements";
 
 test("normaliza sangrias e suprimentos, filtra filial e classifica dinheiro pelo catálogo", () => {
   const movements = parsePdvCashMovements({
@@ -107,4 +107,24 @@ test("reconhece os nomes de campo observados no payload real do PDV", () => {
     { id: "302", operatorId: "449572", paymentMethodId: "0", isCash: false },
     { id: "301", operatorId: "184256", paymentMethodId: "1", isCash: true },
   ]);
+});
+
+test("lê o motivo da sangria quando o PDV envia, por movimento e filial, sem alterar o movimento", () => {
+  const withdrawals = [
+    // Shape of the live PDV row: `codloja`, `dtmovimento` and the reason in `descricao`.
+    { codigo: 101, codloja: 10, codusuario: 7, codformapgto: 1, valor: 20, dtmovimento: "2026-08-28T15:00:00", issangria: true, isCancelado: false, descricao: "  COMPRA DE\n LIMÃO  " },
+    { codigo: 102, valor: 10, data: "2026-08-28 16:00:00", codFilial: 10, observacao: "   " },
+    { codigo: 103, valor: 10, data: "2026-08-28 16:30:00", codFilial: 10 },
+    { codigo: 104, valor: 10, data: "2026-08-28 17:00:00", codFilial: 11, motivo: "Outra filial" },
+    { valor: 10, data: "2026-08-28 18:00:00", codFilial: 10, motivo: "Sem identificador do PDV" },
+    { codigo: 105, valor: 10, data: "2026-08-28 19:00:00", codFilial: 10, observacao: "x".repeat(500) },
+    { codigo: 106, valor: 10, data: "2026-08-28 19:30:00", codFilial: 10, motivo: 7 },
+  ];
+  const reasons = parsePdvWithdrawalReasons({ withdrawals: { data: withdrawals }, filialId: "10" });
+  assert.deepEqual([...reasons.keys()], ["101", "105"]);
+  assert.equal(reasons.get("101"), "COMPRA DE LIMÃO");
+  assert.equal(reasons.get("105")?.length, 200);
+  const movement = parsePdvCashMovements({ withdrawals, supplies: [], paymentMethods: [], date: "2026-08-28", filialId: "10" }).find((row) => row.id === "101");
+  assert.equal(movement?.amountCents, 2_000);
+  assert.equal(movement && "reason" in movement, false);
 });

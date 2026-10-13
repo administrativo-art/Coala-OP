@@ -23,6 +23,7 @@ interface ApiService {
     @GET("api/dp/mobile-schedule") suspend fun schedule(@Query("year") year: Int, @Query("month") month: Int): MonthSchedule
     @GET("api/goals/mobile") suspend fun goalUnits(): GoalUnits
     @GET("api/goals/mobile") suspend fun goals(@Query("kioskId") kioskId: String): UnitGoals
+    @GET("api/goals/mobile?scope=all") suspend fun goalsOverview(): GoalsOverview
     @GET("api/signage/mobile") suspend fun signage(): SignageUnits
     @POST("api/signage/mobile/screens") suspend fun pair(@Body request: PairScreen): PairResponse
 }

@@ -140,7 +140,7 @@ Todos os endpoints autenticados usam token Firebase no cabeçalho `Authorization
 | `GET /api/stock/mobile-reposition` | Firebase + atestação; `app.reposition.receive` | — | Atividades aguardando recebimento, lotes e `imageUrl` |
 | `POST /api/stock/mobile-reposition/receive` | Firebase + atestação; `app.reposition.receive` | `{activityId, rows}` | `status`, `hasDivergence`, `alreadyReceived`; linhas exatas |
 | `GET /api/dp/mobile-schedule?year=&month=` | Firebase + atestação; `app.schedule.view` | Ano/mês válidos | Escala publicada, unidades, pessoas e turnos |
-| `GET /api/goals/mobile` | Firebase + atestação; `app.goals.view` | Opcional `kioskId` | Unidades ou metas ativas da unidade |
+| `GET /api/goals/mobile` | Firebase + atestação; `app.goals.view` | Opcional `kioskId` ou `scope=all` | Unidades, metas ativas da unidade ou resumo de todas as unidades |
 | `GET /api/signage/mobile` | Firebase + atestação; `app.signage.manage` | — | Unidades, telas, orientação e conexão |
 | `POST /api/signage/mobile/screens` | Firebase + atestação; `app.signage.manage` | `{kioskId, screenId?, orientation, code}` | Tela criada/substituída; máximo de 12 telas |
 | `POST /api/auth/forgot-password` | Público | `{email}` | Solicita reset sem revelar existência da conta |

@@ -9,6 +9,10 @@ import java.time.temporal.TemporalAdjusters
 import java.util.UUID
 
 object Rules {
+    /** Choice of the unit switcher that stands for every unit; no real unit id can be this value. */
+    const val ALL_UNITS = "*"
+    /** "Todas as unidades" is offered only when there is more than one unit to put side by side. */
+    fun unitChoices(units: List<Pair<String, String>>) = if (units.size > 1) listOf(ALL_UNITS to "Todas as unidades") + units else units
     fun quantity(value: String): Double = value.trim().replace(".", "").replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 } ?: 0.0
     fun quantityText(value: Double): String = BigDecimal.valueOf(value).setScale(3, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')
     fun cents(value: String): Long? = runCatching { BigDecimal(value.trim().replace(".", "").replace(',', '.')).movePointRight(2).longValueExact() }.getOrNull()
