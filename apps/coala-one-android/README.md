@@ -15,8 +15,8 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_APP_ID` | appId da aplicação **Android**, não o appId web do Expo |
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
 | `COALA_FIREBASE_SENDER_ID` | Número do projeto Google para Play Integrity |
-| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 12; crescente nas atualizações Go |
-| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.7 |
+| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 13; crescente nas atualizações Go |
+| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.8 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
 
 Debug sem configuração oferece simulação sem API/Firebase/Storage de negócio. Release recusa configuração pública ausente, appId web, HTTP, modo de teste ou ausência da assinatura existente. Não registrar `local.properties`, `google-services.json`, `.env`, APKs intermediários, senhas ou keystores no Git. A exceção de distribuição é o instalador assinado `public/app/CoalaGo.apk`, acompanhado por metadados e hash verificados.
@@ -67,8 +67,8 @@ expandem suavemente. Escala zero desliga movimentos decorativos e mostra o
 progresso final. Animações nunca simulam resposta de servidor.
 
 Home usa hero de compra e grid filtrado pelas permissões reais, preservando
-Signage. O resumo de hoje na barra escura abre ao arrastar a alça para baixo e
-fecha ao arrastá-la para cima; toque simples não alterna o estado. A simulação
+Signage. A barra escura do início mostra só os dados dela, sem alça nem resumo
+deslizante; o que há para hoje aparece nos selos dos cartões. A simulação
 guarda `Heucilene Oliveira Ribeiro`, enquanto a interface mostra somente
 primeiro e último nomes (`Heucilene Ribeiro`) nos espaços compactos do app.
 O subtítulo da saudação mostra a função recebida do perfil, ou o cargo quando

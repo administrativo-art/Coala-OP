@@ -24,7 +24,7 @@ class DemoApi @Inject constructor() : ApiService {
         Reposition("simulation-reposition-2", "Centro de distribuição", units[1].id, units[1].name, "2026-10-02T12:00:00Z", dispatchedAt = "2026-10-02T11:40:00Z", rows = listOf(RepositionRow("b3", "l5", "Morango congelado", "SIM-005", 8.0))),
         Reposition("simulation-reposition-3", "Centro de distribuição", units[4].id, units[4].name, "2026-10-03T12:00:00Z", dispatchedAt = "2026-10-03T09:15:00Z", rows = listOf(RepositionRow("b4", "l6", "Copo 500 ml", "SIM-006", 20.0), RepositionRow("b5", "l7", "Granola", "SIM-007", 6.0)))), false)
     override suspend fun receive(request: ReceiveRequest) = Received("received", request.rows.any { it.notes.isNotBlank() }, false)
-    override suspend fun withdrawals() = Withdrawals(listOf(Withdrawal("a".repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 5000),
+    override suspend fun withdrawals() = Withdrawals(listOf(Withdrawal("a".repeat(64), unit.id, unit.name, "2026-10-01", amountCents = 5000, reason = "Compra de gelo"),
         Withdrawal("b".repeat(64), units[1].id, units[1].name, "2026-10-07", "14:20", 20000, "Caio Martins"), Withdrawal("c".repeat(64), units[4].id, units[4].name, "2026-10-06", "10:05", 8000, simulatedUserName)), emptyList(), DateWindow("2026-10-01", "2026-10-31"), false)
     override suspend fun purchaseContext() = PurchaseContext(units, listOf(UnitRef("account", "Insumos")), units.mapIndexed { index, row -> ResultCenter(if (index == 0) "center" else "center-${row.id}", row.name, row.id) }, listOf(StockProduct("milk", "Leite integral", "1 L")))
     override suspend fun upload(fields: Map<String, RequestBody>, documents: List<MultipartBody.Part>, expectedOwner: String?) = UploadResponse(Submission("simulation-submission", false, "pending_review", ReceiptAnalysis("Fornecedor de simulação", null, "2026-10-01", 5000, listOf(AnalysisItem("Leite integral", 10.0, "un", 500, 5000)), "high")))
@@ -52,6 +52,11 @@ class DemoApi @Inject constructor() : ApiService {
         })
     }
     override suspend fun goalUnits() = GoalUnits(units)
+    override suspend fun goalsOverview(): GoalsOverview {
+        val rows = units.map { unit -> OverviewUnit(unit.id, unit.name, goals(unit.id).goals.map { OverviewGoal(it.id, it.typeLabel, it.startDate, it.endDate, it.summary.cumulative, it.summary.currentValue, it.summary.levels.first().amount, it.summary.percentOfTarget) }) }
+        val all = rows.flatMap { it.goals }; val current = all.sumOf { it.currentValue }; val target = all.sumOf { it.targetValue }
+        return GoalsOverview(LocalDate.now().toString(), OverviewTotal(current, target, Math.round(current / target * 1000) / 10.0, rows.count { it.goals.isNotEmpty() }), rows)
+    }
     override suspend fun goals(kioskId: String): UnitGoals {
         val index = units.indexOfFirst { it.id == kioskId }.coerceAtLeast(0)
         // One unit without a goal under way, to show the empty state.

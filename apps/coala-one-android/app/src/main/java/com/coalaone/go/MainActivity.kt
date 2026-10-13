@@ -12,17 +12,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
@@ -144,7 +137,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
             }
             ProfileAvatar(state?.profile?.name.orEmpty(), state?.profile?.avatarUrl) { navigate("profile") }
         }
-        if (today.loaded) TodayHeader(today, pending.size, navigate)
     }) {
         if (session.mode.simulation) Text("Simulação · nenhum dado é enviado", color = Tokens.warning, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().background(Tokens.warningBg, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
         release?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { target -> CardBlock(selected = true) {
@@ -166,60 +158,6 @@ private fun installUpdate(context: android.content.Context, file: File) {
             }
             if (!(modules.localPurchase || modules.stockCount || modules.repositionReceipt || modules.schedule || modules.goals || modules.signage)) EmptyState("Nenhum módulo liberado", "Seu perfil não tem módulos liberados para o aplicativo.")
         }
-    }
-}
-/**
- * "Hoje" as a continuation of the dark bar: a handle on its lower edge and nothing else;
- * dragging it vertically opens or closes the detail (shift, the unit's goal for the day, what is waiting), each line leading to its module.
- */
-@Composable internal fun ColumnScope.TodayHeader(today: HomeToday, pendingNotes: Int, navigate: (String) -> Unit) {
-    val whole = java.text.NumberFormat.getIntegerInstance(java.util.Locale.forLanguageTag("pt-BR"))
-    val lines = listOfNotNull(
-        if (today.hasSchedule) Triple("Seu turno", today.shift?.let { shift -> today.shiftUnit?.let { "$shift · $it" } ?: shift } ?: "Sem turno hoje", "schedule") else null,
-        if (today.goalDaily != null && today.goalToday != null) Triple("Meta do dia · ${today.goalUnit.orEmpty()}", "R$ ${whole.format(Math.round(today.goalToday))} de R$ ${whole.format(Math.round(today.goalDaily))}", "goals") else null,
-        today.openCounts.takeIf { it.isNotEmpty() }?.let { Triple("Contagem em curso", it.joinToString(", "), "count") },
-        today.repositions?.takeIf { it > 0 }?.let { Triple("Reposição a receber", if (it == 1) "1 reposição chegou ou está a caminho" else "$it reposições chegaram ou estão a caminho", "receive") },
-        pendingNotes.takeIf { it > 0 }?.let { Triple("Notas no aparelho", if (it == 1) "1 nota aguardando envio ou revisão" else "$it notas aguardando envio ou revisão", "purchase") })
-    if (lines.isEmpty()) return
-    var open by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    var dragDistance by remember { mutableFloatStateOf(0f) }
-    val dragThreshold = with(LocalDensity.current) { 24.dp.toPx() }
-    val dragState = rememberDraggableState { delta ->
-        dragDistance += if (open) delta.coerceAtMost(0f) else delta.coerceAtLeast(0f)
-    }
-    val motion = LocalMotionEnabled.current
-    androidx.compose.animation.AnimatedVisibility(open, enter = androidx.compose.animation.expandVertically(tween(if (motion) 220 else 0)) + fadeIn(tween(if (motion) 220 else 0)), exit = androidx.compose.animation.shrinkVertically(tween(if (motion) 160 else 0)) + fadeOut(tween(if (motion) 160 else 0))) {
-        Column {
-            lines.forEach { (label, value, route) ->
-                HorizontalDivider(color = Tokens.onDark.copy(alpha = .1f))
-                Row(Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button) { navigate(route) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(label, color = Tokens.onDark3, style = MaterialTheme.typography.bodySmall)
-                        Text(value, color = Tokens.onDark, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-                    }
-                    Text("›", color = Tokens.onDark3, style = MaterialTheme.typography.titleMedium)
-                }
-            }
-        }
-    }
-    // A tap does nothing: direct manipulation of the handle is the only visual gesture.
-    val dragInstruction = if (open) "Deslize para cima para fechar o resumo de hoje" else "Deslize para baixo para abrir o resumo de hoje"
-    Box(Modifier.fillMaxWidth().height(44.dp)
-        .semantics {
-            contentDescription = dragInstruction
-            stateDescription = if (open) "Resumo de hoje aberto" else "Resumo de hoje fechado"
-        }
-        .draggable(
-            state = dragState,
-            orientation = Orientation.Vertical,
-            onDragStarted = { dragDistance = 0f },
-            onDragStopped = {
-                if (!open && dragDistance >= dragThreshold) open = true
-                else if (open && dragDistance <= -dragThreshold) open = false
-                dragDistance = 0f
-            },
-        ), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(36.dp, 4.dp).background(Tokens.onDark.copy(alpha = .28f), RoundedCornerShape(4.dp)))
     }
 }
 /** Account chores live here, off the home screen: photo, refresh, update check and sign-out. */

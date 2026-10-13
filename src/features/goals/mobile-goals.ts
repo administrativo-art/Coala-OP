@@ -148,3 +148,29 @@ export function mobileGoalPrize(period: MobileGoalPeriodInput, team: ReturnType<
     byEmployee: Object.fromEntries(snapshot.participants.map((participant) => [participant.employeeId, amount(participant.bonusAmount)])),
   };
 }
+
+export type MobileGoalOverviewRow = { id: string; kioskId: string; type: GoalType; typeLabel: string; startDate: string; endDate: string; currentValue: number; targetValue: number };
+
+/**
+ * Every unit side by side: one line per goal under way, with the share of the goal already reached.
+ * The total adds revenue goals only; a ticket or product goal has no meaningful sum across units.
+ */
+export function mobileGoalsOverview(units: Array<{ id: string; name: string }>, rows: MobileGoalOverviewRow[]) {
+  const percent = (current: number, target: number) => target > 0 ? round((current / target) * 100) : 0;
+  const revenue = rows.filter((row) => row.type === "revenue" && units.some((unit) => unit.id === row.kioskId));
+  const current = revenue.reduce((sum, row) => sum + row.currentValue, 0);
+  const target = revenue.reduce((sum, row) => sum + row.targetValue, 0);
+  return {
+    total: revenue.length ? { currentValue: round(current), targetValue: round(target), percentOfTarget: percent(current, target), unitCount: new Set(revenue.map((row) => row.kioskId)).size } : null,
+    units: units.map((unit) => ({
+      id: unit.id,
+      name: unit.name,
+      goals: rows.filter((row) => row.kioskId === unit.id)
+        .sort((left, right) => left.typeLabel.localeCompare(right.typeLabel, "pt-BR") || left.startDate.localeCompare(right.startDate))
+        .map((row) => ({
+          id: row.id, typeLabel: row.typeLabel, startDate: row.startDate, endDate: row.endDate, cumulative: row.type !== "ticket",
+          currentValue: round(row.currentValue), targetValue: round(row.targetValue), percentOfTarget: percent(row.currentValue, row.targetValue),
+        })),
+    })),
+  };
+}

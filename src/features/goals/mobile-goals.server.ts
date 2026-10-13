@@ -8,10 +8,11 @@ import { safeAvatarUrl, safePersonColor } from "@/features/collaborator-schedule
 import { loadScheduledGoalDateKeys } from "@/features/collaborator-schedule/mobile-schedule.server";
 import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
 import type { EmployeeGoal, GoalPeriodDoc } from "@/types";
-import { mobileGoalDays, mobileGoalPrize, mobileGoalSummary, mobileGoalTeam, type MobileGoalPeriodInput } from "./mobile-goals";
+import { mobileGoalDays, mobileGoalPrize, mobileGoalSummary, mobileGoalTeam, mobileGoalsOverview, type MobileGoalPeriodInput } from "./mobile-goals";
 
 const MAX_ACTIVE_PERIODS = 10;
 const MAX_EMPLOYEE_GOALS = 200;
+const MAX_OVERVIEW_PERIODS = 200;
 
 const TYPE_LABELS: Record<GoalPeriodDoc["templateType"] & string, string> = {
   revenue: "Faturamento",
@@ -42,6 +43,27 @@ export async function listMobileGoalUnits(actor: ServerUserContext) {
     .filter((document) => canAccessUnit(actor.userDoc, document.id, { isDefaultAdmin: actor.isDefaultAdmin }))
     .map((document) => ({ id: document.id, name: String(document.get("name") || document.get("displayName") || document.id) }))
     .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+}
+
+/**
+ * Goals under way in every unit of the user's scope, without team or prize: one bounded read of the
+ * active periods, on demand. Units outside the scope are dropped before anything leaves the server.
+ */
+export async function loadMobileGoalsOverview(actor: ServerUserContext) {
+  const units = await listMobileGoalUnits(actor);
+  const today = todayInClosureTimezone();
+  const allowed = new Set(units.map((unit) => unit.id));
+  const snapshot = units.length ? await dbAdmin.collection("goalPeriods").where("status", "==", "active")
+    .select("kioskId", "templateType", "startDate", "endDate", "targetValue", "currentValue").limit(MAX_OVERVIEW_PERIODS).get() : null;
+  const rows = (snapshot?.docs ?? []).filter((document) => allowed.has(String(document.get("kioskId") ?? ""))).map((document) => {
+    const type = (document.get("templateType") ?? "revenue") as MobileGoalPeriodInput["type"];
+    return {
+      id: document.id, kioskId: String(document.get("kioskId")), type, typeLabel: TYPE_LABELS[type] ?? "Meta",
+      startDate: dayKey(document.get("startDate"), today), endDate: dayKey(document.get("endDate"), today),
+      currentValue: Number(document.get("currentValue") ?? 0), targetValue: Number(document.get("targetValue") ?? 0),
+    };
+  });
+  return { today, ...mobileGoalsOverview(units, rows) };
 }
 
 /** Active goals of one unit, with the team scoreboard and the prize forecast. Read on demand, never polled. */
