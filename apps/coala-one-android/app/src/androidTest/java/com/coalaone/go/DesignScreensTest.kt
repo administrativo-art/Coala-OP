@@ -46,7 +46,7 @@ class DesignScreensTest {
         compose.runOnIdle { assertFalse(WindowCompat.getInsetsController(compose.activity.window, compose.activity.window.decorView).isAppearanceLightStatusBars) }
         compose.onNodeWithText("Metas").performScrollTo().performClick()
         // Goals open straight on a unit; the header shows it with "Trocar unidade".
-        compose.onNodeWithText("Trocar unidade ⌄").assertExists()
+        compose.onNodeWithText("Trocar unidade").assertExists()
         compose.onNodeWithText("MINHA PARTE").assertExists()
         compose.onNodeWithText("HOJE NA UNIDADE").assertExists()
         snapshot("goals-days")
