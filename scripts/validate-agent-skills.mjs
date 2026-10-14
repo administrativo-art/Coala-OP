@@ -51,7 +51,68 @@ if (realpathSync(linkTarget) !== realpathSync(skillRoot)) {
 
 process.stdout.write("Skill coala-error-triage validada.\n");
 
-const supplySkillRoot = join(repositoryRoot, ".agents", "skills", "coala-supply-chain-audit");
+const securityAuditRoot = join(repositoryRoot, ".agents", "skills", "coala-security-audit");
+for (const relativePath of [
+  "SKILL.md",
+  "agents/openai.yaml",
+  "evals/cases.json",
+  "references/local-validation.md",
+  "references/reporting-and-retest.md",
+  "references/scope-and-evidence.md",
+  "references/static-analysis.md",
+  "references/threat-modeling.md",
+  "scripts/init-audit-run.mjs",
+  "scripts/validate-audit-run.mjs",
+]) {
+  const path = join(securityAuditRoot, relativePath);
+  if (!existsSync(path)) throw new Error(`Arquivo obrigatório da auditoria de segurança ausente: ${relativePath}`);
+}
+
+const securityAuditSkill = readFileSync(join(securityAuditRoot, "SKILL.md"), "utf8");
+for (const expected of [
+  "name: coala-security-audit",
+  "disable-model-invocation: true",
+  "user-invocable: true",
+  "Use somente por invocação explícita",
+  ".ai-work/security-audit",
+  "$coala-security-supply-chain",
+]) {
+  if (!securityAuditSkill.includes(expected)) {
+    throw new Error(`Contrato ausente na skill de auditoria de segurança: ${expected}`);
+  }
+}
+if (/TODO|PLACEHOLDER|TBD/.test(securityAuditSkill)) {
+  throw new Error("Skill de auditoria de segurança contém placeholder não resolvido.");
+}
+
+const securityAuditOpenai = readFileSync(join(securityAuditRoot, "agents", "openai.yaml"), "utf8");
+if (
+  !securityAuditOpenai.includes("allow_implicit_invocation: false") ||
+  !securityAuditOpenai.includes("$coala-security-audit")
+) {
+  throw new Error("Skill de auditoria de segurança deve permanecer explicit-only.");
+}
+
+const securityAuditCases = JSON.parse(readFileSync(join(securityAuditRoot, "evals", "cases.json"), "utf8"));
+if (!Array.isArray(securityAuditCases) || securityAuditCases.length < 3) {
+  throw new Error("Evals da skill de auditoria de segurança estão ausentes ou incompletos.");
+}
+
+const securityAuditClaudeEntry = join(repositoryRoot, ".claude", "skills", "coala-security-audit");
+if (!existsSync(securityAuditClaudeEntry) || !lstatSync(securityAuditClaudeEntry).isSymbolicLink()) {
+  throw new Error("Entrada Claude da auditoria de segurança deve ser symlink para a implementação canônica.");
+}
+const securityAuditLinkTarget = resolve(
+  dirname(securityAuditClaudeEntry),
+  readlinkSync(securityAuditClaudeEntry),
+);
+if (realpathSync(securityAuditLinkTarget) !== realpathSync(securityAuditRoot)) {
+  throw new Error("Entrada Claude não aponta para .agents/skills/coala-security-audit.");
+}
+
+process.stdout.write("Skill coala-security-audit validada.\n");
+
+const supplySkillRoot = join(repositoryRoot, ".agents", "skills", "coala-security-supply-chain");
 for (const relativePath of [
   "SKILL.md",
   "agents/openai.yaml",
@@ -64,7 +125,7 @@ for (const relativePath of [
 
 const supplySkill = readFileSync(join(supplySkillRoot, "SKILL.md"), "utf8");
 for (const expected of [
-  "name: coala-supply-chain-audit",
+  "name: coala-security-supply-chain",
   "disable-model-invocation: true",
   "user-invocable: true",
   "Use somente por invocação explícita",
@@ -77,7 +138,7 @@ if (/TODO|PLACEHOLDER|TBD/.test(supplySkill)) {
 }
 
 const supplyOpenai = readFileSync(join(supplySkillRoot, "agents", "openai.yaml"), "utf8");
-if (!supplyOpenai.includes("allow_implicit_invocation: false") || !supplyOpenai.includes("$coala-supply-chain-audit")) {
+if (!supplyOpenai.includes("allow_implicit_invocation: false") || !supplyOpenai.includes("$coala-security-supply-chain")) {
   throw new Error("Skill de supply chain deve permanecer explicit-only.");
 }
 
@@ -86,13 +147,13 @@ if (!Array.isArray(supplyCases) || supplyCases.length < 2) {
   throw new Error("Evals da skill de supply chain estão ausentes ou incompletos.");
 }
 
-const supplyClaudeEntry = join(repositoryRoot, ".claude", "skills", "coala-supply-chain-audit");
+const supplyClaudeEntry = join(repositoryRoot, ".claude", "skills", "coala-security-supply-chain");
 if (!existsSync(supplyClaudeEntry) || !lstatSync(supplyClaudeEntry).isSymbolicLink()) {
   throw new Error("Entrada Claude da supply chain deve ser symlink para a implementação canônica.");
 }
 const supplyLinkTarget = resolve(dirname(supplyClaudeEntry), readlinkSync(supplyClaudeEntry));
 if (realpathSync(supplyLinkTarget) !== realpathSync(supplySkillRoot)) {
-  throw new Error("Entrada Claude não aponta para .agents/skills/coala-supply-chain-audit.");
+  throw new Error("Entrada Claude não aponta para .agents/skills/coala-security-supply-chain.");
 }
 
-process.stdout.write("Skill coala-supply-chain-audit validada.\n");
+process.stdout.write("Skill coala-security-supply-chain validada.\n");

@@ -20,6 +20,12 @@ Retrato do worktree `Coala-OP-design-guide`, branch `feat/design-guide-tokens-20
 
 Barra lateral do Coala One e da Programação do Instagram no padrão flutuante e recolhida, painel escuro com chips que vira faixa ao rolar, painel de post em etapas com prévia no celular e a lista detalhada de posts. Detalhes em [barra-lateral.md](barra-lateral.md) e [cabecalho-e-etapas.md](cabecalho-e-etapas.md). Sem validação visual em navegador nem E2E executado; `validacao-visual.md` não foi preenchido para essas telas.
 
+## Adoção no painel de operações (14/10/2026)
+
+O painel de operações passou a usar `PageHero`, tokens `ds-*` e o construtor de painéis personalizáveis já adotado na gestão e no financeiro. O escopo `operations` reúne seis widgets próprios — resumo, validade, compras urgentes, reposição, contagem e tarefas — com visibilidade condicionada às permissões existentes.
+
+As tentativas anteriores de migração ampla de Documentos e Departamento Pessoal não foram incorporadas quando conflitavam com fluxos funcionais mais recentes. Nessas áreas, a adoção do design system deve continuar de forma incremental, preservando as regras vigentes de jornadas, ausências, documentos e perfil do colaborador.
+
 ## Fora deste PR
 
 - alterar `PageContainer`, `PageHeader`, `BackButton`, `safeReturnTo` ou o histórico do Next;
