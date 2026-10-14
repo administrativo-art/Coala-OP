@@ -973,6 +973,12 @@ test('preserva identidade Bizneo e impede excluir turno vinculado a jornada', as
   ]);
   journeyId = '';
   successorJourneyId = '';
+  await updateShiftDefinition({
+    context,
+    id: shiftId,
+    requestId: 'request-shift-archive',
+    input: { isArchived: true },
+  });
   await deleteShiftDefinition({ context, id: shiftId, requestId: 'request-shift-delete' });
   assert.equal((await dbAdmin.collection('dp_shiftDefinitions').doc(shiftId).get()).exists, false);
   shiftId = '';

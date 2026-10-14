@@ -128,8 +128,10 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
     const actor = security.actor;
     const normalizedEmployeeId = security.resource.employeeId;
 
-    const fieldMap = await loadFieldMap(actor);
-    const personLink = await resolvePersonLink(normalizedEmployeeId);
+    const [fieldMap, personLink] = await Promise.all([
+      loadFieldMap(actor),
+      resolvePersonLink(normalizedEmployeeId),
+    ]);
     const employeeSnap = personLink.employeeDocument;
     if (!employeeSnap?.exists) {
       return NextResponse.json({ error: "Colaborador não encontrado no RH." }, { status: 404 });
@@ -142,33 +144,7 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
       ...(accessEmail ? { email: accessEmail, access_email: accessEmail } : {}),
     };
     const resolvedEmployeeId = employeeSnap.id;
-    let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
-    let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
-    let onboardingSnap = await hrDbAdmin
-      .collection("onboardingProcesses")
-      .where("employeeId", "==", resolvedEmployeeId)
-      .limit(1)
-      .get();
     const employeeEmail = typeof employee.email === "string" ? employee.email.trim().toLowerCase() : "";
-    if (onboardingSnap.empty && employeeEmail) {
-      onboardingSnap = await hrDbAdmin
-        .collection("onboardingProcesses")
-        .where("candidateEmail", "==", employeeEmail)
-        .limit(1)
-        .get();
-    }
-    const onboarding = onboardingSnap.empty ? null : onboardingSnap.docs[0].data();
-    const onboardingId = onboardingSnap.empty ? null : onboardingSnap.docs[0].id;
-    imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
-    privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
-      ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingId }
-      : null;
-    const probation = onboarding?.probationV2
-      ? refreshProbationProcess(
-          onboarding.probationV2 as ProbationProcessState,
-          new Date().toISOString().slice(0, 10),
-        )
-      : null;
     const role = inferRole(actor, employee);
     const cache: RhAccessCache = {
       auth_uid: actor.userDoc.id,
@@ -190,11 +166,51 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
       .filter(([, entry]) => canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix))
       .map(([key]) => key);
 
-    // BatchGet mantém a autorização por chave e evita uma ida ao Firestore para cada campo.
+    // As fontes independentes são carregadas juntas para evitar uma cascata de consultas.
     const fieldValueRefs = readableKeys.map((key) => employeeSnap.ref.collection("field_values").doc(key));
-    const fieldValueSnaps = fieldValueRefs.length > 0
-      ? await hrDbAdmin.getAll(...fieldValueRefs)
-      : [];
+    const onboardingByEmployeePromise = hrDbAdmin
+      .collection("onboardingProcesses")
+      .where("employeeId", "==", resolvedEmployeeId)
+      .limit(1)
+      .get();
+    const onboardingByEmailPromise = employeeEmail
+      ? hrDbAdmin
+          .collection("onboardingProcesses")
+          .where("candidateEmail", "==", employeeEmail)
+          .limit(1)
+          .get()
+      : Promise.resolve(null);
+    const fieldValuesPromise = fieldValueRefs.length > 0
+      ? hrDbAdmin.getAll(...fieldValueRefs)
+      : Promise.resolve([]);
+    const changeRequestsPromise = hrDbAdmin
+      .collection("hrProfileUpdateRequests")
+      .where("employeeId", "==", resolvedEmployeeId)
+      .limit(100)
+      .get();
+    const [onboardingByEmployee, onboardingByEmail, fieldValueSnaps, changeRequestSnapshot] = await Promise.all([
+      onboardingByEmployeePromise,
+      onboardingByEmailPromise,
+      fieldValuesPromise,
+      changeRequestsPromise,
+    ]);
+
+    const onboardingSnap = !onboardingByEmployee.empty ? onboardingByEmployee : onboardingByEmail;
+    const onboarding = onboardingSnap && !onboardingSnap.empty ? onboardingSnap.docs[0].data() : null;
+    const onboardingId = onboardingSnap && !onboardingSnap.empty ? onboardingSnap.docs[0].id : null;
+    let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
+    let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
+    imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
+    privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
+      ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingId }
+      : null;
+    const probation = onboarding?.probationV2
+      ? refreshProbationProcess(
+          onboarding.probationV2 as ProbationProcessState,
+          new Date().toISOString().slice(0, 10),
+        )
+      : null;
+
     const fieldValues = Object.fromEntries(
       fieldValueSnaps
         .filter((snap) => snap.exists)
@@ -208,11 +224,6 @@ export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
         updated_by: "system:access-account",
       };
     }
-    const changeRequestSnapshot = await hrDbAdmin
-      .collection("hrProfileUpdateRequests")
-      .where("employeeId", "==", resolvedEmployeeId)
-      .limit(100)
-      .get();
     const changeRequests = changeRequestSnapshot.docs
       .filter((document) => (
         document.get("type") === "self_service_profile_update"

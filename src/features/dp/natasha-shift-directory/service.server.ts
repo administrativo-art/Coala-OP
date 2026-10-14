@@ -11,7 +11,7 @@ import { canAccessUnit } from '@/lib/unit-access';
 const QUERY_LIMIT = 501;
 const PROJECTED_FIELDS = [
   'code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd',
-  'unitId', 'unitIds', 'daysOfWeek', 'journeyIds',
+  'unitId', 'unitIds', 'daysOfWeek', 'journeyIds', 'isArchived',
 ] as const;
 
 function assertPermission(context: ServerUserContext) {
@@ -74,7 +74,7 @@ export async function loadNatashaShiftDirectory(params: {
 
   return prepareNatashaShiftDirectory({
     unitIds,
-    documents: snapshot.docs.map(documentData),
+    documents: snapshot.docs.filter((document) => document.get('isArchived') !== true).map(documentData),
     sourceQuery: 'dp_shiftDefinitions:orderBy:name',
   });
 }

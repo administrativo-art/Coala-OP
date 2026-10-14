@@ -6,7 +6,7 @@ const EDITABLE_SHIFT_DEFINITION_FIELDS = [
   'code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType',
   'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'unitId', 'unitName',
   'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description',
-  'configurationNotes', 'overnight', 'expectedPunches',
+  'configurationNotes', 'overnight', 'expectedPunches', 'isArchived',
 ] as const satisfies readonly (keyof DPShiftDefinitionUpdate)[];
 
 const NULLABLE_SHIFT_DEFINITION_FIELDS = new Set<keyof DPShiftDefinitionUpdate>([

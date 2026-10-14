@@ -8,6 +8,7 @@ import { useDP } from '@/components/dp-context';
 import { DPTimeApplicabilityFields, TimeConfigurationNotice } from '@/components/dp/dp-time-config-fields';
 import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
 import { Field, fieldInputClass } from '@/components/patterns/field';
+import { FilterChips } from '@/components/patterns/filter-chips';
 import { InlineConfirm } from '@/components/patterns/inline-confirm';
 import { PanelField, PanelSection, SidePanel } from '@/components/patterns/side-panel';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import {
   timeConfigStatusLabel,
 } from '@/lib/dp-time-config-ui';
 import { activeOperationalUnits } from '@/lib/dp-units';
+import { filterTimeConfigsByListStatus, timeConfigListCounts, type DPTimeConfigListStatus } from '@/lib/dp-time-config-status';
 import { resolveUnitAccess } from '@/lib/unit-access';
 import { cn } from '@/lib/utils';
 import type { DPOvertimeCategory, DPOvertimePolicy, DPTimeApplicability } from '@/types';
@@ -43,8 +45,7 @@ function OvertimeSelect({ className, children, ...props }: ComponentProps<'selec
   );
 }
 
-type CategoryForm = Omit<DPOvertimeCategory, 'startsAfterMinutes' | 'ratePercent' | 'bankCreditFactor'> & {
-  startsAfterMinutes: string;
+type CategoryForm = Omit<DPOvertimeCategory, 'ratePercent' | 'bankCreditFactor'> & {
   ratePercent: string;
   bankCreditFactor: string;
 };
@@ -81,7 +82,6 @@ function defaultCategory(index = 0): CategoryForm {
     id: index === 0 ? 'hora-extra-50' : `faixa-${index + 1}`,
     name: index === 0 ? 'Hora extra 50%' : `Nova faixa ${index + 1}`,
     trigger: 'workday',
-    startsAfterMinutes: '0',
     ratePercent: index === 0 ? '50' : '0',
     destination: 'payroll',
     bankCreditFactor: '',
@@ -102,7 +102,6 @@ function formFor(item?: DPOvertimePolicy): OvertimeForm {
     weeklyOvertimeLimit: item?.weeklyOvertimeLimitMinutes ? formatDuration(item.weeklyOvertimeLimitMinutes) : '',
     categories: item?.categories.map((category) => ({
       ...category,
-      startsAfterMinutes: String(category.startsAfterMinutes),
       ratePercent: String(category.ratePercent),
       bankCreditFactor: category.bankCreditFactor == null ? '' : String(category.bankCreditFactor),
     })) ?? [defaultCategory()],
@@ -143,11 +142,9 @@ function buildPayload(form: OvertimeForm) {
 
   const categories: DPOvertimeCategory[] = form.categories.map((category, index) => {
     const ratePercent = Number(category.ratePercent);
-    const startsAfterMinutes = Number(category.startsAfterMinutes);
     const bankCreditFactor = category.bankCreditFactor ? Number(category.bankCreditFactor) : undefined;
     if (!category.id.trim() || !category.name.trim()) throw new Error(`Preencha código e nome da faixa ${index + 1}.`);
     if (!Number.isFinite(ratePercent) || ratePercent < 0) throw new Error(`Revise o percentual da faixa ${index + 1}.`);
-    if (!Number.isInteger(startsAfterMinutes) || startsAfterMinutes < 0) throw new Error(`Revise o início, em minutos extras, da faixa ${index + 1}.`);
     if (category.trigger === 'specific_weekdays' && !category.weekdays?.length) throw new Error(`Selecione ao menos um dia da semana na faixa ${index + 1}.`);
     if (category.destination === 'time_bank' && (!bankCreditFactor || bankCreditFactor <= 0)) throw new Error(`Informe o fator de crédito da faixa ${index + 1}.`);
     return {
@@ -155,7 +152,6 @@ function buildPayload(form: OvertimeForm) {
       name: category.name.trim(),
       trigger: category.trigger,
       ...(category.trigger === 'specific_weekdays' ? { weekdays: Array.from(new Set(category.weekdays)).sort() } : {}),
-      startsAfterMinutes,
       ratePercent,
       destination: category.destination,
       ...(category.destination === 'time_bank' ? { bankCreditFactor } : {}),
@@ -220,6 +216,7 @@ export function DPSettingsOvertime() {
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [form, setForm] = useState<OvertimeForm>(() => formFor());
   const [search, setSearch] = useState('');
+  const [listStatus, setListStatus] = useState<DPTimeConfigListStatus>('active');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
@@ -241,11 +238,13 @@ export function DPSettingsOvertime() {
   const unitNames = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
   const groupNames = useMemo(() => new Map(unitGroups.map((group) => [group.id, group.name])), [unitGroups]);
   const organizationNames = useMemo(() => new Map(unitOrganizations.map((organization) => [organization.id, organization.name])), [unitOrganizations]);
+  const listCounts = useMemo(() => timeConfigListCounts(items), [items]);
+  const statusItems = useMemo(() => filterTimeConfigsByListStatus(items, listStatus), [items, listStatus]);
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
-    if (!term) return items;
-    return items.filter((entry) => `${entry.name} ${entry.description ?? ''} ${entry.collectiveAgreementReference ?? ''} ${applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}`.toLocaleLowerCase('pt-BR').includes(term));
-  }, [groupNames, items, organizationNames, search, unitNames]);
+    if (!term) return statusItems;
+    return statusItems.filter((entry) => `${entry.name} ${entry.description ?? ''} ${entry.collectiveAgreementReference ?? ''} ${applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}`.toLocaleLowerCase('pt-BR').includes(term));
+  }, [groupNames, organizationNames, search, statusItems, unitNames]);
 
   function updateCategory(index: number, patch: Partial<CategoryForm>) {
     setForm((current) => ({ ...current, categories: current.categories.map((category, categoryIndex) => categoryIndex === index ? { ...category, ...patch } : category) }));
@@ -287,6 +286,7 @@ export function DPSettingsOvertime() {
     try {
       const updated = await update(item.id, { action });
       setPanel({ mode: 'view', item: updated });
+      if (action === 'archive') setListStatus('archived');
     } catch (transitionError) {
       setSaveError(transitionError instanceof Error ? transitionError.message : 'Não foi possível alterar a situação da política.');
     } finally {
@@ -316,16 +316,25 @@ export function DPSettingsOvertime() {
       <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px] shadow-none ring-1 ring-white/10">
         <div>
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Critérios de apuração</p>
-          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{items.length}</p>
+          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{statusItems.length}</p>
           <p className="mt-1 text-base font-extrabold">Políticas de hora extra</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <ControlSearch value={search} onChange={setSearch} placeholder="Buscar política, CCT ou abrangência" />
           <Button type="button" variant="primary-page" size="xl" onClick={() => setPanel({ mode: 'create' })}>+ Nova política</Button>
         </div>
+        <FilterChips
+          includeAll={false}
+          value={listStatus}
+          onChange={(value) => setListStatus(value === 'archived' ? 'archived' : 'active')}
+          chips={[
+            { value: 'active', label: 'Ativas', count: listCounts.active },
+            { value: 'archived', label: 'Arquivadas', count: listCounts.archived },
+          ]}
+        />
       </ControlPanel>
 
-      <div className="flex items-baseline gap-2.5"><span className="text-[28px] font-extrabold tracking-[-0.03em]">{visibleItems.length}</span><span className="text-[13px] text-ds-ink-faint">de {items.length} políticas</span></div>
+      <div className="flex items-baseline gap-2.5"><span className="text-[28px] font-extrabold tracking-[-0.03em]">{visibleItems.length}</span><span className="text-[13px] text-ds-ink-faint">de {statusItems.length} políticas {listStatus === 'active' ? 'ativas' : 'arquivadas'}</span></div>
       <ListShell minWidth={820}>
         <ListHead template={ROW_TEMPLATE}><span>Política</span><span>Abrangência</span><span>Faixas</span><span>Situação</span><span /></ListHead>
         {visibleItems.map((entry) => (
@@ -337,10 +346,10 @@ export function DPSettingsOvertime() {
             <Chevron />
           </ListRow>
         ))}
-        {items.length === 0 ? <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma política cadastrada. Crie a primeira como rascunho.</p> : visibleItems.length === 0 ? <EmptyResults title="Nenhuma política encontrada com essa busca." onClear={() => setSearch('')} /> : null}
+        {items.length === 0 ? <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma política cadastrada. Crie a primeira como rascunho.</p> : visibleItems.length === 0 ? <EmptyResults title={statusItems.length === 0 ? `Nenhuma política ${listStatus === 'active' ? 'ativa' : 'arquivada'}.` : 'Nenhuma política encontrada com essa busca.'} onClear={() => setSearch('')} /> : null}
       </ListShell>
 
-      <SidePanel open={!!panel} onOpenChange={(open) => { if (!open) setPanel(null); }} kicker={panel?.mode === 'create' ? (panel.supersedes ? 'Nova versão' : 'Nova política') : panel?.mode === 'edit' ? 'Editar política' : `Hora extra · v${item?.version ?? 1}`} title={editing ? (form.name || 'Sem nome') : (item?.name ?? '')} subtitle="Abrangência, vigência, tolerâncias, faixas e banco de horas.">
+      <SidePanel open={!!panel} onOpenChange={(open) => { if (!open) setPanel(null); }} kicker={panel?.mode === 'create' ? (panel.supersedes ? 'Nova versão' : 'Nova política') : panel?.mode === 'edit' ? 'Editar política' : `Hora extra · v${item?.version ?? 1}`} title={editing ? (form.name || 'Sem nome') : (item?.name ?? '')} subtitle="Abrangência, vigência, tolerância geral, faixas e banco de horas.">
         {panel && !editing && item ? (
           <>
             <PanelSection title="Aplicação">
@@ -351,7 +360,7 @@ export function DPSettingsOvertime() {
             </PanelSection>
             <PanelSection title="Limites">
               <div className="grid grid-cols-2 gap-4">
-                <PanelField label="Tolerância de hora extra">{item.dailyToleranceMinutes} min</PanelField>
+                <PanelField label="Tolerância geral">{item.dailyToleranceMinutes} min</PanelField>
                 <PanelField label="Limite de hora extra por dia">{formatDuration(item.dailyOvertimeLimitMinutes)}</PanelField>
                 <PanelField label="Limite de hora extra por semana">{formatDuration(item.weeklyOvertimeLimitMinutes)}</PanelField>
                 <PanelField label="Banco de horas">{item.timeBank.enabled ? 'Ativo' : 'Desativado'}</PanelField>
@@ -364,7 +373,7 @@ export function DPSettingsOvertime() {
                   <p className="mt-1 text-xs text-ds-ink-muted">
                     {triggerLabels[category.trigger]}
                     {category.trigger === 'specific_weekdays' && category.weekdays?.length ? ` (${category.weekdays.map((day) => WEEKDAY_LABELS[day]).join(', ')})` : ''}
-                    {' · '}a partir de {category.startsAfterMinutes} min extras · {destinationLabels[category.destination]}
+                    {' · '}{destinationLabels[category.destination]}
                   </p>
                 </div>
               ))}
@@ -398,18 +407,18 @@ export function DPSettingsOvertime() {
             <Field label="Descrição" htmlFor="overtime-description" requirement="opcional"><textarea id="overtime-description" className={`${fieldInputClass} min-h-20 py-2`} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
             <Field label="Referência da CCT ou acordo" htmlFor="overtime-agreement" requirement="opcional" hint="Referência informativa. O sistema não interpreta o documento automaticamente."><Input id="overtime-agreement" className={fieldInputClass} value={form.collectiveAgreementReference} onChange={(event) => setForm((current) => ({ ...current, collectiveAgreementReference: event.target.value }))} placeholder="Ex.: CCT 2026 · cláusula 12" /></Field>
             <PanelSection title="Abrangência"><DPTimeApplicabilityFields value={form.applicability} onChange={(applicability) => setForm((current) => ({ ...current, applicability }))} units={activeOperationalUnits(units)} unitOrganizations={activeOperationalUnits(unitOrganizations)} unitGroups={unitGroups} roles={roles} functions={functions} people={activeUsers} /></PanelSection>
-            <PanelSection title="Vigência e tolerância">
+            <PanelSection title="Vigência e tolerância geral">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Início" htmlFor="overtime-valid-from"><Input id="overtime-valid-from" type="date" className={fieldInputClass} value={form.validFrom} onChange={(event) => setForm((current) => ({ ...current, validFrom: event.target.value }))} /></Field>
                 <Field label="Fim" htmlFor="overtime-valid-to" requirement="opcional"><Input id="overtime-valid-to" type="date" className={fieldInputClass} value={form.validTo} onChange={(event) => setForm((current) => ({ ...current, validTo: event.target.value }))} /></Field>
-                <Field label="Tolerância de hora extra" htmlFor="overtime-tolerance" hint="Margem diária, em minutos, antes de começar a apurar hora extra. A regra só será aplicada quando o motor de ponto for ativado."><Input id="overtime-tolerance" type="number" min={0} max={180} className={fieldInputClass} value={form.dailyToleranceMinutes} onChange={(event) => setForm((current) => ({ ...current, dailyToleranceMinutes: event.target.value }))} /></Field>
+                <Field label="Tolerância geral de hora extra" htmlFor="overtime-tolerance" hint="Margem diária única, em minutos, aplicada a todas as faixas desta política antes de começar a apurar hora extra. A regra só será aplicada quando o motor de ponto for ativado."><Input id="overtime-tolerance" type="number" min={0} max={180} className={fieldInputClass} value={form.dailyToleranceMinutes} onChange={(event) => setForm((current) => ({ ...current, dailyToleranceMinutes: event.target.value }))} /></Field>
                 <Field label="Limite de hora extra por dia" htmlFor="overtime-daily-limit" requirement="opcional" hint="Máximo de horas extras reconhecidas automaticamente no dia. Não é o total da jornada. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-daily-limit" className={`${fieldInputClass} font-ds-mono`} value={form.dailyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, dailyOvertimeLimit: event.target.value }))} placeholder="02:00" /></Field>
                 <Field label="Limite de hora extra por semana" htmlFor="overtime-weekly-limit" requirement="opcional" hint="Máximo acumulado de horas extras reconhecidas automaticamente na semana. O excedente deverá seguir para revisão. Use HH:MM."><Input id="overtime-weekly-limit" className={`${fieldInputClass} font-ds-mono`} value={form.weeklyOvertimeLimit} onChange={(event) => setForm((current) => ({ ...current, weeklyOvertimeLimit: event.target.value }))} placeholder="10:00" /></Field>
               </div>
             </PanelSection>
             <PanelSection title="Faixas de hora extra" aside={`${form.categories.length}`}>
               <TimeConfigurationNotice>
-                Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
+                Todas as faixas usam a tolerância geral definida acima. Para uma CCT com 50% nos dias comuns, crie uma faixa geral e cadastre domingo e feriado em faixas separadas. Feriado é a condição mais específica e deve prevalecer na apuração futura.
               </TimeConfigurationNotice>
               <div className="space-y-3">
                 {form.categories.map((category, index) => (
@@ -418,8 +427,7 @@ export function DPSettingsOvertime() {
                     <div className="grid grid-cols-2 gap-3">
                       <Field label="Código" htmlFor={`overtime-category-id-${index}`}><Input id={`overtime-category-id-${index}`} className={`${fieldInputClass} font-ds-mono`} value={category.id} onChange={(event) => updateCategory(index, { id: event.target.value })} /></Field>
                       <Field label="Nome" htmlFor={`overtime-category-name-${index}`}><Input id={`overtime-category-name-${index}`} className={fieldInputClass} value={category.name} onChange={(event) => updateCategory(index, { name: event.target.value })} /></Field>
-                      <Field label="Quando aplicar" htmlFor={`overtime-category-trigger-${index}`} hint="Situação que ativa esta faixa de hora extra."><OvertimeSelect id={`overtime-category-trigger-${index}`} value={category.trigger} onChange={(event) => updateCategory(index, { trigger: event.target.value as DPOvertimeCategory['trigger'] })}>{Object.entries(triggerLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</OvertimeSelect></Field>
-                      <Field label="A partir de" htmlFor={`overtime-category-start-${index}`} hint="Minutos extras já apurados neste contexto. Use 0 para aplicar desde o primeiro minuto."><Input id={`overtime-category-start-${index}`} type="number" min={0} className={fieldInputClass} value={category.startsAfterMinutes} onChange={(event) => updateCategory(index, { startsAfterMinutes: event.target.value })} /></Field>
+                      <Field label="Quando aplicar" htmlFor={`overtime-category-trigger-${index}`} hint="Escolha uma situação por faixa. Para outra situação, crie outra faixa, mesmo quando percentual e destino forem iguais."><OvertimeSelect id={`overtime-category-trigger-${index}`} value={category.trigger} onChange={(event) => updateCategory(index, { trigger: event.target.value as DPOvertimeCategory['trigger'] })}>{Object.entries(triggerLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</OvertimeSelect></Field>
                       {category.trigger === 'specific_weekdays' ? (
                         <div className="col-span-2 space-y-2">
                           <p className="text-xs font-bold text-ds-ink-2">Dias da semana</p>

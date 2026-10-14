@@ -544,9 +544,15 @@
   }
 
   /* Portais Radix ficam fora do main; esta classe mantém dialogs e popovers na mesma escala. */
-  .personal-density-active [role='dialog'] {
+  .personal-density-active [role='dialog']:not([data-ui='side-panel']) {
     border-radius: 0.75rem !important;
     max-height: 84vh;
+  }
+
+  .personal-density-active [data-ui='side-panel'] {
+    height: 100dvh;
+    max-height: 100dvh !important;
+    border-radius: 20px 0 0 20px !important;
   }
 
   .personal-density-active [role='dialog'] :where(h1, h2, [data-dialog-title]) {
@@ -668,6 +674,45 @@
 
   .personal-create-user-form .space-y-2 > :not([hidden]) ~ :not([hidden]) {
     margin-top: 0.375rem !important;
+  }
+
+  /* Formulário extenso do perfil já migrado para o sistema visual comum. */
+  .collaborator-edit-form :where(label) {
+    min-height: 1rem;
+    font-size: 0.75rem !important;
+    font-weight: 700;
+    line-height: 1rem !important;
+    color: var(--ds-ink-2);
+  }
+
+  .collaborator-edit-form
+    :where(input:not([type='checkbox']):not([type='radio']):not([type='file'])) {
+    height: 2.5rem;
+    border-color: var(--ds-border-input);
+    border-radius: var(--ds-r-md);
+    background: var(--ds-surface-input);
+    color: var(--ds-ink);
+    font-size: 0.8125rem !important;
+  }
+
+  .collaborator-edit-form
+    :where(input:not([type='checkbox']):not([type='radio']):not([type='file'])):focus-visible {
+    border-color: var(--ds-modal-accent);
+    background: var(--ds-surface);
+    box-shadow: 0 0 0 3px var(--ds-modal-accent-soft);
+    outline: none;
+  }
+
+  .collaborator-edit-form
+    :where(input:not([type='checkbox']):not([type='radio']):not([type='file']))[aria-invalid='true'] {
+    border-width: 1.5px;
+    border-color: var(--ds-danger);
+  }
+
+  .collaborator-edit-form [id$='-form-item-description'],
+  .collaborator-edit-form [id$='-form-item-message'] {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
   }
 
   .personal-uniform-density table :where(th, td) {
