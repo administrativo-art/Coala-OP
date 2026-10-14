@@ -336,7 +336,7 @@ export function DPBulkShiftEditPanel({
                       <span className={`h-[7px] w-[7px] rounded-full ${!shiftDefinitionId ? 'bg-[#db2777]' : 'bg-[#cbd5e1]'}`} />
                       <span className={`text-xs font-extrabold ${!shiftDefinitionId ? 'text-[#db2777]' : 'text-[#475569]'}`}>Manual</span>
                     </button>
-                    {shiftDefinitions.map((definition) => {
+                    {shiftDefinitions.filter((definition) => definition.isArchived !== true).map((definition) => {
                       const selected = shiftDefinitionId === definition.id;
                       return (
                         <button

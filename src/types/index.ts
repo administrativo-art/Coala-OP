@@ -948,7 +948,7 @@ export type User = {
   jobRoleName?: string;
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
-  employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship';
+  employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | 'partner';
   onboardingId?: string | null;
   /** Unidade jurídica responsável pelo vínculo; não se confunde com a unidade de trabalho. */
   employerUnitId?: string | null;
@@ -1003,13 +1003,13 @@ export type User = {
     cause?: string | null;
     notes?: string | null;
     terminationDate?: string | null;
-    employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | null;
+    employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | 'partner' | null;
   }>;
   terminationDate?: Timestamp;
   terminationReason?: string;
   terminationCause?: string;
   terminationNotes?: string;
-  terminationRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship';
+  terminationRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | 'partner';
   terminationProcessId?: string;
   terminationEmployerUnitId?: string | null;
   terminationEmployerName?: string | null;
@@ -3724,7 +3724,6 @@ export type DPOvertimeCategory = {
   name: string;
   trigger: 'workday' | 'specific_weekdays' | 'rest_day' | 'sunday' | 'holiday' | 'unplanned_work';
   weekdays?: number[]; // 0=Dom, 1=Seg, ...; usado somente em specific_weekdays
-  startsAfterMinutes: number;
   ratePercent: number;
   destination: 'payroll' | 'time_bank' | 'review';
   bankCreditFactor?: number;
@@ -3769,7 +3768,7 @@ export type DPOvertimePolicy = {
 export type DPAbsenceEmploymentRelationship = 'clt' | 'apprenticeship' | 'internship';
 export type DPAbsenceRequestUnit = 'day' | 'hour';
 export type DPAbsenceInitiator = 'collaborator' | 'manager' | 'dp' | 'system';
-export type DPAbsenceColor = 'pink' | 'blue' | 'green' | 'amber' | 'violet' | 'slate';
+export type DPAbsenceColor = 'pink' | 'red' | 'orange' | 'amber' | 'yellow' | 'green' | 'teal' | 'cyan' | 'blue' | 'indigo' | 'violet' | 'slate';
 
 export type DPAbsencePolicy = {
   id: string;
@@ -3842,8 +3841,12 @@ export type DPShiftDefinition = {
   configurationNotes?: string;
   overnight?: boolean;
   expectedPunches?: number;
+  isArchived?: boolean;
+  archivedAt?: Timestamp;
+  archivedBy?: string;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
+  updatedBy?: string;
 };
 
 export type DPScheduleSnapshot = {

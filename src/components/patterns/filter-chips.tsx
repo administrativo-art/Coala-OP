@@ -17,12 +17,14 @@ export interface FilterChipsProps {
   onChange: (value: string | null) => void
   allLabel?: string
   allCount?: number
+  /** Mantém o padrão com "Todas" por padrão; desligue para estados mutuamente exclusivos. */
+  includeAll?: boolean
   className?: string
 }
 
 /** Chips de categoria sobre o painel escuro. Um ativo por vez; "Todas" primeiro. */
-export function FilterChips({ chips, value, onChange, allLabel = "Todas", allCount, className }: FilterChipsProps) {
-  const items: FilterChip[] = [{ value: "", label: allLabel, count: allCount }, ...chips]
+export function FilterChips({ chips, value, onChange, allLabel = "Todas", allCount, includeAll = true, className }: FilterChipsProps) {
+  const items: FilterChip[] = includeAll ? [{ value: "", label: allLabel, count: allCount }, ...chips] : chips
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>
       {items.map((c) => {
