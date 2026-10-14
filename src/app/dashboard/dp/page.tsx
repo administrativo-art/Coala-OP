@@ -120,7 +120,7 @@ function UpcomingVacationsCard({ vacations, userMap }: {
                     </TableCell>
                     <TableCell>
                       {v.paymentDate && (
-                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300">
+                        <Badge variant="outline" className="bg-ds-warn-bg text-ds-warn border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn">
                           <DollarSign className="mr-1 h-3 w-3" />
                           {fmtDate(v.paymentDate)}
                         </Badge>
@@ -128,7 +128,7 @@ function UpcomingVacationsCard({ vacations, userMap }: {
                     </TableCell>
                     <TableCell>
                       {v.returnDate && (
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300">
+                        <Badge variant="outline" className="bg-ds-info-bg text-ds-info border-ds-info-bg dark:bg-ds-info dark:text-ds-info">
                           <Briefcase className="mr-1 h-3 w-3" />
                           {fmtDate(v.returnDate)}
                         </Badge>
@@ -305,7 +305,7 @@ function BirthdayCard({ users }: { users: User[] }) {
                     <p className="text-sm font-medium truncate max-w-[120px]">{user.username}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Cake className="h-3.5 w-3.5 text-pink-400" />
+                    <Cake className="h-3.5 w-3.5 text-ds-accent-ink" />
                     <Badge variant={today ? 'default' : 'secondary'} className="text-xs">
                       {today ? 'Hoje!' : format(date, 'dd/MMM', { locale: ptBR })}
                     </Badge>
@@ -338,8 +338,8 @@ function ActiveVacationsCard({ vacations, userMap }: {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <div className="bg-blue-100 dark:bg-blue-900/30 p-1.5 rounded-lg">
-            <Plane className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+          <div className="bg-ds-info-bg dark:bg-ds-info p-1.5 rounded-lg">
+            <Plane className="h-4 w-4 text-ds-info dark:text-ds-info" />
           </div>
           Em Férias Hoje
         </CardTitle>
@@ -368,7 +368,7 @@ function ActiveVacationsCard({ vacations, userMap }: {
                       </p>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-0 text-xs dark:bg-blue-900/30 dark:text-blue-300">
+                  <Badge variant="secondary" className="bg-ds-info-bg text-ds-info border-0 text-xs dark:bg-ds-info dark:text-ds-info">
                     🏖️ Off
                   </Badge>
                 </div>
@@ -444,7 +444,7 @@ function TodayShiftsCard({ todayShifts }: {
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            {active && <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />}
+                            {active && <div className="h-2 w-2 rounded-full bg-ds-ok animate-pulse" />}
                             <Badge variant={active ? 'default' : 'secondary'} className="text-xs">
                               {shift.startTime}–{shift.endTime}
                             </Badge>
@@ -610,22 +610,22 @@ export default function DPDashboardPage() {
                 title="Em Férias Hoje"
                 value={vacationStats.onVacation}
                 icon={<Plane className="h-5 w-5" />}
-                bg="bg-blue-100 dark:bg-blue-900/30"
-                color="text-blue-500"
+                bg="bg-ds-info-bg dark:bg-ds-info"
+                color="text-ds-info"
               />
               <VacationStatCard
                 title="Pagamentos em 15 dias"
                 value={vacationStats.paymentsSoon}
                 icon={<CalendarCheck2 className="h-5 w-5" />}
-                bg="bg-amber-100 dark:bg-amber-900/30"
-                color="text-amber-500"
+                bg="bg-ds-warn-bg dark:bg-ds-warn"
+                color="text-ds-warn"
               />
               <VacationStatCard
                 title="Retornos em 7 dias"
                 value={vacationStats.returningSoon}
                 icon={<Briefcase className="h-5 w-5" />}
-                bg="bg-teal-100 dark:bg-teal-900/30"
-                color="text-teal-500"
+                bg="bg-ds-accent-soft dark:bg-ds-accent"
+                color="text-ds-accent-ink"
               />
             </div>
             <UpcomingVacationsCard vacations={vacations} userMap={userMap} />

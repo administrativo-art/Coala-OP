@@ -752,10 +752,11 @@ Nenhuma string de API encontrada no percurso estático; investigar chamadas indi
 
 Páginas: [`src/app/dashboard/operations/page.tsx`](../../src/app/dashboard/operations/page.tsx).
 
-Arquivos locais percorridos: 54.
+Arquivos locais percorridos: 68.
 
 Chamadas candidatas encontradas:
 
+- `/api/dashboard/layouts` — interface [`src/features/management-dashboard/use-layouts.ts`](../../src/features/management-dashboard/use-layouts.ts); rota candidata [`src/app/api/dashboard/layouts/route.ts`](../../src/app/api/dashboard/layouts/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/products` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
@@ -801,7 +802,6 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `stock.stockCount.approve` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.perform` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
-- `tasks.view` — [`src/app/dashboard/operations/page.tsx`](../../src/app/dashboard/operations/page.tsx)
 
 ## `organization`
 

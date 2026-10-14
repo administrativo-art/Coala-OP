@@ -32,6 +32,8 @@ function contract(method: "GET" | "PUT" | "PATCH" | "DELETE", mode: "read" | "wr
   });
 }
 
+const parseScope = (value: string | null) => (value === "financial" || value === "operations" ? value : "management");
+
 function authenticate(request: NextRequest) {
   return requireUser(request).catch((error) => rethrowServerAuthenticationFailure(error));
 }
@@ -52,7 +54,7 @@ function wrapError(error: unknown): never {
 
 const getContract = contract("GET", "read", "none");
 const getEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext>(getContract, { authenticate: ({ request }) => authenticate(request), authorize: ({ actor }) => authorize(actor) });
-export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security, request }) => NextResponse.json(await listManagementLayouts(security.actor, request.nextUrl.searchParams.get("scope") === "financial" ? "financial" : "management"), { headers: { "Cache-Control": "private, no-store" } }));
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security, request }) => NextResponse.json(await listManagementLayouts(security.actor, parseScope(request.nextUrl.searchParams.get("scope"))), { headers: { "Cache-Control": "private, no-store" } }));
 
 const putContract = contract("PUT", "write", "layout");
 const putEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext, z.infer<typeof dashboardLayoutInputSchema>>(putContract, {

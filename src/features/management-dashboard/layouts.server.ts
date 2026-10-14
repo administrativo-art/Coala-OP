@@ -9,7 +9,7 @@ import type { DashboardLayoutsPayload, DashboardScope, ManagementDashboardLayout
 
 const COLLECTION = "managementDashboardLayouts";
 const PREFERENCES = "managementDashboardPreferences";
-const ACTIVE_FIELD: Record<DashboardScope, string> = { management: "activeLayoutId", financial: "activeFinancialLayoutId" };
+const ACTIVE_FIELD: Record<DashboardScope, string> = { management: "activeLayoutId", financial: "activeFinancialLayoutId", operations: "activeOperationsLayoutId" };
 
 const scopeOf = (layout: { scope?: DashboardScope }): DashboardScope => layout.scope ?? "management";
 

@@ -31,12 +31,21 @@ export const FINANCIAL_WIDGET_IDS = [
   "fin-planning-hub",
 ] as const;
 
-export const ALL_WIDGET_IDS = [...MANAGEMENT_WIDGET_IDS, ...FINANCIAL_WIDGET_IDS] as const;
+export const OPERATIONS_WIDGET_IDS = [
+  "ops-summary",
+  "ops-expiring",
+  "ops-purchase-alerts",
+  "ops-restock",
+  "ops-count",
+  "ops-tasks",
+] as const;
+
+export const ALL_WIDGET_IDS = [...MANAGEMENT_WIDGET_IDS, ...FINANCIAL_WIDGET_IDS, ...OPERATIONS_WIDGET_IDS] as const;
 
 export type ManagementWidgetId = (typeof ALL_WIDGET_IDS)[number];
 export type FinancialWidgetId = (typeof FINANCIAL_WIDGET_IDS)[number];
-/** Cada painel pertence a uma área: o da gestão (início) ou o do financeiro. */
-export type DashboardScope = "management" | "financial";
+/** Cada painel pertence a uma área: o da gestão (início), o do financeiro ou o da operação. */
+export type DashboardScope = "management" | "financial" | "operations";
 export type DashboardBreakpoint = "desktop" | "tablet" | "mobile";
 export type DashboardVisibility = "personal" | "shared" | "template";
 

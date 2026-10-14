@@ -60,9 +60,19 @@ export const FINANCIAL_WIDGET_CATALOG: readonly ManagementWidgetDefinition[] = [
   { id: "fin-planning-hub", title: "Planejamento e resultado", description: "DRE, orçamento, fluxo de caixa e configurações.", module: "Atalhos", scope: "financial", preview: "Atalhos de análise e planejamento.", href: "/dashboard/financial/dre", defaultLayouts: full(6, 3), allowedSizes: standardSizes, canView: (p) => !!p.financial?.view },
 ] as const;
 
+export const OPERATIONS_WIDGET_CATALOG: readonly ManagementWidgetDefinition[] = [
+  { id: "ops-summary", title: "Indicadores de validade e estoque", description: "Vencendo em 7 dias, vencidos e lotes ativos nas suas unidades.", module: "Estoque", scope: "operations", preview: "Quatro indicadores do estoque do quiosque.", href: "/dashboard/stock/inventory-control", defaultLayouts: full(12, 2), allowedSizes: standardSizes, canView: (p) => p.stock.view },
+  { id: "ops-expiring", title: "Vencendo em breve", description: "Lotes que vencem nos próximos 7 dias.", module: "Estoque", scope: "operations", preview: "Lista dos lotes mais próximos do vencimento.", href: "/dashboard/stock/inventory-control", defaultLayouts: full(6, 4), allowedSizes: standardSizes, canView: (p) => p.stock.view },
+  { id: "ops-purchase-alerts", title: "Compras urgentes", description: "Alertas de compra que precisam de decisão.", module: "Estoque", scope: "operations", preview: "Itens com compra urgente sugerida.", href: "/dashboard/stock/purchasing", defaultLayouts: full(6, 4), allowedSizes: standardSizes, canView: (p) => p.stock.purchasing.view },
+  { id: "ops-restock", title: "Reposição", description: "Painel de reposição por unidade.", module: "Estoque", scope: "operations", preview: "Itens a repor e quantidades sugeridas.", href: "/dashboard/stock/analysis/restock", defaultLayouts: full(12, 5), allowedSizes: standardSizes, canView: (p) => p.stock.analysis.restock },
+  { id: "ops-count", title: "Contagem de estoque", description: "Histórico e indicadores das contagens.", module: "Estoque", scope: "operations", preview: "Sessões de contagem e divergências.", href: "/dashboard/stock/audit", defaultLayouts: full(12, 5), allowedSizes: standardSizes, canView: (p) => p.stock.audit.view || p.stock.stockCount.view },
+  { id: "ops-tasks", title: "Tarefas", description: "Demandas, prazos e aprovações da operação.", module: "Trabalho", scope: "operations", preview: "Gerenciador de tarefas.", href: "/dashboard/tasks", defaultLayouts: full(12, 5), allowedSizes: standardSizes, canView: (p) => p.tasks.view },
+] as const;
+
 export const WIDGET_CATALOG_BY_SCOPE: Record<DashboardScope, readonly ManagementWidgetDefinition[]> = {
   management: MANAGEMENT_WIDGET_CATALOG,
   financial: FINANCIAL_WIDGET_CATALOG,
+  operations: OPERATIONS_WIDGET_CATALOG,
 };
 
-export const MANAGEMENT_WIDGET_BY_ID = new Map([...MANAGEMENT_WIDGET_CATALOG, ...FINANCIAL_WIDGET_CATALOG].map((widget) => [widget.id, widget]));
+export const MANAGEMENT_WIDGET_BY_ID = new Map([...MANAGEMENT_WIDGET_CATALOG, ...FINANCIAL_WIDGET_CATALOG, ...OPERATIONS_WIDGET_CATALOG].map((widget) => [widget.id, widget]));
