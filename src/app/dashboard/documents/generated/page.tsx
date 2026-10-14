@@ -6,6 +6,9 @@ import { CheckCircle2, Clock3, Download, Eye, FileStack, Loader2, Lock, RefreshC
 import { Button } from "@/components/ui/button";
 import { DocumentGeneratorWorkspace } from "@/components/documents/document-generator-workspace";
 import { Input } from "@/components/ui/input";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroChip } from "@/components/patterns/hero-chip";
 import { useAuth } from "@/hooks/use-auth";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import {
@@ -236,7 +239,7 @@ function signatureStatusTone(status: string) {
   }
   return {
     dot: "bg-violet-700",
-    pill: "border-violet-200 bg-white text-violet-700",
+    pill: "border-violet-200 bg-white text-ds-accent-ink",
   };
 }
 
@@ -261,6 +264,7 @@ export default function GeneratedDocumentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<DocumentQueueFilter>("all");
   const [busyDocument, setBusyDocument] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ id: string; kind: "discard" | "signature" } | null>(null);
   const [audit, setAudit] = useState<AuditPayload | null>(null);
   const [signatureTrail, setSignatureTrail] = useState<SignatureTrailPayload | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -455,7 +459,7 @@ export default function GeneratedDocumentsPage() {
   }
 
   async function discard(id: string) {
-    if (!window.confirm("Descartar esta prévia? O arquivo será excluído.")) return;
+    setPendingConfirm(null);
     setBusyDocument(id);
     setMessage("");
     try {
@@ -474,7 +478,7 @@ export default function GeneratedDocumentsPage() {
   }
 
   async function sendForSignature(id: string) {
-    if (!window.confirm("Enviar este documento individualmente para assinatura eletrônica?")) return;
+    setPendingConfirm(null);
     setBusyDocument(id);
     setMessage("");
     try {
@@ -541,41 +545,26 @@ export default function GeneratedDocumentsPage() {
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos gerados.</p>;
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-teal-700">
-            Gestão documental
-          </p>
-          <h1 className="text-xl font-black text-slate-950">Central de documentos</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="h-2 w-2 rounded-full bg-amber-600" />
-            {documents.filter((item) => ["draft", "review_pending"].includes(item.status)).length} em conferência
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="h-2 w-2 rounded-full bg-violet-700" />
-            {documents.filter((item) => ["sent", "partially_signed"].includes(String(item.signatureStatus))).length} para assinar
-          </span>
-          {viewMode === "queue" && hasFormalizationPermission(permissions, "documents.generate") ? (
-            <Button
-              className="gap-2 bg-rose-500 font-bold hover:bg-rose-600"
-              onClick={() => setViewMode("generator")}
-            >
-                <FileStack className="h-4 w-4" />
-                Gerar documento
-            </Button>
-          ) : viewMode === "generator" ? (
-            <Button variant="outline" className="font-bold" onClick={() => setViewMode("queue")}>
-              Voltar à fila
-            </Button>
-          ) : null}
-        </div>
-      </header>
+    <div className="space-y-4">
+      <PageHero
+        kicker="Gestão documental"
+        title="Central de documentos"
+        actions={viewMode === "queue" && hasFormalizationPermission(permissions, "documents.generate") ? (
+          <Button type="button" variant="primary-page" size="md" onClick={() => setViewMode("generator")}>
+            <FileStack className="mr-2 h-4 w-4" />Gerar documento
+          </Button>
+        ) : viewMode === "generator" ? (
+          <Button type="button" variant="ds-secondary" size="md" onClick={() => setViewMode("queue")}>Voltar à fila</Button>
+        ) : null}
+        chips={<>
+          <HeroChip value={documents.filter((item) => ["draft", "review_pending"].includes(item.status)).length} label="em conferência" tone="warning" />
+          <HeroChip value={documents.filter((item) => ["sent", "partially_signed"].includes(String(item.signatureStatus))).length} label="para assinar" tone="info" />
+        </>}
+      />
+      <div className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface">
 
       {message ? (
-        <div className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700">
+        <div className="border-b border-ds-confirm-border bg-ds-danger-bg px-4 py-2 text-xs font-semibold text-ds-danger" role="alert">
           {message}
         </div>
       ) : null}
@@ -617,7 +606,7 @@ export default function GeneratedDocumentsPage() {
           <div className="max-h-[610px] overflow-y-auto">
             {loading ? (
               <div className="grid min-h-40 place-items-center">
-                <Loader2 className="h-5 w-5 animate-spin text-teal-700" />
+                <Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" />
               </div>
             ) : filtered.length === 0 ? (
               <div className="grid min-h-52 place-items-center p-8 text-center">
@@ -637,7 +626,7 @@ export default function GeneratedDocumentsPage() {
                   key={item.id}
                   type="button"
                   className={`flex w-full items-center gap-3 border-b px-4 py-3 text-left transition ${
-                    active ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : "hover:bg-slate-50"
+                    active ? "bg-ds-accent-row shadow-[inset_3px_0_0_var(--ds-accent-ink)]" : "hover:bg-slate-50"
                   }`}
                   onClick={() => {
                     setSelectedId(item.id);
@@ -677,7 +666,7 @@ export default function GeneratedDocumentsPage() {
           </div>
         </section>
 
-        <aside className="min-w-0 bg-[#fbfaf8]">
+        <aside className="min-w-0 bg-ds-surface">
           {!selectedDocument ? (
             <div className="grid h-full min-h-96 place-items-center p-8 text-center text-xs text-slate-500">
               Selecione um documento na fila.
@@ -685,7 +674,7 @@ export default function GeneratedDocumentsPage() {
           ) : (
             <div className="flex h-full flex-col">
               <div className="border-b bg-white px-4 py-3">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-violet-700">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-ds-accent-ink">
                   Detalhe do documento
                 </p>
                 <h2 className="mt-0.5 truncate text-sm font-black text-slate-950">
@@ -693,14 +682,14 @@ export default function GeneratedDocumentsPage() {
                 </h2>
                 <nav className="mt-3 flex gap-5 text-xs">
                   <button
-                    className={`pb-1 font-bold ${detailTab === "document" ? "border-b-2 border-violet-700 text-violet-700" : "text-slate-500"}`}
+                    className={`pb-1 font-bold ${detailTab === "document" ? "border-b-2 border-ds-accent-ink text-ds-accent-ink" : "text-slate-500"}`}
                     onClick={() => setDetailTab("document")}
                   >
                     Documento
                   </button>
                   {canViewAudit ? (
                     <button
-                      className={`pb-1 font-bold ${detailTab === "audit" ? "border-b-2 border-violet-700 text-violet-700" : "text-slate-500"}`}
+                      className={`pb-1 font-bold ${detailTab === "audit" ? "border-b-2 border-ds-accent-ink text-ds-accent-ink" : "text-slate-500"}`}
                       onClick={() => void openAudit(selectedDocument.id)}
                     >
                       Auditoria
@@ -708,7 +697,7 @@ export default function GeneratedDocumentsPage() {
                   ) : null}
                   {canViewSignature ? (
                     <button
-                      className={`pb-1 font-bold ${detailTab === "signature" ? "border-b-2 border-violet-700 text-violet-700" : "text-slate-500"}`}
+                      className={`pb-1 font-bold ${detailTab === "signature" ? "border-b-2 border-ds-accent-ink text-ds-accent-ink" : "text-slate-500"}`}
                       onClick={() => void openSignatureTrail(selectedDocument.id)}
                     >
                       Assinatura
@@ -716,6 +705,21 @@ export default function GeneratedDocumentsPage() {
                   ) : null}
                 </nav>
               </div>
+
+              {pendingConfirm?.id === selectedDocument.id ? (
+                <div className="border-b bg-white px-4 py-3">
+                  <InlineConfirm
+                    message={pendingConfirm.kind === "discard"
+                      ? "Descartar esta prévia? O arquivo será excluído."
+                      : "Enviar este documento individualmente para assinatura eletrônica?"}
+                    confirmLabel={pendingConfirm.kind === "discard" ? "Descartar prévia" : "Enviar para assinatura"}
+                    loadingLabel={pendingConfirm.kind === "discard" ? "Descartando…" : "Enviando…"}
+                    loading={busyDocument === selectedDocument.id}
+                    onConfirm={() => void (pendingConfirm.kind === "discard" ? discard(selectedDocument.id) : sendForSignature(selectedDocument.id))}
+                    onCancel={() => setPendingConfirm(null)}
+                  />
+                </div>
+              ) : null}
 
               <div className="max-h-[600px] flex-1 overflow-y-auto p-4">
                 {detailTab === "document" ? (
@@ -762,7 +766,7 @@ export default function GeneratedDocumentsPage() {
                       {["draft", "review_pending"].includes(selectedDocument.status) && canReview ? (
                         <>
                           <Button size="sm" variant="outline" className="text-sky-700" disabled={!selectedDocument.pdfAvailable || busyDocument === selectedDocument.id} onClick={() => void changeStatus(selectedDocument.id, "approved")}><CheckCircle2 className="mr-1.5 h-4 w-4" />Aprovar</Button>
-                          <Button size="sm" variant="outline" className="text-rose-600" disabled={busyDocument === selectedDocument.id} onClick={() => void discard(selectedDocument.id)}><Trash2 className="mr-1.5 h-4 w-4" />Descartar</Button>
+                          <Button size="sm" variant="outline" className="text-rose-600" disabled={busyDocument === selectedDocument.id} onClick={() => setPendingConfirm({ id: selectedDocument.id, kind: "discard" })}><Trash2 className="mr-1.5 h-4 w-4" />Descartar</Button>
                         </>
                       ) : null}
                       {selectedDocument.status === "approved" && canReview ? (
@@ -772,17 +776,17 @@ export default function GeneratedDocumentsPage() {
                         && (selectedDocument.signatureScope === "independent" || selectedDocument.postAdmissionSignatureScope === "independent")
                         && ["approved", "final"].includes(selectedDocument.status)
                         && !["sent", "signed"].includes(String(selectedDocument.signatureStatus)) ? (
-                          <Button size="sm" className="bg-violet-700 hover:bg-violet-800" disabled={!selectedHasSignatureRecipients || busyDocument === selectedDocument.id} onClick={() => void sendForSignature(selectedDocument.id)}><Send className="mr-1.5 h-4 w-4" />Enviar para assinatura</Button>
+                          <Button size="sm" className="bg-ds-accent hover:bg-ds-accent-hover" disabled={!selectedHasSignatureRecipients || busyDocument === selectedDocument.id} onClick={() => setPendingConfirm({ id: selectedDocument.id, kind: "signature" })}><Send className="mr-1.5 h-4 w-4" />Enviar para assinatura</Button>
                         ) : null}
                       {canViewSignature && ["sent", "partially_signed"].includes(String(selectedDocument.signatureStatus)) ? (
-                        <Button size="sm" variant="outline" className="text-violet-700" disabled={busyDocument === selectedDocument.id} onClick={() => void reconcileSignature(selectedDocument.id)}><Clock3 className="mr-1.5 h-4 w-4" />Atualizar estado</Button>
+                        <Button size="sm" variant="outline" className="text-ds-accent-ink" disabled={busyDocument === selectedDocument.id} onClick={() => void reconcileSignature(selectedDocument.id)}><Clock3 className="mr-1.5 h-4 w-4" />Atualizar estado</Button>
                       ) : null}
                     </div>
                   </div>
                 ) : detailTab === "audit" ? (
                   <div className="space-y-3">
                     {busyDocument === selectedDocument.id && !audit ? (
-                      <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-violet-700" /></div>
+                      <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div>
                     ) : (
                       <>
                         <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] text-violet-900">
@@ -818,12 +822,12 @@ export default function GeneratedDocumentsPage() {
                 ) : (
                   <div>
                     {busyDocument === selectedDocument.id && !signatureTrail ? (
-                      <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-violet-700" /></div>
+                      <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div>
                     ) : (
                       <>
                         <div className="mb-4 grid gap-2 rounded-lg border bg-white p-3 text-xs sm:grid-cols-2">
                           <p><span className="block text-[10px] font-bold text-slate-400">Provedor</span><span className="font-extrabold">{signatureTrail?.signature?.provider ?? "Autentique"}</span></p>
-                      <p><span className="block text-[10px] font-bold text-slate-400">Estado</span><span className="font-extrabold text-violet-700">{SIGNATURE_STATUS_LABELS[String(signatureTrail?.signature?.status ?? "")] ?? "Ainda não enviado"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Estado</span><span className="font-extrabold text-ds-accent-ink">{SIGNATURE_STATUS_LABELS[String(signatureTrail?.signature?.status ?? "")] ?? "Ainda não enviado"}</span></p>
                           <p><span className="block text-[10px] font-bold text-slate-400">Protocolo</span><span className="font-mono font-extrabold">{signatureTrail?.signature?.protocol ?? selectedDocument.protocol ?? "—"}</span></p>
                           <p><span className="block text-[10px] font-bold text-slate-400">ID externo</span><span className="break-all font-mono text-[10px] font-bold">{signatureTrail?.signature?.providerDocumentId ?? "—"}</span></p>
                           <p className="sm:col-span-2"><span className="block text-[10px] font-bold text-slate-400">Hash pré-assinatura</span><span className="break-all font-mono text-[10px] text-slate-500">{selectedDocument.preSignatureHash ?? "—"}</span></p>
@@ -865,7 +869,7 @@ export default function GeneratedDocumentsPage() {
                           </ol>
                         ) : (
                           <div className="rounded-xl border border-dashed bg-white px-5 py-8 text-center">
-                            <Send className="mx-auto h-8 w-8 text-violet-300" />
+                            <Send className="mx-auto h-8 w-8 text-ds-ink-faint" />
                             <p className="mt-3 text-xs font-extrabold text-slate-800">Ainda não enviado para assinatura</p>
                             <p className="mt-1 text-[11px] text-slate-500">A trilha aparecerá aqui após o envio e o primeiro evento.</p>
                             {canSendSignature
@@ -874,9 +878,9 @@ export default function GeneratedDocumentsPage() {
                               && ["approved", "final"].includes(selectedDocument.status) ? (
                                 <Button
                                   size="sm"
-                                  className="mt-4 bg-violet-700 hover:bg-violet-800"
+                                  className="mt-4 bg-ds-accent hover:bg-ds-accent-hover"
                                   disabled={!selectedHasSignatureRecipients || busyDocument === selectedDocument.id}
-                                  onClick={() => void sendForSignature(selectedDocument.id)}
+                                  onClick={() => setPendingConfirm({ id: selectedDocument.id, kind: "signature" })}
                                 >
                                   Enviar para assinatura
                                 </Button>
@@ -893,6 +897,7 @@ export default function GeneratedDocumentsPage() {
         </aside>
       </div>
       )}
+      </div>
     </div>
   );
 }

@@ -59,16 +59,16 @@ const VISIBILITY_LABEL: Record<string, string> = {
   confidential: "Confidencial",
 };
 const VISIBILITY_OPTIONS: Array<{ id: NormalizedFieldVisibility; label: string; dot: string }> = [
-  { id: "public", label: "Sem restrição", dot: "bg-emerald-500" },
-  { id: "restricted_partial", label: "Restrito parcial", dot: "bg-sky-500" },
-  { id: "restricted_total", label: "Restrito total", dot: "bg-amber-500" },
-  { id: "confidential", label: "Confidencial", dot: "bg-rose-500" },
+  { id: "public", label: "Sem restrição", dot: "bg-ds-ok" },
+  { id: "restricted_partial", label: "Restrito parcial", dot: "bg-ds-info" },
+  { id: "restricted_total", label: "Restrito total", dot: "bg-ds-warn" },
+  { id: "confidential", label: "Confidencial", dot: "bg-ds-danger" },
 ];
 const STATUS_PRESENTATION: Record<string, { description: string; dot: string; text: string }> = {
-  pending: { description: "Ainda não recebido", dot: "bg-slate-400", text: "text-slate-700" },
-  received: { description: "Aguardando validação", dot: "bg-sky-500", text: "text-sky-700" },
-  validated: { description: "Conferido e liberado", dot: "bg-emerald-500", text: "text-emerald-700" },
-  rejected: { description: "Novo envio necessário", dot: "bg-rose-500", text: "text-rose-700" },
+  pending: { description: "Ainda não recebido", dot: "bg-ds-ink-faint", text: "text-ds-ink-2" },
+  received: { description: "Aguardando validação", dot: "bg-ds-info", text: "text-ds-info" },
+  validated: { description: "Conferido e liberado", dot: "bg-ds-ok", text: "text-ds-ok" },
+  rejected: { description: "Novo envio necessário", dot: "bg-ds-danger", text: "text-ds-danger" },
 };
 
 type DocumentRow = {
@@ -163,26 +163,26 @@ function InlineVisibilityMenu({
           type="button"
           disabled={disabled}
           onClick={(event) => event.stopPropagation()}
-          className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-white px-2 text-[10px] font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-ds-surface px-2 text-[10px] font-black text-ds-ink-muted shadow-sm hover:bg-ds-muted disabled:opacity-50"
           aria-label={`Definir visibilidade. Atual: ${current.label}`}
         >
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${current.dot}`} />
           <span className="truncate">{inherited ? `Herdado: ${current.label}` : current.label}</span>
-          <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-ds-ink-faint" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 rounded-xl p-1.5 shadow-xl" onClick={(event) => event.stopPropagation()}>
         {inherited !== undefined ? (
           <DropdownMenuItem onSelect={() => onChange("inherit")} className="cursor-pointer rounded-lg px-3 py-2.5">
-            <span className="min-w-0 flex-1"><span className="block text-sm font-black">Herdar da pasta</span><span className="block text-[11px] font-semibold text-slate-500">Acompanha o padrão da pasta</span></span>
-            {inherited ? <Check className="h-4 w-4 text-emerald-600" /> : null}
+            <span className="min-w-0 flex-1"><span className="block text-sm font-black">Herdar da pasta</span><span className="block text-[11px] font-semibold text-ds-ink-muted">Acompanha o padrão da pasta</span></span>
+            {inherited ? <Check className="h-4 w-4 text-ds-ok" /> : null}
           </DropdownMenuItem>
         ) : null}
         {VISIBILITY_OPTIONS.map((option) => (
           <DropdownMenuItem key={option.id} onSelect={() => onChange(option.id)} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
             <span className={`h-2.5 w-2.5 rounded-full ${option.dot}`} />
-            <span className="flex-1 text-sm font-black text-slate-700">{option.label}</span>
-            {!inherited && value === option.id ? <Check className="h-4 w-4 text-emerald-600" /> : null}
+            <span className="flex-1 text-sm font-black text-ds-ink-2">{option.label}</span>
+            {!inherited && value === option.id ? <Check className="h-4 w-4 text-ds-ok" /> : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -318,16 +318,16 @@ function profileSuggestionStatusLabel(status: ProfileSuggestion["status"]) {
 }
 
 function profileSuggestionStatusClass(status: ProfileSuggestion["status"]) {
-  if (status === "DIVERGENT") return "bg-amber-50 text-amber-700";
-  if (status === "MATCHING_PROFILE") return "bg-sky-50 text-sky-700";
-  return "bg-emerald-50 text-emerald-700";
+  if (status === "DIVERGENT") return "bg-ds-warn-bg text-ds-warn";
+  if (status === "MATCHING_PROFILE") return "bg-ds-info-bg text-ds-info";
+  return "bg-ds-ok-bg text-ds-ok";
 }
 
 function statusBadgeClass(status: AnalysisDocument["status"]) {
-  if (status === "ready") return "bg-emerald-50 text-emerald-700";
-  if (status === "review" || status === "duplicate") return "bg-amber-50 text-amber-700";
-  if (status === "discarded") return "bg-slate-100 text-slate-500";
-  return "bg-rose-50 text-rose-700";
+  if (status === "ready") return "bg-ds-ok-bg text-ds-ok";
+  if (status === "review" || status === "duplicate") return "bg-ds-warn-bg text-ds-warn";
+  if (status === "discarded") return "bg-ds-neutral-bg text-ds-ink-muted";
+  return "bg-ds-danger-bg text-ds-danger";
 }
 
 function statusLabel(status: AnalysisDocument["status"]) {
@@ -397,6 +397,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewState>(null);
   const [message, setMessage] = useState("");
+  const [discardTarget, setDiscardTarget] = useState<AnalysisDocument | null>(null);
   const [employeeCorrections, setEmployeeCorrections] = useState<Record<string, EmployeeCorrection>>({});
   const [resumableBatches, setResumableBatches] = useState<ResumableBatch[]>([]);
   const [expandedVerificationId, setExpandedVerificationId] = useState<string | null>(null);
@@ -834,8 +835,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     }
   }
 
-  async function itemAction(document: AnalysisDocument, action: "discard" | "accept") {
-    if (action === "discard" && !window.confirm(`Descartar “${document.originalName}” desta prévia?`)) return;
+  async function itemAction(document: AnalysisDocument, action: "discard" | "accept", confirmed = false) {
+    if (action === "discard" && !confirmed) {
+      setDiscardTarget(document);
+      return;
+    }
+    setDiscardTarget(null);
     setBusy(true);
     setMessage("");
     try {
@@ -950,16 +955,16 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             <button
               type="button"
               onClick={() => selectFolder(node.path)}
-              className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-[5px] text-left text-[11px] font-bold transition-colors ${active ? "bg-pink-50 text-[#c81f69]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}
+              className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-[5px] text-left text-[11px] font-bold transition-colors ${active ? "bg-ds-accent-soft text-ds-accent-ink" : "text-ds-ink-muted hover:bg-ds-muted hover:text-ds-ink-2"}`}
             >
-              <Folder className={`h-3.5 w-3.5 shrink-0 ${active ? "" : "text-slate-300"}`} />
+              <Folder className={`h-3.5 w-3.5 shrink-0 ${active ? "" : "text-ds-ink-faint"}`} />
               <span className="min-w-0 flex-1">{node.label}</span>
             </button>
             {hasChildren ? (
               <button
                 type="button"
                 onClick={() => setExpandedFolderPaths((current) => ({ ...current, [key]: !expanded }))}
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-50"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ds-ink-faint hover:bg-ds-muted"
                 aria-label={expanded ? `Recolher ${node.label}` : `Expandir ${node.label}`}
               >
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -967,7 +972,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             ) : null}
           </div>
           {expanded ? (
-            <div className="ml-3.5 border-l border-slate-100 pl-1.5">
+            <div className="ml-3.5 border-l border-ds-divider pl-1.5">
               {renderFolderNodes(node.children, depth + 1)}
             </div>
           ) : null}
@@ -979,7 +984,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   if (!canAccessThisProfile) {
     return (
       <div className="w-full p-4 md:p-8">
-        <div className="rounded-2xl border bg-white p-5 text-sm font-semibold text-slate-600">
+        <div className="rounded-2xl border bg-ds-surface p-5 text-sm font-semibold text-ds-ink-muted">
           Este perfil permite visualizar apenas os próprios documentos da Gestão do colaborador.
         </div>
       </div>
@@ -995,22 +1000,22 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             ariaLabel="Voltar à página anterior"
             iconOnly
             variant="outline"
-            className="h-9 w-9 rounded-lg bg-white p-0"
+            className="h-9 w-9 rounded-lg bg-ds-surface p-0"
             iconClassName="h-4 w-4"
           />
           <div className="flex min-w-0 items-center gap-2.5">
             <Avatar className="h-9 w-9 shrink-0 rounded-lg">
               <AvatarImage src={employee?.avatarUrl || undefined} alt={employee?.username ?? "Colaborador"} className="rounded-2xl object-cover" />
               <AvatarFallback
-                className="rounded-2xl bg-[#8a8a94] text-sm font-black text-white"
+                className="rounded-2xl bg-ds-ink-faint text-sm font-black text-white"
                 style={{ backgroundColor: employee?.color || "#8a8a94" }}
               >
                 {initials(employee?.username ?? "Colaborador")}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#df2f78]">Painel do colaborador</p>
-              <h1 className="truncate text-lg font-black text-slate-900">{employee?.username ?? "Colaborador"}</h1>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ds-accent-ink">Painel do colaborador</p>
+              <h1 className="truncate text-lg font-black text-ds-ink">{employee?.username ?? "Colaborador"}</h1>
             </div>
           </div>
         </div>
@@ -1018,7 +1023,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/dashboard/dp/documents?configureVisibility=1"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-sm hover:bg-slate-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-ds-surface px-3 text-xs font-black text-ds-ink-2 shadow-sm hover:bg-ds-muted"
             >
               <Settings2 className="h-4 w-4" />
               Visibilidade
@@ -1026,7 +1031,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             <button
               type="button"
               onClick={() => setUploadModalOpen(true)}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#df2f78] px-4 text-xs font-black text-white shadow-sm hover:bg-[#c81f69]"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-ds-accent px-4 text-xs font-black text-white shadow-sm hover:bg-ds-accent"
             >
               <Upload className="h-4 w-4" />
               Anexar documentos
@@ -1036,22 +1041,22 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       </div>
 
       {process.env.NODE_ENV !== "production" ? (
-        <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        <div className="rounded-lg border border-ds-ok-bg bg-ds-ok-bg px-3 py-2 text-xs text-ds-ok">
           <ShieldCheck className="mr-1.5 inline h-3.5 w-3.5" />
           Arquivos privados. Visualização autenticada pelo backend e trilha de auditoria.
         </div>
       ) : null}
 
       {canManage && resumableBatches.length > 0 && !analysis ? (
-        <section className="flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+        <section className="flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl border border-ds-warn-bg bg-ds-warn-bg px-3 py-2 text-xs text-ds-warn">
           <span className="inline-flex items-center gap-1.5 font-black">
             <AlertTriangle className="h-3.5 w-3.5" />
             {resumableBatches.length === 1 ? "1 revisão pendente" : `${resumableBatches.length} revisões pendentes`}
           </span>
-          <span className="h-4 w-px bg-amber-200" aria-hidden="true" />
+          <span className="h-4 w-px bg-ds-warn-bg" aria-hidden="true" />
           <div className="flex flex-wrap gap-1.5">
             {resumableBatches.map((batch) => (
-              <button key={batch.id} type="button" onClick={() => resumeBatch(batch)} className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 font-black text-amber-800 hover:bg-amber-100/70">
+              <button key={batch.id} type="button" onClick={() => resumeBatch(batch)} className="rounded-lg border border-ds-warn-bg bg-ds-surface px-2.5 py-1 font-black text-ds-warn hover:bg-ds-warn-bg">
                 Revisar {batch.items.length} {batch.items.length === 1 ? "arquivo" : "arquivos"}
               </button>
             ))}
@@ -1060,28 +1065,28 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       ) : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
+        <aside className="h-fit rounded-xl border bg-ds-surface p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
           {EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES.map(({ id, label }) => {
             const catActive = category === id;
             const catSelected = catActive && activeFolderPath.length === 0;
             const expanded = catActive && expandedCategory === id && folderTree.length > 0;
             return (
               <div key={id}>
-                <div className={`flex items-center gap-1 rounded-lg ${catSelected ? "bg-pink-50 text-[#c81f69]" : catActive ? "text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
+                <div className={`flex items-center gap-1 rounded-lg ${catSelected ? "bg-ds-accent-soft text-ds-accent-ink" : catActive ? "text-ds-accent-ink" : "text-ds-ink-2 hover:bg-ds-muted"}`}>
                   <button
                     type="button"
                     onClick={() => selectCategory(id)}
                     aria-current={catActive ? "page" : undefined}
                     className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-xs font-black"
                   >
-                    <Folder className={`h-4 w-4 shrink-0 ${catActive ? "" : "text-slate-400"}`} />
+                    <Folder className={`h-4 w-4 shrink-0 ${catActive ? "" : "text-ds-ink-faint"}`} />
                     <span className="min-w-0 flex-1">{label}</span>
                   </button>
                   {catActive && folderTree.length > 0 ? (
                     <button
                       type="button"
                       onClick={() => setExpandedCategory((current) => current === id ? null : id)}
-                      className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/70"
+                      className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ds-ink-faint hover:bg-ds-surface"
                       aria-label={expanded ? `Recolher ${label}` : `Expandir ${label}`}
                     >
                       <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -1089,7 +1094,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                   ) : null}
                 </div>
                 {expanded ? (
-                  <div className="ml-4 border-l border-slate-100 py-1 pl-1.5">
+                  <div className="ml-4 border-l border-ds-divider py-1 pl-1.5">
                     {renderFolderNodes(folderTree)}
                   </div>
                 ) : null}
@@ -1100,21 +1105,21 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
         <main className="min-w-0 space-y-3">
           {analysis ? (
-            <section className="rounded-3xl border border-sky-100 bg-sky-50/60 p-4 shadow-sm">
+            <section className="rounded-3xl border border-ds-info-bg bg-ds-info-bg p-4 shadow-sm">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="text-sm font-black text-sky-900">Prévia de classificação e arquivamento</p>
-                  <p className="text-xs font-semibold text-sky-700">
+                  <p className="text-sm font-black text-ds-info">Prévia de classificação e arquivamento</p>
+                  <p className="text-xs font-semibold text-ds-info">
                     {analysis.readyFiles} pronto(s), {analysis.reviewFiles ?? 0} em revisão e {analysis.blockedFiles} bloqueado(s). O MVP arquiva apenas os prontos após confirmação.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <span className="inline-flex items-center justify-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-black text-slate-700">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="inline-flex items-center justify-center gap-1 rounded-full bg-ds-surface px-3 py-2 text-xs font-black text-ds-ink-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-ds-ok" />
                     {analysis.totalFiles} analisado(s)
                   </span>
                   {canManage ? (
-                    <button type="button" disabled={busy || analysis.readyFiles === 0} onClick={() => void uploadBatch()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#df2f78] px-4 py-2 text-xs font-black text-white disabled:opacity-50">
+                    <button type="button" disabled={busy || analysis.readyFiles === 0} onClick={() => void uploadBatch()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ds-accent px-4 py-2 text-xs font-black text-white disabled:opacity-50">
                       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                       Arquivar {analysis.readyFiles} pronto(s)
                     </button>
@@ -1124,11 +1129,11 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
               <div className="mt-4 space-y-3">
                 {analysis.documents.map((document) => (
-                  <div key={document.clientFileId} className="rounded-2xl bg-white p-4 shadow-sm">
+                  <div key={document.clientFileId} className="rounded-2xl bg-ds-surface p-4 shadow-sm">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-slate-900">{document.originalName}</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                        <p className="truncate text-sm font-black text-ds-ink">{document.originalName}</p>
+                        <p className="mt-1 text-xs font-semibold text-ds-ink-muted">
                           {categoryLabel(document.category)} · {document.documentType} · {ACCESS[document.accessLevel] ?? document.accessLevel} · Confiança {(document.confidence * 100).toFixed(0)}%
                         </p>
                       </div>
@@ -1148,7 +1153,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           </select>
                         ) : null}
                         {canManage && document.status !== "ready" ? (
-                          <button type="button" onClick={() => void reanalyzeItem(document)} disabled={busy} className="grid h-8 w-8 place-items-center rounded-lg border text-sky-700 disabled:opacity-50" title="Reanalisar documento">
+                          <button type="button" onClick={() => void reanalyzeItem(document)} disabled={busy} className="grid h-8 w-8 place-items-center rounded-lg border text-ds-info disabled:opacity-50" title="Reanalisar documento">
                             <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
                           </button>
                         ) : null}
@@ -1157,7 +1162,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                             type="button"
                             onClick={() => void itemAction(document, "discard")}
                             disabled={busy}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-100 px-2.5 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ds-danger-bg px-2.5 text-xs font-black text-ds-danger hover:bg-ds-danger-bg disabled:opacity-50"
                             title="Descartar este item da prévia"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -1170,19 +1175,19 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       </div>
                     </div>
 
-                    <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600">
-                      <p className="flex items-start gap-2"><FolderTree className="mt-0.5 h-4 w-4 text-sky-600" />Trilha: {document.destinationTrail.join(" › ")}</p>
-                      <p className="break-all rounded-xl bg-slate-50 p-2">Subpasta: {document.storageSubfolder}</p>
-                      <p className="break-all rounded-xl bg-slate-50 p-2">Nomenclatura: {document.fileName}</p>
-                      <p className="rounded-xl bg-slate-50 p-2">
+                    <div className="mt-3 grid gap-2 text-xs font-semibold text-ds-ink-muted">
+                      <p className="flex items-start gap-2"><FolderTree className="mt-0.5 h-4 w-4 text-ds-info" />Trilha: {document.destinationTrail.join(" › ")}</p>
+                      <p className="break-all rounded-xl bg-ds-muted p-2">Subpasta: {document.storageSubfolder}</p>
+                      <p className="break-all rounded-xl bg-ds-muted p-2">Nomenclatura: {document.fileName}</p>
+                      <p className="rounded-xl bg-ds-muted p-2">
                         Colaborador: {document.identifiedEmployeeName || employee?.username || "não identificado"} · Match: {document.employeeMatchStatus ?? "UNKNOWN"} · Modelo: {document.analysisModel ?? "—"}
                       </p>
-                      {document.employeeMatchReason ? <p className="rounded-xl bg-slate-50 p-2">Vínculo: {document.employeeMatchReason}</p> : null}
-                      {document.decisionReason ? <p className="rounded-xl bg-slate-50 p-2">Decisão: {document.decisionReason}</p> : null}
+                      {document.employeeMatchReason ? <p className="rounded-xl bg-ds-muted p-2">Vínculo: {document.employeeMatchReason}</p> : null}
+                      {document.decisionReason ? <p className="rounded-xl bg-ds-muted p-2">Decisão: {document.decisionReason}</p> : null}
                     </div>
 
                     {document.employeeMatchStatus === "MISMATCH" && document.suggestedEmployeeId ? (
-                      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                      <div className="mt-3 rounded-2xl border border-ds-warn-bg bg-ds-warn-bg p-3 text-xs font-bold text-ds-warn">
                         <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
                         Documento identificado como pertencente a {document.suggestedEmployeeName ?? "outro colaborador"}.
                         Esse colaborador tem cadastro no sistema; confirme abaixo para direcionar ao dossiê correto.
@@ -1226,7 +1231,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           type="button"
                           onClick={() => void correctItemEmployee(document)}
                           disabled={busy || !correctionEmployeeId(document, employeeCorrections, userId) || correctionEmployeeId(document, employeeCorrections, userId) === document.employeeId}
-                          className="h-9 rounded-lg border border-sky-200 bg-sky-50 px-3 text-xs font-black text-sky-800 disabled:opacity-50"
+                          className="h-9 rounded-lg border border-ds-info-bg bg-ds-info-bg px-3 text-xs font-black text-ds-info disabled:opacity-50"
                         >
                           {document.suggestedEmployeeId && document.suggestedEmployeeId !== document.employeeId ? "Direcionar colaborador" : "Trocar colaborador"}
                         </button>
@@ -1236,34 +1241,34 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                     {Object.keys(document.extractedFields ?? {}).length > 0 ? (
                       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {Object.entries(document.extractedFields).slice(0, 6).map(([key, value]) => (
-                          <div key={key} className="rounded-xl bg-slate-50 p-2">
-                            <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{key}</p>
-                            <p className="truncate text-xs font-bold text-slate-700">{fieldPreview(value)}</p>
-                            {typeof document.fieldConfidences?.[key] === "number" ? <p className="mt-1 text-[10px] font-bold text-slate-400">Confiança {(document.fieldConfidences[key] * 100).toFixed(0)}%</p> : null}
+                          <div key={key} className="rounded-xl bg-ds-muted p-2">
+                            <p className="text-[10px] font-black uppercase tracking-wide text-ds-ink-faint">{key}</p>
+                            <p className="truncate text-xs font-bold text-ds-ink-2">{fieldPreview(value)}</p>
+                            {typeof document.fieldConfidences?.[key] === "number" ? <p className="mt-1 text-[10px] font-bold text-ds-ink-faint">Confiança {(document.fieldConfidences[key] * 100).toFixed(0)}%</p> : null}
                           </div>
                         ))}
                       </div>
                     ) : null}
 
                     {document.profileSuggestions && document.profileSuggestions.length > 0 ? (
-                      <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 p-3">
-                        <p className="text-xs font-black text-sky-900">
+                      <div className="mt-3 rounded-2xl border border-ds-info-bg bg-ds-info-bg p-3">
+                        <p className="text-xs font-black text-ds-info">
                           <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
                           Cadastro do colaborador
                         </p>
                         <div className="mt-2 grid gap-2 md:grid-cols-2">
                           {document.profileSuggestions.map((suggestion) => (
-                            <div key={`${document.itemId}-${suggestion.fieldKey}`} className="rounded-xl bg-white p-3 text-xs shadow-sm">
+                            <div key={`${document.itemId}-${suggestion.fieldKey}`} className="rounded-xl bg-ds-surface p-3 text-xs shadow-sm">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="font-black text-slate-900">{suggestion.fieldLabel}</p>
+                                <p className="font-black text-ds-ink">{suggestion.fieldLabel}</p>
                                 <span className={`rounded-full px-2 py-1 font-black ${profileSuggestionStatusClass(suggestion.status)}`}>
                                   {profileSuggestionStatusLabel(suggestion.status)}
                                 </span>
                               </div>
-                              <p className="mt-1 font-semibold text-slate-500">{suggestion.section}</p>
-                              <p className="mt-2 font-bold text-slate-700">Documento: {suggestion.extractedValue}</p>
-                              <p className="mt-1 font-bold text-slate-500">Cadastro atual: {suggestion.currentValue || "vazio"}</p>
-                              <p className="mt-1 text-[10px] font-bold text-slate-400">Confiança {(suggestion.confidence * 100).toFixed(0)}%</p>
+                              <p className="mt-1 font-semibold text-ds-ink-muted">{suggestion.section}</p>
+                              <p className="mt-2 font-bold text-ds-ink-2">Documento: {suggestion.extractedValue}</p>
+                              <p className="mt-1 font-bold text-ds-ink-muted">Cadastro atual: {suggestion.currentValue || "vazio"}</p>
+                              <p className="mt-1 text-[10px] font-bold text-ds-ink-faint">Confiança {(suggestion.confidence * 100).toFixed(0)}%</p>
                             </div>
                           ))}
                         </div>
@@ -1271,12 +1276,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                     ) : null}
 
                     {document.existingDocument && document.employeeMatchStatus !== "MISMATCH" ? (
-                      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                        <p className="text-xs font-black text-amber-800">
+                      <div className="mt-3 rounded-2xl border border-ds-warn-bg bg-ds-warn-bg p-3">
+                        <p className="text-xs font-black text-ds-warn">
                           <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
                           Este colaborador já tem esse documento
                         </p>
-                        <p className="mt-1 text-xs font-semibold text-amber-700">
+                        <p className="mt-1 text-xs font-semibold text-ds-warn">
                           {document.existingDocument.documentType ?? "Documento"}
                           {document.existingDocument.version ? ` · v${String(document.existingDocument.version).padStart(2, "0")}` : ""}
                           {document.existingDocument.uploadedAt ? ` · enviado em ${new Date(document.existingDocument.uploadedAt).toLocaleDateString("pt-BR")}` : ""}
@@ -1288,7 +1293,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                         </p>
                         {canManage && document.status !== "ready" && document.duplicateResolution !== "EXACT_DUPLICATE" ? (
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <button type="button" onClick={() => void itemAction(document, "accept")} disabled={busy} className="rounded-lg bg-[#df2f78] px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">
+                            <button type="button" onClick={() => void itemAction(document, "accept")} disabled={busy} className="rounded-lg bg-ds-accent px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">
                               Arquivar mesmo assim
                             </button>
                           </div>
@@ -1299,7 +1304,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                     {document.errors.length > 0 || document.warnings.length > 0 ? (
                       <div className="mt-3 space-y-1">
                         {[...document.errors, ...document.warnings].map((entry) => (
-                          <p key={entry} className={`text-xs font-bold ${document.errors.includes(entry) ? "text-rose-700" : "text-amber-700"}`}>
+                          <p key={entry} className={`text-xs font-bold ${document.errors.includes(entry) ? "text-ds-danger" : "text-ds-warn"}`}>
                             <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
                             {entry}
                           </p>
@@ -1312,15 +1317,25 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             </section>
           ) : null}
 
-          {message ? <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{message}</p> : null}
+          {discardTarget ? (
+            <InlineConfirm
+              message={`Descartar “${discardTarget.originalName}” desta prévia?`}
+              confirmLabel="Descartar documento"
+              loading={busy}
+              loadingLabel="Descartando…"
+              onCancel={() => setDiscardTarget(null)}
+              onConfirm={() => void itemAction(discardTarget, "discard", true)}
+            />
+          ) : null}
+          {message ? <p className="rounded-xl bg-ds-neutral-bg px-3 py-2 text-sm font-bold text-ds-ink-2">{message}</p> : null}
 
-          <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <section className="overflow-hidden rounded-xl border bg-ds-surface shadow-sm">
             <div className="border-b px-4 py-3">
-              <div className="mb-1 flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+              <div className="mb-1 flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-wide text-ds-ink-faint">
                 {openFolderTrail.map((segment, index) => (
                   <span key={`${segment}-${index}`} className="inline-flex items-center gap-1">
-                    <span className={index === openFolderTrail.length - 1 ? "text-[#df2f78]" : ""}>{segment}</span>
-                    {index < openFolderTrail.length - 1 ? <span className="text-slate-300">›</span> : null}
+                    <span className={index === openFolderTrail.length - 1 ? "text-ds-accent-ink" : ""}>{segment}</span>
+                    {index < openFolderTrail.length - 1 ? <span className="text-ds-ink-faint">›</span> : null}
                   </span>
                 ))}
               </div>
@@ -1330,8 +1345,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
               const pending = documentGroups.map((group) => group.current).filter((item) => item.status === "received");
               if (pending.length === 0) return null;
               return (
-                <div className="m-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
-                  <span className="inline-flex items-center gap-2 text-sm font-black text-sky-800">
+                <div className="m-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ds-info-bg bg-ds-info-bg px-4 py-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-black text-ds-info">
                     <Clock className="h-4 w-4" />
                     {pending.length} documento{pending.length === 1 ? "" : "s"} aguardando validação
                   </span>
@@ -1340,7 +1355,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       type="button"
                       disabled={busy}
                       onClick={() => void bulkSetStatus("validated")}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ds-ok px-3.5 text-sm font-black text-white hover:bg-ds-ok disabled:opacity-50"
                     >
                       <Check className="h-4 w-4" /> Validar todos
                     </button>
@@ -1348,7 +1363,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       type="button"
                       disabled={busy}
                       onClick={() => void bulkSetStatus("rejected")}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3.5 text-sm font-black text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-ds-danger-bg bg-ds-surface px-3.5 text-sm font-black text-ds-danger hover:bg-ds-danger-bg disabled:opacity-50"
                     >
                       Recusar todos
                     </button>
@@ -1357,7 +1372,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
               );
             })() : null}
             {loading ? (
-              <div className="grid place-items-center p-12"><Loader2 className="h-6 w-6 animate-spin text-[#df2f78]" /></div>
+              <div className="grid place-items-center p-12"><Loader2 className="h-6 w-6 animate-spin text-ds-accent-ink" /></div>
             ) : activeFolderPath.length === 0 && rootFolderSummaries.length > 0 ? (
               <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
                 {rootFolderSummaries.map((folder) => (
@@ -1365,30 +1380,30 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                     key={folder.path.join("/")}
                     type="button"
                     onClick={() => selectFolder(folder.path)}
-                    className="group flex min-h-24 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-pink-200 hover:bg-pink-50/40 hover:shadow-sm"
+                    className="group flex min-h-24 items-center gap-3 rounded-xl border border-ds-border bg-ds-surface p-4 text-left transition hover:border-ds-accent-soft hover:bg-ds-accent-soft hover:shadow-sm"
                   >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pink-50 text-[#df2f78] transition group-hover:bg-white">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ds-accent-soft text-ds-accent-ink transition group-hover:bg-ds-surface">
                       <Folder className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-black text-slate-800">{folder.label}</span>
-                      <span className="mt-1 block text-xs font-semibold text-slate-500">
+                      <span className="block text-sm font-black text-ds-ink">{folder.label}</span>
+                      <span className="mt-1 block text-xs font-semibold text-ds-ink-muted">
                         {folder.documentCount} {folder.documentCount === 1 ? "documento" : "documentos"}
                       </span>
                     </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#df2f78]" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-ds-ink-faint transition group-hover:translate-x-0.5 group-hover:text-ds-accent-ink" />
                   </button>
                 ))}
               </div>
             ) : visible.length === 0 ? (
               <div className="px-6 py-8 text-center">
-                <FileText className="mx-auto mb-1.5 h-6 w-6 text-slate-300" />
-                <p className="text-xs font-bold text-slate-500">Nenhum documento nesta pasta.</p>
+                <FileText className="mx-auto mb-1.5 h-6 w-6 text-ds-ink-faint" />
+                <p className="text-xs font-bold text-ds-ink-muted">Nenhum documento nesta pasta.</p>
                 {canManage ? (
                   <button
                     type="button"
                     onClick={() => setUploadModalOpen(true)}
-                    className="mx-auto mt-2.5 inline-flex h-8 items-center gap-2 rounded-lg border border-pink-200 bg-pink-50 px-3 text-xs font-black text-[#c81f69] hover:bg-pink-100"
+                    className="mx-auto mt-2.5 inline-flex h-8 items-center gap-2 rounded-lg border border-ds-accent-soft bg-ds-accent-soft px-3 text-xs font-black text-ds-accent-ink hover:bg-ds-accent-soft"
                   >
                     <Upload className="h-4 w-4" /> Anexar documento
                   </button>
@@ -1413,23 +1428,23 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                   return (
                     <div key={group.key} className="p-4">
                       {startsFolder ? (
-                        <div className="-mx-4 -mt-4 mb-4 flex items-center gap-2 border-b bg-slate-50/70 px-4 py-3 text-sm font-black text-slate-700">
-                          <Folder className="h-4 w-4 text-slate-400" />
+                        <div className="-mx-4 -mt-4 mb-4 flex items-center gap-2 border-b bg-ds-muted px-4 py-3 text-sm font-black text-ds-ink-2">
+                          <Folder className="h-4 w-4 text-ds-ink-faint" />
                           <span>{group.folderPath.join(" › ")}</span>
                         </div>
                       ) : null}
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="min-w-0">
-                          <p className="font-black text-slate-900">{item.documentType}</p>
-                          <p className="truncate text-xs text-slate-500">
+                          <p className="font-black text-ds-ink">{item.documentType}</p>
+                          <p className="truncate text-xs text-ds-ink-muted">
                             {formatBytes(item.size)} · enviado por {uploaderName(item)}
                             {typeof item.version === "number" ? ` · v${item.version}` : ""}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
+                            <span className="rounded-full bg-ds-info-bg px-2 py-1 text-xs font-bold text-ds-info">{STATUS[item.status] ?? item.status}</span>
                             {signatureIndicator ? <>
-                              <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">Exige assinatura</span>
-                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ${signatureIndicator.signed ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                              <span className="rounded-full bg-ds-warn-bg px-2 py-1 text-xs font-black text-ds-warn">Exige assinatura</span>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ${signatureIndicator.signed ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger"}`}>
                                 {signatureIndicator.signed ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                                 {signatureIndicator.statusLabel}
                               </span>
@@ -1442,7 +1457,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                 onChange={(value) => updateDocumentVisibility(item.documentTypeCode!, value)}
                               />
                             ) : (
-                              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                              <span className="rounded-full bg-ds-neutral-bg px-2 py-1 text-xs font-bold text-ds-ink-muted">
                                 {VISIBILITY_LABEL[item.resolvedVisibility ?? ""] ?? ACCESS[item.accessLevel] ?? item.accessLevel}
                               </span>
                             )}
@@ -1453,7 +1468,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                               const moreOpen = (docVis === "public" || docVis === "restricted_partial")
                                 && (folderVis === "restricted_total" || folderVis === "confidential");
                               return (
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-black ${moreOpen ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"}`}>
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-black ${moreOpen ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-warn-bg text-ds-warn"}`}>
                                   <AlertTriangle className="h-3 w-3" />
                                   Exceção: {VISIBILITY_LABEL[docVis]}
                                 </span>
@@ -1464,7 +1479,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                 type="button"
                                 onClick={() => setOpenVersions((current) => ({ ...current, [group.key]: !current[group.key] }))}
                                 aria-expanded={versionsOpen}
-                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50"
+                                className="inline-flex items-center gap-1 rounded-full border border-ds-border bg-ds-surface px-2 py-1 text-[11px] font-black text-ds-ink-muted hover:bg-ds-muted"
                               >
                                 <History className="h-3 w-3" />
                                 {olderVersions.length + 1} versões
@@ -1476,7 +1491,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                 type="button"
                                 onClick={() => setExpandedVerificationId(isExpanded ? null : item.id)}
                                 aria-expanded={isExpanded}
-                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold ${divergentCount > 0 || pendingCount > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold ${divergentCount > 0 || pendingCount > 0 ? "bg-ds-warn-bg text-ds-warn" : "bg-ds-ok-bg text-ds-ok"}`}
                               >
                                 {divergentCount > 0
                                   ? `${divergentCount} divergência${divergentCount === 1 ? "" : "s"} no cadastro`
@@ -1496,14 +1511,14 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                   <button
                                     type="button"
                                     disabled={busy}
-                                    className={`inline-flex h-9 min-w-[126px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black shadow-sm hover:bg-slate-50 disabled:opacity-50 ${STATUS_PRESENTATION[item.status]?.text ?? "text-slate-700"}`}
+                                    className={`inline-flex h-9 min-w-[126px] items-center justify-between gap-2 rounded-lg border bg-ds-surface px-3 text-xs font-black shadow-sm hover:bg-ds-muted disabled:opacity-50 ${STATUS_PRESENTATION[item.status]?.text ?? "text-ds-ink-2"}`}
                                     aria-label={`Alterar status. Atual: ${STATUS[item.status] ?? item.status}`}
                                   >
                                     <span className="inline-flex items-center gap-2">
-                                      <span className={`h-2 w-2 rounded-full ${STATUS_PRESENTATION[item.status]?.dot ?? "bg-slate-400"}`} />
+                                      <span className={`h-2 w-2 rounded-full ${STATUS_PRESENTATION[item.status]?.dot ?? "bg-ds-ink-faint"}`} />
                                       {STATUS[item.status] ?? item.status}
                                     </span>
-                                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                                    <ChevronDown className="h-3.5 w-3.5 text-ds-ink-faint" />
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-60 rounded-xl p-1.5 shadow-xl">
@@ -1521,9 +1536,9 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${presentation.dot}`} />
                                         <span className="min-w-0 flex-1">
                                           <span className={`block text-sm font-black ${presentation.text}`}>{status.label}</span>
-                                          <span className="block text-[11px] font-semibold text-slate-500">{presentation.description}</span>
+                                          <span className="block text-[11px] font-semibold text-ds-ink-muted">{presentation.description}</span>
                                         </span>
-                                        {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
+                                        {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-ds-ok" /> : null}
                                       </DropdownMenuItem>
                                     );
                                   })}
@@ -1535,7 +1550,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                                   removeTriggerRef.current = event.currentTarget;
                                   setRemoveTarget(item);
                                 }}
-                                className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600"
+                                className="grid h-9 w-9 place-items-center rounded-lg border text-ds-danger"
                                 title="Excluir"
                                 aria-label={`Excluir ${item.originalName}`}
                               >
@@ -1561,25 +1576,25 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                         <div className="mt-4 border-t pt-4">
                           <div className="grid gap-3 md:grid-cols-2">
                             {pendingSuggestions.map((suggestion) => (
-                              <div key={`${item.id}-${suggestion.fieldKey}`} className="rounded-xl border bg-slate-50 p-3 text-xs">
+                              <div key={`${item.id}-${suggestion.fieldKey}`} className="rounded-xl border bg-ds-muted p-3 text-xs">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="font-black text-slate-900">{suggestion.fieldLabel}</p>
+                                  <p className="font-black text-ds-ink">{suggestion.fieldLabel}</p>
                                   <span className={`rounded-full px-2 py-1 font-black ${profileSuggestionStatusClass(suggestion.status)}`}>
                                     {profileSuggestionStatusLabel(suggestion.status)}
                                   </span>
                                 </div>
-                                <p className="mt-1 font-semibold text-slate-500">{suggestion.section}</p>
+                                <p className="mt-1 font-semibold text-ds-ink-muted">{suggestion.section}</p>
                                 <dl className="mt-3 grid gap-2 sm:grid-cols-2">
                                   <div>
-                                    <dt className="font-bold text-slate-400">No documento</dt>
-                                    <dd className="mt-0.5 break-words font-bold text-slate-700">{suggestion.extractedValue || "Não identificado"}</dd>
+                                    <dt className="font-bold text-ds-ink-faint">No documento</dt>
+                                    <dd className="mt-0.5 break-words font-bold text-ds-ink-2">{suggestion.extractedValue || "Não identificado"}</dd>
                                   </div>
                                   <div>
-                                    <dt className="font-bold text-slate-400">No cadastro</dt>
-                                    <dd className="mt-0.5 break-words font-bold text-slate-700">{suggestion.currentValue || "Vazio"}</dd>
+                                    <dt className="font-bold text-ds-ink-faint">No cadastro</dt>
+                                    <dd className="mt-0.5 break-words font-bold text-ds-ink-2">{suggestion.currentValue || "Vazio"}</dd>
                                   </div>
                                 </dl>
-                                <p className="mt-3 font-bold text-slate-400">Confiança da extração: {(suggestion.confidence * 100).toFixed(0)}%</p>
+                                <p className="mt-3 font-bold text-ds-ink-faint">Confiança da extração: {(suggestion.confidence * 100).toFixed(0)}%</p>
                               </div>
                             ))}
                           </div>
@@ -1589,12 +1604,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       {versionsOpen && olderVersions.length > 0 ? (
                         <div className="mt-4 flex flex-col gap-2 border-t border-dashed pt-3">
                           {olderVersions.map((old) => (
-                            <div key={old.id} className="flex items-center justify-between gap-3 rounded-xl border bg-slate-50 px-3 py-2">
+                            <div key={old.id} className="flex items-center justify-between gap-3 rounded-xl border bg-ds-muted px-3 py-2">
                               <div className="flex min-w-0 items-center gap-2">
-                                <span className="rounded-md border bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-slate-600">
+                                <span className="rounded-md border bg-ds-surface px-2 py-0.5 font-mono text-[11px] font-bold text-ds-ink-muted">
                                   v{typeof old.version === "number" ? old.version : 1}
                                 </span>
-                                <span className="truncate text-xs font-semibold text-slate-500">
+                                <span className="truncate text-xs font-semibold text-ds-ink-muted">
                                   enviado por {uploaderName(old)}
                                   {old.uploadedAt ? ` · ${new Date(old.uploadedAt).toLocaleDateString("pt-BR")}` : ""}
                                 </span>
@@ -1617,19 +1632,19 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       </div>
 
       {uploadModalOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4">
-          <section className="max-h-[86vh] w-full max-w-2xl overflow-auto rounded-xl border bg-white p-3.5 shadow-2xl">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ds-dark p-4">
+          <section className="max-h-[86vh] w-full max-w-2xl overflow-auto rounded-xl border bg-ds-surface p-3.5 shadow-2xl">
             <div className="flex items-start justify-between gap-3 border-b pb-2.5">
               <div>
                 <div className="flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-[#df2f78]" />
-                  <h2 className="text-base font-black text-slate-900">Anexar documentos</h2>
+                  <Brain className="h-4 w-4 text-ds-accent-ink" />
+                  <h2 className="text-base font-black text-ds-ink">Anexar documentos</h2>
                 </div>
-                <p className="mt-1 text-sm font-semibold text-slate-500">
+                <p className="mt-1 text-sm font-semibold text-ds-ink-muted">
                   Selecione os arquivos. A classificação, pasta, acesso e nome serão definidos pela análise.
                 </p>
               </div>
-              <button type="button" onClick={() => setUploadModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border text-slate-500 hover:bg-slate-50">
+              <button type="button" onClick={() => setUploadModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border text-ds-ink-muted hover:bg-ds-muted">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -1640,12 +1655,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                 event.preventDefault();
                 addFiles(event.dataTransfer.files);
               }}
-              className="mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center hover:border-[#df2f78]/50 hover:bg-pink-50/60"
+              className="mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ds-border bg-ds-muted px-4 py-6 text-center hover:border-ds-accent hover:bg-ds-accent-soft"
             >
-              <Upload className="h-6 w-6 text-[#df2f78]" />
+              <Upload className="h-6 w-6 text-ds-accent-ink" />
               <div>
-                <p className="text-base font-black text-slate-900">Arraste documentos para cá ou clique para selecionar</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">PDF, DOC, DOCX, JPG ou PNG · até 15 MB por arquivo</p>
+                <p className="text-base font-black text-ds-ink">Arraste documentos para cá ou clique para selecionar</p>
+                <p className="mt-1 text-sm font-semibold text-ds-ink-muted">PDF, DOC, DOCX, JPG ou PNG · até 15 MB por arquivo</p>
               </div>
               <input
                 type="file"
@@ -1660,17 +1675,17 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             </label>
 
             {uploadFiles.length > 0 ? (
-              <div className="mt-3 rounded-xl border bg-white p-3">
+              <div className="mt-3 rounded-xl border bg-ds-surface p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-black text-slate-800">{uploadFiles.length} arquivo(s) selecionado(s) · {formatBytes(selectedTotalBytes)}</p>
-                  <button type="button" onClick={clearFiles} className="text-xs font-black text-rose-600">Limpar seleção</button>
+                  <p className="text-sm font-black text-ds-ink">{uploadFiles.length} arquivo(s) selecionado(s) · {formatBytes(selectedTotalBytes)}</p>
+                  <button type="button" onClick={clearFiles} className="text-xs font-black text-ds-danger">Limpar seleção</button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {uploadFiles.map((item) => (
-                    <span key={item.id} className="inline-flex max-w-full items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                    <span key={item.id} className="inline-flex max-w-full items-center gap-2 rounded-full bg-ds-neutral-bg px-3 py-1 text-xs font-bold text-ds-ink-2">
                       <span className="truncate">{item.file.name}</span>
-                      <span className="text-slate-400">{formatBytes(item.file.size)}</span>
-                      <button type="button" onClick={() => removeFile(item.id)} className="text-slate-400 hover:text-rose-600">
+                      <span className="text-ds-ink-faint">{formatBytes(item.file.size)}</span>
+                      <button type="button" onClick={() => removeFile(item.id)} className="text-ds-ink-faint hover:text-ds-danger">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </span>
@@ -1680,10 +1695,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             ) : null}
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={() => setUploadModalOpen(false)} className="inline-flex items-center justify-center rounded-2xl border bg-white px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50">
+              <button type="button" onClick={() => setUploadModalOpen(false)} className="inline-flex items-center justify-center rounded-2xl border bg-ds-surface px-5 py-3 text-sm font-black text-ds-ink-2 hover:bg-ds-muted">
                 Cancelar
               </button>
-              <button type="button" disabled={busy || selectedFileCount === 0} onClick={() => void analyzeBatch()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#df2f78] px-5 py-3 text-sm font-black text-white disabled:opacity-50">
+              <button type="button" disabled={busy || selectedFileCount === 0} onClick={() => void analyzeBatch()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ds-accent px-5 py-3 text-sm font-black text-white disabled:opacity-50">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
                 Enviar e analisar {selectedFileCount || ""} documento(s)
               </button>
@@ -1693,25 +1708,25 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4">
-          <section className="flex h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-ds-dark p-4">
+          <section className="flex h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-ds-surface shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
               <div className="min-w-0">
-                <p className="truncate text-base font-black text-slate-900">{preview.title}</p>
-                <p className="text-xs font-bold text-slate-500">Pré-visualização somente leitura · acesso autenticado</p>
+                <p className="truncate text-base font-black text-ds-ink">{preview.title}</p>
+                <p className="text-xs font-bold text-ds-ink-muted">Pré-visualização somente leitura · acesso autenticado</p>
               </div>
-              <button type="button" onClick={() => setPreview(null)} className="grid h-9 w-9 place-items-center rounded-xl border text-slate-500 hover:bg-slate-50">
+              <button type="button" onClick={() => setPreview(null)} className="grid h-9 w-9 place-items-center rounded-xl border text-ds-ink-muted hover:bg-ds-muted">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 bg-slate-100">
+            <div className="min-h-0 flex-1 bg-ds-neutral-bg">
               {preview.mimeType?.startsWith("image/") ? (
                 <div className="flex h-full items-center justify-center overflow-auto p-4">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={preview.url} alt={preview.title} className="max-h-full max-w-full rounded-xl bg-white object-contain shadow" />
+                  <img src={preview.url} alt={preview.title} className="max-h-full max-w-full rounded-xl bg-ds-surface object-contain shadow" />
                 </div>
               ) : (
-                <iframe title={preview.title} src={preview.url} className="h-full w-full bg-white" />
+                <iframe title={preview.title} src={preview.url} className="h-full w-full bg-ds-surface" />
               )}
             </div>
           </section>

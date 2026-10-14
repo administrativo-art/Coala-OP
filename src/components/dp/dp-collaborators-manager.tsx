@@ -454,7 +454,7 @@ function EditSheet({
                           Quando desligado, o perfil acompanha automaticamente a função quando ela tiver perfil padrão; caso contrário, acompanha o cargo. Quando ligado, o perfil atual é preservado como exceção manual.
                         </p>
                         {!selectedEffectiveProfile && !profileSyncDisabled && (
-                          <p className="text-xs text-amber-700">
+                          <p className="text-xs text-ds-warn">
                             O cargo/função atual ainda não tem perfil padrão. O perfil existente será mantido.
                           </p>
                         )}
@@ -468,20 +468,20 @@ function EditSheet({
               />
 
               {!profileSyncDisabled && selectedEffectiveProfile && user?.profileId !== selectedEffectiveProfile.id && (
-                <p className="text-xs text-emerald-700">
+                <p className="text-xs text-ds-ok">
                   Ao salvar, o perfil deste colaborador será atualizado automaticamente para <strong>{selectedEffectiveProfile.name}</strong>.
                 </p>
               )}
 
               {profileSyncDisabled && (
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-ds-warn">
                   Exceção manual ativa. O cargo será atualizado, mas o perfil atual permanecerá inalterado.
                 </p>
               )}
             </div>
 
             {hrError && (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="rounded-md border border-ds-warn-bg bg-ds-warn-bg px-3 py-2 text-xs text-ds-warn">
                 Catálogo de RH indisponível no momento: {hrError}
               </p>
             )}
@@ -557,7 +557,7 @@ function EditSheet({
                         Se não houver escala atribuída, a primeira versão vai liberar o login e sinalizar a ausência da escala.
                       </p>
                       {selectedRole?.loginRestricted && (
-                        <p className="text-xs text-amber-700">
+                        <p className="text-xs text-ds-warn">
                           O cargo atual já está marcado como elegível para restrição por escala.
                         </p>
                       )}

@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Archive, BookOpenCheck, Loader2, Plus } from "lucide-react";
 
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,6 +55,7 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -108,7 +110,7 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
   }
 
   async function archive(agreement: Agreement) {
-    if (!firebaseUser || !window.confirm(`Arquivar a CCT ${agreement.registryNumber} de ${agreement.unitName}?`)) return;
+    if (!firebaseUser) return;
     setSaving(true);
     try {
       const response = await fetch(`/api/documents/collective-agreements/${agreement.id}`, {
@@ -121,6 +123,7 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao arquivar a CCT.");
+      setArchivingId(null);
       await load();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao arquivar a CCT.");
@@ -133,15 +136,15 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
 
   return (
     <>
-      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <section className="rounded-ds-card border border-ds-border bg-ds-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex items-center gap-3">
-            <span className="grid size-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+            <span className="grid size-9 place-items-center rounded-ds-btn bg-ds-ok-bg text-ds-ok">
               <BookOpenCheck className="size-4" />
             </span>
             <div>
-              <h2 className="text-sm font-black text-slate-900">Fonte automática · Convenção coletiva</h2>
-              <p className="text-xs text-slate-500">
+              <h2 className="text-sm font-black text-ds-ink">Fonte automática · Convenção coletiva</h2>
+              <p className="text-xs text-ds-ink-muted">
                 Registro, sindicatos e vigência são resolvidos pela unidade e pela data de admissão.
               </p>
             </div>
@@ -153,9 +156,9 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
             </Button>
           ) : null}
         </div>
-        {message ? <p className="border-b bg-rose-50 px-4 py-2 text-xs font-medium text-rose-700">{message}</p> : null}
+        {message ? <p role="alert" className="border-b bg-ds-danger-bg px-4 py-2 text-xs font-medium text-ds-danger">{message}</p> : null}
         {loading ? (
-          <div className="flex items-center gap-2 px-4 py-5 text-sm text-slate-500">
+          <div className="flex items-center gap-2 px-4 py-5 text-sm text-ds-ink-muted">
             <Loader2 className="size-4 animate-spin" /> Carregando convenções…
           </div>
         ) : activeAgreements.length ? (
@@ -163,35 +166,47 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
             {activeAgreements.map((agreement) => (
               <div key={agreement.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center">
                 <div>
-                  <p className="font-bold text-slate-900">{agreement.unitName}</p>
-                  <p className="text-xs text-slate-500">MTE {agreement.registryNumber}</p>
+                  <p className="font-bold text-ds-ink">{agreement.unitName}</p>
+                  <p className="text-xs text-ds-ink-muted">MTE {agreement.registryNumber}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Vigência</p>
-                  <p className="font-medium text-slate-700">{dateLabel(agreement.validFrom)} a {dateLabel(agreement.validUntil)}</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-ds-ink-faint">Vigência</p>
+                  <p className="font-medium text-ds-ink-2">{dateLabel(agreement.validFrom)} a {dateLabel(agreement.validUntil)}</p>
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-xs text-slate-600">{agreement.employeeUnion}</p>
-                  <p className="truncate text-xs text-slate-600">{agreement.employerUnion}</p>
+                  <p className="truncate text-xs text-ds-ink-muted">{agreement.employeeUnion}</p>
+                  <p className="truncate text-xs text-ds-ink-muted">{agreement.employerUnion}</p>
                 </div>
                 {canManage ? (
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="text-slate-400 hover:text-rose-700"
+                    className="text-ds-ink-faint hover:text-ds-danger"
                     disabled={saving}
-                    onClick={() => void archive(agreement)}
+                    onClick={() => setArchivingId(agreement.id)}
                     title="Arquivar esta vigência"
+                    aria-label={`Arquivar a vigência ${agreement.registryNumber} de ${agreement.unitName}`}
                   >
                     <Archive className="size-4" />
                   </Button>
+                ) : null}
+                {archivingId === agreement.id ? (
+                  <InlineConfirm
+                    className="md:col-span-4"
+                    message={`Arquivar a CCT ${agreement.registryNumber} de ${agreement.unitName}?`}
+                    confirmLabel="Arquivar"
+                    loadingLabel="Arquivando…"
+                    loading={saving}
+                    onConfirm={() => void archive(agreement)}
+                    onCancel={() => setArchivingId(null)}
+                  />
                 ) : null}
               </div>
             ))}
           </div>
         ) : (
-          <p className="px-4 py-5 text-sm text-amber-700">
+          <p className="px-4 py-5 text-sm text-ds-warn">
             Nenhuma CCT ativa cadastrada. A geração de contratos que dependem desses dados será bloqueada.
           </p>
         )}
@@ -252,8 +267,8 @@ export function CollectiveAgreementsPanel({ canManage }: { canManage: boolean })
               <Textarea id="cct-notes" rows={2} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
             </div>
             <DialogFooter className="md:col-span-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-              <Button type="submit" disabled={saving} className="bg-violet-700 hover:bg-violet-800">
+              <Button type="button" variant="ds-ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={saving} variant="primary-modal">
                 {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                 Salvar vigência
               </Button>

@@ -131,7 +131,7 @@ export function DPVacationEditorPanel({
   }
 
   const inputClass = 'mt-1.5 h-10 w-full rounded-[10px] border bg-background px-3 text-[12.5px] font-semibold outline-none transition-colors focus:border-primary';
-  const labelClass = 'text-[10.5px] font-extrabold text-slate-600 dark:text-slate-300';
+  const labelClass = 'text-[10.5px] font-extrabold text-ds-ink-muted dark:text-ds-ink-faint';
 
   return (
     <>
@@ -232,11 +232,11 @@ export function DPVacationEditorPanel({
         </div>
 
         {recordType === 'gozo' && noticeLeadDays !== null ? (
-          <div className={`rounded-xl border p-3 ${shortNotice ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/25' : 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/25'}`}>
+          <div className={`rounded-xl border p-3 ${shortNotice ? 'border-ds-danger-bg bg-ds-danger-bg dark:border-ds-danger-bg dark:bg-ds-danger' : 'border-ds-warn-bg bg-ds-warn-bg dark:border-ds-warn-bg dark:bg-ds-warn'}`}>
             <div className="flex items-start gap-2.5">
-              {shortNotice ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" /> : <CalendarCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />}
+              {shortNotice ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ds-danger" /> : <CalendarCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-ds-ok" />}
               <div>
-                <p className={`text-xs font-black ${shortNotice ? 'text-red-800 dark:text-red-300' : 'text-amber-900 dark:text-amber-200'}`}>
+                <p className={`text-xs font-black ${shortNotice ? 'text-ds-danger dark:text-ds-danger' : 'text-ds-warn dark:text-ds-warn'}`}>
                   {shortNotice ? 'Aviso de férias com menos de 30 dias de antecedência' : `Aviso com ${noticeLeadDays} dias de antecedência · dentro da regra`}
                 </p>
                 <p className="mt-1 text-[11px] font-semibold leading-relaxed text-muted-foreground">

@@ -173,15 +173,15 @@ function SignatureParticipantCard({
   const delivered = viewed || Boolean(participant.emailDeliveredAt);
   const invited = true;
   const accent = tone === 'violet'
-    ? 'text-violet-700 bg-violet-50 border-violet-100'
-    : 'text-sky-700 bg-sky-50 border-sky-100';
+    ? 'text-ds-accent-ink bg-ds-accent-soft border-ds-accent-soft'
+    : 'text-ds-info bg-ds-info-bg border-ds-info-bg';
   const statusClasses = failed
-    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    ? 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger'
     : signed
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      ? 'border-ds-ok-bg bg-ds-ok-bg text-ds-ok'
       : viewed
-        ? 'border-sky-200 bg-sky-50 text-sky-700'
-        : 'border-amber-200 bg-amber-50 text-amber-700';
+        ? 'border-ds-info-bg bg-ds-info-bg text-ds-info'
+        : 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn';
   const summary = failed
     ? participant.status === 'rejected' ? 'Documento recusado pelo colaborador.' : 'Não foi possível entregar o convite.'
     : signed
@@ -219,19 +219,19 @@ function SignatureParticipantCard({
   ];
 
   return (
-    <div className={`overflow-hidden rounded-2xl border bg-white ${failed ? 'border-rose-200' : signed ? 'border-emerald-200' : 'border-slate-200'}`}>
+    <div className={`overflow-hidden rounded-2xl border bg-ds-surface ${failed ? 'border-ds-danger-bg' : signed ? 'border-ds-ok-bg' : 'border-ds-border'}`}>
       <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
         <Avatar className="h-10 w-10 shrink-0 ring-2 ring-white shadow-sm">
           <AvatarImage src={participant.avatarUrl ?? undefined} />
           <AvatarFallback>{participantInitials(participant.name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <p className={`text-[9px] font-black uppercase tracking-[0.1em] ${tone === 'violet' ? 'text-violet-700' : 'text-sky-700'}`}>
+          <p className={`text-[9px] font-black uppercase tracking-[0.1em] ${tone === 'violet' ? 'text-ds-accent-ink' : 'text-ds-info'}`}>
             {participant.party === 'employee' ? 'Colaborador(a)' : 'Empregadora'}
           </p>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2">
-            <p className="truncate text-[12.5px] font-black text-slate-950">{participant.name}</p>
-            <p className="truncate text-[10.5px] font-semibold text-slate-500">{participant.email}</p>
+            <p className="truncate text-[12.5px] font-black text-ds-ink">{participant.name}</p>
+            <p className="truncate text-[10.5px] font-semibold text-ds-ink-muted">{participant.email}</p>
           </div>
         </div>
         <Badge variant="outline" className={`rounded-full px-2.5 py-1 text-[9.5px] font-black ${statusClasses}`}>
@@ -251,20 +251,20 @@ function SignatureParticipantCard({
               key={milestone.label}
               className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
                 milestone.done
-                  ? 'border-emerald-100 bg-emerald-50/65'
+                  ? 'border-ds-ok-bg bg-ds-ok-bg'
                   : failed
-                    ? 'border-rose-100 bg-rose-50/60'
-                    : 'border-slate-200 bg-slate-50'
+                    ? 'border-ds-danger-bg bg-ds-danger-bg'
+                    : 'border-ds-border bg-ds-muted'
               }`}
             >
               <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
-                milestone.done ? 'bg-emerald-600 text-white' : failed ? 'bg-rose-100 text-rose-600' : 'bg-white text-slate-400 ring-1 ring-slate-200'
+                milestone.done ? 'bg-ds-ok text-white' : failed ? 'bg-ds-danger-bg text-ds-danger' : 'bg-ds-surface text-ds-ink-faint ring-1 ring-ds-border'
               }`}>
                 {milestone.done ? <Check className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[10.5px] font-black text-slate-900">{milestone.label}</span>
-                <span className={`mt-0.5 block text-[9.5px] font-semibold ${milestone.done ? 'text-emerald-700' : failed ? 'text-rose-700' : 'text-slate-500'}`}>
+                <span className="block truncate text-[10.5px] font-black text-ds-ink">{milestone.label}</span>
+                <span className={`mt-0.5 block text-[9.5px] font-semibold ${milestone.done ? 'text-ds-ok' : failed ? 'text-ds-danger' : 'text-ds-ink-muted'}`}>
                   {milestone.detail}
                 </span>
               </span>
@@ -274,7 +274,7 @@ function SignatureParticipantCard({
       </div>
 
       {participant.deliveryFailureReason ? (
-        <div className="border-t border-rose-100 bg-rose-50 px-4 py-2.5 text-[10.5px] font-bold text-rose-700">
+        <div className="border-t border-ds-danger-bg bg-ds-danger-bg px-4 py-2.5 text-[10.5px] font-bold text-ds-danger">
           Motivo da falha: {participant.deliveryFailureReason}
         </div>
       ) : null}
@@ -292,12 +292,12 @@ function stepStateLabel(step: DPVacationWorkflowStep) {
 }
 
 function stepClasses(step: DPVacationWorkflowStep) {
-  if (step.status === 'completed') return 'border-b-emerald-500 bg-emerald-50 text-emerald-800';
+  if (step.status === 'completed') return 'border-b-emerald-500 bg-ds-ok-bg text-ds-ok';
   if (step.status === 'in_progress' || step.status === 'waiting_external') {
-    return 'border-b-[#df2f78] bg-pink-50 text-pink-800';
+    return 'border-b-[#df2f78] bg-ds-accent-soft text-ds-accent-ink';
   }
-  if (step.status === 'blocked') return 'border-b-amber-400 bg-amber-50 text-amber-800';
-  return 'border-b-stone-200 bg-[#faf9f6] text-stone-500';
+  if (step.status === 'blocked') return 'border-b-amber-400 bg-ds-warn-bg text-ds-warn';
+  return 'border-b-stone-200 bg-ds-muted text-ds-ink-muted';
 }
 
 function displayStageStep(
@@ -457,19 +457,19 @@ function Substep({
   return (
     <div className={`flex gap-2.5 rounded-xl border px-3 py-2.5 ${
       done
-        ? 'border-emerald-200 bg-emerald-50'
+        ? 'border-ds-ok-bg bg-ds-ok-bg'
         : active
-          ? 'border-pink-200 bg-pink-50'
-          : 'border-slate-200 bg-slate-50'
+          ? 'border-ds-accent-soft bg-ds-accent-soft'
+          : 'border-ds-border bg-ds-muted'
     }`}>
       <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
-        done ? 'bg-emerald-600 text-white' : active ? 'bg-pink-600 text-white' : 'bg-white text-slate-400 ring-1 ring-slate-200'
+        done ? 'bg-ds-ok text-white' : active ? 'bg-ds-accent text-white' : 'bg-ds-surface text-ds-ink-faint ring-1 ring-ds-border'
       }`}>
         {done ? <Check className="h-3 w-3" /> : active ? <Clock3 className="h-3 w-3" /> : <Circle className="h-2.5 w-2.5" />}
       </span>
       <span className="min-w-0">
-        <span className="block text-[11.5px] font-black text-slate-900">{label}</span>
-        <span className="mt-0.5 block text-[10.5px] font-semibold text-slate-500">{detail}</span>
+        <span className="block text-[11.5px] font-black text-ds-ink">{label}</span>
+        <span className="mt-0.5 block text-[10.5px] font-semibold text-ds-ink-muted">{detail}</span>
       </span>
     </div>
   );
@@ -494,8 +494,8 @@ function EmptyWorkflow({
 
   if (!cycle || balance <= 0) {
     return (
-      <section className="rounded-[18px] border border-[#e9edf4] bg-card p-[18px]">
-        <Badge variant="outline" className="rounded-full bg-slate-50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-700">
+      <section className="rounded-[18px] border border-ds-info-bg bg-card p-[18px]">
+        <Badge variant="outline" className="rounded-full bg-ds-muted text-[10px] font-black uppercase tracking-[0.1em] text-ds-ink-2">
           Ficha informativa
         </Badge>
         <h2 className="mt-2 text-lg font-black tracking-tight">Nenhum ciclo disponível para registro</h2>
@@ -525,10 +525,10 @@ function EmptyWorkflow({
   ];
 
   return (
-    <section className="rounded-[18px] border border-[#e9edf4] bg-card p-[18px]">
+    <section className="rounded-[18px] border border-ds-info-bg bg-card p-[18px]">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-[260px] flex-1">
-          <Badge className="rounded-full bg-pink-100 text-[10px] font-black uppercase tracking-[0.1em] text-pink-800 hover:bg-pink-100">
+          <Badge className="rounded-full bg-ds-accent-soft text-[10px] font-black uppercase tracking-[0.1em] text-ds-accent-ink hover:bg-ds-accent-soft">
             Passo 1 de 3 · registro
           </Badge>
           <h2 className="mt-2 text-lg font-black tracking-tight">
@@ -539,10 +539,10 @@ function EmptyWorkflow({
           </p>
           {cycle ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              <Badge variant="outline" className="h-7 rounded-[9px] border-slate-200 bg-slate-50 px-2.5 text-[11px] font-extrabold text-slate-700">
+              <Badge variant="outline" className="h-7 rounded-[9px] border-ds-border bg-ds-muted px-2.5 text-[11px] font-extrabold text-ds-ink-2">
                 Saldo do ciclo: {balance}d a agendar
               </Badge>
-              <Badge variant="outline" className="h-7 rounded-[9px] border-slate-200 bg-slate-50 px-2.5 text-[11px] font-extrabold text-slate-700">
+              <Badge variant="outline" className="h-7 rounded-[9px] border-ds-border bg-ds-muted px-2.5 text-[11px] font-extrabold text-ds-ink-2">
                 Concessivo até {format(cycle.concessivePeriod.end, 'dd/MM/yyyy')}
               </Badge>
               {noticeDeadline ? (
@@ -550,10 +550,10 @@ function EmptyWorkflow({
                   variant="outline"
                   className={`h-7 rounded-[9px] px-2.5 text-[11px] font-extrabold ${
                     (noticeDaysLeft ?? 0) <= 30
-                      ? 'border-red-200 bg-red-50 text-red-700'
+                      ? 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger'
                       : (noticeDaysLeft ?? 0) <= 90
-                        ? 'border-amber-300 bg-amber-50 text-amber-800'
-                        : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        ? 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn'
+                        : 'border-ds-ok-bg bg-ds-ok-bg text-ds-ok'
                   }`}
                 >
                   Avisar até {format(noticeDeadline, 'dd/MM/yyyy')} · {noticeDaysLeft} dias
@@ -563,7 +563,7 @@ function EmptyWorkflow({
           ) : null}
         </div>
         {canEdit ? (
-          <Button type="button" className="h-11 rounded-xl bg-[#db2777] px-5 shadow-[0_12px_24px_-16px_rgba(219,39,119,.9)] hover:bg-[#be185d]" onClick={onRegister}>
+          <Button type="button" className="h-11 rounded-xl bg-ds-accent px-5 shadow-[0_12px_24px_-16px_rgba(219,39,119,.9)] hover:bg-ds-accent" onClick={onRegister}>
             <Plus className="mr-2 h-4 w-4" />
             Registrar férias
           </Button>
@@ -572,13 +572,13 @@ function EmptyWorkflow({
 
       <div className="mt-4 grid gap-2.5 md:grid-cols-3">
         {steps.map((step, index) => (
-          <div key={step.title} className={`rounded-[14px] border p-3.5 ${index === 0 ? 'border-pink-200 bg-pink-50/60' : 'bg-muted/20'}`}>
+          <div key={step.title} className={`rounded-[14px] border p-3.5 ${index === 0 ? 'border-ds-accent-soft bg-ds-accent-soft' : 'bg-muted/20'}`}>
             <div className="flex items-center gap-2">
-              <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-black ${index === 0 ? 'bg-pink-600 text-white' : 'bg-muted text-muted-foreground'}`}>{index + 1}</span>
+              <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-black ${index === 0 ? 'bg-ds-accent text-white' : 'bg-muted text-muted-foreground'}`}>{index + 1}</span>
               <p className="text-[12.5px] font-black">{step.title}</p>
             </div>
             <p className="mt-2 text-[11.5px] font-semibold leading-relaxed text-muted-foreground">{step.description}</p>
-            <p className={`mt-2 text-[10.5px] font-extrabold ${index === 0 ? 'text-pink-800' : 'text-muted-foreground'}`}>{step.meta}</p>
+            <p className={`mt-2 text-[10.5px] font-extrabold ${index === 0 ? 'text-ds-accent-ink' : 'text-muted-foreground'}`}>{step.meta}</p>
           </div>
         ))}
       </div>
@@ -587,7 +587,7 @@ function EmptyWorkflow({
         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">As 6 etapas que vêm depois da aprovação</p>
         <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-6">
           {VACATION_WORKFLOW_DISPLAY_STAGE_META.map((stage, index) => (
-            <div key={stage.id} className="rounded-xl border border-[#eef1f6] bg-[#fcfcfd] p-2.5">
+            <div key={stage.id} className="rounded-xl border border-ds-info-bg bg-ds-surface p-2.5">
               <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-muted text-[9.5px] font-black text-muted-foreground">{index + 1}</span>
               <p className="mt-1.5 truncate text-[11px] font-extrabold text-muted-foreground">{stage.label}</p>
               <p className="mt-1 truncate text-[9.5px] font-semibold text-muted-foreground/75">{stage.ownerLabel}</p>
@@ -640,38 +640,38 @@ export function DPVacationAuditTimeline({
   }, [load, version]);
 
   return (
-    <div className={embedded ? 'overflow-hidden bg-white' : 'overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'}>
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
+    <div className={embedded ? 'overflow-hidden bg-ds-surface' : 'overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm'}>
+      <div className="flex items-center justify-between gap-3 border-b border-ds-divider px-4 py-3.5">
         <div>
           <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-slate-600" />
+            <History className="h-4 w-4 text-ds-ink-muted" />
             <p className="text-[13px] font-black">Histórico auditável</p>
           </div>
-          <p className="mt-1 text-[11px] font-semibold text-slate-500">Ações humanas e automáticas, em ordem cronológica.</p>
+          <p className="mt-1 text-[11px] font-semibold text-ds-ink-muted">Ações humanas e automáticas, em ordem cronológica.</p>
         </div>
         <Badge variant="outline" className="rounded-full text-[9px] font-black">{events.length} evento(s)</Badge>
       </div>
-      {error ? <p className="px-4 py-3 text-[10.5px] font-semibold text-rose-700">{error}</p> : null}
-      <div className="divide-y divide-slate-100 px-4">
+      {error ? <p className="px-4 py-3 text-[10.5px] font-semibold text-ds-danger">{error}</p> : null}
+      <div className="divide-y divide-ds-divider px-4">
         {events.map((event) => (
           <div key={event.id} className="grid gap-1 py-3 sm:grid-cols-[1fr_auto] sm:gap-4">
             <div>
-              <p className="text-[11px] font-black text-slate-900">{event.message}</p>
-              <p className="mt-0.5 text-[9.5px] font-semibold text-slate-500">
+              <p className="text-[11px] font-black text-ds-ink">{event.message}</p>
+              <p className="mt-0.5 text-[9.5px] font-semibold text-ds-ink-muted">
                 {event.actorName}{typeof event.data?.reason === 'string' ? ` · Motivo: ${event.data.reason}` : ''}
               </p>
             </div>
-            <time className="font-mono text-[9.5px] font-semibold text-slate-500">
+            <time className="font-mono text-[9.5px] font-semibold text-ds-ink-muted">
               {new Date(event.at).toLocaleString('pt-BR', { timeZone: 'America/Belem' })}
             </time>
           </div>
         ))}
         {!loading && events.length === 0 && !error ? (
-          <p className="py-4 text-center text-[10.5px] font-semibold text-slate-500">Nenhum evento registrado.</p>
+          <p className="py-4 text-center text-[10.5px] font-semibold text-ds-ink-muted">Nenhum evento registrado.</p>
         ) : null}
       </div>
       {loading || cursor ? (
-        <div className="border-t border-slate-100 px-4 py-3">
+        <div className="border-t border-ds-divider px-4 py-3">
           <Button variant="outline" size="sm" className="rounded-xl" disabled={loading || !cursor} onClick={() => void load(cursor)}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
             {loading ? 'Carregando histórico' : 'Carregar eventos anteriores'}
@@ -816,15 +816,15 @@ export function DPVacationWorkflowPanel({
   );
 
   return (
-    <section className="space-y-4 text-slate-950">
-      <div className="rounded-[18px] border border-[#e2ded6] bg-white p-4 shadow-sm">
+    <section className="space-y-4 text-ds-ink">
+      <div className="rounded-[18px] border border-ds-border bg-ds-surface p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.09em] text-[#df2f78]">Trilha de férias</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.09em] text-ds-accent-ink">Trilha de férias</p>
             <h2 className="mt-1 text-base font-black tracking-[-0.01em]">
               Ciclo {record.cycleId} · {record.days} dias
             </h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
+            <p className="mt-1 text-xs font-semibold text-ds-ink-muted">
               {formatDate(record.startDate)} → {formatDate(record.endDate)} · retorno em {formatDate(record.returnDate)}
             </p>
           </div>
@@ -849,7 +849,7 @@ export function DPVacationWorkflowPanel({
               </Button>
             ) : null}
             {canApprove && workflow.status === 'active' && record.status === 'APPROVED' && !workflow.payment.paymentRequestId ? (
-              <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-700" onClick={() => onCancel(record)}>
+              <Button variant="outline" size="sm" className="rounded-xl border-ds-danger-bg text-ds-danger" onClick={() => onCancel(record)}>
                 Cancelar formalmente
               </Button>
             ) : null}
@@ -867,11 +867,11 @@ export function DPVacationWorkflowPanel({
                 aria-pressed={selected}
                 aria-label={`Ver etapa ${index + 1}: ${meta.label}`}
                 onClick={() => setStageSelection({ recordId: record.id, stage: meta.id })}
-                className={`min-w-[124px] flex-1 rounded-[13px] border-b-[3px] px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]/50 ${stepClasses(step)} ${selected ? 'ring-2 ring-[#df2f78]/35 shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                className={`min-w-[124px] flex-1 rounded-[13px] border-b-[3px] px-3 py-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent ${stepClasses(step)} ${selected ? 'ring-2 ring-ds-accent shadow-sm' : 'opacity-80 hover:opacity-100'}`}
               >
                 <span className="flex items-center gap-2">
                   <span className="font-mono text-[9px] font-bold opacity-70">0{index + 1}</span>
-                  <span className={`h-1.5 w-1.5 rounded-full ${step.status === 'completed' ? 'bg-emerald-500' : step.status === 'in_progress' || step.status === 'waiting_external' ? 'bg-[#df2f78]' : 'bg-stone-300'}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${step.status === 'completed' ? 'bg-ds-ok' : step.status === 'in_progress' || step.status === 'waiting_external' ? 'bg-ds-accent' : 'bg-ds-seg'}`} />
                 </span>
                 <span className="mt-1 block text-[12px] font-black leading-snug">{meta.short}</span>
                 <span className="mt-0.5 block text-[9.5px] font-bold opacity-70">{stepStateLabel(step)}</span>
@@ -882,32 +882,32 @@ export function DPVacationWorkflowPanel({
       </div>
 
       {viewingCurrentStage ? (
-        <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-ds-warn-bg bg-ds-warn-bg px-4 py-3.5">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ds-warn" />
           <div className="min-w-0 flex-1">
-            <p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-amber-700">O que falta para avançar</p>
-            <p className="mt-1 text-[13px] font-black text-amber-900">{action.title}</p>
-            <p className="mt-1 text-[11.5px] font-semibold text-amber-700">{action.description}</p>
+            <p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-ds-warn">O que falta para avançar</p>
+            <p className="mt-1 text-[13px] font-black text-ds-warn">{action.title}</p>
+            <p className="mt-1 text-[11.5px] font-semibold text-ds-warn">{action.description}</p>
           </div>
-          <Badge variant="outline" className="rounded-full border-amber-200 bg-white text-[10px] font-black text-amber-800">
+          <Badge variant="outline" className="rounded-full border-ds-warn-bg bg-ds-surface text-[10px] font-black text-ds-warn">
             Responsável: {action.owner}
           </Badge>
           {workflow.currentStage === 'scheduling' && canApprove && record.status !== 'APPROVED' ? (
-            <Button size="sm" className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]" onClick={() => onApprove(record)}>
+            <Button size="sm" className="rounded-xl bg-ds-accent hover:bg-ds-accent" onClick={() => onApprove(record)}>
               Aprovar agendamento
             </Button>
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-ds-border bg-ds-muted px-4 py-3">
           {selectedStep.status === 'completed' ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-ds-ok" />
           ) : (
-            <LockKeyhole className="h-4 w-4 shrink-0 text-slate-500" />
+            <LockKeyhole className="h-4 w-4 shrink-0 text-ds-ink-muted" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Visualizando {selectedStageMeta.label}</p>
-            <p className="mt-0.5 text-[11.5px] font-semibold text-slate-600">
+            <p className="text-[10px] font-black uppercase tracking-[0.08em] text-ds-ink-muted">Visualizando {selectedStageMeta.label}</p>
+            <p className="mt-0.5 text-[11.5px] font-semibold text-ds-ink-muted">
               {selectedStep.status === 'completed'
                 ? 'Etapa concluída. Os dados permanecem disponíveis para consulta.'
                 : 'Etapa futura em modo de consulta; as ações serão liberadas quando o processo chegar aqui.'}
@@ -927,13 +927,13 @@ export function DPVacationWorkflowPanel({
 
       <div className="space-y-4">
         {selectedStage === 'scheduling' ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3.5">
+        <div className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm">
+          <div className="border-b border-ds-divider px-4 py-3.5">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-[#df2f78]" />
+              <ShieldCheck className="h-4 w-4 text-ds-accent-ink" />
               <p className="text-[13px] font-black">Análise inicial do agendamento</p>
             </div>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+            <p className="mt-1 text-[11px] font-semibold text-ds-ink-muted">
               Impedimentos legais bloqueiam a aprovação. Exceção de antecedência exige justificativa formal no envio.
             </p>
           </div>
@@ -941,15 +941,15 @@ export function DPVacationWorkflowPanel({
             {workflow.legalAnalysis.checks.map((check) => (
               <div key={check.code} className={`rounded-xl border px-3 py-2.5 ${
                 check.status === 'ok'
-                  ? 'border-emerald-200 bg-emerald-50'
+                  ? 'border-ds-ok-bg bg-ds-ok-bg'
                   : check.status === 'blocked'
-                    ? 'border-rose-200 bg-rose-50'
+                    ? 'border-ds-danger-bg bg-ds-danger-bg'
                     : check.status === 'warning'
-                      ? 'border-amber-200 bg-amber-50'
-                      : 'border-slate-200 bg-slate-50'
+                      ? 'border-ds-warn-bg bg-ds-warn-bg'
+                      : 'border-ds-border bg-ds-muted'
               }`}>
-                <p className="text-[11px] font-black text-slate-900">{check.label}</p>
-                <p className="mt-1 text-[10.5px] font-semibold text-slate-600">{check.message}</p>
+                <p className="text-[11px] font-black text-ds-ink">{check.label}</p>
+                <p className="mt-1 text-[10.5px] font-semibold text-ds-ink-muted">{check.message}</p>
               </div>
             ))}
           </div>
@@ -957,13 +957,13 @@ export function DPVacationWorkflowPanel({
         ) : null}
 
         {selectedStage === 'notice' ? (
-        <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
-          <div className="border-b border-violet-100 px-4 py-3.5">
+        <div className="overflow-hidden rounded-2xl border border-ds-accent-soft bg-ds-surface shadow-sm">
+          <div className="border-b border-ds-accent-soft px-4 py-3.5">
             <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-violet-600" />
+              <FileText className="h-4 w-4 text-ds-accent-ink" />
               <p className="text-[13px] font-black">Aviso de férias</p>
             </div>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+            <p className="mt-1 text-[11px] font-semibold text-ds-ink-muted">
               O documento só poderá ser enviado depois de gerado e validado pelo RH.
             </p>
           </div>
@@ -973,11 +973,11 @@ export function DPVacationWorkflowPanel({
             <Substep done={noticeSigned} active={noticeValidated && !noticeSigned} label="Enviar e assinar" detail={noticeSigned ? 'Ciência registrada' : 'Somente após validação'} />
           </div>
           {workflow.currentStage === 'notice' || noticeGenerated ? (
-            <div className="flex flex-wrap items-center gap-2 border-t border-violet-100 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 border-t border-ds-accent-soft px-4 py-3">
               {canApprove && ['not_generated', 'failed', 'draft'].includes(notice.status) ? (
                 <Button
                   size="sm"
-                  className="rounded-xl bg-violet-600 hover:bg-violet-700"
+                  className="rounded-xl bg-ds-accent hover:bg-ds-accent"
                   disabled={noticeBusy !== null}
                   onClick={() => onGenerateNotice(record)}
                 >
@@ -1000,7 +1000,7 @@ export function DPVacationWorkflowPanel({
               {canApprove && notice.status === 'draft' ? (
                 <Button
                   size="sm"
-                  className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]"
+                  className="rounded-xl bg-ds-accent hover:bg-ds-accent"
                   disabled={noticeBusy !== null}
                   onClick={() => onValidateNotice(record)}
                 >
@@ -1020,7 +1020,7 @@ export function DPVacationWorkflowPanel({
                   ) : null}
                   <Button
                     size="sm"
-                    className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]"
+                    className="rounded-xl bg-ds-accent hover:bg-ds-accent"
                     disabled={noticeBusy !== null || ((workflow.legalAnalysis.noticeLeadDays ?? -1) < 30 && noticeExceptionReason.trim().length < 10)}
                     onClick={() => onSendNotice(record, noticeExceptionReason.trim() || undefined)}
                   >
@@ -1042,29 +1042,29 @@ export function DPVacationWorkflowPanel({
                 </Button>
               ) : null}
               {notice.status === 'generating' ? (
-                <span className="inline-flex items-center gap-2 text-[10.5px] font-bold text-violet-700">
+                <span className="inline-flex items-center gap-2 text-[10.5px] font-bold text-ds-accent-ink">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Geração em andamento
                 </span>
               ) : null}
               {notice.status === 'failed' ? (
-                <span className="text-[10.5px] font-bold text-rose-700">
+                <span className="text-[10.5px] font-bold text-ds-danger">
                   A geração falhou. Nenhum documento foi liberado para envio.
                 </span>
               ) : null}
               {notice.status === 'sending' ? (
-                <span className="inline-flex items-center gap-2 text-[10.5px] font-bold text-violet-700">
+                <span className="inline-flex items-center gap-2 text-[10.5px] font-bold text-ds-accent-ink">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando ao Autentique
                 </span>
               ) : null}
               {notice.sendErrorCode ? (
-                <span className="text-[10.5px] font-bold text-rose-700">
+                <span className="text-[10.5px] font-bold text-ds-danger">
                   O envio anterior falhou. O aviso continua validado e pode ser reenviado.
                 </span>
               ) : null}
             </div>
           ) : null}
           {notice.participants?.length ? (
-            <div className="space-y-3 border-t border-violet-100 bg-violet-50/40 p-4">
+            <div className="space-y-3 border-t border-ds-accent-soft bg-ds-accent-soft p-4">
               {notice.participants.map((participant) => (
                 <SignatureParticipantCard
                   key={participant.providerSignatureId}
@@ -1078,13 +1078,13 @@ export function DPVacationWorkflowPanel({
         ) : null}
 
         {selectedStage === 'accountant' ? (
-        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
-          <div className="border-b border-emerald-100 px-4 py-3.5">
+        <div className="overflow-hidden rounded-2xl border border-ds-ok-bg bg-ds-surface shadow-sm">
+          <div className="border-b border-ds-ok-bg px-4 py-3.5">
             <div className="flex items-center gap-2">
-              {workflow.currentStage === 'receipt_review' ? <FileCheck2 className="h-4 w-4 text-emerald-600" /> : <Upload className="h-4 w-4 text-emerald-600" />}
+              {workflow.currentStage === 'receipt_review' ? <FileCheck2 className="h-4 w-4 text-ds-ok" /> : <Upload className="h-4 w-4 text-ds-ok" />}
               <p className="text-[13px] font-black">Contabilidade e revisão</p>
             </div>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+            <p className="mt-1 text-[11px] font-semibold text-ds-ink-muted">
               Acompanhe o envio do contador, a triagem da Mel e a confirmação final do RH em uma única etapa.
             </p>
           </div>
@@ -1094,24 +1094,24 @@ export function DPVacationWorkflowPanel({
             <Substep done={receiptApproved} active={workflow.receipt.status === 'review_pending'} label="Triar e revisar" detail={receiptApproved ? 'Recibo aprovado' : receiptSelectionConfirmed ? 'Recibo escolhido pelo RH' : receiptReceived ? 'Escolha final pendente' : 'Após o recebimento'} />
           </div>
           {receiptReceived ? (
-          <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <div className="mx-4 mb-4 grid gap-2 rounded-xl border border-dashed border-ds-border bg-ds-muted p-3 sm:grid-cols-2">
             {[
               { icon: ReceiptText, label: 'Arquivos do contador', detail: 'PDF, JPG ou PNG preservados' },
               { icon: FileCheck2, label: 'Triagem da Mel', detail: 'Sugestão para confirmação do RH' },
             ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
-                <item.icon className="h-4 w-4 text-slate-400" />
-                <span><span className="block text-[10.5px] font-black text-slate-800">{item.label}</span><span className="block text-[9.5px] font-semibold text-slate-500">{item.detail}</span></span>
+              <div key={item.label} className="flex items-center gap-2 rounded-lg bg-ds-surface px-2.5 py-2">
+                <item.icon className="h-4 w-4 text-ds-ink-faint" />
+                <span><span className="block text-[10.5px] font-black text-ds-ink">{item.label}</span><span className="block text-[9.5px] font-semibold text-ds-ink-muted">{item.detail}</span></span>
               </div>
             ))}
           </div>
           ) : null}
-          <div className="border-t border-emerald-100 px-4 py-3">
+          <div className="border-t border-ds-ok-bg px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               {selectedStage === 'accountant' && noticeSigned && canApprove && ['ready_to_send', 'failed', 'correction_requested'].includes(workflow.accountant.status) ? (
                 <Button
                   size="sm"
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                  className="rounded-xl bg-ds-ok hover:bg-ds-ok"
                   disabled={workflowBusy !== null}
                   onClick={() => onSendAccountant(record)}
                 >
@@ -1132,34 +1132,34 @@ export function DPVacationWorkflowPanel({
                 </Button>
               ) : null}
               {selectedStage === 'accountant' && workflow.accountant.recipientEmail ? (
-                <span className="text-[10.5px] font-semibold text-slate-500">
+                <span className="text-[10.5px] font-semibold text-ds-ink-muted">
                   Contabilidade: {workflow.accountant.recipientEmail} · {emailStatusLabel(workflow.accountant.emailStatus)}
                 </span>
               ) : null}
             </div>
             {selectedStage === 'accountant' && workflow.accountant.lastError ? (
-              <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[10.5px] font-semibold text-rose-700">
+              <p className="mt-2 rounded-lg border border-ds-danger-bg bg-ds-danger-bg px-3 py-2 text-[10.5px] font-semibold text-ds-danger">
                 {workflow.accountant.lastError}
               </p>
             ) : null}
           </div>
 
           {workflow.receipt.status === 'processing' ? (
-            <div className="border-t border-emerald-100 px-4 py-4 text-[11px] font-semibold text-emerald-700">
+            <div className="border-t border-ds-ok-bg px-4 py-4 text-[11px] font-semibold text-ds-ok">
               <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Processando os arquivos para sugerir o recibo principal.</span>
             </div>
           ) : null}
 
           {receiptDocuments.length ? (
-            <div className="space-y-3 border-t border-emerald-100 bg-slate-50/60 p-4">
+            <div className="space-y-3 border-t border-ds-ok-bg bg-ds-muted p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-black text-slate-900">Arquivos recebidos</p>
-                  <p className="mt-1 text-[10.5px] font-semibold text-slate-500">
+                  <p className="text-[11px] font-black text-ds-ink">Arquivos recebidos</p>
+                  <p className="mt-1 text-[10.5px] font-semibold text-ds-ink-muted">
                     A Mel sugere; o RH precisa abrir e confirmar o recibo principal.
                   </p>
                 </div>
-                <Badge variant="outline" className="rounded-full bg-white text-[9.5px] font-black">{receiptDocuments.length} arquivo(s)</Badge>
+                <Badge variant="outline" className="rounded-full bg-ds-surface text-[9.5px] font-black">{receiptDocuments.length} arquivo(s)</Badge>
               </div>
               <div className="grid gap-2 lg:grid-cols-2">
                 {receiptDocuments.map((document) => {
@@ -1168,21 +1168,21 @@ export function DPVacationWorkflowPanel({
                     || (!workflow.receipt.selectedDocumentId && workflow.receipt.originalDocumentId === document.id);
                   const processing = document.status === 'processing';
                   return (
-                    <div key={document.id} className={`rounded-xl border bg-white p-3 ${selected ? 'border-emerald-400 ring-1 ring-emerald-200' : suggested ? 'border-amber-300' : 'border-slate-200'}`}>
+                    <div key={document.id} className={`rounded-xl border bg-ds-surface p-3 ${selected ? 'border-ds-ok-bg ring-1 ring-ds-ok-bg' : suggested ? 'border-ds-warn-bg' : 'border-ds-border'}`}>
                       <div className="flex items-start gap-2.5">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600"><FileText className="h-4 w-4" /></span>
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ds-neutral-bg text-ds-ink-muted"><FileText className="h-4 w-4" /></span>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[11px] font-black text-slate-900">{document.fileName}</p>
-                          <p className="mt-0.5 text-[9.5px] font-semibold text-slate-500">
+                          <p className="truncate text-[11px] font-black text-ds-ink">{document.fileName}</p>
+                          <p className="mt-0.5 text-[9.5px] font-semibold text-ds-ink-muted">
                             {processing
                               ? 'Análise em andamento'
                               : `${receiptDocumentTypeLabel(document.analysis?.documentTypeCode)} · ${Math.round((document.analysis?.documentTypeConfidence ?? 0) * 100)}%`}
                           </p>
                         </div>
                         {selected ? (
-                          <Badge className="rounded-full bg-emerald-100 text-[9px] font-black text-emerald-800 hover:bg-emerald-100">Escolhido pelo RH</Badge>
+                          <Badge className="rounded-full bg-ds-ok-bg text-[9px] font-black text-ds-ok hover:bg-ds-ok-bg">Escolhido pelo RH</Badge>
                         ) : suggested ? (
-                          <Badge className="rounded-full bg-amber-100 text-[9px] font-black text-amber-800 hover:bg-amber-100">Sugestão</Badge>
+                          <Badge className="rounded-full bg-ds-warn-bg text-[9px] font-black text-ds-warn hover:bg-ds-warn-bg">Sugestão</Badge>
                         ) : null}
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -1201,7 +1201,7 @@ export function DPVacationWorkflowPanel({
                           <Button
                             type="button"
                             size="sm"
-                            className="h-8 rounded-lg bg-emerald-600 text-[10px] hover:bg-emerald-700"
+                            className="h-8 rounded-lg bg-ds-ok text-[10px] hover:bg-ds-ok"
                             disabled={!canApprove || workflowBusy !== null || processing || workflow.receipt.status !== 'review_pending'}
                             onClick={() => onSelectReceiptDocument(record, document.id)}
                           >
@@ -1214,7 +1214,7 @@ export function DPVacationWorkflowPanel({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 rounded-lg border-rose-200 text-[10px] text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                            className="h-8 rounded-lg border-ds-danger-bg text-[10px] text-ds-danger hover:bg-ds-danger-bg hover:text-ds-danger"
                             disabled={!canApprove || workflowBusy !== null || processing || workflow.receipt.status !== 'review_pending'}
                             onClick={() => setDiscardTarget({ documentId: document.id, fileName: document.fileName })}
                           >
@@ -1228,16 +1228,16 @@ export function DPVacationWorkflowPanel({
                 })}
               </div>
               {!receiptSelectionConfirmed && workflow.receipt.status === 'review_pending' ? (
-                <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[10.5px] font-semibold text-amber-800">
+                <div className="flex gap-2 rounded-xl border border-ds-warn-bg bg-ds-warn-bg px-3 py-2.5 text-[10.5px] font-semibold text-ds-warn">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   Confirme um arquivo como recibo principal para liberar a revisão dos valores.
                 </div>
               ) : null}
             </div>
           ) : receiptAllDocumentsDiscarded ? (
-            <div className="space-y-3 border-t border-emerald-100 bg-slate-50/60 p-4">
-              <div className="flex gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10.5px] font-semibold text-slate-600">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            <div className="space-y-3 border-t border-ds-ok-bg bg-ds-muted p-4">
+              <div className="flex gap-2 rounded-xl border border-ds-border bg-ds-surface px-3 py-2.5 text-[10.5px] font-semibold text-ds-ink-muted">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-ds-ink-faint" />
                 <span>
                   Nenhum recibo disponível para revisão: todos os arquivos recebidos foram descartados pelo RH.
                   Aguarde um novo envio do contador para retomar a triagem.
@@ -1247,31 +1247,31 @@ export function DPVacationWorkflowPanel({
           ) : null}
 
           {workflow.receipt.status === 'review_pending' && receiptSelectionConfirmed ? (
-            <div className="space-y-4 border-t border-emerald-100 bg-emerald-50/30 p-4">
+            <div className="space-y-4 border-t border-ds-ok-bg bg-ds-ok-bg p-4">
               <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500">Leitura automática</p>
+                <div className="rounded-xl border border-ds-border bg-ds-surface p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.08em] text-ds-ink-muted">Leitura automática</p>
                   <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[10.5px]">
-                    <dt className="font-semibold text-slate-500">Colaborador</dt><dd className="text-right font-black">{analysis?.employeeName ?? 'Não identificado'}</dd>
-                    <dt className="font-semibold text-slate-500">Período</dt><dd className="text-right font-black">{formatDate(analysis?.vacationStartDate)} → {formatDate(analysis?.vacationEndDate)}</dd>
-                    <dt className="font-semibold text-slate-500">Bruto</dt><dd className="text-right font-black">{formatMoney(analysis?.amountGross)}</dd>
-                    <dt className="font-semibold text-slate-500">Descontos</dt><dd className="text-right font-black">{formatMoney(analysis?.amountDiscounts)}</dd>
-                    <dt className="font-semibold text-slate-500">Líquido</dt><dd className="text-right font-black">{formatMoney(analysis?.amountNet)}</dd>
-                    <dt className="font-semibold text-slate-500">Assinatura no original</dt><dd className="text-right font-black">{analysis?.signatureDetected == null ? 'Não identificado' : analysis.signatureDetected ? 'Sim' : 'Não'}</dd>
+                    <dt className="font-semibold text-ds-ink-muted">Colaborador</dt><dd className="text-right font-black">{analysis?.employeeName ?? 'Não identificado'}</dd>
+                    <dt className="font-semibold text-ds-ink-muted">Período</dt><dd className="text-right font-black">{formatDate(analysis?.vacationStartDate)} → {formatDate(analysis?.vacationEndDate)}</dd>
+                    <dt className="font-semibold text-ds-ink-muted">Bruto</dt><dd className="text-right font-black">{formatMoney(analysis?.amountGross)}</dd>
+                    <dt className="font-semibold text-ds-ink-muted">Descontos</dt><dd className="text-right font-black">{formatMoney(analysis?.amountDiscounts)}</dd>
+                    <dt className="font-semibold text-ds-ink-muted">Líquido</dt><dd className="text-right font-black">{formatMoney(analysis?.amountNet)}</dd>
+                    <dt className="font-semibold text-ds-ink-muted">Assinatura no original</dt><dd className="text-right font-black">{analysis?.signatureDetected == null ? 'Não identificado' : analysis.signatureDetected ? 'Sim' : 'Não'}</dd>
                   </dl>
                   {workflow.receipt.analysis?.warnings.length || workflow.receipt.analysis?.issues.length ? (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800">
+                    <div className="mt-3 rounded-lg border border-ds-warn-bg bg-ds-warn-bg px-3 py-2 text-[10px] font-semibold text-ds-warn">
                       {[...(workflow.receipt.analysis?.issues ?? []), ...(workflow.receipt.analysis?.warnings ?? [])].join(' · ')}
                     </div>
                   ) : null}
                 </div>
-                <div className="rounded-xl border border-emerald-200 bg-white p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.08em] text-emerald-700">Valores conferidos pelo RH</p>
+                <div className="rounded-xl border border-ds-ok-bg bg-ds-surface p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.08em] text-ds-ok">Valores conferidos pelo RH</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <label className="space-y-1 text-[10px] font-bold text-slate-600">Bruto<Input type="number" min="0" step="0.01" value={receiptValues.grossAmount} onChange={(event) => setReceiptValues((current) => ({ ...current, grossAmount: event.target.value }))} /></label>
-                    <label className="space-y-1 text-[10px] font-bold text-slate-600">Descontos<Input type="number" min="0" step="0.01" value={receiptValues.discountAmount} onChange={(event) => setReceiptValues((current) => ({ ...current, discountAmount: event.target.value }))} /></label>
-                    <label className="space-y-1 text-[10px] font-bold text-slate-600">Líquido<Input type="number" min="0.01" step="0.01" value={receiptValues.netAmount} onChange={(event) => setReceiptValues((current) => ({ ...current, netAmount: event.target.value }))} /></label>
-                    <label className="space-y-1 text-[10px] font-bold text-slate-600">Data indicada<Input type="date" value={receiptValues.paymentDate} onChange={(event) => setReceiptValues((current) => ({ ...current, paymentDate: event.target.value }))} /></label>
+                    <label className="space-y-1 text-[10px] font-bold text-ds-ink-muted">Bruto<Input type="number" min="0" step="0.01" value={receiptValues.grossAmount} onChange={(event) => setReceiptValues((current) => ({ ...current, grossAmount: event.target.value }))} /></label>
+                    <label className="space-y-1 text-[10px] font-bold text-ds-ink-muted">Descontos<Input type="number" min="0" step="0.01" value={receiptValues.discountAmount} onChange={(event) => setReceiptValues((current) => ({ ...current, discountAmount: event.target.value }))} /></label>
+                    <label className="space-y-1 text-[10px] font-bold text-ds-ink-muted">Líquido<Input type="number" min="0.01" step="0.01" value={receiptValues.netAmount} onChange={(event) => setReceiptValues((current) => ({ ...current, netAmount: event.target.value }))} /></label>
+                    <label className="space-y-1 text-[10px] font-bold text-ds-ink-muted">Data indicada<Input type="date" value={receiptValues.paymentDate} onChange={(event) => setReceiptValues((current) => ({ ...current, paymentDate: event.target.value }))} /></label>
                   </div>
                   <Textarea className="mt-2 min-h-16" placeholder="Observação da auditoria (opcional)" value={receiptNotes} onChange={(event) => setReceiptNotes(event.target.value)} />
                   <Textarea
@@ -1292,7 +1292,7 @@ export function DPVacationWorkflowPanel({
                 />
                 <Button
                   variant="outline"
-                  className="rounded-xl border-amber-300 text-amber-800"
+                  className="rounded-xl border-ds-warn-bg text-ds-warn"
                   disabled={!canApprove || workflowBusy !== null || !correctionReason.trim()}
                   onClick={() => onReviewReceipt(record, {
                     decision: 'correction_required',
@@ -1304,7 +1304,7 @@ export function DPVacationWorkflowPanel({
                   Solicitar correção
                 </Button>
                 <Button
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                  className="rounded-xl bg-ds-ok hover:bg-ds-ok"
                   disabled={!canApprove || workflowBusy !== null
                     || !receiptValuesValid
                     || (receiptNeedsOverride && receiptOverrideReason.trim().length < 10)}
@@ -1327,15 +1327,15 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
           {!receiptReceived ? (
-            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-[10.5px] font-semibold text-slate-500">
+            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-ds-border bg-ds-muted px-3 py-3 text-[10.5px] font-semibold text-ds-ink-muted">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
               A triagem será liberada assim que o contador enviar os arquivos.
             </div>
           ) : null}
           {receiptApproved ? (
-            <div className="mx-4 mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-              <p className="text-[11px] font-black text-emerald-900">Recibo aprovado pelo RH</p>
-              <p className="mt-1 text-[10.5px] font-semibold text-emerald-700">
+            <div className="mx-4 mb-4 rounded-xl border border-ds-ok-bg bg-ds-ok-bg px-3 py-3">
+              <p className="text-[11px] font-black text-ds-ok">Recibo aprovado pelo RH</p>
+              <p className="mt-1 text-[10.5px] font-semibold text-ds-ok">
                 {formatMoney(workflow.receipt.reviewedValues?.netAmount ?? analysis?.amountNet)} líquidos · dados conferidos e enviados ao Financeiro.
               </p>
             </div>
@@ -1344,15 +1344,15 @@ export function DPVacationWorkflowPanel({
         ) : null}
 
         {selectedStage === 'payment' || selectedStage === 'receipt_signature' || selectedStage === 'closure' ? (
-        <div className="overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm">
-          <div className="border-b border-sky-100 px-4 py-3.5">
+        <div className="overflow-hidden rounded-2xl border border-ds-info-bg bg-ds-surface shadow-sm">
+          <div className="border-b border-ds-info-bg px-4 py-3.5">
             <div className="flex items-center gap-2">
-              {selectedStage === 'payment' ? <Landmark className="h-4 w-4 text-sky-600" /> : selectedStage === 'receipt_signature' ? <UserRoundCheck className="h-4 w-4 text-sky-600" /> : <CheckCircle2 className="h-4 w-4 text-sky-600" />}
+              {selectedStage === 'payment' ? <Landmark className="h-4 w-4 text-ds-info" /> : selectedStage === 'receipt_signature' ? <UserRoundCheck className="h-4 w-4 text-ds-info" /> : <CheckCircle2 className="h-4 w-4 text-ds-info" />}
               <p className="text-[13px] font-black">
                 {selectedStage === 'payment' ? 'Pagamento das férias' : selectedStage === 'receipt_signature' ? 'Assinatura do recibo' : 'Finalização pelo RH'}
               </p>
             </div>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+            <p className="mt-1 text-[11px] font-semibold text-ds-ink-muted">
               {selectedStage === 'payment'
                 ? `Prazo de pagamento: ${formatDate(workflow.payment.dueAt)}. A autorização bancária permanece com o Financeiro.`
                 : selectedStage === 'receipt_signature'
@@ -1370,11 +1370,11 @@ export function DPVacationWorkflowPanel({
             )}
           </div>
           {selectedStage === 'payment' && workflow.receipt.status === 'approved' ? (
-            <div className="mx-4 mb-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5">
+            <div className="mx-4 mb-3 rounded-xl border border-ds-info-bg bg-ds-info-bg px-3 py-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-black text-sky-950">{paymentStatusLabel(workflow.payment.status)}</p>
-                  <p className="mt-0.5 text-[10px] font-semibold text-sky-700">
+                  <p className="text-[11px] font-black text-ds-info">{paymentStatusLabel(workflow.payment.status)}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold text-ds-info">
                     {formatMoney(workflow.payment.amount)} · prazo legal {formatDate(workflow.payment.dueAt)}
                     {workflow.payment.scheduledFor ? ` · programado para ${formatDate(workflow.payment.scheduledFor)}` : ''}
                   </p>
@@ -1383,7 +1383,7 @@ export function DPVacationWorkflowPanel({
                   {canApprove && ['not_started', 'failed'].includes(workflow.payment.status) ? (
                     <Button
                       size="sm"
-                      className="rounded-xl bg-sky-700 hover:bg-sky-800"
+                      className="rounded-xl bg-ds-info hover:bg-ds-info"
                       disabled={workflowBusy !== null}
                       onClick={() => onPreparePayment(record)}
                     >
@@ -1405,7 +1405,7 @@ export function DPVacationWorkflowPanel({
                   ) : null}
                 </div>
               </div>
-              {workflow.payment.lastError ? <p className="mt-2 text-[10px] font-semibold text-rose-700">{workflow.payment.lastError}</p> : null}
+              {workflow.payment.lastError ? <p className="mt-2 text-[10px] font-semibold text-ds-danger">{workflow.payment.lastError}</p> : null}
               {workflow.payment.proofStoragePath ? (
                 <Button
                   variant="outline"
@@ -1421,29 +1421,29 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
           {selectedStage === 'payment' && workflow.receipt.status !== 'approved' ? (
-            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[10.5px] font-semibold text-slate-500">
+            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-ds-border bg-ds-muted px-3 py-2.5 text-[10.5px] font-semibold text-ds-ink-muted">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
               O pagamento será preparado depois que o RH aprovar a auditoria do recibo.
             </div>
           ) : null}
           {selectedStage === 'receipt_signature' && !paymentPaid ? (
-            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[10.5px] font-semibold text-slate-500">
+            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-ds-border bg-ds-muted px-3 py-2.5 text-[10.5px] font-semibold text-ds-ink-muted">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
               O recibo permanece indisponível para assinatura enquanto o pagamento não estiver confirmado.
             </div>
           ) : null}
           {selectedStage === 'receipt_signature' && paymentPaid ? (
-            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[10.5px] font-semibold text-emerald-700">
+            <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-ds-ok-bg bg-ds-ok-bg px-3 py-2.5 text-[10.5px] font-semibold text-ds-ok">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               Pagamento confirmado. O recibo pode seguir para assinatura do colaborador.
             </div>
           ) : null}
           {selectedStage === 'receipt_signature' && paymentPaid ? (
-            <div className="mx-4 mb-4 flex flex-wrap items-center gap-2 border-t border-sky-100 pt-3">
+            <div className="mx-4 mb-4 flex flex-wrap items-center gap-2 border-t border-ds-info-bg pt-3">
               {canApprove && ['ready', 'failed'].includes(workflow.receiptSignature.status) ? (
                 <Button
                   size="sm"
-                  className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]"
+                  className="rounded-xl bg-ds-accent hover:bg-ds-accent"
                   disabled={workflowBusy !== null}
                   onClick={() => onRetryReceiptSignature(record)}
                 >
@@ -1490,12 +1490,12 @@ export function DPVacationWorkflowPanel({
                 </Button>
               ) : null}
               {workflow.receiptSignature.lastError ? (
-                <span className="text-[10.5px] font-semibold text-rose-700">{workflow.receiptSignature.lastError}</span>
+                <span className="text-[10.5px] font-semibold text-ds-danger">{workflow.receiptSignature.lastError}</span>
               ) : null}
             </div>
           ) : null}
           {selectedStage === 'receipt_signature' && workflow.receiptSignature.participants?.length ? (
-            <div className="space-y-3 border-t border-sky-100 bg-sky-50/40 p-4">
+            <div className="space-y-3 border-t border-ds-info-bg bg-ds-info-bg p-4">
               {workflow.receiptSignature.participants.map((participant) => (
                 <SignatureParticipantCard
                   key={participant.providerSignatureId}
@@ -1506,13 +1506,13 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
           {selectedStage === 'closure' ? (
-            <div className="mx-4 mb-4 rounded-xl border border-sky-200 bg-sky-50 px-3 py-3">
+            <div className="mx-4 mb-4 rounded-xl border border-ds-info-bg bg-ds-info-bg px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-black text-sky-950">
+                  <p className="text-[11px] font-black text-ds-info">
                     {workflow.closure.status === 'completed' ? 'Trilha encerrada' : workflow.closure.status === 'ready' ? 'Pronta para finalização' : 'Aguardando assinatura do recibo'}
                   </p>
-                  <p className="mt-1 text-[10.5px] font-semibold text-sky-700">
+                  <p className="mt-1 text-[10.5px] font-semibold text-ds-info">
                     {workflow.closure.status === 'completed'
                       ? 'Todos os documentos, pagamentos e assinaturas foram conferidos.'
                       : 'A finalização preserva o histórico e encerra o processo no RH.'}
@@ -1527,8 +1527,8 @@ export function DPVacationWorkflowPanel({
                         key={item.label}
                         variant="outline"
                         className={item.done
-                          ? 'rounded-full border-emerald-200 bg-white text-[9.5px] font-black text-emerald-700'
-                          : 'rounded-full border-slate-200 bg-white text-[9.5px] font-black text-slate-500'}
+                          ? 'rounded-full border-ds-ok-bg bg-ds-surface text-[9.5px] font-black text-ds-ok'
+                          : 'rounded-full border-ds-border bg-ds-surface text-[9.5px] font-black text-ds-ink-muted'}
                       >
                         {item.label}: {item.done ? 'concluído' : 'pendente'}
                       </Badge>
@@ -1538,7 +1538,7 @@ export function DPVacationWorkflowPanel({
                 {canApprove && workflow.closure.status === 'ready' ? (
                   <Button
                     size="sm"
-                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                    className="rounded-xl bg-ds-ok hover:bg-ds-ok"
                     disabled={workflowBusy !== null}
                     onClick={() => onFinalizeWorkflow(record)}
                   >
