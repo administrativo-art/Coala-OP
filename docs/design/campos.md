@@ -13,6 +13,8 @@
 - O limite relevante fica visível antes do erro: "Quantidade (lata) · disponível 42".
 - Unidade junto do número (sufixo dentro do campo ou no rótulo).
 - Dropdowns não usam a seta nativa de cada sistema operacional. Foco, erro e estado desabilitado afetam o campo e o contêiner do chevron em conjunto; o ícone não cria um segundo alvo de clique.
+- Campos lado a lado reservam a mesma altura para os rótulos. Se um rótulo quebrar em duas linhas, o controle da coluna vizinha não sobe: inputs e selects continuam alinhados pelo topo.
+- Quando um bloco de configuração reunir conceitos ou opções que não sejam autoexplicativos, o cabeçalho recebe um ícone de informação. O clique/toque abre `InfoPopover`; não dependa somente de hover. O conteúdo explica cada campo e cada opção daquele bloco, incluindo alcance, efeito e combinações permitidas. Em abas de regras repetíveis, essa ajuda acompanha cada regra e uma nota inicial informa explicitamente a qual cadastro a regra pertence.
 
 ## Datas, horários e competências
 

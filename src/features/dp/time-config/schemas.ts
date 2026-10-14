@@ -146,12 +146,11 @@ export const updateJourneySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('archive') }).strict(),
 ]);
 
-const overtimeCategorySchema = z.object({
+const overtimeCategoryFieldsSchema = z.object({
   id: z.string().trim().min(1).max(60),
   name: z.string().trim().min(2).max(100),
   trigger: z.enum(['workday', 'specific_weekdays', 'rest_day', 'sunday', 'holiday', 'unplanned_work']),
   weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
-  startsAfterMinutes: z.number().int().min(0).max(24 * 60),
   ratePercent: z.number().min(0).max(1000),
   destination: z.enum(['payroll', 'time_bank', 'review']),
   bankCreditFactor: z.number().positive().max(10).optional(),
@@ -170,6 +169,15 @@ const overtimeCategorySchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['bankCreditFactor'], message: 'Fator de crédito só se aplica ao banco de horas.' });
   }
 });
+
+const overtimeCategorySchema = z.preprocess((value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const normalized = { ...(value as Record<string, unknown>) };
+  // Compatibilidade com registros criados antes da tolerância ser
+  // consolidada no nível geral da política.
+  delete normalized.startsAfterMinutes;
+  return normalized;
+}, overtimeCategoryFieldsSchema);
 
 const overtimeFieldsObjectSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -278,8 +286,12 @@ function refineShiftDefinition(value: z.infer<typeof shiftDefinitionFieldsObject
 }
 
 export const createShiftDefinitionSchema = shiftDefinitionFieldsObjectSchema.superRefine(refineShiftDefinition);
-export const updateShiftDefinitionSchema = shiftDefinitionFieldsObjectSchema.partial().refine((value) => Object.keys(value).length > 0);
-export const completeShiftDefinitionSchema = shiftDefinitionFieldsObjectSchema.superRefine(refineShiftDefinition);
+export const updateShiftDefinitionSchema = shiftDefinitionFieldsObjectSchema.partial().extend({
+  isArchived: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0);
+export const completeShiftDefinitionSchema = shiftDefinitionFieldsObjectSchema.extend({
+  isArchived: z.boolean().optional(),
+}).superRefine(refineShiftDefinition);
 export const completeJourneySchema = journeyFieldsObjectSchema.superRefine(refineJourney);
 export const completeOvertimePolicySchema = overtimeFieldsObjectSchema.superRefine(refineOvertimePolicy);
 

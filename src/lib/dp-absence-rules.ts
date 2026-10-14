@@ -3,7 +3,7 @@ import type { DPAbsencePolicy, DPAbsenceType, DPTimeApplicability } from '@/type
 
 export type DPAbsenceResolutionTarget = {
   collaboratorId: string;
-  employmentRelationshipType: 'clt' | 'apprenticeship' | 'internship' | 'pj';
+  employmentRelationshipType: 'clt' | 'apprenticeship' | 'internship' | 'pj' | 'partner';
   unitId?: string;
   unitGroupId?: string;
   unitOrganizationId?: string;
@@ -48,7 +48,9 @@ export function resolveAbsencePolicy(
   date: string,
   target: DPAbsenceResolutionTarget,
 ): DPAbsencePolicyResolution {
-  if (target.employmentRelationshipType === 'pj') return { status: 'not_applicable' };
+  if (target.employmentRelationshipType === 'pj' || target.employmentRelationshipType === 'partner') {
+    return { status: 'not_applicable' };
+  }
   const eligibleRelationship = target.employmentRelationshipType;
   if (date < absenceType.validFrom || date > (absenceType.validTo ?? '9999-12-31')) {
     return { status: 'not_applicable' };

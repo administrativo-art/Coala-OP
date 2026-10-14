@@ -45,7 +45,7 @@ const absencePolicySchema = z.object({
 const absenceTypeFieldsSchema = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(1000).optional(),
-  color: z.enum(['pink', 'blue', 'green', 'amber', 'violet', 'slate']),
+  color: z.enum(['pink', 'red', 'orange', 'amber', 'yellow', 'green', 'teal', 'cyan', 'blue', 'indigo', 'violet', 'slate']),
   requestUnits: z.array(z.enum(['day', 'hour'])).min(1).max(2).transform((values) => [...new Set(values)].sort()),
   initiatedBy: z.array(z.enum(['collaborator', 'manager', 'dp', 'system'])).min(1).max(4).transform((values) => [...new Set(values)].sort()),
   workdayEffect: z.enum(['excused_absence', 'unexcused_absence', 'worked_credit', 'time_bank_debit', 'manual_review']),

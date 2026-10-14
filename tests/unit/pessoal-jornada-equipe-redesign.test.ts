@@ -112,3 +112,24 @@ test('Pessoal organiza tempo sem quebrar o valor legado de deep link', () => {
   assert.match(page, /children: pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars"\]\)/);
   assert.match(page, /children: pickPersonalTabs\(\["profile-compliance", "login-access", "privacy", "audit"\]\)/);
 });
+
+test('catálogos de jornada, turno e hora extra separam ativos de arquivados', () => {
+  for (const path of [
+    'src/components/dp/dp-settings-journeys.tsx',
+    'src/components/dp/dp-settings-shifts.tsx',
+    'src/components/dp/dp-settings-overtime.tsx',
+  ]) {
+    const code = readFileSync(path, 'utf8');
+    assert.match(code, /includeAll=\{false\}/, `${path}: filtro binário ausente`);
+    assert.match(code, /value: 'active'/, `${path}: lista de ativos ausente`);
+    assert.match(code, /value: 'archived'/, `${path}: lista de arquivados ausente`);
+  }
+});
+
+test('hora extra orienta uma situação por faixa para preservar precedência', () => {
+  const overtime = readFileSync('src/components/dp/dp-settings-overtime.tsx', 'utf8');
+  assert.match(overtime, /Escolha uma situação por faixa/);
+  assert.match(overtime, /Para outra situação, crie outra faixa/);
+  assert.match(overtime, /Todas as faixas usam a tolerância geral definida acima/);
+  assert.doesNotMatch(overtime, /overtime-category-start/);
+});

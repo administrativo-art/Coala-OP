@@ -7,6 +7,7 @@ import { useDP } from '@/components/dp-context';
 import { DPTimeApplicabilityFields, TimeConfigurationNotice } from '@/components/dp/dp-time-config-fields';
 import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
 import { Field, fieldInputClass } from '@/components/patterns/field';
+import { FilterChips } from '@/components/patterns/filter-chips';
 import { InlineConfirm } from '@/components/patterns/inline-confirm';
 import { PanelField, PanelSection, SidePanel } from '@/components/patterns/side-panel';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,7 @@ import {
 import { defaultExpectedBreakMinutes, formatShiftMinutes, shiftJourneyComparisons } from '@/lib/dp-shift-duration';
 import { activeOperationalUnits } from '@/lib/dp-units';
 import { resolveUnitAccess } from '@/lib/unit-access';
+import { filterTimeConfigsByListStatus, timeConfigListCounts, type DPTimeConfigListStatus } from '@/lib/dp-time-config-status';
 import type { DPJourney, DPJourneyDay, DPShiftDefinition, DPTimeApplicability } from '@/types';
 
 const ROW_TEMPLATE = 'minmax(220px,1.35fr) 110px 110px minmax(180px,1fr) 140px 16px';
@@ -76,7 +78,7 @@ function shorterShiftComparisons(
   const allowed = new Set(journey.allowedShiftDefinitionIds ?? []);
   const candidates = allowed.size
     ? shiftDefinitions.filter((shift) => allowed.has(shift.id))
-    : shiftDefinitions;
+    : shiftDefinitions.filter((shift) => shift.isArchived !== true);
   return candidates.flatMap((shift) => shiftJourneyComparisons(shift, journey)
     .filter((comparison) => comparison.endsBeforeExpected)
     .map((comparison) => ({ shift, comparison })));
@@ -214,6 +216,7 @@ export function DPSettingsJourneys() {
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [form, setForm] = useState<JourneyForm>(() => formFor());
   const [search, setSearch] = useState('');
+  const [listStatus, setListStatus] = useState<DPTimeConfigListStatus>('active');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
@@ -233,11 +236,13 @@ export function DPSettingsJourneys() {
   const unitNames = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
   const groupNames = useMemo(() => new Map(unitGroups.map((group) => [group.id, group.name])), [unitGroups]);
   const organizationNames = useMemo(() => new Map(unitOrganizations.map((organization) => [organization.id, organization.name])), [unitOrganizations]);
+  const listCounts = useMemo(() => timeConfigListCounts(items), [items]);
+  const statusItems = useMemo(() => filterTimeConfigsByListStatus(items, listStatus), [items, listStatus]);
   const visibleItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
-    if (!term) return items;
-    return items.filter((entry) => `${entry.name} ${entry.description ?? ''} ${journeyRegimeLabel(entry.regime)} ${applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}`.toLocaleLowerCase('pt-BR').includes(term));
-  }, [groupNames, items, organizationNames, search, unitNames]);
+    if (!term) return statusItems;
+    return statusItems.filter((entry) => `${entry.name} ${entry.description ?? ''} ${journeyRegimeLabel(entry.regime)} ${applicabilityLabel(entry.applicability, { unitNames, unitGroupNames: groupNames, unitOrganizationNames: organizationNames })}`.toLocaleLowerCase('pt-BR').includes(term));
+  }, [groupNames, organizationNames, search, statusItems, unitNames]);
   const draftComparisonRows = useMemo(() => {
     const cycleLengthDays = parseCycleLengthDaysInput(form.cycleLengthDays);
     if (!editing || !cycleLengthDays) return [];
@@ -287,6 +292,7 @@ export function DPSettingsJourneys() {
     try {
       const updated = await update(item.id, { action });
       setPanel({ mode: 'view', item: updated });
+      if (action === 'archive') setListStatus('archived');
     } catch (transitionError) {
       setSaveError(transitionError instanceof Error ? transitionError.message : 'Não foi possível alterar a situação da jornada.');
     } finally {
@@ -326,18 +332,27 @@ export function DPSettingsJourneys() {
       <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px] shadow-none ring-1 ring-white/10">
         <div>
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Referências contratuais</p>
-          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{items.length}</p>
+          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{statusItems.length}</p>
           <p className="mt-1 text-base font-extrabold">Jornadas cadastradas</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <ControlSearch value={search} onChange={setSearch} placeholder="Buscar jornada ou abrangência" />
           <Button type="button" variant="primary-page" size="xl" onClick={() => setPanel({ mode: 'create' })}>+ Nova jornada</Button>
         </div>
+        <FilterChips
+          includeAll={false}
+          value={listStatus}
+          onChange={(value) => setListStatus(value === 'archived' ? 'archived' : 'active')}
+          chips={[
+            { value: 'active', label: 'Ativas', count: listCounts.active },
+            { value: 'archived', label: 'Arquivadas', count: listCounts.archived },
+          ]}
+        />
       </ControlPanel>
 
       <div className="flex items-baseline gap-2.5">
         <span className="text-[28px] font-extrabold tracking-[-0.03em]">{visibleItems.length}</span>
-        <span className="text-[13px] text-ds-ink-faint">de {items.length} jornadas</span>
+        <span className="text-[13px] text-ds-ink-faint">de {statusItems.length} jornadas {listStatus === 'active' ? 'ativas' : 'arquivadas'}</span>
       </div>
 
       <ListShell minWidth={940}>
@@ -367,7 +382,7 @@ export function DPSettingsJourneys() {
         ))}
         {items.length === 0 ? (
           <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhuma jornada cadastrada. Crie a primeira como rascunho.</p>
-        ) : visibleItems.length === 0 ? <EmptyResults title="Nenhuma jornada encontrada com essa busca." onClear={() => setSearch('')} /> : null}
+        ) : visibleItems.length === 0 ? <EmptyResults title={statusItems.length === 0 ? `Nenhuma jornada ${listStatus === 'active' ? 'ativa' : 'arquivada'}.` : 'Nenhuma jornada encontrada com essa busca.'} onClear={() => setSearch('')} /> : null}
       </ListShell>
 
       <SidePanel
@@ -780,7 +795,12 @@ export function DPSettingsJourneys() {
             </Field>
             <Field label="Turnos permitidos" requirement="opcional" hint="Selecione turnos já existentes. Eles não são duplicados e mantêm nome e ID do Bizneo.">
               <MultiSelect
-                options={shiftDefinitions.map((shift) => ({ value: shift.id, label: `${shift.name} · ${shift.startTime}–${shift.endTime}` }))}
+                options={shiftDefinitions
+                  .filter((shift) => shift.isArchived !== true || form.allowedShiftDefinitionIds.includes(shift.id))
+                  .map((shift) => ({
+                    value: shift.id,
+                    label: `${shift.name} · ${shift.startTime}–${shift.endTime}${shift.isArchived ? ' · arquivado' : ''}`,
+                  }))}
                 selected={form.allowedShiftDefinitionIds}
                 onChange={(allowedShiftDefinitionIds) => setForm((current) => ({ ...current, allowedShiftDefinitionIds }))}
                 placeholder="Todos os turnos existentes"

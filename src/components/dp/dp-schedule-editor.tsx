@@ -539,6 +539,7 @@ function ShiftDialog({
                     {(activeUnitIdForDefs
                       ? shiftDefinitions.filter(d => shiftDefinitionMatchesUnit(d, activeUnitIdForDefs))
                       : shiftDefinitions
+                    ).filter((definition) => definition.isArchived !== true || definition.id === field.value
                     ).map(def => (
                       <SelectItem key={def.id} value={def.id}>
                         {def.name} ({def.startTime}–{def.endTime})
