@@ -19,6 +19,15 @@ const FINANCIAL_DEFAULT_WIDGETS: ManagementWidgetId[] = [
   "fin-planning-hub",
 ];
 
+const OPERATIONS_DEFAULT_WIDGETS: ManagementWidgetId[] = [
+  "ops-summary",
+  "ops-expiring",
+  "ops-purchase-alerts",
+  "ops-restock",
+  "ops-count",
+  "ops-tasks",
+];
+
 const DEFAULT_WIDGETS: ManagementWidgetId[] = [
   "goals-revenue",
   "pending-tasks",
@@ -38,7 +47,7 @@ export function createDefaultManagementLayout(ownerId: string, ownerName: string
   const now = new Date().toISOString();
   let desktopX = 0;
   let desktopY = 0;
-  const widgets: DashboardWidgetPlacement[] = (scope === "financial" ? FINANCIAL_DEFAULT_WIDGETS : DEFAULT_WIDGETS).map((widgetId, index) => {
+  const widgets: DashboardWidgetPlacement[] = ({ financial: FINANCIAL_DEFAULT_WIDGETS, operations: OPERATIONS_DEFAULT_WIDGETS, management: DEFAULT_WIDGETS } as const)[scope].map((widgetId, index) => {
     const definition = MANAGEMENT_WIDGET_BY_ID.get(widgetId);
     if (!definition) throw new Error(`Widget desconhecido: ${widgetId}`);
     const layouts = structuredClone(definition.defaultLayouts);
@@ -60,7 +69,7 @@ export function createDefaultManagementLayout(ownerId: string, ownerName: string
   return {
     id: "personal",
     name: "Meu painel",
-    description: scope === "financial" ? "Visão personalizada do financeiro." : "Visão personalizada da gestão.",
+    description: { financial: "Visão personalizada do financeiro.", operations: "Visão personalizada da operação.", management: "Visão personalizada da gestão." }[scope],
     visibility: "personal",
     ownerId,
     ownerName,

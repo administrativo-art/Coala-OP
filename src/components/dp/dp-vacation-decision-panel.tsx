@@ -51,24 +51,24 @@ function fmtDate(value?: string | Date | null) {
 function checkTone(status: DPVacationLegalCheck['status']) {
   if (status === 'ok') {
     return {
-      box: 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/20',
-      icon: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
-      value: 'text-emerald-700 dark:text-emerald-300',
+      box: 'border-ds-ok-bg bg-ds-ok-bg dark:border-ds-ok-bg dark:bg-ds-ok',
+      icon: 'bg-ds-ok-bg text-ds-ok dark:bg-ds-ok dark:text-ds-ok',
+      value: 'text-ds-ok dark:text-ds-ok',
       glyph: CheckCircle2,
     };
   }
   if (status === 'blocked') {
     return {
-      box: 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20',
-      icon: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
-      value: 'text-red-700 dark:text-red-300',
+      box: 'border-ds-danger-bg bg-ds-danger-bg dark:border-ds-danger-bg dark:bg-ds-danger',
+      icon: 'bg-ds-danger-bg text-ds-danger dark:bg-ds-danger dark:text-ds-danger',
+      value: 'text-ds-danger dark:text-ds-danger',
       glyph: XCircle,
     };
   }
   return {
-    box: 'border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20',
-    icon: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
-    value: 'text-amber-800 dark:text-amber-300',
+    box: 'border-ds-warn-bg bg-ds-warn-bg dark:border-ds-warn-bg dark:bg-ds-warn',
+    icon: 'bg-ds-warn-bg text-ds-warn dark:bg-ds-warn dark:text-ds-warn',
+    value: 'text-ds-warn dark:text-ds-warn',
     glyph: AlertTriangle,
   };
 }
@@ -257,7 +257,7 @@ export function DPVacationDecisionPanel({
         </section>
 
         {hasBlockingIssue && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/70 p-3 text-red-800 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+          <div className="flex items-start gap-2.5 rounded-xl border border-ds-danger-bg bg-ds-danger-bg p-3 text-ds-danger dark:border-ds-danger-bg dark:bg-ds-danger dark:text-ds-danger">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <p className="text-[11.5px] font-semibold leading-relaxed">
               A aprovação está bloqueada até a correção das verificações impeditivas.
@@ -266,7 +266,7 @@ export function DPVacationDecisionPanel({
         )}
 
         {!canApprove && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300">
+          <div className="flex items-start gap-2.5 rounded-xl border border-ds-warn-bg bg-ds-warn-bg p-3 text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <p className="text-[11.5px] font-semibold leading-relaxed">
               Você pode consultar o período, mas precisa da permissão “Aprovar Férias” para decidir.
@@ -275,8 +275,8 @@ export function DPVacationDecisionPanel({
         )}
 
         {mode === 'reject' && (
-          <section className="rounded-2xl border border-red-200 bg-red-50/60 p-3.5 dark:border-red-900/60 dark:bg-red-950/20">
-            <h4 className="text-xs font-bold text-red-800 dark:text-red-300">Motivo da rejeição</h4>
+          <section className="rounded-2xl border border-ds-danger-bg bg-ds-danger-bg p-3.5 dark:border-ds-danger-bg dark:bg-ds-danger">
+            <h4 className="text-xs font-bold text-ds-danger dark:text-ds-danger">Motivo da rejeição</h4>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
               A justificativa será registrada na trilha de auditoria e devolverá o período ao RH.
             </p>
@@ -288,8 +288,8 @@ export function DPVacationDecisionPanel({
                   onClick={() => setReason(item)}
                   className={`rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-semibold transition-colors ${
                     reason === item
-                      ? 'border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-                      : 'border-border bg-background text-muted-foreground hover:border-red-200 hover:text-foreground'
+                      ? 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger dark:border-ds-danger-bg dark:bg-ds-danger dark:text-ds-danger'
+                      : 'border-border bg-background text-muted-foreground hover:border-ds-danger-bg hover:text-foreground'
                   }`}
                 >
                   {item}
@@ -314,8 +314,8 @@ export function DPVacationDecisionPanel({
         {result ? (
           <div className={`flex flex-wrap items-center gap-2.5 rounded-xl border p-3 ${
             result === 'approved'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-300'
-              : 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/25 dark:text-red-300'
+              ? 'border-ds-ok-bg bg-ds-ok-bg text-ds-ok dark:border-ds-ok-bg dark:bg-ds-ok dark:text-ds-ok'
+              : 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger dark:border-ds-danger-bg dark:bg-ds-danger dark:text-ds-danger'
           }`}>
             <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-current/10">
               {result === 'approved' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
@@ -331,7 +331,7 @@ export function DPVacationDecisionPanel({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              className="min-w-[190px] flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
+              className="min-w-[190px] flex-1 bg-ds-ok text-white hover:bg-ds-ok"
               disabled={!canSubmitApproval}
               onClick={() => void approve()}
             >
@@ -341,7 +341,7 @@ export function DPVacationDecisionPanel({
             <Button
               type="button"
               variant="outline"
-              className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+              className="border-ds-danger-bg text-ds-danger hover:bg-ds-danger-bg hover:text-ds-danger dark:border-ds-danger-bg dark:text-ds-danger dark:hover:bg-ds-danger"
               disabled={!canApprove || Boolean(busy)}
               onClick={() => setMode('reject')}
             >

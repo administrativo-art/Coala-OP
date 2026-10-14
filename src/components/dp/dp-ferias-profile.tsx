@@ -81,19 +81,19 @@ function fmtDate(d?: string | Date) {
 // ─── Risk config ──────────────────────────────────────────────────────────────
 
 const RISK_CONFIG: Record<VacationRisk, { label: string; text: string; bg: string }> = {
-  VENCIDA:  { label: 'Vencida',   text: 'text-red-700 dark:text-red-300',      bg: 'bg-red-100 dark:bg-red-900/30'      },
-  CRITICA:  { label: 'Crítica',   text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-100 dark:bg-orange-900/30' },
-  ATENCAO:  { label: 'Atenção',   text: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-100 dark:bg-yellow-900/30' },
-  EM_DIA:   { label: 'Em dia',    text: 'text-green-700 dark:text-green-300',   bg: 'bg-green-100 dark:bg-green-900/30'   },
+  VENCIDA:  { label: 'Vencida',   text: 'text-ds-danger dark:text-ds-danger',      bg: 'bg-ds-danger-bg dark:bg-ds-danger'      },
+  CRITICA:  { label: 'Crítica',   text: 'text-ds-warn dark:text-ds-warn', bg: 'bg-ds-warn-bg dark:bg-ds-warn' },
+  ATENCAO:  { label: 'Atenção',   text: 'text-ds-warn dark:text-ds-warn', bg: 'bg-ds-warn-bg dark:bg-ds-warn' },
+  EM_DIA:   { label: 'Em dia',    text: 'text-ds-ok dark:text-ds-ok',   bg: 'bg-ds-ok-bg dark:bg-ds-ok'   },
 };
 
 // ─── Vacation record status config ────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  PENDING:  { label: 'Pendente',  bg: 'bg-amber-100 dark:bg-amber-900/30',  text: 'text-amber-700 dark:text-amber-300'  },
-  PLANNED:  { label: 'Planejado', bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300' },
-  APPROVED: { label: 'Aprovado',  bg: 'bg-green-100 dark:bg-green-900/30',  text: 'text-green-700 dark:text-green-300'  },
-  REJECTED: { label: 'Rejeitado', bg: 'bg-red-100 dark:bg-red-900/30',      text: 'text-red-700 dark:text-red-300'      },
+  PENDING:  { label: 'Pendente',  bg: 'bg-ds-warn-bg dark:bg-ds-warn',  text: 'text-ds-warn dark:text-ds-warn'  },
+  PLANNED:  { label: 'Planejado', bg: 'bg-ds-accent-soft dark:bg-ds-accent', text: 'text-ds-accent-ink dark:text-ds-accent-ink' },
+  APPROVED: { label: 'Aprovado',  bg: 'bg-ds-ok-bg dark:bg-ds-ok',  text: 'text-ds-ok dark:text-ds-ok'  },
+  REJECTED: { label: 'Rejeitado', bg: 'bg-ds-danger-bg dark:bg-ds-danger',      text: 'text-ds-danger dark:text-ds-danger'      },
 } as const;
 
 // ─── Vacation Record Row ──────────────────────────────────────────────────────
@@ -806,12 +806,12 @@ export function DPFeriasProfile({
 
         {selectedWorkflowVacation ? (
           <details className="group border-b bg-background">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[12px] font-black text-slate-700 marker:content-none">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[12px] font-black text-ds-ink-2 marker:content-none">
               <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Histórico auditável</span>
-              <span className="text-[10px] font-semibold text-slate-500 group-open:hidden">Mostrar</span>
-              <span className="hidden text-[10px] font-semibold text-slate-500 group-open:inline">Ocultar</span>
+              <span className="text-[10px] font-semibold text-ds-ink-muted group-open:hidden">Mostrar</span>
+              <span className="hidden text-[10px] font-semibold text-ds-ink-muted group-open:inline">Ocultar</span>
             </summary>
-            <div className="border-t border-slate-100">
+            <div className="border-t border-ds-divider">
               <DPVacationAuditTimeline
                 vacationId={selectedWorkflowVacation.id}
                 version={selectedWorkflowVacation.workflow?.updatedAt ?? String(selectedWorkflowVacation.updatedAt ?? '')}
@@ -896,21 +896,21 @@ export function DPFeriasProfile({
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ciclos</p>
               <div className="mt-3 space-y-2">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-sky-500" />Em aquisição</span>
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-ds-info" />Em aquisição</span>
                   <span className="font-semibold tabular-nums">{cycleCounts.acquisition}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-amber-500" />Em período concessivo</span>
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-ds-warn" />Em período concessivo</span>
                   <span className="font-semibold tabular-nums">{cycleCounts.concessive}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-emerald-500" />Encerrados</span>
+                  <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-ds-ok" />Encerrados</span>
                   <span className="font-semibold tabular-nums">{cycleCounts.closed}</span>
                 </div>
                 {cycleCounts.overdue > 0 ? (
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2 text-red-700"><span className="h-2 w-2 rounded-full bg-red-500" />Vencidos</span>
-                    <span className="font-semibold tabular-nums text-red-700">{cycleCounts.overdue}</span>
+                    <span className="flex items-center gap-2 text-ds-danger"><span className="h-2 w-2 rounded-full bg-ds-danger" />Vencidos</span>
+                    <span className="font-semibold tabular-nums text-ds-danger">{cycleCounts.overdue}</span>
                   </div>
                 ) : null}
               </div>
@@ -938,17 +938,17 @@ export function DPFeriasProfile({
                   {concessiveNoticeLimit ? (
                     <div className={`mt-3 rounded-xl border px-3 py-2.5 ${
                       concessiveNoticeLimit.daysLeft < 0
-                        ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/25 dark:text-red-200'
+                        ? 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger dark:border-ds-danger-bg dark:bg-ds-danger dark:text-ds-danger'
                         : concessiveNoticeLimit.daysLeft <= 60
-                          ? 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/25 dark:text-amber-200'
-                          : 'border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/25 dark:text-sky-200'
+                          ? 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn'
+                          : 'border-ds-info-bg bg-ds-info-bg text-ds-info dark:border-ds-info-bg dark:bg-ds-info dark:text-ds-info'
                     }`}>
                       <div className="flex items-start justify-between gap-3">
                         <span>
                           <span className="block text-[10px] font-black uppercase tracking-[0.08em]">Data-limite do aviso</span>
                           <span className="mt-0.5 block text-sm font-black tabular-nums">{fmtDate(concessiveNoticeLimit.date)}</span>
                         </span>
-                        <span className="rounded-full bg-white/75 px-2 py-1 text-[10px] font-black dark:bg-black/15">
+                        <span className="rounded-full bg-ds-surface px-2 py-1 text-[10px] font-black dark:bg-black/15">
                           {concessiveNoticeLimit.daysLeft < 0
                             ? `${Math.abs(concessiveNoticeLimit.daysLeft)}d em atraso`
                             : concessiveNoticeLimit.daysLeft === 0
