@@ -164,6 +164,18 @@ Após autorização para retirar o antigo e atualizar download, versão sem par�
 
 Cumprir o [roteiro de primeira instalação](coala-go-device-migration.md) e executar piloto físico/integrado Go. Registrar aceite das lacunas acima. A publicação para teste foi posteriormente autorizada e realizada; não equivale a paridade final comprovada.
 
+### Verificação da 0.3.9 (Escala em "Todas as unidades", seta desenhada)
+
+A Escala abre em "Todas as unidades" a cada visita (com uma unidade só, abre
+nela). A seta dos seletores e das seções da revisão da Compra local passou a
+ser o componente desenhado `DropdownChevron`, no lugar dos caracteres de seta.
+Os padrões de interface do app foram documentados em `docs/design/app.md`.
+`ViewModelsTest` cobre o valor inicial da Escala e o teste de contrato
+`coala-go-ui-contract.test.ts` cobre o reinício a cada visita e a proibição de
+caracteres de seta. As telas não foram vistas em emulador nem aparelho (o
+emulador ficou desligado por pedido do responsável) e os testes de tela foram
+só compilados.
+
 ### Verificação da 0.3.8 (motivo da sangria, "Todas as unidades", barra sem deslize)
 
 A lista de sangrias e a revisão da compra mostram o motivo digitado no PDV,

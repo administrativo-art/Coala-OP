@@ -144,6 +144,7 @@ class ViewModelsTest {
     }
     @Test fun scheduleUnitSelectionKeepsLoadedUnitsAndOnlyMineState() = runTest {
         val vm = ModulesViewModel(repository(auth, DemoApi()))
+        assertEquals(com.coalaone.go.domain.Rules.ALL_UNITS, vm.state.value.selectedScheduleUnit)
         vm.schedule(LocalDate.of(2026, 10, 12)); advanceUntilIdle()
         val loaded = vm.state.value.schedules
         assertEquals(8, loaded.getValue("2026-10").units.size)

@@ -193,7 +193,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
                 if (!open && subtitle.isNotBlank()) Text(subtitle, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
-            Text(if (open) "⌃" else "⌄", color = if (open) Tokens.wine else Tokens.faint)
+            DropdownChevron(open, if (open) Tokens.wine else Tokens.faint)
         }
         if (open) content()
     }
