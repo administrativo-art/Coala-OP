@@ -26,6 +26,7 @@ Este índice trata do sistema web. O aplicativo Android (Coala Go) tem paleta, c
 - [Painel lateral](painel-lateral.md)
 - [Modais](modais.md)
 - [Confirmação e feedback](feedback.md)
+- [Movimento, marca e ícones](movimento-marca-e-icones.md)
 - [Aplicativo Coala Go](app.md)
 - [Decisões](decisoes/)
 - [Estado atual × destino](estado-atual.md)
