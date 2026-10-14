@@ -493,7 +493,7 @@ api,src/app/api/stock/mobile-count/save/route.ts,,docs/engineering/flows/stock-c
 api,src/app/api/stock/mobile-reposition/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Reposicoes aguardando recebimento nas unidades de destino do usuario; GET sem escrita.
 api,src/app/api/stock/mobile-reposition/receive/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Registra o recebimento pelo aplicativo na unidade de destino; nao movimenta estoque.
 api,src/app/api/stock/mobile-reposition/photo/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Foto privada de lote despachado; permissao app.reposition.receive e unidade de destino; GET sem escrita.
-api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em andamento das unidades do usuario para o aplicativo com placar e previsao de premio; GET sem escrita.
+api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em andamento das unidades do usuario para o aplicativo com placar e previsao de premio e resumo de todas as unidades (scope=all); GET sem escrita.
 api,src/app/api/goals/employee-goals/route.ts,,docs/engineering/flows/goals.md,Cria participante de meta com permissao e escopo da unidade; recusa cobertura externa no periodo e audita no servidor.
 api,src/app/api/goals/periods/[periodId]/status/route.ts,,docs/engineering/flows/goals.md,Encerra cancela ou reabre meta no servidor; relê escala e exclui cobertura externa antes de congelar prêmio.
 api,src/app/api/dp/mobile-schedule/route.ts,,docs/engineering/flows/collaborator-schedule.md,Escala publicada das unidades do proprio usuario para o aplicativo; mesma regra do portal do colaborador; GET sem escrita.

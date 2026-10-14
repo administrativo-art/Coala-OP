@@ -183,8 +183,16 @@ export function parseSignagePairingCode(scanned: string) {
 }
 
 /**
- * A tela que "Adicionar tela" vai criar na unidade: enquanto a tela padrão não tem monitor, é ela
- * (a "Tela 1"); depois, uma tela adicional com o próximo nome livre.
+ * A unidade não tem tela até alguém cadastrar uma. A primeira tela usa o id da própria unidade e
+ * guarda o código no cadastro dela; ela só existe quando há esse código ou o documento da tela.
+ */
+export function hasUnitFirstScreen(kiosk: { deviceToken?: unknown }, screenDocExists: boolean) {
+  return screenDocExists || (typeof kiosk.deviceToken === 'string' && kiosk.deviceToken.length > 0);
+}
+
+/**
+ * A tela que "Adicionar tela" vai criar na unidade: enquanto a primeira tela não tem monitor, é ela;
+ * depois, uma tela adicional com o próximo nome livre.
  */
 export function planNewSignageScreen(screens: { name: string; isDefault: boolean; deviceToken?: string }[]) {
   const first = screens.find((screen) => screen.isDefault);
@@ -197,7 +205,7 @@ export function planNewSignageScreen(screens: { name: string; isDefault: boolean
 }
 
 /**
- * Nome automático da próxima tela da unidade: a primeira é a "Tela 1" (a tela padrão); as demais
+ * Nome automático da próxima tela da unidade: a primeira é a "Tela 1"; as demais
  * recebem o menor número ainda livre, para um nome apagado poder ser reaproveitado sem repetir outro.
  */
 export function nextSignageScreenName(existingNames: string[]) {
@@ -222,7 +230,7 @@ export function getPublishedTimestamp(input?: { updatedAt?: string } | null) {
   return input?.updatedAt ? Date.parse(input.updatedAt) || 0 : 0;
 }
 
-/** Telas que exibem o slide; slides anteriores às telas só têm `kioskIds`, que são as telas padrão. */
+/** Telas que exibem o slide; slides anteriores às telas só têm `kioskIds`, que são a primeira tela de cada unidade. */
 export function getSlideScreenIds(slide: { screenIds?: string[]; kioskIds?: string[] }): string[] {
   return slide.screenIds?.length ? slide.screenIds : slide.kioskIds ?? [];
 }

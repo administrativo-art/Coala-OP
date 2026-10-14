@@ -2,6 +2,8 @@
 
 Padrões visuais e de comportamento das telas operacionais. Guia vivo: `/dashboard/design`.
 
+Este índice trata do sistema web. O aplicativo Android (Coala Go) tem paleta, componentes e regras próprios, descritos em [Aplicativo Coala Go](app.md).
+
 ## Princípios
 - Um título por tela antes do primeiro item. Departamento vira menu; subseções ficam na mesma linha do título.
 - Tudo que **filtra** a lista fica no painel escuro do topo. Tudo que **age** sobre um item fica no painel lateral.
@@ -26,6 +28,8 @@ Padrões visuais e de comportamento das telas operacionais. Guia vivo: `/dashboa
 - [Gerenciador de documentos](gerenciador-de-documentos.md)
 - [Modais](modais.md)
 - [Confirmação e feedback](feedback.md)
+- [Movimento, marca e ícones](movimento-marca-e-icones.md)
+- [Aplicativo Coala Go](app.md)
 - [Decisões](decisoes/)
 - [Estado atual × destino](estado-atual.md)
 - [Validação visual](validacao-visual.md)

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { dayKeysBetween, mobileGoalDays, mobileGoalPrize, mobileGoalSummary, mobileGoalTeam, type MobileGoalPeriodInput } from "../../src/features/goals/mobile-goals";
+import { dayKeysBetween, mobileGoalDays, mobileGoalPrize, mobileGoalSummary, mobileGoalTeam, mobileGoalsOverview, type MobileGoalPeriodInput } from "../../src/features/goals/mobile-goals";
 import { defaultAdminPermissions, defaultGuestPermissions, type EmployeeGoal, type GoalMethodSnapshot } from "../../src/types";
 
 const method = {
@@ -107,4 +107,26 @@ test("goals in the app need the app permission and stay inside the user's units"
   const route = readFileSync("src/app/api/goals/mobile/route.ts", "utf8");
   assert.match(route, /action: "app\.goals\.view"/);
   assert.match(route, /export const GET = secureRoute/);
+});
+
+test("overview lists every unit, sums revenue goals only and ignores goals of units outside the scope", () => {
+  const row = (id: string, kioskId: string, patch: Record<string, unknown> = {}) => ({
+    id, kioskId, type: "revenue" as const, typeLabel: "Faturamento", startDate: "2026-10-01", endDate: "2026-10-31", currentValue: 15000, targetValue: 60000, ...patch,
+  });
+  const overview = mobileGoalsOverview(
+    [{ id: "a", name: "Centro" }, { id: "b", name: "Orla" }, { id: "c", name: "Shopping" }],
+    [row("g1", "a"), row("g2", "b", { currentValue: 45000 }), row("g3", "b", { type: "ticket", typeLabel: "Ticket médio", currentValue: 21.5, targetValue: 20 }), row("g4", "outside", { currentValue: 999999 })],
+  );
+  assert.deepEqual(overview.total, { currentValue: 60000, targetValue: 120000, percentOfTarget: 50, unitCount: 2 });
+  assert.deepEqual(overview.units.map((unit) => [unit.id, unit.goals.length]), [["a", 1], ["b", 2], ["c", 0]]);
+  assert.deepEqual(overview.units[1]!.goals.map((goal) => [goal.typeLabel, goal.percentOfTarget, goal.cumulative]), [["Faturamento", 75, true], ["Ticket médio", 107.5, false]]);
+  assert.equal(mobileGoalsOverview([{ id: "c", name: "Shopping" }], []).total, null);
+});
+
+test("goals route serves the all-units summary only through the scoped loader", () => {
+  const route = readFileSync("src/app/api/goals/mobile/route.ts", "utf8");
+  const server = readFileSync("src/features/goals/mobile-goals.server.ts", "utf8");
+  assert.match(route, /scope === "all" \? await loadMobileGoalsOverview\(security\.actor\)/);
+  assert.match(server, /const units = await listMobileGoalUnits\(actor\);[\s\S]*allowed\.has\(/);
+  assert.match(server, /where\("status", "==", "active"\)[\s\S]*\.limit\(MAX_OVERVIEW_PERIODS\)/);
 });

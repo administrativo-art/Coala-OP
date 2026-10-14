@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { assertCanViewMobileGoals, listMobileGoalUnits, loadMobileUnitGoals } from "@/features/goals/mobile-goals.server";
+import { assertCanViewMobileGoals, listMobileGoalUnits, loadMobileGoalsOverview, loadMobileUnitGoals } from "@/features/goals/mobile-goals.server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { AppError } from "@/lib/observability/app-error";
 import { defineSecurityEnforcer } from "@/lib/security/enforcer";
@@ -41,11 +41,14 @@ const enforcer = defineSecurityEnforcer<NextRequest, StaticRouteContext, unknown
 });
 
 // Without `kioskId` it lists the user's units; with it, the goals of that unit after the unit scope is checked.
+// `scope=all` is the side-by-side summary of every unit in the user's scope.
 export const GET = secureRoute({ contract, enforcer }, async ({ request, security }) => {
   const kioskId = request.nextUrl.searchParams.get("kioskId");
-  if (kioskId !== null && !/^[^/]{1,200}$/.test(kioskId)) {
+  const scope = request.nextUrl.searchParams.get("scope");
+  if ((kioskId !== null && !/^[^/]{1,200}$/.test(kioskId)) || (scope !== null && (scope !== "all" || kioskId !== null))) {
     throw new AppError({ code: "MOBILE_GOALS_INPUT_INVALID", kind: "VALIDATION", safeMessage: "Unidade inválida." });
   }
-  const body = kioskId ? await loadMobileUnitGoals(security.actor, kioskId) : { units: await listMobileGoalUnits(security.actor) };
+  const body = scope === "all" ? await loadMobileGoalsOverview(security.actor)
+    : kioskId ? await loadMobileUnitGoals(security.actor, kioskId) : { units: await listMobileGoalUnits(security.actor) };
   return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store" } });
 });

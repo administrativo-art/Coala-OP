@@ -90,8 +90,9 @@ export const PATCH = secureRoute({ contract: updateContract, enforcer: updateEnf
   const screenRef = signageDbAdmin.collection('screens').doc(screen.id);
 
   if (screen.isDefault) {
-    // O nome da tela padrão fica num documento de mesmo id da unidade; o código continua no cadastro da unidade.
-    if (input.name !== undefined) await screenRef.set({ kioskId: screen.kioskId, name: input.name }, { merge: true });
+    // A primeira tela fica num documento de mesmo id da unidade; o código continua no cadastro da unidade.
+    // O documento é gravado sempre: sem ele, tirar o código faria a tela deixar de existir.
+    await screenRef.set({ kioskId: screen.kioskId, ...(input.name !== undefined ? { name: input.name } : {}) }, { merge: true });
     if (input.token) {
       await dbAdmin.collection('kiosks').doc(screen.kioskId).update({ deviceToken: nextToken ?? FieldValue.delete() });
     }
@@ -115,21 +116,26 @@ export const PATCH = secureRoute({ contract: updateContract, enforcer: updateEnf
 
 export const DELETE = secureRoute({ contract: deleteContract, enforcer: deleteEnforcer }, async ({ security }) => {
   const screen = security.resource;
-  if (screen.isDefault) {
-    throw new AppError({ code: 'SIGNAGE_SCREEN_DEFAULT', kind: 'CONFLICT', safeMessage: 'A primeira tela da unidade não pode ser excluída.' });
-  }
-
-  const slidesSnap = await signageDbAdmin.collection('slides')
+  const slidesQuery = signageDbAdmin.collection('slides')
     .where('screenIds', 'array-contains', screen.id)
     .limit(MAX_SLIDES_PER_SCREEN_DELETE + 1)
     .get();
-  if (slidesSnap.size > MAX_SLIDES_PER_SCREEN_DELETE) {
+  // Slides anteriores às telas só têm `kioskIds` e pertencem à primeira tela da unidade.
+  const legacyQuery = screen.isDefault
+    ? signageDbAdmin.collection('slides').where('kioskIds', 'array-contains', screen.id).limit(MAX_SLIDES_PER_SCREEN_DELETE + 1).get()
+    : null;
+  const [byScreen, byUnit] = await Promise.all([slidesQuery, legacyQuery]);
+  const slideDocs = [
+    ...byScreen.docs,
+    ...(byUnit?.docs ?? []).filter((doc) => !doc.data().screenIds?.length),
+  ];
+  if (slideDocs.length > MAX_SLIDES_PER_SCREEN_DELETE) {
     throw new AppError({ code: 'SIGNAGE_SCREEN_TOO_MANY_SLIDES', kind: 'CONFLICT', safeMessage: 'Esta tela tem slides demais para excluir de uma vez. Remova parte deles antes.' });
   }
 
   // Telas restantes de cada slide, para recalcular as unidades donas sem ler tela por tela.
   const kioskByScreen = new Map<string, string>();
-  const otherScreenIds = new Set(slidesSnap.docs.flatMap((doc) => getSlideScreenIds(doc.data())).filter((id) => id !== screen.id));
+  const otherScreenIds = new Set(slideDocs.flatMap((doc) => getSlideScreenIds(doc.data())).filter((id) => id !== screen.id));
   await Promise.all(Array.from(otherScreenIds).map(async (screenId) => {
     const other = await resolveSignageScreen(screenId);
     if (other) kioskByScreen.set(screenId, other.kioskId);
@@ -137,7 +143,7 @@ export const DELETE = secureRoute({ contract: deleteContract, enforcer: deleteEn
 
   const orphanedAssets: Array<{ assetPath: string; slideId: string }> = [];
   const batch = signageDbAdmin.batch();
-  slidesSnap.docs.forEach((doc) => {
+  slideDocs.forEach((doc) => {
     const data = doc.data();
     const remaining = getSlideScreenIds(data).filter((id) => id !== screen.id && kioskByScreen.has(id));
     if (!remaining.length) {
@@ -156,6 +162,10 @@ export const DELETE = secureRoute({ contract: deleteContract, enforcer: deleteEn
   batch.delete(signageDbAdmin.collection('playerHeartbeats').doc(screen.id));
   batch.delete(signageDbAdmin.collection('screens').doc(screen.id));
   await batch.commit();
+  // O código da primeira tela mora no cadastro da unidade, em outro banco; sai depois da tela.
+  if (screen.isDefault && screen.deviceToken) {
+    await dbAdmin.collection('kiosks').doc(screen.kioskId).update({ deviceToken: FieldValue.delete() });
+  }
 
   // A mídia sai do Storage depois do commit; uma falha aqui deixa só um arquivo sem uso.
   await Promise.allSettled(orphanedAssets.map(({ assetPath, slideId }) => deleteSignageAssetIfOrphaned(assetPath, slideId)));

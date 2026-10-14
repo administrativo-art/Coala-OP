@@ -42,8 +42,8 @@ android {
         applicationId = "coalaone.go"
         minSdk = 26
         targetSdk = 36
-        versionCode = configured("COALA_VERSION_CODE", "10").toInt()
-        versionName = configured("COALA_VERSION_NAME", "0.3.5")
+        versionCode = configured("COALA_VERSION_CODE", "14").toInt()
+        versionName = configured("COALA_VERSION_NAME", "0.3.9")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoted(configured("COALA_API_BASE_URL", "https://op.coalashakes.com")))
         buildConfigField("String", "FIREBASE_API_KEY", quoted(configured("COALA_FIREBASE_API_KEY")))
@@ -125,6 +125,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
     implementation("androidx.room:room-runtime:2.7.1")
     implementation("androidx.room:room-ktx:2.7.1")

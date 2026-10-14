@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
@@ -31,6 +32,15 @@ import java.time.format.DateTimeFormatter
 
 private val ptBR = java.util.Locale.forLanguageTag("pt-BR")
 private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerInstance(ptBR).format(Math.round(value))
+@Composable private fun ClockGlyph(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier.size(14.dp)) {
+        val stroke = 1.4.dp.toPx()
+        val center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+        drawCircle(Tokens.muted, radius = size.minDimension / 2 - stroke / 2, center = center, style = Stroke(stroke))
+        drawLine(Tokens.muted, center, androidx.compose.ui.geometry.Offset(center.x, center.y - 3.dp.toPx()), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(Tokens.muted, center, androidx.compose.ui.geometry.Offset(center.x + 2.5.dp.toPx(), center.y + 1.5.dp.toPx()), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    }
+}
 @Composable private fun NavSquare(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick), contentAlignment = Alignment.Center) {
         Box(Modifier.size(34.dp).background(Tokens.surface, RoundedCornerShape(10.dp)).border(1.dp, Tokens.fieldBorder, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(glyph, style = MaterialTheme.typography.titleMedium) }
@@ -38,10 +48,14 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
 }
 @Composable fun ScheduleScreen(vm: ModulesViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
-    LaunchedEffect(Unit) { vm.schedule() }
+    // Every visit starts on "Todas as unidades"; a rotation keeps the unit picked during the visit.
+    var opened by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (!opened) { opened = true; vm.scheduleFilter(Rules.ALL_UNITS, state.onlyMine) }; vm.schedule() }
     val dates = Rules.week(state.day)
     val units = state.schedules.values.flatMap { it.units }.distinctBy { it.id }
     val selected = units.firstOrNull { it.id == state.selectedScheduleUnit } ?: units.firstOrNull()
+    val allUnits = units.size > 1 && state.selectedScheduleUnit == Rules.ALL_UNITS
+    val choice = if (allUnits) Rules.ALL_UNITS else selected?.id.orEmpty()
     var selectedDay by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var monthView by rememberSaveable { mutableStateOf(false) }
     val picked = runCatching { LocalDate.parse(selectedDay) }.getOrNull()
@@ -53,7 +67,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     fun mine(date: LocalDate) = state.schedules[date.toString().take(7)]?.units.orEmpty().flatMap { unit -> unit.shifts.filter { it.date == date.toString() && unit.people.getOrNull(it.person)?.isMe == true } }.minByOrNull { it.startTime }
     Page("Escala", feedback, onBack, onRefresh = { vm.refreshSchedule() }, header = {
         TopBar("Escala", busy = feedback.busy, onBack = onBack)
-        if (!state.onlyMine) UnitPickerHeader(units.map { it.id to it.name }, selected?.id.orEmpty(), feedback.busy) { vm.scheduleFilter(it, state.onlyMine) }
+        if (!state.onlyMine) UnitPickerHeader(Rules.unitChoices(units.map { it.id to it.name }), choice, feedback.busy) { vm.scheduleFilter(it, state.onlyMine) }
     }) {
         if (monthView) {
             val first = state.day.withDayOfMonth(1)
@@ -101,8 +115,8 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PillChoice("Equipe", !state.onlyMine) { vm.scheduleFilter(selected?.id.orEmpty(), false) }
-            PillChoice("Só a minha", state.onlyMine) { vm.scheduleFilter(selected?.id.orEmpty(), true) }
+            PillChoice("Equipe", !state.onlyMine) { vm.scheduleFilter(choice, false) }
+            PillChoice("Só a minha", state.onlyMine) { vm.scheduleFilter(choice, true) }
             Spacer(Modifier.weight(1f))
             PillChoice(if (monthView) "Ver semana" else "Ver mês", false) { if (monthView) vm.schedule(day); monthView = !monthView }
             if (today !in dates && !monthView) Text("Hoje", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy, role = Role.Button) { selectedDay = today.toString(); vm.schedule(today) }.padding(8.dp))
@@ -110,23 +124,34 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
         if (units.isEmpty() && !feedback.busy) EmptyState("Nenhuma escala neste período", "Ainda não há escala lançada para esta semana.")
         else {
             val month = state.schedules[day.toString().take(7)]
-            // "Só a minha" gathers the person's shifts from every unit; the team view follows the chosen unit.
-            val shown = if (state.onlyMine) month?.units.orEmpty() else listOfNotNull(month?.units?.firstOrNull { it.id == selected?.id })
-            val rows = shown.flatMap { unit -> unit.shifts.filter { it.date == day.toString() && (!state.onlyMine || unit.people.getOrNull(it.person)?.isMe == true) }.map { unit to it } }.sortedBy { (if (it.second.type == "day_off") "99" else "") + it.second.startTime }
+            // "Só a minha" gathers the person's shifts from every unit; the team view follows the chosen unit, or every unit at once.
+            val grouped = allUnits && !state.onlyMine
+            val shown = if (state.onlyMine || allUnits) month?.units.orEmpty() else listOfNotNull(month?.units?.firstOrNull { it.id == selected?.id })
+            val rows = shown.flatMap { unit -> unit.shifts.filter { it.date == day.toString() && (!state.onlyMine || unit.people.getOrNull(it.person)?.isMe == true) }.map { unit to it } }.sortedWith(compareBy({ if (grouped) it.first.name else "" }, { (if (it.second.type == "day_off") "99" else "") + it.second.startTime }))
             Text(day.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", ptBR)).replaceFirstChar { it.titlecase(ptBR) }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
             if (!state.onlyMine && units.size == 1) Text(selected?.name.orEmpty(), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             if (rows.isEmpty()) EmptyState(if (state.onlyMine) "Você não tem turno neste dia" else "Nenhum turno neste dia")
-            rows.forEach { (unit, shift) ->
+            rows.forEachIndexed { index, (unit, shift) ->
                 val person = unit.people.getOrNull(shift.person)
+                if (grouped && rows.getOrNull(index - 1)?.first?.id != unit.id) Text(unit.name.uppercase(ptBR), color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.ExtraBold), modifier = Modifier.padding(top = 10.dp))
                 HorizontalDivider(color = Tokens.border)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PersonBadge(person?.name.orEmpty(), person?.avatarUrl, shift.person, person?.color, 38)
-                    Column(Modifier.weight(1f)) {
-                        Text("${person?.name.orEmpty()}${if (person?.isMe == true) " · você" else ""}", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
-                        Text(if (state.onlyMine && units.size > 1) unit.name else person?.role.orEmpty(), color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.padding(top = 1.dp)) { PersonBadge(person?.name.orEmpty(), person?.avatarUrl, shift.person, person?.color, 38) }
+                    Column(Modifier.weight(1f).widthIn(max = 190.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(personDisplayName(person?.name.orEmpty()), style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            if (person?.isMe == true) Text("VOCÊ", color = Tokens.wine, style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.ExtraBold))
+                        }
+                        Text(if (state.onlyMine && units.size > 1) unit.name else person?.role.orEmpty(), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
-                    if (shift.type == "day_off") Text("Folga", color = Tokens.faint, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp))
-                    else Column(horizontalAlignment = Alignment.End) { Text("${shift.startTime}–${shift.endTime}", style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp)); Text(shift.shiftName, color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+                    if (shift.type == "day_off") Text("Folga", color = Tokens.faint, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp), modifier = Modifier.padding(top = 2.dp))
+                    else Column(Modifier.widthIn(min = 112.dp, max = 172.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            ClockGlyph()
+                            Text("${shift.startTime}–${shift.endTime}", style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold), maxLines = 1)
+                        }
+                        Text(scheduleShiftDisplayName(shift.shiftName), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp), textAlign = TextAlign.End, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -141,17 +166,32 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
     val preferences = androidx.compose.ui.platform.LocalContext.current.getSharedPreferences("goals", android.content.Context.MODE_PRIVATE)
     val owner = LocalOwner.current
     LaunchedEffect(state.goalUnits, feedback.busy) {
-        if (state.goals == null && state.goalUnits.isNotEmpty() && !feedback.busy && feedback.error == null) {
+        if (state.goals == null && state.goalsOverview == null && state.goalUnits.isNotEmpty() && !feedback.busy && feedback.error == null) {
             val saved = preferences.getString("unit:$owner", null)
-            vm.goals(state.goalUnits.firstOrNull { it.id == saved }?.id ?: state.goalUnits.first().id)
+            if (saved == Rules.ALL_UNITS && state.goalUnits.size > 1) vm.goalsOverview() else vm.goals(state.goalUnits.firstOrNull { it.id == saved }?.id ?: state.goalUnits.first().id)
         }
     }
     val goals = state.goals?.goals.orEmpty()
     val goal = goals.firstOrNull { it.id == selectedGoal } ?: goals.firstOrNull()
     val unitName = state.goalUnits.firstOrNull { it.id == state.goals?.kioskId }?.name.orEmpty()
+    val overview = state.goalsOverview
+    val open: (String) -> Unit = { id -> selectedGoal = ""; preferences.edit().putString("unit:$owner", id).apply(); if (id == Rules.ALL_UNITS) vm.goalsOverview() else vm.goals(id) }
     Page("Metas", feedback, onBack, header = {
         TopBar("Metas", busy = feedback.busy, onBack = onBack)
-        UnitPickerHeader(state.goalUnits.map { it.id to it.name }, state.goals?.kioskId.orEmpty(), feedback.busy) { id -> selectedGoal = ""; preferences.edit().putString("unit:$owner", id).apply(); vm.goals(id) }
+        UnitPickerHeader(Rules.unitChoices(state.goalUnits.map { it.id to it.name }), if (overview != null) Rules.ALL_UNITS else state.goals?.kioskId.orEmpty(), feedback.busy, open)
+        overview?.total?.let { total ->
+            Spacer(Modifier.height(12.dp))
+            Text("FATURAMENTO · ${total.unitCount} ${if (total.unitCount == 1) "UNIDADE" else "UNIDADES"}", color = Tokens.pink, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black))
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Text(money0(total.currentValue), color = Tokens.onDark, style = MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp, fontWeight = FontWeight.Black), modifier = Modifier.weight(1f))
+                Text(percentText(Math.round(total.percentOfTarget).toDouble()), color = Tokens.onDark, style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Black))
+            }
+            Spacer(Modifier.height(8.dp))
+            AnimatedProgress((total.percentOfTarget / 100).toFloat(), height = 12, track = Tokens.track, fill = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Tokens.accent, Tokens.pink)))
+            Spacer(Modifier.height(8.dp))
+            Text("Soma das metas de faturamento em andamento: ${money0(total.targetValue)}", color = Tokens.onDark2, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+        }
         goal?.let { target ->
             val summary = target.summary
             val scale = maxOf(summary.levels.maxOfOrNull { it.amount } ?: 0.0, 1.0)
@@ -198,7 +238,30 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
         }
     }) {
         if (goals.size > 1) Choices("Meta", goals.map { it.id to "${it.typeLabel} · ${shortDate(it.startDate) ?: it.startDate} a ${shortDate(it.endDate) ?: it.endDate}" }, goal?.id.orEmpty()) { selectedGoal = it }
-        if (state.goals == null && !feedback.busy) Text("Escolha a unidade para ver a meta em andamento.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
+        overview?.let { all ->
+            if (all.units.none { it.goals.isNotEmpty() }) Text("Nenhuma meta em andamento nas suas unidades.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
+            else Text("Toque em uma unidade para ver a equipe, os dias e o prêmio.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+            all.units.forEach { unit ->
+                Card(onClick = { open(unit.id) }, enabled = !feedback.busy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Tokens.border), colors = CardDefaults.cardColors(containerColor = Tokens.surface, disabledContainerColor = Tokens.surface)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(unit.name, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.5.sp))
+                        if (unit.goals.isEmpty()) Text("Nenhuma meta em andamento", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+                        unit.goals.forEach { row ->
+                            val amount: (Double) -> String = { if (row.cumulative) money0(it) else moneyValue(it) }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text("${row.typeLabel} · ${shortDate(row.startDate) ?: row.startDate} a ${shortDate(row.endDate) ?: row.endDate}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), modifier = Modifier.weight(1f))
+                                    Text(percentText(Math.round(row.percentOfTarget).toDouble()), style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
+                                }
+                                AnimatedProgress((row.percentOfTarget / 100).toFloat(), duration = 1000, height = 6, fill = androidx.compose.ui.graphics.SolidColor(if (row.percentOfTarget >= 100) Tokens.ok else Tokens.accent))
+                                Text("${amount(row.currentValue)} de ${amount(row.targetValue)}", style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (state.goals == null && overview == null && !feedback.busy) Text("Escolha a unidade para ver a meta em andamento.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
         if (state.goals != null && goals.isEmpty()) Text("Nenhuma meta em andamento em ${unitName.ifBlank { "esta unidade" }}.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth().background(Tokens.greyBg, RoundedCornerShape(12.dp)).padding(14.dp))
         goal?.let { target ->
             val today = state.goals?.today
@@ -283,7 +346,7 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
                         Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 PersonBadge(member.name, member.avatarUrl, index, member.color, 32)
-                                Text("${member.name}${if (member.isMe) " · você" else ""}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                Text("${personDisplayName(member.name)}${if (member.isMe) " · você" else ""}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                                 Text(percentText(Math.round(member.percent).toDouble()), style = MaterialTheme.typography.titleMedium)
                             }
                             AnimatedProgress((member.percent / 100).toFloat(), duration = 1000, height = 6, fill = androidx.compose.ui.graphics.SolidColor(if (member.percent >= 100) Tokens.ok else Tokens.accent))

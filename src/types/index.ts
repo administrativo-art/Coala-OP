@@ -2025,7 +2025,7 @@ export type SignageSlide = {
   order: number;
   /** Unidades donas das telas em `screenIds`; derivado no servidor para o filtro de acesso. */
   kioskIds: string[];
-  /** Telas que exibem o slide. A tela padrão de uma unidade tem o mesmo id da unidade. */
+  /** Telas que exibem o slide. A primeira tela de uma unidade tem o mesmo id da unidade. */
   screenIds: string[];
   /** Posição por tela; sem entrada, vale `order`. */
   orderByScreen?: Record<string, number>;
@@ -2069,7 +2069,7 @@ export type SignageScreen = {
   deviceToken?: string;
   /** Posição física da tela, informada ao cadastrá-la; orienta o formato das artes. Ausente em telas antigas. */
   orientation?: 'landscape' | 'portrait';
-  /** Tela padrão da unidade: existe sem cadastro e não pode ser excluída. */
+  /** Primeira tela da unidade: usa o id da unidade e guarda o código no cadastro dela. */
   isDefault: boolean;
 };
 
