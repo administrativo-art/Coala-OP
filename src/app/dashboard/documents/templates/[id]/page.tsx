@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -427,7 +427,11 @@ function ManualValueInput({ binding, value, onChange }: { binding: ManualFieldBi
 
 export default function DocumentTemplateDetailPage() {
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
   const router = useRouter();
+  const templatesBasePath = pathname.startsWith("/dashboard/settings/")
+    ? "/dashboard/settings/documents/templates"
+    : "/dashboard/documents/templates";
   const { firebaseUser, permissions, activeUsers } = useAuth();
   const canView = hasFormalizationPermission(permissions, "templates.view");
   const canManage = hasFormalizationPermission(permissions, "templates.manage");
@@ -787,7 +791,7 @@ export default function DocumentTemplateDetailPage() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao criar a nova versão.");
-      router.push(`/dashboard/documents/templates/${encodeURIComponent(payload.template.id)}?prepare=1`);
+      router.push(`${templatesBasePath}/${encodeURIComponent(payload.template.id)}?prepare=1`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao criar a nova versão.");
     } finally {
@@ -1173,7 +1177,7 @@ export default function DocumentTemplateDetailPage() {
     <div className="space-y-4">
       <div className="sticky top-2 z-20 flex flex-col gap-4 rounded-2xl border bg-white/95 px-4 py-4 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <button className="mb-1 inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900" onClick={() => router.push("/dashboard/documents/templates")}>
+          <button className="mb-1 inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900" onClick={() => router.push("/dashboard/settings?department=pessoal&tab=document-templates")}>
             <ArrowLeft className="h-3.5 w-3.5" />Modelos
           </button>
           <h1 className="truncate text-lg font-black leading-tight text-slate-950">{template.name}</h1>

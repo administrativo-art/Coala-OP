@@ -34,7 +34,7 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
         <DialogPrimitive.Content
           data-ui="side-panel"
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex w-[460px] max-w-full flex-col bg-ds-warm font-ds shadow-ds-side outline-hidden",
+            "fixed inset-y-0 right-0 z-50 flex w-[460px] max-w-full flex-col overflow-hidden rounded-l-[20px] bg-ds-warm font-ds shadow-ds-side outline-hidden",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right duration-200",
             className
           )}

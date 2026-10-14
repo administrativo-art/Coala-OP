@@ -926,7 +926,7 @@ function StartOnboardingModal({
   const [candidateEmail, setCandidateEmail] = useState('');
   const [jobRoleId, setJobRoleId] = useState('');
   const [functionId, setFunctionId] = useState('');
-  const [employmentRelationshipType, setEmploymentRelationshipType] = useState<'' | 'clt' | 'pj'>('');
+  const [employmentRelationshipType, setEmploymentRelationshipType] = useState<'' | 'clt' | 'apprenticeship' | 'pj'>('');
   const [unitId, setUnitId] = useState('');
   const [employerUnitId, setEmployerUnitId] = useState('');
   const [expectedAdmissionDate, setExpectedAdmissionDate] = useState('');
@@ -1155,7 +1155,7 @@ function StartOnboardingModal({
         </div>
 
         {!employmentRelationshipType ? (
-          <div className="grid gap-4 p-5 md:grid-cols-2">
+          <div className="grid gap-4 p-5 md:grid-cols-3">
             <button type="button" onClick={() => setEmploymentRelationshipType('clt')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-pink-300 hover:bg-pink-50/40">
               <Users className="h-7 w-7 text-pink-600" />
               <span className="mt-3 block text-base font-black text-slate-950">CLT</span>
@@ -1165,6 +1165,11 @@ function StartOnboardingModal({
               <Briefcase className="h-7 w-7 text-violet-700" />
               <span className="mt-3 block text-base font-black text-slate-950">Pessoa jurídica (PJ)</span>
               <span className="mt-1 block text-xs leading-relaxed text-slate-500">Contratação de empresa prestadora com contrato e cadastro fiscal próprios.</span>
+            </button>
+            <button type="button" onClick={() => setEmploymentRelationshipType('apprenticeship')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-emerald-300 hover:bg-emerald-50/40">
+              <GraduationCap className="h-7 w-7 text-emerald-700" />
+              <span className="mt-3 block text-base font-black text-slate-950">Aprendiz</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Contrato especial de aprendizagem, com fluxo trabalhista e regras próprias.</span>
             </button>
           </div>
         ) : employmentRelationshipType === 'pj' ? (

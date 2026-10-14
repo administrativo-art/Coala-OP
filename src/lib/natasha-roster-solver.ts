@@ -87,7 +87,11 @@ function isSunday(date: string): boolean {
   return new Date(`${date}T00:00:00.000Z`).getUTCDay() === 0;
 }
 
-function hardCompatible(existing: readonly WorkSpan[], candidate: WorkSpan): boolean {
+function hardCompatible(
+  existing: readonly WorkSpan[],
+  candidate: WorkSpan,
+  ruleOn: (date: string) => { maxConsecutiveWorkDays: number; sundayCadenceWeeks?: number },
+): boolean {
   const all = [...existing, candidate].sort((left, right) => left.start - right.start);
   for (let index = 1; index < all.length; index += 1) {
     if (all[index].start - all[index - 1].end < MIN_REST_MINUTES) return false;
@@ -96,15 +100,16 @@ function hardCompatible(existing: readonly WorkSpan[], candidate: WorkSpan): boo
   let consecutive = 0;
   for (let index = 0; index < dates.length; index += 1) {
     consecutive = index > 0 && dayNumber(dates[index]) - dayNumber(dates[index - 1]) === 1 ? consecutive + 1 : 1;
-    if (consecutive > 6) return false;
+    if (consecutive > ruleOn(dates[index]).maxConsecutiveWorkDays) return false;
   }
-  const worked = new Set(dates);
-  for (const date of dates) {
-    if (!isSunday(date)) continue;
-    const day = dayNumber(date);
-    const prior = new Date((day - 7) * DAY_MS).toISOString().slice(0, 10);
-    const beforePrior = new Date((day - 14) * DAY_MS).toISOString().slice(0, 10);
-    if (worked.has(prior) && worked.has(beforePrior)) return false;
+  const sundays = dates.filter(isSunday);
+  let consecutiveSundays = 0;
+  for (let index = 0; index < sundays.length; index += 1) {
+    consecutiveSundays = index > 0 && dayNumber(sundays[index]) - dayNumber(sundays[index - 1]) === 7
+      ? consecutiveSundays + 1 : 1;
+    // Cadência 3 significa descansar no terceiro domingo consecutivo.
+    const cadence = ruleOn(sundays[index]).sundayCadenceWeeks ?? 3;
+    if (consecutiveSundays >= cadence) return false;
   }
   return true;
 }
@@ -201,6 +206,10 @@ export function generateNatashaAlternatives(
   const candidates = new Map(inputs.positions.map((position) => [position.id,
     inputs.employees.filter((employee) => eligible(position, employee, snapshot)).map((employee) => employee.id).sort(),
   ]));
+  const ruleOn = (employeeId: string, date: string) => inputs.journeyResolution.people
+    .find((person) => person.employeeId === employeeId)?.assignments
+    .find((assignment) => date >= assignment.from && date <= assignment.through)?.journey.weeklyRest
+    ?? { maxConsecutiveWorkDays: 6, sundayCadenceWeeks: 3 };
   const mandateList = [...mandates.values()];
   const ordered = [...inputs.positions].sort((left, right) => {
     const count = (candidates.get(left.id)?.length ?? 0) - (candidates.get(right.id)?.length ?? 0);
@@ -294,7 +303,7 @@ export function generateNatashaAlternatives(
     for (const employeeId of optionsForPosition) {
       const current = perEmployee.get(employeeId) ?? [];
       const candidate = span(position.date, position.startTime, position.endTime);
-      if (!hardCompatible(current, candidate)) continue;
+      if (!hardCompatible(current, candidate, (date) => ruleOn(employeeId, date))) continue;
       current.push(candidate);
       perEmployee.set(employeeId, current);
       assigned.set(position.id, employeeId);

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { natashaJourneyDirectoryReportSchema, type NatashaJourneyDirectoryReport } from './natasha-journey-directory';
 import { natashaCoveragePlanSchema, validateNatashaCoverage, type NatashaCoveragePlan } from './natasha-roster-coverage';
 import { natashaRosterSnapshotSchema, type NatashaRosterSnapshot } from './natasha-roster-validator';
 
@@ -19,6 +20,8 @@ export const natashaPositionSchema = z.object({
   endTime: timeSchema,
   slot: slotSchema,
   requiredRoleId: idSchema.nullable(),
+  shiftDefinitionId: idSchema.nullable().optional(),
+  journeyIds: z.array(idSchema).max(30).optional(),
 }).strict().refine((position) => position.endTime > position.startTime, {
   path: ['endTime'], message: 'O turno precisa terminar depois de começar.',
 });
@@ -41,6 +44,7 @@ export const natashaProposalInputsSchema = z.object({
   }).strict().refine((shift) => shift.endTime > shift.startTime, {
     path: ['endTime'], message: 'O turno precisa terminar depois de começar.',
   })).max(100),
+  journeyResolution: natashaJourneyDirectoryReportSchema,
   confirmed: z.object({
     team: z.boolean(),
     rolesAndUnitLinks: z.boolean(),
@@ -119,9 +123,23 @@ export function assessNatashaProposalInputs(
   const previous = addDays(first, -1);
   const expectedUnits = new Set(coveragePlan.expectedUnitIds);
   const employees = new Map(inputs.employees.map((person) => [person.id, person]));
+  const journeyPeople = new Map(inputs.journeyResolution.people.map((person) => [person.employeeId, person]));
+
+  const journeyOn = (employeeId: string, date: string) => journeyPeople.get(employeeId)?.assignments
+    .find((assignment) => date >= assignment.from && date <= assignment.through)?.journey;
 
   if (snapshot.period !== inputs.period || coveragePlan.period !== inputs.period) {
     add({ code: 'PERIOD_MISMATCH', category: 'data', detail: 'Snapshot, demanda e entradas devem ter a mesma competência.' });
+  }
+  if (inputs.journeyResolution.status !== 'ready_for_proposal') {
+    add({ code: 'JOURNEY_SOURCE_INCOMPLETE', category: 'data', detail: 'A resolução oficial de jornadas possui lacunas, conflitos ou revisão manual.' });
+  }
+  if (inputs.journeyResolution.period !== inputs.period) {
+    add({ code: 'JOURNEY_PERIOD_MISMATCH', category: 'data', detail: 'A resolução de jornadas pertence a outra competência.' });
+  }
+  if ([...expectedUnits].some((unitId) => !inputs.journeyResolution.unitIds.includes(unitId))
+    || inputs.journeyResolution.unitIds.some((unitId) => !expectedUnits.has(unitId))) {
+    add({ code: 'JOURNEY_UNIT_SCOPE_MISMATCH', category: 'data', detail: 'A resolução de jornadas não cobre exatamente as unidades da proposta.' });
   }
   if (snapshot.shifts.some((shift) => shift.date.startsWith(`${inputs.period}-`))) {
     add({ code: 'TARGET_SHIFTS_PRESENT', category: 'data', detail: 'O pré-voo para montar escala aceita histórico, não turnos já lançados no mês alvo.' });
@@ -141,13 +159,34 @@ export function assessNatashaProposalInputs(
   if (inputs.employees.filter((person) => person.active).length === 0) {
     add({ code: 'NO_ACTIVE_EMPLOYEES', category: 'question', detail: 'Informe ao menos uma pessoa ativa para a equipe candidata.' });
   }
+  for (const employee of inputs.employees.filter((person) => person.active)) {
+    const resolved = journeyPeople.get(employee.id);
+    if (!resolved) {
+      add({ code: 'JOURNEY_EMPLOYEE_MISSING', category: 'data', detail: 'O colaborador ativo não possui jornada oficial resolvida.', employeeId: employee.id });
+      continue;
+    }
+    const expectedDays = new Date(Date.UTC(Number(inputs.period.slice(0, 4)), Number(inputs.period.slice(5, 7)), 0)).getUTCDate();
+    const resolvedDays = resolved.assignments.reduce((count, assignment) => {
+      if (!assignment.from.startsWith(`${inputs.period}-`) || !assignment.through.startsWith(`${inputs.period}-`)) return count;
+      return count + Math.floor((Date.parse(`${assignment.through}T00:00:00.000Z`) - Date.parse(`${assignment.from}T00:00:00.000Z`)) / 86_400_000) + 1;
+    }, 0);
+    if (resolvedDays !== expectedDays) {
+      add({ code: 'JOURNEY_DAYS_INCOMPLETE', category: 'data', detail: 'A jornada não foi resolvida para todos os dias da competência.', employeeId: employee.id });
+    }
+  }
   if (inputs.positions.length === 0) {
     add({ code: 'NO_POSITIONS', category: 'question', detail: 'Informe as posições de turno que precisam ser preenchidas.' });
   }
 
   const eligibility = (position: NatashaProposalInputs['positions'][number], employeeId: string) => {
     const employee = employees.get(employeeId);
+    const journey = journeyOn(employeeId, position.date);
     return Boolean(employee?.active && employee.allowedUnitIds.includes(position.unitId)
+      && journey
+      && (journey.allowedShiftDefinitionIds.length === 0
+        || Boolean(position.shiftDefinitionId && journey.allowedShiftDefinitionIds.includes(position.shiftDefinitionId)))
+      && (!position.journeyIds?.length || position.journeyIds.includes(journey.journeyId))
+      && !isFixedCycleRestDay(journey, position.date)
       && (position.requiredRoleId === null || employee.roleIds.includes(position.requiredRoleId))
       && !snapshot.vacations.some((vacation) => vacation.employeeId === employeeId && vacation.status === 'approved'
         && vacation.recordType === 'gozo' && position.date >= vacation.startDate && position.date <= vacation.endDate)
@@ -225,4 +264,15 @@ export function assessNatashaProposalInputs(
     activeEmployees: inputs.employees.filter((person) => person.active).length,
     issues,
   };
+}
+
+function isFixedCycleRestDay(
+  journey: NatashaJourneyDirectoryReport['people'][number]['assignments'][number]['journey'],
+  date: string,
+) {
+  if (journey.weeklyRest.placement !== 'fixed_cycle') return false;
+  const elapsed = Math.floor((Date.parse(`${date}T00:00:00.000Z`) - Date.parse(`${journey.validFrom}T00:00:00.000Z`)) / 86_400_000);
+  if (elapsed < 0) return false;
+  const dayIndex = (elapsed % journey.cycleLengthDays) + 1;
+  return journey.days.find((day) => day.dayIndex === dayIndex)?.isRestDay === true;
 }

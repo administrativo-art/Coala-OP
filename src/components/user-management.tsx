@@ -259,7 +259,7 @@ const userSchema = z.object({
   registrationIdPdv: z.string().optional(),
   jobRoleId: z.string().optional(),
   jobFunctionIds: z.array(z.string()).optional(),
-  employmentRelationshipType: z.enum(['clt', 'pj', 'internship'], {
+  employmentRelationshipType: z.enum(['clt', 'apprenticeship', 'pj', 'internship'], {
     required_error: 'Selecione o tipo de vínculo.',
   }),
   responsibleUnitIds: z.array(z.string()).optional(),
@@ -801,10 +801,12 @@ export function UserManagement({
   const handleInactivateConfirm = async () => {
     if (userToInactivate) {
       if (inactivationMode === 'contract_termination' && !contractTerminationAvailable) {
+        const isSpecialEmploymentContract = userToInactivate.employmentRelationshipType === 'internship'
+          || userToInactivate.employmentRelationshipType === 'apprenticeship';
         toast({
-          title: userToInactivate.employmentRelationshipType === 'internship' ? 'Fluxo de estágio ainda não disponível.' : 'Tipo de vínculo obrigatório.',
-          description: userToInactivate.employmentRelationshipType === 'internship'
-            ? 'Nesta entrega, o desligamento específico de estágio ainda não foi habilitado.'
+          title: isSpecialEmploymentContract ? `${terminationCopy.action} ainda não disponível.` : 'Tipo de vínculo obrigatório.',
+          description: isSpecialEmploymentContract
+            ? 'Nesta entrega, o encerramento específico deste vínculo ainda não foi habilitado.'
             : 'Defina o tipo de vínculo no cadastro antes de registrar o encerramento.',
           variant: 'destructive',
         });

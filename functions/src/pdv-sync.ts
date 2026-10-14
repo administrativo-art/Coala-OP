@@ -25,7 +25,65 @@ const GOAL_QUERY_LIMITS = {
   employeeGoalsPerPeriod: 200,
   schedulesPerMonth: 20,
   shiftsPerScheduleChunk: 1000,
+  dpUnits: 301,
 } as const;
+
+function normalizeDPUnitName(value: string): string {
+  return value
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/centro de distribuicao|quiosque|quisque/gi, ' ')
+    .replace(/[-–_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function unitNameDistance(left: string, right: string): number {
+  const rows = Array.from({ length: left.length + 1 }, (_, index) => index);
+  for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+    let previous = rows[0];
+    rows[0] = rightIndex;
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+      const saved = rows[leftIndex];
+      rows[leftIndex] = left[leftIndex - 1] === right[rightIndex - 1]
+        ? previous
+        : 1 + Math.min(previous, rows[leftIndex], rows[leftIndex - 1]);
+      previous = saved;
+    }
+  }
+  return rows[left.length];
+}
+
+function matchLegacyDPUnit(
+  kioskName: string,
+  units: FirebaseFirestore.QueryDocumentSnapshot[],
+): string | null {
+  const normalizedKiosk = normalizeDPUnitName(kioskName);
+  if (!normalizedKiosk) return null;
+  const available = units
+    .filter((unit) => unit.get('isArchived') !== true)
+    .map((unit) => ({ id: unit.id, name: normalizeDPUnitName(String(unit.get('name') ?? '')) }))
+    .filter((unit) => Boolean(unit.name));
+  const exact = available.filter((unit) => (
+    normalizedKiosk === unit.name
+    || normalizedKiosk.includes(unit.name)
+    || unit.name.includes(normalizedKiosk)
+  ));
+  if (exact.length > 1) {
+    throw new PdvApiError('Mais de uma unidade do DP corresponde ao nome do quiosque.', 'GOAL_DP_UNIT_AMBIGUOUS');
+  }
+  if (exact.length === 1) return exact[0].id;
+
+  const ranked = available
+    .map((unit) => ({ ...unit, distance: unitNameDistance(normalizedKiosk, unit.name) }))
+    .filter((unit) => unit.distance <= Math.max(3, Math.floor(Math.max(normalizedKiosk.length, unit.name.length) * 0.25)))
+    .sort((left, right) => left.distance - right.distance);
+  if (ranked.length > 1 && ranked[0].distance === ranked[1].distance) {
+    throw new PdvApiError('Mais de uma unidade do DP corresponde ao nome do quiosque.', 'GOAL_DP_UNIT_AMBIGUOUS');
+  }
+  return ranked[0]?.id ?? null;
+}
 
 type CatalogSimulation = { id: string; name?: string; ppo?: { sku?: unknown } } & Record<string, any>;
 type CatalogSimulationItem = { id: string; simulationId?: string; baseProductId?: string } & Record<string, any>;
@@ -355,11 +413,6 @@ async function persistPdvSnapshot(
     const usersQuery = db.collection('users')
       .where('assignedKioskIds', 'array-contains', kioskId)
       .limit(GOAL_QUERY_LIMITS.usersPerKiosk);
-    const schedulesQuery = db.collection('dp_schedules')
-      .where('year', '==', year)
-      .where('month', '==', month)
-      .limit(GOAL_QUERY_LIMITS.schedulesPerMonth);
-
     const [existingReport, stateDoc] = await Promise.all([
       transaction.get(reportRef),
       transaction.get(stateRef),
@@ -430,6 +483,7 @@ async function persistPdvSnapshot(
 
     const goalsByPeriod = new Map<string, Map<string, EmployeeGoalEntry[]>>();
     const multiShiftEmployeeIds = new Set<string>();
+    const goalEmployeeIds = new Set<string>();
     employeeGoalSnaps.forEach((goalsSnap, index) => {
       const byEmployee = new Map<string, EmployeeGoalEntry[]>();
       for (const goalDoc of goalsSnap.docs) {
@@ -438,6 +492,7 @@ async function persistPdvSnapshot(
         const entries = byEmployee.get(goal.employeeId) ?? [];
         entries.push({ ref: goalDoc.ref, data: goal });
         byEmployee.set(goal.employeeId, entries);
+        goalEmployeeIds.add(goal.employeeId);
       }
       for (const [employeeId, entries] of byEmployee) {
         if (entries.length > 1 && entries.some(entry => entry.data.shiftId)) {
@@ -448,9 +503,40 @@ async function persistPdvSnapshot(
     });
 
     const workedTimesByEmployee = new Map<string, string>();
-    const employeeIds = [...multiShiftEmployeeIds];
-    const schedulesSnap = employeeIds.length > 0
-      ? await transaction.get(schedulesQuery)
+    const externalCoverageEmployeeIds = new Set<string>();
+    const employeeIds = [...goalEmployeeIds];
+    let dpUnitId: string | null = null;
+    if (employeeIds.length > 0) {
+      const [kioskDoc, externalUnits] = await Promise.all([
+        transaction.get(db.collection('kiosks').doc(kioskId)),
+        transaction.get(db.collection('dp_units').where('externalId', '==', kioskId).limit(2)),
+      ]);
+      if (externalUnits.size > 1) {
+        throw new PdvApiError('Mais de uma unidade do DP está vinculada ao quiosque.', 'GOAL_DP_UNIT_AMBIGUOUS');
+      }
+      dpUnitId = externalUnits.docs[0]?.id ?? null;
+      if (!dpUnitId && kioskDoc.exists) {
+        const kioskName = String(kioskDoc.get('name') ?? '').trim();
+        const units = kioskName
+          ? await transaction.get(db.collection('dp_units').orderBy('name').limit(GOAL_QUERY_LIMITS.dpUnits))
+          : null;
+        if (units) {
+          assertCatalogQueryWithinLimit('de unidades do DP', units.size, GOAL_QUERY_LIMITS.dpUnits);
+          dpUnitId = matchLegacyDPUnit(kioskName, units.docs);
+        }
+      }
+      if (!dpUnitId) {
+        throw new PdvApiError('A unidade do PDV não está vinculada a uma unidade do DP.', 'GOAL_DP_UNIT_NOT_FOUND');
+      }
+    }
+    const schedulesSnap = employeeIds.length > 0 && dpUnitId
+      ? await transaction.get(
+          db.collection('dp_schedules')
+            .where('unitId', '==', dpUnitId)
+            .where('year', '==', year)
+            .where('month', '==', month)
+            .limit(GOAL_QUERY_LIMITS.schedulesPerMonth),
+        )
       : null;
     if (schedulesSnap) {
       assertCatalogQueryWithinLimit('de escalas mensais', schedulesSnap.size, GOAL_QUERY_LIMITS.schedulesPerMonth);
@@ -468,8 +554,14 @@ async function persistPdvSnapshot(
         assertCatalogQueryWithinLimit('de turnos da escala', shiftsSnap.size, GOAL_QUERY_LIMITS.shiftsPerScheduleChunk);
         for (const shiftDoc of shiftsSnap.docs) {
           const shift = shiftDoc.data();
-          if (shift.type !== 'work' || !shift.startTime || !shift.endTime || !shift.userId) continue;
-          workedTimesByEmployee.set(shift.userId, `${shift.startTime}-${shift.endTime}`);
+          if (shift.type !== 'work' || !shift.userId) continue;
+          if (shift.countsTowardGoals === false) {
+            externalCoverageEmployeeIds.add(shift.userId);
+            continue;
+          }
+          if (multiShiftEmployeeIds.has(shift.userId) && shift.startTime && shift.endTime) {
+            workedTimesByEmployee.set(shift.userId, `${shift.startTime}-${shift.endTime}`);
+          }
         }
       }
     }
@@ -532,7 +624,9 @@ async function persistPdvSnapshot(
       const byEmployee = goalsByPeriod.get(periods[periodIndex].id)
         ?? new Map<string, EmployeeGoalEntry[]>();
       for (const [employeeId, goals] of byEmployee) {
-        const employeeRevenue = revenueByEmployeeId[employeeId] ?? 0;
+        const employeeRevenue = externalCoverageEmployeeIds.has(employeeId)
+          ? 0
+          : revenueByEmployeeId[employeeId] ?? 0;
         const workedShiftId = shiftIdByTime.get(workedTimesByEmployee.get(employeeId) ?? '') ?? null;
         const hasMultipleShifts = goals.length > 1 && goals.some(goal => goal.data.shiftId);
         const totalTarget = goals.reduce((sum, goal) => sum + Number(goal.data.targetValue ?? 0), 0);

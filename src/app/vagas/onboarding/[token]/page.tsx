@@ -30,7 +30,7 @@ type PublicOnboarding = {
   jobRoleName?: string | null;
   functionName?: string | null;
   unitName?: string | null;
-  employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
+  employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | null;
   providerCnpj?: string | null;
   providerLegalName?: string | null;
   providerTradeName?: string | null;

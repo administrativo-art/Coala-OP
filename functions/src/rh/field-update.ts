@@ -376,6 +376,12 @@ export type OnFieldUpdateRequest = {
   value:       unknown;
 };
 
+export type ReviewFieldChangeRequest = {
+  request_id: string;
+  decision: 'approved' | 'rejected';
+  reason?: string;
+};
+
 export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
   { cors: internalAppCors },
   async (request) => {
@@ -424,7 +430,14 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
     if (!canReadField(entry, fieldMap.access_matrix, role, isOwner, cache, uid)) {
       throw new HttpsError('permission-denied', `Campo ${field_key} não visível para role ${role}.`);
     }
-    if (!canWriteField(entry, fieldMap.access_matrix, role, isOwner, cache, uid)) {
+    const selfServicePolicy = entry.self_service_policy ?? 'inherit';
+    const isOwnerEmployee = role === 'employee' && isOwner;
+    const createsApprovalRequest = isOwnerEmployee && selfServicePolicy === 'approval';
+    const allowsDirectOwnerEdit = isOwnerEmployee && selfServicePolicy === 'direct';
+    if (isOwnerEmployee && selfServicePolicy === 'blocked') {
+      throw new HttpsError('permission-denied', `Campo ${field_key} é somente leitura para o titular.`);
+    }
+    if (!createsApprovalRequest && !allowsDirectOwnerEdit && !canWriteField(entry, fieldMap.access_matrix, role, isOwner, cache, uid)) {
       throw new HttpsError('permission-denied', `Campo ${field_key} não editável para role ${role}.`);
     }
 
@@ -439,6 +452,30 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
       prevData?.value_boolean ??
       prevData?.value_json    ??
       null;
+
+    if (createsApprovalRequest) {
+      const requestId = `${employee_id}__${field_key}__${uid}`.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 900);
+      const now = Timestamp.now();
+      await hrDb.collection('hrProfileUpdateRequests').doc(requestId).set({
+        type: 'self_service_profile_update',
+        status: 'pending_approval',
+        employeeId: employee_id,
+        employeeName: empData.name ?? employee_id,
+        fieldKey: field_key,
+        fieldLabel: entry.label,
+        oldValue: prevValue,
+        proposedValue: value,
+        requestedBy: uid,
+        requestedAt: now,
+        updatedAt: now,
+      });
+      return {
+        success: true,
+        pending_approval: true,
+        request_id: requestId,
+        profile_completion: Number(empData.profile_completion ?? 0),
+      };
+    }
 
     // 6. Gravar novo valor
     const newFieldValue = buildFieldValue(field_key, value, entry.type, uid);
@@ -476,4 +513,128 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
 
     return { success: true, profile_completion: completion };
   }
+);
+
+export const reviewFieldChangeRequest = onCall<ReviewFieldChangeRequest>(
+  { cors: internalAppCors },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    await assertActiveSession(db, request.auth);
+
+    const uid = request.auth.uid;
+    const requestId = String(request.data?.request_id ?? '').trim();
+    const decision = request.data?.decision;
+    const reason = String(request.data?.reason ?? '').trim().slice(0, 1000);
+    if (!requestId || (decision !== 'approved' && decision !== 'rejected')) {
+      throw new HttpsError('invalid-argument', 'Solicitação e decisão são obrigatórias.');
+    }
+
+    const currentAccess = await resolveCurrentRhAccess(uid, request.auth.token);
+    if (!currentAccess?.canEditOtherProfiles) {
+      throw new HttpsError('permission-denied', 'Sem permissão para revisar alterações de perfil.');
+    }
+
+    const requestRef = hrDb.collection('hrProfileUpdateRequests').doc(requestId);
+    const requestSnap = await requestRef.get();
+    if (!requestSnap.exists) throw new HttpsError('not-found', 'Solicitação não encontrada.');
+    const change = requestSnap.data() ?? {};
+    if (change.type !== 'self_service_profile_update' || change.status !== 'pending_approval') {
+      throw new HttpsError('failed-precondition', 'Esta solicitação já foi revisada ou não pertence ao perfil do colaborador.');
+    }
+
+    const employeeId = String(change.employeeId ?? '').trim();
+    const fieldKey = String(change.fieldKey ?? '').trim();
+    const employeeRef = hrDb.collection('employees').doc(employeeId);
+    const [employeeSnap, fieldMap] = await Promise.all([employeeRef.get(), getFieldMap()]);
+    if (!employeeSnap.exists) throw new HttpsError('not-found', 'Colaborador não encontrado.');
+    const employeeData = employeeSnap.data() ?? {};
+    const entry = fieldMap.fields[fieldKey] as FieldMapEntry | undefined;
+    if (!entry) throw new HttpsError('not-found', 'Campo não encontrado na configuração atual.');
+
+    const reviewerRole = currentAccess.cache.rh_role;
+    const reviewerUnitIds = new Set([
+      ...currentAccess.unitIds,
+      ...(currentAccess.cache.unit_id ? [currentAccess.cache.unit_id] : []),
+    ]);
+    if (reviewerRole === 'manager' && !reviewerUnitIds.has(String(employeeData.unit_id ?? ''))) {
+      throw new HttpsError('permission-denied', 'Sem acesso à unidade deste colaborador.');
+    }
+    if (!canWriteField(entry, fieldMap.access_matrix, reviewerRole, false, currentAccess.cache, uid)) {
+      throw new HttpsError('permission-denied', 'Sem permissão para aprovar este campo.');
+    }
+
+    if (decision === 'rejected') {
+      await requestRef.update({
+        status: 'rejected',
+        reviewedBy: uid,
+        reviewedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        ...(reason ? { reviewReason: reason } : {}),
+      });
+      return { success: true, status: 'rejected' };
+    }
+
+    const fieldValueRef = employeeRef.collection('field_values').doc(fieldKey);
+    const currentValueSnap = await fieldValueRef.get();
+    const currentValueData = currentValueSnap.data() as EmployeeFieldValue | undefined;
+    const currentValue =
+      currentValueData?.value_text ??
+      currentValueData?.value_number ??
+      currentValueData?.value_date ??
+      currentValueData?.value_boolean ??
+      currentValueData?.value_json ??
+      null;
+    const comparable = (value: unknown) => JSON.stringify(value && typeof value === 'object' && 'toDate' in value
+      ? (value as { toDate: () => Date }).toDate().toISOString()
+      : value);
+    if (comparable(currentValue) !== comparable(change.oldValue ?? null)) {
+      throw new HttpsError('aborted', 'O valor do campo mudou depois da solicitação. Rejeite esta proposta e peça uma nova alteração.');
+    }
+
+    const proposedValue = change.proposedValue;
+    const newFieldValue = buildFieldValue(fieldKey, proposedValue, entry.type, uid);
+    const now = Timestamp.now();
+    const auditRef = hrDb.collection('audit_log').doc();
+    await hrDb.runTransaction(async (transaction) => {
+      const latestRequest = await transaction.get(requestRef);
+      if (latestRequest.get('status') !== 'pending_approval') {
+        throw new HttpsError('aborted', 'A solicitação já foi revisada.');
+      }
+      transaction.set(fieldValueRef, newFieldValue, { merge: true });
+      transaction.set(auditRef, {
+        employee_id: employeeId,
+        field_key: fieldKey,
+        old_value: currentValue,
+        new_value: proposedValue,
+        changed_by: uid,
+        changed_at: now,
+        source: 'approved_self_service',
+        request_id: requestId,
+      });
+      transaction.update(requestRef, {
+        status: 'approved',
+        reviewedBy: uid,
+        reviewedAt: now,
+        updatedAt: now,
+        ...(reason ? { reviewReason: reason } : {}),
+      });
+    });
+
+    const allFvSnap = await employeeRef.collection('field_values').get();
+    const fvMap: Record<string, EmployeeFieldValue> = {};
+    allFvSnap.docs.forEach((document) => { fvMap[document.id] = document.data() as EmployeeFieldValue; });
+    const completion = calcProfileCompletion(fvMap);
+    await employeeRef.update({ profile_completion: completion });
+    await dispatchAutomations(
+      entry,
+      fieldKey,
+      employeeId,
+      String(employeeData.name ?? employeeId),
+      String(employeeData.unit_id ?? ''),
+      proposedValue,
+      currentValue,
+    );
+
+    return { success: true, status: 'approved', profile_completion: completion };
+  },
 );

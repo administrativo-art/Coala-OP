@@ -84,7 +84,11 @@ export function nextISODate(date: string) {
   return format(addDays(parse(date, 'yyyy-MM-dd', new Date()), 1), 'yyyy-MM-dd');
 }
 
-export function isPredictedDayOffDate(workedDates: ReadonlySet<string>, targetDate: string) {
+export function isPredictedDayOffDate(
+  workedDates: ReadonlySet<string>,
+  targetDate: string,
+  maxConsecutiveWorkDays = 6,
+) {
   if (workedDates.has(targetDate)) return false;
 
   let cursor = parse(targetDate, 'yyyy-MM-dd', new Date());
@@ -98,7 +102,7 @@ export function isPredictedDayOffDate(workedDates: ReadonlySet<string>, targetDa
     consecutiveDays += 1;
   }
 
-  return consecutiveDays > 0 && consecutiveDays % 6 === 0;
+  return consecutiveDays > 0 && consecutiveDays % maxConsecutiveWorkDays === 0;
 }
 
 export function buildShiftStreakState(shifts: DPShift[]) {
