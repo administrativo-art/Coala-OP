@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const native = 'apps/coala-one-android/app/src/main/java/com/coalaone/go/';
 const screens = readFileSync(`${native}ui/ModuleScreens.kt`, 'utf8');
 const components = readFileSync(`${native}ui/Components.kt`, 'utf8');
+const modulesViewModel = readFileSync(`${native}ui/ModulesViewModel.kt`, 'utf8');
 const activity = readFileSync(`${native}MainActivity.kt`, 'utf8');
 const schedule = screens.split('@Composable fun ScheduleScreen')[1]?.split('@Composable fun GoalsScreen')[0] ?? '';
 const goals = screens.split('@Composable fun GoalsScreen')[1]?.split('@Composable fun SignageScreen')[0] ?? '';
@@ -13,9 +14,16 @@ const home = activity.split('@Composable private fun HomeScreen')[1]?.split('@Co
 test('Escala e Metas usam o mesmo seletor de unidade acessível no cabeçalho', () => {
   assert.match(components, /fun UnitPickerHeader\([\s\S]*?PickerSheet\("Unidade", values, selected, onSelect\)/);
   assert.match(components, /clickable\(enabled = several && !busy, role = Role\.Button, onClickLabel = "Trocar unidade"\)/);
+  // Every dropdown or unfolding arrow is the one drawn chevron, never a font glyph (docs/design/app.md).
+  assert.match(components, /fun DropdownChevron\(open: Boolean, color: Color/);
+  assert.match(components, /DropdownChevron\(choosingUnit, Tokens\.pink\)/);
+  for (const file of readdirSync(`${native}ui`)) assert.doesNotMatch(readFileSync(`${native}ui/${file}`, 'utf8'), /"[^"\n]*[⌄⌃▾▼▴▲][^"\n]*"/, file);
   // Both offer "Todas as unidades" through the shared rule, never a hand-made entry.
   assert.match(schedule, /header = \{[\s\S]*?UnitPickerHeader\(Rules\.unitChoices\(units\.map \{ it\.id to it\.name \}\), choice, feedback\.busy\) \{ vm\.scheduleFilter\(it, state\.onlyMine\) \}/);
   assert.match(goals, /header = \{[\s\S]*?UnitPickerHeader\(Rules\.unitChoices\(state\.goalUnits\.map/);
+  // Escala opens on "Todas as unidades": the state default and the reset on each visit.
+  assert.match(schedule, /if \(!opened\) \{ opened = true; vm\.scheduleFilter\(Rules\.ALL_UNITS, state\.onlyMine\) \}/);
+  assert.match(modulesViewModel, /selectedScheduleUnit: String = Rules\.ALL_UNITS/);
   assert.doesNotMatch(schedule, /Choices\("Unidade"/);
 });
 

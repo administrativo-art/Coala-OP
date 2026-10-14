@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.update
 import java.time.LocalDate
 import javax.inject.Inject
 
-data class ModulesState(val schedules: Map<String, MonthSchedule> = emptyMap(), val day: LocalDate = LocalDate.now(), val selectedScheduleUnit: String = "", val onlyMine: Boolean = false, val goalUnits: List<UnitRef> = emptyList(), val goals: UnitGoals? = null, val goalsOverview: GoalsOverview? = null, val signage: SignageUnits? = null, val paired: PairResponse? = null)
+data class ModulesState(val schedules: Map<String, MonthSchedule> = emptyMap(), val day: LocalDate = LocalDate.now(), val selectedScheduleUnit: String = Rules.ALL_UNITS, val onlyMine: Boolean = false, val goalUnits: List<UnitRef> = emptyList(), val goals: UnitGoals? = null, val goalsOverview: GoalsOverview? = null, val signage: SignageUnits? = null, val paired: PairResponse? = null)
 @HiltViewModel class ModulesViewModel @Inject constructor(private val repository: ApiRepository) : FeedbackViewModel() {
     private val mutable = MutableStateFlow(ModulesState())
     val state = mutable.asStateFlow()

@@ -15,8 +15,8 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_APP_ID` | appId da aplicação **Android**, não o appId web do Expo |
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
 | `COALA_FIREBASE_SENDER_ID` | Número do projeto Google para Play Integrity |
-| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 13; crescente nas atualizações Go |
-| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.8 |
+| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 14; crescente nas atualizações Go |
+| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.9 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
 
 Debug sem configuração oferece simulação sem API/Firebase/Storage de negócio. Release recusa configuração pública ausente, appId web, HTTP, modo de teste ou ausência da assinatura existente. Não registrar `local.properties`, `google-services.json`, `.env`, APKs intermediários, senhas ou keystores no Git. A exceção de distribuição é o instalador assinado `public/app/CoalaGo.apk`, acompanhado por metadados e hash verificados.
@@ -55,6 +55,10 @@ WorkManager repete usando o mesmo UUID, somente com rede, e valida a conta no en
 
 ## Handoff visual nativo
 
+Os padrões de interface do app (cores, tipografia, ícones, animações, seta de
+dropdown, seletor de unidade e como cada tela abre) estão em
+[`docs/design/app.md`](../../docs/design/app.md). Mudou um padrão, atualize lá.
+
 O handoff `Coala One App - Prototipo.dc.html` foi adaptado para **Coala Go**,
 sem runtime HTML ou dados fictícios no release. Inter Tight e JetBrains Mono
 estão embarcadas em `res/font`, com licenças SIL OFL em `assets/font-licenses`.
@@ -83,7 +87,7 @@ semanal. Compra, contagem e
 recebimento mantêm seus ViewModels, validações, confirmações e contratos.
 Limites/estados reais prevalecem sobre números, timers e sucessos do protótipo.
 
-`DesignMotionTest` verifica movimento, redução, fonte ampliada e o gesto vertical do resumo;
+`DesignMotionTest` verifica movimento, redução e fonte ampliada;
 `DesignScreensTest` captura telas nativas em simulação e navega nas novas abas;
 `ComposeFlowsTest` continua cobrindo as ações de negócio. As capturas liberam
 FLAG_SECURE somente na janela de teste, nunca no aplicativo distribuído.
