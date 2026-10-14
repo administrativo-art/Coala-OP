@@ -8,7 +8,7 @@ import type { DashboardLayoutsPayload, DashboardScope, ManagementDashboardLayout
 
 async function request<T>(firebaseUser: FirebaseUser, method: string, body?: unknown, scope?: DashboardScope): Promise<T> {
   const token = await firebaseUser.getIdToken();
-  const response = await fetch(scope === "financial" && method === "GET" ? "/api/dashboard/layouts?scope=financial" : "/api/dashboard/layouts", {
+  const response = await fetch(scope !== "management" && method === "GET" ? `/api/dashboard/layouts?scope=${scope}` : "/api/dashboard/layouts", {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,

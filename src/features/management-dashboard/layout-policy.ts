@@ -30,7 +30,7 @@ export const dashboardLayoutInputSchema = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(240).default(""),
   visibility: z.enum(["personal", "shared", "template"]),
-  scope: z.enum(["management", "financial"]).default("management"),
+  scope: z.enum(["management", "financial", "operations"]).default("management"),
   targetProfileIds: z.array(z.string().trim().min(1).max(160)).max(30).default([]),
   lockedWidgetIds: z.array(z.string().trim().min(1).max(100)).max(MAX_DASHBOARD_WIDGETS).default([]),
   widgets: z.array(widgetPlacementSchema).min(1).max(MAX_DASHBOARD_WIDGETS),

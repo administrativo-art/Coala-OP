@@ -8,12 +8,12 @@ import { useProducts } from "@/hooks/use-products";
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData";
 import { useStockAudit } from "@/hooks/use-stock-audit";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Package, AlertTriangle, ClipboardCheck, ShoppingCart, ListTodo,
-  ArrowRight, Box, BarChart3, Activity, Timer, TrendingDown,
+  Package,
+  ArrowRight, Timer,
 } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -21,44 +21,13 @@ import { PurchaseAlertCard } from "@/components/purchase-alert-card";
 import { TaskManager } from "@/components/task-manager";
 import { RestockPanel } from "@/components/restock-panel";
 import { AuditDashboard } from "@/components/audit-dashboard";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { canAccessUnit } from "@/lib/unit-access";
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-
-function StatCard({ title, value, subtitle, icon, accent, href }: {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon: React.ReactNode;
-  accent: string;
-  href?: string;
-}) {
-  const content = (
-    <Card className={`relative overflow-hidden transition-all duration-300 group ${href ? 'hover:shadow-lg hover:-translate-y-0.5 cursor-pointer' : ''}`}>
-      <div className={`absolute inset-0 opacity-[0.04] bg-gradient-to-br ${accent}`} />
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold tracking-tight">{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-          </div>
-          <div className={`rounded-xl p-2.5 bg-gradient-to-br ${accent} text-white shadow-lg`}>
-            {icon}
-          </div>
-        </div>
-        {href && (
-          <div className="mt-3 flex items-center gap-1 text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
-            Ver detalhes <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  return href ? <Link href={href}>{content}</Link> : content;
-}
+import { ManagementDashboardBuilder, ManagementWidgetFrame } from "@/features/management-dashboard/builder-context";
+import { MANAGEMENT_WIDGET_BY_ID } from "@/features/management-dashboard/catalog";
+import { WidgetCard, WidgetHead, KpiTile } from "@/features/management-dashboard/widgets/kit";
+import { widgetIcons } from "@/features/management-dashboard/widgets/icons";
+import type { ManagementWidgetId } from "@/features/management-dashboard/types";
+import { PageHero } from "@/components/patterns/page-hero";
 
 // ─── Expiring Products Quick View ─────────────────────────────────────────────
 
@@ -82,7 +51,7 @@ function ExpiringQuickView({ lots, loading }: { lots: any[]; loading: boolean })
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
-            <Timer className="h-4 w-4 text-rose-500" />
+            <Timer className="h-4 w-4 text-ds-danger" />
             Vencendo em breve
           </CardTitle>
           <Link href="/dashboard/stock/inventory-control" className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -92,7 +61,7 @@ function ExpiringQuickView({ lots, loading }: { lots: any[]; loading: boolean })
       </CardHeader>
       <CardContent>
         {expiringSoon.length === 0 ? (
-          <div className="flex flex-col items-center py-6 text-muted-foreground gap-2">
+          <div className="flex flex-col items-center py-6 text-ds-ink-muted gap-2">
             <Package className="h-8 w-8 opacity-40" />
             <p className="text-sm">Nenhum produto vencendo nos próximos 7 dias.</p>
           </div>
@@ -104,7 +73,7 @@ function ExpiringQuickView({ lots, loading }: { lots: any[]; loading: boolean })
                 <div key={lot.id || i} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{lot.productName || lot.name}</p>
-                    <p className="text-xs text-muted-foreground">Qtd: {lot.quantity}</p>
+                    <p className="text-xs text-ds-ink-muted">Qtd: {lot.quantity}</p>
                   </div>
                   <Badge
                     variant={days <= 2 ? "destructive" : "secondary"}
@@ -125,7 +94,7 @@ function ExpiringQuickView({ lots, loading }: { lots: any[]; loading: boolean })
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function OperationsPage() {
-  const { user, permissions, isDefaultAdmin } = useAuth();
+  const { user, firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { products } = useProducts();
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
@@ -161,105 +130,60 @@ export default function OperationsPage() {
   const initialLoading = lotsLoading || consumptionLoading;
 
   if (!permissions.dashboard?.view) {
-    return <p className="text-muted-foreground p-6">Sem permissão para acessar o Painel de Operações.</p>;
+    return <p className="text-ds-ink-muted p-6">Sem permissão para acessar o Painel de Operações.</p>;
   }
 
+  const show = (id: ManagementWidgetId) => MANAGEMENT_WIDGET_BY_ID.get(id)?.canView(permissions) ?? false;
+  const activeLots = lotsInKiosk.filter((lot) => lot.quantity > 0).length;
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Painel de Operações</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Visão geral operacional — estoque, validade, reposição e tarefas.
-        </p>
-      </div>
+    <div className="w-full space-y-3 pb-8 font-ds">
+      <PageHero
+        kicker="Operação"
+        title="Painel de operações"
+        subtitle="Visão geral operacional — estoque, validade, reposição e tarefas."
+      />
 
-      {/* KPIs */}
-      {initialLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Vencendo em 7 dias"
-            value={expiringSoonCount}
-            subtitle="produtos próximos do vencimento"
-            icon={<AlertTriangle className="h-5 w-5" />}
-            accent="from-rose-500 to-pink-600"
-            href="/dashboard/stock/inventory-control"
-          />
-          <StatCard
-            title="Vencidos"
-            value={expiredCount}
-            subtitle="produtos já vencidos em estoque"
-            icon={<TrendingDown className="h-5 w-5" />}
-            accent="from-amber-500 to-orange-600"
-            href="/dashboard/stock/inventory-control"
-          />
-          <StatCard
-            title="Estoque"
-            value={lotsInKiosk.filter(l => l.quantity > 0).length}
-            subtitle="lotes ativos no quiosque"
-            icon={<Box className="h-5 w-5" />}
-            accent="from-blue-500 to-indigo-600"
-            href="/dashboard/stock"
-          />
-          <StatCard
-            title="Itens Monitorados"
-            value={lotsInKiosk.length}
-            subtitle="total de lotes rastreados"
-            icon={<Activity className="h-5 w-5" />}
-            accent="from-emerald-500 to-teal-600"
-          />
-        </div>
-      )}
-
-      {/* Tabs de conteúdo */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="overview" className="gap-2">
-            <BarChart3 className="h-4 w-4" /> Visão Geral
-          </TabsTrigger>
-          <TabsTrigger value="restock" className="gap-2">
-            <ShoppingCart className="h-4 w-4" /> Reposição
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="gap-2">
-            <ClipboardCheck className="h-4 w-4" /> Contagem
-          </TabsTrigger>
-          {permissions.tasks?.view && (
-            <TabsTrigger value="tasks" className="gap-2">
-              <ListTodo className="h-4 w-4" /> Tarefas
-            </TabsTrigger>
+      <ManagementDashboardBuilder firebaseUser={firebaseUser} userId={firebaseUser?.uid ?? user?.id ?? ""} userName={user?.username ?? "Usuário"} permissions={permissions} scope="operations">
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-6 xl:grid-cols-12">
+          {show("ops-summary") && (
+            <WidgetCard widgetId="ops-summary">
+              {(density) => (
+                <>
+                  <WidgetHead icon={widgetIcons.inventory} tone="accent" title="Validade e estoque" subtitle="Lotes das suas unidades" href="/dashboard/stock/inventory-control" density={density} />
+                  {initialLoading ? <Skeleton className="h-20 w-full" /> : (
+                    <div className={density === "compact" ? "grid grid-cols-2 gap-3" : "grid grid-cols-2 gap-3 lg:grid-cols-4"}>
+                      <KpiTile label="Vencendo em 7 dias" value={String(expiringSoonCount)} note="próximos do vencimento" tone={expiringSoonCount > 0 ? "danger" : "muted"} />
+                      <KpiTile label="Vencidos" value={String(expiredCount)} note="ainda em estoque" tone={expiredCount > 0 ? "warn" : "muted"} />
+                      <KpiTile label="Estoque" value={String(activeLots)} note="lotes ativos" />
+                      <KpiTile label="Monitorados" value={String(lotsInKiosk.length)} note="lotes rastreados" />
+                    </div>
+                  )}
+                </>
+              )}
+            </WidgetCard>
           )}
-        </TabsList>
 
-        <TabsContent value="overview" className="mt-6 space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ExpiringQuickView lots={lotsInKiosk} loading={lotsLoading} />
-            <div className="space-y-4">
-              <h2 className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">
-                Compras Urgentes
-              </h2>
-              <PurchaseAlertCard />
-            </div>
-          </div>
-        </TabsContent>
+          {show("ops-expiring") && (
+            <ManagementWidgetFrame id="ops-expiring">
+              <ExpiringQuickView lots={lotsInKiosk} loading={lotsLoading} />
+            </ManagementWidgetFrame>
+          )}
 
-        <TabsContent value="restock" className="mt-6">
-          <RestockPanel />
-        </TabsContent>
+          {show("ops-purchase-alerts") && (
+            <ManagementWidgetFrame id="ops-purchase-alerts">
+              <div className="space-y-4">
+                <h2 className="text-[11px] font-black text-ds-ink-muted uppercase tracking-[0.2em]">Compras Urgentes</h2>
+                <PurchaseAlertCard />
+              </div>
+            </ManagementWidgetFrame>
+          )}
 
-        <TabsContent value="audit" className="mt-6">
-          <AuditDashboard />
-        </TabsContent>
-
-        {permissions.tasks?.view && (
-          <TabsContent value="tasks" className="mt-6">
-            <TaskManager />
-          </TabsContent>
-        )}
-      </Tabs>
+          {show("ops-restock") && <ManagementWidgetFrame id="ops-restock"><RestockPanel /></ManagementWidgetFrame>}
+          {show("ops-count") && <ManagementWidgetFrame id="ops-count"><AuditDashboard /></ManagementWidgetFrame>}
+          {show("ops-tasks") && <ManagementWidgetFrame id="ops-tasks"><TaskManager /></ManagementWidgetFrame>}
+        </div>
+      </ManagementDashboardBuilder>
     </div>
   );
 }
