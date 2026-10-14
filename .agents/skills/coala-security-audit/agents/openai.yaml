@@ -1,0 +1,7 @@
+interface:
+  display_name: "Auditoria de segurança Coala"
+  short_description: "Coordena auditoria AppSec com evidências locais"
+  default_prompt: "Use $coala-security-audit para iniciar uma auditoria de segurança rastreável e somente leitura."
+
+policy:
+  allow_implicit_invocation: false
