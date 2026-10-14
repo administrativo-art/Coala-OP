@@ -5,6 +5,8 @@
 **Última atualização:** 12/08/2026  
 **Responsável funcional:** RH / Administração
 
+> **Atualização de 14/10/2026:** o Coala passará a ter REP-P próprio, conforme [plano-rep-p-controle-de-ponto.md](plano-rep-p-controle-de-ponto.md). Quando ele for promovido, a fonte das batidas descrita na seção 2.1 deixa de ser o sistema externo e passa a ser a ARP do Coala; até lá, o sistema externo continua sendo a fonte oficial.
+
 ## 1. Objetivo
 
 Criar no Coala um subproduto completo de Jornada e Fechamento de RH capaz de:
