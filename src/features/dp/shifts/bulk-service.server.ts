@@ -138,6 +138,9 @@ export async function applyWorkShiftBulkChange(params: {
     if (replacePatch?.shiftDefinitionId && !targetShiftDefinitionSnapshot?.exists) {
       throw new AppError({ code: 'DP_SHIFT_DEFINITION_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'O turno configurado não existe mais.' });
     }
+    if (replacePatch?.shiftDefinitionId && targetShiftDefinitionSnapshot?.get('isArchived') === true) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_ARCHIVED', kind: 'CONFLICT', safeMessage: 'O turno escolhido está arquivado. Selecione um turno ativo.' });
+    }
     if (replacementCrossesMidnight && (
       !targetShiftDefinitionSnapshot?.exists
       || targetShiftDefinitionSnapshot.get('overnight') !== true

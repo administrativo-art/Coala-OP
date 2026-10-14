@@ -3,9 +3,9 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **437**
-- Totalmente contratados: **80**
-- Legados congelados: **357**
-- Exceções temporárias: **0**
+- Totalmente contratados: **81**
+- Legados congelados: **354**
+- Exceções temporárias: **2**
 - Violações: **0**
 
 Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os métodos exportados ou possuir exceção temporária válida. Uma rota só deixa de ser legada quando seus métodos são efetivamente contratados.
@@ -280,7 +280,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/hr/login-access` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/login-access/route.ts](../../src/app/api/hr/login-access/route.ts) |
 | `/api/hr/login-access/audit` | GET | `LEGACY_BASELINE` | [src/app/api/hr/login-access/audit/route.ts](../../src/app/api/hr/login-access/audit/route.ts) |
 | `/api/hr/navigation` | GET | `LEGACY_BASELINE` | [src/app/api/hr/navigation/route.ts](../../src/app/api/hr/navigation/route.ts) |
-| `/api/hr/onboarding` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/route.ts](../../src/app/api/hr/onboarding/route.ts) |
+| `/api/hr/onboarding` | GET, POST | `EXCEPTION` | [src/app/api/hr/onboarding/route.ts](../../src/app/api/hr/onboarding/route.ts) |
 | `/api/hr/onboarding/[id]` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/route.ts](../../src/app/api/hr/onboarding/[id]/route.ts) |
 | `/api/hr/onboarding/[id]/accountant-form` | POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/accountant-form/route.tsx](../../src/app/api/hr/onboarding/[id]/accountant-form/route.tsx) |
 | `/api/hr/onboarding/[id]/accountant-workflow` | GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/hr/onboarding/[id]/accountant-workflow/route.ts](../../src/app/api/hr/onboarding/[id]/accountant-workflow/route.ts) |
@@ -442,8 +442,8 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/uniforms/return` | POST | `LEGACY_BASELINE` | [src/app/api/uniforms/return/route.ts](../../src/app/api/uniforms/return/route.ts) |
 | `/api/uniforms/terms/[id]` | GET | `LEGACY_BASELINE` | [src/app/api/uniforms/terms/[id]/route.ts](../../src/app/api/uniforms/terms/[id]/route.ts) |
 | `/api/uploads/operations` | POST ✓ | `CONTRACTED` | [src/app/api/uploads/operations/route.ts](../../src/app/api/uploads/operations/route.ts) |
-| `/api/users` | POST | `LEGACY_BASELINE` | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) |
-| `/api/users/[userId]` | PATCH | `LEGACY_BASELINE` | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/[userId]/route.ts) |
+| `/api/users` | POST | `EXCEPTION` | [src/app/api/users/route.ts](../../src/app/api/users/route.ts) |
+| `/api/users/[userId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/users/[userId]/route.ts](../../src/app/api/users/[userId]/route.ts) |
 | `/api/webhooks/autentique` | POST | `LEGACY_BASELINE` | [src/app/api/webhooks/autentique/route.ts](../../src/app/api/webhooks/autentique/route.ts) |
 | `/api/webhooks/inter/banking` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/banking/route.ts](../../src/app/api/webhooks/inter/banking/route.ts) |
 | `/api/webhooks/inter/cobranca` | POST ✓ | `CONTRACTED` | [src/app/api/webhooks/inter/cobranca/route.ts](../../src/app/api/webhooks/inter/cobranca/route.ts) |

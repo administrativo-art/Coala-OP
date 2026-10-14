@@ -159,6 +159,12 @@ export async function saveWorkShift(params: {
     if (input.shiftDefinitionId && !shiftDefinitionSnapshot?.exists) {
       throw new AppError({ code: 'DP_SHIFT_DEFINITION_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'O turno configurado não existe mais.' });
     }
+    const preservesArchivedDefinition = mode === 'update'
+      && shiftSnapshot.exists
+      && shiftSnapshot.get('shiftDefinitionId') === input.shiftDefinitionId;
+    if (shiftDefinitionSnapshot?.get('isArchived') === true && !preservesArchivedDefinition) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_ARCHIVED', kind: 'CONFLICT', safeMessage: 'O turno escolhido está arquivado. Selecione um turno ativo.' });
+    }
     if (crossesMidnight && (
       !shiftDefinitionSnapshot?.exists
       || shiftDefinitionSnapshot.get('overnight') !== true

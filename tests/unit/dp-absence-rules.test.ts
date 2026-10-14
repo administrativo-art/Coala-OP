@@ -39,6 +39,14 @@ test('não aplica ausência trabalhista a pessoa jurídica', () => {
   assert.deepEqual(result, { status: 'not_applicable' });
 });
 
+test('não aplica ausência trabalhista a vínculo societário', () => {
+  const result = resolveAbsencePolicy({ validFrom: '2026-01-01', policies: [policy()] }, '2026-10-14', {
+    collaboratorId: 'person-partner',
+    employmentRelationshipType: 'partner',
+  });
+  assert.deepEqual(result, { status: 'not_applicable' });
+});
+
 test('identifica regras ambíguas no mesmo nível e o schema impede a publicação', () => {
   const left = policy({ id: 'left', name: 'Regra A', employmentRelationshipTypes: ['clt'] });
   const right = policy({ id: 'right', name: 'Regra B', employmentRelationshipTypes: ['clt'] });
@@ -66,4 +74,15 @@ test('schema rejeita PJ como vínculo configurável', () => {
     policies: [policy({ employmentRelationshipTypes: ['pj' as never] })], validFrom: '2026-01-01',
   });
   assert.equal(parsed.success, false);
+});
+
+test('catálogo de ausências aceita a paleta ampliada', () => {
+  for (const color of ['red', 'orange', 'yellow', 'teal', 'cyan', 'indigo'] as const) {
+    const parsed = completeAbsenceTypeSchema.safeParse({
+      name: 'Ausência', color, requestUnits: ['day'], initiatedBy: ['dp'],
+      workdayEffect: 'manual_review', includeInAbsenteeism: false, blocksSchedule: false,
+      policies: [policy()], validFrom: '2026-01-01',
+    });
+    assert.equal(parsed.success, true, `cor ${color} deveria ser aceita`);
+  }
 });

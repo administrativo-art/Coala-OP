@@ -32,6 +32,35 @@ A entrada fica em **Configurações → Pessoal → Tempo → Ausências**. Cada
 
 As regras usam a mesma abrangência de Jornadas: empresa, organização, grupo ou unidade, refinada por cargo, função e pessoa. A precedência é **pessoa → função → cargo → abrangência**. Duas regras do mesmo tipo não podem empatar no mesmo nível para vínculos que se interceptam. A simulação por colaborador mostra a regra vencedora sem criar solicitação.
 
+Cada regra pertence exclusivamente ao tipo de ausência em edição. Uma regra criada em **Atestado médico**, por exemplo, não é aplicada a nenhum outro tipo. A tela identifica esse escopo inclusive durante a criação, antes de o novo tipo receber um nome.
+
+Cada bloco do editor possui ajuda contextual aberta por clique ou toque. A unidade da solicitação pode habilitar **Dias**, **Horas** ou ambos; quando ambos estiverem ativos, o pedido futuro escolherá uma unidade por solicitação. Na aba Regras, a ajuda permanece disponível junto a quatro grupos — público e abrangência, contagem e aprovação, limites/prazos/documento e gestão da solicitação — e detalha as opções de cada grupo. Os campos em duas colunas mantêm os controles alinhados mesmo quando um rótulo ocupa duas linhas.
+
+O tipo pode ser identificado por uma paleta ampliada de doze cores. A cor é somente uma distinção visual e não altera precedência, aprovação ou efeito. As instruções ao solicitante podem ser geradas a partir da regra ativa; o texto reflete vínculos, abrangência, unidade, contagem, prazos, anexo, aprovação, efeito e bloqueio da escala, continua editável e só é persistido quando o rascunho for salvo. Para o rascunho existente de **Atestado médico**, a sugestão é preenchida quando ainda não houver instrução gravada.
+
+### Efeito na jornada
+
+O efeito descreve a apuração de tempo da ocorrência aprovada; ele não define sozinho pagamento ou desconto em folha:
+
+- **Ausência justificada:** registra que a pessoa não trabalhou, mas mantém o período classificado como justificado, sem crédito de trabalho ou débito no banco;
+- **Ausência não justificada:** mantém o tempo previsto como não cumprido e o encaminha como falta não justificada para os fluxos posteriores de ponto e DP;
+- **Crédito como período trabalhado:** considera o período cumprido na jornada, sem marcação de ponto e sem criar hora extra;
+- **Débito em banco de horas:** consome do saldo a quantidade aprovada; saldo insuficiente não permite aplicação automática e exige tratamento pelo DP;
+- **Revisão manual:** não produz efeito automático até que o DP defina o tratamento da ocorrência.
+
+Na Etapa 1, essas opções são somente configuração. A movimentação efetiva ocorre nas etapas futuras após uma solicitação aprovada e deve ser idempotente e auditável.
+
+### Hierarquia de aprovação
+
+O fluxo é configurado em cada regra por público, depois que vínculo e abrangência definem quem ela alcança:
+
+- **Automática:** o servidor aprova somente depois de todas as validações da regra, sem decisão humana;
+- **Gestor:** uma etapa atribuída ao gestor direto vigente do colaborador;
+- **Departamento Pessoal:** uma etapa atribuída à fila do DP;
+- **Gestor → Departamento Pessoal:** duas etapas sequenciais; o DP só recebe depois da aprovação do gestor.
+
+Uma rejeição encerra as etapas seguintes e respeita a exigência configurada de motivo. Quando o fluxo exigir gestor e não houver um gestor direto válido, o pedido não pode avançar automaticamente nem escolher outro usuário por inferência: fica pendente e sinalizado ao DP. A Etapa 2 deverá congelar no pedido o fluxo e a regra aplicados, mas resolver a autorização de quem decide novamente no servidor em cada ação. Substituição temporária e SLA continuam lacunas de política; nenhum substituto é concedido implicitamente nesta etapa.
+
 ```text
 rascunho --publicar--> publicado --arquivar--> arquivado
                          |
@@ -113,6 +142,7 @@ Cada adaptador deve registrar ID externo, tentativa, resultado sanitizado e capa
 
 - Nenhum pedido é enviado sem regra única e vigente para a pessoa e a data.
 - A regra aplicada fica congelada no pedido.
+- As etapas e os aprovadores resolvidos ficam registrados na trilha, com ordem, decisão, autor e data/hora.
 - Anexo obrigatório é validado no servidor antes do envio.
 - Ações de gestor/DP respeitam permissão e escopo no servidor.
 - Aprovar e reverter são idempotentes e auditados.

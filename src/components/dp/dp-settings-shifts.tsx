@@ -9,6 +9,7 @@ import { Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton } fro
 import { useDP } from '@/components/dp-context';
 import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
 import { Field, fieldInputClass } from '@/components/patterns/field';
+import { FilterChips } from '@/components/patterns/filter-chips';
 import { InlineConfirm } from '@/components/patterns/inline-confirm';
 import { PanelField, PanelSection, SidePanel } from '@/components/patterns/side-panel';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { formatShiftMinutes, shiftDurationSummary, shiftJourneyComparisons } fro
 import { resolveBizneoShiftIdentity } from '@/lib/dp-shift-bizneo';
 import { getShiftDefinitionUnitIds, getShiftDefinitionUnitNames } from '@/lib/dp-shift-definitions';
 import { isShiftDefinitionCompatibleWithJourney } from '@/lib/dp-time-config-rules';
+import { filterTimeConfigsByListStatus, timeConfigListCounts, type DPTimeConfigListStatus } from '@/lib/dp-time-config-status';
 import { activeOperationalUnits } from '@/lib/dp-units';
 import { cn } from '@/lib/utils';
 import type { DPJourney, DPShiftDefinition } from '@/types';
@@ -149,11 +151,15 @@ export function DPSettingsShifts() {
 
   const [panel, setPanel] = useState<PanelState | null>(null);
   const [search, setSearch] = useState('');
+  const [listStatus, setListStatus] = useState<DPTimeConfigListStatus>('active');
   const [unitFilter, setUnitFilter] = useState('all');
+  const [confirmingArchive, setConfirmingArchive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const archiveTriggerRef = useRef<HTMLButtonElement>(null);
 
   const form = useForm<ShiftDefForm>({ resolver: zodResolver(shiftDefSchema), defaultValues: formValuesFor(null) });
   const {
@@ -170,6 +176,7 @@ export function DPSettingsShifts() {
   const selectedBreakType = watch('breakType');
 
   useEffect(() => {
+    setConfirmingArchive(false);
     setConfirmingDelete(false);
     setSaveError(null);
     if (panel?.mode === 'edit') reset(formValuesFor(panel.def));
@@ -185,9 +192,14 @@ export function DPSettingsShifts() {
     return linkedUnitIds.map((unitId, index) => units.find((unit) => unit.id === unitId)?.name ?? linkedUnitNames[index] ?? unitId);
   };
 
+  const listCounts = useMemo(() => timeConfigListCounts(shiftDefinitions), [shiftDefinitions]);
+  const statusDefinitions = useMemo(
+    () => filterTimeConfigsByListStatus(shiftDefinitions, listStatus),
+    [listStatus, shiftDefinitions],
+  );
   const visibleDefinitions = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
-    return shiftDefinitions.filter((item) => {
+    return statusDefinitions.filter((item) => {
       const matchesSearch = !term || `${item.name} ${item.code ?? ''} ${resolveUnitLabels(item).join(' ')}`.toLocaleLowerCase('pt-BR').includes(term);
       const linkedUnitIds = getShiftDefinitionUnitIds(item);
       const matchesUnit = unitFilter === 'all'
@@ -197,7 +209,7 @@ export function DPSettingsShifts() {
     });
     // resolveUnitLabels depende só de `units`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shiftDefinitions, search, unitFilter, units]);
+  }, [statusDefinitions, search, unitFilter, units]);
 
   async function onSubmit(values: ShiftDefForm) {
     setSaveError(null);
@@ -249,6 +261,22 @@ export function DPSettingsShifts() {
     }
   }
 
+  async function setArchived(isArchived: boolean) {
+    if (!def) return;
+    setUpdatingStatus(true);
+    setSaveError(null);
+    try {
+      await updateShiftDefinition(def.id, { isArchived });
+      setPanel(null);
+      setListStatus(isArchived ? 'archived' : 'active');
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : `Não foi possível ${isArchived ? 'arquivar' : 'reativar'} o turno.`);
+    } finally {
+      setUpdatingStatus(false);
+      setConfirmingArchive(false);
+    }
+  }
+
   if (shiftDefsLoading && shiftDefinitions.length === 0) {
     return (
       <div className="rounded-ds-card-lg border border-ds-border bg-ds-warm" role="status" aria-label="Carregando turnos">
@@ -266,7 +294,7 @@ export function DPSettingsShifts() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Turnos reutilizáveis</p>
-            <p className="mt-1 text-[44px] font-bold leading-none tracking-tighter font-ds-mono">{shiftDefinitions.length}</p>
+            <p className="mt-1 text-[44px] font-bold leading-none tracking-tighter font-ds-mono">{statusDefinitions.length}</p>
             <p className="mt-1 text-base font-extrabold">Definições de turno</p>
           </div>
         </div>
@@ -288,11 +316,20 @@ export function DPSettingsShifts() {
             + Novo turno
           </Button>
         </div>
+        <FilterChips
+          includeAll={false}
+          value={listStatus}
+          onChange={(value) => setListStatus(value === 'archived' ? 'archived' : 'active')}
+          chips={[
+            { value: 'active', label: 'Ativos', count: listCounts.active },
+            { value: 'archived', label: 'Arquivados', count: listCounts.archived },
+          ]}
+        />
       </ControlPanel>
 
       <div className="flex items-baseline gap-2.5">
         <span className="text-[28px] font-extrabold tracking-[-0.03em]">{visibleDefinitions.length}</span>
-        <span className="text-[13px] text-ds-ink-faint">de {shiftDefinitions.length} turnos</span>
+        <span className="text-[13px] text-ds-ink-faint">de {statusDefinitions.length} turnos {listStatus === 'active' ? 'ativos' : 'arquivados'}</span>
       </div>
 
       <ListShell minWidth={1240}>
@@ -314,7 +351,7 @@ export function DPSettingsShifts() {
               template={ROW_TEMPLATE}
               isOpen={def?.id === item.id}
               isSelected={false}
-              isMuted={false}
+              isMuted={item.isArchived === true}
               onOpen={() => setPanel({ mode: 'view', def: item })}
               label={`Abrir turno ${item.name}`}
             >
@@ -342,7 +379,7 @@ export function DPSettingsShifts() {
         {shiftDefinitions.length === 0 ? (
           <p className="px-5 py-12 text-center text-sm text-ds-ink-muted">Nenhum turno cadastrado. Crie o primeiro com “Novo turno”.</p>
         ) : visibleDefinitions.length === 0 ? (
-          <EmptyResults title="Nenhum turno encontrado com esses filtros." onClear={() => { setSearch(''); setUnitFilter('all'); }} />
+          <EmptyResults title={statusDefinitions.length === 0 ? `Nenhum turno ${listStatus === 'active' ? 'ativo' : 'arquivado'}.` : 'Nenhum turno encontrado com esses filtros.'} onClear={() => { setSearch(''); setUnitFilter('all'); }} />
         ) : null}
       </ListShell>
 
@@ -355,6 +392,12 @@ export function DPSettingsShifts() {
       >
         {panel && !editing && def ? (
           <>
+            <PanelSection title="Situação">
+              <div className="flex items-center justify-between gap-3">
+                <StatusPill variant={def.isArchived ? 'neutral' : 'ok'}>{def.isArchived ? 'Arquivado' : 'Ativo'}</StatusPill>
+                <p className="text-right text-xs text-ds-ink-muted">{def.isArchived ? 'Somente histórico; não pode ser usado em novas escalas.' : 'Disponível para novas configurações e escalas.'}</p>
+              </div>
+            </PanelSection>
             <PanelSection title="Horário">
               {(() => {
                 const definedDuration = shiftDurationSummary(def);
@@ -464,19 +507,34 @@ export function DPSettingsShifts() {
             ) : null}
             {saveError ? <p role="alert" className="rounded-ds-btn border border-ds-confirm-border bg-ds-confirm-bg px-3.5 py-3 text-[12.5px] font-semibold text-ds-confirm-ink">{saveError}</p> : null}
             <div className="mt-auto flex flex-col gap-3 border-t border-ds-divider pt-4">
-              {confirmingDelete ? (
+              {def.isArchived && confirmingDelete ? (
                 <InlineConfirm
-                  message={`Excluir o turno “${def.name}”?`}
+                  message={`Excluir definitivamente o turno “${def.name}”?`}
                   loading={deleting}
                   returnFocusRef={deleteTriggerRef}
                   onCancel={() => setConfirmingDelete(false)}
                   onConfirm={() => void confirmDelete()}
                 />
+              ) : def.isArchived ? (
+                <>
+                  <Button type="button" variant="primary-modal" size="md" loading={updatingStatus} onClick={() => void setArchived(false)}>Reativar turno</Button>
+                  <div>
+                    <Button ref={deleteTriggerRef} type="button" variant="danger-link" size="xs" onClick={() => setConfirmingDelete(true)}>Excluir definitivamente</Button>
+                  </div>
+                </>
+              ) : confirmingArchive ? (
+                <InlineConfirm
+                  message={`Arquivar o turno “${def.name}”? Ele deixará de aparecer em novas escalas.`}
+                  loading={updatingStatus}
+                  returnFocusRef={archiveTriggerRef}
+                  onCancel={() => setConfirmingArchive(false)}
+                  onConfirm={() => void setArchived(true)}
+                />
               ) : (
                 <>
                   <Button type="button" variant="primary-modal" size="md" onClick={() => setPanel({ mode: 'edit', def })}>Editar turno</Button>
                   <div>
-                    <Button ref={deleteTriggerRef} type="button" variant="danger-link" size="xs" onClick={() => setConfirmingDelete(true)}>Excluir turno</Button>
+                    <Button ref={archiveTriggerRef} type="button" variant="danger-link" size="xs" onClick={() => setConfirmingArchive(true)}>Arquivar turno</Button>
                   </div>
                 </>
               )}

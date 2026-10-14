@@ -101,7 +101,7 @@ function parseComplete(collectionName: TimeConfigCollection, value: unknown) {
 
 const JOURNEY_FIELDS = ['name', 'description', 'weeklyMinutes', 'cycleLengthDays', 'days', 'regime', 'weeklyRest', 'scaleValidation', 'expectedBreakMinutes', 'useDefinedShiftWhenShorter', 'allowedShiftDefinitionIds', 'applicability', 'validFrom', 'validTo'] as const;
 const OVERTIME_FIELDS = ['name', 'description', 'collectiveAgreementReference', 'applicability', 'validFrom', 'validTo', 'dailyToleranceMinutes', 'dailyOvertimeLimitMinutes', 'weeklyOvertimeLimitMinutes', 'categories', 'timeBank', 'externalCoverageRule'] as const;
-const SHIFT_FIELDS = ['code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'unitId', 'unitName', 'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description', 'configurationNotes', 'overnight', 'expectedPunches'] as const;
+const SHIFT_FIELDS = ['code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd', 'breakType', 'breakDurationMinutes', 'breakWindowStart', 'breakWindowEnd', 'unitId', 'unitName', 'unitIds', 'unitNames', 'daysOfWeek', 'bizneoTemplateId', 'journeyIds', 'description', 'configurationNotes', 'overnight', 'expectedPunches', 'isArchived'] as const;
 
 function pickFields(source: Record<string, unknown>, fields: readonly string[]) {
   return Object.fromEntries(fields.flatMap((field) => field in source ? [[field, source[field]]] : []));
@@ -134,8 +134,8 @@ async function validateJourneyShiftReferences(input: Record<string, unknown>) {
   const shiftIds = normalizeIds(input.allowedShiftDefinitionIds);
   if (!shiftIds.length) return;
   const shifts = await dbAdmin.getAll(...shiftIds.map((id) => dbAdmin.collection(SHIFT_DEFINITIONS).doc(id)));
-  if (shifts.some((snapshot) => !snapshot.exists)) {
-    throw new AppError({ code: 'DP_JOURNEY_SHIFT_INVALID', kind: 'VALIDATION', safeMessage: 'Um dos turnos permitidos não existe.' });
+  if (shifts.some((snapshot) => !snapshot.exists || snapshot.get('isArchived') === true)) {
+    throw new AppError({ code: 'DP_JOURNEY_SHIFT_INVALID', kind: 'VALIDATION', safeMessage: 'Um dos turnos permitidos não existe ou está arquivado.' });
   }
 }
 
@@ -143,8 +143,8 @@ async function validateJourneyShiftReferencesInTransaction(transaction: Transact
   const shiftIds = normalizeIds(input.allowedShiftDefinitionIds);
   if (!shiftIds.length) return;
   const shifts = await transaction.getAll(...shiftIds.map((id) => dbAdmin.collection(SHIFT_DEFINITIONS).doc(id)));
-  if (shifts.some((snapshot) => !snapshot.exists)) {
-    throw new AppError({ code: 'DP_JOURNEY_SHIFT_INVALID', kind: 'VALIDATION', safeMessage: 'Um dos turnos permitidos não existe.' });
+  if (shifts.some((snapshot) => !snapshot.exists || snapshot.get('isArchived') === true)) {
+    throw new AppError({ code: 'DP_JOURNEY_SHIFT_INVALID', kind: 'VALIDATION', safeMessage: 'Um dos turnos permitidos não existe ou está arquivado.' });
   }
 }
 
@@ -392,7 +392,7 @@ export async function createShiftDefinition(params: { context: ServerUserContext
     if (!duplicate.empty) throw new AppError({ code: 'DP_SHIFT_CODE_DUPLICATE', kind: 'CONFLICT', safeMessage: 'Já existe um turno com este código.' });
     await validateLinkedJourneysInTransaction(transaction, input.journeyIds);
     const now = Timestamp.now();
-    transaction.create(ref, { ...omitNullableFields(input), createdAt: now, updatedAt: now });
+    transaction.create(ref, { ...omitNullableFields(input), isArchived: false, createdAt: now, updatedAt: now, updatedBy: context.decoded.uid });
     transaction.set(dbAdmin.collection('actionLogs').doc(), auditPayload(context, {
       module: 'dp.time.shifts', action: 'shift_definition_created', requestId,
       metadata: { shift_definition_id: ref.id, code: input.code },
@@ -410,6 +410,13 @@ export async function updateShiftDefinition(params: { context: ServerUserContext
     const fresh = await transaction.get(ref);
     if (!fresh.exists) throw new AppError({ code: 'DP_SHIFT_DEFINITION_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Turno não encontrado.' });
     const freshData = fresh.data() ?? {};
+    const archiveTransition = Object.hasOwn(input, 'isArchived');
+    if (archiveTransition && Object.keys(input).length !== 1) {
+      throw new AppError({ code: 'DP_SHIFT_ARCHIVE_TRANSITION_INVALID', kind: 'VALIDATION', safeMessage: 'Arquive ou reative o turno em uma ação separada.' });
+    }
+    if (freshData.isArchived === true && input.isArchived !== false) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_ARCHIVED', kind: 'CONFLICT', safeMessage: 'Reative o turno antes de editá-lo.' });
+    }
     const currentJourneyIds = normalizeIds(freshData.journeyIds);
     const nextJourneyIds = Object.hasOwn(input, 'journeyIds') ? normalizeIds(input.journeyIds) : currentJourneyIds;
     const journeyLinksChanged = currentJourneyIds.length !== nextJourneyIds.length
@@ -427,13 +434,28 @@ export async function updateShiftDefinition(params: { context: ServerUserContext
     for (const [key, value] of Object.entries(input)) if (value === null) delete merged[key];
     const parsed = completeShiftDefinitionSchema.safeParse(merged);
     if (!parsed.success) throw new AppError({ code: 'DP_SHIFT_DEFINITION_INVALID', kind: 'VALIDATION', safeMessage: parsed.error.issues[0]?.message ?? 'Configuração do turno inválida.' });
-    await validateLinkedJourneysInTransaction(transaction, parsed.data.journeyIds, {
-      preservedArchivedIds: new Set(currentJourneyIds),
-    });
+    // Arquivar precisa continuar possível mesmo quando o turno conserva vínculos
+    // puramente históricos com jornadas que já foram removidas. As referências
+    // voltam a ser validadas ao reativar ou editar o cadastro.
+    if (input.isArchived !== true) {
+      await validateLinkedJourneysInTransaction(transaction, parsed.data.journeyIds, {
+        preservedArchivedIds: new Set(currentJourneyIds),
+      });
+    }
     const now = Timestamp.now();
-    transaction.update(ref, { ...cleanNullableFields(input), updatedAt: now });
+    const isArchiving = input.isArchived === true && freshData.isArchived !== true;
+    const isReactivating = input.isArchived === false && freshData.isArchived === true;
+    transaction.update(ref, {
+      ...cleanNullableFields(input),
+      ...(isArchiving ? { archivedAt: now, archivedBy: context.decoded.uid } : {}),
+      ...(isReactivating ? { archivedAt: FieldValue.delete(), archivedBy: FieldValue.delete() } : {}),
+      updatedAt: now,
+      updatedBy: context.decoded.uid,
+    });
     transaction.set(dbAdmin.collection('actionLogs').doc(), auditPayload(context, {
-      module: 'dp.time.shifts', action: 'shift_definition_updated', requestId,
+      module: 'dp.time.shifts',
+      action: isArchiving ? 'shift_definition_archived' : isReactivating ? 'shift_definition_reactivated' : 'shift_definition_updated',
+      requestId,
       metadata: { shift_definition_id: id, changed_fields: Object.keys(input).sort() },
     }, now));
   });
@@ -456,6 +478,9 @@ export async function deleteShiftDefinition(params: { context: ServerUserContext
         kind: 'CONFLICT',
         safeMessage: 'Remova o turno das jornadas vinculadas antes de excluí-lo.',
       });
+    }
+    if (snapshot.get('isArchived') !== true) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_DELETE_REQUIRES_ARCHIVE', kind: 'CONFLICT', safeMessage: 'Arquive o turno antes de excluí-lo definitivamente.' });
     }
     const now = Timestamp.now();
     transaction.delete(ref);

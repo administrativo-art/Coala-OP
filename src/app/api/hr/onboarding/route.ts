@@ -375,8 +375,8 @@ export async function POST(request: NextRequest) {
   if (!candidateEmail || !candidateEmail.includes('@')) return jsonError('Informe um e-mail válido.');
   if (!jobRoleId) return jsonError('Selecione o cargo da integração.');
   if (!functionId) return jsonError('Selecione a função da integração.');
-  if (!isEmploymentRelationshipType(employmentRelationshipType)) {
-    return jsonError('Selecione o tipo de vínculo: CLT, PJ ou Estágio.');
+  if (!isEmploymentRelationshipType(employmentRelationshipType) || employmentRelationshipType === 'partner') {
+    return jsonError('Selecione um vínculo disponível para integração: CLT, Aprendiz, PJ ou Estágio.');
   }
   if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
   if (!expectedAdmissionDate) return jsonError('Informe a data prevista de admissão.');

@@ -129,7 +129,7 @@ test('política de hora extra persiste regras sem aceitar banco desativado como 
     applicability: { scope: { kind: 'unit_group' as const, id: 'belem' } },
     validFrom: '2026-01-01',
     dailyToleranceMinutes: 10,
-    categories: [{ id: 'he60', name: 'Hora extra 60%', trigger: 'workday' as const, startsAfterMinutes: 0, ratePercent: 60, destination: 'payroll' as const, requiresApproval: true }],
+    categories: [{ id: 'he60', name: 'Hora extra 60%', trigger: 'workday' as const, ratePercent: 60, destination: 'payroll' as const, requiresApproval: true }],
     timeBank: { enabled: false, allowNegativeBalance: false, expiredBalanceDestination: 'review' as const },
     externalCoverageRule: 'origin' as const,
   };
@@ -146,6 +146,12 @@ test('política de hora extra persiste regras sem aceitar banco desativado como 
     ...policy,
     categories: [{ ...policy.categories[0], trigger: 'specific_weekdays' }],
   }).success, false);
+  const legacy = createOvertimePolicySchema.safeParse({
+    ...policy,
+    categories: [{ ...policy.categories[0], startsAfterMinutes: 30 }],
+  });
+  assert.equal(legacy.success, true);
+  if (legacy.success) assert.equal('startsAfterMinutes' in legacy.data.categories[0], false);
 });
 
 test('abrangência só é ambígua no mesmo nível quando filtros e vigências se cruzam', () => {
@@ -180,6 +186,8 @@ test('turno mantém o contrato Bizneo e aceita somente metadados opcionais do Co
   assert.equal(parsed.bizneoTemplateId, '9988');
   assert.deepEqual(parsed.journeyIds, ['jornada-44h']);
   assert.equal(updateShiftDefinitionSchema.safeParse({ expectedPunches: null }).success, true);
+  assert.equal(updateShiftDefinitionSchema.safeParse({ isArchived: true }).success, true);
+  assert.equal(createShiftDefinitionSchema.safeParse({ ...parsed, isArchived: true }).success, false);
   assert.equal(createShiftDefinitionSchema.safeParse({
     ...parsed,
     breakType: 'fixed', breakStart: '12:00', breakEnd: '13:00',

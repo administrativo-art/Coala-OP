@@ -14,6 +14,7 @@ test('PATCH de turno ignora metadados legados e converte somente opcionais remov
     journeyIds: ['jornada-v2'],
     breakStart: undefined,
     description: undefined,
+    isArchived: true,
     synchronizedSource: 'bizneo',
     synchronizedAt: { seconds: 1 },
     createdAt: { seconds: 1 },
@@ -28,5 +29,6 @@ test('PATCH de turno ignora metadados legados e converte somente opcionais remov
     daysOfWeek: [0],
     journeyIds: ['jornada-v2'],
     description: null,
+    isArchived: true,
   });
 });
