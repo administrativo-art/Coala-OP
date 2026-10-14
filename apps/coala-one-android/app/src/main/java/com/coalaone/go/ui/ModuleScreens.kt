@@ -48,7 +48,9 @@ private fun money0(value: Double) = "R$ " + java.text.NumberFormat.getIntegerIns
 }
 @Composable fun ScheduleScreen(vm: ModulesViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState(); val feedback by vm.feedback.collectAsState()
-    LaunchedEffect(Unit) { vm.schedule() }
+    // Every visit starts on "Todas as unidades"; a rotation keeps the unit picked during the visit.
+    var opened by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (!opened) { opened = true; vm.scheduleFilter(Rules.ALL_UNITS, state.onlyMine) }; vm.schedule() }
     val dates = Rules.week(state.day)
     val units = state.schedules.values.flatMap { it.units }.distinctBy { it.id }
     val selected = units.firstOrNull { it.id == state.selectedScheduleUnit } ?: units.firstOrNull()
