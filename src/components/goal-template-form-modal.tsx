@@ -12,6 +12,7 @@ import { useDPStore } from '@/store/use-dp-store';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { useGoalMethodConfigs } from '@/hooks/use-goal-method-configs';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { countsDPShiftTowardGoals, externalCoverageUserIds } from '@/lib/dp-external-coverage';
 import {
   applyRevenueTargetsToGoalMethod,
   calculateTieredGoalBonus,
@@ -382,19 +383,28 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   );
 
   // Carrega os turnos reais da escala do quiosque para vincular colaboradores.
-  const { shifts: dpShifts } = useDPShifts(scheduleForKiosk?.id ?? null);
+  const { shifts: dpShifts, loading: dpShiftsLoading, error: dpShiftsError } = useDPShifts(scheduleForKiosk?.id ?? null);
+  const scheduleEvidenceReady = !scheduleForKiosk || (!dpShiftsLoading && !dpShiftsError);
 
   // A escala já é da unidade do quiosque; qualquer pessoa escalada nela entra como participante.
   const kioskShifts = useMemo(() => {
     const startKey = dateKey(activeDateRange.start);
     const endKey = dateKey(activeDateRange.end);
-    return dpShifts.filter(s => s.date >= startKey && s.date <= endKey);
+    return dpShifts.filter(s => s.date >= startKey && s.date <= endKey && countsDPShiftTowardGoals(s));
   }, [dpShifts, activeDateRange]);
+
+  const externalCoverageUsers = useMemo(() => {
+    const startKey = dateKey(activeDateRange.start);
+    const endKey = dateKey(activeDateRange.end);
+    return externalCoverageUserIds(dpShifts.filter((shift) => shift.date >= startKey && shift.date <= endKey));
+  }, [activeDateRange, dpShifts]);
 
   // Colaboradores do quiosque para fallback manual
   const kioskUsers = useMemo(
-    () => users.filter(u => kioskId && (u.assignedKioskIds?.includes(kioskId) || u.participatesInGoals === true)),
-    [users, kioskId]
+    () => scheduleEvidenceReady ? users.filter(u => kioskId
+      && !externalCoverageUsers.has(u.id)
+      && (u.assignedKioskIds?.includes(kioskId) || u.participatesInGoals === true)) : [],
+    [externalCoverageUsers, users, kioskId, scheduleEvidenceReady]
   );
 
   const scheduledParticipants = useMemo<RevenueParticipant[]>(() => {
@@ -446,7 +456,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     const scheduled = scheduledParticipants.filter(item => !excluded.has(item.employeeId));
     const scheduledIds = new Set(scheduled.map(item => item.employeeId));
     const manual = manualParticipantIds
-      .filter(id => !scheduledIds.has(id) && !excluded.has(id))
+      .filter(id => !scheduledIds.has(id) && !excluded.has(id) && !externalCoverageUsers.has(id))
       .map(id => ({
         employeeId: id,
         label: users.find(user => user.id === id)?.username ?? id,
@@ -463,7 +473,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     return rows
       .map(item => ({ ...item, fraction: totalWeight > 0 ? Math.max(item.coveredTurns || item.scheduledDays, 1) / totalWeight : 0 }))
       .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-  }, [excludedParticipantIds, getParticipantRole, manualParticipantIds, scheduledParticipants, users]);
+  }, [excludedParticipantIds, externalCoverageUsers, getParticipantRole, manualParticipantIds, scheduledParticipants, users]);
 
   const selectedParticipantIds = useMemo(
     () => new Set(participantRows.map(item => item.employeeId)),
@@ -561,7 +571,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   }
 
   function addParticipant() {
-    if (!newParticipantId) return;
+    if (!newParticipantId || !scheduleEvidenceReady || externalCoverageUsers.has(newParticipantId)) return;
     setManualParticipantIds(prev => prev.includes(newParticipantId) ? prev : [...prev, newParticipantId]);
     setExcludedParticipantIds(prev => prev.filter(id => id !== newParticipantId));
     setNewParticipantId('');
@@ -694,6 +704,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       return;
     }
     if (currentStep === 'revenue_shifts_users') {
+      if (!scheduleEvidenceReady) {
+        toast({
+          title: dpShiftsLoading ? 'Aguarde o carregamento da escala' : 'Não foi possível validar a escala',
+          description: 'A equipe da meta só pode ser confirmada depois que as coberturas externas forem verificadas.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (participantRows.length === 0) {
         toast({ title: 'Selecione ao menos um colaborador', variant: 'destructive' });
         return;
@@ -739,6 +757,10 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   }
 
   async function handleSubmit() {
+    if (selectedTypes.has('revenue') && !scheduleEvidenceReady) {
+      toast({ title: 'Não foi possível validar a equipe da meta', description: 'Recarregue a escala antes de salvar.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     const { start, end } = activeDateRange;
     let hasError = false;
@@ -801,7 +823,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
               targetValue: revenueConfig.targetValue * participant.fraction,
               currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
             } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
-            await addEmployeeGoal(employeeGoalData);
+            const employeeGoalId = await addEmployeeGoal(employeeGoalData);
+            if (!employeeGoalId) hasError = true;
           }
         } else hasError = true;
       } else hasError = true;
@@ -1265,6 +1288,13 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 <Badge variant="outline">{goalPeriodLabel(goalPeriod)}</Badge>
               </div>
               <div className="space-y-2 max-h-[34vh] overflow-y-auto pr-1">
+                {scheduleForKiosk && !scheduleEvidenceReady ? (
+                  <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+                    {dpShiftsLoading
+                      ? 'Carregando a escala para excluir coberturas externas da meta…'
+                      : 'A escala não pôde ser validada. Recarregue antes de selecionar a equipe.'}
+                  </p>
+                ) : null}
                 {participantRows.length === 0 ? (
                   <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
                     Nenhum colaborador selecionado.

@@ -10,6 +10,10 @@ import { refreshProbationProcess, type ProbationProcessState } from "@/features/
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
 import { isOwnHrEmployeeId } from "@/lib/hr/person-link";
+import { AppError } from "@/lib/observability/app-error";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,22 +84,49 @@ async function loadFieldMap(actor: Awaited<ReturnType<typeof requireUser>>): Pro
   } as FieldMap;
 }
 
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ employeeId: string }> },
-) {
-  try {
-    const actor = await requireUser(request);
-    const { employeeId } = await context.params;
-    const normalizedEmployeeId = decodeURIComponent(employeeId ?? "").trim();
+type RouteContext = { params: Promise<{ employeeId: string }> };
+type ProfileResource = { employeeId: string };
 
-    if (!normalizedEmployeeId) {
-      return NextResponse.json({ error: "Colaborador obrigatório." }, { status: 400 });
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "rh.employee-profile.read",
+  version: 1,
+  surface: { method: "GET", path: "/api/rh/employee-profile/[employeeId]" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "custom", strategy: "rh-profile-read" },
+  resourceScope: { kind: "custom", strategy: "employee-profile" },
+  input: { kind: "schema", schema: "rh-employee-profile-route", unknownFields: "reject" },
+  effects: { mode: "read", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof requireUser>>, { employeeId: string }, ProfileResource>({
+  id: "rh-employee-profile-read-v1",
+  guarantees: ["authenticated-user", "active-user", "authorization:rh-profile-read", "scope:employee-profile", "input-validated", "fields-allowlisted"],
+  async enforce({ request, routeContext }) {
+    const actor = await requireUser(request).catch((cause) => {
+      throw new AppError({ code: "RH_PROFILE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", safeMessage: "Autenticação necessária.", cause, reportable: false });
+    });
+    const params = await routeContext.params;
+    const employeeId = decodeURIComponent(params.employeeId ?? "").trim();
+    if (!employeeId || employeeId.length > 250) {
+      throw new AppError({ code: "RH_PROFILE_EMPLOYEE_ID_INVALID", kind: "VALIDATION", safeMessage: "Colaborador obrigatório.", reportable: false });
     }
-    if (!canReadRhProfile(actor, normalizedEmployeeId)) {
-      return NextResponse.json({ error: "Sem permissão para visualizar perfil RH." }, { status: 403 });
+    if (!canReadRhProfile(actor, employeeId)) {
+      throw new AppError({ code: "RH_PROFILE_READ_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para visualizar perfil RH.", reportable: false });
     }
-    await assertEmployeeUnitAccess(actor, normalizedEmployeeId);
+    await assertEmployeeUnitAccess(actor, employeeId).catch((cause) => {
+      throw new AppError({ code: "RH_PROFILE_UNIT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem acesso à unidade deste colaborador.", cause, reportable: false });
+    });
+    return { actor, input: { employeeId }, resource: { employeeId } };
+  },
+});
+
+export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
+  try {
+    const actor = security.actor;
+    const normalizedEmployeeId = security.resource.employeeId;
 
     const fieldMap = await loadFieldMap(actor);
     const personLink = await resolvePersonLink(normalizedEmployeeId);
@@ -177,6 +208,33 @@ export async function GET(
         updated_by: "system:access-account",
       };
     }
+    const changeRequestSnapshot = await hrDbAdmin
+      .collection("hrProfileUpdateRequests")
+      .where("employeeId", "==", resolvedEmployeeId)
+      .limit(100)
+      .get();
+    const changeRequests = changeRequestSnapshot.docs
+      .filter((document) => (
+        document.get("type") === "self_service_profile_update"
+        && document.get("status") === "pending_approval"
+        && readableKeys.includes(String(document.get("fieldKey") ?? ""))
+      ))
+      .map((document) => {
+        const value = document.data();
+        const requestedAt = value.requestedAt;
+        return {
+          id: document.id,
+          status: "pending_approval" as const,
+          employeeId: resolvedEmployeeId,
+          fieldKey: String(value.fieldKey ?? ""),
+          fieldLabel: String(value.fieldLabel ?? value.fieldKey ?? "Campo"),
+          oldValue: value.oldValue ?? null,
+          proposedValue: value.proposedValue ?? null,
+          requestedBy: String(value.requestedBy ?? ""),
+          requestedAt: typeof requestedAt?.toDate === "function" ? requestedAt.toDate().toISOString() : String(requestedAt ?? ""),
+        };
+      })
+      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt));
 
     return NextResponse.json(
       {
@@ -187,6 +245,7 @@ export async function GET(
         consentimento_imagem_voz: imageVoiceConsent,
         ciencia_privacidade_onboarding: privacyAcknowledgement,
         periodo_experiencia: probation,
+        changeRequests,
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );
@@ -196,4 +255,4 @@ export async function GET(
       { status: 400 },
     );
   }
-}
+});

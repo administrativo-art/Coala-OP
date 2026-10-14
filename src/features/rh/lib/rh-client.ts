@@ -7,8 +7,8 @@ export async function callOnFieldUpdate(params: {
   employee_id: string;
   field_key:   string;
   value:       unknown;
-}): Promise<{ success: boolean; profile_completion: number }> {
-  const call = httpsCallable<typeof params, { success: boolean; profile_completion: number }>(
+}): Promise<{ success: boolean; profile_completion: number; pending_approval?: boolean; request_id?: string }> {
+  const call = httpsCallable<typeof params, { success: boolean; profile_completion: number; pending_approval?: boolean; request_id?: string }>(
     functions,
     'onFieldUpdate'
   );
@@ -25,4 +25,17 @@ export async function callManualSync(): Promise<{
   const call = httpsCallable(functions, 'manualSyncFromBizneo');
   const result = await call({});
   return result.data as ReturnType<typeof callManualSync> extends Promise<infer T> ? T : never;
+}
+
+export async function callReviewFieldChange(params: {
+  request_id: string;
+  decision: 'approved' | 'rejected';
+  reason?: string;
+}): Promise<{ success: boolean; status: 'approved' | 'rejected'; profile_completion?: number }> {
+  const call = httpsCallable<typeof params, { success: boolean; status: 'approved' | 'rejected'; profile_completion?: number }>(
+    functions,
+    'reviewFieldChangeRequest',
+  );
+  const result = await call(params);
+  return result.data;
 }

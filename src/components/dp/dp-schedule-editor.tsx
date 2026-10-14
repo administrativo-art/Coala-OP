@@ -8,10 +8,11 @@ import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
-import { useDPShifts } from '@/hooks/use-dp-shifts';
+import { notifyDPScheduleShiftsChanged, useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
 import { useDPScheduleVacations } from '@/hooks/use-dp-schedule-vacations';
+import { useDPScheduleJourneyValidation } from '@/hooks/use-dp-schedule-journey-validation';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -131,12 +132,13 @@ function weekOfMonth(year: number, month: number, day: number) {
   return Math.floor((day + firstDow - 1) / 7) + 1;
 }
 
-// Anel de "dias consecutivos" no estilo do protótipo: cinza (1–4), âmbar (5–6),
-// vermelho cheio (7+). Mostra a contagem no centro.
-function StreakRing({ count }: { count: number }) {
-  const pct = Math.round((Math.min(count, 7) / 7) * 100);
-  const danger = count >= 7;
-  const warn = count >= 5 && count < 7;
+// Anel de dias consecutivos. As cores se adaptam ao limite da jornada efetiva
+// do colaborador, em vez de pressuporem que toda a escala usa 6×1.
+function StreakRing({ count, maxAllowed = 6 }: { count: number; maxAllowed?: number }) {
+  const dangerAt = maxAllowed + 1;
+  const pct = Math.round((Math.min(count, dangerAt) / dangerAt) * 100);
+  const danger = count > maxAllowed;
+  const warn = count >= Math.max(1, maxAllowed - 1) && count <= maxAllowed;
   const fill = danger
     ? 'hsl(var(--destructive))'
     : warn
@@ -189,6 +191,7 @@ const shiftSchema = z.object({
   shiftDefinitionId: z.string().optional(),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
+  exceptionReason: z.string().optional(),
 });
 
 type ShiftFormValues = z.infer<typeof shiftSchema>;
@@ -215,11 +218,28 @@ interface ShiftDialogProps {
 function ShiftDialog({
   scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations, onDelete,
 }: ShiftDialogProps) {
-  const { activeUsers } = useAuth();
+  const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { addShift, updateShift } = useDPShifts(scheduleId);
+  const api = useAuthenticatedApi();
   const { toast } = useToast();
   const isEdit = !!shift;
+  const canAssignExternal = isDefaultAdmin || permissions.dp?.schedules?.assignExternal === true;
+  type ExternalCandidate = {
+    id: string;
+    username: string;
+    originUnitId: string;
+    originUnitName: string;
+    jobRoleName?: string;
+    jobFunctionNames?: string[];
+    shiftDefinitionId?: string;
+  };
+  const [externalMode, setExternalMode] = useState(shift?.assignmentKind === 'external_coverage');
+  const [candidateSearch, setCandidateSearch] = useState('');
+  const [externalCandidates, setExternalCandidates] = useState<ExternalCandidate[]>([]);
+  const [selectedExternal, setSelectedExternal] = useState<ExternalCandidate | null>(null);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
 
   // Pre-set unit from column click — hide unit selector if locked
   const unitLocked = !isEdit && !!defaultUnitId;
@@ -231,8 +251,7 @@ function ShiftDialog({
   const operationalUsers = (() => {
     const all = activeUsers.filter(u => u.operacional === true);
     if (!activeUnitIdForDefs) return all;
-    const linked = all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
-    return linked.length > 0 ? linked : all; // fallback to all if no unitIds configured
+    return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
   })();
 
   const form = useForm<ShiftFormValues>({
@@ -244,6 +263,7 @@ function ShiftDialog({
       shiftDefinitionId: shift?.shiftDefinitionId ?? '',
       startTime: shift?.startTime ?? '',
       endTime: shift?.endTime ?? '',
+      exceptionReason: shift?.exceptionReason ?? '',
     },
   });
 
@@ -256,9 +276,21 @@ function ShiftDialog({
         shiftDefinitionId: shift?.shiftDefinitionId ?? '',
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
+        exceptionReason: shift?.exceptionReason ?? '',
       });
+      const isExternal = shift?.assignmentKind === 'external_coverage';
+      setExternalMode(isExternal);
+      setCandidateSearch('');
+      setExternalCandidates([]);
+      setCandidateError(null);
+      setSelectedExternal(isExternal && shift ? {
+        id: shift.userId,
+        username: shift.userName ?? activeUsers.find((candidate) => candidate.id === shift.userId)?.username ?? 'Colaboradora externa',
+        originUnitId: shift.originUnitId ?? '',
+        originUnitName: units.find((unit) => unit.id === shift.originUnitId)?.name ?? shift.originUnitId ?? 'Unidade de origem',
+      } : null);
     }
-  }, [open, shift, defaultDate, defaultUnitId]);
+  }, [activeUsers, defaultDate, defaultUnitId, form, open, shift, units]);
 
   const selectedUserId = form.watch('userId');
   const selectedDate = form.watch('date');
@@ -288,7 +320,33 @@ function ShiftDialog({
     }
   }
 
+  async function searchExternalCandidates() {
+    const term = candidateSearch.trim();
+    if (term.length < 2) {
+      setCandidateError('Digite ao menos dois caracteres para buscar.');
+      return;
+    }
+    setCandidateLoading(true);
+    setCandidateError(null);
+    try {
+      const result = await api<{ candidates: ExternalCandidate[]; truncated: boolean }>(
+        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/external-candidates?search=${encodeURIComponent(term)}&limit=15`,
+        { fallbackError: 'Falha ao buscar colaboradoras de outras unidades.' },
+      );
+      setExternalCandidates(result.candidates);
+      if (result.candidates.length === 0) setCandidateError('Nenhuma colaboradora externa encontrada com essa busca.');
+    } catch (candidateFailure) {
+      setCandidateError(candidateFailure instanceof Error ? candidateFailure.message : 'Não foi possível buscar colaboradoras externas.');
+    } finally {
+      setCandidateLoading(false);
+    }
+  }
+
   async function onSubmit(values: ShiftFormValues) {
+    if (externalMode && !values.exceptionReason?.trim()) {
+      form.setError('exceptionReason', { message: 'Informe o motivo da cobertura em outra unidade.' });
+      return;
+    }
     if (dayOffOccupied?.get(values.userId)?.has(values.date)) {
       toast({
         title: 'Existe uma folga confirmada nesta data.',
@@ -309,14 +367,22 @@ function ShiftDialog({
     }
 
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
-    const userName = operationalUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
+    const userName = selectedExternal?.username ?? activeUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
+    const payload = {
+      ...values,
+      exceptionReason: externalMode ? values.exceptionReason?.trim() : undefined,
+      scheduleId,
+      ...(userName ? { userName } : {}),
+      type: 'work' as const,
+      hasConflict: hasCrossConflict,
+    };
     try {
       if (isEdit && shift) {
-        await updateShift({ ...shift, ...values, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
+        await updateShift({ ...shift, ...payload });
         toast({ title: 'Turno atualizado.' });
       } else {
-        await addShift({ ...values, scheduleId, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
-        toast({ title: 'Turno adicionado.' });
+        await addShift(payload);
+        toast({ title: externalMode ? 'Cobertura externa adicionada.' : 'Turno adicionado.' });
       }
       if (hasCrossConflict) {
         toast({
@@ -358,7 +424,7 @@ function ShiftDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
 
-            <FormField control={form.control} name="userId" render={({ field }) => (
+            {!externalMode ? <FormField control={form.control} name="userId" render={({ field }) => (
               <FormItem className="mt-[15px] space-y-2">
                 <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Colaboradora</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
@@ -369,9 +435,69 @@ function ShiftDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                {operationalUsers.length === 0 ? <p className="text-[11px] font-semibold text-muted-foreground">Nenhuma colaboradora vinculada a esta unidade.</p> : null}
                 <FormMessage className="text-[11px]" />
               </FormItem>
-            )} />
+            )} /> : (
+              <div className="mt-[15px] space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black text-foreground">Cobertura externa</p>
+                    <p className="text-[11px] font-semibold text-muted-foreground">Não altera o vínculo e não participa das metas desta unidade.</p>
+                  </div>
+                  <Badge variant="outline" className="border-primary/30 bg-background text-[10px] font-bold text-primary">Exceção</Badge>
+                </div>
+                {!selectedExternal || !isEdit ? (
+                  <div className="flex gap-2">
+                    <Input aria-label="Buscar colaboradora de outra unidade" value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchExternalCandidates(); } }} placeholder="Nome da colaboradora" className="h-9 text-xs" />
+                    <Button type="button" variant="outline" size="sm" disabled={candidateLoading} onClick={() => void searchExternalCandidates()}>{candidateLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Buscar'}</Button>
+                  </div>
+                ) : null}
+                {externalCandidates.length > 0 ? (
+                  <FormField control={form.control} name="userId" render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">Colaboradora externa</FormLabel>
+                      <Select value={field.value} onValueChange={(value) => { field.onChange(value); setSelectedExternal(externalCandidates.find((candidate) => candidate.id === value) ?? null); }}>
+                        <FormControl><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                        <SelectContent>{externalCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.username} · {candidate.originUnitName}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <FormMessage className="text-[11px]" />
+                    </FormItem>
+                  )} />
+                ) : null}
+                {selectedExternal ? (
+                  <div className="rounded-lg border border-border bg-background px-3 py-2">
+                    <p className="text-xs font-bold text-foreground">{selectedExternal.username}</p>
+                    <p className="text-[11px] text-muted-foreground">Unidade de origem: {selectedExternal.originUnitName}</p>
+                  </div>
+                ) : null}
+                {candidateError ? <p role="alert" className="text-[11px] font-semibold text-destructive">{candidateError}</p> : null}
+                <FormField control={form.control} name="exceptionReason" render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">Motivo da cobertura</FormLabel>
+                    <FormControl><textarea {...field} rows={3} placeholder="Ex.: cobertura pontual por ausência" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs outline-hidden focus:ring-2 focus:ring-ring" /></FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+              </div>
+            )}
+
+            {!isEdit && canAssignExternal ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setExternalMode((current) => !current);
+                  setSelectedExternal(null);
+                  setExternalCandidates([]);
+                  setCandidateError(null);
+                  form.setValue('userId', '');
+                  form.setValue('exceptionReason', '');
+                }}
+                className="mt-3 text-left text-xs font-extrabold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {externalMode ? 'Voltar para colaboradora da unidade' : 'Trazer colaborador de outra unidade'}
+              </button>
+            ) : null}
 
             {(!defaultDate || isEdit) && (
               <FormField control={form.control} name="date" render={({ field }) => (
@@ -565,6 +691,7 @@ interface ShiftCardProps {
   userColor?: string;
   shiftDef?: DPShiftDefinition;
   canEdit: boolean;
+  maxConsecutiveWorkDays?: number;
   selectionMode?: boolean;
   selected?: boolean;
   onSelect?: (shift: DPShift) => void;
@@ -580,6 +707,7 @@ function ShiftCard({
   userColor,
   shiftDef,
   canEdit,
+  maxConsecutiveWorkDays,
   selectionMode,
   selected,
   onSelect,
@@ -590,7 +718,8 @@ function ShiftCard({
   const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   const shiftLabel = shiftDef?.name?.trim() || 'Turno manual';
-  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
+  const externalCoverage = shift.assignmentKind === 'external_coverage';
+  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ' · Cobertura externa, não participa das metas' : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
     <div
       role={selectionMode ? 'button' : 'group'}
@@ -626,6 +755,7 @@ function ShiftCard({
         <p className="mt-px whitespace-normal wrap-break-word text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
           {shiftLabel}
         </p>
+        {externalCoverage ? <p className="mt-0.5 text-[8.5px] font-extrabold uppercase leading-[10px] text-primary">Cobertura externa · não participa das metas</p> : null}
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
@@ -648,7 +778,7 @@ function ShiftCard({
           <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
         )}
         {shift.consecutiveDayCount && shift.consecutiveDayCount >= 1 && (
-          <StreakRing count={shift.consecutiveDayCount} />
+          <StreakRing count={shift.consecutiveDayCount} maxAllowed={maxConsecutiveWorkDays ?? shift.journeyResolution?.maxConsecutiveWorkDays ?? 6} />
         )}
       </div>
 
@@ -668,15 +798,20 @@ function ShiftCard({
 
 // ─── Ghost Shift Badge ────────────────────────────────────────────────────────
 
-function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationConflict }: {
+function GhostShiftBadge({ shift, unitName, consecutiveDayCount, maxConsecutiveWorkDays = 6, user, vacationConflict }: {
   shift: DPShift;
   unitName: string;
   consecutiveDayCount: number;
+  maxConsecutiveWorkDays?: number;
   user: { username: string; avatarUrl?: string; color?: string };
   vacationConflict?: DPVacationRecord | null;
 }) {
   const color = user.color ?? getUserColor(user.username);
-  const countColor = consecutiveDayCount >= 7 ? 'text-destructive' : consecutiveDayCount >= 5 ? 'text-orange-500' : 'text-muted-foreground/60';
+  const countColor = consecutiveDayCount > maxConsecutiveWorkDays
+    ? 'text-destructive'
+    : consecutiveDayCount >= Math.max(1, maxConsecutiveWorkDays - 1)
+      ? 'text-orange-500'
+      : 'text-muted-foreground/60';
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   return (
     <div
@@ -1185,6 +1320,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     deleteShift: doDelete,
   } = useDPShifts(schedule.id);
   const {
+    validation: journeyValidation,
+    loading: journeyValidationLoading,
+    error: journeyValidationError,
+  } = useDPScheduleJourneyValidation(schedule.id);
+  const {
     vacations,
     loading: vacationsLoading,
     error: vacationsError,
@@ -1347,6 +1487,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         title: result.alreadyPublished ? 'Folga já confirmada.' : 'Folga confirmada.',
         description: 'O Bizneo reconheceu o dia como folga.',
       });
+      notifyDPScheduleShiftsChanged(params.scheduleId ?? schedule.id);
       return true;
     } catch (caught) {
       toast({
@@ -1383,6 +1524,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         title: result.alreadyRemoved ? 'Folga já removida.' : 'Folga removida.',
         description: 'O Bizneo e o Coala One foram atualizados.',
       });
+      notifyDPScheduleShiftsChanged(shift.scheduleId);
       setDayOffRemovalTarget(null);
     } catch (caught) {
       toast({
@@ -1413,8 +1555,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       const cleanSnapshot = JSON.parse(JSON.stringify({ users: snapshotUsers }));
       await updateSchedule({ ...schedule, locked: true, snapshot: cleanSnapshot });
       toast({ title: 'Escala trancada.' });
-    } catch {
-      toast({ title: 'Erro ao trancar escala.', variant: 'destructive' });
+    } catch (caught) {
+      toast({
+        title: 'Não foi possível trancar a escala.',
+        description: caught instanceof Error ? caught.message : 'Revise as jornadas aplicáveis.',
+        variant: 'destructive',
+      });
     } finally {
       setLocking(false);
     }
@@ -1663,7 +1809,31 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     ),
     [isPerUnit, prevSiblingWorkShifts, prevWorkShifts, siblingWorkShifts, workShifts]
   );
-  const consecutiveCountMap = streakState.countByShiftId;
+  const consecutiveCountMap = useMemo(() => {
+    const counts = new Map(streakState.countByShiftId);
+    workShifts.forEach((shift) => {
+      const resolvedCount = journeyValidation?.people[shift.userId]?.countsByDate[shift.date];
+      if (typeof resolvedCount === 'number') counts.set(shift.id, resolvedCount);
+    });
+    return counts;
+  }, [journeyValidation, streakState.countByShiftId, workShifts]);
+
+  const journeyPredictedDayOffsByUser = useMemo(() => {
+    const predictions = new Map<string, Array<{ date: string; sourceUnitId: string }>>();
+    if (!journeyValidation) return predictions;
+    const allWorkShifts = [...prevWorkShifts, ...prevSiblingWorkShifts, ...workShifts, ...siblingWorkShifts];
+    Object.entries(journeyValidation.people).forEach(([userId, person]) => {
+      const userShifts = allWorkShifts
+        .filter((shift) => shift.userId === userId)
+        .sort((left, right) => left.date.localeCompare(right.date));
+      const items = person.predictedDayOffDates.map((date) => ({
+        date,
+        sourceUnitId: [...userShifts].reverse().find((shift) => shift.date < date)?.unitId ?? schedule.unitId ?? '',
+      }));
+      if (items.length) predictions.set(userId, items);
+    });
+    return predictions;
+  }, [journeyValidation, prevSiblingWorkShifts, prevWorkShifts, schedule.unitId, siblingWorkShifts, workShifts]);
 
   // lastSundayShiftsByDate[date] = work shifts of THIS unit on that date.
   // Combines the current schedule with the previous month's own-unit shifts
@@ -1823,7 +1993,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
 
-    streakState.predictedDayOffsByUser.forEach((items, userId) => {
+    journeyPredictedDayOffsByUser.forEach((items, userId) => {
       items.forEach((item) => {
         let displayUnitId = item.sourceUnitId;
         if (isPerUnit && schedule.unitId) {
@@ -1869,7 +2039,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     operationalUsers,
     schedule.unitId,
     siblingDayOffShifts,
-    streakState.predictedDayOffsByUser,
+    journeyPredictedDayOffsByUser,
     units,
     userFilter,
   ]);
@@ -1962,9 +2132,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           if (vacationConflictByShiftId.has(shiftVacationKey(shift))) {
             alerts.push({ key: `vacation:${shift.id}`, label: `${userName}: turno durante férias`, tone: 'danger' });
           }
-          if ((shift.consecutiveDayCount ?? 0) >= 7) {
-            alerts.push({ key: `streak:${shift.id}`, label: `${userName}: ${shift.consecutiveDayCount} dias seguidos`, tone: 'warning' });
-          }
+          journeyValidation?.issues
+            .filter((issue) => issue.userId === shift.userId && issue.date === date)
+            .forEach((issue) => {
+              alerts.push({
+                key: `journey:${issue.code}:${shift.id}`,
+                label: `${userName}: ${issue.message}`,
+                tone: issue.blocking ? 'danger' : 'warning',
+              });
+            });
         });
 
         (dayOffIndex[date]?.[unit.id] ?? []).forEach(({ userId, shift }) => {
@@ -1983,7 +2159,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
     return index;
-  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
+  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, journeyValidation, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
 
   const alertDates = useMemo(
     () => new Set(Array.from(alertsByCellKey.keys()).map((key) => key.slice(0, 10))),
@@ -2047,8 +2223,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       if (vacationConflictByShiftId.has(shiftVacationKey(shift))) issues.add(`vacation:${shift.id}`);
     });
     workDayOffConflictKeys.forEach((key) => issues.add(`day-off:${key}`));
+    journeyValidation?.issues.forEach((issue, index) => {
+      if (issue.blocking) issues.add(`journey:${issue.userId}:${issue.date ?? index}:${issue.code}`);
+    });
     return issues.size;
-  }, [crossConflictShiftIds, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
+  }, [crossConflictShiftIds, journeyValidation, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
   const coverageAlertCount = useMemo(
     () => [...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).length,
     [coverageByCellKey],
@@ -2271,6 +2450,30 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           Escala trancada — dados de colaboradores e vale-transporte estão congelados.
         </div>
       )}
+      {!schedule.locked && journeyValidationLoading && (
+        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          Validando a jornada de cada colaborador e a sequência entre competências e unidades.
+        </div>
+      )}
+      {!schedule.locked && journeyValidationError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          A validação de jornadas não foi concluída: {journeyValidationError}
+        </div>
+      )}
+      {!schedule.locked && journeyValidation?.status === 'blocked' && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {journeyValidation.issues.length} pendência{journeyValidation.issues.length === 1 ? '' : 's'} de jornada impedem o fechamento. {journeyValidation.issues[0]?.message}
+        </div>
+      )}
+      {!schedule.locked && journeyValidation?.status === 'ok' && workShifts.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+          Jornadas resolvidas e sequência contínua validada para esta escala.
+        </div>
+      )}
       {isArchivedUnitSchedule && (
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <Lock className="h-3.5 w-3.5 shrink-0" />
@@ -2408,12 +2611,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex">
-            Dias seguidos
-            <StreakRing count={3} />
-            <StreakRing count={6} />
-            <StreakRing count={7} />
-            <span className="normal-case tracking-normal">1–4 · 5–6 · 7+</span>
+          <span
+            className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex"
+            title="Indicador da sequência realizada na escala. A regra aplicável pertence à jornada do colaborador."
+          >
+            Sequência realizada
+            <span className="normal-case tracking-normal">o indicador se adapta ao limite da jornada</span>
           </span>
           <button
             type="button"
@@ -2523,6 +2726,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                       userColor={user?.color}
                                       shiftDef={def}
                                       canEdit={false}
+                                      maxConsecutiveWorkDays={shift.journeyResolution?.maxConsecutiveWorkDays}
                                       onEdit={() => {}}
                                       onDelete={() => {}}
                                     />
@@ -2667,6 +2871,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             userColor={user?.color}
                             shiftDef={def}
                             canEdit={canEdit}
+                            maxConsecutiveWorkDays={journeyValidation?.people[shift.userId]?.journey?.maxConsecutiveWorkDays}
                             selectionMode={bulkSelectionActive}
                             selected={selectedShiftIds.includes(shift.id)}
                             onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
@@ -2686,6 +2891,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                               shift={ghost.shift}
                               unitName={ghost.unitName}
                               consecutiveDayCount={ghost.consecutiveDayCount}
+                              maxConsecutiveWorkDays={journeyValidation?.people[ghost.shift.userId]?.journey?.maxConsecutiveWorkDays}
                               user={user}
                               vacationConflict={vacationConflictForShift(ghost.shift)}
                             />

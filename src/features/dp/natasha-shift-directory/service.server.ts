@@ -11,7 +11,7 @@ import { canAccessUnit } from '@/lib/unit-access';
 const QUERY_LIMIT = 501;
 const PROJECTED_FIELDS = [
   'code', 'name', 'startTime', 'endTime', 'breakStart', 'breakEnd',
-  'unitId', 'unitIds', 'daysOfWeek',
+  'unitId', 'unitIds', 'daysOfWeek', 'journeyIds',
 ] as const;
 
 function assertPermission(context: ServerUserContext) {

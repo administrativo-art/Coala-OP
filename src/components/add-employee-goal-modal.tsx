@@ -13,6 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Plus, X, AlertCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useDP } from '@/components/dp-context';
+import { useDPShifts } from '@/hooks/use-dp-shifts';
+import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { externalCoverageUserIds } from '@/lib/dp-external-coverage';
 
 interface AddEmployeeGoalModalProps {
   open: boolean;
@@ -24,6 +28,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
   const { employeeGoals, addEmployeeGoal, deleteEmployeeGoal, rebalancePeriodEmployeeGoals } = useGoals();
   const { users } = useAuth();
   const { kiosks } = useKiosks();
+  const { schedules, units } = useDP();
   const { toast } = useToast();
 
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -33,20 +38,37 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
 
   const hasShifts = (period?.shifts?.length ?? 0) > 0 && period?.version !== 2;
 
+  const kiosk = kiosks.find(item => item.id === period?.kioskId);
+  const dpUnit = kiosk ? matchDPUnitForKiosk(kiosk.name, units) : undefined;
+  const periodStart = period?.startDate?.toDate?.();
+  const periodEnd = period?.endDate?.toDate?.();
+  const schedule = schedules.find(item => item.unitId === dpUnit?.id
+    && item.year === periodStart?.getFullYear()
+    && item.month === (periodStart?.getMonth() ?? -1) + 1) ?? null;
+  const { shifts: dpShifts, loading: dpShiftsLoading, error: dpShiftsError } = useDPShifts(schedule?.id ?? null);
+  const scheduleEvidenceReady = !schedule || (!dpShiftsLoading && !dpShiftsError);
+  const externalCoverageUsers = useMemo(() => {
+    if (!periodStart || !periodEnd) return new Set<string>();
+    const key = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    const startKey = key(periodStart);
+    const endKey = key(periodEnd);
+    return externalCoverageUserIds(dpShifts.filter(shift => shift.date >= startKey && shift.date <= endKey));
+  }, [dpShifts, periodEnd, periodStart]);
+
   const periodEmployeeGoals = useMemo(() =>
     employeeGoals.filter(eg => eg.periodId === period?.id),
     [employeeGoals, period]
   );
 
   const kioskUsers = useMemo(() =>
-    users.filter(u => {
+    scheduleEvidenceReady ? users.filter(u => {
       if (!period) return false;
       // Show user if they participate in goals OR are assigned to this kiosk
       const participates = u.participatesInGoals === true;
       const assigned = u.assignedKioskIds?.includes(period.kioskId);
-      return participates || assigned;
-    }),
-    [users, period]
+      return !externalCoverageUsers.has(u.id) && (participates || assigned);
+    }) : [],
+    [externalCoverageUsers, users, period, scheduleEvidenceReady]
   );
 
   const getUserName = (id: string) => users.find(u => u.id === id)?.username ?? id;
@@ -91,7 +113,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
     if (!period) return;
     const empId = newEmp[shiftId];
     const pct = newPct[shiftId];
-    if (!empId || !pct) return;
+    if (!empId || !pct || !scheduleEvidenceReady || externalCoverageUsers.has(empId)) return;
     const fractionNum = parseFloat(pct) / 100;
     if (isNaN(fractionNum) || fractionNum <= 0 || fractionNum > 1) {
       toast({ title: 'Porcentagem inválida', variant: 'destructive' });
@@ -111,8 +133,12 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       distributionMode: period.distributionMode ?? 'calendar_days',
     } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
     const id = await addEmployeeGoal(employeeGoalData);
-    if (id) await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
-    toast({ title: 'Colaborador adicionado ao turno.' });
+    if (id) {
+      await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
+      toast({ title: 'Colaborador adicionado ao turno.' });
+    } else {
+      toast({ title: 'Colaborador não adicionado', description: 'Coberturas externas não participam das metas da unidade.', variant: 'destructive' });
+    }
     setNewEmp(prev => ({ ...prev, [shiftId]: '' }));
     setNewPct(prev => ({ ...prev, [shiftId]: '' }));
     setLoading(false);
@@ -131,7 +157,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
   );
 
   async function handleAddLegacy() {
-    if (!period || !selectedEmployee || !fraction) return;
+    if (!period || !selectedEmployee || !fraction || !scheduleEvidenceReady || externalCoverageUsers.has(selectedEmployee)) return;
     // Unify to use percentage (1-100) instead of decimal (0-1)
     const fractionNum = parseFloat(fraction) / 100;
     if (isNaN(fractionNum) || fractionNum <= 0 || fractionNum > 1) {
@@ -153,8 +179,12 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
       distributionMode: period.distributionMode ?? 'calendar_days',
     } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
     const id = await addEmployeeGoal(employeeGoalData);
-    if (id) await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
-    toast({ title: 'Colaborador adicionado à meta.' });
+    if (id) {
+      await rebalanceWith([...periodEmployeeGoals, { id, ...employeeGoalData } as EmployeeGoal]);
+      toast({ title: 'Colaborador adicionado à meta.' });
+    } else {
+      toast({ title: 'Colaborador não adicionado', description: 'Coberturas externas não participam das metas da unidade.', variant: 'destructive' });
+    }
     setSelectedEmployee('');
     setFraction('');
     setLoading(false);
@@ -173,6 +203,13 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
         </DialogHeader>
 
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+          {schedule && !scheduleEvidenceReady ? (
+            <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+              {dpShiftsLoading
+                ? 'Carregando a escala para validar a equipe da meta…'
+                : 'A escala não pôde ser validada. Recarregue antes de alterar participantes.'}
+            </p>
+          ) : null}
           {hasShifts ? (
             // ── POR TURNO ──────────────────────────────────────────────────
             period!.shifts!.map(shift => {

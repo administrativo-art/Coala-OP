@@ -3238,7 +3238,12 @@ export function GoalsTrackingDashboard() {
                   {revenuePeriods.map(period => {
                     const stats = calcMonthlyStats(period, distributionSnapshot);
                     const { refDate, periodEnd } = getPeriodContext(period);
-                    const periodEgs = employeeGoals.filter(goal => goal.periodId === period.id);
+                    const externalCoverageUserIds = new Set(
+                      distributionSnapshot?.externalCoverageUserIdsByPeriodId?.[period.id] ?? [],
+                    );
+                    const periodEgs = employeeGoals.filter(goal => (
+                      goal.periodId === period.id && !externalCoverageUserIds.has(goal.employeeId)
+                    ));
                     const collaboratorIds = Array.from(new Set(periodEgs.map(goal => goal.employeeId)));
                     const roleByCollaborator = new Map(collaboratorIds.map(id => {
                       const goals = periodEgs.filter(goal => goal.employeeId === id);
@@ -3435,7 +3440,12 @@ export function GoalsTrackingDashboard() {
                             </p>
                           </div>
                           {(() => {
-                            const periodEgs = employeeGoals.filter(eg => eg.periodId === period.id);
+                            const externalCoverageUserIds = new Set(
+                              distributionSnapshot?.externalCoverageUserIdsByPeriodId?.[period.id] ?? [],
+                            );
+                            const periodEgs = employeeGoals.filter(eg => (
+                              eg.periodId === period.id && !externalCoverageUserIds.has(eg.employeeId)
+                            ));
                             if (periodEgs.length === 0) {
                               return (
                                 <div className="rounded-ds-card border border-dashed border-ds-border bg-ds-warm px-5 py-8 text-center">

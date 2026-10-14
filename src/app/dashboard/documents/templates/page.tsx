@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Download, Eye, FileDown, FileStack, Loader2, LockKeyhole, Plus, Search, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,8 @@ function variableStats(template: DocumentTemplate) {
 
 export default function DocumentTemplatesPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const embedded = pathname.startsWith("/dashboard/settings");
   const { firebaseUser, permissions } = useAuth();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,8 +138,14 @@ export default function DocumentTemplatesPage() {
   const canView = hasFormalizationPermission(permissions, "templates.view");
   const canManage = hasFormalizationPermission(permissions, "templates.manage");
 
+  useEffect(() => {
+    if (!embedded) {
+      router.replace("/dashboard/settings?department=pessoal&tab=document-templates");
+    }
+  }, [embedded, router]);
+
   const loadTemplates = useCallback(async () => {
-    if (!firebaseUser || !canView) return;
+    if (!embedded || !firebaseUser || !canView) return;
     setLoading(true);
     try {
       const token = await firebaseUser.getIdToken();
@@ -150,7 +158,7 @@ export default function DocumentTemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, firebaseUser]);
+  }, [canView, embedded, firebaseUser]);
 
   useEffect(() => { void loadTemplates(); }, [loadTemplates]);
 
@@ -206,7 +214,7 @@ export default function DocumentTemplatesPage() {
   );
 
   function openTemplateFlow(template: DocumentTemplate) {
-    router.push(`/dashboard/documents/templates/${encodeURIComponent(template.id)}`);
+    router.push(`/dashboard/settings/documents/templates/${encodeURIComponent(template.id)}`);
   }
 
   async function createTemplate() {
@@ -226,7 +234,7 @@ export default function DocumentTemplatesPage() {
       const uploadResponse = await fetch(`/api/documents/templates/${encodeURIComponent(payload.template.id)}/file`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
       const uploadPayload = await uploadResponse.json();
       if (!uploadResponse.ok) throw new Error(uploadPayload.error || "Modelo criado, mas o DOCX não foi enviado.");
-      router.push(`/dashboard/documents/templates/${encodeURIComponent(payload.template.id)}`);
+      router.push(`/dashboard/settings/documents/templates/${encodeURIComponent(payload.template.id)}`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao criar modelo.");
     } finally {
@@ -234,12 +242,23 @@ export default function DocumentTemplatesPage() {
     }
   }
 
+  if (!embedded) {
+    return <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" aria-label="Abrindo configurações de modelos" /></div>;
+  }
+
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar modelos.</p>;
 
   return (
     <div className="overflow-hidden rounded-2xl border bg-white shadow-xs">
-      <div className="flex flex-col gap-3 border-b px-5 py-5 sm:flex-row sm:items-end sm:justify-between lg:px-6">
-        <div><p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p><h1 className="text-xl font-black text-slate-950">Modelos</h1></div>
+      <div className={`flex flex-col gap-3 border-b px-5 sm:flex-row sm:items-end sm:justify-between lg:px-6 ${embedded ? "py-4" : "py-5"}`}>
+        {embedded ? (
+          <div>
+            <p className="text-sm font-black text-slate-950">Biblioteca de modelos</p>
+            <p className="mt-0.5 text-xs text-slate-500">Crie, prepare, versione e publique os modelos usados pelos fluxos documentais.</p>
+          </div>
+        ) : (
+          <div><p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p><h1 className="text-xl font-black text-slate-950">Modelos</h1></div>
+        )}
         {canManage ? <Button size="sm" className="h-10 gap-2 rounded-xl px-4 shadow-xs" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" />Novo modelo</Button> : null}
       </div>
       <div className="space-y-3 px-5 pb-2 pt-4 lg:px-6">

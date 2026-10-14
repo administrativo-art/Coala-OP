@@ -10,6 +10,7 @@ Padrões visuais e de comportamento das telas operacionais. Guia vivo: `/dashboa
 - O painel escuro do topo usa chips compactos e vira uma faixa fina quando a tela rola.
 - Código novo não usa `alert()`, `confirm()` ou `prompt()`: erro fica junto do campo e confirmação é inline.
 - Status é só leitura na lista; a troca acontece no painel ou no modal, com o motivo dos bloqueios.
+- Toda data apresentada ao usuário segue o padrão brasileiro `DD/MM/AAAA`. ISO (`AAAA-MM-DD`) é formato interno e fica restrito a armazenamento, APIs e integrações; nunca deve aparecer em textos, trilhas, tabelas, painéis ou documentos visíveis.
 
 ## Índice
 - [Estrutura de página e navegação](estrutura-e-navegacao.md)
@@ -22,6 +23,7 @@ Padrões visuais e de comportamento das telas operacionais. Guia vivo: `/dashboa
 - [Status](status.md)
 - [Listas e linhas](listas.md)
 - [Painel lateral](painel-lateral.md)
+- [Gerenciador de documentos](gerenciador-de-documentos.md)
 - [Modais](modais.md)
 - [Confirmação e feedback](feedback.md)
 - [Decisões](decisoes/)
@@ -33,8 +35,12 @@ Padrões visuais e de comportamento das telas operacionais. Guia vivo: `/dashboa
 - [ ] Uma ação principal por área; rótulos no formato verbo + objeto.
 - [ ] Ação destrutiva afastada e com confirmação inline.
 - [ ] Erros em texto junto do campo; sem `alert`/`confirm`/`prompt` no código novo.
+- [ ] Dropdowns removem a seta nativa e usam o chevron definido em [Campos](campos.md).
 - [ ] Se migrei uma tela real, anexei capturas e preenchi `validacao-visual.md`.
 - [ ] Linhas clicáveis usam `LiftRow` e abrem `SidePanel`.
 - [ ] Estados de carregando, vazio e sem resultados tratados.
+- [ ] Páginas de configuração com salvamento em lote mantêm a barra de alterações pendentes fixa durante a rolagem.
 - [ ] Animações respeitam `prefers-reduced-motion` e não são o único sinal de estado.
 - [ ] Detalhe de registro abre em painel lateral e o painel de topo encolhe ao rolar (inclusive em listas internas).
+- [ ] Drawers laterais encostados à direita mantêm o lado direito reto e usam `rounded-l-[20px]` somente nos cantos esquerdo superior e inferior, com recorte do conteúdo.
+- [ ] Datas visíveis usam `DD/MM/AAAA`, data e hora usam `DD/MM/AAAA, HH:mm`, e competências usam “mês de AAAA”; nenhum valor ISO ficou exposto na interface.

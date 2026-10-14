@@ -522,9 +522,9 @@ export function DPSettingsUnits() {
 
   return (
     <div className="space-y-5">
+      <CadastrosTabs tabs={tabItems} active={tab} onChange={(id) => setTab(id as UnitsTab)} />
       <CadastrosHero
         kicker="Estrutura organizacional"
-        tabs={<CadastrosTabs tabs={tabItems} active={tab} onChange={(id) => setTab(id as UnitsTab)} />}
         search={{
           value: search,
           placeholder: tab === "units" ? "Buscar unidade, CNPJ, grupo ou PDV" : tab === "groups" ? "Buscar grupo, organização ou responsável" : "Buscar organização ou responsável",
