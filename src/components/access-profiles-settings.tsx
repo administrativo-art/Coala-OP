@@ -10,6 +10,7 @@ import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-
 import { ProfileManagementModal, logProfileAudit } from "@/components/profile-management-modal";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Check } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import type { Profile } from "@/types";
@@ -25,6 +26,175 @@ const AREA_LABELS: Record<string, string> = {
   pricing: "Precificação", commercial: "Comercial", settings: "Configurações", tasks: "Tarefas",
   goals: "Metas", help: "Ajuda", reposition: "Reposição", itemRequests: "Solicitações",
   signage: "Sinalização", dp: "Pessoal", financial: "Financeiro", hr: "RH", app: "Aplicativo",
+  purchasing: "Compras", recruitment: "Recrutamento", forms: "Formulários",
+};
+
+const PERMISSION_LABELS: Record<string, string> = {
+  view: "Visualizar",
+  add: "Adicionar",
+  edit: "Editar",
+  delete: "Excluir",
+  create: "Criar",
+  manage: "Gerenciar",
+  approve: "Aprovar",
+  perform: "Realizar",
+  start: "Iniciar",
+  receive: "Receber",
+  finalize: "Finalizar",
+  cancel: "Cancelar",
+  export: "Exportar",
+  import: "Importar",
+  audit: "Auditoria",
+  operational: "Painel de operações",
+  pricing: "Precificação",
+  settings: "Configurações",
+  technicalSheets: "Fichas técnicas",
+  collaborator: "Painel do colaborador",
+  inventoryControl: "Controle de estoque",
+  uniforms: "Uniformes",
+  stockCount: "Contagem de estoque",
+  requestItem: "Solicitar item",
+  analysis: "Análises",
+  purchasing: "Compras",
+  returns: "Devoluções",
+  conversions: "Conversões",
+  predefinedLists: "Listas predefinidas",
+  addLot: "Adicionar lote",
+  editLot: "Editar lote",
+  writeDown: "Dar baixa",
+  transfer: "Transferir",
+  viewHistory: "Ver histórico",
+  deliver: "Entregar",
+  dispose: "Descartar",
+  manageEvaluation: "Gerenciar avaliação",
+  restock: "Reposição sugerida",
+  consumption: "Consumo",
+  projection: "Projeção",
+  valuation: "Valoração",
+  suggest: "Sugerir",
+  deleteHistory: "Excluir histórico",
+  updateStatus: "Atualizar situação",
+  printLabels: "Imprimir etiquetas",
+  retire: "Baixar patrimônio",
+  simulate: "Simular",
+  manageParameters: "Gerenciar parâmetros",
+  manageUsers: "Gerenciar usuários",
+  manageKiosks: "Gerenciar unidades",
+  manageProfiles: "Gerenciar perfis",
+  manageLabels: "Gerenciar etiquetas",
+  managePublicBio: "Gerenciar perfil público",
+  viewAiCosts: "Ver custos de IA",
+  prepareDispatch: "Preparar envio",
+  schedules: "Escalas",
+  publishBizneo: "Publicar no Bizneo",
+  assignExternal: "Escalar pessoa de outra unidade",
+  vacation: "Férias",
+  requests: "Solicitações dos colaboradores",
+  viewAll: "Ver todos",
+  request: "Solicitar",
+  review: "Analisar",
+  manageSettings: "Gerenciar configurações",
+  collaborators: "Colaboradores",
+  ownProfileOnly: "Somente o próprio perfil",
+  terminate: "Desligar colaborador",
+  syncProfile: "Sincronizar perfil",
+  manageUnits: "Gerenciar unidades",
+  manageShifts: "Gerenciar turnos",
+  manageCalendars: "Gerenciar calendários",
+  manageTime: "Gerenciar jornadas e horas",
+  manageAbsences: "Gerenciar tipos de ausência",
+  dashboard: "Visão geral",
+  cashFlow: "Fluxo de caixa",
+  financialFlow: "Fluxo financeiro",
+  expenses: "Despesas",
+  inbox: "Caixa de entrada",
+  audits: "Auditorias",
+  reconciliation: "Conciliação",
+  cardStatements: "Extratos de cartão",
+  personnelCosts: "Custos de pessoal",
+  beneficiaries: "Beneficiários",
+  paymentRequests: "Solicitações de pagamento",
+  cashClosures: "Fechamentos de caixa",
+  cashDeposits: "Depósitos de caixa",
+  interIntegration: "Integração bancária",
+  pay: "Pagar",
+  analyze: "Analisar",
+  link: "Vincular",
+  discard: "Descartar",
+  ignore: "Ignorar",
+  effectuate: "Efetivar",
+  confirm: "Confirmar",
+  correct: "Corrigir",
+  classifyAdjustments: "Classificar ajustes",
+  administer: "Administrar",
+  close: "Fechar",
+  reconcile: "Conciliar",
+  viewMaskedPaymentData: "Ver dados de pagamento mascarados",
+  managePaymentData: "Gerenciar dados de pagamento",
+  authorize: "Autorizar",
+  submit: "Enviar",
+  refresh: "Atualizar",
+  viewProof: "Ver comprovante",
+  adjustExpected: "Ajustar valor esperado",
+  reopen: "Reabrir",
+  resync: "Sincronizar novamente",
+  issue: "Emitir",
+  adjust: "Ajustar",
+  createQuotation: "Criar cotação",
+  finalizeQuotation: "Finalizar cotação",
+  createPurchase: "Criar compra",
+  receivePurchase: "Receber compra",
+  cancelPurchase: "Cancelar compra",
+  revertPurchaseStage: "Voltar etapa da compra",
+  manageFinancialLink: "Gerenciar vínculo financeiro",
+  manageBaseItems: "Gerenciar itens-base",
+  localPurchase: "Compra local",
+  register: "Registrar",
+  stockEntry: "Dar entrada em estoque",
+  schedule: "Escala",
+  viewAllUnits: "Ver todas as unidades",
+  employees: "Colaboradores",
+  org_chart: "Organograma",
+  roles: "Cargos",
+  functions: "Funções",
+  navigation: "Navegação",
+  formalization: "Formalização",
+  propagate: "Propagar alterações",
+  onboarding: "Admissão",
+  aso: "ASO",
+  accountant: "Contabilidade",
+  documents: "Documentos",
+  companyDocuments: "Documentos da empresa",
+  templates: "Modelos",
+  signatures: "Assinaturas",
+  consents: "Consentimentos",
+  sensitiveData: "Dados sensíveis",
+  generate: "Gerar",
+  publish: "Publicar",
+  send: "Enviar",
+  pipeline: "Etapas do processo",
+  talent_pool: "Banco de talentos",
+  hire: "Contratar",
+  global: "Configurações gerais",
+  analytics: "Análises",
+  projects: "Projetos",
+  view_all_projects: "Ver todos os projetos",
+  create_projects: "Criar projetos",
+  manage_templates: "Gerenciar modelos",
+  view_analytics: "Ver análises",
+  manage_taxonomy: "Gerenciar categorias",
+  configure_templates: "Configurar modelos",
+  view_occurrences: "Ver ocorrências",
+  edit_occurrences_admin: "Editar ocorrências como administrador",
+  export_occurrences: "Exportar ocorrências",
+  reprocess_occurrences: "Reprocessar ocorrências",
+  view_personal_targets: "Ver metas individuais",
+  export_personal_targets: "Exportar metas individuais",
+  view_collaborator_rankings: "Ver classificação dos colaboradores",
+  manage_retention_policy: "Gerenciar política de retenção",
+  manage_task_rules: "Gerenciar regras de tarefas",
+  resolve_occurrences: "Resolver ocorrências",
+  validate_occurrence_resolution: "Validar resolução de ocorrências",
 };
 
 function activePermissions(value: unknown, path = ""): string[] {
@@ -33,8 +203,15 @@ function activePermissions(value: unknown, path = ""): string[] {
   return Object.entries(value).flatMap(([key, child]) => activePermissions(child, path ? `${path}.${key}` : key));
 }
 
-function readablePermission(path: string) {
-  return path.split(".").slice(1).map((segment) => segment.replace(/([a-z])([A-Z])/g, "$1 $2")).join(" · ");
+export function readablePermission(path: string) {
+  return path
+    .split(".")
+    .slice(1)
+    .map((segment) => PERMISSION_LABELS[segment] ?? segment
+      .replace(/_/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/^./, (letter) => letter.toLocaleUpperCase("pt-BR")))
+    .join(" · ");
 }
 
 export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps) {
@@ -181,11 +358,19 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
             </div>
             <PanelSection title="Permissões ativas" aside={`${selectedPermissions.length} no total`}>
               {permissionAreas.length ? permissionAreas.map(([area, paths]) => (
-                <div key={area}>
-                  <p className="text-[12.5px] font-bold text-ds-ink">{AREA_LABELS[area] ?? area} · {paths.length}</p>
-                  <ul className="mt-1 space-y-1 pl-4 text-[12px] text-ds-ink-muted">
-                    {paths.map((path) => <li key={path} className="list-disc">{readablePermission(path)}</li>)}
-                  </ul>
+                <div key={area} className="rounded-ds-md bg-ds-warm px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[12.5px] font-black text-ds-ink">{AREA_LABELS[area] ?? area}</p>
+                    <span className="rounded-full bg-ds-muted px-2 py-0.5 text-[10.5px] font-bold text-ds-ink-muted">{paths.length}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {paths.map((path) => (
+                      <span key={path} className="inline-flex items-center gap-1 rounded-ds-sm border border-ds-border bg-ds-surface px-2 py-1 text-[11px] font-semibold text-ds-ink-muted">
+                        <Check className="h-3 w-3 text-ds-ok" />
+                        {readablePermission(path)}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )) : <p className="text-[12.5px] text-ds-ink-muted">Nenhuma permissão ativa neste perfil.</p>}
             </PanelSection>

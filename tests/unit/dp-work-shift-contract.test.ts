@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -7,6 +8,9 @@ import {
   saveWorkShiftSchema,
   workShiftRouteSchema,
 } from '../../src/features/dp/shifts/schemas';
+
+const workShiftServiceSource = readFileSync('src/features/dp/shifts/service.server.ts', 'utf8');
+const bulkShiftServiceSource = readFileSync('src/features/dp/shifts/bulk-service.server.ts', 'utf8');
 
 const validShift = {
   userId: 'user-1',
@@ -23,11 +27,14 @@ test('aceita somente o contrato completo de turno de trabalho', () => {
   assert.equal(saveWorkShiftSchema.safeParse(validShift).success, true);
   assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, type: 'day_off' }).success, false);
   assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, hasConflict: true }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, exceptionReason: 'Cobertura por ausência pontual.' }).success, true);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, countsTowardGoals: false }).success, false);
 });
 
-test('rejeita horário inválido ou invertido', () => {
+test('rejeita horário inválido ou sem duração e encaminha noturno para validação do servidor', () => {
   assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, startTime: '9:00' }).success, false);
-  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, startTime: '16:00', endTime: '15:00' }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, startTime: '16:00', endTime: '16:00' }).success, false);
+  assert.equal(saveWorkShiftSchema.safeParse({ ...validShift, startTime: '22:00', endTime: '06:00', shiftDefinitionId: 'night' }).success, true);
 });
 
 test('valida os identificadores da rota', () => {
@@ -67,7 +74,7 @@ test('rejeita edição em lote ambígua, duplicada ou fora do limite', () => {
   assert.equal(bulkWorkShiftSchema.safeParse({
     action: 'replace',
     shiftIds: ['shift-1'],
-    patch: { startTime: '18:00', endTime: '10:00' },
+    patch: { startTime: '18:00', endTime: '18:00' },
   }).success, false);
   assert.equal(bulkWorkShiftSchema.safeParse({
     action: 'delete',
@@ -77,4 +84,14 @@ test('rejeita edição em lote ambígua, duplicada ou fora do limite', () => {
     action: 'delete',
     shiftIds: Array.from({ length: 201 }, (_, index) => `shift-${index}`),
   }).success, false);
+});
+
+test('submete atribuição individual e troca em lote à jornada resolvida', () => {
+  for (const source of [workShiftServiceSource, bulkShiftServiceSource]) {
+    assert.match(source, /resolveDPJourney/);
+    assert.match(source, /DP_SHIFT_JOURNEY_NOT_FOUND/);
+    assert.match(source, /DP_SHIFT_JOURNEY_AMBIGUOUS/);
+    assert.match(source, /journeyResolution/);
+    assert.match(source, /journeyValidationVersion/);
+  }
 });

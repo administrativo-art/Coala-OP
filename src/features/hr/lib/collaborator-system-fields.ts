@@ -73,15 +73,29 @@ export const SYSTEM_BLOCK_KEYS = {
   behavior: [SYSTEM_FIELD_KEYS.behaviorOperational, SYSTEM_FIELD_KEYS.behaviorGoals],
 } as const;
 
+export const SYSTEM_BLOCK_FIELD_KEYS_BY_ID: Record<string, readonly string[]> = {
+  "system.schedule_units": SYSTEM_BLOCK_KEYS.schedule,
+  "system.uniforms": SYSTEM_BLOCK_KEYS.uniforms,
+  "system.vacations": SYSTEM_BLOCK_KEYS.vacations,
+  "system.aso_control": SYSTEM_BLOCK_KEYS.asoControl,
+  "system.family_salary": SYSTEM_BLOCK_KEYS.familySalary,
+  "system.transport_voucher": SYSTEM_BLOCK_KEYS.transportVoucher,
+  "system.behavior": SYSTEM_BLOCK_KEYS.behavior,
+};
+
+export function systemFieldsRepresentedByProfileBlocks(blockIds: Iterable<string>) {
+  const fieldKeys = new Set<string>();
+  for (const blockId of blockIds) {
+    for (const fieldKey of SYSTEM_BLOCK_FIELD_KEYS_BY_ID[blockId] ?? []) fieldKeys.add(fieldKey);
+  }
+  return fieldKeys;
+}
+
 export function defaultFieldLgpd(section: string, visibility: FieldVisibility): NonNullable<FieldMapEntry["lgpd"]> {
-  const sensitiveSection = /banc|aso|saúde|saude|divers|depend|sal[aá]rio/i.test(section);
+  const sensitiveSection = /aso|saúde|saude|divers|biometri|racial|etni|religi|sindic|sexual|gen[eé]tic/i.test(section);
   const normalized = normalizeFieldVisibility(visibility);
   return {
-    category: normalized === "confidential" || sensitiveSection
-      ? "sensitive"
-      : normalized === "restricted_total" || normalized === "restricted_partial"
-        ? "confidential"
-        : "personal",
+    category: sensitiveSection ? "sensitive" : "personal",
     legal_basis: "legal_obligation",
     retention: normalized === "public" ? "termination_plus_2y" : "employment_plus_5y",
     requires_consent: false,

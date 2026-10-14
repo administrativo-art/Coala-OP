@@ -70,13 +70,12 @@ export function CadastrosWorkspace({ defaultTab = 'base' }: { defaultTab?: Cadas
     [baseProducts, products, entities],
   );
 
-  const tabs = <CadastrosTabs tabs={tabItems} active={tab} onChange={(id) => setTab(id as CadastrosTabId)} />;
-
   return (
-    <div className="text-ds-ink">
-      {tab === 'base' ? <BaseProductManagement tabs={tabs} view={view} onViewChange={handleViewChange} /> : null}
-      {tab === 'derived' ? <ItemManagement tabs={tabs} view={view} onViewChange={handleViewChange} /> : null}
-      {tab === 'entities' ? <EntityManagement tabs={tabs} view={view} onViewChange={handleViewChange} /> : null}
+    <div className="space-y-4 text-ds-ink">
+      <CadastrosTabs tabs={tabItems} active={tab} onChange={(id) => setTab(id as CadastrosTabId)} />
+      {tab === 'base' ? <BaseProductManagement view={view} onViewChange={handleViewChange} /> : null}
+      {tab === 'derived' ? <ItemManagement view={view} onViewChange={handleViewChange} /> : null}
+      {tab === 'entities' ? <EntityManagement view={view} onViewChange={handleViewChange} /> : null}
     </div>
   );
 }

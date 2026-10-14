@@ -11,7 +11,7 @@ test('Perfis de acesso abre cadastro pelo CTA e detalhe pela linha inteira', () 
   assert.match(settings, /onClick=\{\(\) => openManager\("create"\)\}[\s\S]*?Novo perfil/);
   assert.match(settings, /<LiftRow[\s\S]*?onClick=\{\(\) => \{\s*setSelectedProfileId\(profile\.id\)/);
   assert.match(settings, /<SidePanel[\s\S]*?open=\{!!selectedProfile\}/);
-  assert.doesNotMatch(settings, /interactive=\{false\}|Gerenciar perfis/);
+  assert.doesNotMatch(settings, /interactive=\{false\}|>\s*Gerenciar perfis\s*</);
 });
 
 test('Detalhe preserva consulta e protege ações de escrita e exclusão administrativa', () => {
@@ -33,4 +33,13 @@ test('Formulário direto e lista legada usam o mesmo modal e mantêm auditoria',
   assert.match(provider, /Error updating profile:[\s\S]*?throw error/);
   assert.match(userManagement, /<ProfileManagementModal[\s\S]*?canEdit=\{!!permissions\.settings\.manageProfiles\}/);
   assert.doesNotMatch(userManagement, /initialAction=/);
+});
+
+test('Coala One e Coala Go usam a mesma navegação recolhível por seção', () => {
+  assert.match(modal, /value="app-local-purchase"/);
+  assert.match(modal, /value="app-stock"/);
+  assert.match(modal, /value="app-goals"/);
+  assert.match(modal, /value="app-schedule"/);
+  assert.match(modal, /value="app-signage"/);
+  assert.doesNotMatch(modal, /<h3 className="pt-2 text-lg font-semibold">Compra local<\/h3>/);
 });

@@ -9,7 +9,8 @@ import { SectionEditModal } from './SectionEditModal';
 import { getStatusBadge } from '../lib/field-format';
 import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
 import { EmployeeProbationCard } from './EmployeeProbationCard';
-import { canEditField, canViewField } from '@/types/rh';
+import { ProfileChangeRequestsCard } from './ProfileChangeRequestsCard';
+import { canEditField, canRequestFieldChange, canViewField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
 const SECTION_LABELS: Record<string, string> = {
@@ -75,6 +76,7 @@ export function MyProfilePage() {
     consentimento_imagem_voz,
     ciencia_privacidade_onboarding,
     periodo_experiencia,
+    changeRequests,
   } = profileState.data;
   const { label: statusLabel, color: statusColor } = getStatusBadge(employee.status);
   const initials = employee.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
@@ -104,7 +106,8 @@ export function MyProfilePage() {
       key,
       entry,
       fv: fieldValues[key],
-      editable: canEditField(entry, ownerRole, visibilityContext, fieldMap.access_matrix),
+      editable: canEditField(entry, ownerRole, visibilityContext, fieldMap.access_matrix)
+        || canRequestFieldChange(entry, ownerRole, visibilityContext, fieldMap.access_matrix),
     });
     return acc;
   }, {});
@@ -143,6 +146,8 @@ export function MyProfilePage() {
         fieldMap={fieldMap}
         fieldValues={fieldValues}
       />
+
+      <ProfileChangeRequestsCard requests={changeRequests} canReview={false} />
 
       <ImageVoiceConsentCard
         employeeId={employee.bizneo_employee_id}

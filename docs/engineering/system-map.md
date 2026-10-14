@@ -4,7 +4,7 @@
 
 | Pedido ou área | Primeira entrada | Guia de impacto |
 | --- | --- | --- |
-| Colaborador, cadastro, acesso inicial, perfis | [`dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`dp/settings/page.tsx`](../../src/app/dashboard/dp/settings/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); `users` redireciona para colaboradores |
+| Colaborador, cadastro, acesso inicial, perfis e ausências | [`dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`settings/page.tsx`](../../src/app/dashboard/settings/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); [Ausências do DP](flows/dp-absences.md); `users` redireciona para colaboradores |
 | Férias, recibos, contador, desligamento | [`dp/ferias/page.tsx`](../../src/app/dashboard/dp/ferias/page.tsx), [`dp/terminations/page.tsx`](../../src/app/dashboard/dp/terminations/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); [etapas de férias](flow-coverage.md) |
 | Pedido de demissão pelo próprio colaborador | [`resignation/page.tsx`](../../src/app/dashboard/resignation/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
 | Escalas, turnos, folgas, calendário, portal do colaborador | [`dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx), [`collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |

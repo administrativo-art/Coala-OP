@@ -4,12 +4,17 @@ import { FieldValue, Timestamp, type QueryDocumentSnapshot } from 'firebase-admi
 
 import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
+import { resolveDPJourney } from '@/lib/dp-journey-resolution';
+import { isShiftDefinitionCompatibleWithJourney } from '@/lib/dp-time-config-rules';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
+import type { DPJourney } from '@/types';
 
 import type { SaveWorkShiftInput } from './schemas';
 
 const OCCUPANCY_QUERY_LIMIT = 21;
+const JOURNEY_QUERY_LIMIT = 100;
 const AUDIT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 function isScheduleShift(document: QueryDocumentSnapshot) {
@@ -46,6 +51,9 @@ export async function saveWorkShift(params: {
   const shiftRef = scheduleRef.collection('shifts').doc(shiftId);
   const userRef = dbAdmin.collection('users').doc(input.userId);
   const unitRef = dbAdmin.collection('dp_units').doc(input.unitId);
+  const shiftDefinitionRef = input.shiftDefinitionId
+    ? dbAdmin.collection('dp_shiftDefinitions').doc(input.shiftDefinitionId)
+    : null;
   const occupancyQuery = dbAdmin.collectionGroup('shifts')
     .where('userId', '==', input.userId)
     .where('date', '==', input.date)
@@ -56,6 +64,7 @@ export async function saveWorkShift(params: {
     const shiftSnapshot = await transaction.get(shiftRef);
     const userSnapshot = await transaction.get(userRef);
     const unitSnapshot = await transaction.get(unitRef);
+    const shiftDefinitionSnapshot = shiftDefinitionRef ? await transaction.get(shiftDefinitionRef) : null;
     const occupancySnapshot = await transaction.get(occupancyQuery);
 
     if (!scheduleSnapshot.exists) {
@@ -72,6 +81,59 @@ export async function saveWorkShift(params: {
     }
     if (!canAccessUnit(context.userDoc, input.unitId, { isDefaultAdmin: context.isDefaultAdmin })) {
       throw new AppError({ code: 'DP_SHIFT_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade do turno.' });
+    }
+
+    const primaryUnitId = typeof userSnapshot.get('unitId') === 'string' && userSnapshot.get('unitId')
+      ? String(userSnapshot.get('unitId'))
+      : input.unitId;
+    const primaryUnitSnapshot = primaryUnitId === input.unitId
+      ? unitSnapshot
+      : await transaction.get(dbAdmin.collection('dp_units').doc(primaryUnitId));
+    if (!primaryUnitSnapshot.exists || primaryUnitSnapshot.get('isArchived') === true) {
+      throw new AppError({ code: 'DP_SHIFT_PRIMARY_UNIT_UNAVAILABLE', kind: 'DATA_INTEGRITY', safeMessage: 'A unidade principal da colaboradora não existe ou está arquivada.' });
+    }
+    const unitGroupId = typeof primaryUnitSnapshot.get('groupId') === 'string' ? String(primaryUnitSnapshot.get('groupId')) : undefined;
+    const unitGroupSnapshot = unitGroupId
+      ? await transaction.get(dbAdmin.collection('dp_unitGroups').doc(unitGroupId))
+      : null;
+    const unitOrganizationId = typeof primaryUnitSnapshot.get('organizationId') === 'string'
+      ? String(primaryUnitSnapshot.get('organizationId'))
+      : unitGroupSnapshot?.exists && typeof unitGroupSnapshot.get('organizationId') === 'string'
+        ? String(unitGroupSnapshot.get('organizationId'))
+        : undefined;
+    const journeySnapshot = await transaction.get(
+      dbAdmin.collection('dp_journeys')
+        .where('status', 'in', ['published', 'archived'])
+        .limit(JOURNEY_QUERY_LIMIT + 1),
+    );
+    if (journeySnapshot.size > JOURNEY_QUERY_LIMIT) {
+      throw new AppError({ code: 'DP_SHIFT_JOURNEY_CATALOG_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há jornadas demais para resolver esta atribuição com segurança.' });
+    }
+    const journeyResolution = resolveDPJourney({
+      journeys: journeySnapshot.docs.map((document) => ({ id: document.id, ...document.data() } as DPJourney)),
+      target: {
+        collaboratorId: input.userId,
+        ...(typeof userSnapshot.get('jobRoleId') === 'string' ? { jobRoleId: String(userSnapshot.get('jobRoleId')) } : {}),
+        jobFunctionIds: Array.isArray(userSnapshot.get('jobFunctionIds')) ? userSnapshot.get('jobFunctionIds') : [],
+        unitId: primaryUnitId,
+        ...(unitGroupId ? { unitGroupId } : {}),
+        ...(unitOrganizationId ? { unitOrganizationId } : {}),
+      },
+      date: input.date,
+    });
+    if (journeyResolution.status === 'none') {
+      throw new AppError({ code: 'DP_SHIFT_JOURNEY_NOT_FOUND', kind: 'EXPECTED_BUSINESS', safeMessage: 'Nenhuma jornada vigente se aplica a esta colaboradora. Configure a abrangência antes de incluí-la na escala.' });
+    }
+    if (journeyResolution.status === 'ambiguous') {
+      throw new AppError({ code: 'DP_SHIFT_JOURNEY_AMBIGUOUS', kind: 'CONFLICT', safeMessage: 'Mais de uma jornada com a mesma prioridade se aplica a esta colaboradora. Corrija a abrangência antes de continuar.' });
+    }
+    if (!isShiftDefinitionCompatibleWithJourney({
+      journeyId: journeyResolution.journey.id,
+      journeyAllowedShiftDefinitionIds: journeyResolution.journey.allowedShiftDefinitionIds,
+      shiftDefinitionId: input.shiftDefinitionId,
+      shiftJourneyIds: shiftDefinitionSnapshot?.get('journeyIds'),
+    })) {
+      throw new AppError({ code: 'DP_SHIFT_NOT_ALLOWED_BY_JOURNEY', kind: 'VALIDATION', safeMessage: 'O turno escolhido não está permitido na jornada aplicável.' });
     }
 
     const scheduleMonth = Number(scheduleSnapshot.get('month'));
@@ -92,6 +154,22 @@ export async function saveWorkShift(params: {
     }
     if (shiftSnapshot.exists && shiftSnapshot.get('type') === 'day_off') {
       throw new AppError({ code: 'DP_SHIFT_DAY_OFF_IMMUTABLE', kind: 'CONFLICT', safeMessage: 'Uma folga não pode ser convertida diretamente em turno.' });
+    }
+    const crossesMidnight = input.endTime < input.startTime;
+    if (input.shiftDefinitionId && !shiftDefinitionSnapshot?.exists) {
+      throw new AppError({ code: 'DP_SHIFT_DEFINITION_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'O turno configurado não existe mais.' });
+    }
+    if (crossesMidnight && (
+      !shiftDefinitionSnapshot?.exists
+      || shiftDefinitionSnapshot.get('overnight') !== true
+      || shiftDefinitionSnapshot.get('startTime') !== input.startTime
+      || shiftDefinitionSnapshot.get('endTime') !== input.endTime
+    )) {
+      throw new AppError({
+        code: 'DP_SHIFT_OVERNIGHT_DEFINITION_REQUIRED',
+        kind: 'VALIDATION',
+        safeMessage: 'Para atravessar a meia-noite, selecione um turno noturno com estes mesmos horários.',
+      });
     }
     if (occupancySnapshot.size === OCCUPANCY_QUERY_LIMIT) {
       throw new AppError({
@@ -116,7 +194,34 @@ export async function saveWorkShift(params: {
       && document.get('type') !== 'day_off'
       && scheduleIdFromShift(document) !== scheduleId
     ));
+    let assignment;
+    try {
+      assignment = resolveDPShiftAssignment({
+        executionUnitId: input.unitId,
+        executionUnitExternalId: typeof unitSnapshot.get('externalId') === 'string' ? unitSnapshot.get('externalId') : undefined,
+        user: userSnapshot.data() ?? {},
+      });
+    } catch {
+      throw new AppError({
+        code: 'DP_SHIFT_EXTERNAL_ORIGIN_REQUIRED',
+        kind: 'DATA_INTEGRITY',
+        safeMessage: 'A unidade de origem da colaboradora precisa estar definida antes da cobertura.',
+      });
+    }
+    const existingReason = shiftSnapshot.exists && typeof shiftSnapshot.get('exceptionReason') === 'string'
+      ? shiftSnapshot.get('exceptionReason') as string
+      : undefined;
+    const exceptionReason = input.exceptionReason ?? existingReason;
+    if (assignment.assignmentKind === 'external_coverage') {
+      if (!context.isDefaultAdmin && context.permissions.dp.schedules.assignExternal !== true) {
+        throw new AppError({ code: 'DP_SHIFT_EXTERNAL_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para trazer colaboradoras de outra unidade.' });
+      }
+      if (!exceptionReason) {
+        throw new AppError({ code: 'DP_SHIFT_EXTERNAL_REASON_REQUIRED', kind: 'VALIDATION', safeMessage: 'Informe o motivo da cobertura em outra unidade.' });
+      }
+    }
     const now = Timestamp.now();
+    const journey = journeyResolution.journey;
     const basePayload = {
       scheduleId,
       unitId: input.unitId,
@@ -125,22 +230,51 @@ export async function saveWorkShift(params: {
       date: input.date,
       startTime: input.startTime,
       endTime: input.endTime,
+      overnight: crossesMidnight,
       type: 'work',
       hasConflict: hasCrossUnitConflict,
+      assignmentKind: assignment.assignmentKind,
+      countsTowardGoals: assignment.countsTowardGoals,
+      journeyResolution: {
+        journeyId: journey.id,
+        lineageId: journey.lineageId,
+        version: journey.version,
+        name: journey.name,
+        resolvedBy: journeyResolution.resolvedBy,
+        validationMode: journey.scaleValidation?.mode ?? 'consecutive_days',
+        maxConsecutiveWorkDays: journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
+        resolvedAt: now,
+      },
       updatedAt: now,
     };
+
+    const assignmentPayload = assignment.assignmentKind === 'external_coverage'
+      ? { originUnitId: assignment.originUnitId, exceptionReason }
+      : mode === 'update'
+        ? { originUnitId: FieldValue.delete(), exceptionReason: FieldValue.delete() }
+        : {};
 
     if (mode === 'create') {
       transaction.create(shiftRef, {
         ...basePayload,
+        ...assignmentPayload,
         ...(input.shiftDefinitionId ? { shiftDefinitionId: input.shiftDefinitionId } : {}),
         createdAt: now,
       });
-      transaction.update(scheduleRef, { shiftCount: FieldValue.increment(1) });
+      transaction.update(scheduleRef, {
+        shiftCount: FieldValue.increment(1),
+        goalEligibilityVersion: FieldValue.increment(1),
+        journeyValidationVersion: FieldValue.increment(1),
+      });
     } else {
       transaction.update(shiftRef, {
         ...basePayload,
+        ...assignmentPayload,
         shiftDefinitionId: input.shiftDefinitionId ?? FieldValue.delete(),
+      });
+      transaction.update(scheduleRef, {
+        goalEligibilityVersion: FieldValue.increment(1),
+        journeyValidationVersion: FieldValue.increment(1),
       });
     }
     transaction.set(dbAdmin.collection('actionLogs').doc(), {
@@ -157,6 +291,13 @@ export async function saveWorkShift(params: {
         unit_id: input.unitId,
         date: input.date,
         has_cross_unit_conflict: hasCrossUnitConflict,
+        assignment_kind: assignment.assignmentKind,
+        origin_unit_id: assignment.assignmentKind === 'external_coverage' ? assignment.originUnitId : null,
+        counts_toward_goals: assignment.countsTowardGoals,
+        journey_id: journey.id,
+        journey_version: journey.version,
+        journey_resolved_by: journeyResolution.resolvedBy,
+        exception_reason: assignment.assignmentKind === 'external_coverage' ? exceptionReason : null,
       },
       ip_address: null,
       timestamp: now,

@@ -60,8 +60,8 @@
 | Etapa | Estado |
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
-| 2. Inventários | Atualizados com o cronograma de projetos: 159 páginas internas, 21 externas, 368 APIs e 45 exports de Functions. |
-| 3. Guias detalhados | 55/55 grupos traçados integralmente no levantamento estático; 0/55 verificados nesta base. Há 74 guias de subfluxo. |
+| 2. Inventários | Atualizados: 162 páginas internas, 22 externas, 433 APIs e 47 exports de Functions. |
+| 3. Guias detalhados | 56/56 grupos traçados integralmente no levantamento estático; 0/56 verificados nesta base. Há 76 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |
 | 6. Correções locais anteriores | Preservadas somente no worktree de origem; não incluídas na integração documental. |

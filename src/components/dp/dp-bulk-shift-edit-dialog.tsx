@@ -126,6 +126,7 @@ export function DPBulkShiftEditPanel({
     return selectedDates.filter((date) => dates.has(date)).length;
   }, [selectedDates, swapUserId, vacationDatesByUser]);
   const hasTimeChange = Boolean(startTime && endTime);
+  const selectedDefinition = shiftDefinitions.find((item) => item.id === shiftDefinitionId);
 
   const affectedUsers = React.useMemo(
     () => uniqSorted(selectedShifts.map((item) => item.userName)),
@@ -202,8 +203,13 @@ export function DPBulkShiftEditPanel({
       return;
     }
 
-    if (action === 'replace' && hasTimeChange && startTime >= endTime) {
-      toast({ title: 'O horário final deve ser posterior ao horário inicial.', variant: 'destructive' });
+    if (action === 'replace' && hasTimeChange && startTime === endTime) {
+      toast({ title: 'O início e o fim do turno não podem ser iguais.', variant: 'destructive' });
+      return;
+    }
+
+    if (action === 'replace' && hasTimeChange && startTime > endTime && selectedDefinition?.overnight !== true) {
+      toast({ title: 'Selecione um turno noturno para atravessar a meia-noite.', variant: 'destructive' });
       return;
     }
 

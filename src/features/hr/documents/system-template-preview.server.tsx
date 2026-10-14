@@ -45,6 +45,21 @@ export async function loadSystemTemplateSource(template: SystemDocumentTemplate)
   return loadSystemDocumentTemplateSource(template);
 }
 
+export async function renderSystemDocumentTemplateDemoDocx(template: SystemDocumentTemplate) {
+  if (template.sourceFormat !== "docx") {
+    throw new Error("Este modelo não possui uma fonte Word para prévia.");
+  }
+  const source = await loadSystemTemplateSource(template);
+  return generateDocx(source, buildDocumentTemplateDemoData({
+    variables: template.variables,
+    fieldMapping: template.fieldMapping,
+  }));
+}
+
+async function finalizeSystemDocumentTemplateDemoPdf(pdf: Buffer) {
+  return stampDocumentTemplateDemoPreview(await applyCoalaLetterheadToPdf(pdf));
+}
+
 async function renderBlankLetterhead() {
   const letterhead = await loadLetterhead();
   const dataUri = `data:image/png;base64,${letterhead.toString("base64")}`;
@@ -66,16 +81,12 @@ export async function renderSystemDocumentTemplatePreview(template: SystemDocume
     if (!uniformTemplate) throw new Error("Modelo de uniforme não encontrado.");
     return loadUniformSystemTemplatePreview(uniformTemplate.type);
   }
-  const source = await loadSystemTemplateSource(template);
-  const demoDocx = generateDocx(source, buildDocumentTemplateDemoData({
-    variables: template.variables,
-    fieldMapping: template.fieldMapping,
-  }));
+  const demoDocx = await renderSystemDocumentTemplateDemoDocx(template);
   const pdf = await convertDocxToPdf(demoDocx);
   if (!pdf) {
     throw new SystemTemplatePreviewUnavailableError(
       "A prévia em PDF não está disponível neste ambiente. Baixe o arquivo Word original.",
     );
   }
-  return stampDocumentTemplateDemoPreview(await applyCoalaLetterheadToPdf(pdf));
+  return finalizeSystemDocumentTemplateDemoPdf(pdf);
 }

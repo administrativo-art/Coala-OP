@@ -5,17 +5,26 @@ import {
   CLT_TERMINATION_REASONS,
   PJ_TERMINATION_REASONS,
   employmentRelationshipLabel,
+  isEmploymentRelationshipEligibleForAbsence,
   isEmploymentRelationshipType,
   resolveEmploymentRelationshipType,
   terminationReasonsForRelationship,
 } from '../../../src/lib/hr/employment-relationship';
 
-test('aceita somente os três tipos de vínculo desta entrega', () => {
+test('aceita os quatro tipos de vínculo desta entrega', () => {
   assert.equal(isEmploymentRelationshipType('clt'), true);
+  assert.equal(isEmploymentRelationshipType('apprenticeship'), true);
   assert.equal(isEmploymentRelationshipType('pj'), true);
   assert.equal(isEmploymentRelationshipType('internship'), true);
   assert.equal(isEmploymentRelationshipType('temporary'), false);
   assert.equal(isEmploymentRelationshipType(null), false);
+});
+
+test('ausências trabalhistas incluem aprendiz e excluem PJ', () => {
+  assert.equal(isEmploymentRelationshipEligibleForAbsence('clt'), true);
+  assert.equal(isEmploymentRelationshipEligibleForAbsence('apprenticeship'), true);
+  assert.equal(isEmploymentRelationshipEligibleForAbsence('internship'), true);
+  assert.equal(isEmploymentRelationshipEligibleForAbsence('pj'), false);
 });
 
 test('recupera o vínculo de cadastros legados pelo tipo canônico da pessoa', () => {
@@ -36,6 +45,8 @@ test('oferece motivos contratuais próprios para PJ e bloqueia estágio nesta en
   assert.deepEqual(terminationReasonsForRelationship('pj'), PJ_TERMINATION_REASONS);
   assert.equal(terminationReasonsForRelationship('pj').includes('Término do prazo contratual'), true);
   assert.deepEqual(terminationReasonsForRelationship('internship'), []);
+  assert.deepEqual(terminationReasonsForRelationship('apprenticeship'), []);
+  assert.equal(employmentRelationshipLabel('apprenticeship'), 'Aprendiz');
   assert.deepEqual(terminationReasonsForRelationship(undefined), []);
   assert.equal(employmentRelationshipLabel(undefined), 'Vínculo não definido');
 });

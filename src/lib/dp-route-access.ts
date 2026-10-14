@@ -11,5 +11,9 @@ export function canAccessDpRoute(permissions: PermissionSet, pathname: string) {
     return permissions.dp?.collaborators?.view === true;
   }
 
+  if (isRouteWithin(pathname, "/dashboard/dp/requests")) {
+    return permissions.dp?.requests?.view === true;
+  }
+
   return false;
 }

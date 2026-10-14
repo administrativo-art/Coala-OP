@@ -7,15 +7,12 @@ import { hasFormalizationPermission, type FormalizationAction } from "@/lib/hr-f
 
 const destinations = [
   {
-    title: "Gestão de documentos",
-    description: "Acesse separadamente os modelos e o gerador de documentos avulsos.",
-    href: "/dashboard/documents/management",
+    title: "Gerador de documentos",
+    description: "Gere documentos avulsos usando os modelos publicados nas configurações.",
+    href: "/dashboard/documents/generator",
     icon: FileStack,
     tone: "bg-violet-50 text-violet-700",
-    permissions: [
-      "templates.view",
-      "documents.generate",
-    ] as FormalizationAction[],
+    permissions: ["documents.generate"] as FormalizationAction[],
   },
   {
     title: "Documentos da empresa",

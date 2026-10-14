@@ -95,7 +95,9 @@ export function OperationalItemCategoriesProvider({ children }: { children: Reac
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error || 'Falha na operação de categoria operacional.');
+      const error = new Error(payload.error || 'Falha na operação de categoria operacional.') as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
     return response;
   }, [firebaseUser]);
@@ -116,7 +118,10 @@ export function OperationalItemCategoriesProvider({ children }: { children: Reac
         const persisted = await response.json() as OperationalItemCategory[];
         if (!cancelled) setCategories(mergeWithDefaultCategories(persisted));
       } catch (error) {
-        console.error('Error fetching operational item categories:', error);
+        const status = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 0;
+        if (status !== 401 && status !== 403) {
+          console.error('Error fetching operational item categories:', error);
+        }
         if (!cancelled) setCategories(DEFAULT_OPERATIONAL_ITEM_CATEGORIES);
       } finally {
         if (!cancelled) setLoading(false);

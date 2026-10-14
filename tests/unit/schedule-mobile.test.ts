@@ -80,7 +80,9 @@ test("schedule and profile reuse the web rules and need the app permission", () 
   const server = readFileSync("src/features/collaborator-schedule/mobile-schedule.server.ts", "utf8");
   assert.match(server, /permissions\.app\?\.schedule\?\.view !== true/);
   assert.match(server, /buildCollaboratorSchedulePayload\(actor, year, month, await extraScheduleUnits\(actor\)\)/);
-  assert.match(readFileSync("src/features/goals/mobile-goals.server.ts", "utf8"), /period\.distributionMode !== "scheduled_days" \? null/);
+  const goalsServer = readFileSync("src/features/goals/mobile-goals.server.ts", "utf8");
+  assert.match(goalsServer, /period\.distributionMode === "scheduled_days" \? scheduleEvidence\[index\]!\.dateKeys : undefined/);
+  assert.match(goalsServer, /\.filter\(\(goal\) => !externalCoverageUserIds\.has\(goal\.employeeId\)\)/);
   assert.match(readFileSync("src/app/api/dp/mobile-schedule/route.ts", "utf8"), /action: "app\.schedule\.view"/);
   const profile = readFileSync("src/app/api/mobile/profile/route.ts", "utf8");
   assert.match(profile, /authorization: \{ kind: "owner" \}/);

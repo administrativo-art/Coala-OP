@@ -94,6 +94,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from "@/lib/hr/termination-options";
 import {
   employmentRelationshipLabel,
+  isEmploymentRelationshipEligibleForAbsence,
   terminationCopyForRelationship,
   terminationReasonsForRelationship,
   type EmploymentTerminationReason,
@@ -1418,7 +1419,7 @@ function EmployeeProfileFields({
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         },
       };
@@ -1464,7 +1465,7 @@ function EmployeeProfileFields({
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         };
       });
@@ -2445,7 +2446,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         },
       };
@@ -2509,7 +2510,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         };
       });
@@ -2573,7 +2574,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     currentUser?.id === collaborator.id || firebaseUser?.uid === collaborator.id
   );
   const canRequestOwnResignation = Boolean(
-    isOwnProfile && !isTerminated && collaborator.employmentRelationshipType === "clt"
+    isOwnProfile && !isTerminated && isEmploymentRelationshipEligibleForAbsence(collaborator.employmentRelationshipType)
   );
 
   async function confirmTermination(payload: TerminationPayload) {

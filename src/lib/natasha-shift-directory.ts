@@ -21,6 +21,7 @@ const shiftDocumentSchema = z.object({
   breakEnd: timeSchema.optional(),
   unitId: idSchema.optional(),
   unitIds: z.array(idSchema).max(20).optional(),
+  journeyIds: z.array(idSchema).max(30).optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).max(7),
 }).passthrough().superRefine((shift, context) => {
   if (shift.endTime <= shift.startTime) {
@@ -53,6 +54,7 @@ const normalizedShiftSchema = z.object({
   breakEnd: timeSchema.nullable(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).max(7),
   allowedUnitIds: z.array(idSchema).min(1).max(5),
+  journeyIds: z.array(idSchema).max(30).default([]),
   global: z.boolean(),
 }).strict();
 
@@ -113,6 +115,7 @@ export function prepareNatashaShiftDirectory(
       breakEnd: document.breakEnd ?? null,
       daysOfWeek: [...document.daysOfWeek].sort((left, right) => left - right),
       allowedUnitIds,
+      journeyIds: [...new Set(document.journeyIds ?? [])].sort(),
       global,
     });
   }

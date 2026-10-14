@@ -4,6 +4,7 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { matchDPUnitForKiosk } from "@/lib/dp-kiosk-match";
 import { canAccessUnit } from "@/lib/unit-access";
+import { countsDPShiftTowardGoals } from "@/lib/dp-external-coverage";
 import { AppError } from "@/lib/observability/app-error";
 import type { DPUnit } from "@/types";
 import { buildCollaboratorSchedulePayload } from "./server";
@@ -51,8 +52,11 @@ let dpUnitsCache: { expiresAt: number; value: Promise<DPUnit[]> } | null = null;
 
 function dpUnits() {
   if (dpUnitsCache && dpUnitsCache.expiresAt > Date.now()) return dpUnitsCache.value;
-  const entry = { expiresAt: Date.now() + UNITS_TTL_MS, value: dbAdmin.collection("dp_units").limit(300).get()
-    .then((snapshot) => snapshot.docs.map((document) => ({ ...(document.data() as DPUnit), id: document.id }))) };
+  const entry = { expiresAt: Date.now() + UNITS_TTL_MS, value: dbAdmin.collection("dp_units").limit(301).get()
+    .then((snapshot) => {
+      if (snapshot.size > 300) throw new AppError({ code: 'MOBILE_GOALS_UNIT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há unidades demais para validar a meta com segurança.' });
+      return snapshot.docs.map((document) => ({ ...(document.data() as DPUnit), id: document.id }));
+    }) };
   entry.value.catch(() => { if (dpUnitsCache === entry) dpUnitsCache = null; });
   dpUnitsCache = entry;
   return entry.value;
@@ -63,26 +67,62 @@ function dpUnits() {
  * the period on which a goal participant has a work shift in the schedules of that unit. An empty
  * result means "use calendar days", the same fallback the web applies.
  */
-export async function loadScheduledGoalDateKeys(input: { kioskName: string; startKey: string; endKey: string; employeeIds: string[] }) {
-  if (!input.employeeIds.length) return [];
+export async function loadScheduledGoalEvidence(input: { kioskName: string; startKey: string; endKey: string; employeeIds: string[] }) {
+  if (!input.employeeIds.length) return { dateKeys: [], externalCoverageUserIds: [] };
   const unit = matchDPUnitForKiosk(input.kioskName, await dpUnits());
-  const months = new Set([input.startKey.slice(0, 7), input.endKey.slice(0, 7)]);
-  const schedules = (await Promise.all([...months].map((key) =>
-    dbAdmin.collection("dp_schedules").where("year", "==", Number(key.slice(0, 4))).where("month", "==", Number(key.slice(5, 7))).get())))
-    .flatMap((snapshot) => snapshot.docs)
-    // A schedule tied to another unit never counts; legacy schedules without a unit serve every unit.
-    .filter((document) => !document.get("unitId") || !unit || document.get("unitId") === unit.id);
+  if (!unit) {
+    throw new AppError({
+      code: 'MOBILE_GOALS_DP_UNIT_NOT_FOUND',
+      kind: 'DATA_INTEGRITY',
+      safeMessage: 'A unidade da meta não está vinculada à escala do Departamento Pessoal.',
+    });
+  }
+  const months = new Set<string>();
+  let cursor = new Date(`${input.startKey.slice(0, 7)}-01T12:00:00.000Z`);
+  const endMonth = input.endKey.slice(0, 7);
+  while (cursor.toISOString().slice(0, 7) <= endMonth) {
+    months.add(cursor.toISOString().slice(0, 7));
+    if (months.size > 24) {
+      throw new AppError({ code: 'MOBILE_GOALS_PERIOD_TOO_LONG', kind: 'DATA_INTEGRITY', safeMessage: 'O período da meta é longo demais para validar a escala.' });
+    }
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1, 12));
+  }
+  const scheduleSnapshots = await Promise.all([...months].map((key) =>
+    dbAdmin.collection("dp_schedules")
+      .where("unitId", "==", unit.id)
+      .where("year", "==", Number(key.slice(0, 4)))
+      .where("month", "==", Number(key.slice(5, 7)))
+      .limit(2)
+      .get()));
+  if (scheduleSnapshots.some((snapshot) => snapshot.size > 1)) {
+    throw new AppError({ code: 'MOBILE_GOALS_SCHEDULE_AMBIGUOUS', kind: 'DATA_INTEGRITY', safeMessage: 'Há mais de uma escala da unidade na mesma competência.' });
+  }
+  const schedules = scheduleSnapshots.flatMap((snapshot) => snapshot.docs);
   const dates = new Set<string>();
+  const externalCoverageUserIds = new Set<string>();
   for (const schedule of schedules) {
     for (let index = 0; index < input.employeeIds.length; index += 30) {
-      const shifts = await schedule.ref.collection("shifts").where("userId", "in", input.employeeIds.slice(index, index + 30)).get();
+      const shifts = await schedule.ref.collection("shifts").where("userId", "in", input.employeeIds.slice(index, index + 30)).limit(501).get();
+      if (shifts.size > 500) {
+        throw new AppError({ code: 'MOBILE_GOALS_SHIFT_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há turnos demais para validar a meta com segurança.' });
+      }
       for (const shift of shifts.docs) {
         const date = String(shift.get("date") ?? "");
-        if (shift.get("type") === "work" && date >= input.startKey && date <= input.endKey) dates.add(date);
+        if (shift.get("type") !== "work" || date < input.startKey || date > input.endKey) continue;
+        const userId = String(shift.get("userId") ?? "");
+        if (!countsDPShiftTowardGoals(shift.data())) externalCoverageUserIds.add(userId);
+        else dates.add(date);
       }
     }
   }
-  return [...dates].sort();
+  return {
+    dateKeys: [...dates].sort(),
+    externalCoverageUserIds: [...externalCoverageUserIds].filter(Boolean).sort(),
+  };
+}
+
+export async function loadScheduledGoalDateKeys(input: { kioskName: string; startKey: string; endKey: string; employeeIds: string[] }) {
+  return (await loadScheduledGoalEvidence(input)).dateKeys;
 }
 
 /** The signed-in person's own card: name, role and photo, exactly as registered in Coala One. */

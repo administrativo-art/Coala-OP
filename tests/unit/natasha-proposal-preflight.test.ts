@@ -73,6 +73,15 @@ test('turnos do mês alvo ou compromisso posterior fora da janela não passam co
   assert.ok(result.issues.some((issue) => issue.code === 'NEXT_MONTH_SHIFT_OUTSIDE_WINDOW'));
 });
 
+test('posição de turno restrita a outra jornada não recebe candidato', () => {
+  const { snapshot, plan, inputs } = fixtures();
+  inputs.positions[0].journeyIds = ['outra-jornada'];
+  const result = assessNatashaProposalInputs(snapshot, plan, inputs);
+  assert.equal(result.status, 'infeasible');
+  assert.ok(result.issues.some((issue) => issue.code === 'POSITION_WITHOUT_CANDIDATE'
+    && issue.positionId === inputs.positions[0].id));
+});
+
 test('CLI de pré-voo usa somente os três arquivos sintéticos', () => {
   const result = spawnSync(process.execPath, [
     '--import', 'tsx', 'scripts/natasha-preflight.mts',
