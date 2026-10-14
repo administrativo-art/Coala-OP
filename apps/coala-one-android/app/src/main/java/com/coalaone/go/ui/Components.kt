@@ -222,6 +222,18 @@ fun shortDate(value: String?): String? {
         }
     }
 }
+/**
+ * The one arrow for anything that opens a list or unfolds a section: it points down while closed and up
+ * while open. Drawn, not typed: the arrow character changed weight and height from one phone font to another.
+ */
+@Composable fun DropdownChevron(open: Boolean, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(width = 11.dp, height = 7.dp)) {
+        val stroke = 1.8.dp.toPx(); val inset = stroke / 2
+        val tip = Offset(size.width / 2, if (open) inset else size.height - inset); val base = if (open) size.height - inset else inset
+        drawLine(color, Offset(inset, base), tip, stroke, cap = StrokeCap.Round)
+        drawLine(color, Offset(size.width - inset, base), tip, stroke, cap = StrokeCap.Round)
+    }
+}
 @Composable private fun SelectorCard(label: String, value: String?, placeholder: String, enabled: Boolean, onClick: () -> Unit) {
     Card(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Tokens.fieldBorder), colors = CardDefaults.cardColors(containerColor = Tokens.soft, disabledContainerColor = Tokens.soft)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -229,11 +241,7 @@ fun shortDate(value: String?): String? {
                 Text(label, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
                 Text(value ?: placeholder, color = if (value == null) Tokens.muted else Tokens.ink, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Canvas(Modifier.size(14.dp)) {
-                val stroke = 2.dp.toPx()
-                drawLine(Tokens.muted, Offset(size.width * .1f, size.height * .3f), Offset(size.width / 2, size.height * .75f), stroke, StrokeCap.Round)
-                drawLine(Tokens.muted, Offset(size.width / 2, size.height * .75f), Offset(size.width * .9f, size.height * .3f), stroke, StrokeCap.Round)
-            }
+            DropdownChevron(false, Tokens.muted)
         }
     }
 }
@@ -255,7 +263,10 @@ fun shortDate(value: String?): String? {
             Text("UNIDADE", color = Tokens.onDark4, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
             Text(values.firstOrNull { it.first == selected }?.second ?: "Escolher unidade", color = Tokens.onDark, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (several) Text("Trocar unidade ⌄", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+        if (several) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Trocar unidade", color = Tokens.pink, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
+            DropdownChevron(choosingUnit, Tokens.pink)
+        }
     }
 }
 /** Searchable unit list used by the shared header switcher and other pickers. */
