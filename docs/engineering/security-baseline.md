@@ -11,7 +11,7 @@ Esta fase separa detecção de remediação. Encontrar uma vulnerabilidade, um s
 - referências de GitHub Actions fixadas por SHA integral de release oficial;
 - ratchet de `npm audit` separado entre raiz e `functions`;
 - ratchet de contrato de segurança para toda rota de API nova ou alterada;
-- `coala-supply-chain-audit` local e explicit-only.
+- `coala-security-audit` e `coala-security-supply-chain` locais e explicit-only.
 
 O CodeQL é report-only nesta fase: seus achados aparecem em code scanning, mas o job não é um required check. Erro de execução do scanner continua sendo falha do workflow.
 

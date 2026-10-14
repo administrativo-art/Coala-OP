@@ -9,7 +9,7 @@ import {
   classifyVersionSpec,
   inventoryDependencies,
   writeSupplyChainArtifacts,
-} from "../../../.agents/skills/coala-supply-chain-audit/scripts/inventory-dependencies.mjs";
+} from "../../../.agents/skills/coala-security-supply-chain/scripts/inventory-dependencies.mjs";
 
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "coala-supply-skill-"));
