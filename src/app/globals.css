@@ -1,27 +1,211 @@
+@import 'tailwindcss';
+@plugin 'tailwindcss-animate';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@custom-variant dark (&:is(.dark *));
+
+@utility container {
+  margin-inline: auto;
+}
+
+@theme {
+  --font-sans: Geist, sans-serif;
+  --font-headline: Geist, sans-serif;
+  --font-mono: Geist Mono, monospace;
+  --font-ds:
+    'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  --font-ds-mono: 'JetBrains Mono', 'Geist Mono', ui-monospace, monospace;
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
+  --color-ds-page: var(--ds-bg-page);
+  --color-ds-topbar: var(--ds-bg-topbar);
+  --color-ds-surface: var(--ds-surface);
+  --color-ds-warm: var(--ds-surface-warm);
+  --color-ds-input: var(--ds-surface-input);
+  --color-ds-muted: var(--ds-surface-muted);
+  --color-ds-seg: var(--ds-surface-seg);
+  --color-ds-dark: var(--ds-surface-dark);
+  --color-ds-dark-hover: var(--ds-surface-dark-hover);
+  --color-ds-border: var(--ds-border);
+  --color-ds-border-input: var(--ds-border-input);
+  --color-ds-divider: var(--ds-divider);
+  --color-ds-ink: var(--ds-ink);
+  --color-ds-ink-2: var(--ds-ink-2);
+  --color-ds-ink-muted: var(--ds-ink-muted);
+  --color-ds-ink-faint: var(--ds-ink-faint);
+  --color-ds-on-dark: var(--ds-ink-on-dark);
+  --color-ds-on-dark-2: var(--ds-ink-on-dark-2);
+  --color-ds-on-dark-muted: var(--ds-ink-on-dark-muted);
+  --color-ds-on-dark-sub: var(--ds-ink-on-dark-sub);
+  --color-ds-indicator-zero: var(--ds-indicator-zero);
+  --color-ds-border-footer: var(--ds-border-footer);
+  --color-ds-accent: var(--ds-accent);
+  --color-ds-accent-hover: var(--ds-accent-hover);
+  --color-ds-accent-ink: var(--ds-accent-ink);
+  --color-ds-accent-ink-hover: var(--ds-accent-ink-hover);
+  --color-ds-accent-soft: var(--ds-accent-soft);
+  --color-ds-accent-row: var(--ds-accent-row);
+  --color-ds-accent-kicker: var(--ds-accent-kicker-dark);
+  --color-ds-modal: var(--ds-modal-accent);
+  --color-ds-modal-soft: var(--ds-modal-accent-soft);
+  --color-ds-modal-ink: var(--ds-modal-accent-ink);
+  --color-ds-ok: var(--ds-ok);
+  --color-ds-ok-bg: var(--ds-ok-bg);
+  --color-ds-warn: var(--ds-warn);
+  --color-ds-warn-bg: var(--ds-warn-bg);
+  --color-ds-danger: var(--ds-danger);
+  --color-ds-danger-bg: var(--ds-danger-bg);
+  --color-ds-info: var(--ds-info);
+  --color-ds-info-bg: var(--ds-info-bg);
+  --color-ds-neutral: var(--ds-neutral);
+  --color-ds-neutral-bg: var(--ds-neutral-bg);
+  --color-ds-alert-bg: var(--ds-alert-bg);
+  --color-ds-alert-border: var(--ds-alert-border);
+  --color-ds-alert-ink: var(--ds-alert-ink);
+  --color-ds-confirm-bg: var(--ds-confirm-bg);
+  --color-ds-confirm-border: var(--ds-confirm-border);
+  --color-ds-confirm-ink: var(--ds-confirm-ink);
+  --color-ds-disabled: var(--ds-disabled);
+
+  --radius-ds-pill: var(--ds-r-pill);
+  --radius-ds-sm: var(--ds-r-sm);
+  --radius-ds-md: var(--ds-r-md);
+  --radius-ds-btn: var(--ds-r-btn);
+  --radius-ds-btn-lg: var(--ds-r-btn-lg);
+  --radius-ds-card: var(--ds-r-card);
+  --radius-ds-card-lg: var(--ds-r-card-lg);
+  --radius-ds-modal: var(--ds-r-modal);
+  --radius-ds-panel: var(--ds-r-panel);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --shadow-ds-lift: var(--ds-shadow-lift);
+  --shadow-ds-menu: var(--ds-shadow-menu);
+  --shadow-ds-modal: var(--ds-shadow-modal);
+  --shadow-ds-panel: var(--ds-shadow-panel);
+  --shadow-ds-cta: var(--ds-shadow-cta);
+  --shadow-ds-side: var(--ds-shadow-side);
+
+  --ease-ds-lift: var(--ds-ease-lift);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-shake: shake 0.5s ease-in-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+      transform: translateX(-5px);
+    }
+    20%,
+    40%,
+    60%,
+    80% {
+      transform: translateX(5px);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility font-purchasing {
+  font-family:
+    'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+
+  body:has(&)
+    :where(
+      [data-radix-popper-content-wrapper],
+      [role='dialog'],
+      [role='alertdialog']
+    ) {
+    font-family:
+      'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  }
+}
 
 @layer utilities {
-  .font-purchasing {
-    font-family: 'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  /* Superfície tipográfica canônica do módulo Financeiro. */
+  .financial-page-surface {
+    font-family:
+      'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
   }
 
-  body:has(.font-purchasing) :where([data-radix-popper-content-wrapper], [role='dialog'], [role='alertdialog']) {
-    font-family: 'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  .financial-page-surface :where(button, input, select, textarea) {
+    font-family: inherit;
   }
-}
-
-/* Superfície tipográfica canônica do módulo Financeiro. */
-.financial-page-surface {
-  font-family: 'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.financial-page-surface :where(button, input, select, textarea) {
-  font-family: inherit;
 }
 
 @layer base {
@@ -147,354 +331,455 @@
     }
 }
 
-@keyframes pulse-once {
-  0% { background-color: hsl(var(--card)); box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7); }
-  50% { background-color: hsl(var(--primary) / 0.1); box-shadow: 0 0 0 4px hsl(var(--primary) / 0); }
-  100% { background-color: hsl(var(--card)); box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
-}
+@layer utilities {
+  @keyframes pulse-once {
+    0% {
+      background-color: hsl(var(--card));
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+    }
+    50% {
+      background-color: hsl(var(--primary) / 0.1);
+      box-shadow: 0 0 0 4px hsl(var(--primary) / 0);
+    }
+    100% {
+      background-color: hsl(var(--card));
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+    }
+  }
 
+  @keyframes btn-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-3px);
+    }
+    50% {
+      transform: translateX(3px);
+    }
+    75% {
+      transform: translateX(-2px);
+    }
+  }
 
-@keyframes btn-shake {
-  0%,100% { transform: translateX(0); }
-  25% { transform: translateX(-3px); }
-  50% { transform: translateX(3px); }
-  75% { transform: translateX(-2px); }
-}
+  /* Densidade operacional compartilhada por toda a árvore de Pessoal. */
+  .personal-section-density {
+    gap: 0.625rem !important;
+    padding: 1rem !important;
+    overflow-x: clip;
+  }
 
-/* Densidade operacional compartilhada por toda a árvore de Pessoal. */
-.personal-section-density {
-  gap: 0.625rem !important;
-  padding: 1rem !important;
-  overflow-x: clip;
-}
+  .personal-section-density > * {
+    min-width: 0;
+  }
 
-.personal-section-density > * {
-  min-width: 0;
-}
+  .personal-section-density h1 {
+    font-size: 1.25rem !important;
+    line-height: 1.5rem !important;
+  }
 
-.personal-section-density h1 {
-  font-size: 1.25rem !important;
-  line-height: 1.5rem !important;
-}
+  .personal-section-density h2 {
+    font-size: 1rem !important;
+    line-height: 1.25rem !important;
+  }
 
-.personal-section-density h2 {
-  font-size: 1rem !important;
-  line-height: 1.25rem !important;
-}
+  .personal-section-density h3 {
+    font-size: 0.875rem !important;
+    line-height: 1.125rem !important;
+  }
 
-.personal-section-density h3 {
-  font-size: 0.875rem !important;
-  line-height: 1.125rem !important;
-}
+  .personal-section-density :where(.text-4xl, .text-3xl) {
+    font-size: 1.5rem !important;
+    line-height: 1.75rem !important;
+  }
 
-.personal-section-density :where(.text-4xl, .text-3xl) {
-  font-size: 1.5rem !important;
-  line-height: 1.75rem !important;
-}
+  .personal-section-density :where(.text-2xl) {
+    font-size: 1.125rem !important;
+    line-height: 1.375rem !important;
+  }
 
-.personal-section-density :where(.text-2xl) {
-  font-size: 1.125rem !important;
-  line-height: 1.375rem !important;
-}
+  .personal-section-density :where(.text-xl) {
+    font-size: 1rem !important;
+    line-height: 1.25rem !important;
+  }
 
-.personal-section-density :where(.text-xl) {
-  font-size: 1rem !important;
-  line-height: 1.25rem !important;
-}
+  .personal-section-density :where(.text-lg) {
+    font-size: 0.9375rem !important;
+    line-height: 1.25rem !important;
+  }
 
-.personal-section-density :where(.text-lg) {
-  font-size: 0.9375rem !important;
-  line-height: 1.25rem !important;
-}
+  .personal-section-density :where(.text-base) {
+    font-size: 0.8125rem !important;
+    line-height: 1.125rem !important;
+  }
 
-.personal-section-density :where(.text-base) {
-  font-size: 0.8125rem !important;
-  line-height: 1.125rem !important;
-}
+  .personal-section-density :where(.text-sm) {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
 
-.personal-section-density :where(.text-sm) {
-  font-size: 0.75rem !important;
-  line-height: 1rem !important;
-}
-
-/*
+  /*
  * Escala tipográfica canônica para páginas migradas ao sistema visual comum.
  * A classe permite remover gradualmente a compactação legada de Pessoal sem
  * provocar uma mudança global e não revisada em todas as telas do módulo.
  */
-.personal-section-density .system-standard-page [data-ui='page-title'] {
-  font-size: 1.5rem !important;
-  line-height: 2rem !important;
-}
-
-.personal-section-density .system-standard-page [data-ui='page-description'] {
-  font-size: 1rem !important;
-  line-height: 1.5rem !important;
-}
-
-.personal-section-density .system-standard-page :where(.text-2xl) {
-  font-size: 1.5rem !important;
-  line-height: 2rem !important;
-}
-
-.personal-section-density .system-standard-page :where(.text-xl) {
-  font-size: 1.25rem !important;
-  line-height: 1.75rem !important;
-}
-
-.personal-section-density .system-standard-page :where(.text-lg) {
-  font-size: 1.125rem !important;
-  line-height: 1.75rem !important;
-}
-
-.personal-section-density .system-standard-page :where(.text-base) {
-  font-size: 1rem !important;
-  line-height: 1.5rem !important;
-}
-
-.personal-section-density .system-standard-page :where(.text-sm) {
-  font-size: 0.875rem !important;
-  line-height: 1.25rem !important;
-}
-
-.personal-section-density :where(.rounded-3xl) {
-  border-radius: 0.75rem !important;
-}
-
-.personal-section-density :where(.rounded-2xl) {
-  border-radius: 0.625rem !important;
-}
-
-.personal-section-density :where(.p-8, .p-7, .p-6) {
-  padding: 1rem !important;
-}
-
-.personal-section-density :where(.p-5, .p-4) {
-  padding: 0.75rem !important;
-}
-
-.personal-section-density :where(.px-8, .px-7, .px-6) {
-  padding-left: 1rem !important;
-  padding-right: 1rem !important;
-}
-
-.personal-section-density :where(.py-8, .py-7, .py-6) {
-  padding-top: 1rem !important;
-  padding-bottom: 1rem !important;
-}
-
-.personal-section-density :where(.gap-8, .gap-7, .gap-6) {
-  gap: 1rem !important;
-}
-
-.personal-section-density :where(.gap-5, .gap-4) {
-  gap: 0.75rem !important;
-}
-
-.personal-section-density :where(.space-y-8, .space-y-7, .space-y-6) > :not([hidden]) ~ :not([hidden]) {
-  margin-top: 1rem !important;
-}
-
-.personal-section-density :where(.space-y-5, .space-y-4) > :not([hidden]) ~ :not([hidden]) {
-  margin-top: 0.75rem !important;
-}
-
-.personal-section-density :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select) {
-  min-height: 2rem;
-}
-
-.personal-section-density :where(th, td) {
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-
-/* O módulo de escalas segue o sistema visual próprio do handoff. */
-.personal-section-density .dp-schedules-list-title {
-  font-size: 29px !important;
-  line-height: 34px !important;
-}
-
-.personal-section-density .dp-schedule-month-title {
-  font-size: 19px !important;
-  line-height: 24px !important;
-}
-
-@media (min-width: 768px) {
-  .personal-section-density {
-    padding: 1.5rem !important;
+  .personal-section-density .system-standard-page [data-ui='page-title'] {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
   }
-}
 
-@media (min-width: 1280px) {
-  .personal-section-density {
-    padding: 2rem !important;
+  .personal-section-density .system-standard-page [data-ui='page-description'] {
+    font-size: 1rem !important;
+    line-height: 1.5rem !important;
   }
-}
 
-/* Portais Radix ficam fora do main; esta classe mantém dialogs e popovers na mesma escala. */
-.personal-density-active [role='dialog'] {
-  border-radius: 0.75rem !important;
-  max-height: 84vh;
-}
-
-.personal-density-active [role='dialog'] :where(h1, h2, [data-dialog-title]) {
-  font-size: 1rem !important;
-  line-height: 1.25rem !important;
-}
-
-.personal-density-active [role='dialog'] :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select, textarea) {
-  font-size: 0.75rem !important;
-}
-
-.personal-density-active [role='dialog'] :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select, button:not([aria-label='Close'])) {
-  min-height: 2rem !important;
-}
-
-.personal-density-active [data-radix-popper-content-wrapper] :where([role='menu'], [role='listbox'], [data-radix-select-content], [data-radix-popover-content]) {
-  max-width: min(22rem, calc(100vw - 1rem));
-  font-size: 0.75rem !important;
-}
-
-.personal-density-active [data-radix-popper-content-wrapper] > div {
-  border-radius: 0.5rem !important;
-  font-size: 0.75rem !important;
-}
-
-.personal-density-active [role='tooltip'] {
-  max-width: 18rem;
-  padding: 0.375rem 0.5rem !important;
-  border-radius: 0.375rem !important;
-  font-size: 0.6875rem !important;
-  line-height: 0.875rem !important;
-}
-
-.personal-density-active [data-radix-popper-content-wrapper] :where([role='menuitem'], [role='option']) {
-  min-height: 1.75rem !important;
-  padding-top: 0.25rem !important;
-  padding-bottom: 0.25rem !important;
-  font-size: 0.75rem !important;
-}
-
-.personal-create-user-form :where(label) {
-  font-size: 0.6875rem !important;
-  line-height: 0.875rem !important;
-}
-
-.personal-create-user-form .personal-create-user-card {
-  border-radius: 0.5rem !important;
-}
-
-.personal-create-user-form :where(.text-sm) {
-  font-size: 0.6875rem !important;
-  line-height: 0.875rem !important;
-}
-
-.personal-create-user-form :where(.p-3, .p-2\.5) {
-  padding: 0.5rem !important;
-}
-
-.personal-create-user-form :where(.gap-3, .gap-2\.5) {
-  gap: 0.5rem !important;
-}
-
-.personal-field-config-density :where(.rounded-2xl, .rounded-3xl) {
-  border-radius: 0.625rem !important;
-}
-
-.personal-field-config-density :where(.p-6, .p-5, .p-4) {
-  padding: 0.75rem !important;
-}
-
-.personal-field-config-density :where(.gap-6, .gap-5, .gap-4) {
-  gap: 0.75rem !important;
-}
-
-.personal-field-config-density :where(input:not([type='checkbox']):not([type='radio']), select, button) {
-  min-height: 2rem;
-  font-size: 0.75rem !important;
-}
-
-.personal-create-user-form :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), button[role='combobox']) {
-  height: 2rem !important;
-  min-height: 2rem !important;
-  border-radius: 0.5rem !important;
-  font-size: 0.75rem !important;
-}
-
-.personal-create-user-form [id$='-form-item-description'],
-.personal-create-user-form [id$='-form-item-message'] {
-  margin-top: 0.25rem !important;
-  font-size: 0.625rem !important;
-  line-height: 0.875rem !important;
-}
-
-.personal-create-user-form .space-y-2 > :not([hidden]) ~ :not([hidden]) {
-  margin-top: 0.375rem !important;
-}
-
-.personal-uniform-density table :where(th, td) {
-  padding: 0.5rem 0.75rem !important;
-}
-
-.personal-uniform-density table tr.h-24 {
-  height: 3.5rem !important;
-}
-
-.personal-uniform-density table :where(.text-xl, .text-lg, .text-base) {
-  font-size: 0.75rem !important;
-  line-height: 1rem !important;
-}
-
-.personal-uniform-density table :where(.h-12, .w-12) {
-  height: 2rem !important;
-  width: 2rem !important;
-  border-radius: 0.5rem !important;
-}
-
-.personal-recruitment-density :where(.rounded-2xl, .rounded-3xl, [class*='rounded-[']) {
-  border-radius: 0.625rem !important;
-}
-
-.personal-recruitment-density :where(.p-5, .p-4) {
-  padding: 0.75rem !important;
-}
-
-.personal-recruitment-density :where(.px-5, .px-4) {
-  padding-left: 0.75rem !important;
-  padding-right: 0.75rem !important;
-}
-
-.personal-recruitment-density :where(.py-5, .py-4, .py-3) {
-  padding-top: 0.5rem !important;
-  padding-bottom: 0.5rem !important;
-}
-
-.personal-recruitment-density :where(.gap-5, .gap-4) {
-  gap: 0.75rem !important;
-}
-
-.personal-recruitment-density :where(.text-3xl, .text-2xl) {
-  font-size: 1.125rem !important;
-  line-height: 1.375rem !important;
-}
-
-.personal-recruitment-density :where(.text-xl, .text-lg) {
-  font-size: 0.875rem !important;
-  line-height: 1.125rem !important;
-}
-
-.personal-recruitment-density :where(input, select, button[role='combobox']) {
-  min-height: 2rem !important;
-  font-size: 0.75rem !important;
-}
-
-@media print {
-  .no-print {
-    display: none !important;
+  .personal-section-density .system-standard-page :where(.text-2xl) {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
   }
-}
 
-/* Guia de design do Coala (docs/design). Prefixo --ds- para não colidir com os tokens shadcn (HSL). */
+  .personal-section-density .system-standard-page :where(.text-xl) {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+  }
+
+  .personal-section-density .system-standard-page :where(.text-lg) {
+    font-size: 1.125rem !important;
+    line-height: 1.75rem !important;
+  }
+
+  .personal-section-density .system-standard-page :where(.text-base) {
+    font-size: 1rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  .personal-section-density .system-standard-page :where(.text-sm) {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  .personal-section-density :where(.rounded-3xl) {
+    border-radius: 0.75rem !important;
+  }
+
+  .personal-section-density :where(.rounded-2xl) {
+    border-radius: 0.625rem !important;
+  }
+
+  .personal-section-density :where(.p-8, .p-7, .p-6) {
+    padding: 1rem !important;
+  }
+
+  .personal-section-density :where(.p-5, .p-4) {
+    padding: 0.75rem !important;
+  }
+
+  .personal-section-density :where(.px-8, .px-7, .px-6) {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .personal-section-density :where(.py-8, .py-7, .py-6) {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  .personal-section-density :where(.gap-8, .gap-7, .gap-6) {
+    gap: 1rem !important;
+  }
+
+  .personal-section-density :where(.gap-5, .gap-4) {
+    gap: 0.75rem !important;
+  }
+
+  .personal-section-density
+    :where(.space-y-8, .space-y-7, .space-y-6)
+    > :not([hidden])
+    ~ :not([hidden]) {
+    margin-top: 1rem !important;
+  }
+
+  .personal-section-density
+    :where(.space-y-5, .space-y-4)
+    > :not([hidden])
+    ~ :not([hidden]) {
+    margin-top: 0.75rem !important;
+  }
+
+  .personal-section-density
+    :where(
+      input:not([type='checkbox']):not([type='radio']):not([type='file']),
+      select
+    ) {
+    min-height: 2rem;
+  }
+
+  .personal-section-density :where(th, td) {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* O módulo de escalas segue o sistema visual próprio do handoff. */
+  .personal-section-density .dp-schedules-list-title {
+    font-size: 29px !important;
+    line-height: 34px !important;
+  }
+
+  .personal-section-density .dp-schedule-month-title {
+    font-size: 19px !important;
+    line-height: 24px !important;
+  }
+
+  @media (min-width: 768px) {
+    .personal-section-density {
+      padding: 1.5rem !important;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .personal-section-density {
+      padding: 2rem !important;
+    }
+  }
+
+  /* Portais Radix ficam fora do main; esta classe mantém dialogs e popovers na mesma escala. */
+  .personal-density-active [role='dialog']:not([data-ui='side-panel']) {
+    border-radius: 0.75rem !important;
+    max-height: 84vh;
+  }
+
+  .personal-density-active [data-ui='side-panel'] {
+    height: 100dvh;
+    max-height: 100dvh !important;
+    border-radius: 20px 0 0 20px !important;
+  }
+
+  .personal-density-active [role='dialog'] :where(h1, h2, [data-dialog-title]) {
+    font-size: 1rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  .personal-density-active
+    [role='dialog']
+    :where(
+      input:not([type='checkbox']):not([type='radio']):not([type='file']),
+      select,
+      textarea
+    ) {
+    font-size: 0.75rem !important;
+  }
+
+  .personal-density-active
+    [role='dialog']
+    :where(
+      input:not([type='checkbox']):not([type='radio']):not([type='file']),
+      select,
+      button:not([aria-label='Close'])
+    ) {
+    min-height: 2rem !important;
+  }
+
+  .personal-density-active
+    [data-radix-popper-content-wrapper]
+    :where(
+      [role='menu'],
+      [role='listbox'],
+      [data-radix-select-content],
+      [data-radix-popover-content]
+    ) {
+    max-width: min(22rem, calc(100vw - 1rem));
+    font-size: 0.75rem !important;
+  }
+
+  .personal-density-active [data-radix-popper-content-wrapper] > div {
+    border-radius: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .personal-density-active [role='tooltip'] {
+    max-width: 18rem;
+    padding: 0.375rem 0.5rem !important;
+    border-radius: 0.375rem !important;
+    font-size: 0.6875rem !important;
+    line-height: 0.875rem !important;
+  }
+
+  .personal-density-active
+    [data-radix-popper-content-wrapper]
+    :where([role='menuitem'], [role='option']) {
+    min-height: 1.75rem !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .personal-create-user-form :where(label) {
+    font-size: 0.6875rem !important;
+    line-height: 0.875rem !important;
+  }
+
+  .personal-create-user-form .personal-create-user-card {
+    border-radius: 0.5rem !important;
+  }
+
+  .personal-create-user-form :where(.text-sm) {
+    font-size: 0.6875rem !important;
+    line-height: 0.875rem !important;
+  }
+
+  .personal-create-user-form :where(.p-3, .p-2\.5) {
+    padding: 0.5rem !important;
+  }
+
+  .personal-create-user-form :where(.gap-3, .gap-2\.5) {
+    gap: 0.5rem !important;
+  }
+
+  .personal-field-config-density :where(.rounded-2xl, .rounded-3xl) {
+    border-radius: 0.625rem !important;
+  }
+
+  .personal-field-config-density :where(.p-6, .p-5, .p-4) {
+    padding: 0.75rem !important;
+  }
+
+  .personal-field-config-density :where(.gap-6, .gap-5, .gap-4) {
+    gap: 0.75rem !important;
+  }
+
+  .personal-field-config-density
+    :where(input:not([type='checkbox']):not([type='radio']), select, button) {
+    min-height: 2rem;
+    font-size: 0.75rem !important;
+  }
+
+  .personal-create-user-form
+    :where(
+      input:not([type='checkbox']):not([type='radio']):not([type='file']),
+      button[role='combobox']
+    ) {
+    height: 2rem !important;
+    min-height: 2rem !important;
+    border-radius: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .personal-create-user-form [id$='-form-item-description'],
+  .personal-create-user-form [id$='-form-item-message'] {
+    margin-top: 0.25rem !important;
+    font-size: 0.625rem !important;
+    line-height: 0.875rem !important;
+  }
+
+  .personal-create-user-form .space-y-2 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.375rem !important;
+  }
+
+  /* Formulário extenso do perfil já migrado para o sistema visual comum. */
+  .collaborator-edit-form :where(label) {
+    min-height: 1rem;
+    font-size: 0.75rem !important;
+    font-weight: 700;
+    line-height: 1rem !important;
+    color: var(--ds-ink-2);
+  }
+
+  .collaborator-edit-form
+    :where(input:not([type='checkbox']):not([type='radio']):not([type='file'])) {
+    height: 2.5rem;
+    border-color: var(--ds-border-input);
+    border-radius: var(--ds-r-md);
+    background: var(--ds-surface-input);
+    color: var(--ds-ink);
+    font-size: 0.8125rem !important;
+  }
+
+  .collaborator-edit-form
+    :where(input:not([type='checkbox']):not([type='radio']):not([type='file'])):focus-visible {
+    border-color: var(--ds-modal-accent);
+    background: var(--ds-surface);
+    box-shadow: 0 0 0 3px var(--ds-modal-accent-soft);
+    outline: none;
+  }
+
+  .collaborator-edit-form
+    :where(input:not([type='checkbox']):not([type='radio']):not([type='file']))[aria-invalid='true'] {
+    border-width: 1.5px;
+    border-color: var(--ds-danger);
+  }
+
+  .collaborator-edit-form [id$='-form-item-description'],
+  .collaborator-edit-form [id$='-form-item-message'] {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
+
+  .personal-uniform-density table :where(th, td) {
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  .personal-uniform-density table tr.h-24 {
+    height: 3.5rem !important;
+  }
+
+  .personal-uniform-density table :where(.text-xl, .text-lg, .text-base) {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
+
+  .personal-uniform-density table :where(.h-12, .w-12) {
+    height: 2rem !important;
+    width: 2rem !important;
+    border-radius: 0.5rem !important;
+  }
+
+  .personal-recruitment-density
+    :where(.rounded-2xl, .rounded-3xl, [class*='rounded-[']) {
+    border-radius: 0.625rem !important;
+  }
+
+  .personal-recruitment-density :where(.p-5, .p-4) {
+    padding: 0.75rem !important;
+  }
+
+  .personal-recruitment-density :where(.px-5, .px-4) {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .personal-recruitment-density :where(.py-5, .py-4, .py-3) {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  .personal-recruitment-density :where(.gap-5, .gap-4) {
+    gap: 0.75rem !important;
+  }
+
+  .personal-recruitment-density :where(.text-3xl, .text-2xl) {
+    font-size: 1.125rem !important;
+    line-height: 1.375rem !important;
+  }
+
+  .personal-recruitment-density :where(.text-xl, .text-lg) {
+    font-size: 0.875rem !important;
+    line-height: 1.125rem !important;
+  }
+
+  .personal-recruitment-density :where(input, select, button[role='combobox']) {
+    min-height: 2rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+  }
+
+  /* Guia de design do Coala (docs/design). Prefixo --ds- para não colidir com os tokens shadcn (HSL). */
+}
 @layer base {
   :root {
     /* superfícies */
@@ -557,4 +842,39 @@
     --ds-ease-lift: cubic-bezier(.2,.8,.2,1);
     --ds-dur: .18s;
   }
+}
+
+
+/* Nome do sistema na barra da Programação do Instagram: batimento duplo e brilho rosa. */
+@keyframes coala-pulse-name {
+  0%, 100% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+  14% { transform: scale(1.06); text-shadow: 0 0 14px var(--ds-accent); }
+  28% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+  42% { transform: scale(1.04); text-shadow: 0 0 10px var(--ds-accent); }
+  70% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+}
+.coala-pulse-name {
+  display: inline-block;
+  transform-origin: left center;
+  animation: coala-pulse-name 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coala-pulse-name { animation: none; }
+}
+
+/* "One": um brilho percorre a palavra, passando a ideia de tudo conectado num só lugar. */
+@keyframes coala-shimmer-word {
+  0% { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+.coala-shimmer-word {
+  background: linear-gradient(110deg, var(--ds-accent-kicker-dark) 25%, #ffffff 45%, var(--ds-accent-kicker-dark) 65%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: coala-shimmer-word 3.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coala-shimmer-word { animation: none; background: none; color: var(--ds-accent-kicker-dark); -webkit-text-fill-color: currentColor; }
 }

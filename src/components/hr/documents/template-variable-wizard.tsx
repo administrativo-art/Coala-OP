@@ -314,7 +314,7 @@ export function TemplateVariableWizard(props: TemplateVariableWizardProps) {
   if (!props.open) return null;
 
   return (
-    <section id="template-fields-phase" className="flex h-[min(760px,calc(100vh-140px))] min-h-[620px] w-full flex-col gap-0 overflow-hidden rounded-xl border bg-white shadow-sm">
+    <section id="template-fields-phase" className="flex h-[min(760px,calc(100vh-140px))] min-h-[620px] w-full flex-col gap-0 overflow-hidden rounded-xl border bg-white shadow-xs">
         <header className="shrink-0 border-b px-5 py-4">
           <div className="flex items-center gap-3 pr-9">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-700">
@@ -354,7 +354,7 @@ export function TemplateVariableWizard(props: TemplateVariableWizardProps) {
           <div className={`${step === 2 ? "grid" : "hidden"} h-full min-h-0 grid-cols-1 md:grid-cols-[minmax(0,1fr)_372px]`}>
             <div className="min-h-0 overflow-auto bg-[#eceae4] px-6 py-5" onMouseUp={captureSelection}>
               <div className="mb-3 flex justify-center">
-                <span className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-xs text-slate-500 shadow-sm">
+                <span className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-xs text-slate-500 shadow-xs">
                   <Sparkles className="h-3.5 w-3.5 text-violet-700" />
                   Selecione um trecho no documento e confirme o significado ao lado.
                 </span>
@@ -370,13 +370,13 @@ export function TemplateVariableWizard(props: TemplateVariableWizardProps) {
                   <p className="mt-1.5 rounded-lg border border-dashed border-violet-200 bg-violet-50 px-3 py-2 text-[13px] font-bold text-slate-900">“{selectedText}”</p>
                   <div className="mt-3 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
                     <button
-                      className={`h-8 rounded-md text-xs font-extrabold ${selectionAction === "variable" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`}
+                      className={`h-8 rounded-md text-xs font-extrabold ${selectionAction === "variable" ? "bg-white text-violet-700 shadow-xs" : "text-slate-500"}`}
                       onClick={() => setSelectionAction("variable")}
                     >
                       Vincular variável
                     </button>
                     <button
-                      className={`h-8 rounded-md text-xs font-extrabold ${selectionAction === "text" ? "bg-white text-violet-700 shadow-sm" : "text-slate-500"}`}
+                      className={`h-8 rounded-md text-xs font-extrabold ${selectionAction === "text" ? "bg-white text-violet-700 shadow-xs" : "text-slate-500"}`}
                       onClick={() => setSelectionAction("text")}
                     >
                       Editar texto
@@ -442,7 +442,7 @@ export function TemplateVariableWizard(props: TemplateVariableWizardProps) {
                     <p className="text-xs font-extrabold text-violet-700">{terms.length + textReplacements.length} alteração(ões)</p>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-gradient-to-r from-violet-700 to-violet-500 transition-all" style={{ width: terms.length || textReplacements.length ? "100%" : "0%" }} />
+                    <div className="h-full rounded-full bg-linear-to-r from-violet-700 to-violet-500 transition-all" style={{ width: terms.length || textReplacements.length ? "100%" : "0%" }} />
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-500">Cada alteração vale para <strong className="text-slate-800">todas as ocorrências idênticas</strong> no documento.</p>
                 </div>

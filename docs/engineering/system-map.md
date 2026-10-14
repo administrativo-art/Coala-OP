@@ -4,7 +4,7 @@
 
 | Pedido ou área | Primeira entrada | Guia de impacto |
 | --- | --- | --- |
-| Colaborador, cadastro, acesso inicial, perfis | [`dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`dp/settings/page.tsx`](../../src/app/dashboard/dp/settings/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); `users` redireciona para colaboradores |
+| Colaborador, cadastro, acesso inicial, perfis e ausências | [`dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`settings/page.tsx`](../../src/app/dashboard/settings/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); [Ausências do DP](flows/dp-absences.md); `users` redireciona para colaboradores |
 | Férias, recibos, contador, desligamento | [`dp/ferias/page.tsx`](../../src/app/dashboard/dp/ferias/page.tsx), [`dp/terminations/page.tsx`](../../src/app/dashboard/dp/terminations/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md); [etapas de férias](flow-coverage.md) |
 | Pedido de demissão pelo próprio colaborador | [`resignation/page.tsx`](../../src/app/dashboard/resignation/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
 | Escalas, turnos, folgas, calendário, portal do colaborador | [`dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx), [`collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx) | [Pessoas, DP e RH](modules/people-hr-dp.md) |
@@ -17,8 +17,9 @@
 | Fluxo de caixa, contas a receber, DRE, análise financeira e agente | [`financial/cash-flow/page.tsx`](../../src/app/dashboard/financial/cash-flow/page.tsx), [`dre/page.tsx`](../../src/app/dashboard/financial/dre/page.tsx) | [Financeiro](modules/finance.md) |
 | Entrada geral do financeiro | [`financial/page.tsx`](../../src/app/dashboard/financial/page.tsx) | [Financeiro](modules/finance.md) |
 | Cotações, pedidos, recebimento, fornecedores e custo de compra | [`purchasing/orders/page.tsx`](../../src/app/dashboard/purchasing/orders/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md); `purchasing` redireciona para pedidos |
+| Compras locais por APK, extração de nota e conciliação com sangria | [Coala Go Kotlin](../../apps/coala-one-android/README.md), [`local-purchases`](../../src/app/api/purchasing/local-purchases), [`mobile-upload`](../../src/app/api/financial/inbox/mobile-upload) | [Recebimento de compras](flows/purchasing-order-receipt.md); [fechamento e sangrias](flows/cash-closures.md); [paridade mobile](coala-go-parity.md) |
 | Produtos, mercadorias, insumos, entidades, catálogo | [`registration/page.tsx`](../../src/app/dashboard/registration/page.tsx), [`registration/items/page.tsx`](../../src/app/dashboard/registration/items/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md); `items` está desativada |
-| Estoque, transferência, contagem, reposição, devolução, uniforme, patrimônio | [`stock/page.tsx`](../../src/app/dashboard/stock/page.tsx), [`assets/page.tsx`](../../src/app/dashboard/assets/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
+| Estoque, transferência, contagem, reposição, devolução, uniforme, patrimônio | [`stock/page.tsx`](../../src/app/dashboard/stock/page.tsx) (redireciona ao primeiro destino permitido), [`assets/page.tsx`](../../src/app/dashboard/assets/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
 | Conversão de inventário e controle de validade | [`inventory/page.tsx`](../../src/app/dashboard/inventory/page.tsx), [`inventory-control/page.tsx`](../../src/app/dashboard/inventory-control/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
 | Vencimentos | [`expiry/page.tsx`](../../src/app/dashboard/expiry/page.tsx) | [Compras, cadastro e estoque](modules/commerce-stock.md) |
 | Preços, concorrentes e metas | [`pricing/page.tsx`](../../src/app/dashboard/pricing/page.tsx), [`goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx) | [Comercial e operações](modules/commercial-operations.md); `goals` redireciona para acompanhamento |
@@ -36,6 +37,6 @@
 
 Para uma pergunta ou mudança, siga o [procedimento de investigação](investigation-harness.md), abra o guia pertinente e confira a implementação. [Regras aprovadas e comportamento implementado](business-rules.md) ficam separados; [verificações](verification.md) são escolhidas pelo impacto. Guias amplos dão caminhos e contratos observáveis, mas **não certificam todas as regras internas** de cada tela.
 
-Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
+Entradas sem tela: [jobs, gatilhos e webhooks](runtime-surfaces.md); [autenticação, privacidade e reparos](access-and-privacy.md). A política incremental de rotas está no [contrato executável de segurança](security-contract.md) e no [inventário de contratos](security-contract-inventory.md). Cada API, página externa e export de Functions tem destino no [inventário](surface-inventory.md). O progresso está em [acompanhamento](system-map-execution.md).
 
 Orçamentos por categoria/projeto, [comparação com despesas](../../src/app/dashboard/financial/budget-comparison/page.tsx) e simulação no caixa: [guia de orçamentos](flows/financial-budgets.md).

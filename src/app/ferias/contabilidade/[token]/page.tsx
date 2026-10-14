@@ -81,7 +81,7 @@ export default function VacationAccountantPage() {
     <main className="min-h-screen bg-[#f0eee9] px-4 py-8 text-slate-950 sm:py-12">
       <div className="mx-auto max-w-2xl space-y-5">
         <header>
-          <p className="text-xs font-black uppercase tracking-[0.1em] text-pink-600">Coala Shakes · Portal seguro da contabilidade</p>
+          <p className="text-xs font-black uppercase tracking-widest text-pink-600">Coala Shakes · Portal seguro da contabilidade</p>
           <h1 className="mt-2 text-2xl font-black">Documentos das férias</h1>
           <p className="mt-2 text-sm font-semibold text-slate-500">Envie um ou mais arquivos em PDF, JPG ou PNG. Todos serão preservados e o RH confirmará qual é o recibo principal.</p>
         </header>

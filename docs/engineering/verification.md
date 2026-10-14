@@ -15,6 +15,7 @@ Quando comportamento, dados, permissões ou integrações mudarem, confira tamb�
 | Sugestão ou filtragem de recibos de férias | `node --import tsx --test tests/unit/dp-vacation-receipt-selection.test.ts` | `npm run check` |
 | Transição completa de férias | `node --import tsx --test tests/unit/dp-vacation-workflow.test.ts tests/unit/dp-vacation-end-to-end-workflow.test.ts` | `npm run check`; E2E aplicável para mudança em fluxo crítico |
 | Rota, importação ou fronteira server/client | Teste do fluxo afetado | `npm run verify` |
+| Contrato ou arquivo de rota de API | Teste legítimo e indevido do fluxo; testes do contrato quando a infraestrutura mudar | `npm run check:security-contracts`; `npm run verify` |
 | Regra de acesso Firestore | Teste de regra afetado | `npm run check:rules` |
 | Somente documentação de navegação | Verificar todos os links relativos e conferir fontes citadas | `npm run check` conforme `AGENTS.md`, se ambiente de dependências estiver disponível |
 

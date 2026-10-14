@@ -11,6 +11,16 @@ type LinkState =
   | { status: "done"; email: string | null }
   | { status: "error"; message: string };
 
+function apiErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback;
+  const error = (payload as { error?: unknown }).error;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return fallback;
+}
+
 export default function FirstAccessPage() {
   const params = useParams<{ token: string }>();
   const searchParams = useSearchParams();
@@ -45,7 +55,7 @@ export default function FirstAccessPage() {
     fetch(`/api/auth/first-access/${encodeURIComponent(token)}`)
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(payload?.error ?? "Link invalido.");
+        if (!response.ok) throw new Error(apiErrorMessage(payload, "Link inválido."));
         return payload as {
           email?: string | null;
           username?: string | null;
@@ -95,7 +105,7 @@ export default function FirstAccessPage() {
         body: JSON.stringify({ action: step === "pdv" ? "pdv_password" : "coala_password", password }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error ?? "Nao foi possivel definir a senha.");
+      if (!response.ok) throw new Error(apiErrorMessage(payload, "Não foi possível definir a senha."));
       if (step === "pdv") {
         setPassword("");
         setConfirmPassword("");
@@ -113,7 +123,7 @@ export default function FirstAccessPage() {
   return (
     <main className="min-h-screen bg-[#F4ECD8] px-5 py-10 text-[#241A24]">
       <section className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-xl items-center">
-        <div className="w-full rounded-2xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
+        <div className="w-full rounded-2xl border border-black/10 bg-white p-6 shadow-xs sm:p-8">
           <div className="mb-6 flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-pink-50 text-pink-600">
               <KeyRound className="h-5 w-5" />
@@ -231,7 +241,7 @@ export default function FirstAccessPage() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="new-password"
-                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm font-semibold outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm font-semibold outline-hidden focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
                   />
                   <button
                     type="button"
@@ -254,7 +264,7 @@ export default function FirstAccessPage() {
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
-                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-hidden focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
                 />
               </div>
 

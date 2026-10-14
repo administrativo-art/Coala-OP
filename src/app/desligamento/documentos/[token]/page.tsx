@@ -38,9 +38,9 @@ export default function EmployeeTerminationDocumentsPage() {
   return (
     <main className="min-h-screen bg-[#f0eee9] p-4 md:p-10">
       <div className="mx-auto max-w-3xl space-y-5">
-        <section className="rounded-[24px] border border-emerald-200 bg-white p-6 shadow-sm sm:p-8">
+        <section className="rounded-[24px] border border-emerald-200 bg-white p-6 shadow-xs sm:p-8">
           <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-          <p className="mt-4 text-xs font-black uppercase tracking-[0.1em] text-emerald-700">Desligamento concluído com o colaborador</p>
+          <p className="mt-4 text-xs font-black uppercase tracking-widest text-emerald-700">Desligamento concluído com o colaborador</p>
           <h1 className="mt-2 text-2xl font-black text-slate-950">Seus documentos finais estão disponíveis</h1>
           <p className="mt-2 text-sm font-medium text-slate-500">Olá, {process.employeeName}. Guarde este link e baixe os documentos do protocolo {process.protocol}.</p>
         </section>

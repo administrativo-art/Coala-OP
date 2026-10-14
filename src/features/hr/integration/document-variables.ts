@@ -62,7 +62,7 @@ const SYSTEM_EMAIL_FIELD: FieldMapEntry = {
   employee_editable: false,
   order: 30,
   lgpd: {
-    category: "confidential",
+    category: "personal",
     legal_basis: "legal_obligation",
     retention: "employment_plus_5y",
     requires_consent: false,

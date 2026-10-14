@@ -4,7 +4,7 @@ import { type User, type Profile } from '@/types';
 
 import { dbAdmin } from './firebase-admin';
 import { resolveUnitAccess } from './unit-access';
-import { verifyAuth } from './verify-auth';
+import { verifyAuthWithUser } from './verify-auth';
 
 export type SignageAccess = {
   user: User;
@@ -18,7 +18,7 @@ export type SignageAccess = {
 export async function assertSignageAccess(req: NextRequest, mode: 'view' | 'manage' = 'view'): Promise<SignageAccess> {
   // Player/signage é um contexto operacional próprio, fora do login humano
   // sujeito à confirmação trimestral de dados pessoais.
-  const decodedToken = await verifyAuth(req, { enforceProfileCompliance: false });
+  const { decoded: decodedToken, userSnap } = await verifyAuthWithUser(req, { enforceProfileCompliance: false });
   const isAdmin = decodedToken.isDefaultAdmin === true;
   const fallbackUser: User = {
     id: decodedToken.uid,
@@ -39,12 +39,6 @@ export async function assertSignageAccess(req: NextRequest, mode: 'view' | 'mana
       allUnits: true,
       allowedKioskIds: [],
     };
-  }
-
-  const userSnap = await dbAdmin.collection('users').doc(decodedToken.uid).get();
-
-  if (!userSnap.exists) {
-    throw new Error('Usuário não encontrado no ERP.');
   }
 
   const user = { id: userSnap.id, ...userSnap.data() } as User;

@@ -15,6 +15,17 @@ function fixtures() {
   return { snapshot, plan, inputs };
 }
 
+function addEmployeeWithJourney(
+  inputs: ReturnType<typeof fixtures>['inputs'],
+  employee: ReturnType<typeof fixtures>['inputs']['employees'][number],
+) {
+  inputs.employees.push(employee);
+  const source = structuredClone(inputs.journeyResolution.people[0]);
+  source.employeeId = employee.id;
+  source.employeeName = employee.id;
+  inputs.journeyResolution.people.push(source);
+}
+
 test('empacota alternativas com versão e IDs determinísticos para revisão', () => {
   const { snapshot, plan, inputs } = fixtures();
   const first = buildNatashaProposalPackage(snapshot, plan, inputs);
@@ -32,10 +43,8 @@ test('empacota alternativas com versão e IDs determinísticos para revisão', (
 
 test('alterar fonte muda a versão e explicita posições diferentes da melhor', () => {
   const { snapshot, plan, inputs } = fixtures();
-  inputs.employees.push(
-    { id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] },
-    { id: 'bia', active: true, allowedUnitIds: ['matriz'], roleIds: [] },
-  );
+  addEmployeeWithJourney(inputs, { id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
+  addEmployeeWithJourney(inputs, { id: 'bia', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
   const day = plan.units[0].days.find((item) => item.date === '2026-10-03')!;
   day.status = 'open';
   day.windows = [{ startTime: '09:00', endTime: '17:00', minimumPeople: 1 }];

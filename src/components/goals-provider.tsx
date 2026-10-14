@@ -6,10 +6,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { type GoalTemplate, type GoalPeriodDoc, type EmployeeGoal } from '@/types';
 import { GoalsContext } from '@/contexts/goals-context';
-import { buildGoalClosureSnapshot, calculateScheduledEmployeeGoalTargets, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
+import { calculateScheduledEmployeeGoalTargets, loadGoalDistributionSnapshot } from '@/lib/goals-distribution';
 import { fetchClientBootstrap } from '@/lib/client-bootstrap';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
+  const authenticatedApi = useAuthenticatedApi();
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
   const [periods, setPeriods] = useState<GoalPeriodDoc[]>([]);
   const [employeeGoals, setEmployeeGoals] = useState<EmployeeGoal[]>([]);
@@ -115,64 +117,38 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const closePeriod = useCallback(async (id: string, status: 'closed' | 'cancelled', closureNote: string, closedBy: string) => {
-    try {
-      const period = periods.find(item => item.id === id);
-      const periodEmployeeGoals = employeeGoals.filter(goal => goal.periodId === id);
-      const distributionSnapshot = period
-        ? await loadGoalDistributionSnapshot([period], periodEmployeeGoals)
-        : null;
-      const closureSnapshot = period
-        ? {
-            ...buildGoalClosureSnapshot(period, periodEmployeeGoals, distributionSnapshot),
-            capturedAt: serverTimestamp(),
-          }
-        : null;
-
-      await updateDoc(doc(db, 'goalPeriods', id), {
-        status,
-        closureNote,
-        closedBy,
-        closedAt: serverTimestamp(),
-        closureSnapshot,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (e) { console.error(e); }
-  }, [employeeGoals, periods]);
+    void closedBy;
+    await authenticatedApi(`/api/goals/periods/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      json: { status, closureNote },
+    });
+  }, [authenticatedApi]);
 
   const reopenPeriod = useCallback(async (id: string) => {
-    try {
-      await updateDoc(doc(db, 'goalPeriods', id), {
-        status: 'active',
-        closureNote: null,
-        closedBy: null,
-        closedAt: null,
-        closureSnapshot: null,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (e) { console.error(e); }
-  }, []);
-
-  const refreshEmployeeGoals = useCallback(async () => {
-    try {
-      const snap = await getDocs(collection(db, 'employeeGoals'));
-      setEmployeeGoals(snap.docs.map(d => ({ id: d.id, ...d.data() } as EmployeeGoal)));
-    } catch (e) { console.warn('[GoalsProvider] refreshEmployeeGoals:', e); }
-  }, []);
+    await authenticatedApi(`/api/goals/periods/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      json: { status: 'active' },
+    });
+  }, [authenticatedApi]);
 
   const addEmployeeGoal = useCallback(async (data: Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<string | null> => {
     try {
-      const ref = await addDoc(collection(db, 'employeeGoals'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      const response = await authenticatedApi<{ employeeGoal: EmployeeGoal }>('/api/goals/employee-goals', {
+        method: 'POST',
+        json: data,
+      });
+      const created = response.employeeGoal;
       // Atualização otimista imediata
       setEmployeeGoals(prev => {
-        if (prev.some(eg => eg.id === ref.id)) return prev;
-        return [...prev, { id: ref.id, ...data } as EmployeeGoal];
+        if (prev.some(eg => eg.id === created.id)) return prev;
+        return [...prev, created];
       });
       // Leitura forçada para garantir consistência mesmo se o onSnapshot estiver morto
       const snap = await getDocs(collection(db, 'employeeGoals'));
       setEmployeeGoals(snap.docs.map(d => ({ id: d.id, ...d.data() } as EmployeeGoal)));
-      return ref.id;
+      return created.id;
     } catch (e) { console.error('[GoalsProvider] addEmployeeGoal:', e); return null; }
-  }, []);
+  }, [authenticatedApi]);
 
   const updateEmployeeGoal = useCallback(async (id: string, data: Partial<EmployeeGoal>) => {
     try {

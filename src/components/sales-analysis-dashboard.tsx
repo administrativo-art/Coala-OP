@@ -971,7 +971,7 @@ function SalesAnalysisDashboardInner() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-4 items-end bg-card p-4 rounded-xl border shadow-sm">
+      <div className="flex flex-wrap gap-4 items-end bg-card p-4 rounded-xl border shadow-xs">
         <div className="space-y-1.5">
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Quiosque</p>
           <Select value={selectedKioskId} onValueChange={setSelectedKioskId}>
@@ -986,11 +986,11 @@ function SalesAnalysisDashboardInner() {
         <div className="space-y-1.5">
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Período prático</p>
           <ToggleGroup type="single" value={activePreset} onValueChange={v => v && applyPreset(v)} className="bg-muted/50 p-1 rounded-lg border">
-            <ToggleGroupItem value="yesterday" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Ontem</ToggleGroupItem>
-            <ToggleGroupItem value="today" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Hoje</ToggleGroupItem>
-            <ToggleGroupItem value="thisMonth" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Mês Atual</ToggleGroupItem>
-            <ToggleGroupItem value="lastMonth" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Mês Passado</ToggleGroupItem>
-            <ToggleGroupItem value="custom" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-sm">Intervalo</ToggleGroupItem>
+            <ToggleGroupItem value="yesterday" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-xs">Ontem</ToggleGroupItem>
+            <ToggleGroupItem value="today" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-xs">Hoje</ToggleGroupItem>
+            <ToggleGroupItem value="thisMonth" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-xs">Mês Atual</ToggleGroupItem>
+            <ToggleGroupItem value="lastMonth" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-xs">Mês Passado</ToggleGroupItem>
+            <ToggleGroupItem value="custom" className="h-7 px-3 text-[11px] data-[state=on]:bg-background data-[state=on]:shadow-xs">Intervalo</ToggleGroupItem>
           </ToggleGroup>
         </div>
 
@@ -1010,8 +1010,8 @@ function SalesAnalysisDashboardInner() {
         <div className="space-y-1.5">
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Evolução Mensal</p>
           <ToggleGroup type="single" value={filterMode} onValueChange={v => v && setFilterMode(v as FilterMode)} className="bg-muted/50 p-1 rounded-lg border">
-            <ToggleGroupItem value="overview" className="h-7 px-3 text-[11px] text-foreground data-[state=on]:bg-background data-[state=on]:shadow-sm">Período</ToggleGroupItem>
-            <ToggleGroupItem value="compare" className="h-7 px-3 text-[11px] text-foreground data-[state=on]:bg-background data-[state=on]:shadow-sm">Por Mês</ToggleGroupItem>
+            <ToggleGroupItem value="overview" className="h-7 px-3 text-[11px] text-foreground data-[state=on]:bg-background data-[state=on]:shadow-xs">Período</ToggleGroupItem>
+            <ToggleGroupItem value="compare" className="h-7 px-3 text-[11px] text-foreground data-[state=on]:bg-background data-[state=on]:shadow-xs">Por Mês</ToggleGroupItem>
           </ToggleGroup>
         </div>
 

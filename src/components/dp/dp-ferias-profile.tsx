@@ -796,7 +796,7 @@ export function DPFeriasProfile({
         onCancel={handleCancel}
       />
 
-      <section className="overflow-hidden rounded-[18px] border bg-card shadow-sm">
+      <section className="overflow-hidden rounded-[18px] border bg-card shadow-xs">
         <div className="border-b px-4 py-3.5">
           <p className="text-sm font-black">Ciclos e histórico</p>
           <p className="mt-1 text-[11px] font-semibold text-muted-foreground">

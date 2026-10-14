@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, FilePlus2, FileStack } from "lucide-react";
+import { ChevronRight, FilePlus2 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -10,14 +10,6 @@ import {
 } from "@/lib/hr-formalization-permissions";
 
 const accesses = [
-  {
-    title: "Modelos de documentos",
-    description: "Cadastre, prepare, revise e publique os modelos que podem ser usados pelo sistema.",
-    href: "/dashboard/documents/templates",
-    icon: FileStack,
-    tone: "bg-violet-50 text-violet-700",
-    permission: "templates.view" as FormalizationAction,
-  },
   {
     title: "Gerador de documentos",
     description: "Gere documentos avulsos usando somente modelos publicados para geração direta.",
@@ -41,16 +33,14 @@ export default function DocumentManagementPage() {
           Documentos
         </p>
         <h1 className="text-xl font-black text-slate-950">Gestão de documentos</h1>
-        <p className="text-xs text-slate-500">
-          Administração dos modelos e geração avulsa de documentos.
-        </p>
+        <p className="text-xs text-slate-500">Geração avulsa de documentos a partir dos modelos publicados nas configurações.</p>
       </header>
       <div className="grid gap-3 md:grid-cols-2">
         {visible.map(({ title, description, href, icon: Icon, tone }) => (
           <Link
             key={href}
             href={href}
-            className="group flex min-h-36 items-start gap-3 rounded-lg border bg-white p-4 shadow-sm transition hover:border-teal-200 hover:shadow-md"
+            className="group flex min-h-36 items-start gap-3 rounded-lg border bg-white p-4 shadow-xs transition hover:border-teal-200 hover:shadow-md"
           >
             <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${tone}`}>
               <Icon className="h-5 w-5" />

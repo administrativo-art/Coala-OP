@@ -48,22 +48,11 @@ function normalizeDaysOfWeek(raw: unknown): number[] {
     .sort();
 }
 
-function normalizeSchedule(doc: { id: string; data: () => Record<string, unknown> }): DPSchedule {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    ...data,
-    month: Number(data.month),
-    year: Number(data.year),
-    shiftCount: Number(data.shiftCount ?? 0),
-  } as DPSchedule;
-}
-
 function normalizeVacation(doc: { id: string; data: () => Record<string, unknown> }): DPVacationRecord {
   return { id: doc.id, ...doc.data() } as DPVacationRecord;
 }
 
-type DPScope = 'inactive' | 'dashboard' | 'settings' | 'schedules' | 'vacations' | 'collaborators' | 'goals';
+type DPScope = 'inactive' | 'dashboard' | 'settings' | 'schedules' | 'vacations' | 'collaborators' | 'requests' | 'goals';
 
 const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   inactive: [],
@@ -72,6 +61,7 @@ const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   schedules: ['units', 'shiftDefs', 'schedules', 'calendars'],
   vacations: ['units', 'vacations'],
   collaborators: ['units', 'shiftDefs', 'vacations'],
+  requests: ['units'],
   goals: ['units', 'shiftDefs', 'schedules'],
 };
 
@@ -82,6 +72,7 @@ function getDPScope(pathname: string | null): DPScope {
   if (pathname.startsWith('/dashboard/dp/schedules')) return 'schedules';
   if (pathname.startsWith('/dashboard/dp/ferias')) return 'vacations';
   if (pathname.startsWith('/dashboard/dp/collaborators')) return 'collaborators';
+  if (pathname.startsWith('/dashboard/dp/requests')) return 'requests';
   if (pathname === '/dashboard/dp') return 'dashboard';
   if (pathname.startsWith('/dashboard/dp')) return 'dashboard';
   if (pathname.startsWith('/dashboard/collaborator')) return 'goals';
@@ -470,16 +461,11 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       errorMessage: 'Falha ao carregar turnos do DP.',
     });
 
-    registerResource({
-      resource: 'schedules',
-      queryRef: query(collection(db, 'dp_schedules'), orderBy('createdAt', 'desc')),
-      applySnapshot: (snapshot) => {
-        const schedules = snapshot.docs.map(normalizeSchedule);
-        schedules.sort((a, b) => b.year - a.year || b.month - a.month);
-        store.setSchedules(schedules);
-      },
-      errorMessage: 'Falha ao carregar escalas do DP.',
-    });
+    // O servidor filtra a lista por unidade. Uma consulta global do SDK cliente
+    // não consegue provar esse escopo às regras sem expor escalas alheias.
+    if (requiredResources.has('schedules')) {
+      void loadServerBootstrap('unit-scoped schedules');
+    }
 
     if (canSubscribeVacations) {
       registerResource({

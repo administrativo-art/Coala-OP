@@ -92,7 +92,7 @@ export function InventoryConverter() {
       return (
         <div className="space-y-6">
           <div className="flex gap-4 items-end">
-            <div className="flex-grow space-y-2">
+            <div className="grow space-y-2">
               <Label htmlFor="product">Produto</Label>
               <Skeleton className="h-10 w-full" />
             </div>
@@ -132,7 +132,7 @@ export function InventoryConverter() {
     return (
       <>
         <div className="flex gap-4 items-end">
-          <div className="flex-grow space-y-2">
+          <div className="grow space-y-2">
             <Label htmlFor="product">Produto</Label>
             <Select value={selectedProductId} onValueChange={handleProductChange} disabled={activeProducts.length === 0}>
               <SelectTrigger id="product">
@@ -168,7 +168,7 @@ export function InventoryConverter() {
             <div className="space-y-2">
                <Label htmlFor="to-unit-inv">Para</Label>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary">
-                  <p className="text-2xl font-bold text-primary font-headline flex-grow">{result}</p>
+                  <p className="text-2xl font-bold text-primary font-headline grow">{result}</p>
                    <Select value={toUnit} onValueChange={setToUnit} disabled={!selectedProduct}>
                       <SelectTrigger id="to-unit-inv" className="w-1/3"><SelectValue /></SelectTrigger>
                       <SelectContent>

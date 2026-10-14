@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
 export interface LegacyTask {
   id: string;
@@ -17,10 +18,13 @@ type TabKey = "all" | "task";
 
 interface NotificationCenterProps {
   tasks: LegacyTask[];
+  /** `dark`: botão para o cabeçalho escuro flutuante. */
+  tone?: "light" | "dark";
 }
 
 export function NotificationCenter({
   tasks,
+  tone = "light",
 }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -71,15 +75,19 @@ export function NotificationCenter({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`relative flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border transition-colors ${
-          open
-            ? "border-rose-200 bg-rose-50 text-rose-500 dark:border-rose-800 dark:bg-rose-950/40"
-            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+          tone === "dark"
+            ? open
+              ? "border-white/20 bg-white/15 text-white"
+              : "border-white/10 bg-white/[0.07] text-ds-on-dark-2 hover:bg-white/10 hover:text-white"
+            : open
+              ? "border-rose-200 bg-rose-50 text-rose-500 dark:border-rose-800 dark:bg-rose-950/40"
+              : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
         aria-label="Notificações"
       >
         <Bell className="h-4 w-4" />
         {totalUnread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 border-background bg-destructive px-[3px] text-[8px] font-bold text-white">
+          <span className={`absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full border-2 ${tone === "dark" ? "border-ds-dark" : "border-background"} bg-destructive px-[3px] text-[8px] font-bold text-white`}>
             {totalUnread > 99 ? "99+" : totalUnread}
           </span>
         )}
@@ -93,7 +101,7 @@ export function NotificationCenter({
           style={{ maxHeight: 480 }}
         >
           {/* Header */}
-          <div className="flex-shrink-0 px-4 pb-0 pt-3.5">
+          <div className="shrink-0 px-4 pb-0 pt-3.5">
             <div className="mb-3 flex items-center">
               <span className="flex-1 text-sm font-bold">Notificações</span>
               <button
@@ -154,9 +162,9 @@ export function NotificationCenter({
                           : "hover:bg-muted/40"
                       }`}
                     >
-                      <div className="mt-1.5 h-[7px] w-[7px] flex-shrink-0 rounded-full" style={{ background: isUnread ? "#3b82f6" : "transparent" }} />
+                      <div className="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: isUnread ? "#3b82f6" : "transparent" }} />
 
-                      <div className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-[9px] bg-blue-50 dark:bg-blue-950/30">
+                      <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-blue-50 dark:bg-blue-950/30">
                         <Icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       </div>
 
@@ -174,9 +182,9 @@ export function NotificationCenter({
                       </div>
 
                       <Link
-                        href={task.link}
+                        href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}
                         onClick={(e) => e.stopPropagation()}
-                        className="hidden flex-shrink-0 self-center rounded-md bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary group-hover:flex hover:bg-primary/20 transition-colors"
+                        className="hidden shrink-0 self-center rounded-md bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary group-hover:flex hover:bg-primary/20 transition-colors"
                       >
                         Abrir →
                       </Link>
@@ -189,7 +197,7 @@ export function NotificationCenter({
           </div>
 
           {/* Footer */}
-          <div className="flex-shrink-0 border-t border-border px-4 py-2.5 text-center">
+          <div className="shrink-0 border-t border-border px-4 py-2.5 text-center">
             <Link
               href="/dashboard/forms"
               onClick={() => setOpen(false)}

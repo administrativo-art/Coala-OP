@@ -21,6 +21,7 @@ import {
 } from './bizneo-client.js';
 import { calcProfileCompletion, type FieldMap, type EmployeeFieldValue } from './types.js';
 import { resolveRhRoleFromPermissions } from './access-policy.js';
+import { assertActiveSession } from '../active-session.js';
 
 const db    = getFirestore('coala');
 const hrDb  = getFirestore('coala-rh');
@@ -90,6 +91,8 @@ export const syncRhAccessCache = onDocumentWritten(
       rh_role:              rhRole,
       bizneo_employee_id:   bizneoId ?? null,
       unit_id:              unitId   ?? null,
+      is_active:            userData.isActive !== false && userData.active !== false,
+      session_version:      typeof userData.sessionVersion === 'number' ? userData.sessionVersion : 0,
       updated_at:           FieldValue.serverTimestamp(),
     }, { merge: true });
 
@@ -334,6 +337,7 @@ export const manualSyncFromBizneo = onCall(
   { cors: internalAppCors, secrets: ['BIZNEO_TOKEN'] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    await assertActiveSession(db, request.auth);
 
     if (!BIZNEO_COLLABORATOR_IMPORT_ENABLED) {
       throw new HttpsError(

@@ -62,6 +62,14 @@ export function serializeInstagramPost(doc: DocumentSnapshot) {
     storyMentions: Array.isArray(data.storyMentions) ? data.storyMentions : [],
     publicationMode: data.publicationMode === "manual" ? "manual" : "automatic",
     manualInstructions: data.manualInstructions ?? "",
+    planning: {
+      designRationale: typeof data.planning?.designRationale === "string" ? data.planning.designRationale : "",
+      formatRationale: typeof data.planning?.formatRationale === "string" ? data.planning.formatRationale : "",
+      objective: typeof data.planning?.objective === "string" ? data.planning.objective : null,
+      callToAction: typeof data.planning?.callToAction === "string" ? data.planning.callToAction : "",
+      plannedAt: iso(data.planning?.plannedAt),
+      updatedAt: iso(data.planning?.updatedAt),
+    },
     media,
     publicationReadiness,
     publicationCertification: data.publicationCertification ? {

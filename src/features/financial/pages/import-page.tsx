@@ -97,6 +97,7 @@ import type {
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { getUserDisplayName } from "@/lib/user-display";
 import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/patterns/page-hero";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -4084,28 +4085,24 @@ export function FinancialImportPage({
   return (
     <div className={cn("mx-auto w-full max-w-[1460px] space-y-4", embedded && "max-w-none")}>
       {!embedded || (showImportControls && !uploadOnly) ? (
-        <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 px-5 py-4 shadow-sm backdrop-blur">
-          {!embedded ? <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Financeiro / Importações</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Importar extrato bancário</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API.
-            </p>
-          </div> : null}
-          <div className="flex flex-wrap items-end gap-2">
-            {canImportAudits ? (
-              <Button
-                size="sm"
-                className="h-9 rounded-xl"
-                onClick={() => setImportDialogOpen(true)}
-                disabled={isProcessing}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Importar extrato
-              </Button>
-            ) : null}
-          </div>
+        !embedded ? <PageHero
+          kicker="Financeiro · Importações"
+          title="Importar extrato bancário"
+          subtitle="Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API."
+          actions={canImportAudits ? (
+            <Button variant="primary-page" size="md" onClick={() => setImportDialogOpen(true)} disabled={isProcessing}>
+              <Upload className="mr-2 h-4 w-4" />
+              Importar extrato
+            </Button>
+          ) : null}
+        /> : canImportAudits ? (
+        <div className="flex justify-end">
+          <Button variant="primary-page" size="md" onClick={() => setImportDialogOpen(true)} disabled={isProcessing}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar extrato
+          </Button>
         </div>
+        ) : null
       ) : null}
 
       <input
@@ -4222,7 +4219,7 @@ export function FinancialImportPage({
                       "flex flex-col rounded-2xl border bg-card p-3 text-left transition-shadow",
                       isActive
                         ? "border-primary shadow-md ring-1 ring-primary/20"
-                        : "border-border/70 shadow-sm hover:border-primary/40"
+                        : "border-border/70 shadow-xs hover:border-primary/40"
                     )}
                   >
                     <button
@@ -4389,7 +4386,7 @@ export function FinancialImportPage({
 
               <div
                 data-ui="statement-reconciliation-summary"
-                className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
+                className="rounded-2xl border border-border/70 bg-card p-4 shadow-xs"
               >
                 <h3 className="text-[14px] font-bold tracking-tight">Resumo do extrato</h3>
 
@@ -4472,7 +4469,7 @@ export function FinancialImportPage({
             <div className="grid items-start gap-4">
             <div
               data-testid="transactions-pane"
-              className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+              className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-xs"
             >
               <div className="space-y-2 border-b px-4 py-3">
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -4543,7 +4540,7 @@ export function FinancialImportPage({
                           </button>
                         </Fragment>
                       ))}
-                      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/60">ou</span>
+                      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/60">ou</span>
                       <button
                         type="button"
                         onClick={() => setItemStatusFilter("ignored")}
@@ -4575,7 +4572,7 @@ export function FinancialImportPage({
                             onClick={() => setDirectionFilter(value)}
                             className={cn(
                               "rounded-full px-3 py-1 text-[10.5px] font-medium transition-colors",
-                              directionFilter === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                              directionFilter === value ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
                             )}
                           >
                             {label}
@@ -4670,7 +4667,7 @@ export function FinancialImportPage({
                   </div>
                 ) : selectedSessionGroups.map((group) => (
                   <Fragment key={group.date || group.label}>
-                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-[#fbfaf7]/95 px-4 py-2 backdrop-blur">
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-[#fbfaf7]/95 px-4 py-2 backdrop-blur-sm">
                       <span className="text-[11px] font-semibold text-foreground">{group.label}</span>
                       <span className="text-[10.5px] text-muted-foreground">{group.weekday}</span>
                       <span className="h-px flex-1 bg-border/60" />
@@ -4721,7 +4718,7 @@ export function FinancialImportPage({
                           }}
                           className={cn(
                             "group grid grid-cols-[28px_minmax(0,1fr)_104px] items-center gap-2 border-b px-4 py-3 text-left transition-colors hover:bg-primary/[0.035] lg:grid-cols-[28px_minmax(0,1fr)_100px_116px_140px] xl:grid-cols-[28px_minmax(0,1fr)_100px_116px_116px_170px]",
-                            isBatchSelected && "bg-primary/[0.055]",
+                            isBatchSelected && "bg-primary/5.5",
                             isDetailOpen && "border-l-2 border-l-primary bg-primary/[0.07]"
                           )}
                         >
@@ -4882,10 +4879,10 @@ export function FinancialImportPage({
               <SheetContent
                 side="right"
                 className={cn(
-                  "flex h-full flex-col gap-0 overflow-hidden border-l p-0 transition-[width,border-radius] duration-200 sm:!max-w-none",
+                  "flex h-full flex-col gap-0 overflow-hidden border-l p-0 transition-[width,border-radius] duration-200 sm:max-w-none!",
                   auditDrawerExpanded
-                    ? "!w-screen rounded-none"
-                    : "!w-[min(1006px,calc(100vw-24px))] rounded-l-[20px]"
+                    ? "w-screen! rounded-none"
+                    : "w-[min(1006px,calc(100vw-24px))]! rounded-l-[20px]"
                 )}
               >
                 <SheetHeader className="relative border-b bg-background px-7 py-[18px] pr-24">
@@ -5180,8 +5177,8 @@ export function FinancialImportPage({
                     ];
                 return (
                   <div className="mx-auto min-w-0 max-w-[960px] space-y-4 px-6 pb-6 pt-3">
-                    <div className="sticky top-0 z-30 -mx-2 border-b border-border/70 bg-[#fbfbfc]/95 px-2 py-2 backdrop-blur">
-                      <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border bg-background/95 px-3 py-2 shadow-sm">
+                    <div className="sticky top-0 z-30 -mx-2 border-b border-border/70 bg-[#fbfbfc]/95 px-2 py-2 backdrop-blur-sm">
+                      <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border bg-background/95 px-3 py-2 shadow-xs">
                         <div className="flex min-w-0 items-center gap-2">
                           <Badge variant="outline" className={cn("shrink-0 rounded-md text-[10px] font-semibold uppercase", treatmentClassName)}>
                             {treatmentLabel}
@@ -5201,7 +5198,7 @@ export function FinancialImportPage({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border bg-background px-5 py-4 shadow-sm">
+                    <div className="rounded-2xl border bg-background px-5 py-4 shadow-xs">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                           Progresso da auditoria
@@ -5270,7 +5267,7 @@ export function FinancialImportPage({
                     </div>
 
                     {auditStep > 0 ? (
-                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3 shadow-xs">
                         <div className="min-w-0">
                           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-sky-700">1. Origem bancária confirmada</p>
                           <p className="mt-1 truncate text-xs font-semibold">
@@ -5283,7 +5280,7 @@ export function FinancialImportPage({
                       </div>
                     ) : null}
 
-                    <div className={cn("rounded-2xl border bg-background p-4 shadow-sm", auditStep !== 0 && "hidden")}>
+                    <div className={cn("rounded-2xl border bg-background p-4 shadow-xs", auditStep !== 0 && "hidden")}>
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Movimentação selecionada
@@ -5300,7 +5297,7 @@ export function FinancialImportPage({
                           {isIncomingMovement ? "Entrada" : "Saída"}
                         </Badge>
                       </div>
-                      <p className="mt-3 break-words text-sm font-semibold leading-snug">
+                      <p className="mt-3 wrap-break-word text-sm font-semibold leading-snug">
                         {item.rawDescription || "Movimentação sem descrição no extrato"}
                       </p>
                       <div className="mt-3 flex items-end justify-between gap-3 rounded-xl bg-muted/60 px-3 py-2.5">
@@ -5325,13 +5322,13 @@ export function FinancialImportPage({
                           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                             Comentário do Pix
                           </p>
-                          <p className="mt-1.5 break-words text-sm leading-relaxed text-sky-950">{pixComment}</p>
+                          <p className="mt-1.5 wrap-break-word text-sm leading-relaxed text-sky-950">{pixComment}</p>
                         </div>
                       ) : null}
                     </div>
 
                     {isBoletoPayment ? (
-                      <div className={cn("rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm", auditStep !== 0 && "hidden")}>
+                      <div className={cn("rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-xs", auditStep !== 0 && "hidden")}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-amber-950">Dados do pagamento de boleto</p>
@@ -5410,7 +5407,7 @@ export function FinancialImportPage({
                             <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left [&>svg]:shrink-0">
                               <SelectValue placeholder={isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"} />
                             </SelectTrigger>
-                            <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-24px)]">
+                            <SelectContent className="w-(--radix-select-trigger-width) max-w-[calc(100vw-24px)]">
                               <SelectItem value="none">
                                 {isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"}
                               </SelectItem>
@@ -5443,7 +5440,7 @@ export function FinancialImportPage({
                             <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left [&>svg]:shrink-0">
                               <SelectValue placeholder={isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"} />
                             </SelectTrigger>
-                            <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-24px)]">
+                            <SelectContent className="w-(--radix-select-trigger-width) max-w-[calc(100vw-24px)]">
                               <SelectItem value="none">
                                 {isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"}
                               </SelectItem>
@@ -5566,7 +5563,7 @@ export function FinancialImportPage({
                         </p>
                       </div>
                     ) : (
-                      <div className={cn("mt-2 space-y-4 rounded-2xl border border-amber-200 bg-white p-5 shadow-sm", auditStep !== 1 && "hidden")}>
+                      <div className={cn("mt-2 space-y-4 rounded-2xl border border-amber-200 bg-white p-5 shadow-xs", auditStep !== 1 && "hidden")}>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800">
                           2. Como tratar esta despesa
                         </p>
@@ -5582,7 +5579,7 @@ export function FinancialImportPage({
                               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                 Despesa sugerida pelo sistema
                               </p>
-                              <p className="mt-0.5 break-words text-xs font-semibold text-foreground">
+                              <p className="mt-0.5 wrap-break-word text-xs font-semibold text-foreground">
                                 {item.suggestedExpenseDescription || suggestedExistingExpense?.description || "Despesa existente"}
                               </p>
                               <p className="mt-1 text-[10.5px] text-muted-foreground">
@@ -5934,7 +5931,7 @@ export function FinancialImportPage({
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
                                   </Button>
                                 </PopoverTrigger>
-                                <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-2">
+                                <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-2">
                                   <Input
                                     value={supplierSearch}
                                     onChange={(event) => setSupplierSearch(event.target.value)}
@@ -6629,7 +6626,7 @@ export function FinancialImportPage({
                                     variant="ghost"
                                     className={cn(
                                       "h-7 rounded-md px-3 text-[11px]",
-                                      item.expenseDraft.splitAllocationMode === mode && "bg-background shadow-sm hover:bg-background",
+                                      item.expenseDraft.splitAllocationMode === mode && "bg-background shadow-xs hover:bg-background",
                                     )}
                                     onClick={() => setSplitAllocationMode(item.id, mode)}
                                   >
@@ -6823,7 +6820,7 @@ export function FinancialImportPage({
                           <span>Há campos obrigatórios pendentes nas etapas anteriores. {validation.issues.join(" ")}</span>
                         </div>
                       ) : null}
-                      <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                      <div className="rounded-2xl border bg-background p-4 shadow-xs">
                         <div className="mb-4 flex items-center gap-2">
                           <span className="grid h-6 w-6 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
                             <Check className="h-4 w-4" />
@@ -6838,7 +6835,7 @@ export function FinancialImportPage({
                             )}>
                               <dt className="text-[11px] text-muted-foreground">{label}</dt>
                               <dd className={cn(
-                                "break-words text-xs font-semibold sm:text-right",
+                                "wrap-break-word text-xs font-semibold sm:text-right",
                                 label === "Valor" && "font-mono text-sm",
                                 label === "Valor" && (isIncomingMovement ? "text-emerald-700" : "text-rose-700")
                               )}>
@@ -6865,7 +6862,7 @@ export function FinancialImportPage({
                       </div>
                     </div>
 
-                    <div className="sticky bottom-0 z-20 rounded-2xl border border-zinc-200 bg-background/95 p-4 shadow-lg backdrop-blur">
+                    <div className="sticky bottom-0 z-20 rounded-2xl border border-zinc-200 bg-background/95 p-4 shadow-lg backdrop-blur-sm">
                       <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-700">
                         {auditStep < 2 ? `${auditStep + 1}. ${auditStepLabels[auditStep]}` : "3. Auditoria e conciliação"}
                       </p>
@@ -6971,7 +6968,7 @@ export function FinancialImportPage({
                       </div>
                     </div>
 
-                    <div className={cn("rounded-2xl border bg-background p-4 shadow-sm", auditStep !== 2 && "hidden")}>
+                    <div className={cn("rounded-2xl border bg-background p-4 shadow-xs", auditStep !== 2 && "hidden")}>
                       <div className="flex items-center gap-2">
                         <History className="h-4 w-4 text-muted-foreground" />
                         <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -6987,7 +6984,7 @@ export function FinancialImportPage({
                             >
                               <span
                                 className={cn(
-                                  "absolute -left-[5px] top-1 h-2 w-2 rounded-full ring-2 ring-background",
+                                  "absolute left-[-5px] top-1 h-2 w-2 rounded-full ring-2 ring-background",
                                   entry.action === "effectuated"
                                     ? "bg-emerald-500"
                                     : entry.action === "reopened"
@@ -7009,7 +7006,7 @@ export function FinancialImportPage({
                               {entry.changes?.length ? (
                                 <div className="mt-2 space-y-1 rounded-lg bg-muted/55 px-2.5 py-2">
                                   {entry.changes.map((change) => (
-                                    <p key={change.field} className="break-words text-[10.5px] leading-relaxed text-muted-foreground">
+                                    <p key={change.field} className="wrap-break-word text-[10.5px] leading-relaxed text-muted-foreground">
                                       <span className="font-semibold text-foreground">{change.label}:</span>{" "}
                                       <span className="line-through">{change.previousValue}</span>{" "}
                                       <span aria-hidden="true">→</span>{" "}
@@ -7028,7 +7025,7 @@ export function FinancialImportPage({
                       )}
                     </div>
 
-                    <div className={cn("rounded-2xl border bg-background p-4 shadow-sm", auditStep !== 2 && "hidden")}>
+                    <div className={cn("rounded-2xl border bg-background p-4 shadow-xs", auditStep !== 2 && "hidden")}>
                       <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Checklist</p>
                       <div className="mt-3 space-y-2">
                         {selectedChecklist.map((entry, index) => (
@@ -7062,7 +7059,7 @@ export function FinancialImportPage({
             </Sheet>
         </div>
       ) : statementAccountId && visibleOpenSessions.length === 0 ? (
-        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
+        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-xs">
           <CardHeader>
             <CardTitle>Nenhuma sessão aberta para esta conta</CardTitle>
             <CardDescription>
@@ -7086,7 +7083,7 @@ export function FinancialImportPage({
         </Card>
       ) : (
         (uploadOnly || showImportControls) && canImportAudits ? (
-        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
+        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-xs">
           <CardHeader>
             <CardTitle>Upload do arquivo</CardTitle>
             <CardDescription>Selecione a conta do extrato e importe um arquivo OFX ou CSV para iniciar a conciliação.</CardDescription>
@@ -7101,7 +7098,7 @@ export function FinancialImportPage({
                     onClick={() => setFileType(type)}
                     className={cn(
                       "rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors",
-                      fileType === type ? "bg-background text-primary shadow-sm" : "text-muted-foreground"
+                      fileType === type ? "bg-background text-primary shadow-xs" : "text-muted-foreground"
                     )}
                   >
                     {type}
@@ -7166,7 +7163,7 @@ export function FinancialImportPage({
           </CardContent>
         </Card>
         ) : (
-        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
+        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-xs">
           <CardContent className="flex min-h-[180px] items-center justify-center p-6 text-center">
             <div className="space-y-2">
               <p className="text-base font-semibold">Nenhuma sessão aberta para auditoria</p>

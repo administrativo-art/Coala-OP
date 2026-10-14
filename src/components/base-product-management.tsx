@@ -104,7 +104,7 @@ function BulkEditClassificationModal({
 
 const LIST_TEMPLATE = '28px minmax(0,2.2fr) minmax(0,1.3fr) 70px 110px 80px 90px 20px';
 
-export function BaseProductManagement({ tabs, view, onViewChange }: CadastrosTabProps) {
+export function BaseProductManagement({ view, onViewChange }: CadastrosTabProps) {
   const { baseProducts, loading: loadingBase, updateBaseProduct, updateMultipleBaseProducts, deleteMultipleBaseProducts } = useBaseProducts();
   const { products, updateMultipleProducts } = useProducts();
   const { lots } = useExpiryProducts();
@@ -277,7 +277,6 @@ export function BaseProductManagement({ tabs, view, onViewChange }: CadastrosTab
       <div className="flex flex-col gap-4">
         <CadastrosHero
           kicker="Cadastros operacionais"
-          tabs={tabs}
           search={{ value: searchTerm, onChange: setSearchTerm, placeholder: 'Buscar por nome, código ou classificação' }}
           status={{ value: status, onChange: changeStatus, activeCount, inactiveCount, inactiveLabel: 'Inativos' }}
           manage={{ label: 'Classificações', onClick: () => setIsClassificationModalOpen(true) }}
@@ -333,7 +332,7 @@ export function BaseProductManagement({ tabs, view, onViewChange }: CadastrosTab
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="break-words text-[19px] font-extrabold leading-[1.15] tracking-[-0.02em]">{product.name}</span>
+                    <span className="wrap-break-word text-[19px] font-extrabold leading-[1.15] tracking-[-0.02em]">{product.name}</span>
                     <Mono className="text-[11px] uppercase text-[#9a9ba1]">{product.id.slice(0, 8)}</Mono>
                   </div>
                   <SoftPill isEmpty={!classificationName(product)}>{classificationName(product) || 'Sem classificação'}</SoftPill>

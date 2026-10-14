@@ -11,6 +11,50 @@
     { "id": "m-30", "unitId": "matriz", "date": "2026-10-30", "startTime": "09:00", "endTime": "17:00", "slot": "single", "requiredRoleId": "lider" }
   ],
   "nextMonthKnownShifts": [],
+  "journeyResolution": {
+    "status": "ready_for_proposal",
+    "scope": "published_journeys_resolved_by_employee_and_date",
+    "period": "2026-10",
+    "unitIds": ["matriz"],
+    "people": [{
+      "employeeId": "leader",
+      "employeeName": "Líder",
+      "assignments": [{
+        "from": "2026-10-01",
+        "through": "2026-10-31",
+        "journey": {
+          "journeyId": "jornada-6x1",
+          "lineageId": "jornada-6x1",
+          "version": 1,
+          "name": "Jornada 6x1",
+          "resolvedBy": "company",
+          "weeklyMinutes": 2640,
+          "cycleLengthDays": 7,
+          "days": [
+            { "dayIndex": 1, "plannedMinutes": 440, "isRestDay": false },
+            { "dayIndex": 2, "plannedMinutes": 440, "isRestDay": false },
+            { "dayIndex": 3, "plannedMinutes": 440, "isRestDay": false },
+            { "dayIndex": 4, "plannedMinutes": 440, "isRestDay": false },
+            { "dayIndex": 5, "plannedMinutes": 440, "isRestDay": false },
+            { "dayIndex": 6, "plannedMinutes": 440, "isRestDay": false },
+            { "dayIndex": 7, "plannedMinutes": 0, "isRestDay": true }
+          ],
+          "regime": { "mode": "fixed" },
+          "validFrom": "2026-01-01",
+          "weeklyRest": { "placement": "schedule", "maxConsecutiveWorkDays": 6, "sundayCadenceWeeks": 3 },
+          "validationMode": "consecutive_days",
+          "allowedShiftDefinitionIds": []
+        }
+      }]
+    }],
+    "issues": [],
+    "evidence": {
+      "sourceQueries": ["synthetic:test"],
+      "journeyDocuments": 1,
+      "resolvedDays": 31,
+      "requiresHumanJourneyPremise": false
+    }
+  },
   "confirmed": {
     "team": true,
     "rolesAndUnitLinks": true,

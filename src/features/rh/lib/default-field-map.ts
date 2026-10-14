@@ -1,5 +1,4 @@
 import type { FieldMapEntry, FieldType, FieldVisibility, ProfileBlockConfig } from "@/types/rh";
-import { normalizeFieldVisibility } from "@/types/rh";
 
 type FieldConfig = {
   label: string;
@@ -22,13 +21,17 @@ type FieldConfig = {
 function field(config: FieldConfig): FieldMapEntry {
   const section = config.section.toLowerCase();
   const sectionKey = section.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const visibility = normalizeFieldVisibility(config.visibility);
   const isSensitiveCategory =
     sectionKey.includes("diversidade") ||
     sectionKey.includes("aso") ||
     sectionKey.includes("saude") ||
-    sectionKey.includes("bancarios") ||
-    sectionKey.includes("familia");
+    sectionKey.includes("biometr") ||
+    sectionKey.includes("racial") ||
+    sectionKey.includes("etni") ||
+    sectionKey.includes("relig") ||
+    sectionKey.includes("sindic") ||
+    sectionKey.includes("sexual") ||
+    sectionKey.includes("genetic");
   const entry: FieldMapEntry = {
     bizneo_id: "coala_internal",
     label: config.label,
@@ -39,11 +42,7 @@ function field(config: FieldConfig): FieldMapEntry {
     employee_editable: config.employeeEditable,
     order: config.order,
     lgpd: {
-      category: isSensitiveCategory || visibility === "confidential"
-        ? "sensitive"
-        : visibility === "restricted_total" || visibility === "restricted_partial"
-          ? "confidential"
-          : "personal",
+      category: isSensitiveCategory ? "sensitive" : "personal",
       legal_basis: sectionKey.includes("diversidade") ? "consent" : "legal_obligation",
       retention: sectionKey.includes("bancarios")
         ? "termination_plus_90d"

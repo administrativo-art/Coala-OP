@@ -1,20 +1,29 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode, type SelectHTMLAttributes } from 'react';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, ChevronDown, Eye, EyeOff, Globe2, GripVertical, Link2, Lock, MoreHorizontal, Pencil, Plus, Save, Search, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Eye, EyeOff, Globe2, GripVertical, Link2, Lock, Pencil, Plus, Save, Search, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { FieldMap, FieldMapEntry, FieldType, FieldVisibility, NormalizedFieldVisibility, ProfileAccessActor, ProfileAccessMatrix, ProfileAccessPermission, ProfileBlockConfig } from '@/types/rh';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { Field, fieldInputClass } from '@/components/patterns/field';
+import { systemFieldsRepresentedByProfileBlocks } from '@/features/hr/lib/collaborator-system-fields';
+import type { FieldMap, FieldMapEntry, FieldType, FieldVisibility, NormalizedFieldVisibility, ProfileAccessActor, ProfileAccessMatrix, ProfileAccessPermission, ProfileBlockConfig, ProfileSelfServicePolicy } from '@/types/rh';
 import { DEFAULT_PROFILE_ACCESS_MATRIX, normalizeFieldVisibility, normalizeProfileAccessMatrix } from '@/types/rh';
 
 type EditableFieldMapEntry = FieldMapEntry;
 type FieldTuple = [string, EditableFieldMapEntry];
 type AccessOption = { id: string; label: string; description?: string };
+type StructurePanelState =
+  | { kind: 'section'; sectionName: string; fieldLabel: string }
+  | { kind: 'group'; section: string; groupLabel: string; fieldLabel: string }
+  | { kind: 'subgroup'; section: string; group: NonNullable<FieldMapEntry['group']>; subgroupLabel: string; fieldLabel: string }
+  | { kind: 'rename_section'; section: string; nextName: string }
+  | { kind: 'delete_field'; key: string; label: string };
 
 const FIELD_TYPES: FieldType[] = ['text', 'multiline', 'date', 'number', 'currency', 'boolean', 'single_select', 'multi_select', 'ref:jobRoles'];
 const VISIBILITIES: NormalizedFieldVisibility[] = ['public', 'restricted_partial', 'restricted_total', 'confidential'];
@@ -40,10 +49,11 @@ const VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
 };
 
 const LGPD_CATEGORY_LABELS = {
-  personal: 'Pessoal',
-  sensitive: 'Sensível',
-  confidential: 'Confidencial',
+  personal: 'Dado pessoal',
+  sensitive: 'Dado pessoal sensível',
 } as const;
+
+type LgpdCategory = keyof typeof LGPD_CATEGORY_LABELS;
 
 const LEGAL_BASIS_LABELS = {
   legal_obligation: 'Obrigação legal',
@@ -61,7 +71,7 @@ const RETENTION_LABELS = {
   manual_review: 'Revisão manual',
 } as const;
 
-const FIELD_GRID_TEMPLATE = '48px 44px minmax(280px, 1.6fr) 150px 170px 150px 190px';
+const FIELD_GRID_TEMPLATE = '48px 44px minmax(280px, 1.6fr) 150px 170px 190px';
 const ORDER_GRID_TEMPLATE = '44px 44px minmax(0, 1fr) 150px 170px';
 const SYSTEM_BLOCKS_SECTION = '__system_blocks';
 
@@ -79,6 +89,13 @@ const PROFILE_ACCESS_PERMISSIONS: Array<{ value: ProfileAccessPermission; label:
   { value: 'edit', label: 'Editar' },
 ];
 
+const SELF_SERVICE_POLICIES: Array<{ value: ProfileSelfServicePolicy; label: string; helper: string }> = [
+  { value: 'inherit', label: 'Herdar da matriz', helper: 'Usa a permissão do Titular configurada para esta visibilidade.' },
+  { value: 'blocked', label: 'Somente leitura', helper: 'O colaborador visualiza o campo, mas não pode solicitar nem aplicar alterações.' },
+  { value: 'direct', label: 'Alteração direta', helper: 'O próprio colaborador altera o valor e a mudança entra no histórico.' },
+  { value: 'approval', label: 'Sujeita à aprovação', helper: 'A proposta fica pendente e só altera o perfil após aprovação do RH.' },
+];
+
 const ACCESS_MATRIX_GRID = '210px repeat(5, minmax(0, 1fr))';
 
 const VISIBILITY_DOTS: Record<NormalizedFieldVisibility, { dot: string; halo: string }> = {
@@ -93,6 +110,32 @@ const VISIBILITY_TONES: Record<NormalizedFieldVisibility, { bg: string; fg: stri
   restricted_partial: { bg: '#eef7ff', fg: '#2563eb', dot: '#2f6fed' },
   restricted_total: { bg: '#fff5db', fg: '#d17400', dot: '#e59015' },
   confidential: { bg: '#ffe9ef', fg: '#d9275f', dot: '#dc3b4b' },
+};
+
+const VISIBILITY_HELP: Record<NormalizedFieldVisibility, { title: string; description: string }> = {
+  public: {
+    title: 'Sem restrição',
+    description: 'Na regra padrão, usuários autenticados e o próprio titular podem visualizar; gestores e administradores podem editar.',
+  },
+  restricted_partial: {
+    title: 'Restrito parcial',
+    description: 'Na regra padrão, o titular pode visualizar, gestores e administradores podem editar e os demais usuários não veem o campo.',
+  },
+  restricted_total: {
+    title: 'Restrito total',
+    description: 'Na regra padrão, o campo fica oculto para o titular e usuários comuns; apenas gestores e administradores podem editá-lo.',
+  },
+  confidential: {
+    title: 'Confidencial',
+    description: 'Na regra padrão, somente administradores acessam o campo. Outras pessoas dependem de uma exceção explícita nas Regras de acesso.',
+  },
+};
+
+const VISIBILITY_ICONS: Record<NormalizedFieldVisibility, typeof Eye> = {
+  public: Globe2,
+  restricted_partial: Eye,
+  restricted_total: Lock,
+  confidential: EyeOff,
 };
 
 function makeKey(label: string) {
@@ -116,16 +159,20 @@ function makeId(label: string) {
     .slice(0, 56) || `grupo_${Date.now()}`;
 }
 
-function defaultLgpd(section: string, visibility: FieldVisibility): NonNullable<FieldMapEntry['lgpd']> {
+function normalizeLgpdCategory(category: unknown): LgpdCategory {
+  return category === 'sensitive' ? 'sensitive' : 'personal';
+}
+
+function cloneFieldEntry(entry: EditableFieldMapEntry): EditableFieldMapEntry {
+  return structuredClone(entry);
+}
+
+function defaultLgpd(section: string, _visibility: FieldVisibility): NonNullable<FieldMapEntry['lgpd']> {
   const lower = section.toLowerCase();
-  const normalizedVisibility = normalizeFieldVisibility(visibility);
   const consent = lower.includes('diversidade');
+  const sensitive = /sa[uú]de|aso|biometri|racial|etni|religi|sindic|sexual|gen[eé]tic|diversidade/.test(lower);
   return {
-    category: consent || normalizedVisibility === 'confidential'
-      ? 'sensitive'
-      : normalizedVisibility === 'restricted_total' || normalizedVisibility === 'restricted_partial'
-        ? 'confidential'
-        : 'personal',
+    category: sensitive ? 'sensitive' : 'personal',
     legal_basis: consent ? 'consent' : 'legal_obligation',
     retention: lower.includes('banc') ? 'termination_plus_90d' : lower.includes('aso') || consent ? 'termination_plus_2y' : 'employment_plus_5y',
     requires_consent: consent,
@@ -248,23 +295,61 @@ function SectionVisibilitySelect({
   mixed?: boolean;
   onChange: (visibility: FieldVisibility) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const CurrentIcon = VISIBILITY_ICONS[visibility];
+
   return (
-    <label className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2.5 text-[11.5px] font-extrabold text-[#6f6f7c] ring-1 ring-[#ececf0]">
-      Visibilidade
-      <select
-        value={visibility}
-        onChange={(event) => onChange(event.target.value as FieldVisibility)}
-        className="h-7 rounded-lg border border-[#dedfe4] bg-white px-1.5 text-[11.5px] font-extrabold text-[#1d1d26] outline-none"
-        title="Altera a visibilidade de todos os campos deste card"
-      >
-        {mixed ? <option value={visibility}>Visibilidade mista</option> : null}
-        {VISIBILITIES.map((option) => (
-          <option key={option} value={option}>
-            {VISIBILITY_LABELS[option]}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Alterar visibilidade da seção"
+          className="flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] bg-white px-2.5 text-[11.5px] font-extrabold text-[#6f6f7c] ring-1 ring-[#ececf0] hover:bg-[#fbfbfc]"
+        >
+          <span>Visibilidade</span>
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-[#dedfe4] bg-white px-2 text-[11.5px] font-extrabold text-[#1d1d26]">
+            <CurrentIcon className="h-3.5 w-3.5" style={{ color: VISIBILITY_TONES[visibility].fg }} />
+            {mixed ? 'Visibilidade mista' : VISIBILITY_LABELS[visibility]}
+            <ChevronDown className="h-3.5 w-3.5 text-[#777784]" />
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[390px] max-w-[calc(100vw-24px)] rounded-xl border-[#dedfe4] p-2 shadow-xl">
+        <div className="mb-1 px-2 py-1.5">
+          <p className="text-xs font-black text-[#1d1d26]">Visibilidade da seção</p>
+          <p className="mt-0.5 text-[11px] font-medium leading-4 text-[#777784]">A escolha é aplicada a todos os campos desta seção. As Regras de acesso podem personalizar o comportamento padrão.</p>
+        </div>
+        <div className="space-y-1">
+          {VISIBILITIES.map((option) => {
+            const Icon = VISIBILITY_ICONS[option];
+            const selected = !mixed && option === visibility;
+            return (
+              <div key={option} className={`flex items-center gap-1 rounded-lg ${selected ? 'bg-[#fff0f6]' : 'hover:bg-[#f7f7f9]'}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(option);
+                    setOpen(false);
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2.5 text-left"
+                >
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: VISIBILITY_TONES[option].bg, color: VISIBILITY_TONES[option].fg }}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm font-extrabold text-[#1d1d26]">{VISIBILITY_LABELS[option]}</span>
+                  {selected ? <Check className="h-4 w-4 shrink-0 text-[#df2f78]" /> : null}
+                </button>
+                <span className="pr-2">
+                  <InfoTooltip title={VISIBILITY_HELP[option].title}>
+                    <p>{VISIBILITY_HELP[option].description}</p>
+                  </InfoTooltip>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -484,10 +569,10 @@ function AccessMatrixPanel({
       {showHeader ? (
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-wide text-[#df2f78]">Matriz de acesso</p>
-            <h2 className="mt-1 text-xl font-black text-[#181820]">Regra padrão por visibilidade</h2>
+            <p className="text-xs font-black uppercase tracking-wide text-[#df2f78]">Regras gerais de acesso</p>
+            <h2 className="mt-1 text-xl font-black text-[#181820]">Permissão padrão por visibilidade</h2>
             <p className="mt-1 max-w-4xl text-sm font-semibold leading-relaxed text-[#6f6f7c]">
-              O que cada perfil pode fazer em campos e cards. Vínculos de cargo, função e pessoa ficam na coluna Exceção.
+              Define quem oculta, visualiza ou edita cada nível. A política do próprio colaborador é configurada em cada campo e pode exigir aprovação.
             </p>
           </div>
           <span className="rounded-full bg-[#fff0f6] px-3 py-1 text-xs font-black text-[#df2f78]">
@@ -601,16 +686,75 @@ function AccessMatrixPanel({
   );
 }
 
-function LgpdBadge({ category }: { category: keyof typeof LGPD_CATEGORY_LABELS }) {
-  const tone =
-    category === 'sensitive' ? 'bg-[#f2e9ff] text-[#7c3aed]' :
-    category === 'confidential' ? 'bg-[#ffe9ef] text-[#d9275f]' :
-    'bg-[#fff0f6] text-[#df2f78]';
+function SensitiveDataBadge() {
   return (
-    <span className={`inline-flex w-fit items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-black ${tone}`}>
+    <span className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[#f2e9ff] px-2 py-1 text-[10.5px] font-black text-[#7c3aed]">
       <ShieldCheck className="h-3.5 w-3.5" />
-      {LGPD_CATEGORY_LABELS[category]}
+      Dado sensível
     </span>
+  );
+}
+
+function FieldEditorSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-ds-btn-lg border border-ds-border bg-ds-surface">
+      <div className="border-b border-ds-divider bg-ds-warm px-4 py-3.5">
+        <h3 className="text-sm font-black text-ds-ink">{title}</h3>
+        <p className="mt-0.5 text-xs font-medium leading-5 text-ds-ink-muted">{description}</p>
+      </div>
+      <div className="grid gap-4 p-4 md:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function StyledSelect({ children, className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className="relative block">
+      <select {...props} className={`${fieldInputClass} appearance-none pr-12 ${className}`}>
+        {children}
+      </select>
+      <span className="pointer-events-none absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs">
+        <ChevronDown className="h-4 w-4" strokeWidth={2.25} />
+      </span>
+    </span>
+  );
+}
+
+function FieldEditorToggle({
+  checked,
+  disabled,
+  label,
+  description,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  description: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className={`flex min-h-[72px] items-start gap-3 rounded-ds-md border p-3.5 transition ${disabled ? 'cursor-not-allowed border-ds-border bg-ds-muted opacity-60' : checked ? 'border-ds-modal bg-ds-modal-soft' : 'cursor-pointer border-ds-border bg-ds-input hover:border-ds-border-input'}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 h-4 w-4 accent-(--ds-modal)"
+      />
+      <span>
+        <span className="block text-xs font-black text-ds-ink">{label}</span>
+        <span className="mt-1 block text-[11px] font-medium leading-4 text-ds-ink-muted">{description}</span>
+      </span>
+    </label>
   );
 }
 
@@ -641,12 +785,14 @@ function SortableFieldRow({
         {position}
       </span>
       <div className="min-w-0">
-        <p className="truncate text-[15px] font-extrabold text-[#1d1d26]">{entry.label}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-[15px] font-extrabold text-[#1d1d26]">{entry.label}</p>
+          {normalizeLgpdCategory(entry.lgpd?.category) === 'sensitive' ? <SensitiveDataBadge /> : null}
+        </div>
         <p className="mt-0.5 truncate font-mono text-xs font-medium text-[#a6a6b0]">{id}</p>
       </div>
       <TypeBadge type={entry.type} />
       <VisibilityBadge visibility={entry.visibility} />
-      <LgpdBadge category={entry.lgpd?.category ?? 'personal'} />
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
@@ -788,9 +934,13 @@ export function FieldConfigPage() {
   const [profileBlocks, setProfileBlocks] = useState<Record<string, ProfileBlockConfig>>({});
   const [sectionOrder, setSectionOrder] = useState<Record<string, number>>({});
   const [accessMatrix, setAccessMatrix] = useState<ProfileAccessMatrix>(DEFAULT_PROFILE_ACCESS_MATRIX);
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+  const [accessMatrixDraft, setAccessMatrixDraft] = useState<ProfileAccessMatrix>(DEFAULT_PROFILE_ACCESS_MATRIX);
   const [roleOptions, setRoleOptions] = useState<AccessOption[]>([]);
   const [functionOptions, setFunctionOptions] = useState<AccessOption[]>([]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState<EditableFieldMapEntry | null>(null);
+  const [structurePanel, setStructurePanel] = useState<StructurePanelState | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -816,6 +966,21 @@ export function FieldConfigPage() {
     setProfileBlocks(fieldMap.profile_blocks ?? {});
     setAccessMatrix(normalizeProfileAccessMatrix(fieldMap.access_matrix));
     setMessage(null);
+  }
+
+  function openAccessDialog() {
+    setAccessMatrixDraft(normalizeProfileAccessMatrix(accessMatrix));
+    setAccessDialogOpen(true);
+  }
+
+  function closeAccessDialog() {
+    setAccessDialogOpen(false);
+    setAccessMatrixDraft(normalizeProfileAccessMatrix(accessMatrix));
+  }
+
+  function applyAccessDialog() {
+    setAccessMatrix(normalizeProfileAccessMatrix(accessMatrixDraft));
+    setAccessDialogOpen(false);
   }
 
   useEffect(() => {
@@ -879,8 +1044,14 @@ export function FieldConfigPage() {
     };
   }, [firebaseUser]);
 
+  const fieldsRepresentedBySystemBlocks = useMemo(
+    () => systemFieldsRepresentedByProfileBlocks(Object.keys(profileBlocks)),
+    [profileBlocks],
+  );
+
   const grouped = useMemo(() => {
     const groups = Object.entries(fields).reduce<Record<string, FieldTuple[]>>((acc, item) => {
+      if (fieldsRepresentedBySystemBlocks.has(item[0])) return acc;
       const section = item[1].section || 'Sem seção';
       if (!acc[section]) acc[section] = [];
       acc[section].push(item);
@@ -892,7 +1063,7 @@ export function FieldConfigPage() {
       const rightOrder = sectionOrder[right] ?? Number.MAX_SAFE_INTEGER;
       return leftOrder - rightOrder || left.localeCompare(right, 'pt-BR');
     }));
-  }, [fields, sectionOrder]);
+  }, [fields, fieldsRepresentedBySystemBlocks, sectionOrder]);
 
   const displayedGrouped = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -931,7 +1102,7 @@ export function FieldConfigPage() {
       .map(({ section }) => section);
   }, [grouped, orderedProfileBlocks.length, sectionOrder]);
 
-  const editing = editingKey ? fields[editingKey] : null;
+  const editing = editingKey ? editingDraft : null;
 
   function toggleSection(section: string) {
     setCollapsedSections((current) => ({ ...current, [section]: current[section] === false }));
@@ -954,7 +1125,7 @@ export function FieldConfigPage() {
             lgpd: {
               ...nextLgpd,
               ...(entry.lgpd ?? {}),
-              category: nextLgpd.category,
+              category: normalizeLgpdCategory(entry.lgpd?.category),
             },
           },
         ];
@@ -963,11 +1134,7 @@ export function FieldConfigPage() {
   }
 
   function addSection() {
-    const section = window.prompt('Nome da nova seção');
-    if (!section?.trim()) return;
-    const label = window.prompt('Nome do primeiro campo desta seção') ?? 'Novo campo';
-    addField(section.trim(), label.trim() || 'Novo campo');
-    setSectionOrder((current) => current[section.trim()] == null ? { ...current, [section.trim()]: Object.keys(current).length * 10 + 10 } : current);
+    setStructurePanel({ kind: 'section', sectionName: '', fieldLabel: '' });
   }
 
   function addField(section: string, label = 'Novo campo', patch: Partial<EditableFieldMapEntry> = {}) {
@@ -979,64 +1146,41 @@ export function FieldConfigPage() {
       suffix += 1;
     }
     const order = (grouped[section]?.length ?? 0) * 10 + 10;
+    const entry: EditableFieldMapEntry = {
+      bizneo_id: 'coala_internal',
+      type: 'text',
+      visibility: 'public',
+      employee_visible: true,
+      employee_editable: false,
+      required: false,
+      lgpd: defaultLgpd(section, 'public'),
+      ...patch,
+      label,
+      section,
+      order: patch.order ?? order,
+    };
     setFields((current) => ({
       ...current,
-      [key]: {
-        bizneo_id: 'coala_internal',
-        type: 'text',
-        visibility: 'public',
-        employee_visible: true,
-        employee_editable: false,
-        required: false,
-        lgpd: defaultLgpd(section, 'public'),
-        ...patch,
-        label,
-        section,
-        order: patch.order ?? order,
-      },
+      [key]: entry,
     }));
     setEditingKey(key);
+    setEditingDraft(cloneFieldEntry(entry));
   }
 
   function addGroup(section: string) {
-    const groupLabel = window.prompt('Nome do grupo');
-    if (!groupLabel?.trim()) return;
-    const fieldLabel = window.prompt('Nome do primeiro campo deste grupo') ?? 'Novo campo';
-    const groupId = makeId(`${section}_${groupLabel}`);
-    const groupCount = new Set((grouped[section] ?? []).map(([, entry]) => entry.group?.id).filter(Boolean)).size;
-    addField(section, fieldLabel.trim() || 'Novo campo', {
-      group: {
-        id: groupId,
-        label: groupLabel.trim(),
-        order: (groupCount + 1) * 10,
-      },
-    });
+    setStructurePanel({ kind: 'group', section, groupLabel: '', fieldLabel: '' });
   }
 
   function addSubgroup(section: string, group: NonNullable<EditableFieldMapEntry['group']>) {
-    const subgroupLabel = window.prompt('Nome do subgrupo');
-    if (!subgroupLabel?.trim()) return;
-    const fieldLabel = window.prompt('Nome do primeiro campo deste subgrupo') ?? 'Novo campo';
-    const subgroupCount = new Set(
-      (grouped[section] ?? [])
-        .filter(([, entry]) => entry.group?.id === group.id)
-        .map(([, entry]) => entry.subgroup?.id)
-        .filter(Boolean)
-    ).size;
-    addField(section, fieldLabel.trim() || 'Novo campo', {
-      group,
-      subgroup: {
-        id: makeId(`${section}_${group.id}_${subgroupLabel}`),
-        label: subgroupLabel.trim(),
-        group_id: group.id,
-        order: (subgroupCount + 1) * 10,
-      },
-    });
+    setStructurePanel({ kind: 'subgroup', section, group, subgroupLabel: '', fieldLabel: '' });
   }
 
   function renameSection(oldName: string) {
-    const nextName = window.prompt('Novo nome da seção', oldName);
-    if (!nextName?.trim() || nextName.trim() === oldName) return;
+    setStructurePanel({ kind: 'rename_section', section: oldName, nextName: oldName });
+  }
+
+  function applySectionRename(oldName: string, nextName: string) {
+    if (!nextName.trim() || nextName.trim() === oldName) return;
     setFields((current) => Object.fromEntries(
       Object.entries(current).map(([key, entry]) => [
         key,
@@ -1054,99 +1198,103 @@ export function FieldConfigPage() {
   }
 
   function deleteField(key: string) {
-    if (!window.confirm('Remover este campo do perfil?')) return;
+    setStructurePanel({ kind: 'delete_field', key, label: fields[key]?.label ?? key });
+  }
+
+  function applyFieldDeletion(key: string) {
     setFields((current) => {
       const next = { ...current };
       delete next[key];
       return next;
     });
-    if (editingKey === key) setEditingKey(null);
+    if (editingKey === key) {
+      setEditingKey(null);
+      setEditingDraft(null);
+    }
   }
 
-  function updateFieldGroup(key: string, label: string) {
-    setFields((current) => {
-      const entry = current[key];
-      if (!entry) return current;
-      const previousGroup = entry.group;
+  function openFieldEditor(key: string) {
+    const entry = fields[key];
+    if (!entry) return;
+    setEditingKey(key);
+    setEditingDraft(cloneFieldEntry(entry));
+  }
+
+  function closeFieldEditor() {
+    setEditingKey(null);
+    setEditingDraft(null);
+  }
+
+  function patchEditingDraft(patch: Partial<EditableFieldMapEntry>) {
+    setEditingDraft((current) => current ? { ...current, ...patch } : current);
+  }
+
+  function updateEditingGroup(label: string) {
+    setEditingDraft((current) => {
+      if (!current) return current;
+      const previousGroup = current.group;
       const trimmed = label.trim();
-      const nextGroup = trimmed
+      const group = trimmed
         ? {
-            id: previousGroup?.id ?? makeId(`${entry.section}_${trimmed}`),
+            id: previousGroup?.id ?? makeId(`${current.section}_${trimmed}`),
             label: trimmed,
-            order: previousGroup?.order ?? entry.order,
+            order: previousGroup?.order ?? current.order,
             ...(previousGroup?.conditionals?.length ? { conditionals: previousGroup.conditionals } : {}),
             ...(previousGroup?.repeatable ? { repeatable: previousGroup.repeatable } : {}),
           }
         : undefined;
-      return Object.fromEntries(
-        Object.entries(current).map(([itemKey, item]) => {
-          const belongsToGroup = Boolean(previousGroup?.id && item.group?.id === previousGroup.id);
-          if (!belongsToGroup && itemKey !== key) return [itemKey, item];
-          return [itemKey, { ...item, group: nextGroup, subgroup: nextGroup ? item.subgroup : undefined }];
-        })
-      );
+      return { ...current, group, subgroup: group ? current.subgroup : undefined };
     });
   }
 
-  function updateFieldSubgroup(key: string, label: string) {
-    setFields((current) => {
-      const entry = current[key];
-      if (!entry?.group) return current;
-      const previousSubgroup = entry.subgroup;
+  function updateEditingSubgroup(label: string) {
+    setEditingDraft((current) => {
+      if (!current?.group) return current;
+      const previousSubgroup = current.subgroup;
       const trimmed = label.trim();
-      const nextSubgroup = trimmed
+      const subgroup = trimmed
         ? {
-            id: previousSubgroup?.id ?? makeId(`${entry.section}_${entry.group.id}_${trimmed}`),
+            id: previousSubgroup?.id ?? makeId(`${current.section}_${current.group.id}_${trimmed}`),
             label: trimmed,
-            group_id: entry.group.id,
-            order: previousSubgroup?.order ?? entry.order,
+            group_id: current.group.id,
+            order: previousSubgroup?.order ?? current.order,
             ...(previousSubgroup?.conditionals?.length ? { conditionals: previousSubgroup.conditionals } : {}),
           }
         : undefined;
-      return Object.fromEntries(
-        Object.entries(current).map(([itemKey, item]) => {
-          const belongsToSubgroup = Boolean(previousSubgroup?.id && item.subgroup?.id === previousSubgroup.id);
-          if (!belongsToSubgroup && itemKey !== key) return [itemKey, item];
-          return [itemKey, { ...item, subgroup: nextSubgroup }];
-        })
-      );
+      return { ...current, subgroup };
     });
   }
 
-  function updateGroupRepeatable(key: string, enabled: boolean) {
-    setFields((current) => {
-      const entry = current[key];
-      if (!entry?.group) return current;
-      const nextGroup = {
-        ...entry.group,
-        repeatable: enabled
-          ? {
-              enabled: true,
-              add_label: entry.group.repeatable?.add_label ?? `Adicionar ${entry.group.label.toLowerCase()}`,
-              item_label: entry.group.repeatable?.item_label ?? entry.group.label,
-              ...(entry.group.repeatable?.max_items ? { max_items: entry.group.repeatable.max_items } : {}),
-            }
-          : undefined,
+  function updateEditingGroupRepeatable(enabled: boolean) {
+    setEditingDraft((current) => {
+      if (!current?.group) return current;
+      return {
+        ...current,
+        group: {
+          ...current.group,
+          repeatable: enabled
+            ? {
+                enabled: true,
+                add_label: current.group.repeatable?.add_label ?? `Adicionar ${current.group.label.toLowerCase()}`,
+                item_label: current.group.repeatable?.item_label ?? current.group.label,
+                ...(current.group.repeatable?.max_items ? { max_items: current.group.repeatable.max_items } : {}),
+              }
+            : undefined,
+        },
       };
-      return Object.fromEntries(
-        Object.entries(current).map(([itemKey, item]) => [
-          itemKey,
-          item.group?.id === entry.group?.id ? { ...item, group: nextGroup } : item,
-        ])
-      );
     });
   }
 
-  function updateShowIf(key: string, controllerKey: string, rawValue: string) {
+  function updateEditingShowIf(controllerKey: string, rawValue: string) {
     if (!controllerKey) {
-      updateField(key, { conditionals: undefined });
+      patchEditingDraft({ conditionals: undefined });
       return;
     }
     const controller = fields[controllerKey];
     const value = controller?.type === 'boolean'
       ? rawValue === 'false' ? false : true
       : rawValue;
-    updateField(key, {
+    patchEditingDraft({
       conditionals: [{
         kind: 'show_if',
         field: controllerKey,
@@ -1154,6 +1302,82 @@ export function FieldConfigPage() {
         ...(controller?.type === 'boolean' || rawValue ? { value } : {}),
       }],
     });
+  }
+
+  function applyFieldEditor() {
+    if (!editingKey || !editingDraft) return;
+    const draft = {
+      ...editingDraft,
+      label: editingDraft.label.trim(),
+      section: editingDraft.section.trim(),
+    };
+    if (!draft.label || !draft.section) return;
+    setFields((current) => {
+      const previous = current[editingKey];
+      if (!previous) return current;
+      const next = { ...current };
+      Object.entries(current).forEach(([key, entry]) => {
+        let updated = entry;
+        if (previous.group?.id && entry.group?.id === previous.group.id) {
+          updated = {
+            ...updated,
+            group: draft.group,
+            subgroup: draft.group ? updated.subgroup : undefined,
+          };
+        }
+        if (previous.subgroup?.id && entry.subgroup?.id === previous.subgroup.id) {
+          updated = { ...updated, subgroup: draft.subgroup };
+        }
+        next[key] = updated;
+      });
+      next[editingKey] = cloneFieldEntry(draft);
+      return next;
+    });
+    closeFieldEditor();
+  }
+
+  function submitStructurePanel() {
+    if (!structurePanel) return;
+    if (structurePanel.kind === 'section') {
+      const section = structurePanel.sectionName.trim();
+      if (!section) return;
+      addField(section, structurePanel.fieldLabel.trim() || 'Novo campo');
+      setSectionOrder((current) => current[section] == null ? { ...current, [section]: Object.keys(current).length * 10 + 10 } : current);
+    } else if (structurePanel.kind === 'group') {
+      const groupLabel = structurePanel.groupLabel.trim();
+      if (!groupLabel) return;
+      const groupCount = new Set((grouped[structurePanel.section] ?? []).map(([, entry]) => entry.group?.id).filter(Boolean)).size;
+      addField(structurePanel.section, structurePanel.fieldLabel.trim() || 'Novo campo', {
+        group: {
+          id: makeId(`${structurePanel.section}_${groupLabel}`),
+          label: groupLabel,
+          order: (groupCount + 1) * 10,
+        },
+      });
+    } else if (structurePanel.kind === 'subgroup') {
+      const subgroupLabel = structurePanel.subgroupLabel.trim();
+      if (!subgroupLabel) return;
+      const subgroupCount = new Set(
+        (grouped[structurePanel.section] ?? [])
+          .filter(([, entry]) => entry.group?.id === structurePanel.group.id)
+          .map(([, entry]) => entry.subgroup?.id)
+          .filter(Boolean)
+      ).size;
+      addField(structurePanel.section, structurePanel.fieldLabel.trim() || 'Novo campo', {
+        group: structurePanel.group,
+        subgroup: {
+          id: makeId(`${structurePanel.section}_${structurePanel.group.id}_${subgroupLabel}`),
+          label: subgroupLabel,
+          group_id: structurePanel.group.id,
+          order: (subgroupCount + 1) * 10,
+        },
+      });
+    } else if (structurePanel.kind === 'rename_section') {
+      applySectionRename(structurePanel.section, structurePanel.nextName);
+    } else {
+      applyFieldDeletion(structurePanel.key);
+    }
+    setStructurePanel(null);
   }
 
   function updateProfileBlock(key: string, patch: Partial<ProfileBlockConfig>) {
@@ -1275,7 +1499,7 @@ export function FieldConfigPage() {
   });
 
   return (
-    <div className="personal-field-config-density space-y-3 bg-[var(--bg)] px-3 py-3 text-[#1d1d26] md:px-4">
+    <div className="personal-field-config-density space-y-3 bg-(--bg) px-3 py-3 text-[#1d1d26] md:px-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-black tracking-[-.02em] text-[#181820]">Campos do Perfil</h1>
@@ -1284,32 +1508,33 @@ export function FieldConfigPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
-          <Dialog>
+          <Dialog open={accessDialogOpen} onOpenChange={(open) => open ? openAccessDialog() : closeAccessDialog()}>
             <DialogTrigger asChild>
               <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e2e0da] bg-white px-3 text-xs font-black text-[#494952] hover:bg-[#faf9f6]">
                 <ShieldCheck className="h-4 w-4 text-[#df2f78]" />
-                Matriz de acesso
+                Regras de acesso
               </button>
             </DialogTrigger>
-            <DialogContent className="max-h-[82vh] overflow-y-auto rounded-xl p-0 sm:max-w-[min(760px,calc(100vw-1rem))]" overlayClassName="bg-black/45">
-              <DialogHeader className="space-y-0 px-4 pb-3 pt-4 text-left">
-                <p className="text-[11.5px] font-bold uppercase tracking-[.12em] text-[#df2f78]">Matriz de acesso</p>
-                <DialogTitle className="mt-1 text-base font-bold leading-tight tracking-[-.02em] text-[#191c22]">
-                  Regra padrão por visibilidade
+            <DialogContent flush className="max-h-[92vh] overflow-hidden border-ds-border bg-ds-surface p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]" overlayClassName="bg-black/55 backdrop-blur-[2px]">
+              <div className="flex max-h-[92vh] min-h-0 flex-col">
+              <DialogHeader className="shrink-0 space-y-0 border-b border-ds-divider bg-ds-surface px-5 pb-4 pt-5 pr-14 text-left sm:px-6 sm:pb-5 sm:pt-6">
+                <p className="text-[10.5px] font-black uppercase tracking-[.12em] text-ds-accent-kicker">Regras gerais de acesso</p>
+                <DialogTitle className="mt-1.5 text-xl font-black leading-tight tracking-[-.02em] text-ds-ink">
+                  Permissão padrão por visibilidade
                 </DialogTitle>
-                <DialogDescription className="mt-1 max-w-[640px] text-xs leading-5 text-[#6a707a]">
-                  O que cada perfil pode fazer em campos e cards. Vínculos de cargo, função e pessoa ficam na coluna Exceção.
+                <DialogDescription className="mt-1.5 max-w-[760px] text-xs font-medium leading-5 text-ds-ink-muted">
+                  Esta matriz define a base para cada visibilidade. Edição direta ou sujeita à aprovação pelo titular é configurada em cada campo.
                 </DialogDescription>
-                <div className="!mt-3.5 inline-flex w-fit items-center gap-[7px] rounded-full border border-[#df2f78]/[.16] bg-[#df2f78]/[.07] py-1.5 pl-2.5 pr-3 text-[12.5px] font-semibold text-[#df2f78]">
-                  <span className="h-[7px] w-[7px] rounded-full bg-[#df2f78]" />
+                <div className="mt-3.5! inline-flex w-fit items-center gap-[7px] rounded-full border border-ds-accent bg-ds-accent-soft py-1.5 pl-2.5 pr-3 text-[12.5px] font-bold text-ds-accent-ink">
+                  <span className="h-[7px] w-[7px] rounded-full bg-ds-accent" />
                   Base do perfil
                 </div>
               </DialogHeader>
 
-              <div className="px-4">
+              <div className="min-h-0 flex-1 overflow-auto bg-ds-page p-4 sm:p-5">
                 <AccessMatrixPanel
-                  matrix={accessMatrix}
-                  onChange={setAccessMatrix}
+                  matrix={accessMatrixDraft}
+                  onChange={setAccessMatrixDraft}
                   roleOptions={roleOptions}
                   functionOptions={functionOptions}
                   userOptions={userOptions}
@@ -1317,26 +1542,19 @@ export function FieldConfigPage() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-4 pt-3">
+              <DialogFooter className="shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-t border-ds-divider bg-ds-surface px-5 py-4 sm:justify-between sm:space-x-0 sm:px-6">
                 <PermissionLegend />
-                <div className="flex items-center gap-2.5">
-                  <DialogClose asChild>
-                    <button
-                      type="button"
-                      className="h-[42px] rounded-[11px] border border-[#e2e4e8] bg-white px-5 text-sm font-semibold text-[#3d434c] hover:bg-[#f6f7f8]"
-                    >
-                      Cancelar
-                    </button>
-                  </DialogClose>
+                <div className="ml-auto flex items-center gap-2.5">
+                  <button type="button" onClick={closeAccessDialog} className="h-10 rounded-ds-md border border-ds-border bg-ds-input px-5 text-sm font-bold text-ds-ink-2 transition hover:bg-ds-muted">Cancelar</button>
                   <button
                     type="button"
-                    onClick={() => void save()}
-                    disabled={saving}
-                    className="h-[42px] rounded-[11px] bg-[#df2f78] px-[22px] text-sm font-bold text-white shadow-[0_6px_16px_-6px_#df2f78] transition hover:brightness-[1.06] disabled:opacity-60"
+                    onClick={applyAccessDialog}
+                    className="h-10 rounded-ds-md bg-ds-modal px-5 text-sm font-black text-white shadow-sm transition hover:brightness-95"
                   >
-                    {saving ? 'Salvando...' : 'Salvar alterações'}
+                    Aplicar regras
                   </button>
                 </div>
+              </DialogFooter>
               </div>
             </DialogContent>
           </Dialog>
@@ -1358,7 +1576,7 @@ export function FieldConfigPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="h-11 w-full rounded-xl border-0 bg-[#f6f5f2] pl-10 pr-4 text-sm font-medium text-[#4f4f5b] outline-none placeholder:text-[#9d9da9]"
+              className="h-11 w-full rounded-xl border-0 bg-[#f6f5f2] pl-10 pr-4 text-sm font-medium text-[#4f4f5b] outline-hidden placeholder:text-[#9d9da9]"
               placeholder="Buscar campo por nome ou chave..."
             />
           </div>
@@ -1392,7 +1610,7 @@ export function FieldConfigPage() {
                     style={active && tone ? { background: '#ffffffaa', color: tone.fg } : undefined}
                     className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${
                       active && !tone
-                        ? 'bg-white/[.18] text-white'
+                        ? 'bg-white/18 text-white'
                         : active
                           ? ''
                           : 'bg-[#eceae4] text-[#8a8a94]'
@@ -1407,7 +1625,7 @@ export function FieldConfigPage() {
         </div>
       </div>
 
-      {message ? <p className="rounded-2xl bg-white px-5 py-4 text-sm font-black text-[#6f6f7c] shadow-sm ring-1 ring-[#dedfe4]">{message}</p> : null}
+      {message ? <p className="rounded-2xl bg-white px-5 py-4 text-sm font-black text-[#6f6f7c] shadow-xs ring-1 ring-[#dedfe4]">{message}</p> : null}
 
       {visibleSectionContainers.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-[#cfd0d8] bg-white px-5 py-10 text-center text-sm font-black text-[#777784]">
@@ -1487,9 +1705,6 @@ export function FieldConfigPage() {
                       <Plus className="h-[15px] w-[15px]" />
                       Adicionar campo
                     </button>
-                    <button type="button" className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[#9d9da9] hover:bg-[#f7f7f9]" aria-label={`Mais ações de ${section}`}>
-                      <MoreHorizontal className="h-[18px] w-[18px]" />
-                    </button>
                   </>
                 )}
                 collapsed={collapsedSections[section] !== false}
@@ -1504,7 +1719,6 @@ export function FieldConfigPage() {
                         <span>Campo</span>
                         <span>Tipo</span>
                         <span>Visibilidade</span>
-                        <span>LGPD</span>
                         <span className="text-right">Ações</span>
                       </div>
                       {(() => {
@@ -1574,7 +1788,7 @@ export function FieldConfigPage() {
                                   </div>
                                 </div>
                               ) : null}
-                              <SortableFieldRow id={key} entry={entry} position={index + 1} onEdit={() => setEditingKey(key)} onDelete={() => deleteField(key)} />
+                              <SortableFieldRow id={key} entry={entry} position={index + 1} onEdit={() => openFieldEditor(key)} onDelete={() => deleteField(key)} />
                             </Fragment>
                           );
                         });
@@ -1589,8 +1803,10 @@ export function FieldConfigPage() {
       </DndContext>
 
       {dirty ? (
-        <div className="pointer-events-none sticky bottom-[18px] z-20 mt-[22px] flex justify-center">
-          <div className="pointer-events-auto flex flex-wrap items-center gap-4 rounded-2xl bg-[#181820] py-[11px] pl-5 pr-3 text-white shadow-[0_18px_40px_-12px_rgba(20,22,28,.55)]">
+        <>
+        <div aria-hidden className="h-20" />
+        <div className="pointer-events-none fixed inset-x-3 bottom-[calc(12px+env(safe-area-inset-bottom))] z-40 flex justify-center sm:inset-x-6 sm:bottom-[calc(20px+env(safe-area-inset-bottom))]">
+          <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-2xl bg-[#181820] py-[11px] pl-5 pr-3 text-white shadow-[0_18px_40px_-12px_rgba(20,22,28,.55)] sm:gap-4">
             <span className="inline-flex items-center gap-2.5 text-[13.5px] font-bold">
               <span className="h-2 w-2 rounded-full bg-[#f7b500] shadow-[0_0_0_4px_rgba(247,181,0,.2)]" />
               Você tem alterações não salvas
@@ -1600,7 +1816,7 @@ export function FieldConfigPage() {
                 type="button"
                 onClick={discard}
                 disabled={saving}
-                className="h-[38px] rounded-xl bg-white/[.12] px-[15px] text-[13px] font-bold text-[#e7e7ea] transition hover:bg-white/20 disabled:opacity-60"
+                className="h-[38px] rounded-xl bg-white/12 px-[15px] text-[13px] font-bold text-[#e7e7ea] transition hover:bg-white/20 disabled:opacity-60"
               >
                 Descartar
               </button>
@@ -1616,108 +1832,257 @@ export function FieldConfigPage() {
             </div>
           </div>
         </div>
+        </>
       ) : null}
 
-      {editing && editingKey ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="max-h-[84vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-3 shadow-xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-black text-[#1d1d26]">Editar campo</h2>
-                <p className="mt-1 font-mono text-sm font-semibold text-[#9d9da9]">{editingKey}</p>
-              </div>
-              <button type="button" onClick={() => setEditingKey(null)} className="h-8 rounded-lg bg-[#f1f2f5] px-3 text-xs font-black text-[#6f6f7c]">Fechar</button>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Nome
-                <input value={editing.label} onChange={(event) => updateField(editingKey, { label: event.target.value })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Seção
-                <input value={editing.section} onChange={(event) => updateField(editingKey, { section: event.target.value })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Grupo
-                <input value={editing.group?.label ?? ''} onChange={(event) => updateFieldGroup(editingKey, event.target.value)} placeholder="Ex.: CNH, Dependente" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Subgrupo
-                <input value={editing.subgroup?.label ?? ''} onChange={(event) => updateFieldSubgroup(editingKey, event.target.value)} disabled={!editing.group} placeholder="Ex.: Validade da CNH" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]" />
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Tipo
-                <select value={editing.type} onChange={(event) => updateField(editingKey, { type: event.target.value as FieldType })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
-                  {FIELD_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Visibilidade
-                <select value={normalizeFieldVisibility(editing.visibility)} onChange={(event) => {
-                  const visibility = event.target.value as NormalizedFieldVisibility;
-                  updateField(editingKey, { visibility, lgpd: defaultLgpd(editing.section, visibility) });
-                }} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
-                  {VISIBILITIES.map((visibility) => <option key={visibility} value={visibility}>{VISIBILITY_LABELS[visibility]}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Categoria LGPD
-                <select value={editing.lgpd?.category ?? 'personal'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, category: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
-                  {Object.entries(LGPD_CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Base legal
-                <select value={editing.lgpd?.legal_basis ?? 'legal_obligation'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, legal_basis: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
-                  {Object.entries(LEGAL_BASIS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Retenção
-                <select value={editing.lgpd?.retention ?? 'employment_plus_5y'} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, retention: event.target.value as any } })} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
-                  {Object.entries(RETENTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Opções
-                <input value={editing.options?.join(', ') ?? ''} onChange={(event) => updateField(editingKey, { options: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="Separadas por vírgula" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none" />
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Aparece quando
-                <select value={showIfRule?.field ?? ''} onChange={(event) => updateShowIf(editingKey, event.target.value, 'true')} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
-                  <option value="">Sempre aparece</option>
-                  {controllerOptions.map(([key, entry]) => <option key={key} value={key}>{entry.label}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
-                Valor da condição
-                {fields[showIfRule?.field ?? '']?.type === 'boolean' ? (
-                  <select value={showIfValue || 'true'} disabled={!showIfRule} onChange={(event) => updateShowIf(editingKey, showIfRule?.field ?? '', event.target.value)} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]">
-                    <option value="true">Sim</option>
-                    <option value="false">Não</option>
-                  </select>
+      <Dialog open={structurePanel !== null} onOpenChange={(open) => { if (!open) setStructurePanel(null); }}>
+        <DialogContent flush className="overflow-hidden border-ds-border bg-ds-surface p-0 sm:max-w-[560px]" overlayClassName="bg-black/55 backdrop-blur-[2px]">
+          {structurePanel ? (
+            <form onSubmit={(event) => { event.preventDefault(); submitStructurePanel(); }}>
+              <DialogHeader className="border-b border-ds-divider bg-ds-surface px-5 py-5 pr-14 text-left sm:px-6">
+                <p className="text-[10.5px] font-black uppercase tracking-[.12em] text-ds-accent-kicker">Estrutura do perfil</p>
+                <DialogTitle className="mt-1.5 text-xl font-black tracking-[-.02em] text-ds-ink">
+                  {structurePanel.kind === 'section' ? 'Nova seção' : structurePanel.kind === 'group' ? 'Novo grupo' : structurePanel.kind === 'subgroup' ? 'Novo subgrupo' : structurePanel.kind === 'rename_section' ? 'Renomear seção' : 'Remover campo'}
+                </DialogTitle>
+                <DialogDescription className="mt-1.5 text-xs font-medium leading-5 text-ds-ink-muted">
+                  {structurePanel.kind === 'delete_field'
+                    ? 'O campo sai do perfil quando as alterações forem salvas.'
+                    : structurePanel.kind === 'section'
+                      ? 'A seção organiza um conjunto de campos relacionados no perfil.'
+                      : structurePanel.kind === 'group'
+                        ? 'O grupo organiza campos relacionados dentro da seção selecionada.'
+                        : structurePanel.kind === 'subgroup'
+                          ? 'O subgrupo cria uma divisão adicional dentro do grupo selecionado.'
+                          : 'O novo nome será aplicado a todos os campos desta seção.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 bg-ds-page px-5 py-5 sm:px-6">
+                {structurePanel.kind === 'section' ? (
+                  <>
+                    <Field label="Nome da seção" htmlFor="profile-structure-section-name">
+                      <input id="profile-structure-section-name" autoFocus required value={structurePanel.sectionName} onChange={(event) => setStructurePanel((current) => current?.kind === 'section' ? { ...current, sectionName: event.target.value } : current)} className={fieldInputClass} placeholder="Ex.: Dados contratuais" />
+                    </Field>
+                    <Field label="Primeiro campo" requirement="opcional" htmlFor="profile-structure-section-field" hint="Se ficar vazio, o sistema cria um campo provisório para a seção.">
+                      <input id="profile-structure-section-field" value={structurePanel.fieldLabel} onChange={(event) => setStructurePanel((current) => current?.kind === 'section' ? { ...current, fieldLabel: event.target.value } : current)} className={fieldInputClass} placeholder="Novo campo" />
+                    </Field>
+                  </>
+                ) : structurePanel.kind === 'group' ? (
+                  <>
+                    <p className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2 text-xs font-bold text-ds-ink-muted">Seção: <span className="text-ds-ink">{structurePanel.section}</span></p>
+                    <Field label="Nome do grupo" htmlFor="profile-structure-group-name">
+                      <input id="profile-structure-group-name" autoFocus required value={structurePanel.groupLabel} onChange={(event) => setStructurePanel((current) => current?.kind === 'group' ? { ...current, groupLabel: event.target.value } : current)} className={fieldInputClass} placeholder="Ex.: Documentos" />
+                    </Field>
+                    <Field label="Primeiro campo" requirement="opcional" htmlFor="profile-structure-group-field">
+                      <input id="profile-structure-group-field" value={structurePanel.fieldLabel} onChange={(event) => setStructurePanel((current) => current?.kind === 'group' ? { ...current, fieldLabel: event.target.value } : current)} className={fieldInputClass} placeholder="Novo campo" />
+                    </Field>
+                  </>
+                ) : structurePanel.kind === 'subgroup' ? (
+                  <>
+                    <p className="rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2 text-xs font-bold text-ds-ink-muted">{structurePanel.section} <span className="px-1 text-ds-ink-faint">/</span> <span className="text-ds-ink">{structurePanel.group.label}</span></p>
+                    <Field label="Nome do subgrupo" htmlFor="profile-structure-subgroup-name">
+                      <input id="profile-structure-subgroup-name" autoFocus required value={structurePanel.subgroupLabel} onChange={(event) => setStructurePanel((current) => current?.kind === 'subgroup' ? { ...current, subgroupLabel: event.target.value } : current)} className={fieldInputClass} placeholder="Ex.: Validade" />
+                    </Field>
+                    <Field label="Primeiro campo" requirement="opcional" htmlFor="profile-structure-subgroup-field">
+                      <input id="profile-structure-subgroup-field" value={structurePanel.fieldLabel} onChange={(event) => setStructurePanel((current) => current?.kind === 'subgroup' ? { ...current, fieldLabel: event.target.value } : current)} className={fieldInputClass} placeholder="Novo campo" />
+                    </Field>
+                  </>
+                ) : structurePanel.kind === 'rename_section' ? (
+                  <Field label="Nome da seção" htmlFor="profile-structure-rename">
+                    <input id="profile-structure-rename" autoFocus required value={structurePanel.nextName} onChange={(event) => setStructurePanel((current) => current?.kind === 'rename_section' ? { ...current, nextName: event.target.value } : current)} className={fieldInputClass} />
+                  </Field>
                 ) : (
-                  <input value={showIfValue} disabled={!showIfRule} onChange={(event) => updateShowIf(editingKey, showIfRule?.field ?? '', event.target.value)} placeholder="Deixe vazio para preenchido" className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none disabled:bg-[#f7f7f9] disabled:text-[#b7b7c1]" />
+                  <div className="rounded-ds-btn-lg border border-ds-danger bg-ds-danger-bg px-4 py-3.5">
+                    <p className="text-sm font-black text-ds-danger">{structurePanel.label}</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-ds-danger">Valores já existentes não serão apagados automaticamente, mas o campo deixará de aparecer no perfil.</p>
+                  </div>
                 )}
-              </label>
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
-                <input type="checkbox" checked={editing.required === true} onChange={(event) => updateField(editingKey, { required: event.target.checked })} />
-                Obrigatório
-              </label>
-              <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
-                <input type="checkbox" checked={editing.lgpd?.requires_consent === true} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, requires_consent: event.target.checked } })} />
-                Exige consentimento
-              </label>
-              <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
-                <input type="checkbox" checked={editing.group?.repeatable?.enabled === true} disabled={!editing.group} onChange={(event) => updateGroupRepeatable(editingKey, event.target.checked)} />
-                Grupo com várias respostas
-              </label>
-            </div>
-          </div>
-        </div>
-      ) : null}
+              </div>
+              <DialogFooter className="flex-row justify-end gap-2 border-t border-ds-divider bg-ds-surface px-5 py-4 sm:space-x-0 sm:px-6">
+                <button type="button" onClick={() => setStructurePanel(null)} className="h-10 rounded-ds-md border border-ds-border bg-ds-input px-4 text-sm font-bold text-ds-ink-2 transition hover:bg-ds-muted">Cancelar</button>
+                <button type="submit" className={`h-10 rounded-ds-md px-5 text-sm font-black text-white transition ${structurePanel.kind === 'delete_field' ? 'bg-ds-danger hover:brightness-95' : 'bg-ds-modal hover:brightness-95'}`}>
+                  {structurePanel.kind === 'delete_field' ? 'Remover campo' : structurePanel.kind === 'rename_section' ? 'Salvar nome' : 'Criar'}
+                </button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editing && editingKey)} onOpenChange={(open) => { if (!open) closeFieldEditor(); }}>
+        {editing && editingKey ? (
+          <DialogContent
+            flush
+            hideClose
+            overlayClassName="bg-black/55 backdrop-blur-[2px]"
+            className="max-h-[92vh] overflow-hidden border-ds-border bg-ds-surface p-0 shadow-2xl sm:max-w-[900px]"
+          >
+            <form onSubmit={(event) => { event.preventDefault(); applyFieldEditor(); }} className="flex max-h-[92vh] min-h-0 flex-col">
+              <DialogHeader className="shrink-0 border-b border-ds-divider bg-ds-surface px-5 py-4 pr-5 sm:px-6 sm:py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[10.5px] font-black uppercase tracking-[.12em] text-ds-accent-kicker">Configuração do perfil</p>
+                    <DialogTitle className="mt-1.5 text-xl font-black tracking-[-.02em] text-ds-ink">Editar campo</DialogTitle>
+                    <DialogDescription className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ds-ink-muted">
+                      <span>Defina como o campo aparece, quem pode acessá-lo e como ele é tratado.</span>
+                      <span className="rounded-md bg-ds-muted px-2 py-1 font-mono text-[11px] font-bold text-ds-ink-2">{editingKey}</span>
+                    </DialogDescription>
+                  </div>
+                  <button type="button" onClick={closeFieldEditor} className="h-9 shrink-0 rounded-ds-md border border-ds-border bg-ds-input px-3 text-xs font-black text-ds-ink-muted transition hover:bg-ds-muted hover:text-ds-ink">
+                    Fechar
+                  </button>
+                </div>
+              </DialogHeader>
+
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-ds-page p-4 sm:p-5">
+                <FieldEditorSection title="Identificação e organização" description="Nome e posição do campo dentro da estrutura do perfil.">
+                  <Field label="Nome do campo" htmlFor="profile-field-name" error={!editing.label.trim() ? 'Informe o nome do campo.' : null}>
+                    <input id="profile-field-name" autoFocus value={editing.label} onChange={(event) => patchEditingDraft({ label: event.target.value })} className={fieldInputClass} />
+                  </Field>
+                  <Field label="Seção" htmlFor="profile-field-section" error={!editing.section.trim() ? 'Informe a seção.' : null}>
+                    <input id="profile-field-section" value={editing.section} onChange={(event) => patchEditingDraft({ section: event.target.value })} className={fieldInputClass} />
+                  </Field>
+                  <Field label="Grupo" requirement="opcional" htmlFor="profile-field-group" hint="Agrupa campos relacionados dentro da seção.">
+                    <input id="profile-field-group" value={editing.group?.label ?? ''} onChange={(event) => updateEditingGroup(event.target.value)} placeholder="Ex.: CNH ou Dependentes" className={fieldInputClass} />
+                  </Field>
+                  <Field label="Subgrupo" requirement="opcional" htmlFor="profile-field-subgroup" hint={editing.group ? 'Use quando o grupo precisar de uma divisão adicional.' : 'Defina um grupo antes de criar o subgrupo.'}>
+                    <input id="profile-field-subgroup" value={editing.subgroup?.label ?? ''} onChange={(event) => updateEditingSubgroup(event.target.value)} disabled={!editing.group} placeholder="Ex.: Validade da CNH" className={`${fieldInputClass} disabled:cursor-not-allowed disabled:bg-ds-muted disabled:text-ds-ink-faint`} />
+                  </Field>
+                </FieldEditorSection>
+
+                <FieldEditorSection title="Formato e preenchimento" description="Tipo de resposta, obrigatoriedade e comportamento de grupos repetíveis.">
+                  <Field label="Tipo de campo" htmlFor="profile-field-type">
+                    <StyledSelect
+                      id="profile-field-type"
+                      value={editing.type}
+                      onChange={(event) => {
+                        const type = event.target.value as FieldType;
+                        patchEditingDraft({
+                          type,
+                          ...(!['single_select', 'multi_select'].includes(type) ? { options: undefined } : {}),
+                        });
+                      }}
+                    >
+                      {editing.type === 'autonumber' ? <option value="autonumber">{TYPE_LABELS.autonumber}</option> : null}
+                      {FIELD_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
+                    </StyledSelect>
+                  </Field>
+                  {['single_select', 'multi_select'].includes(editing.type) ? (
+                    <Field label="Opções de resposta" htmlFor="profile-field-options" hint="Separe cada opção por vírgula.">
+                      <input id="profile-field-options" value={editing.options?.join(', ') ?? ''} onChange={(event) => patchEditingDraft({ options: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="Ex.: Sim, Não, Não se aplica" className={fieldInputClass} />
+                    </Field>
+                  ) : <div className="hidden md:block" />}
+                  <FieldEditorToggle
+                    checked={editing.required === true}
+                    label="Campo obrigatório"
+                    description="O perfil só será considerado completo quando este campo estiver preenchido."
+                    onChange={(required) => patchEditingDraft({ required })}
+                  />
+                  <FieldEditorToggle
+                    checked={editing.group?.repeatable?.enabled === true}
+                    disabled={!editing.group}
+                    label="Grupo com várias respostas"
+                    description={editing.group ? 'Permite cadastrar vários itens, como dependentes ou documentos.' : 'Disponível quando o campo pertence a um grupo.'}
+                    onChange={updateEditingGroupRepeatable}
+                  />
+                </FieldEditorSection>
+
+                <FieldEditorSection title="Acesso e alteração" description="Controle quem pode ver o campo e como o titular propõe mudanças.">
+                  <Field label="Visibilidade" htmlFor="profile-field-visibility" hint="As permissões efetivas seguem as Regras gerais de acesso.">
+                    <StyledSelect
+                      id="profile-field-visibility"
+                      value={normalizeFieldVisibility(editing.visibility)}
+                      onChange={(event) => {
+                        const visibility = event.target.value as NormalizedFieldVisibility;
+                        patchEditingDraft({
+                          visibility,
+                          lgpd: {
+                            ...defaultLgpd(editing.section, visibility),
+                            ...editing.lgpd,
+                            category: normalizeLgpdCategory(editing.lgpd?.category),
+                          },
+                        });
+                      }}
+                    >
+                      {VISIBILITIES.map((visibility) => <option key={visibility} value={visibility}>{VISIBILITY_LABELS[visibility]}</option>)}
+                    </StyledSelect>
+                  </Field>
+                  <Field
+                    label="Alteração pelo titular"
+                    htmlFor="profile-field-self-service"
+                    hint={SELF_SERVICE_POLICIES.find((policy) => policy.value === (editing.self_service_policy ?? 'inherit'))?.helper}
+                  >
+                    <StyledSelect id="profile-field-self-service" value={editing.self_service_policy ?? 'inherit'} onChange={(event) => patchEditingDraft({ self_service_policy: event.target.value as ProfileSelfServicePolicy })}>
+                      {SELF_SERVICE_POLICIES.map((policy) => <option key={policy.value} value={policy.value}>{policy.label}</option>)}
+                    </StyledSelect>
+                  </Field>
+                </FieldEditorSection>
+
+                <FieldEditorSection title="Privacidade e retenção" description="Classificação do dado e regras de tratamento. Isso não substitui a visibilidade.">
+                  <Field
+                    label="Natureza do dado"
+                    htmlFor="profile-field-lgpd-category"
+                    hint={(
+                      <span className="inline-flex items-center gap-1.5">
+                        A natureza jurídica é independente de quem pode visualizar o campo.
+                        <InfoTooltip title="Natureza do dado pela LGPD">
+                          <p>Dado pessoal identifica ou pode identificar uma pessoa. Dado pessoal sensível inclui informações como saúde, biometria, origem racial ou étnica, religião, filiação sindical, vida sexual e dados genéticos.</p>
+                        </InfoTooltip>
+                      </span>
+                    )}
+                  >
+                    <StyledSelect id="profile-field-lgpd-category" value={normalizeLgpdCategory(editing.lgpd?.category)} onChange={(event) => patchEditingDraft({ lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, category: event.target.value as LgpdCategory } })}>
+                      {Object.entries(LGPD_CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </StyledSelect>
+                  </Field>
+                  <Field label="Base legal" htmlFor="profile-field-legal-basis" hint="Fundamento usado para tratar este dado.">
+                    <StyledSelect id="profile-field-legal-basis" value={editing.lgpd?.legal_basis ?? 'legal_obligation'} onChange={(event) => patchEditingDraft({ lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, legal_basis: event.target.value as NonNullable<FieldMapEntry['lgpd']>['legal_basis'] } })}>
+                      {Object.entries(LEGAL_BASIS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </StyledSelect>
+                  </Field>
+                  <Field label="Retenção" htmlFor="profile-field-retention" hint="Prazo padrão antes da revisão ou eliminação do dado.">
+                    <StyledSelect id="profile-field-retention" value={editing.lgpd?.retention ?? 'employment_plus_5y'} onChange={(event) => patchEditingDraft({ lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, retention: event.target.value as NonNullable<FieldMapEntry['lgpd']>['retention'] } })}>
+                      {Object.entries(RETENTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </StyledSelect>
+                  </Field>
+                  <FieldEditorToggle
+                    checked={editing.lgpd?.requires_consent === true}
+                    label="Exige registro de consentimento"
+                    description="Use somente quando o consentimento for a base aplicável; obrigação legal e contrato normalmente não dependem dele."
+                    onChange={(requiresConsent) => patchEditingDraft({ lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, requires_consent: requiresConsent } })}
+                  />
+                </FieldEditorSection>
+
+                <FieldEditorSection title="Exibição condicional" description="Mostre este campo apenas quando outro campo atender à condição configurada.">
+                  <Field label="Aparece quando" htmlFor="profile-field-condition-controller" hint="Escolha “Sempre aparece” para remover a condição.">
+                    <StyledSelect id="profile-field-condition-controller" value={showIfRule?.field ?? ''} onChange={(event) => updateEditingShowIf(event.target.value, 'true')}>
+                      <option value="">Sempre aparece</option>
+                      {controllerOptions.map(([key, entry]) => <option key={key} value={key}>{entry.label}</option>)}
+                    </StyledSelect>
+                  </Field>
+                  <Field label="Valor da condição" htmlFor="profile-field-condition-value" hint={!showIfRule ? 'Selecione primeiro o campo que controla a exibição.' : undefined}>
+                    {fields[showIfRule?.field ?? '']?.type === 'boolean' ? (
+                      <StyledSelect id="profile-field-condition-value" value={showIfValue || 'true'} disabled={!showIfRule} onChange={(event) => updateEditingShowIf(showIfRule?.field ?? '', event.target.value)} className="disabled:cursor-not-allowed disabled:bg-ds-muted disabled:text-ds-ink-faint">
+                        <option value="true">Sim</option>
+                        <option value="false">Não</option>
+                      </StyledSelect>
+                    ) : (
+                      <input id="profile-field-condition-value" value={showIfValue} disabled={!showIfRule} onChange={(event) => updateEditingShowIf(showIfRule?.field ?? '', event.target.value)} placeholder="Vazio significa: quando estiver preenchido" className={`${fieldInputClass} disabled:cursor-not-allowed disabled:bg-ds-muted disabled:text-ds-ink-faint`} />
+                    )}
+                  </Field>
+                </FieldEditorSection>
+              </div>
+
+              <DialogFooter className="shrink-0 flex-row items-center justify-between gap-3 border-t border-ds-divider bg-ds-surface px-5 py-4 sm:justify-between sm:space-x-0 sm:px-6">
+                <p className="hidden text-xs font-medium text-ds-ink-muted sm:block">A alteração será adicionada ao rascunho da página.</p>
+                <div className="ml-auto flex items-center gap-2">
+                  <button type="button" onClick={closeFieldEditor} className="h-10 rounded-ds-md border border-ds-border bg-ds-input px-4 text-sm font-bold text-ds-ink-2 transition hover:bg-ds-muted">Cancelar</button>
+                  <button type="submit" disabled={!editing.label.trim() || !editing.section.trim()} className="h-10 rounded-ds-md bg-ds-modal px-5 text-sm font-black text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50">Aplicar ao campo</button>
+                </div>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

@@ -277,7 +277,7 @@ export function RestockPanel() {
                         className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 p-3 flex flex-col gap-2"
                       >
                         {/* Linha 1: nome do insumo */}
-                        <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 min-h-[2rem]">
+                        <p className="text-xs font-semibold text-foreground leading-tight line-clamp-2 min-h-8">
                           {baseProduct.name}
                         </p>
 

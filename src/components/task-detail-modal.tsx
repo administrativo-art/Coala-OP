@@ -19,6 +19,7 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useProfiles } from '@/hooks/use-profiles';
 import { useRouter } from 'next/navigation';
+import { safeInternalPath } from '@/lib/safe-return-path';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -123,7 +124,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const originLink = useMemo(() => {
     if (!task) return null;
     if (task.originLink) {
-      return task.originLink;
+      return safeInternalPath(task.originLink);
     }
     if (task.origin.kind === 'form_trigger') {
       return `/dashboard/forms/${task.origin.execution_id}/view`;
@@ -131,7 +132,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     if (task.origin.kind === 'purchase_receipt') {
       return '/dashboard/purchasing/receipts';
     }
-    return task.legacyLink ?? null;
+    return safeInternalPath(task.legacyLink);
   }, [task]);
 
   const isStockCountTask = task?.origin.kind === 'legacy' && task.origin.type === 'stock_count_approval';
@@ -287,7 +288,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
             <div className="space-y-2">
               {task.status === 'awaiting_approval' ? (
                 <div className="flex justify-end gap-2">
-                  <div className="flex-grow"><Textarea placeholder="Justificativa (obrigatório para rejeitar)" value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} /></div>
+                  <div className="grow"><Textarea placeholder="Justificativa (obrigatório para rejeitar)" value={rejectionNotes} onChange={(e) => setRejectionNotes(e.target.value)} /></div>
                   <Button variant="destructive" onClick={handleReject} disabled={!rejectionNotes}><X className="mr-2"/> Rejeitar</Button>
                   <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleApprove}><Check className="mr-2"/> Aprovar</Button>
                 </div>

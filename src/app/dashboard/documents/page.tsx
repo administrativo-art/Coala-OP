@@ -7,15 +7,12 @@ import { hasFormalizationPermission, type FormalizationAction } from "@/lib/hr-f
 
 const destinations = [
   {
-    title: "Gestão de documentos",
-    description: "Acesse separadamente os modelos e o gerador de documentos avulsos.",
-    href: "/dashboard/documents/management",
+    title: "Gerador de documentos",
+    description: "Gere documentos avulsos usando os modelos publicados nas configurações.",
+    href: "/dashboard/documents/generator",
     icon: FileStack,
     tone: "bg-violet-50 text-violet-700",
-    permissions: [
-      "templates.view",
-      "documents.generate",
-    ] as FormalizationAction[],
+    permissions: ["documents.generate"] as FormalizationAction[],
   },
   {
     title: "Documentos da empresa",
@@ -61,7 +58,7 @@ export default function DocumentsPage() {
           <Link
             key={href}
             href={href}
-            className="group flex min-h-32 items-start gap-3 rounded-lg border bg-white p-4 shadow-sm transition hover:border-teal-200 hover:shadow-md"
+            className="group flex min-h-32 items-start gap-3 rounded-lg border bg-white p-4 shadow-xs transition hover:border-teal-200 hover:shadow-md"
           >
             <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${tone}`}>
               <Icon className="h-5 w-5" />

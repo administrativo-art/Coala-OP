@@ -177,6 +177,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await user.getIdToken(true);
           void recordLoginAccess(user);
           const userData = fallbackUser ?? ({ id: userDocSnap!.id, ...userDocSnap!.data() } as User);
+          if (userData.isActive === false) {
+            await signOut(auth);
+            setAppUser(null);
+            setPermissions(defaultGuestPermissions);
+            setPermissionsReady(true);
+            setLoading(false);
+            return;
+          }
           setAppUser(userData);
         } else {
           await signOut(auth);
@@ -425,7 +433,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.error ?? "Erro ao atualizar usuário.");
+      const message = typeof payload?.error === "string"
+        ? payload.error
+        : typeof payload?.error?.message === "string"
+          ? payload.error.message
+          : "Erro ao atualizar usuário.";
+      throw new Error(message);
     }
   }, []);
   

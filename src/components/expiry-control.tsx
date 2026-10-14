@@ -75,7 +75,7 @@ const STATUS_FILTER_NAMES: Record<string, string> = {
 };
 
 const ROW_HOVER =
-  'transition-[transform,box-shadow,border-radius,background-color] duration-[180ms] ease-[cubic-bezier(.2,.8,.2,1)] hover:z-[3] hover:-translate-y-[3px] hover:rounded-[14px] hover:bg-white hover:shadow-[0_16px_36px_rgba(21,21,28,.16),0_2px_6px_rgba(21,21,28,.06)]';
+  'transition-[transform,box-shadow,border-radius,background-color] duration-180 ease-[cubic-bezier(.2,.8,.2,1)] hover:z-3 hover:translate-y-[-3px] hover:rounded-[14px] hover:bg-white hover:shadow-[0_16px_36px_rgba(21,21,28,.16),0_2px_6px_rgba(21,21,28,.06)]';
 
 const DARK_CONTROL =
   'flex h-12 items-center gap-2 whitespace-nowrap rounded-[14px] border border-white/15 bg-transparent px-4 text-[13.5px] font-bold text-[#f3f2ee] hover:bg-white/10';
@@ -145,9 +145,15 @@ function summarizeGroup(baseGroup: GroupedByBaseProduct) {
 type ExpiryControlProps = {
   onOpenHistory?: () => void;
   onOpenConsumption?: () => void;
+  /** Ações que antes ficavam no botão flutuante; agora moram no menu "Ações" do painel. */
+  onOpenWriteDown?: () => void;
+  onOpenTransfer?: () => void;
+  onOpenLabels?: () => void;
+  /** Voltar e título da tela, dentro do painel escuro (uma só massa escura por tela). */
+  heading?: React.ReactNode;
 };
 
-function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryControlProps) {
+function ExpiryControlContent({ onOpenHistory, onOpenConsumption, onOpenWriteDown, onOpenTransfer, onOpenLabels, heading }: ExpiryControlProps) {
   const { user, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
@@ -539,7 +545,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
   const renderTableContent = () => (
     <div className="overflow-auto rounded-[18px] border border-[#e3dfd6] bg-white">
       <div className="min-w-[980px]">
-        <div className="grid grid-cols-[minmax(0,2.4fr)_130px_minmax(0,1.3fr)_150px_170px_minmax(0,1.2fr)] gap-3.5 border-b border-[#e3dfd6] bg-[#f6f4ef] px-[18px] py-3 text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]">
+        <div className="grid grid-cols-[minmax(0,2.4fr)_130px_minmax(0,1.3fr)_150px_170px_minmax(0,1.2fr)] gap-3.5 border-b border-[#e3dfd6] bg-[#f6f4ef] px-[18px] py-3 text-[10.5px] font-extrabold uppercase tracking-widest text-[#9a9ba1]">
           <span>Insumo / marca</span><span>Lote</span><span>Local</span><span>Validade</span><span className="text-right">Quantidade</span><span>Reserva</span>
         </div>
         {groupedData.map((baseGroup) => {
@@ -764,6 +770,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
       <div className="mx-auto flex h-full w-full flex-col animate-in fade-in zoom-in-95">
         <div className="mx-auto w-full max-w-[1520px] px-4 pb-0 pt-3 sm:px-6">
           <div className="flex flex-col gap-[18px] rounded-[28px] bg-[#15151c] px-[26px] pb-5 pt-[22px] text-[#f3f2ee] shadow-[0_24px_60px_rgba(21,21,28,.18)]">
+            {heading}
             <span className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#f08bb1]">Estoque · {kioskLabel}</span>
 
             <div className="grid grid-cols-2 gap-1 border-b border-white/10 md:grid-cols-5">
@@ -802,7 +809,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Buscar por insumo base, produto, lote, cód. de barras…"
-                  className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-none placeholder:text-[#8e8d99]"
+                  className="min-w-0 flex-1 border-none bg-transparent text-[14.5px] text-white outline-hidden placeholder:text-[#8e8d99]"
                 />
                 {searchTerm && (
                   <button type="button" onClick={() => setSearchTerm('')} aria-label="Limpar busca" className="text-[#8e8d99] hover:text-white">
@@ -814,7 +821,7 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
                   onClick={() => setIsSearchScannerOpen(true)}
                   title="Escanear código de barras"
                   aria-label="Escanear código de barras para busca"
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-white/[.08] text-[#c8c7d0] hover:bg-white/15"
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-white/8 text-[#c8c7d0] hover:bg-white/15"
                 >
                   <Camera className="h-4 w-4" />
                 </button>
@@ -846,9 +853,13 @@ function ExpiryControlContent({ onOpenHistory, onOpenConsumption }: ExpiryContro
                   <button type="button" className={DARK_CONTROL}>Ações ▾</button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[220px] rounded-[14px] border-[#e3dfd6] bg-white p-1.5 shadow-[0_18px_44px_rgba(0,0,0,.24)]">
+                  {onOpenWriteDown && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenWriteDown}>Realizar baixa</DropdownMenuItem>}
+                  {onOpenTransfer && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenTransfer}>Realizar transferência</DropdownMenuItem>}
+                  {(onOpenWriteDown || onOpenTransfer) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
                   {onOpenHistory && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenHistory}>Consultar histórico</DropdownMenuItem>}
                   {onOpenConsumption && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenConsumption}>Consumo por período</DropdownMenuItem>}
-                  {(onOpenHistory || onOpenConsumption) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
+                  {onOpenLabels && <DropdownMenuItem className={MENU_ITEM} onSelect={onOpenLabels}>Configurar etiquetas</DropdownMenuItem>}
+                  {(onOpenHistory || onOpenConsumption || onOpenLabels) && <DropdownMenuSeparator className="mx-1.5 my-1 bg-[#efece6]" />}
                   <DropdownMenuItem className={MENU_ITEM} onSelect={handleExportPdf}>Exportar como PDF</DropdownMenuItem>
                   <DropdownMenuItem className={MENU_ITEM} disabled={groupedData.length === 0} onSelect={handleExportCsv}>Exportar como CSV</DropdownMenuItem>
                 </DropdownMenuContent>

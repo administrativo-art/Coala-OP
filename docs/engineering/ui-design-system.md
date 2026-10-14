@@ -40,7 +40,7 @@ Use a opção `back` de `PageHeader` nas páginas internas. Ela combina o `BackB
 - Informe um `fallbackHref` interno e validado.
 - Não posicione um botão grande “Voltar” entre as ações do lado direito.
 - Não crie um botão local quando `PageHeader` e `BackButton` atenderem ao caso.
-- Parâmetros `returnTo` devem aceitar apenas rotas internas previstas pelo fluxo.
+- Parâmetros `returnTo` e links persistidos de tarefas devem passar por [`safeInternalPath`/`resolveSafeReturnPath`](../../src/lib/safe-return-path.ts) antes de persistir ou navegar. Esquemas externos, URLs `//`, barras invertidas, controles e versões percent-encoded equivalentes caem no fallback interno.
 
 ## Competência
 

@@ -141,7 +141,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onScanSuccess }: Barco
                         onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitManualCode(); } }}
                         placeholder="Ou digite o código"
                         inputMode="numeric"
-                        className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[.07] px-3.5 text-sm text-white outline-none placeholder:text-[#8e8d99] focus:border-[#f08bb1]"
+                        className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[.07] px-3.5 text-sm text-white outline-hidden placeholder:text-[#8e8d99] focus:border-[#f08bb1]"
                     />
                     <button type="button" onClick={submitManualCode} disabled={!manualCode.trim()} className="h-11 whitespace-nowrap rounded-xl bg-[#e0457f] px-4 text-[13.5px] font-extrabold text-white hover:bg-[#c93a6f] disabled:opacity-50">Buscar</button>
                 </div>

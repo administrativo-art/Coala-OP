@@ -1,0 +1,85 @@
+import 'server-only';
+
+import type { ServerUserContext } from '@/lib/auth-server';
+import { resolveDPShiftAssignment } from '@/lib/dp-external-coverage';
+import { dbAdmin } from '@/lib/firebase-admin';
+import { AppError } from '@/lib/observability/app-error';
+import { canAccessUnit } from '@/lib/unit-access';
+
+const QUERY_MULTIPLIER = 3;
+export const EXTERNAL_CANDIDATE_MAX_RESULTS = 20;
+export const EXTERNAL_CANDIDATE_MAX_READS = EXTERNAL_CANDIDATE_MAX_RESULTS * QUERY_MULTIPLIER + 1;
+
+export async function listExternalCoverageCandidates(params: {
+  context: ServerUserContext;
+  scheduleId: string;
+  search: string;
+  limit: number;
+}) {
+  const { context, scheduleId, search, limit } = params;
+  if (!context.isDefaultAdmin && (
+    context.permissions.dp.schedules.view !== true
+    || context.permissions.dp.schedules.edit !== true
+    || context.permissions.dp.schedules.assignExternal !== true
+  )) {
+    throw new AppError({ code: 'DP_EXTERNAL_CANDIDATES_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para consultar coberturas externas.' });
+  }
+
+  const schedule = await dbAdmin.collection('dp_schedules').doc(scheduleId).get();
+  if (!schedule.exists) throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
+  const executionUnitId = schedule.get('unitId');
+  if (typeof executionUnitId !== 'string' || !executionUnitId) {
+    throw new AppError({ code: 'DP_EXTERNAL_CANDIDATES_UNIT_REQUIRED', kind: 'VALIDATION', safeMessage: 'A escala precisa estar vinculada a uma unidade.' });
+  }
+  if (!canAccessUnit(context.userDoc, executionUnitId, { isDefaultAdmin: context.isDefaultAdmin })) {
+    throw new AppError({ code: 'DP_EXTERNAL_CANDIDATES_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade desta escala.' });
+  }
+  const unit = await dbAdmin.collection('dp_units').doc(executionUnitId).get();
+  if (!unit.exists || unit.get('isArchived') === true) {
+    throw new AppError({ code: 'DP_SHIFT_UNIT_UNAVAILABLE', kind: 'EXPECTED_BUSINESS', safeMessage: 'A unidade da escala não está disponível.' });
+  }
+
+  const boundedLimit = Math.min(Math.max(limit, 1), EXTERNAL_CANDIDATE_MAX_RESULTS);
+  const snapshot = await dbAdmin.collection('users')
+    .orderBy('username')
+    .startAt(search)
+    .endAt(`${search}\uf8ff`)
+    .select('username', 'isActive', 'unitId', 'unitIds', 'assignedKioskIds', 'jobRoleId', 'jobRoleName', 'jobFunctionIds', 'jobFunctionNames', 'shiftDefinitionId')
+    .limit(boundedLimit * QUERY_MULTIPLIER + 1)
+    .get();
+
+  const candidates = snapshot.docs.flatMap((document) => {
+    if (document.get('isActive') === false) return [];
+    try {
+      const assignment = resolveDPShiftAssignment({
+        executionUnitId,
+        executionUnitExternalId: typeof unit.get('externalId') === 'string' ? unit.get('externalId') : undefined,
+        user: document.data(),
+      });
+      if (assignment.assignmentKind !== 'external_coverage') return [];
+      return [{
+        id: document.id,
+        username: String(document.get('username') ?? ''),
+        originUnitId: assignment.originUnitId,
+        jobRoleId: typeof document.get('jobRoleId') === 'string' ? document.get('jobRoleId') : undefined,
+        jobRoleName: typeof document.get('jobRoleName') === 'string' ? document.get('jobRoleName') : undefined,
+        jobFunctionIds: Array.isArray(document.get('jobFunctionIds')) ? document.get('jobFunctionIds') : [],
+        jobFunctionNames: Array.isArray(document.get('jobFunctionNames')) ? document.get('jobFunctionNames') : [],
+        shiftDefinitionId: typeof document.get('shiftDefinitionId') === 'string' ? document.get('shiftDefinitionId') : undefined,
+      }];
+    } catch {
+      return [];
+    }
+  }).slice(0, boundedLimit);
+
+  const originIds = [...new Set(candidates.map((candidate) => candidate.originUnitId))];
+  const origins = originIds.length
+    ? await dbAdmin.getAll(...originIds.map((id) => dbAdmin.collection('dp_units').doc(id)))
+    : [];
+  const originNameById = new Map(origins.filter((origin) => origin.exists).map((origin) => [origin.id, String(origin.get('name') ?? origin.id)]));
+
+  return {
+    candidates: candidates.map((candidate) => ({ ...candidate, originUnitName: originNameById.get(candidate.originUnitId) ?? candidate.originUnitId })),
+    truncated: snapshot.size > boundedLimit * QUERY_MULTIPLIER,
+  };
+}

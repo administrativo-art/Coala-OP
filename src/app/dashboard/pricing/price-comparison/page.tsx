@@ -1,99 +1,32 @@
 "use client";
 
-import { useState } from 'react';
 import { BackButton } from '@/components/navigation/back-button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { PriceComparisonTable } from '@/components/price-comparison-table';
-import { CompetitorManagementModal } from '@/components/competitor-management-modal';
-import { CompetitorProductManagementModal } from '@/components/competitor-product-management-modal';
-import { LineChart, SlidersHorizontal, Group, Users, Menu } from 'lucide-react';
-import { CompetitorSelectionModal } from '@/components/competitor-selection-modal';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useAuth } from "@/hooks/use-auth";
+import { CompetitorsWorkspace } from '@/components/competitors/competitors-workspace';
 import { PermissionGuard } from "@/components/permission-guard";
+import { useAuth } from "@/hooks/use-auth";
 
-
+/** Mesmo espaço de trabalho da aba Concorrentes em Configurações → Comercial. */
 export default function PriceComparisonPage() {
   const { permissions } = useAuth();
-  const [isCompetitorModalOpen, setIsCompetitorModalOpen] = useState(false);
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
-  const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<string[]>([]);
 
   return (
     <PermissionGuard allowed={permissions.pricing.view}>
-        <div className="mx-auto w-full max-w-[1600px] space-y-6">
-        <div className="flex items-center gap-4 mb-2">
-            <BackButton
-                fallbackHref="/dashboard/pricing"
-                variant="ghost"
-                iconOnly
-                className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
-                ariaLabel="Voltar para gestão de preços e margens"
-            />
-            <div>
-                <h1 className="text-3xl font-bold">Estudo de preço</h1>
-                <p className="text-sm text-muted-foreground">Voltar para gestão de preços e margens</p>
-            </div>
-            </div>
-        <Card>
-            <CardHeader>
-                <div className="flex justify-between items-start">
-                <div>
-                    <CardTitle className="flex items-center gap-2">
-                        <LineChart />
-                        Estudo de preço
-                    </CardTitle>
-                    <CardDescription>
-                        Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.
-                    </CardDescription>
-                </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon">
-                        <Menu className="h-4 w-4" />
-                    </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setIsSelectionModalOpen(true)}>
-                        <SlidersHorizontal className="mr-2 h-4 w-4" />
-                        Selecionar concorrentes
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsProductModalOpen(true)}>
-                        <Group className="mr-2 h-4 w-4" />
-                        Mercadorias dos Concorrentes
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsCompetitorModalOpen(true)}>
-                        <Users className="mr-2 h-4 w-4" />
-                        Gerenciar Concorrentes
-                    </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <PriceComparisonTable 
-                selectedCompetitorIds={selectedCompetitorIds} 
-                />
-            </CardContent>
-        </Card>
-            
-            <CompetitorManagementModal
-                isOpen={isCompetitorModalOpen}
-                onClose={() => setIsCompetitorModalOpen(false)}
-            />
-            <CompetitorProductManagementModal
-                isOpen={isProductModalOpen}
-                onClose={() => setIsProductModalOpen(false)}
-            />
-            <CompetitorSelectionModal
-                isOpen={isSelectionModalOpen}
-                onClose={() => setIsSelectionModalOpen(false)}
-                selectedCompetitorIds={selectedCompetitorIds}
-                setSelectedCompetitorIds={setSelectedCompetitorIds}
-            />
+      <div className="mx-auto w-full max-w-[1600px] space-y-6">
+        <div className="mb-2 flex items-center gap-4">
+          <BackButton
+            fallbackHref="/dashboard/pricing"
+            variant="ghost"
+            iconOnly
+            className="h-auto w-auto rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted"
+            ariaLabel="Voltar para gestão de preços e margens"
+          />
+          <div>
+            <h1 className="text-3xl font-bold">Estudo de preço</h1>
+            <p className="text-sm text-muted-foreground">Compare os preços das suas mercadorias com os da concorrência para se manter competitivo.</p>
+          </div>
         </div>
+        <CompetitorsWorkspace />
+      </div>
     </PermissionGuard>
   );
 }

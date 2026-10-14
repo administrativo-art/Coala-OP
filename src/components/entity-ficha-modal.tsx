@@ -61,9 +61,9 @@ function DetailGroup({ title, onEdit, rows }: { title: string; onEdit: () => voi
       </header>
       <div className="grid grid-cols-1 sm:grid-cols-2">
         {rows.map((row) => (
-          <div key={row.label} className={cn('min-w-0 border-t border-[#f6f4ef] px-4 py-3 first:border-t-0', row.full && 'sm:col-span-2', !row.full && 'sm:[&:nth-child(2)]:border-t-0')}>
+          <div key={row.label} className={cn('min-w-0 border-t border-[#f6f4ef] px-4 py-3 first:border-t-0', row.full && 'sm:col-span-2', !row.full && 'sm:nth-2:border-t-0')}>
             <p className="text-[11.5px] text-[#8a8f99]">{row.label}</p>
-            <div className={cn('mt-1 break-words text-[13.5px] font-bold text-[#1a1b1f]', row.mono && 'font-mono text-[13px]', row.tone && toneClass[row.tone])}>{row.value || '—'}</div>
+            <div className={cn('mt-1 wrap-break-word text-[13.5px] font-bold text-[#1a1b1f]', row.mono && 'font-mono text-[13px]', row.tone && toneClass[row.tone])}>{row.value || '—'}</div>
           </div>
         ))}
       </div>
@@ -269,8 +269,8 @@ export function EntityFichaModal({ open, onOpenChange, entity, asoClinic, onEdit
               {entity.imageUrl ? <Image src={entity.imageUrl} alt="" fill sizes="92px" className="object-cover" unoptimized /> : initials}
             </div>
             <div className="flex flex-col gap-2">
-              <h2 className="break-words text-[28px] font-extrabold leading-[1.05] tracking-[-.03em]">{name}</h2>
-              {isPJ && entity.fantasyName ? <span className="break-words text-[12.5px] text-[#a3a2ad]">{entity.fantasyName}</span> : null}
+              <h2 className="wrap-break-word text-[28px] font-extrabold leading-[1.05] tracking-[-.03em]">{name}</h2>
+              {isPJ && entity.fantasyName ? <span className="wrap-break-word text-[12.5px] text-[#a3a2ad]">{entity.fantasyName}</span> : null}
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {tags.map((tag) => <span key={tag.label} className={cn('whitespace-nowrap rounded-full px-2.5 py-[3px] text-[11.5px] font-bold', tag.className)}>{tag.label}</span>)}
               </div>
@@ -285,7 +285,7 @@ export function EntityFichaModal({ open, onOpenChange, entity, asoClinic, onEdit
             </div>
             <div className="mt-auto flex flex-col gap-1.5">
               {quick.map((item) => (
-                <a key={item.href} href={item.href} className="flex min-w-0 items-center gap-2.5 rounded-xl bg-white/[.06] px-3 py-2.5 text-[12.5px] font-semibold text-[#f3f2ee] hover:bg-white/10">
+                <a key={item.href} href={item.href} className="flex min-w-0 items-center gap-2.5 rounded-xl bg-white/6 px-3 py-2.5 text-[12.5px] font-semibold text-[#f3f2ee] hover:bg-white/10">
                   <span className="w-[22px] text-center text-[#b9b9ff]">{item.icon}</span>
                   <span className="truncate">{item.value}</span>
                 </a>
@@ -349,7 +349,7 @@ export function EntityFichaModal({ open, onOpenChange, entity, asoClinic, onEdit
                 {currentTab === 'general' && entity.notes ? (
                   <section className="rounded-2xl border border-[#e6e2da] bg-white px-4 py-3">
                     <h3 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-[#8a8f99]">Observações</h3>
-                    <p className="mt-1.5 whitespace-pre-wrap break-words text-[13.5px] text-[#1a1b1f]">{entity.notes}</p>
+                    <p className="mt-1.5 whitespace-pre-wrap wrap-break-word text-[13.5px] text-[#1a1b1f]">{entity.notes}</p>
                   </section>
                 ) : null}
               </div>

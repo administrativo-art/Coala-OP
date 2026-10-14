@@ -5,7 +5,8 @@ import { Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/layout/page-header";
+import { PageHero } from "@/components/patterns/page-hero";
+import { HeroBackButton } from "@/components/patterns/hero-back-button";
 import { Button } from "@/components/ui/button";
 import { FinancialAccessGuard } from "../components/financial-access-guard";
 import { expensesReturnHref } from "../lib/reconciliation-navigation";
@@ -20,23 +21,19 @@ export function BankStatementsPage() {
     return <PageContainer surface><FinancialAccessGuard title="Extratos bancários" description="Seu perfil não possui permissão para consultar auditorias de extratos." /></PageContainer>;
   }
   return <PageContainer variant="wide" surface className="space-y-6 pb-10">
-    <PageHeader
+    <PageHero
+      kicker="Financeiro · Conciliação"
       title="Extratos bancários"
-      back={{
-        fallbackHref: expensesReturnHref(searchParams.get("returnTo")),
-        parentLabel: "Despesas",
-      }}
-      actions={permissions.financial?.audits?.import === true ? (
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => setImportDialogOpen(true)}
-          className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]"
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          Importar extrato
-        </Button>
-      ) : null}
+      subtitle="Auditoria do extrato e conciliação com as despesas."
+      actions={<>
+        <HeroBackButton fallbackHref={expensesReturnHref(searchParams.get("returnTo"))} parentLabel="Despesas" />
+        {permissions.financial?.audits?.import === true ? (
+          <Button type="button" variant="primary-page" size="md" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar extrato
+          </Button>
+        ) : null}
+      </>}
     />
     <FinancialImportPage
       embedded

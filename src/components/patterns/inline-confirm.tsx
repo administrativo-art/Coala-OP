@@ -10,6 +10,8 @@ export interface InlineConfirmProps {
   message: React.ReactNode
   confirmLabel?: string
   cancelLabel?: string
+  /** Texto do botão enquanto `loading`. */
+  loadingLabel?: string
   loading?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -23,6 +25,7 @@ export function InlineConfirm({
   message,
   confirmLabel = "Excluir",
   cancelLabel = "Cancelar",
+  loadingLabel = "Excluindo…",
   loading,
   onConfirm,
   onCancel,
@@ -55,11 +58,11 @@ export function InlineConfirm({
           ref={cancelRef}
           onClick={onCancel}
           disabled={loading}
-          className="h-8 rounded-ds-sm border border-ds-confirm-border bg-white px-3 text-xs font-bold text-ds-confirm-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+          className="h-8 rounded-ds-sm border border-ds-confirm-border bg-white px-3 text-xs font-bold text-ds-confirm-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
         >
           {cancelLabel}
         </button>
-        <Button type="button" variant="danger" size="xs" loading={loading} loadingLabel="Excluindo…" onClick={onConfirm}>
+        <Button type="button" variant="danger" size="xs" loading={loading} loadingLabel={loadingLabel} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>

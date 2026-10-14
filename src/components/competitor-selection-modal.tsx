@@ -92,7 +92,7 @@ export function CompetitorSelectionModal({ isOpen, onClose, selectedCompetitorId
                         return (
                             <AccordionItem value={group.id} key={group.id} className="border rounded-lg">
                                 <div className="flex items-center p-3">
-                                    <div className="flex items-center space-x-3 flex-shrink-0 pr-2">
+                                    <div className="flex items-center space-x-3 shrink-0 pr-2">
                                         <Checkbox
                                             id={`group-${group.id}`}
                                             checked={allInGroupSelected || (someInGroupSelected ? 'indeterminate' : false)}

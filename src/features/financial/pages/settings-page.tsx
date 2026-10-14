@@ -3,11 +3,9 @@
 import { BookMarked, Building2, Layers3, Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
-import AccountPlansManagement from "@/features/financial/components/settings/account-plans-management";
+import { AccountingSettings } from "@/features/financial/components/settings/accounting-settings";
 import BankAccountsManagement from "@/features/financial/components/settings/bank-accounts-management";
-import ExpenseDescriptionsManagement from "@/features/financial/components/settings/expense-descriptions-management";
 import ImportAliasesManagement from "@/features/financial/components/settings/import-aliases-management";
-import ResultCentersManagement from "@/features/financial/components/settings/result-centers-management";
 import BudgetsManagement from "@/features/financial/components/settings/budgets-management";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -27,7 +25,7 @@ export function FinancialSettingsPage() {
     <div className="space-y-6">
       <Tabs defaultValue="accounting" className="w-full">
         <div className="flex justify-end">
-          <TabsList className="grid h-auto w-full max-w-[680px] grid-cols-4 rounded-2xl border bg-background p-1 shadow-sm">
+          <TabsList className="grid h-auto w-full max-w-[680px] grid-cols-4 rounded-2xl border bg-background p-1 shadow-xs">
             <TabsTrigger value="accounting" className="rounded-xl px-4 py-2.5 text-sm font-semibold">
               <span className="inline-flex items-center gap-2">
                 <BookMarked className="h-4 w-4" />
@@ -52,12 +50,14 @@ export function FinancialSettingsPage() {
           </TabsList>
         </div>
 
-        <TabsContent value="accounting" className="mt-4 space-y-6">
-          <AccountPlansManagement canManage={permissions.financial?.settings?.manageAccountPlans} />
-          <ResultCentersManagement canManage={permissions.financial?.settings?.manageResultCenters} />
-          {permissions.financial?.settings?.manageExpenseDescriptions ? (
-            <ExpenseDescriptionsManagement canManage={permissions.financial?.settings?.manageExpenseDescriptions} />
-          ) : null}
+        <TabsContent value="accounting" className="mt-4">
+          <AccountingSettings
+            permissions={{
+              manageAccountPlans: permissions.financial?.settings?.manageAccountPlans,
+              manageResultCenters: permissions.financial?.settings?.manageResultCenters,
+              manageExpenseDescriptions: permissions.financial?.settings?.manageExpenseDescriptions,
+            }}
+          />
         </TabsContent>
         <TabsContent value="accounts" className="mt-4">
           <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />

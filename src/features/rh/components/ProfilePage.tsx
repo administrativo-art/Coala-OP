@@ -10,6 +10,7 @@ import { AuditLogTab } from './AuditLogTab';
 import { SectionEditModal } from './SectionEditModal';
 import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
 import { EmployeeProbationCard } from './EmployeeProbationCard';
+import { ProfileChangeRequestsCard } from './ProfileChangeRequestsCard';
 import { canEditField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
@@ -52,7 +53,8 @@ function Skeleton({ className }: { className: string }) {
 }
 
 export function ProfilePage({ bizneoEmployeeId }: Props) {
-  const profileState  = useEmployeeProfile(bizneoEmployeeId);
+  const [reloadKey, setReloadKey] = useState(0);
+  const profileState  = useEmployeeProfile(bizneoEmployeeId, reloadKey);
   const [tab, setTab] = useState<Tab>('perfil');
   const [activeSection, setActiveSection]   = useState<string>('');
   const [editKey, setEditKey]               = useState<string | null>(null);
@@ -117,6 +119,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
     consentimento_imagem_voz,
     ciencia_privacidade_onboarding,
     periodo_experiencia,
+    changeRequests,
   } = profileState.data;
   const role = cache.rh_role as RhRole;
   const visibilityContext: FieldVisibilityContext = {
@@ -214,6 +217,14 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
         {/* Tab: Perfil */}
         {tab === 'perfil' && (
           <div className="space-y-3">
+            <ProfileChangeRequestsCard
+              requests={changeRequests.filter((request) => {
+                const entry = fieldMap.fields[request.fieldKey];
+                return entry ? canEditField(entry, role, visibilityContext, fieldMap.access_matrix) : false;
+              })}
+              canReview={role !== 'employee'}
+              onReviewed={() => setReloadKey((current) => current + 1)}
+            />
             <ImageVoiceConsentCard
               employeeId={employee.bizneo_employee_id}
               initialConsent={consentimento_imagem_voz}

@@ -17,9 +17,9 @@ test('Firebase CLI keeps the callable minimatch and brace-expansion APIs used by
   assert.equal(minimatch('foo', '{foo,bar}'), true);
 
   const { readdirRecursive } = firebaseRequire('firebase-tools/lib/fsAsync.js') as {
-    readdirRecursive: (options: { path: string; ignore: string[]; maxDepth: number }) => Promise<Array<{ name: string }>>;
+    readdirRecursive: (options: { path: string; ignoreStrings: string[]; maxDepth: number }) => Promise<Array<{ name: string }>>;
   };
-  const files = await readdirRecursive({ path: 'scripts', ignore: ['*.mjs'], maxDepth: 1 });
+  const files = await readdirRecursive({ path: 'scripts', ignoreStrings: ['*.mjs'], maxDepth: 1 });
   assert.ok(files.length > 0);
   assert.ok(files.every((file) => !file.name.endsWith('.mjs')));
 });

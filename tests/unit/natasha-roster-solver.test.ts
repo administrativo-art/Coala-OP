@@ -21,12 +21,21 @@ function openDay(plan: ReturnType<typeof fixtures>['plan'], date: string, startT
   day.windows = [{ startTime, endTime, minimumPeople: 1 }];
 }
 
+function addEmployeeWithJourney(
+  inputs: ReturnType<typeof fixtures>['inputs'],
+  employee: ReturnType<typeof fixtures>['inputs']['employees'][number],
+) {
+  inputs.employees.push(employee);
+  const source = structuredClone(inputs.journeyResolution.people[0]);
+  source.employeeId = employee.id;
+  source.employeeName = employee.id;
+  inputs.journeyResolution.people.push(source);
+}
+
 test('gera alternativas distintas, determinísticas e mantém sexta fixa', () => {
   const { snapshot, plan, inputs } = fixtures();
-  inputs.employees.push(
-    { id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] },
-    { id: 'bia', active: true, allowedUnitIds: ['matriz'], roleIds: [] },
-  );
+  addEmployeeWithJourney(inputs, { id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
+  addEmployeeWithJourney(inputs, { id: 'bia', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
   openDay(plan, '2026-10-03', '09:00', '17:00');
   inputs.positions.push({ id: 'm-03', unitId: 'matriz', date: '2026-10-03', startTime: '09:00', endTime: '17:00', slot: 'single', requiredRoleId: null });
   const first = generateNatashaAlternatives(snapshot, plan, inputs, { minDifferentAssignments: 1 });
@@ -45,7 +54,7 @@ test('gera alternativas distintas, determinísticas e mantém sexta fixa', () =>
 
 test('11h entre setembro e outubro e compromisso de novembro eliminam candidato', () => {
   const { snapshot, plan, inputs } = fixtures();
-  inputs.employees.push({ id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
+  addEmployeeWithJourney(inputs, { id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
   snapshot.shifts.push({ id: 'sep-close', employeeId: 'ana', unitId: 'matriz', date: '2026-09-30', startTime: '14:00', endTime: '22:00', slot: 'closing' });
   openDay(plan, '2026-10-01', '08:00', '16:00');
   inputs.positions.push({ id: 'm-01', unitId: 'matriz', date: '2026-10-01', startTime: '08:00', endTime: '16:00', slot: 'opening', requiredRoleId: null });
@@ -60,7 +69,7 @@ test('11h entre setembro e outubro e compromisso de novembro eliminam candidato'
 
 test('data fixa, férias e ausência de solução são tratadas como restrições', () => {
   const { snapshot, plan, inputs } = fixtures();
-  inputs.employees.push({ id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
+  addEmployeeWithJourney(inputs, { id: 'ana', active: true, allowedUnitIds: ['matriz'], roleIds: [] });
   openDay(plan, '2026-10-03', '09:00', '17:00');
   inputs.positions.push({ id: 'm-03', unitId: 'matriz', date: '2026-10-03', startTime: '09:00', endTime: '17:00', slot: 'single', requiredRoleId: null });
   snapshot.fixedAssignments.push({ employeeId: 'ana', unitId: 'matriz', date: '2026-10-03' });
@@ -102,16 +111,15 @@ test('preferência configurada favorece Sara nos intermediários dos dois quiosq
   }
   plan.expectedUnitIds.push('tirirical', 'shopping');
   plan.units.push(tirirical, shopping);
+  inputs.journeyResolution.unitIds.push('tirirical', 'shopping');
   const tDay = tirirical.days.find((item) => item.date === '2026-10-03')!;
   tDay.status = 'open';
   tDay.windows = [{ startTime: '12:00', endTime: '16:00', minimumPeople: 1 }];
   const sDay = shopping.days.find((item) => item.date === '2026-10-10')!;
   sDay.status = 'open';
   sDay.windows = [{ startTime: '12:00', endTime: '16:00', minimumPeople: 1 }];
-  inputs.employees.push(
-    { id: 'sara', active: true, allowedUnitIds: ['tirirical', 'shopping'], roleIds: [] },
-    { id: 'outra', active: true, allowedUnitIds: ['tirirical', 'shopping'], roleIds: [] },
-  );
+  addEmployeeWithJourney(inputs, { id: 'sara', active: true, allowedUnitIds: ['tirirical', 'shopping'], roleIds: [] });
+  addEmployeeWithJourney(inputs, { id: 'outra', active: true, allowedUnitIds: ['tirirical', 'shopping'], roleIds: [] });
   inputs.positions.push(
     { id: 't-03', unitId: 'tirirical', date: '2026-10-03', startTime: '12:00', endTime: '16:00', slot: 'intermediate', requiredRoleId: null },
     { id: 's-10', unitId: 'shopping', date: '2026-10-10', startTime: '12:00', endTime: '16:00', slot: 'intermediate', requiredRoleId: null },

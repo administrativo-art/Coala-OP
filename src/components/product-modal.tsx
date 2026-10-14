@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Trash2, Download } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { getPricingCommercialStatus } from '@/lib/pricing-insights';
 import { useAuth } from '@/hooks/use-auth';
@@ -108,10 +107,10 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
   const isViewOnlyMode = isCompleteSheetMode || isInstructionMode;
   const commercialStatus = getPricingCommercialStatus(simulation.salePrice, simulation.totalCmv || 0, simulation.profitGoal);
   const statusPresentation = {
-    loss: { label: 'Prejuízo', className: 'border-red-200 bg-red-50 text-red-700' },
-    below: { label: 'Abaixo da meta', className: 'border-orange-200 bg-orange-50 text-orange-700' },
-    met: { label: 'Na meta', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-    none: { label: 'Sem meta', className: 'border-slate-200 bg-slate-50 text-slate-600' },
+    loss: { label: 'Prejuízo', className: 'bg-ds-danger-bg text-ds-danger' },
+    below: { label: 'Abaixo da meta', className: 'bg-ds-warn-bg text-ds-warn' },
+    met: { label: 'Na meta', className: 'bg-ds-ok-bg text-ds-ok' },
+    none: { label: 'Sem meta', className: 'bg-ds-neutral-bg text-ds-neutral' },
   }[commercialStatus];
   const categoryName = simulation.categoryIds?.[0]
     ? categories.find((category) => category.id === simulation.categoryIds?.[0])?.name ?? 'Sem categoria'
@@ -120,29 +119,30 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[90vh] w-[calc(100vw-2rem)] max-w-[900px] flex-col overflow-hidden rounded-[22px] border-0 p-0 shadow-2xl sm:max-w-[900px]">
+        <DialogContent className="flex h-[90vh] w-[calc(100vw-2rem)] max-w-[900px] flex-col gap-0 overflow-hidden rounded-ds-modal border-0 bg-ds-page p-0 font-ds shadow-ds-modal sm:max-w-[900px]">
           <DialogDescription className="sr-only">
             {isInstructionMode ? 'Ficha técnica de instrução da mercadoria.' : isCompleteSheetMode ? 'Ficha técnica completa da mercadoria.' : 'Edição de custos, preços e ficha técnica da mercadoria.'}
           </DialogDescription>
-          {simulation.cmvComplete === false && <p role="alert" className="mx-6 mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">CMV incompleto: confira ingredientes e custos. Os valores e margens desta ficha são uma prévia parcial.</p>}
-          {/* Header */}
-          <div className="flex-shrink-0 border-b border-[#eeece7] px-6 py-5 pr-14">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-3">
-                   <DialogTitle className="text-xl font-black tracking-tight text-slate-950">{simulation.name}</DialogTitle>
-                   <Badge variant="outline" className={cn('rounded-full text-[10px] font-black uppercase', statusPresentation.className)}>{statusPresentation.label}</Badge>
-                   {isViewOnlyMode ? <Badge variant="outline" className="rounded-full border-blue-200 bg-blue-50 text-[10px] font-black uppercase text-blue-700">{isInstructionMode ? 'Ficha de instrução' : 'Ficha completa'}</Badge> : null}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  SKU <span className="font-mono font-bold text-slate-600">{simulation.ppo?.sku || 'N/A'}</span> · {categoryName}
-                </p>
-              </div>
+          <header className="shrink-0 bg-ds-dark px-6 py-5 pr-14 text-ds-on-dark">
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">
+              {isInstructionMode ? 'Ficha de instrução' : isCompleteSheetMode ? 'Ficha completa' : 'Custos e preços'}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <DialogTitle className="text-xl font-extrabold">{simulation.name}</DialogTitle>
+              <span className={cn('inline-flex h-[21px] items-center rounded-ds-pill px-[9px] text-[11.5px] font-bold', statusPresentation.className)}>{statusPresentation.label}</span>
             </div>
-          </div>
+            <p className="mt-0.5 text-[12.5px] text-ds-on-dark-sub">
+              SKU <span className="font-ds-mono font-bold text-ds-on-dark-2">{simulation.ppo?.sku || 'N/A'}</span> · {categoryName}
+            </p>
+          </header>
 
-          {/* Body */}
-          <div className="flex-1 overflow-hidden">
+          {simulation.cmvComplete === false && (
+            <p role="alert" className="mx-6 mt-4 rounded-ds-md border border-ds-alert-border bg-ds-alert-bg p-3 text-[13px] font-semibold text-ds-alert-ink">
+              CMV incompleto: confira ingredientes e custos. Os valores e margens desta ficha são uma prévia parcial.
+            </p>
+          )}
+
+          <div className="min-h-0 flex-1 overflow-hidden">
             {isViewOnlyMode ? (
               <FullTechnicalSheetView simulation={simulation} variant={isInstructionMode ? 'instruction' : 'complete'} />
             ) : (
@@ -150,17 +150,11 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
             )}
           </div>
 
-          {/* Footer */}
-          <div className="flex flex-shrink-0 items-center justify-between border-t border-[#eeece7] bg-[#faf9f6] px-6 py-4">
-            <div className="flex gap-2">
+          <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-ds-border bg-ds-warm px-6 py-4">
+            <div>
               {canDeleteSheet && (
-                <Button 
-                  variant="ghost" 
-                  className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                  onClick={() => setIsDeleteConfirmOpen(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Excluir
+                <Button variant="danger-link" size="md" onClick={() => setIsDeleteConfirmOpen(true)}>
+                  <Trash2 aria-hidden="true" className="mr-2 h-4 w-4" />Excluir
                 </Button>
               )}
             </div>
@@ -173,26 +167,21 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
                   fileName={`${isInstructionMode ? 'ficha_instrucao' : 'ficha_completa'}_${simulation.name.replace(/ /g, '_')}.pdf`}
                 >
                   {((props: any) => (
-                    <Button variant="secondary" size="sm" disabled={props.loading}>
-                      <Download className="mr-2 h-4 w-4" />
+                    <Button variant="ds-secondary" size="md" disabled={props.loading}>
+                      <Download aria-hidden="true" className="mr-2 h-4 w-4" />
                       {props.loading ? 'Gerando...' : 'Baixar PDF'}
                     </Button>
                   )) as any}
                 </PDFDownloadLink>
               )}
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button variant={isViewOnlyMode ? 'primary-modal' : 'ds-ghost'} size="md" onClick={() => onOpenChange(false)}>
                 {isViewOnlyMode ? 'Fechar' : 'Cancelar'}
               </Button>
               {!isViewOnlyMode && (
-                <Button 
-                  className="bg-pink-600 font-bold text-white hover:bg-pink-700"
-                  onClick={handleSave}
-                >
-                  Salvar preços
-                </Button>
+                <Button variant="primary-modal" size="md" onClick={handleSave}>Salvar preços</Button>
               )}
             </div>
-          </div>
+          </footer>
         </DialogContent>
       </Dialog>
 

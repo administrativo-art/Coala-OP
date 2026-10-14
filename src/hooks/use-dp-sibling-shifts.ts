@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import type { DPShift } from '@/types';
+import { fetchScheduleShifts, subscribeToDPScheduleShiftChanges } from '@/features/dp/schedules/client';
 
 /**
  * Loads shifts from multiple sibling schedules (same month/year, different unit)
@@ -20,36 +19,29 @@ export function useDPSiblingShifts(scheduleIds: string[]): {
   const idsKey = scheduleIds.slice().sort().join(',');
 
   useEffect(() => {
-    if (scheduleIds.length === 0) {
-      setShifts([]);
-      setLoading(false);
+    const activeIds = idsKey ? idsKey.split(',') : [];
+    if (activeIds.length === 0) {
+      void Promise.resolve().then(() => {
+        setShifts([]);
+        setLoading(false);
+      });
       return;
     }
 
-    setLoading(true);
-    const results = new Map<string, DPShift[]>();
-    let resolvedCount = 0;
-    const unsubs: (() => void)[] = [];
-
-    for (const id of scheduleIds) {
-      const q = query(
-        collection(db, 'dp_schedules', id, 'shifts'),
-        orderBy('date'),
-      );
-      const unsub = onSnapshot(q, snap => {
-        results.set(id, snap.docs.map(d => ({ id: d.id, ...d.data() } as DPShift)));
-        resolvedCount++;
-        if (resolvedCount >= scheduleIds.length) setLoading(false);
-        setShifts(Array.from(results.values()).flat());
-      }, () => {
-        resolvedCount++;
-        if (resolvedCount >= scheduleIds.length) setLoading(false);
-      });
-      unsubs.push(unsub);
-    }
-
-    return () => unsubs.forEach(u => u());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    const load = () => {
+      void Promise.resolve()
+        .then(() => {
+          if (!cancelled) setLoading(true);
+          return Promise.all(activeIds.map(fetchScheduleShifts));
+        })
+        .then((results) => { if (!cancelled) setShifts(results.flat()); })
+        .catch(() => { if (!cancelled) setShifts([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+    load();
+    const unsubscribe = subscribeToDPScheduleShiftChanges(activeIds, load);
+    return () => { cancelled = true; unsubscribe(); };
   }, [idsKey]);
 
   return { shifts, loading };

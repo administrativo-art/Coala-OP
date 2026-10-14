@@ -7,9 +7,10 @@ import { getStorage } from "firebase-admin/storage";
 import type { NextRequest } from "next/server";
 
 import { createManualTask } from "@/features/tasks/lib/server";
-import { adminApp, authAdmin, dbAdmin } from "@/lib/firebase-admin";
+import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { suspendIdentityAccess } from "@/lib/identity-lifecycle.server";
 import { loadExpectedIdentity } from "@/lib/hr/employee-document-identity";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { createAutentiqueDocument, getAutentiqueDocumentStatus } from "@/lib/autentique.server";
@@ -1911,10 +1912,10 @@ export async function completeEmployeeResignation(params: {
   if (uniformReservation) steps = patchStep(steps, "uniform_return", { status: "waived", completedAt: now, completedBy: params.context.userDoc.id, note: uniformReservation.note.trim() });
   else if (pendingPieces === 0 && !["completed", "waived"].includes(steps.find((step) => step.id === "uniform_return")?.status ?? "")) steps = patchStep(steps, "uniform_return", { status: "completed", completedAt: now, completedBy: params.context.userDoc.id, note: "Nenhuma peça permanece em posse do colaborador." });
   if (asoReservation) steps = patchStep(steps, "aso", { status: "waived", completedAt: now, completedBy: params.context.userDoc.id, note: asoReservation.note.trim() });
-  await Promise.all([
-    authAdmin.updateUser(process.employeeId, { disabled: true }),
-    dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", inactivationType: "contract_termination", terminationDate: process.notice.contractEndDate, terminationReason: process.terminationReason ?? (process.processType === "clt_employee_resignation" ? "Pedido de demissão" : null), terminationCause: process.terminationCause ?? null, terminationNotes: process.terminationNotes ?? null, terminationInternalReason: process.terminationInternalReason ?? null, terminationRelationshipType: process.employmentRelationshipType, terminationProcessId: process.id, terminationEmployerUnitId: process.employer?.unitId ?? null, terminationEmployerName: process.employer?.legalName ?? null, terminationEmployerCnpj: process.employer?.cnpj ?? null, terminationEmployerEntityId: process.employer?.entityId ?? null, updatedAt: now }, { merge: true }),
-  ]);
+  await suspendIdentityAccess({
+    userId: process.employeeId,
+    userPatch: { employmentStatus: "terminated", inactivationType: "contract_termination", terminationDate: process.notice.contractEndDate, terminationReason: process.terminationReason ?? (process.processType === "clt_employee_resignation" ? "Pedido de demissão" : null), terminationCause: process.terminationCause ?? null, terminationNotes: process.terminationNotes ?? null, terminationInternalReason: process.terminationInternalReason ?? null, terminationRelationshipType: process.employmentRelationshipType, terminationProcessId: process.id, terminationEmployerUnitId: process.employer?.unitId ?? null, terminationEmployerName: process.employer?.legalName ?? null, terminationEmployerCnpj: process.employer?.cnpj ?? null, terminationEmployerEntityId: process.employer?.entityId ?? null, updatedAt: now },
+  });
   const financialProvisionClosure = await closeFutureFinancialProvisions(params.context, process, process.notice.contractEndDate, now);
   const updated = await saveTermination({
     ...process,
@@ -1958,10 +1959,9 @@ export async function completeTermination(params: { context: ServerUserContext; 
   if (incomplete.length) throw new Error(`Ainda existem etapas obrigatórias: ${incomplete.map((step) => step.label).join(", ")}.`);
   const now = new Date().toISOString();
   const steps = patchStep(process.steps, "closure", { status: "completed", startedAt: now, completedAt: now, completedBy: params.context.userDoc.id });
-  await Promise.all([
-    authAdmin.updateUser(process.employeeId, { disabled: true }),
-    dbAdmin.collection("users").doc(process.employeeId).set({
-      isActive: false,
+  await suspendIdentityAccess({
+    userId: process.employeeId,
+    userPatch: {
       employmentStatus: "terminated",
       inactivationType: "contract_termination",
       terminationDate: process.notice.contractEndDate,
@@ -1976,8 +1976,8 @@ export async function completeTermination(params: { context: ServerUserContext; 
       terminationEmployerCnpj: process.employer?.cnpj ?? null,
       terminationEmployerEntityId: process.employer?.entityId ?? null,
       updatedAt: now,
-    }, { merge: true }),
-  ]);
+    },
+  });
   const financialProvisionClosure = await closeFutureFinancialProvisions(params.context, process, process.notice.contractEndDate, now);
   const updated = await saveTermination({
     ...process,

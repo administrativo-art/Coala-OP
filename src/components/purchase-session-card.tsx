@@ -380,8 +380,8 @@ export function PurchaseSessionCard({ session }: PurchaseSessionCardProps) {
                     })}
                 </CardContent>
                 {session.status === 'open' && (
-                    <CardFooter className="bg-background/80 backdrop-blur-sm border-t p-4 flex justify-end items-center sticky bottom-0 z-10">
-                        <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading} size="lg" className="bg-gradient-to-r from-primary to-accent text-white shadow-lg hover:shadow-xl transition-shadow">
+                    <CardFooter className="bg-background/80 backdrop-blur-xs border-t p-4 flex justify-end items-center sticky bottom-0 z-10">
+                        <Button onClick={handleFinalize} disabled={Object.keys(winners).length === 0 || loading} size="lg" className="bg-linear-to-r from-primary to-accent text-white shadow-lg hover:shadow-xl transition-shadow">
                             <Check className="mr-2 h-4 w-4"/> Salvar cotação
                         </Button>
                     </CardFooter>

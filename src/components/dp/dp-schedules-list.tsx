@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, getDocs, limit, query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
@@ -18,16 +18,19 @@ import {
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
 import { buildBizneoExportDayOffBlockers } from '@/lib/dp-bizneo-export-preflight';
+import { resolveBizneoShiftId } from '@/lib/dp-shift-bizneo';
 import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
 import { formatDPSchedulePeriod, getAutomaticDPSchedulePeriods } from '@/lib/dp-schedule-periods';
 import { filterUnitsByAccess } from '@/lib/unit-access';
 import { resolveDPUnitCity } from '@/lib/dp-unit-city';
 import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
+import { buildMonthlyTransportVoucherSummaries } from '@/lib/dp-transport-voucher-summary';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -56,6 +59,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/features/audit/client';
 import { DPSchedulesSidebar, type DPSchedulesSidebarGroup } from '@/components/dp/dp-schedules-sidebar';
 import { useDPScheduleFilledDays } from '@/hooks/use-dp-schedule-filled-days';
+import { useDPSchedulesShifts } from '@/hooks/use-dp-schedules-shifts';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -67,6 +71,10 @@ const MONTHS = [
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 4 }, (_, i) => currentYear - 1 + i);
 const PLANNING_YEARS = Array.from({ length: 6 }, (_, i) => currentYear + i);
+
+function formatBRLCents(amountCents: number) {
+  return (amountCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
 const BRAZILIAN_STATE_NAMES: Record<string, string> = {
   AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará',
@@ -86,15 +94,6 @@ function stateCodeOf(state: string) {
   if (BRAZILIAN_STATE_NAMES[upper]) return upper;
   return Object.entries(BRAZILIAN_STATE_NAMES)
     .find(([, name]) => normalizeLocationLabel(name) === normalizeLocationLabel(state))?.[0] ?? '—';
-}
-
-function resolveBizneoShiftId(def?: { bizneoTemplateId?: string; code?: string }) {
-  const explicitId = String(def?.bizneoTemplateId ?? '').trim();
-  if (explicitId) return explicitId.replace(/^#/, '');
-
-  const rawCode = String(def?.code ?? '').trim();
-  const numericCode = rawCode.match(/^#?(\d+)$/);
-  return numericCode?.[1] ?? '';
 }
 
 function getShiftWeekday(date: string) {
@@ -497,15 +496,15 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       const allShifts: (DPShift & { scheduleUnitId?: string })[] = [];
       await Promise.all(
         schedulesToExport.map(async (sched) => {
-          const snap = await getDocs(query(
-            collection(db, 'dp_schedules', sched.id, 'shifts'),
-            limit(MAX_SHIFTS_PER_SCHEDULE_EXPORT + 1),
-          ));
-          if (snap.size > MAX_SHIFTS_PER_SCHEDULE_EXPORT) {
+          const payload = await authenticatedApiRequest<{ shifts: DPShift[] }>(
+            `/api/dp/schedules/${encodeURIComponent(sched.id)}/shifts`,
+            { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
+          );
+          if (payload.shifts.length > MAX_SHIFTS_PER_SCHEDULE_EXPORT) {
             throw new Error(`A escala ${sched.name} excede o limite seguro de exportação.`);
           }
-          snap.docs.forEach(d => {
-            allShifts.push({ id: d.id, ...d.data(), scheduleUnitId: sched.unitId } as any);
+          payload.shifts.forEach((shift) => {
+            allShifts.push({ ...shift, scheduleUnitId: sched.unitId });
           });
         })
       );
@@ -745,7 +744,7 @@ export function DPSchedulesList() {
     shiftDefsLoading,
     shiftDefsError,
   } = useDP();
-  const { permissions, user, isDefaultAdmin } = useAuth();
+  const { permissions, user, users, isDefaultAdmin } = useAuth();
   const router = useRouter();
   const [addMonthOpen, setAddMonthOpen] = useState(false);
   const [exportBizneoOpen, setExportBizneoOpen] = useState(false);
@@ -938,6 +937,30 @@ export function DPSchedulesList() {
 
   const effectiveYear = years.includes(selectedYear) ? selectedYear : (years[0] ?? currentYear);
 
+  const selectedYearSchedules = React.useMemo(
+    () => visibleSchedules.filter((schedule) => schedule.year === effectiveYear),
+    [effectiveYear, visibleSchedules],
+  );
+  const {
+    shifts: selectedYearShifts,
+    loading: transportVoucherLoading,
+    failedScheduleIds: transportVoucherFailedScheduleIds,
+  } = useDPSchedulesShifts(selectedYearSchedules.map((schedule) => schedule.id));
+  const transportVoucherByPeriod = React.useMemo(
+    () => buildMonthlyTransportVoucherSummaries({
+      schedules: selectedYearSchedules,
+      shifts: selectedYearShifts,
+      users,
+    }),
+    [selectedYearSchedules, selectedYearShifts, users],
+  );
+  const transportVoucherFailedPeriods = React.useMemo(() => {
+    const failedIds = new Set(transportVoucherFailedScheduleIds);
+    return new Set(selectedYearSchedules
+      .filter((schedule) => failedIds.has(schedule.id))
+      .map((schedule) => formatDPSchedulePeriod(schedule.year, schedule.month)));
+  }, [selectedYearSchedules, transportVoucherFailedScheduleIds]);
+
   const monthCards = React.useMemo(
     () => Array.from({ length: 12 }, (_, i) => ({ name: MONTHS[i], ...summarize(effectiveYear, i + 1) })),
     [effectiveYear, summarize],
@@ -1032,7 +1055,7 @@ export function DPSchedulesList() {
       <div className="flex flex-wrap items-end gap-4">
         <div className="min-w-0">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#db2777]">Escalas operacionais</p>
-          <h1 className="dp-schedules-list-title mt-[7px] text-[29px] font-black leading-[34px] tracking-[-0.025em] text-[#0f172a]">Meses de escala</h1>
+          <h1 className="dp-schedules-list-title mt-[7px] text-[29px] font-black leading-[34px] tracking-tight text-[#0f172a]">Meses de escala</h1>
           <p className="mt-2 text-[13.5px] font-semibold text-[#64748b]">
             {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'}
             {overview.states > 0 && ` · ${overview.states} ${overview.states === 1 ? 'estado' : 'estados'}`}
@@ -1103,16 +1126,21 @@ export function DPSchedulesList() {
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {monthCards.map((card) => {
           const s = toneStyles[card.tone];
+          const transportVoucher = transportVoucherByPeriod.get(card.period);
+          const transportVoucherUnavailable = transportVoucherFailedPeriods.has(card.period);
           return (
-            <button
+            <article
               key={card.period}
-              type="button"
-              onClick={() => router.push(`/dashboard/dp/schedules/month/${card.period}`)}
               className={cn(
                 'flex flex-col rounded-[16px] border px-4 pb-[14px] pt-[15px] text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
                 s.card,
               )}
             >
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/dp/schedules/month/${card.period}`)}
+                className="flex w-full flex-1 flex-col text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+              >
               <div className="flex items-center gap-2">
                 <span className={cn('text-[15.5px] font-black tracking-[-0.01em]', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#0f172a]')}>{card.name}</span>
                 {card.allLocked && <Lock className="h-3 w-3 text-[#94a3b8]" />}
@@ -1134,7 +1162,61 @@ export function DPSchedulesList() {
                   </span>
                 )}
               </div>
-            </button>
+              </button>
+              {card.hasData ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={transportVoucherLoading || transportVoucherUnavailable}
+                      className="mt-3 border-t border-ds-divider pt-2.5 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink disabled:cursor-default"
+                      aria-label={`Ver vale-transporte de ${card.name} de ${effectiveYear}`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-ds-ink-faint">Vale-transporte</span>
+                        <span className="text-[11.5px] font-black tabular-nums text-ds-ink-2">
+                          {transportVoucherLoading
+                            ? 'Calculando…'
+                            : transportVoucherUnavailable
+                              ? 'Indisponível'
+                              : formatBRLCents(transportVoucher?.totalCents ?? 0)}
+                        </span>
+                      </div>
+                      {!transportVoucherLoading && !transportVoucherUnavailable ? (
+                        <span className="mt-1 flex items-center justify-between gap-2 text-[10.5px] font-semibold text-ds-ink-muted">
+                          <span>{transportVoucher?.people.length ?? 0} colaboradora{transportVoucher?.people.length === 1 ? '' : 's'}</span>
+                          <span className="flex items-center gap-0.5 font-bold text-ds-ink-2">
+                            Ver detalhes <ChevronRight className="h-3 w-3" />
+                          </span>
+                        </span>
+                      ) : null}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[340px] overflow-hidden p-0" align="start" sideOffset={8}>
+                    <div className="flex items-start justify-between gap-4 border-b border-ds-divider bg-ds-surface px-4 py-3">
+                      <div>
+                        <p className="text-sm font-bold text-ds-ink">Vale-transporte · {card.name}</p>
+                        <p className="mt-0.5 text-xs text-ds-ink-muted">Consolidado entre todas as unidades.</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-black tabular-nums text-ds-ink">{formatBRLCents(transportVoucher?.totalCents ?? 0)}</span>
+                    </div>
+                    {transportVoucher?.people.length ? (
+                      <div className="max-h-72 divide-y divide-ds-divider overflow-y-auto">
+                        {transportVoucher.people.map((person) => (
+                          <div key={person.userId} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3 text-xs">
+                            <span className="truncate font-semibold text-ds-ink">{person.name}</span>
+                            <span className="text-ds-ink-muted">{person.days} dia{person.days === 1 ? '' : 's'}</span>
+                            <span className="font-bold tabular-nums text-ds-ink">{formatBRLCents(person.amountCents)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="px-4 py-7 text-center text-sm text-ds-ink-muted">Nenhuma colaboradora com vale-transporte neste mês.</p>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+            </article>
           );
         })}
       </div>

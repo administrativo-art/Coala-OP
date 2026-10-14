@@ -150,7 +150,7 @@ export default function BudgetProjectsManagement({ canManage, accounts }: { canM
     </Select>;
   }
 
-  return <Card className="rounded-2xl border-[#e2ded4] shadow-sm"><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+  return <Card className="rounded-2xl border-[#e2ded4] shadow-xs"><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div><CardTitle className="flex items-center gap-2"><Hammer className="h-5 w-5 text-primary" />Orçamento de projeto</CardTitle>
       <CardDescription>Para reforma ou outra iniciativa com várias despesas, possivelmente em meses diferentes. Você escolhe quais despesas pertencem ao projeto.</CardDescription></div>
     {canManage && <Button variant="outline" onClick={() => setFormOpen(!formOpen)}><Plus className="mr-2 h-4 w-4" />{formOpen ? "Fechar" : "Novo projeto"}</Button>}

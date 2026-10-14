@@ -67,7 +67,9 @@ export function ExpensePeriodFilter({
   dateFrom,
   dateTo,
   onApply,
+  className,
 }: {
+  className?: string;
   preset: ExpensePeriodPreset;
   dateFrom: string;
   dateTo: string;
@@ -125,7 +127,8 @@ export function ExpensePeriodFilter({
           variant="outline"
         className={cn(
             "h-8 w-full min-w-0 justify-between rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] font-medium sm:text-xs",
-            open && "border-primary"
+            open && "border-primary",
+            className
           )}
         >
           <span className="truncate">Vencimento: {label}</span>
@@ -142,7 +145,7 @@ export function ExpensePeriodFilter({
                 className={cn(
                   "rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors",
                   draftPreset === option.value
-                    ? "bg-background font-semibold text-primary shadow-sm"
+                    ? "bg-background font-semibold text-primary shadow-xs"
                     : "text-foreground/75 hover:bg-background/70"
                 )}
                 onClick={() => selectPreset(option.value)}
@@ -187,7 +190,7 @@ export function ExpensePeriodFilter({
                     type="button"
                     title="Selecionar o mês inteiro"
                     aria-label={`Selecionar ${format(displayMonth, "MMMM 'de' yyyy", { locale: ptBR })} inteiro`}
-                    className="rounded-md px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-md px-2 py-1 text-sm font-semibold transition-colors hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => selectEntireMonth(displayMonth)}
                   >
                     {format(displayMonth, "MMMM yyyy", { locale: ptBR })}
@@ -197,7 +200,7 @@ export function ExpensePeriodFilter({
               classNames={{
                 cell: "relative h-9 w-9 p-0 text-center text-sm focus-within:relative focus-within:z-20",
                 day_selected: "rounded-lg bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                day_range_middle: "rounded-none !bg-primary/10 !text-primary hover:!bg-primary/15",
+                day_range_middle: "rounded-none bg-primary/10! text-primary! hover:bg-primary/15!",
               }}
             />
 

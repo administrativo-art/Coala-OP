@@ -916,7 +916,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <DialogDescription className="text-[10.5px] font-extrabold uppercase tracking-[.16em] text-[#8e8d99]">
                                         {productToEdit ? (linkedBaseProduct ? 'Editar insumo derivado' : 'Editar insumo') : 'Novo insumo'}
                                     </DialogDescription>
-                                    <h2 className={cn('break-words text-[30px] font-extrabold leading-[1.05] tracking-[-.03em]', productNameWatch ? 'text-[#f3f2ee]' : 'text-[#5d5c68]')}>
+                                    <h2 className={cn('wrap-break-word text-[30px] font-extrabold leading-[1.05] tracking-[-.03em]', productNameWatch ? 'text-[#f3f2ee]' : 'text-[#5d5c68]')}>
                                         {liveName}
                                     </h2>
                                     <div className="flex flex-wrap gap-1.5">
@@ -972,13 +972,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 onClick={() => setCurrentStep(step.id)}
                                                 className={cn(
                                                     'flex w-full items-center gap-3 rounded-xl px-2.5 py-[9px] text-left transition-colors',
-                                                    isActive ? 'bg-white/[.08] text-white' : 'text-[#c8c7d0] hover:bg-white/[.05]',
+                                                    isActive ? 'bg-white/8 text-white' : 'text-[#c8c7d0] hover:bg-white/5',
                                                     isLocked && 'cursor-not-allowed opacity-40 hover:bg-transparent',
                                                 )}
                                             >
                                                 <span className={cn(
                                                     'flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] text-xs font-extrabold',
-                                                    isActive ? 'bg-[#b9b9ff] text-[#15151c]' : 'bg-white/[.08] text-[#c8c7d0]',
+                                                    isActive ? 'bg-[#b9b9ff] text-[#15151c]' : 'bg-white/8 text-[#c8c7d0]',
                                                 )}>
                                                     {isDone && !productToEdit ? <Check className="h-4 w-4" /> : step.id}
                                                 </span>
@@ -1216,7 +1216,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                 <PopoverContent
                                                                     align="start"
                                                                     portalContainer={dialogContentRef.current}
-                                                                    className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                                    className="pointer-events-auto z-70 w-(--radix-popover-trigger-width) p-0"
                                                                 >
                                                                     <Command>
                                                                         <CommandInput placeholder="Buscar insumo base..." />
@@ -1652,7 +1652,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             ) : (
                                                 <div className="space-y-4">
                                                     {uniformInstructionFields.map((section, sectionIndex) => (
-                                                        <div key={section.id} className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                                                        <div key={section.id} className="overflow-hidden rounded-xl border bg-white shadow-xs">
                                                             <div className="flex items-center gap-3 border-b bg-gray-50 px-4 py-2">
                                                                 <span className="text-[10px] font-black uppercase text-gray-300">Seção {sectionIndex + 1}</span>
                                                                 <Input
@@ -1689,7 +1689,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     <button
                                                         type="button"
                                                         onClick={() => nutritionalTableImageWatch ? setZoomedImage(nutritionalTableImageWatch) : setIsNutritionalPhotoModalOpen(true)}
-                                                        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-none"
+                                                        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-hidden"
                                                     >
                                                         {nutritionalTableImageWatch ? <Image src={nutritionalTableImageWatch} alt="Tabela Nutricional" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
                                                     </button>
@@ -1711,7 +1711,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     <button
                                                         type="button"
                                                         onClick={() => compositionImageWatch ? setZoomedImage(compositionImageWatch) : setIsCompositionPhotoModalOpen(true)}
-                                                        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-none"
+                                                        className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-secondary focus:outline-hidden"
                                                     >
                                                         {compositionImageWatch ? <Image src={compositionImageWatch} alt="Composição" width={64} height={64} className="h-full w-full object-cover" /> : <Camera className="h-7 w-7 text-muted-foreground" />}
                                                     </button>

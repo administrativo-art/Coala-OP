@@ -375,7 +375,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
             type="button"
             onClick={() => router.push('/dashboard/dp/schedules')}
             aria-label="Voltar para todos os meses"
-            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-none hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-hidden hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
           >
             <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.4} />
           </button>

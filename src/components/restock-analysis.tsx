@@ -278,7 +278,6 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
     try {
       const requestId = await createRepositionRequest({
         kioskId: destinationKiosk.id,
-        kioskName: destinationKiosk.name,
         items: requestItems,
       });
       if (!requestId) throw new Error("A criação da solicitação falhou e não retornou um ID.");
@@ -978,7 +977,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
         };
     } else if (percentage <= 25) {
         return {
-            card: 'border-destructive border-2 bg-destructive/10 shadow-sm',
+            card: 'border-destructive border-2 bg-destructive/10 shadow-xs',
             progress: 'bg-destructive',
             badge: <Badge variant="destructive"><AlertTriangle className="mr-1 h-3 w-3" /> Urgente</Badge>,
             rowDot: 'bg-destructive'
@@ -1033,7 +1032,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
           return (
             <Card key={result.baseProduct.id} className={cn(
               "flex flex-col transition-all duration-300",
-              reviewLine ? "border-primary bg-primary/5 shadow-sm" : statusStyle.card
+              reviewLine ? "border-primary bg-primary/5 shadow-xs" : statusStyle.card
             )}>
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start gap-2">
@@ -1048,7 +1047,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                     : result.baseProduct.unit}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow space-y-3">
+              <CardContent className="grow space-y-3">
                 {reviewLine ? (
                   <div className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs">
                     <span className="text-muted-foreground">Estoque na unidade</span>
@@ -1081,7 +1080,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                      {displayPercentage !== null && (
                          <div className="flex justify-between items-center text-[10px] font-bold mb-1">
                             <span className={cn(
-                                "px-1.5 py-0.5 rounded-sm shadow-sm",
+                                "px-1.5 py-0.5 rounded-sm shadow-xs",
                                 displayPercentage <= 25 ? "bg-destructive text-white" :
                                 displayPercentage < 100 ? "bg-orange-500 text-white" :
                                 "bg-green-600 text-white"
@@ -1962,7 +1961,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold leading-tight">{al.lotNumber || "—"}</p>
-                          <p className="text-[11px] leading-tight text-muted-foreground break-words">{al.productName}</p>
+                          <p className="text-[11px] leading-tight text-muted-foreground wrap-break-word">{al.productName}</p>
                           <p className="text-[11px] text-muted-foreground">
                             {al.expiryDate ? `vence ${format(parseISO(al.expiryDate), "dd/MM/yy")}` : "sem validade"} · {formatNumberDisplay(al.availablePackages, al.packageType)} disp.
                           </p>
@@ -2291,7 +2290,7 @@ export function RestockAnalysis({ onReviewingChange }: { onReviewingChange?: (re
                         <div className="flex min-w-0 items-center gap-2">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}</div>
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold leading-tight break-words">{getProductFullName(product)}</p>
+                            <p className="text-xs font-semibold leading-tight wrap-break-word">{getProductFullName(product)}</p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground">1 {packageType} = {formatNumberDisplay(upp, baseProduct.unit)}</p>
                           </div>
                         </div>

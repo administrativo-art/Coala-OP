@@ -50,15 +50,29 @@ api,src/app/api/documents/templates/[id]/source/route.ts,,docs/engineering/flows
 api,src/app/api/documents/templates/[id]/text/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/[id]/workflow/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/documents/templates/route.ts,,docs/engineering/flows/document-templates.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dashboard/layouts/route.ts,,docs/engineering/flows/platform-home.md,Layouts pessoais do painel por UID; modelos compartilhados somente para administradores; preferencia ativa individual.
 api,src/app/api/dp/bootstrap/route.ts,,docs/engineering/flows/dp-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/natasha/team/route.ts,,docs/engineering/flows/dp-schedules.md,Equipe candidata minima da Natasha; leitura autenticada por unidades com permissao dupla e limites fail-closed; sem escala ou escrita.
+api,src/app/api/dp/natasha/journeys/route.ts,,docs/engineering/flows/dp-schedules.md,Jornadas publicadas e historicas resolvidas por pessoa e data; leitura autenticada e limitada por unidades autorizadas; sem premissa manual nem escrita.
 api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Ferias da equipe candidata na competencia e continuidade; leitura autenticada limitada e sem folgas indisponibilidades ou escrita.
 api,src/app/api/dp/natasha/shift-definitions/route.ts,,docs/engineering/flows/dp-schedules.md,Definicoes minimas de horario para unidades autorizadas; leitura limitada sem classificar posicoes nem escrever escala.
 api,src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual; trancamento com validacao autoritativa de jornada; destrancamento; ou exclusao transacional e auditada; todos revalidam permissao e unidade.
+api,src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts,,docs/engineering/flows/dp-schedules.md,Busca prefixada e limitada de pessoas externas; exige permissao especifica e acesso a unidade da escala; retorna projecao minima.
 api,src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts,,docs/engineering/flows/dp-schedules.md,Resolve a jornada por colaborador e valida sequencia entre competencias e unidades; leitura limitada sob permissao e escopo da escala.
+api,src/app/api/dp/schedules/[scheduleId]/shifts/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura limitada de turnos com permissao e escopo de unidade revalidados no servidor.
 api,src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/vacations/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/dp/time/absence-types/[id]/route.ts,,docs/engineering/flows/dp-absences.md,Consulta edicao publicacao arquivamento e exclusao de rascunho de tipo de ausencia versionado.
+api,src/app/api/dp/time/absence-types/route.ts,,docs/engineering/flows/dp-absences.md,Listagem limitada e criacao auditada de tipo de ausencia em rascunho.
+api,src/app/api/dp/time/journeys/[id]/route.ts,,docs/engineering/flows/dp-configuration.md,Consulta edicao publicacao arquivamento e exclusao de rascunho de jornada versionada.
+api,src/app/api/dp/time/journeys/route.ts,,docs/engineering/flows/dp-configuration.md,Listagem limitada e criacao auditada de jornada em rascunho.
+api,src/app/api/dp/time/overtime-policies/[id]/route.ts,,docs/engineering/flows/dp-configuration.md,Consulta edicao publicacao arquivamento e exclusao de rascunho de politica de hora extra.
+api,src/app/api/dp/time/overtime-policies/route.ts,,docs/engineering/flows/dp-configuration.md,Listagem limitada e criacao auditada de politica de hora extra sem apuracao financeira.
+api,src/app/api/dp/time/shifts/[id]/route.ts,,docs/engineering/flows/dp-configuration.md,Consulta alteracao e exclusao auditada das definicoes de turno atuais.
+api,src/app/api/dp/time/shifts/route.ts,,docs/engineering/flows/dp-configuration.md,Listagem limitada e criacao auditada das definicoes de turno atuais preservando campos Bizneo.
 api,src/app/api/dp/unit-groups/[groupId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/unit-groups/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/unit-organizations/[organizationId]/route.ts,,docs/engineering/flows/dp-configuration.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -338,9 +352,18 @@ api,src/app/api/settings/public-bio/media/[id]/route.ts,,docs/engineering/flows/
 api,src/app/api/settings/public-bio/media/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/settings/public-bio/route.ts,,docs/engineering/flows/settings.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/asset/[...assetPath]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/app/downloads/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/heartbeat/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/[mediaId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/folders/[folderId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/folders/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/import/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/media/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/pair/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/public/[kioskId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/publish/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/screens/[screenId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/signage/screens/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/slides/[slideId]/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/slides/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/signage/upload/route.ts,,docs/engineering/flows/signage.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -414,6 +437,12 @@ function,functions/src/inter-statement-jobs.ts,interStatementSync,docs/engineeri
 function,functions/src/rh/automations.ts,scheduledDateAlerts,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/automations.ts,scheduledProfileCompletion,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/field-update.ts,onFieldUpdate,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
+function,functions/src/rh/field-update.ts,reviewFieldChangeRequest,docs/engineering/flows/dp-configuration.md,Callable de aprovacao ou rejeicao das alteracoes de perfil sujeitas a analise; escopo e deploy devem ser conferidos no guia.
+api,src/app/api/collaborator/requests/route.ts,,docs/engineering/flows/collaborator-requests.md,Lista pedidos proprios ou revisaveis e cria solicitacao de vale-transporte com regra de corte.
+api,src/app/api/collaborator/requests/[requestId]/route.ts,,docs/engineering/flows/collaborator-requests.md,Cancela analisa ou refaz o termo da solicitacao com trilha persistida.
+api,src/app/api/collaborator/requests/[requestId]/document/route.ts,,docs/engineering/flows/collaborator-requests.md,Entrega privada do termo em DOCX ou PDF ao titular ou RH autorizado.
+api,src/app/api/collaborator/requests/[requestId]/signature/route.ts,,docs/engineering/flows/collaborator-requests.md,Consulta e inicia a assinatura independente do termo gerado.
+api,src/app/api/dev/transport-voucher-templates/[kind]/route.ts,,docs/engineering/flows/collaborator-requests.md,Previa ficticia somente local dos termos de adesao suspensao e reativacao; bloqueada em producao.
 function,functions/src/rh/propagation.ts,checkFieldMapConsistency,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/sync.ts,manualSyncFromBizneo,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/rh/sync.ts,syncFromBizneo,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
@@ -443,9 +472,36 @@ page,src/app/login/page.tsx,,docs/engineering/access-and-privacy.md,Entrada exte
 page,src/app/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/patrimonio/[code]/page.tsx,,docs/engineering/flows/assets.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/player/page.tsx,,docs/engineering/flows/signage.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
+page,src/app/app/page.tsx,,docs/engineering/flows/signage.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/primeiro-acesso/[token]/page.tsx,,docs/engineering/flows/onboarding-activation.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/tv/[kioskId]/page.tsx,,docs/engineering/flows/signage.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/[slug]/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/banco-de-talentos/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/onboarding/[token]/page.tsx,,docs/engineering/flows/onboarding-public-documents.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
 page,src/app/vagas/page.tsx,,docs/engineering/flows/recruitment.md,Entrada externa classificada no external-page-map; publicidade nao presumida.
+api,src/app/api/financial/inbox/mobile-upload/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Envio de nota e comprovante pelo aplicativo com analise unica de IA; idempotente por submissionId; nao registra compra.
+api,src/app/api/mobile/app-attestation/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Troca de token Play Integrity por passe HMAC do proprio usuario; desligado por padrao; nao validado ponta a ponta.
+api,src/app/api/purchasing/local-purchases/confirm/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Confirma compra local revisada; cria despesa e pre-vinculo de sangria e dispara entrada de estoque idempotente em outro banco.
+api,src/app/api/purchasing/local-purchases/context/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Cadastros para a revisao no aplicativo; unidades do usuario e produtos de estoque so com permissao propria; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/list/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Compras locais para a lista geral de compras; leitura limitada e escopo de unidade; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/reverse/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Estorno completo com motivo; desfaz estoque e despesa e libera a sangria; bloqueia se pago ou vinculado no fechamento.
+api,src/app/api/purchasing/local-purchases/withdrawals/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Sangrias do PDV sem nota lidas ao vivo com cache curto; so unidades do usuario; GET sem escrita.
+api,src/app/api/purchasing/local-purchases/link-withdrawal/route.ts,,docs/engineering/flows/purchasing-order-receipt.md,Liga a uma sangria do PDV uma compra em dinheiro ja registrada; revalida no PDV e tenta a conciliacao automatica.
+api,src/app/api/stock/mobile-count/route.ts,,docs/engineering/flows/stock-count.md,Unidades e contagens abertas do proprio operador para o aplicativo; GET sem escrita.
+api,src/app/api/stock/mobile-count/start/route.ts,,docs/engineering/flows/stock-count.md,Abre a contagem da unidade com itens montados no servidor ou devolve a ja aberta pelo operador.
+api,src/app/api/stock/mobile-count/save/route.ts,,docs/engineering/flows/stock-count.md,Salva rascunho ou conclui pela mesma transacao de finalizacao do web; so o dono da sessao.
+api,src/app/api/stock/mobile-reposition/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Reposicoes aguardando recebimento nas unidades de destino do usuario; GET sem escrita.
+api,src/app/api/stock/mobile-reposition/receive/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Registra o recebimento pelo aplicativo na unidade de destino; nao movimenta estoque.
+api,src/app/api/stock/mobile-reposition/photo/route.ts,,docs/engineering/flows/stock-requests-reposition-returns.md,Foto privada de lote despachado; permissao app.reposition.receive e unidade de destino; GET sem escrita.
+api,src/app/api/goals/mobile/route.ts,,docs/engineering/flows/goals.md,Metas em andamento das unidades do usuario para o aplicativo com placar e previsao de premio e resumo de todas as unidades (scope=all); GET sem escrita.
+api,src/app/api/goals/employee-goals/route.ts,,docs/engineering/flows/goals.md,Cria participante de meta com permissao e escopo da unidade; recusa cobertura externa no periodo e audita no servidor.
+api,src/app/api/goals/periods/[periodId]/status/route.ts,,docs/engineering/flows/goals.md,Encerra cancela ou reabre meta no servidor; relê escala e exclui cobertura externa antes de congelar prêmio.
+api,src/app/api/dp/mobile-schedule/route.ts,,docs/engineering/flows/collaborator-schedule.md,Escala publicada das unidades do proprio usuario para o aplicativo; mesma regra do portal do colaborador; GET sem escrita.
+api,src/app/api/mobile/profile/route.ts,,docs/engineering/access-and-privacy.md,Cartao do proprio usuario (nome cargo foto) e modulos do aplicativo liberados pelo perfil; GET sem escrita.
+api,src/app/api/mobile/profile/photo/route.ts,,docs/engineering/access-and-privacy.md,Troca da propria foto de perfil pelo aplicativo no mesmo caminho e campo do perfil web; imagem validada por conteudo.
+api,src/app/api/signage/mobile/route.ts,,docs/engineering/flows/signage.md,Unidades e telas do escopo do usuario para o modulo Signage do aplicativo; exige app.signage.manage; GET sem escrita e sem codigo de acesso.
+api,src/app/api/signage/mobile/screens/route.ts,,docs/engineering/flows/signage.md,Liga o monitor do QR code lido a uma tela nova ou existente da unidade; exige app.signage.manage e unidade no escopo; grava em dois bancos.
+api,src/app/api/signage/pair/qr/route.ts,,docs/engineering/flows/signage.md,QR code de pareamento em SVG para o app do monitor; publica e limitada por IP; nao le nem grava.
+api,src/app/api/app/version/route.ts,,docs/engineering/flows/signage.md,Versao publicada do Coala One para o botao de atualizar do app; publica; nao le nem grava.
+api,src/app/api/stock/mobile-count/cancel/route.ts,,docs/engineering/flows/stock-count.md,Cancela (apaga) a contagem aberta do proprio operador pelo aplicativo; nada foi aplicado ao estoque; mesma regra de dono do web.
+api,src/app/api/stock/mobile-count/photo/route.ts,,docs/engineering/flows/stock-count.md,Entrega ao aplicativo a foto do insumo guardada dentro do cadastro (data URI); exige app.stockCount.perform; GET sem escrita.

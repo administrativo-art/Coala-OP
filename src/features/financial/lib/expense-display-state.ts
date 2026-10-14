@@ -3,6 +3,7 @@ import { financialDateKey } from "./financial-dates";
 type ExpenseState = {
   status?: string; paymentState?: string; provisionType?: string; originModule?: string; originStatus?: string;
   dueDate?: unknown; totalValue?: number; budgetMigration?: unknown;
+  hiddenFromExpensePanel?: boolean;
   settlementSummary?: { reconciliationStatus?: string; balanceAmountCents?: number | null;
     principalSettledAmountCents?: number; settlementCreditsAmountCents?: number } | null;
 };
@@ -82,5 +83,6 @@ export function cardStatementHasOverdueBalance(statement: CardStatementState, no
 }
 
 export function showExpenseInOperationalList(expense: ExpenseState, statusFilter: string) {
+  if (expense.hiddenFromExpensePanel) return false;
   return !expense.budgetMigration || statusFilter === "cancelled";
 }

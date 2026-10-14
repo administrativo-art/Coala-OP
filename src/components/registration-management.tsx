@@ -22,7 +22,7 @@ export function RegistrationManagement() {
                         <CardTitle className="text-2xl mb-2">Gerenciar insumos</CardTitle>
                         <CardDescription>Cadastre os produtos físicos que compõem seu estoque, como Ovomaltine, Leite, etc.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/registration/items" className="w-full">
                             <Button className="w-full text-lg py-6">
                                 Acessar insumos <ArrowRight className="ml-2" />
@@ -38,7 +38,7 @@ export function RegistrationManagement() {
                         <CardTitle className="text-2xl mb-2">Gerenciar Produto Base</CardTitle>
                         <CardDescription>Agrupe insumos para definir metas de estoque e facilitar a visualização.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/registration/base-products" className="w-full">
                             <Button className="w-full text-lg py-6">
                                 Acessar produto base <ArrowRight className="ml-2" />
@@ -54,7 +54,7 @@ export function RegistrationManagement() {
                         <CardTitle className="text-2xl mb-2">Pessoas e Empresas</CardTitle>
                         <CardDescription>Gerencie seus contatos, clientes e fornecedores em um único lugar.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-grow flex items-end justify-center w-full p-0 pt-6">
+                    <CardContent className="grow flex items-end justify-center w-full p-0 pt-6">
                         <Link href="/dashboard/registration/entities" className="w-full">
                             <Button className="w-full text-lg py-6">
                                 Acessar cadastros <ArrowRight className="ml-2" />

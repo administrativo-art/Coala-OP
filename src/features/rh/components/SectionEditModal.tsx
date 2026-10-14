@@ -41,7 +41,7 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
   value:    string;
   onChange: (v: string) => void;
 }) {
-  const base = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white';
+  const base = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white';
 
   if (entry.type === 'boolean') {
     return (
@@ -49,7 +49,7 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
         <SelectTrigger className={`${base} h-10`}>
           <SelectValue placeholder="Selecionar…" />
         </SelectTrigger>
-        <SelectContent className="z-[70] rounded-xl">
+        <SelectContent className="z-70 rounded-xl">
           <SelectItem value="true">Sim</SelectItem>
           <SelectItem value="false">Não</SelectItem>
         </SelectContent>
@@ -63,7 +63,7 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
         <SelectTrigger className={`${base} h-10`}>
           <SelectValue placeholder="Selecionar…" />
         </SelectTrigger>
-        <SelectContent className="z-[70] rounded-xl">
+        <SelectContent className="z-70 rounded-xl">
           {entry.options.map((option) => (
             <SelectItem key={option} value={option} className="rounded-lg">
               {formatFieldOptionLabel(fieldKey, option)}
@@ -140,6 +140,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
   const [rawValue, setRawValue] = useState('');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
 
   useEffect(() => {
     if (field) setRawValue(currentRawValue(field.fv, field.entry));
@@ -152,6 +153,10 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
     try {
       const value = parseValue(field.entry, rawValue);
       const result = await callOnFieldUpdate({ employee_id: employeeId, field_key: editKey, value });
+      if (result.pending_approval) {
+        setConfirmation('Solicitação enviada. O valor atual será mantido até a aprovação do RH.');
+        return;
+      }
       onSaved(editKey, value, result.profile_completion);
       onClose();
     } catch (err) {
@@ -165,11 +170,13 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-xs" onClick={onClose} />
 
       <div className="relative w-full max-w-sm rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
-          <h2 className="text-sm font-semibold text-gray-900">Editar campo</h2>
+          <h2 className="text-sm font-semibold text-gray-900">
+            {field.entry.self_service_policy === 'approval' && role === 'employee' ? 'Solicitar alteração' : 'Editar campo'}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -196,6 +203,9 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           {error && (
             <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
           )}
+          {confirmation ? (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-700">{confirmation}</p>
+          ) : null}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-gray-100 px-3 py-2.5">
@@ -208,11 +218,11 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           </button>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={confirmation ? onClose : handleSave}
             disabled={saving}
             className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
           >
-            {saving ? 'Salvando…' : 'Salvar'}
+            {confirmation ? 'Fechar' : saving ? 'Salvando…' : field.entry.self_service_policy === 'approval' && role === 'employee' ? 'Enviar para aprovação' : 'Salvar'}
           </button>
         </div>
       </div>

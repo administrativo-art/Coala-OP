@@ -94,7 +94,7 @@ export function LoginAccessGateOverlay({
     !submitting;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-80 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-xs">
       <Card className="w-full max-w-2xl border-slate-200 shadow-2xl">
         <CardHeader className="space-y-4 border-b bg-slate-50/70">
           <div className="flex items-start gap-3">

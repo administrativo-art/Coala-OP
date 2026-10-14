@@ -14,15 +14,21 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function hasFinancialAccess() {
-      return (hasUserDoc()
+    function hasActiveFinancialIdentity() {
+      return hasUserDoc()
         && userData().active == true
+        && userData().get('sessionVersion', 0) == request.auth.token.get('sessionVersion', 0);
+    }
+
+    function hasFinancialAccess() {
+      return (hasActiveFinancialIdentity()
         && userData().permissions.view == true);
     }
 
     function isFinancialAdmin() {
-      return request.auth.token.get('isDefaultAdmin', false) == true
-        || (hasUserDoc() && userData().isDefaultAdmin == true && hasFinancialAccess());
+      return hasActiveFinancialIdentity()
+        && (request.auth.token.get('isDefaultAdmin', false) == true
+          || (userData().isDefaultAdmin == true && userData().permissions.view == true));
     }
 
     function canViewDashboard() {

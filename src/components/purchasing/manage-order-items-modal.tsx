@@ -196,7 +196,7 @@ function ProductCombobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
         <div className="border-b p-2">
           <Input
             autoFocus
@@ -294,7 +294,7 @@ function AssetLinkField({
         <input
           inputMode="numeric"
           placeholder="número do patrimônio"
-          className="h-full w-full rounded-r-md bg-transparent px-2 text-sm outline-none"
+          className="h-full w-full rounded-r-md bg-transparent px-2 text-sm outline-hidden"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => setFocused(true)}

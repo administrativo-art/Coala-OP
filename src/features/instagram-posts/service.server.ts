@@ -15,6 +15,7 @@ import {
 import {
   buildInstagramPostFolderPath,
   expectedInstagramPostConfirmation,
+  INSTAGRAM_PLANNING_MIN_RATIONALE,
   type InstagramPostActionInput,
   type InstagramPostCreateInput,
   type InstagramPostUpdateInput,
@@ -77,6 +78,17 @@ export function instagramPostContentHash(data: DocumentData) {
   return `sha256:${createHash("sha256").update(stable(payload)).digest("hex")}`;
 }
 
+function mergePlanning(current: DocumentData | undefined, patch: InstagramPostUpdateInput["planning"], now: Timestamp) {
+  return {
+    designRationale: patch?.designRationale ?? current?.designRationale ?? "",
+    formatRationale: patch?.formatRationale ?? current?.formatRationale ?? "",
+    objective: patch?.objective !== undefined ? patch.objective : current?.objective ?? null,
+    callToAction: patch?.callToAction ?? current?.callToAction ?? "",
+    plannedAt: patch?.plannedAt !== undefined ? patch.plannedAt : current?.plannedAt ?? null,
+    updatedAt: now,
+  };
+}
+
 function resetApprovals(next: DocumentData, previousHash: string | undefined) {
   const contentHash = instagramPostContentHash(next);
   if (contentHash === previousHash) return { contentHash };
@@ -121,6 +133,7 @@ export async function createInstagramPost(context: ServerUserContext, input: Ins
       storyMentions: input.storyMentions,
       publicationMode: input.publicationMode,
       manualInstructions: input.manualInstructions,
+      planning: mergePlanning(undefined, input.planning, now),
       media: [],
       contentApproval: { status: "pending" },
       publicationApproval: { status: "pending" },
@@ -148,8 +161,15 @@ export async function updateInstagramPost(
     if (!["planned", "produced"].includes(current.status)) {
       fail("INSTAGRAM_POST_PROTECTED", "CONFLICT", "Posts programados ou publicados não podem ser editados por esta operação.");
     }
-    const next: DocumentData = { ...current, ...changes };
+    const now = Timestamp.now();
+    const { planning: planningPatch, ...otherChanges } = changes;
+    const planning = planningPatch ? mergePlanning(current.planning, planningPatch, now) : undefined;
+    const next: DocumentData = { ...current, ...otherChanges, ...(planning ? { planning } : {}) };
     if (changes.status === "produced") {
+      const rationale = (value: unknown) => String(value ?? "").trim().length >= INSTAGRAM_PLANNING_MIN_RATIONALE;
+      if (!rationale(next.planning?.designRationale) || !rationale(next.planning?.formatRationale)) {
+        fail("INSTAGRAM_POST_PLANNING_REQUIRED", "VALIDATION", `Explique o motivo da arte e do formato (mínimo de ${INSTAGRAM_PLANNING_MIN_RATIONALE} caracteres cada) antes de marcar como Produzido.`);
+      }
       if (!String(next.direction ?? "").trim()) {
         fail("INSTAGRAM_POST_DIRECTION_REQUIRED", "VALIDATION", "Preencha o Direcionamento antes de marcar como Produzido.");
       }
@@ -161,7 +181,6 @@ export async function updateInstagramPost(
       }
       requireCertifiedMedia(next, "marcar como Produzido");
     }
-    const now = Timestamp.now();
     const approvalChanges = changes.status === "planned" && current.status !== "planned"
       ? {
           contentHash: instagramPostContentHash(next),
@@ -171,7 +190,8 @@ export async function updateInstagramPost(
         }
       : resetApprovals(next, current.contentHash);
     transaction.update(ref, {
-      ...changes,
+      ...otherChanges,
+      ...(planning ? { planning } : {}),
       ...approvalChanges,
       version: (typeof current.version === "number" ? current.version : 1) + 1,
       updatedAt: now,

@@ -312,11 +312,11 @@ export function EmployeeResignationDetail({
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-3"><Button asChild variant="outline" className="rounded-xl bg-white"><Link href="/dashboard/dp/terminations"><ArrowLeft className="h-4 w-4" />Voltar</Link></Button><Badge className="bg-pink-100 text-pink-700 hover:bg-pink-100">{isEmployerDismissal ? "Dispensa sem justa causa" : "Pedido de demissão"}</Badge><span className="ml-auto font-mono text-xs text-slate-400">{process.request.protocol}</span></div>
         {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{error}</div> : null}
-        <section className="overflow-hidden rounded-[24px] border bg-white shadow-sm">
+        <section className="overflow-hidden rounded-[24px] border bg-white shadow-xs">
           <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-7">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-black uppercase tracking-[0.1em] text-pink-600">
+                <p className="text-xs font-black uppercase tracking-widest text-pink-600">
                   {isEmployerDismissal ? "Desligamento CLT iniciado pela empresa" : "Desligamento CLT solicitado pelo colaborador"}
                 </p>
                 <Badge variant="outline" className={`rounded-full text-[10px] font-black ${
@@ -346,10 +346,10 @@ export function EmployeeResignationDetail({
             </div>
           </div>
           <div className="grid gap-px border-t bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Tipo</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{process.terminationReason ?? (isEmployerDismissal ? "Dispensa sem justa causa" : "Pedido de demissão")}</p></div>
-            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Último dia</p><p className="mt-1.5 inline-flex items-center gap-2 text-xs font-extrabold text-slate-700"><CalendarDays className="h-3.5 w-3.5 text-slate-400" />{dateLabel(process.notice?.contractEndDate ?? process.request.desiredLastDay)}</p></div>
-            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Próxima ação</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionLabel}</p></div>
-            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Responsável</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionOwner}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tipo</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{process.terminationReason ?? (isEmployerDismissal ? "Dispensa sem justa causa" : "Pedido de demissão")}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Último dia</p><p className="mt-1.5 inline-flex items-center gap-2 text-xs font-extrabold text-slate-700"><CalendarDays className="h-3.5 w-3.5 text-slate-400" />{dateLabel(process.notice?.contractEndDate ?? process.request.desiredLastDay)}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Próxima ação</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionLabel}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Responsável</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionOwner}</p></div>
           </div>
         </section>
 
@@ -370,7 +370,7 @@ export function EmployeeResignationDetail({
               onValidate={() => onAction({ action: "sync_uniform_return" })}
             />
             <TerminationAsoCard processId={process.id} workflow={asoWorkflow} step={asoStep} />
-            <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm">
+            <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-xs">
               <div className="border-b border-emerald-100 bg-emerald-50/60 p-4">
                 <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><WalletCards className="h-5 w-5" /></span><div><p className="font-black">Pagamento rescisório</p><p className="mt-0.5 text-xs font-semibold text-slate-500">Disponível após a aprovação da contabilidade.</p></div></div>
               </div>
@@ -383,12 +383,12 @@ export function EmployeeResignationDetail({
           </div>
         </section>
 
-        <section className="grid overflow-hidden rounded-[24px] border bg-white shadow-sm xl:grid-cols-[310px_minmax(0,1fr)]">
-          <aside className="border-b bg-[#fbfaf7] p-4 xl:border-b-0 xl:border-r"><p className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Etapas principais</p><div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-1">{stages.map((stage, index) => { const state = stageState(stage.steps); const selected = stage.id === selectedStage.id; return <button type="button" key={stage.id} onClick={() => setSelectedStageId(stage.id)} className={`flex items-start gap-3 rounded-xl p-3 text-left ${selected ? "bg-white shadow-sm ring-1 ring-pink-100" : "hover:bg-white/70"}`}><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white text-xs font-black">{state === "completed" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : index + 1}</span><span><span className={`block text-sm font-black ${selected ? "text-pink-700" : "text-slate-700"}`}>{stage.title}</span><span className="mt-1 flex items-center gap-1 text-[10px] font-bold text-slate-400"><StatusIcon state={state} />{statusLabel(stage.steps[0]?.status)}</span></span></button>; })}</div></aside>
-          <div className="min-w-0 p-5 sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.1em] text-pink-600">Etapa {stages.findIndex((stage) => stage.id === selectedStage.id) + 1} de {stages.length}</p><h2 className="mt-2 text-xl font-black">{selectedStage.title}</h2><p className="mt-1 text-sm font-medium text-slate-500">{selectedStage.description}</p></div><StatusIcon state={stageState(selectedStage.steps)} /></div><div className="mt-5">{content}</div></div>
+        <section className="grid overflow-hidden rounded-[24px] border bg-white shadow-xs xl:grid-cols-[310px_minmax(0,1fr)]">
+          <aside className="border-b bg-[#fbfaf7] p-4 xl:border-b-0 xl:border-r"><p className="mb-3 px-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Etapas principais</p><div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-1">{stages.map((stage, index) => { const state = stageState(stage.steps); const selected = stage.id === selectedStage.id; return <button type="button" key={stage.id} onClick={() => setSelectedStageId(stage.id)} className={`flex items-start gap-3 rounded-xl p-3 text-left ${selected ? "bg-white shadow-xs ring-1 ring-pink-100" : "hover:bg-white/70"}`}><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white text-xs font-black">{state === "completed" ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : index + 1}</span><span><span className={`block text-sm font-black ${selected ? "text-pink-700" : "text-slate-700"}`}>{stage.title}</span><span className="mt-1 flex items-center gap-1 text-[10px] font-bold text-slate-400"><StatusIcon state={state} />{statusLabel(stage.steps[0]?.status)}</span></span></button>; })}</div></aside>
+          <div className="min-w-0 p-5 sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-pink-600">Etapa {stages.findIndex((stage) => stage.id === selectedStage.id) + 1} de {stages.length}</p><h2 className="mt-2 text-xl font-black">{selectedStage.title}</h2><p className="mt-1 text-sm font-medium text-slate-500">{selectedStage.description}</p></div><StatusIcon state={stageState(selectedStage.steps)} /></div><div className="mt-5">{content}</div></div>
         </section>
 
-        <section className="rounded-[24px] border bg-white p-5 shadow-sm sm:p-7"><div className="flex items-center gap-3"><History className="h-5 w-5 text-slate-500" /><div><h3 className="font-black">Histórico auditável</h3><p className="text-xs text-slate-400">{events.length} evento(s) registrado(s)</p></div></div><div className="mt-4 divide-y">{events.map((event) => <div key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><div><p className="font-bold text-slate-800">{event.message}</p><p className="text-xs text-slate-400">{event.actorName}</p></div><time className="font-mono text-xs text-slate-400">{new Date(event.at).toLocaleString("pt-BR")}</time></div>)}</div></section>
+        <section className="rounded-[24px] border bg-white p-5 shadow-xs sm:p-7"><div className="flex items-center gap-3"><History className="h-5 w-5 text-slate-500" /><div><h3 className="font-black">Histórico auditável</h3><p className="text-xs text-slate-400">{events.length} evento(s) registrado(s)</p></div></div><div className="mt-4 divide-y">{events.map((event) => <div key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><div><p className="font-bold text-slate-800">{event.message}</p><p className="text-xs text-slate-400">{event.actorName}</p></div><time className="font-mono text-xs text-slate-400">{new Date(event.at).toLocaleString("pt-BR")}</time></div>)}</div></section>
       </div>
     </div>
   );

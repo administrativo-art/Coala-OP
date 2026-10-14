@@ -1,3 +1,5 @@
+import { authenticatedApiRequest } from "@/lib/authenticated-api-client";
+
 export type OperationalUploadKind =
   | "reposition-signature"
   | "dispatch-document"
@@ -22,21 +24,18 @@ export async function uploadOperationalFile(params: {
   targetId: string;
   file: File;
 }) {
-  const token = await params.user.getIdToken();
   const formData = new FormData();
   formData.set("kind", params.kind);
   formData.set("targetId", params.targetId);
   formData.set("file", params.file);
 
-  const response = await fetch("/api/uploads/operations", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || "Falha ao enviar arquivo.");
-  }
-
-  return payload as { url: string; path: string };
+  return authenticatedApiRequest<{ url: string; path: string }>(
+    "/api/uploads/operations",
+    {
+      method: "POST",
+      getIdToken: params.user.getIdToken,
+      body: formData,
+      fallbackError: "Falha ao enviar arquivo.",
+    }
+  );
 }

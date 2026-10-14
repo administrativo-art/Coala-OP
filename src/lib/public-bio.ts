@@ -146,3 +146,6 @@ export function publicBioProjection(value: unknown): BioPage | null {
       .map(({ id, kind, label, subtitle, placement, url }) => ({ id, kind, label, subtitle, placement, url, enabled: true })),
   };
 }
+
+/** Endereço público da página da bio, usado no Link na bio e no QR Code das Configurações. */
+export const BIO_SITE_URL = process.env.NEXT_PUBLIC_BIO_SITE_URL || "https://bio.coalashakes.com";

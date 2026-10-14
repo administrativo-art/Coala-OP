@@ -111,7 +111,7 @@ function DraggableMarker({
           event.stopPropagation();
           onRemove();
         }}
-        className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-white/90 text-current shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+        className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-white/90 text-current shadow-xs hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
         aria-label={`Remover ${label.toLowerCase()}`}
         title={removable ? `Remover ${label.toLowerCase()}` : "Cada signatário precisa manter ao menos uma assinatura"}
       >
@@ -250,7 +250,7 @@ function PdfPageStage({
       <button
         type="button"
         onClick={() => onSelectPage(pageNumber)}
-        className="mx-auto mb-2 block rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm"
+        className="mx-auto mb-2 block rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-xs"
       >
         Página {pageNumber}
       </button>
@@ -528,7 +528,7 @@ export default function SignaturePlacementEditor({
   const signers = packageState?.signers ?? [];
   const pageCount = layout?.pageCount ?? 0;
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-xs">
       <div className="flex max-h-[96vh] w-full max-w-[1480px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div>

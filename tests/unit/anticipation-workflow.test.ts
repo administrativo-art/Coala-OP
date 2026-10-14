@@ -64,7 +64,7 @@ test("tela usa transporte autenticado e consulta guiada, sem polling, pagamentos
 
 test("cadastro manual de conta grava workspace e não reassocia conta de outro workspace", () => {
   const source = readFileSync(new URL("../../src/features/financial/components/settings/bank-accounts-management.tsx", import.meta.url), "utf8");
-  assert.match(source, /editTarget\.workspaceId !== WORKSPACE_ID/);
+  assert.match(source, /current\?\.workspaceId && current\.workspaceId !== WORKSPACE_ID/);
   assert.match(source, /workspaceId: WORKSPACE_ID/);
-  assert.ok(source.indexOf("editTarget.workspaceId !== WORKSPACE_ID") < source.indexOf("await updateDoc(financialDoc(\"bankAccounts\""));
+  assert.ok(source.indexOf("current.workspaceId !== WORKSPACE_ID") < source.indexOf("await updateDoc(financialDoc(\"bankAccounts\""));
 });

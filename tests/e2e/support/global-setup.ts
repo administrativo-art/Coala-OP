@@ -65,7 +65,6 @@ export default async function seedE2E() {
     ?? initializeApp({ projectId: PROJECT_ID }, "coala-e2e-seed");
   const auth = getAuth(app);
   const mainDb = getFirestore(app, "coala");
-  const financialDb = getFirestore(app, "coala-financeiro");
 
   try {
     await auth.createUser({
@@ -339,6 +338,16 @@ export default async function seedE2E() {
     createdAt: now,
   });
   await batch.commit();
+
+  await resetFinancialE2EFixtures();
+}
+
+export async function resetFinancialE2EFixtures() {
+  assertFirestoreEmulatorSafety({ projectId: PROJECT_ID });
+  const app = getApps().find((entry) => entry.name === "coala-e2e-seed")
+    ?? initializeApp({ projectId: PROJECT_ID }, "coala-e2e-seed");
+  const financialDb = getFirestore(app, "coala-financeiro");
+  const now = new Date().toISOString();
 
   const financialBatch = financialDb.batch();
   financialBatch.set(financialDb.collection("accounts").doc("account-e2e"), {

@@ -126,6 +126,7 @@ export function DPBulkShiftEditPanel({
     return selectedDates.filter((date) => dates.has(date)).length;
   }, [selectedDates, swapUserId, vacationDatesByUser]);
   const hasTimeChange = Boolean(startTime && endTime);
+  const selectedDefinition = shiftDefinitions.find((item) => item.id === shiftDefinitionId);
 
   const affectedUsers = React.useMemo(
     () => uniqSorted(selectedShifts.map((item) => item.userName)),
@@ -202,8 +203,13 @@ export function DPBulkShiftEditPanel({
       return;
     }
 
-    if (action === 'replace' && hasTimeChange && startTime >= endTime) {
-      toast({ title: 'O horário final deve ser posterior ao horário inicial.', variant: 'destructive' });
+    if (action === 'replace' && hasTimeChange && startTime === endTime) {
+      toast({ title: 'O início e o fim do turno não podem ser iguais.', variant: 'destructive' });
+      return;
+    }
+
+    if (action === 'replace' && hasTimeChange && startTime > endTime && selectedDefinition?.overnight !== true) {
+      toast({ title: 'Selecione um turno noturno para atravessar a meia-noite.', variant: 'destructive' });
       return;
     }
 
@@ -252,7 +258,7 @@ export function DPBulkShiftEditPanel({
           <div className="text-[13.5px] font-black leading-4 text-[#0f172a]">Edição em lote</div>
           <p className="mt-0.5 text-[11.5px] font-semibold leading-4 text-[#94a3b8]">As opções acompanham a escala.</p>
         </div>
-        <button type="button" onClick={onCancel} aria-label="Fechar edição em lote" className="ml-auto grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg text-[#94a3b8] outline-none hover:bg-[#f6f8fb] focus-visible:ring-2 focus-visible:ring-[#db2777]">
+        <button type="button" onClick={onCancel} aria-label="Fechar edição em lote" className="ml-auto grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg text-[#94a3b8] outline-hidden hover:bg-[#f6f8fb] focus-visible:ring-2 focus-visible:ring-[#db2777]">
           <X className="h-[13px] w-[13px]" strokeWidth={2.6} />
         </button>
       </div>
@@ -294,7 +300,7 @@ export function DPBulkShiftEditPanel({
         )}
 
         {selectedShifts.length === 0 ? (
-          <div className="mt-[14px] rounded-[12px] border border-dashed border-[#dfe6f0] px-[14px] py-[22px] text-center text-[11.5px] font-bold leading-[1.5] text-[#a3aec0]">
+          <div className="mt-[14px] rounded-[12px] border border-dashed border-[#dfe6f0] px-[14px] py-[22px] text-center text-[11.5px] font-bold leading-normal text-[#a3aec0]">
             Selecione os turnos na escala para liberar as opções.
           </div>
         ) : (
@@ -330,7 +336,7 @@ export function DPBulkShiftEditPanel({
                       <span className={`h-[7px] w-[7px] rounded-full ${!shiftDefinitionId ? 'bg-[#db2777]' : 'bg-[#cbd5e1]'}`} />
                       <span className={`text-xs font-extrabold ${!shiftDefinitionId ? 'text-[#db2777]' : 'text-[#475569]'}`}>Manual</span>
                     </button>
-                    {shiftDefinitions.map((definition) => {
+                    {shiftDefinitions.filter((definition) => definition.isArchived !== true).map((definition) => {
                       const selected = shiftDefinitionId === definition.id;
                       return (
                         <button
@@ -385,7 +391,7 @@ export function DPBulkShiftEditPanel({
             )}
 
             {preview && (preview.predictedAdded.length > 0 || preview.predictedRemoved.length > 0) && (
-              <div className="mt-3 rounded-[12px] border border-[#fde68a] bg-[#fffbeb] px-3 py-[10px] text-[11.5px] font-bold leading-[1.5] text-[#b45309]">
+              <div className="mt-3 rounded-[12px] border border-[#fde68a] bg-[#fffbeb] px-3 py-[10px] text-[11.5px] font-bold leading-normal text-[#b45309]">
                 {preview.predictedAdded.length > 0 && <p>Novas folgas previstas: {preview.predictedAdded.map(formatDate).join(', ')}.</p>}
                 {preview.predictedRemoved.length > 0 && <p>Folgas previstas removidas: {preview.predictedRemoved.map(formatDate).join(', ')}.</p>}
               </div>

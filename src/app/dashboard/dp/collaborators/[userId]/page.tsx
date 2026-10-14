@@ -1,8 +1,8 @@
 "use client";
 
-import React, { use, useEffect, useState } from "react";
+import React, { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format, differenceInDays, differenceInMonths, differenceInYears } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -20,7 +20,6 @@ import {
   MapPin,
   Menu,
   Pencil,
-  Settings,
   Shirt,
   Umbrella,
   UserX,
@@ -35,7 +34,6 @@ import { getHrEmployeeId } from "@/lib/hr/person-link";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import {
   useEmployeeProfile,
-  useFieldMap,
   type EmployeeProfileState,
 } from "@/features/rh/hooks/useEmployeeProfile";
 import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
@@ -48,6 +46,7 @@ import { callOnFieldUpdate } from "@/features/rh/lib/rh-client";
 import { DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
 import {
   SYSTEM_BLOCK_KEYS,
+  SYSTEM_BLOCK_FIELD_KEYS_BY_ID,
   SYSTEM_FIELD_DEFAULTS,
   SYSTEM_FIELD_KEYS,
   SYSTEM_NAV_LINKS,
@@ -90,10 +89,23 @@ import {
 } from "@/features/hr/lib/transport-voucher";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { SidePanel } from "@/components/patterns/side-panel";
+import { UserManagement } from "@/components/user-management";
 import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from "@/lib/hr/termination-options";
 import {
   employmentRelationshipLabel,
+  isEmploymentRelationshipEligibleForAbsence,
   terminationCopyForRelationship,
   terminationReasonsForRelationship,
   type EmploymentTerminationReason,
@@ -377,6 +389,33 @@ function profileDisplaySection(section: string) {
   return label;
 }
 
+const PROFILE_NAVIGATION_GROUP_ORDER = [
+  "Cadastro",
+  "Financeiro e benefícios",
+  "Operação e acessos",
+  "Saúde e jornada",
+] as const;
+
+type ProfileNavigationGroup = (typeof PROFILE_NAVIGATION_GROUP_ORDER)[number];
+
+function profileNavigationGroup(label: string): ProfileNavigationGroup {
+  const normalized = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+
+  if (/beneficio|banc|pix|salario-familia|vale-transporte/.test(normalized)) {
+    return "Financeiro e benefícios";
+  }
+  if (/sistema|escala|unidade|uniforme/.test(normalized)) {
+    return "Operação e acessos";
+  }
+  if (/saude|aso|ferias|jornada/.test(normalized)) {
+    return "Saúde e jornada";
+  }
+  return "Cadastro";
+}
+
 function pdvRegistrationLabel(user: User) {
   const values = [
     user.registrationIdPdv,
@@ -395,7 +434,7 @@ function Panel({ title, icon: Icon, children, className = "", action }: {
   action?: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-xl border border-[#dedfe4] bg-white shadow-sm ${className}`}>
+    <section className={`rounded-xl border border-[#dedfe4] bg-white shadow-xs ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fff0f6] text-[#df2f78]">
@@ -946,7 +985,7 @@ function EmployeeFamilySalaryPanel({
               <button
                 type="button"
                 onClick={startEditing}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-xs ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 Editar filhos
@@ -976,7 +1015,7 @@ function EmployeeFamilySalaryPanel({
                   max={12}
                   value={drafts.length}
                   onChange={(event) => updateChildCount(Number(event.target.value))}
-                  className="mt-1 h-11 w-full rounded-xl border border-[#dedfe4] bg-[#fbfbfc] px-3 text-sm font-black text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                  className="mt-1 h-11 w-full rounded-xl border border-[#dedfe4] bg-[#fbfbfc] px-3 text-sm font-black text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                 />
               </div>
               <p className="text-xs font-semibold text-[#777784]">
@@ -1005,7 +1044,7 @@ function EmployeeFamilySalaryPanel({
                           <input
                             value={draft.name}
                             onChange={(event) => updateDraft(index, { name: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                         <label className="text-xs font-black text-[#777784]">
@@ -1014,7 +1053,7 @@ function EmployeeFamilySalaryPanel({
                             type="date"
                             value={draft.birthDate}
                             onChange={(event) => updateDraft(index, { birthDate: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                         <label className="text-xs font-black text-[#777784]">
@@ -1022,7 +1061,7 @@ function EmployeeFamilySalaryPanel({
                           <input
                             value={draft.cpf}
                             onChange={(event) => updateDraft(index, { cpf: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                         <label className="text-xs font-black text-[#777784]">
@@ -1030,7 +1069,7 @@ function EmployeeFamilySalaryPanel({
                           <input
                             value={draft.rg}
                             onChange={(event) => updateDraft(index, { rg: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
                           />
                         </label>
                       </div>
@@ -1146,7 +1185,7 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-700 shadow-xs ring-1 ring-slate-200 hover:bg-slate-50"
         >
           12 meses
         </button>
@@ -1202,6 +1241,7 @@ function EmployeeProfileFields({
   profileState,
   onProfileChanged,
   onFieldMapChanged,
+  children,
 }: {
   user: User;
   units: DPUnit[];
@@ -1209,6 +1249,7 @@ function EmployeeProfileFields({
   profileState: EmployeeProfileState;
   onProfileChanged: () => void;
   onFieldMapChanged: () => void;
+  children?: React.ReactNode;
 }) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
   const employeeId = getHrEmployeeId(user) ?? user.id;
@@ -1227,17 +1268,46 @@ function EmployeeProfileFields({
   const [pdvProfileId, setPdvProfileId] = useState("");
   const [pdvProfiles, setPdvProfiles] = useState<Array<{ id: string; name: string }>>([]);
   const [pdvCatalogLoading, setPdvCatalogLoading] = useState(false);
+  const [activeNavigationId, setActiveNavigationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (profileState.status !== "ok") return;
+
+    let observer: IntersectionObserver | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      const targets = Array.from(document.querySelectorAll<HTMLElement>("[data-profile-navigation-section]"));
+      if (targets.length === 0) return;
+
+      observer = new IntersectionObserver((entries) => {
+        const visibleEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+        if (visibleEntry?.target.id) setActiveNavigationId(visibleEntry.target.id);
+      }, {
+        rootMargin: "-180px 0px -58% 0px",
+        threshold: [0, 0.1, 0.35],
+      });
+      targets.forEach((target) => observer?.observe(target));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [profileState.status]);
+
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
-      <div className="grid gap-2.5 lg:grid-cols-[160px_minmax(0,1fr)]">
-        <aside className="hidden space-y-2 lg:block">
+      <div className="grid gap-2.5 lg:grid-cols-[232px_minmax(0,1fr)]">
+        <aside className="hidden rounded-xl border border-[#dedfe4] bg-white p-3 shadow-xs lg:block">
+          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-slate-100" />
           {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-7 animate-pulse rounded-md bg-slate-100" />
+            <div key={index} className="mb-2 h-9 animate-pulse rounded-lg bg-slate-100" />
           ))}
         </aside>
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, sectionIndex) => (
-            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-[#dedfe4] bg-white shadow-sm">
+            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-[#dedfe4] bg-white shadow-xs">
               <div className="flex items-center gap-3 border-b border-[#e8e8ec] px-3 py-2">
                 <div className="h-6 w-6 animate-pulse rounded-md bg-[#fff0f6]" />
                 <div className="h-3 w-32 animate-pulse rounded bg-slate-100" />
@@ -1249,6 +1319,7 @@ function EmployeeProfileFields({
               </div>
             </section>
           ))}
+          {children}
         </div>
       </div>
     );
@@ -1256,14 +1327,17 @@ function EmployeeProfileFields({
 
   if (profileState.status === "error") {
     return (
-      <Panel title="Perfil do colaborador" icon={IdCard}>
-        <div className="rounded-2xl bg-[#fffaf0] p-4">
-          <p className="text-sm font-black text-slate-900">Campos do perfil indisponíveis</p>
-          <p className="mt-1 text-xs font-semibold text-[#817762]">
-            Não foi possível carregar os campos deste colaborador. Motivo: {profileState.message}
-          </p>
-        </div>
-      </Panel>
+      <div className="space-y-4">
+        <Panel title="Perfil do colaborador" icon={IdCard}>
+          <div className="rounded-2xl bg-[#fffaf0] p-4">
+            <p className="text-sm font-black text-slate-900">Campos do perfil indisponíveis</p>
+            <p className="mt-1 text-xs font-semibold text-[#817762]">
+              Não foi possível carregar os campos deste colaborador. Motivo: {profileState.message}
+            </p>
+          </div>
+        </Panel>
+        {children}
+      </div>
     );
   }
 
@@ -1418,7 +1492,7 @@ function EmployeeProfileFields({
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         },
       };
@@ -1464,7 +1538,7 @@ function EmployeeProfileFields({
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         };
       });
@@ -1659,6 +1733,72 @@ function EmployeeProfileFields({
       ],
     },
   ];
+  const profileNavigationItems = orderedSections.map((section) => {
+    const sectionFields = sections[section] ?? [];
+    const filledFields = sectionFields.filter(({ fv, staticValue, staticHasValue }) => (
+      staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv)
+    )).length;
+    const totalFields = sectionFields.length;
+    return {
+      id: profileSectionDomId(section),
+      label: sectionDisplayLabel(section),
+      group: profileNavigationGroup(sectionDisplayLabel(section)),
+      statusLabel: `${filledFields}/${totalFields}`,
+      statusTitle: `${filledFields} de ${totalFields} campos preenchidos`,
+      statusTone: totalFields > 0 && filledFields === totalFields
+        ? "complete"
+        : filledFields > 0
+          ? "partial"
+          : "empty",
+    } as const;
+  });
+  const systemNavigationItems = SYSTEM_NAV_LINKS
+    .filter((link) => link.id !== "system.behavior")
+    .filter((link) => (SYSTEM_BLOCK_FIELD_KEYS_BY_ID[link.id] ?? []).some((key) => {
+      const entry = systemEntry(key);
+      return canManageFieldVisibility
+        || canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix);
+    }))
+    .map((link) => {
+      const entries = (SYSTEM_BLOCK_FIELD_KEYS_BY_ID[link.id] ?? []).map(systemEntry);
+      const visibility = getVisibilitySummary(entries);
+      const statusLabel = visibility.mixed
+        ? "Mista"
+        : visibility.visibility === "public"
+          ? "Visível"
+          : visibility.visibility === "confidential"
+            ? "Confidencial"
+            : "Restrita";
+      return {
+        id: profileSectionDomId(link.id),
+        label: link.label,
+        group: profileNavigationGroup(link.label),
+        statusLabel,
+        statusTitle: visibility.mixed
+          ? "Esta seção reúne campos com níveis de acesso diferentes"
+          : FIELD_VISIBILITY_HELP[visibility.visibility],
+        statusTone: visibility.visibility === "public"
+          ? "complete"
+          : visibility.visibility === "confidential"
+            ? "confidential"
+            : "restricted",
+      } as const;
+    });
+  const profileNavigationItemsByGroup = PROFILE_NAVIGATION_GROUP_ORDER
+    .map((group) => ({
+      group,
+      items: [...profileNavigationItems, ...systemNavigationItems].filter((item) => item.group === group),
+    }))
+    .filter(({ items }) => items.length > 0);
+  const selectedNavigationId = activeNavigationId ?? profileNavigationItemsByGroup[0]?.items[0]?.id ?? null;
+
+  const navigationStatusTone = {
+    complete: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    partial: "bg-amber-50 text-amber-700 ring-amber-100",
+    empty: "bg-slate-100 text-slate-500 ring-slate-200",
+    restricted: "bg-sky-50 text-sky-700 ring-sky-100",
+    confidential: "bg-rose-50 text-rose-700 ring-rose-100",
+  } as const;
 
   function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly }: EmployeeProfileFieldRow) {
     const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
@@ -1700,7 +1840,7 @@ function EmployeeProfileFields({
               <button
                 type="button"
                 onClick={() => setEditKey(key)}
-                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-xs ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
               >
                 Editar
               </button>
@@ -1749,28 +1889,48 @@ function EmployeeProfileFields({
         </p>
       ) : null}
 
-      <div className="grid gap-2.5 lg:grid-cols-[160px_minmax(0,1fr)]">
-        <aside className="space-y-1 lg:sticky lg:top-[236px] lg:self-start">
-          {orderedSections.map((section) => (
-            <button
-              key={section}
-              type="button"
-              onClick={() => document.getElementById(profileSectionDomId(section))?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
-            >
-              <span className="truncate">{sectionDisplayLabel(section)}</span>
-            </button>
-          ))}
-          {SYSTEM_NAV_LINKS.filter((link) => link.id !== "system.behavior").map((link) => (
-            <button
-              key={link.id}
-              type="button"
-              onClick={() => document.getElementById(profileSectionDomId(link.id))?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
-            >
-              <span className="truncate">{link.label}</span>
-            </button>
-          ))}
+      <div className="grid gap-2.5 lg:grid-cols-[232px_minmax(0,1fr)]">
+        <aside className="min-w-0 lg:sticky lg:top-[236px] lg:self-start">
+          <nav aria-label="Seções do perfil" className="rounded-xl border border-[#dedfe4] bg-white p-2 shadow-xs">
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-3 lg:overflow-visible lg:pb-0">
+              {profileNavigationItemsByGroup.map(({ group, items }) => (
+                <div key={group} className="contents lg:block">
+                  <p className="hidden px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#9d9da9] lg:block">
+                    {group}
+                  </p>
+                  <div className="contents lg:mt-1 lg:block lg:space-y-1">
+                    {items.map((item) => {
+                      const active = item.id === selectedNavigationId;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-current={active ? "location" : undefined}
+                          onClick={() => {
+                            setActiveNavigationId(item.id);
+                            document.getElementById(item.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }}
+                          className={`flex min-w-max items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-black transition lg:min-w-0 lg:w-full ${
+                            active
+                              ? "border-[#f5bdd4] bg-[#fff0f6] text-[#bd185c] shadow-xs"
+                              : "border-transparent text-[#656572] hover:border-[#ececf0] hover:bg-[#fbfbfc] hover:text-[#bd185c]"
+                          }`}
+                        >
+                          <span className="max-w-[170px] whitespace-normal break-words leading-4 lg:max-w-[128px]">{item.label}</span>
+                          <span
+                            title={item.statusTitle}
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ring-1 ${navigationStatusTone[item.statusTone]}`}
+                          >
+                            {item.statusLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </nav>
         </aside>
 
         <div className="space-y-4">
@@ -1778,7 +1938,7 @@ function EmployeeProfileFields({
             const sectionFields = sections[section] ?? [];
             const sectionVisibility = getVisibilitySummary(sectionFields.map(({ entry }) => entry));
             return (
-              <section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-[#dedfe4] bg-white shadow-sm">
+              <section data-profile-navigation-section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-[#dedfe4] bg-white shadow-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2">
                   <div className="flex items-center gap-3">
                     <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#fff0f6] text-[#df2f78]">
@@ -1834,7 +1994,7 @@ function EmployeeProfileFields({
                                         type="button"
                                         disabled={Boolean(systemActionSaving)}
                                         onClick={() => void openPdvEditor(access)}
-                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-sky-700 shadow-sm ring-1 ring-sky-100 hover:bg-sky-50 disabled:opacity-50"
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-sky-700 shadow-xs ring-1 ring-sky-100 hover:bg-sky-50 disabled:opacity-50"
                                       >
                                         Alterar unidade/perfil
                                       </button>
@@ -1842,7 +2002,7 @@ function EmployeeProfileFields({
                                         type="button"
                                         disabled={Boolean(systemActionSaving)}
                                         onClick={() => void removePdvAccess(access)}
-                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-rose-700 shadow-sm ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-50"
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-rose-700 shadow-xs ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-50"
                                       >
                                         Remover acesso
                                       </button>
@@ -1866,6 +2026,7 @@ function EmployeeProfileFields({
               </section>
             );
           })}
+          {children}
         </div>
       </div>
 
@@ -1904,7 +2065,7 @@ function EmployeeProfileFields({
                 <select
                   value={pdvUnitId}
                   onChange={(event) => setPdvUnitId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
                 >
                   <option value="">Selecione a unidade</option>
                   {pdvUnits.map((unit) => (
@@ -1920,7 +2081,7 @@ function EmployeeProfileFields({
                   value={pdvProfileId}
                   disabled={pdvCatalogLoading}
                   onChange={(event) => setPdvProfileId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-none focus:border-[#ec2f78] disabled:opacity-60"
+                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-hidden focus:border-[#ec2f78] disabled:opacity-60"
                 >
                   <option value="">{pdvCatalogLoading ? "Carregando perfis..." : "Selecione o perfil"}</option>
                   {pdvProfileId && !pdvProfiles.some((profile) => profile.id === pdvProfileId) ? (
@@ -2105,7 +2266,11 @@ function TerminationDialog({
       setMessage(
         relationshipType === "internship"
           ? "O fluxo específico de desligamento de estágio será implementado posteriormente."
-          : "Defina o tipo de vínculo antes de registrar o encerramento."
+          : relationshipType === "apprenticeship"
+            ? "O fluxo específico de desligamento de aprendiz será implementado posteriormente."
+            : relationshipType === "partner"
+              ? "O fluxo específico de encerramento societário será implementado posteriormente."
+              : "Defina o tipo de vínculo antes de registrar o encerramento."
       );
       return;
     }
@@ -2161,7 +2326,7 @@ function TerminationDialog({
               value={employerUnitId}
               onChange={(event) => setEmployerUnitId(event.target.value)}
               required
-              className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+              className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
             >
               <option value="">Selecione a empresa responsável pelo vínculo</option>
               {employerUnits.map((unit) => (
@@ -2177,7 +2342,7 @@ function TerminationDialog({
                 type="date"
                 value={terminationDate}
                 onChange={(event) => setTerminationDate(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
               />
             </label>
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
@@ -2189,7 +2354,7 @@ function TerminationDialog({
                   setTerminationReason(nextReason);
                   if (!requiresTerminationSubtype(nextReason)) setTerminationCause("");
                 }}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
                 {availableReasons.map((reason) => (
@@ -2205,7 +2370,7 @@ function TerminationDialog({
               <select
                 value={terminationCause}
                 onChange={(event) => setTerminationCause(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
                 {JUST_CAUSE_TYPES.map((cause) => (
@@ -2224,22 +2389,22 @@ function TerminationDialog({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Data e hora da comunicação
-                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
                 </label>
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Local
-                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
                 </label>
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Aviso-prévio
-                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]">
+                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]">
                     <option value="indemnified">Indenizado</option>
                     <option value="worked">Trabalhado</option>
                   </select>
                 </label>
                 <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
                   Outros participantes
-                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
                 </label>
               </div>
               <label className="flex items-start gap-3 rounded-xl border border-pink-200 bg-white p-3 text-sm font-bold text-slate-800">
@@ -2297,6 +2462,7 @@ function TerminationDialog({
 export default function CollaboratorProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { activeUsers, terminatedUsers, permissions, firebaseUser, user: currentUser, updateUser } = useAuth();
   const { toast } = useToast();
   const { shiftDefinitions, units, vacations, vacationsLoading } = useDPBootstrap();
@@ -2314,7 +2480,10 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const [transportVoucherMessage, setTransportVoucherMessage] = useState<string | null>(null);
   const [terminationDialogOpen, setTerminationDialogOpen] = useState(false);
   const [terminationSaving, setTerminationSaving] = useState(false);
-  const { fieldMap: profileLayout } = useFieldMap(fieldMapReloadKey);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [editDrawerDirty, setEditDrawerDirty] = useState(false);
+  const [discardEditOpen, setDiscardEditOpen] = useState(false);
+  const editDrawerOpen = searchParams.get("panel") === "edit-data";
   const allUsers: User[] = [...activeUsers, ...terminatedUsers];
   const user = allUsers.find((entry) => entry.id === userId);
   const employeeId = user ? getHrEmployeeId(user) ?? user.id : "";
@@ -2322,6 +2491,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     employeeId,
     fieldMapReloadKey + employeeProfileReloadKey,
   );
+  const profileLayout = employeeProfileState.status === "ok"
+    ? employeeProfileState.data.fieldMap
+    : null;
 
   function reloadEmployeeProfile() {
     setEmployeeProfileReloadKey((value) => value + 1);
@@ -2330,6 +2502,26 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   function reloadEmployeeFieldMap() {
     setFieldMapReloadKey((value) => value + 1);
   }
+
+  const setEditDrawerInUrl = useCallback((open: boolean) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (open) nextParams.set("panel", "edit-data");
+    else nextParams.delete("panel");
+    const query = nextParams.toString();
+    const href = `/dashboard/dp/collaborators/${encodeURIComponent(userId)}${query ? `?${query}` : ""}`;
+    if (open) router.push(href, { scroll: false });
+    else router.replace(href, { scroll: false });
+  }, [router, searchParams, userId]);
+
+  const requestEditDrawerClose = useCallback((reason: 'cancel' | 'saved' = 'cancel') => {
+    if (reason !== 'saved' && editDrawerDirty) {
+      setDiscardEditOpen(true);
+      return;
+    }
+    setDiscardEditOpen(false);
+    setEditDrawerDirty(false);
+    setEditDrawerInUrl(false);
+  }, [editDrawerDirty, setEditDrawerInUrl]);
 
   useEffect(() => {
     if (!firebaseUser || !user) return;
@@ -2445,7 +2637,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         },
       };
@@ -2509,7 +2701,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           lgpd: {
             ...nextLgpd,
             ...(entry.lgpd ?? {}),
-            category: nextLgpd.category,
+            category: entry.lgpd?.category ?? nextLgpd.category,
           },
         };
       });
@@ -2573,7 +2765,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     currentUser?.id === collaborator.id || firebaseUser?.uid === collaborator.id
   );
   const canRequestOwnResignation = Boolean(
-    isOwnProfile && !isTerminated && collaborator.employmentRelationshipType === "clt"
+    isOwnProfile && !isTerminated && isEmploymentRelationshipEligibleForAbsence(collaborator.employmentRelationshipType)
   );
 
   async function confirmTermination(payload: TerminationPayload) {
@@ -2847,7 +3039,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <button
                       type="button"
                       onClick={openTransportVoucherEditor}
-                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-primary-foreground shadow-sm hover:bg-primary/90"
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-primary-foreground shadow-xs hover:bg-primary/90"
                     >
                       {transportVoucherStatus === "none" ? "Configurar vale-transporte" : "Editar vale-transporte"}
                     </button>
@@ -2869,7 +3061,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <button
                       type="button"
                       onClick={() => setTransportVoucherHistoryOpen(true)}
-                      className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
+                      className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-xs ring-1 ring-slate-200 hover:bg-slate-50"
                     >
                       Ver histórico
                     </button>
@@ -2892,14 +3084,14 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     const block = systemBlocks.find((item) => item.id === id && item.visible);
     if (!block) return null;
     return (
-      <div id={profileSectionDomId(block.id)} key={block.id} className={`scroll-mt-[236px] ${className || block.className}`}>
+      <div data-profile-navigation-section id={profileSectionDomId(block.id)} key={block.id} className={`scroll-mt-[236px] ${className || block.className}`}>
         {block.content}
       </div>
     );
   }
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] bg-[var(--bg)] p-2 text-[#1d1d26] md:p-3">
+    <div className="min-h-[calc(100vh-6rem)] bg-(--bg) p-2 text-[#1d1d26] md:p-3">
       <div className="w-full space-y-2.5">
         <TerminationDialog
           user={collaborator}
@@ -2910,13 +3102,59 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           onConfirm={confirmTermination}
         />
 
+        {canManageSystemFieldVisibility ? (
+          <SidePanel
+            open={editDrawerOpen}
+            onOpenChange={(open) => {
+              if (open) setEditDrawerInUrl(true);
+              else requestEditDrawerClose('cancel');
+            }}
+            kicker="Editar colaborador"
+            title={displayName(collaborator.username)}
+            subtitle="Identificação, atuação, jornada e comportamento no sistema."
+            className="w-[min(920px,100vw)]"
+          >
+            <UserManagement
+              editUserId={collaborator.id}
+              presentation="drawer"
+              contextLabel="Gestão do colaborador › Editar dados"
+              onDirtyChange={setEditDrawerDirty}
+              onClose={requestEditDrawerClose}
+            />
+          </SidePanel>
+        ) : null}
+
+        <AlertDialog open={discardEditOpen} onOpenChange={setDiscardEditOpen}>
+          <AlertDialogContent className="rounded-ds-card border-ds-border bg-ds-surface font-ds">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Descartar alterações?</AlertDialogTitle>
+              <AlertDialogDescription>
+                As alterações feitas nos dados do colaborador ainda não foram salvas.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-rose-600 text-white hover:bg-rose-700"
+                onClick={() => {
+                  setEditDrawerDirty(false);
+                  setDiscardEditOpen(false);
+                  setEditDrawerInUrl(false);
+                }}
+              >
+                Descartar alterações
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <div className="flex items-center gap-2">
           <BackButton
             fallbackHref="/dashboard/dp/collaborators"
             ariaLabel="Voltar à página anterior"
             iconOnly
             variant="ghost"
-            className="h-8 w-8 rounded-lg bg-white p-0 text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
+            className="h-8 w-8 rounded-lg bg-white p-0 text-[#777784] shadow-xs ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
             iconClassName="h-5 w-5"
           />
           <span className="text-xs font-black text-[#8f8f9b]">Departamento pessoal</span>
@@ -2926,8 +3164,8 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           </h1>
         </div>
 
-        <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur lg:top-[76px]">
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_320px_40px] md:items-center">
+        <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur-sm lg:top-[76px]">
+        <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(0,1fr)_320px_auto] xl:items-center">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
               {user.avatarUrl ? (
@@ -2943,7 +3181,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             </div>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="min-w-0 break-words text-base font-black leading-tight text-[#181820]">{user.username}</h2>
+                <h2 className="min-w-0 wrap-break-word text-base font-black leading-tight text-[#181820]">{user.username}</h2>
                 <span
                   className="inline-flex max-w-full items-center rounded-full bg-[#eafaf2] px-2 py-0.5 text-[10px] font-black text-[#008963] sm:max-w-[220px]"
                   title={roleFunctionLabel}
@@ -2990,12 +3228,29 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               profileState={employeeProfileState}
             />
           </div>
-          <div className="flex shrink-0 items-center md:justify-end">
-              <Popover>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 xl:justify-end">
+              {canManageSystemFieldVisibility ? (
+                <button
+                  type="button"
+                  onClick={() => setEditDrawerInUrl(true)}
+                  className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
+                >
+                  <Pencil className="h-4 w-4 text-ds-accent" />
+                  Editar dados
+                </button>
+              ) : null}
+              <Link
+                href={`/dashboard/dp/collaborators/${user.id}/documents`}
+                className="inline-flex h-9 items-center gap-2 rounded-ds-btn border border-ds-border bg-ds-surface px-3 text-xs font-extrabold text-ds-ink shadow-xs hover:border-ds-accent hover:text-ds-accent-ink"
+              >
+                <FileText className="h-4 w-4 text-ds-accent" />
+                Documentos
+              </Link>
+              <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#dedfe4] bg-white text-[#777784] shadow-sm hover:text-[#df2f78]"
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#dedfe4] bg-white text-[#777784] shadow-xs hover:text-[#df2f78]"
                     title="Ações do colaborador"
                   >
                     <Menu className="h-5 w-5" />
@@ -3003,31 +3258,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-60 rounded-lg p-1.5">
                   <div className="space-y-1">
-                    {canManageSystemFieldVisibility ? (
-                      <Link
-                        href={`/dashboard/dp/collaborators/${user.id}/edit`}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-                      >
-                        <Pencil className="h-4 w-4 text-[#df2f78]" />
-                        Editar dados
-                      </Link>
-                    ) : null}
-                    {canManageSystemFieldVisibility ? (
-                      <Link
-                        href="/dashboard/settings?department=pessoal&tab=profile-fields"
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-                      >
-                        <Settings className="h-4 w-4 text-[#df2f78]" />
-                        Editar campos
-                      </Link>
-                    ) : null}
-                    <Link
-                      href={`/dashboard/dp/collaborators/${user.id}/documents`}
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-                    >
-                      <FileText className="h-4 w-4 text-[#df2f78]" />
-                      Documentos do colaborador
-                    </Link>
                     <Link
                       href={`/dashboard/documents/consents/${encodeURIComponent(getHrEmployeeId(collaborator) ?? collaborator.id)}`}
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
@@ -3047,7 +3277,10 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     {canTerminateCollaborator ? (
                       <button
                         type="button"
-                        onClick={() => setTerminationDialogOpen(true)}
+                        onClick={() => {
+                          setActionsOpen(false);
+                          setTerminationDialogOpen(true);
+                        }}
                         className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-rose-700 hover:bg-rose-50"
                       >
                         <UserX className="h-4 w-4 text-rose-600" />
@@ -3068,33 +3301,33 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           profileState={employeeProfileState}
           onProfileChanged={reloadEmployeeProfile}
           onFieldMapChanged={reloadEmployeeFieldMap}
-        />
-
-        <div className="space-y-2.5">
-          {systemVisibilityMessage ? (
-            <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
-              systemVisibilityMessage.startsWith("Falha")
-                ? "bg-rose-50 text-rose-600"
-                : "bg-emerald-50 text-emerald-700"
-            }`}>
-              {systemVisibilityMessage}
-            </p>
-          ) : null}
-          <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
-            <div className="space-y-2.5">
-              {renderSystemBlock("system.schedule_units")}
+        >
+          <div className="space-y-2.5">
+            {systemVisibilityMessage ? (
+              <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
+                systemVisibilityMessage.startsWith("Falha")
+                  ? "bg-rose-50 text-rose-600"
+                  : "bg-emerald-50 text-emerald-700"
+              }`}>
+                {systemVisibilityMessage}
+              </p>
+            ) : null}
+            <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
+              <div className="space-y-2.5">
+                {renderSystemBlock("system.schedule_units")}
+              </div>
+              {renderSystemBlock("system.vacations")}
             </div>
-            {renderSystemBlock("system.vacations")}
+            <div className="grid gap-2.5 xl:grid-cols-2">
+              {renderSystemBlock("system.aso_control")}
+              {renderSystemBlock("system.family_salary")}
+            </div>
+            <div className="grid gap-2.5 xl:grid-cols-2">
+              {renderSystemBlock("system.uniforms")}
+              {renderSystemBlock("system.transport_voucher")}
+            </div>
           </div>
-          <div className="grid gap-2.5 xl:grid-cols-2">
-            {renderSystemBlock("system.aso_control")}
-            {renderSystemBlock("system.family_salary")}
-          </div>
-          <div className="grid gap-2.5 xl:grid-cols-2">
-            {renderSystemBlock("system.uniforms")}
-            {renderSystemBlock("system.transport_voucher")}
-          </div>
-        </div>
+        </EmployeeProfileFields>
         {transportVoucherEditorOpen ? (
           <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3">
             <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl">
@@ -3118,7 +3351,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   <select
                     value={transportVoucherStatusDraft}
                     onChange={(event) => setTransportVoucherStatusDraft(event.target.value as "active" | "suspended")}
-                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
                   >
                     <option value="active">Ativo</option>
                     <option value="suspended">Suspenso</option>
@@ -3131,7 +3364,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <CurrencyInput
                       value={transportVoucherValueDraft}
                       onChange={setTransportVoucherValueDraft}
-                      className="h-8 rounded-lg border-[#dedfe4] bg-white pl-8 text-xs font-bold outline-none focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="h-8 rounded-lg border-[#dedfe4] bg-white pl-8 text-xs font-bold outline-hidden focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
                       placeholder="0,00"
                     />
                   </label>
@@ -3143,7 +3376,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     type="date"
                     value={transportVoucherEffectiveDate}
                     onChange={(event) => setTransportVoucherEffectiveDate(event.target.value)}
-                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
                   />
                 </label>
 
@@ -3152,7 +3385,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   <textarea
                     value={transportVoucherReason}
                     onChange={(event) => setTransportVoucherReason(event.target.value)}
-                    className="min-h-16 rounded-lg border border-[#dedfe4] bg-white px-2.5 py-2 text-xs font-semibold outline-none focus:border-[#ec2f78]"
+                    className="min-h-16 rounded-lg border border-[#dedfe4] bg-white px-2.5 py-2 text-xs font-semibold outline-hidden focus:border-[#ec2f78]"
                     placeholder="Descreva o motivo da alteração."
                   />
                 </label>
@@ -3174,7 +3407,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   type="button"
                   disabled={transportVoucherSaving}
                   onClick={() => void saveTransportVoucher()}
-                  className="h-8 rounded-lg bg-[#ec2f78] px-3 text-xs font-black text-white shadow-sm hover:bg-[#d92b6e] disabled:opacity-60"
+                  className="h-8 rounded-lg bg-[#ec2f78] px-3 text-xs font-black text-white shadow-xs hover:bg-[#d92b6e] disabled:opacity-60"
                 >
                   {transportVoucherSaving ? "Salvando..." : "Salvar alteração"}
                 </button>

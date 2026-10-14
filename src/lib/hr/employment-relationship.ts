@@ -1,7 +1,9 @@
 export const EMPLOYMENT_RELATIONSHIP_TYPES = [
   { value: "clt", label: "CLT" },
+  { value: "apprenticeship", label: "Aprendiz" },
   { value: "pj", label: "Pessoa jurídica (PJ)" },
   { value: "internship", label: "Estágio" },
+  { value: "partner", label: "Societário" },
 ] as const;
 
 export type EmploymentRelationshipType = (typeof EMPLOYMENT_RELATIONSHIP_TYPES)[number]["value"];
@@ -42,11 +44,18 @@ export function resolveEmploymentRelationshipType(
   if (personRecordType === "employee") return "clt";
   if (personRecordType === "pj") return "pj";
   if (personRecordType === "internship") return "internship";
+  if (personRecordType === "partner") return "partner";
   return undefined;
 }
 
 export function employmentRelationshipLabel(value: unknown) {
   return EMPLOYMENT_RELATIONSHIP_TYPES.find((item) => item.value === value)?.label ?? "Vínculo não definido";
+}
+
+export function isEmploymentRelationshipEligibleForAbsence(
+  value: unknown,
+): value is Exclude<EmploymentRelationshipType, "pj" | "partner"> {
+  return value === "clt" || value === "apprenticeship" || value === "internship";
 }
 
 export function terminationReasonsForRelationship(value: unknown): readonly EmploymentTerminationReason[] {
@@ -73,10 +82,22 @@ export function terminationCopyForRelationship(value: unknown) {
 
   if (value !== "clt") {
     return {
-      action: value === "internship" ? "Desligamento de estágio" : "Definir vínculo para encerrar",
-      title: value === "internship" ? "Desligamento de estágio" : "Tipo de vínculo obrigatório",
-      description: value === "internship"
-        ? "O fluxo específico de desligamento de estágio será implementado posteriormente."
+      action: value === "internship"
+        ? "Desligamento de estágio"
+        : value === "apprenticeship"
+          ? "Desligamento de aprendiz"
+          : value === "partner"
+            ? "Encerramento societário"
+          : "Definir vínculo para encerrar",
+      title: value === "internship"
+        ? "Desligamento de estágio"
+        : value === "apprenticeship"
+          ? "Desligamento de aprendiz"
+          : value === "partner"
+            ? "Encerramento societário"
+          : "Tipo de vínculo obrigatório",
+      description: value === "internship" || value === "apprenticeship" || value === "partner"
+        ? "O fluxo específico de encerramento deste vínculo será implementado posteriormente."
         : "Defina o tipo de vínculo antes de registrar o encerramento.",
       dateLabel: "Data do encerramento",
       reasonLabel: "Motivo do encerramento",

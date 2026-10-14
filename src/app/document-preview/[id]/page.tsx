@@ -60,7 +60,7 @@ export default function DocumentPreviewPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-slate-100 text-slate-950">
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-white px-4 shadow-sm">
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-white px-4 shadow-xs">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-700">
           <FileText className="h-4 w-4" />
         </span>
@@ -81,7 +81,7 @@ export default function DocumentPreviewPage() {
       <section className="min-h-0 flex-1">
         {error ? (
           <div className="grid h-[calc(100vh-4rem)] place-items-center p-6">
-            <div className="max-w-lg rounded-2xl border border-rose-200 bg-white p-7 text-center shadow-sm">
+            <div className="max-w-lg rounded-2xl border border-rose-200 bg-white p-7 text-center shadow-xs">
               <p className="text-base font-black text-rose-900">Não foi possível abrir a prévia</p>
               <p className="mt-2 text-sm leading-relaxed text-rose-700">{error}</p>
               <Button variant="outline" className="mt-5" onClick={() => window.close()}>Fechar aba</Button>

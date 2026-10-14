@@ -821,11 +821,11 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                         const profitColorClass = getProfitColorClass(grossMarginPercentage);
                         const hasArchivedBase = simHasArchivedBase.get(sim.id) ?? false;
 
-                        let statusInfo = { label: 'Sem meta', color: 'gray', border: 'border-l-[4px] border-l-gray-300' };
+                        let statusInfo = { label: 'Sem meta', color: 'gray', border: 'border-l-4 border-l-gray-300' };
                         if (sim.profitGoal !== null && sim.profitGoal !== undefined) {
                             statusInfo = meetsGoal
-                                ? { label: 'Na meta', color: 'green', border: 'border-l-[4px] border-l-green-600' }
-                                : { label: 'Abaixo', color: 'orange', border: 'border-l-[4px] border-l-orange-500' };
+                                ? { label: 'Na meta', color: 'green', border: 'border-l-4 border-l-green-600' }
+                                : { label: 'Abaixo', color: 'orange', border: 'border-l-4 border-l-orange-500' };
                         }
 
                         return (
@@ -833,7 +833,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                                 <Card className={cn("overflow-hidden group transition-all", statusInfo.border)}>
                                 <div className="flex items-center p-2 pr-4 bg-muted/30">
                                     <Checkbox className="mx-2" checked={selectedSimulations.has(sim.id)} onCheckedChange={(checked) => handleSelectionChange(sim.id, !!checked)} />
-                                    <div className="flex-grow min-w-0">
+                                    <div className="grow min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <p className="font-semibold truncate">{sim.name}</p>
                                             <Badge variant={statusInfo.color === 'green' ? 'default' : statusInfo.color === 'orange' ? 'secondary' : 'outline'} className={cn(
@@ -1044,10 +1044,10 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
 
                                 return (
                                     <AccordionItem value={sim.id} key={sim.id} className="border-b-0">
-                                        <Card className="overflow-hidden border-dashed border-l-[4px] border-l-gray-300">
+                                        <Card className="overflow-hidden border-dashed border-l-4 border-l-gray-300">
                                             <div className="flex items-center p-2 pr-4 bg-muted/30">
                                                 <div className="mx-2 w-4" />
-                                                <div className="flex-grow min-w-0">
+                                                <div className="grow min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <p className="font-semibold truncate text-muted-foreground">{sim.name}</p>
                                                         {hasArchivedBase && (
@@ -1236,7 +1236,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                                         <AccordionContent className="pb-0">
                                             <div className="grid grid-cols-2 gap-5 border-t bg-white p-5">
                                                 <div>
-                                                    <div className="mb-3 flex items-center justify-between gap-3"><h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Preço e margem por canal</h4>{(insight?.spread ?? 0) > 35 ? <span className="text-[10px] font-bold text-cyan-700">Divergência +{insight?.spread.toFixed(0)}%</span> : null}</div>
+                                                    <div className="mb-3 flex items-center justify-between gap-3"><h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Preço e margem por canal</h4>{(insight?.spread ?? 0) > 35 ? <span className="text-[10px] font-bold text-cyan-700">Divergência +{insight?.spread.toFixed(0)}%</span> : null}</div>
                                                     <div className="space-y-2">
                                                         {insight?.channelRows.map((channel) => (
                                                             <div key={channel.id} className={cn("flex items-center justify-between rounded-xl border px-3 py-2.5", channel.isBest ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200')}>
@@ -1248,18 +1248,18 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                                                 </div>
 
                                                 <div>
-                                                    <div className="mb-3 flex items-center justify-between gap-3"><h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Composição do CMV</h4><span className="text-sm font-black">{formatCurrency(simulation.totalCmv)}</span></div>
+                                                    <div className="mb-3 flex items-center justify-between gap-3"><h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Composição do CMV</h4><span className="text-sm font-black">{formatCurrency(simulation.totalCmv)}</span></div>
                                                     <div className="space-y-3">
                                                         {composition.length ? composition.map((item) => (
                                                             <div key={item.id}>
                                                                 <div className="mb-1 flex justify-between gap-3 text-[11px]"><span className="truncate font-semibold text-slate-600">{item.name} · {item.quantity}</span><span className="shrink-0 font-bold text-slate-500">{formatCurrency(item.cost)} · {item.share.toFixed(0)}%</span></div>
-                                                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
+                                                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-linear-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
                                                             </div>
                                                         )) : <p className="text-xs text-slate-400">Nenhum insumo vinculado.</p>}
                                                     </div>
                                                 </div>
 
-                                                {itemHistory.length ? <div className="col-span-2 border-t pt-4"><h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Alterações recentes de preço</h4><div className="grid grid-cols-4 gap-2">{itemHistory.map((entry: any) => { const variation = entry.oldPrice > 0 ? ((entry.newPrice - entry.oldPrice) / entry.oldPrice) * 100 : 0; return <div key={entry.id} className="rounded-xl border bg-[#faf9f6] p-3"><p className="text-[10px] text-slate-400">{new Date(entry.changedAt).toLocaleDateString('pt-BR')}</p><p className="mt-1 text-xs"><span className="text-slate-400 line-through">{formatCurrency(entry.oldPrice)}</span> <b>{formatCurrency(entry.newPrice)}</b></p><p className={cn("mt-1 text-[10px] font-bold", variation >= 0 ? 'text-emerald-600' : 'text-red-600')}>{variation >= 0 ? '+' : ''}{variation.toFixed(1)}% · {entry.changedBy?.username || 'Sistema'}</p></div>; })}</div></div> : null}
+                                                {itemHistory.length ? <div className="col-span-2 border-t pt-4"><h4 className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Alterações recentes de preço</h4><div className="grid grid-cols-4 gap-2">{itemHistory.map((entry: any) => { const variation = entry.oldPrice > 0 ? ((entry.newPrice - entry.oldPrice) / entry.oldPrice) * 100 : 0; return <div key={entry.id} className="rounded-xl border bg-[#faf9f6] p-3"><p className="text-[10px] text-slate-400">{new Date(entry.changedAt).toLocaleDateString('pt-BR')}</p><p className="mt-1 text-xs"><span className="text-slate-400 line-through">{formatCurrency(entry.oldPrice)}</span> <b>{formatCurrency(entry.newPrice)}</b></p><p className={cn("mt-1 text-[10px] font-bold", variation >= 0 ? 'text-emerald-600' : 'text-red-600')}>{variation >= 0 ? '+' : ''}{variation.toFixed(1)}% · {entry.changedBy?.username || 'Sistema'}</p></div>; })}</div></div> : null}
                                             </div>
                                         </AccordionContent>
                                     </Card>
@@ -1268,7 +1268,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                         })}
                     </Accordion>
 
-                    {archivedSimulations.length ? <div className="mt-5 border-t pt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Mercadorias inativas ({archivedSimulations.length})</p><div className="grid grid-cols-2 gap-2">{archivedSimulations.map((simulation) => <div key={simulation.id} className="flex items-center justify-between rounded-xl border border-dashed bg-slate-50 px-4 py-3 opacity-70"><div><p className="text-sm font-bold text-slate-600">{simulation.name}</p><p className="font-mono text-[10px] text-slate-400">{simulation.ppo?.sku || 'Sem SKU'}</p></div><Button variant="outline" size="sm" onClick={() => handleToggleSimulationActive(simulationById.get(simulation.id) ?? simulation, true)}>Reativar</Button></div>)}</div></div> : null}
+                    {archivedSimulations.length ? <div className="mt-5 border-t pt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Mercadorias inativas ({archivedSimulations.length})</p><div className="grid grid-cols-2 gap-2">{archivedSimulations.map((simulation) => <div key={simulation.id} className="flex items-center justify-between rounded-xl border border-dashed bg-slate-50 px-4 py-3 opacity-70"><div><p className="text-sm font-bold text-slate-600">{simulation.name}</p><p className="font-mono text-[10px] text-slate-400">{simulation.ppo?.sku || 'Sem SKU'}</p></div><Button variant="outline" size="sm" onClick={() => handleToggleSimulationActive(simulationById.get(simulation.id) ?? simulation, true)}>Reativar</Button></div>)}</div></div> : null}
                 </div>
             </div>
         );
@@ -1288,13 +1288,13 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                         />
                         <div className="min-w-0">
                             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pink-600">Coala · Comercial</p>
-                            <h1 className="mt-1 text-[26px] font-black tracking-[-0.02em] text-slate-950">Precificação &amp; CMV</h1>
+                            <h1 className="mt-1 text-[26px] font-black tracking-[-0.02em] text-slate-950">Precificação e CMV</h1>
                             <p className="mt-1 max-w-[620px] text-[13px] text-muted-foreground">Ferramenta de decisão comercial — encontre margens ruins, CMV anormal e divergências de preço por canal sem abrir cada mercadoria.</p>
                         </div>
                     </div>
                 )}
                 <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full md:w-auto">
-                    <TabsList className="bg-white border shadow-sm p-1 h-11 rounded-xl">
+                    <TabsList className="bg-white border shadow-xs p-1 h-11 rounded-xl">
                         <TabsTrigger 
                             value="inventory" 
                             className="rounded-lg px-6 font-bold text-xs uppercase data-[state=active]:bg-pink-50 data-[state=active]:text-pink-600 transition-all"
@@ -1314,7 +1314,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
             </div>
 
             {activeMainTab === "inventory" ? (
-                <Card className="overflow-hidden rounded-[22px] border border-[#e6e3dd] bg-white shadow-sm">
+                <Card className="overflow-hidden rounded-[22px] border border-[#e6e3dd] bg-white shadow-xs">
                     <CardHeader className="px-5 pb-0 pt-5 sm:px-6">
                         <p className="pb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Unidade</p>
                         <div className="grid gap-3 pb-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -1329,7 +1329,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                                         aria-pressed={isActive}
                                         onClick={() => handleUnitContextChange(item.id)}
                                         className={cn(
-                                            "flex min-h-[70px] items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition-all",
+                                            "flex min-h-[70px] items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-xs transition-all",
                                             "hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md",
                                             isActive && "border-pink-500 bg-pink-50/70 ring-2 ring-pink-100"
                                         )}
@@ -1388,7 +1388,7 @@ export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean 
                                         placeholder="Buscar mercadoria por nome ou código..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="h-10 rounded-xl border-slate-200 bg-white pl-10 shadow-sm"
+                                        className="h-10 rounded-xl border-slate-200 bg-white pl-10 shadow-xs"
                                     />
                                 </div>
 

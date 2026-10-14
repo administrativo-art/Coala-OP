@@ -9,6 +9,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasActiveAccount() {
+      let account = isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+      return isAuthenticated()
+        && account.get('isActive', true) != false
+        && account.get('sessionVersion', 0) == request.auth.token.get('sessionVersion', 0);
+    }
+
     function hasCurrentProfileCompliance() {
       let compliance = isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -19,7 +29,7 @@ service cloud.firestore {
     }
 
     function isAuth() {
-      return isAuthenticated() && hasCurrentProfileCompliance();
+      return hasActiveAccount() && hasCurrentProfileCompliance();
     }
 
     function isAdmin() {
@@ -165,6 +175,36 @@ service cloud.firestore {
         );
     }
 
+    function canAccessDPUnit(unitId) {
+      let account = isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+      let scope = account.get('unitAccessScope', 'linked');
+      let linkedUnitIds = account.get('unitIds', []);
+      let assignedKioskIds = account.get('assignedKioskIds', []);
+      let selectedUnitIds = account.get('unitAccessUnitIds', []);
+      let externalUnitId = unitId is string
+        && exists(/databases/$(database)/documents/dp_units/$(unitId))
+        ? get(/databases/$(database)/documents/dp_units/$(unitId)).data.get('externalId', '')
+        : '';
+      return isAdmin()
+        || scope == 'all'
+        || (
+          unitId is string
+          && (
+            (scope == 'selected' && selectedUnitIds is list && selectedUnitIds.hasAny([unitId, externalUnitId]))
+            || (
+              scope == 'linked'
+              && (
+                (linkedUnitIds is list && linkedUnitIds.hasAny([unitId, externalUnitId]))
+                || (assignedKioskIds is list && assignedKioskIds.hasAny([unitId, externalUnitId]))
+              )
+            )
+          )
+        );
+    }
+
     function canRecordMovement() {
       return isAdmin()
         || stockInventoryPerm('addLot')
@@ -270,7 +310,7 @@ service cloud.firestore {
     // Usuários: escrita somente via APIs/Cloud Functions.
     match /users/{userId} {
       // O diretório de terceiros é servido pela API, que aplica o escopo de unidades.
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if hasActiveAccount() && request.auth.uid == userId;
       allow write: if false;
     }
 
@@ -665,12 +705,29 @@ service cloud.firestore {
 
     match /goalPeriods/{id} {
       allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
-      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+      allow create: if isAuth()
+        && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true)
+        && request.resource.data.get('status', '') == 'active'
+        && !request.resource.data.keys().hasAny(['closureNote', 'closedBy', 'closedAt', 'closureSnapshot']);
+      // Encerrar, cancelar e reabrir passam pela API, que relê escala e equipe na transação.
+      allow update: if isAuth()
+        && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['status', 'closureNote', 'closedBy', 'closedAt', 'closureSnapshot']);
+      allow delete: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
     }
 
     match /employeeGoals/{id} {
       allow read: if isAuth() && (isAdmin() || getPerms().goals.view == true || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
-      allow write: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
+      // Inclusões passam pela API, que impede cobertura externa de participar da meta.
+      allow create: if false;
+      allow update: if isAuth()
+        && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true)
+        && request.resource.data.get('periodId', '') == resource.data.get('periodId', '')
+        && request.resource.data.get('employeeId', '') == resource.data.get('employeeId', '')
+        && request.resource.data.get('kioskId', '') == resource.data.get('kioskId', '')
+        && request.resource.data.get('shiftId', '') == resource.data.get('shiftId', '');
+      allow delete: if isAuth() && (isAdmin() || getPerms().goals.manage == true || getPerms().settings.manageUsers == true);
     }
 
     // Presença de usuários
@@ -715,45 +772,72 @@ service cloud.firestore {
         getPerms().dp.view == true ||
         canViewCollaboratorPanel()
       );
-      allow create, update: if isAuth() && (isAdmin() || getPerms().dp.settings.manageShifts == true)
-        && request.resource.data.keys().hasAll(['code', 'name', 'startTime', 'endTime'])
-        && request.resource.data.name is string
-        && request.resource.data.code is string;
-      allow delete: if isAuth() && (isAdmin() || getPerms().dp.settings.manageShifts == true);
+      // Escritas passam pela API para preservar IDs Bizneo, vínculos de jornada e auditoria.
+      allow create, update, delete: if false;
+    }
+
+    // Configurações versionadas são lidas e alteradas somente pelas APIs seguras.
+    match /dp_journeys/{id} {
+      allow read, write: if false;
+    }
+
+    match /dp_overtimePolicies/{id} {
+      allow read, write: if false;
     }
 
     // Escalas
     match /dp_schedules/{scheduleId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().dp.schedules.view == true);
+      // A criação usa um identificador determinístico e consulta antes de criar.
+      // Uma consulta pontual de um ID ainda inexistente não expõe dados de outra unidade.
+      allow get: if isAuth() && (
+        isAdmin()
+        || (
+          getPerms().dp.schedules.view == true
+          && (
+            !exists(/databases/$(database)/documents/dp_schedules/$(scheduleId))
+            || canAccessDPUnit(resource.data.get('unitId', null))
+          )
+        )
+      );
+      allow list: if isAuth() && (
+        isAdmin()
+        || (
+          getPerms().dp.schedules.view == true
+          && canAccessDPUnit(resource.data.get('unitId', null))
+        )
+      );
       allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.create == true)
         && request.resource.data.keys().hasAll(['name', 'month', 'year'])
-        && !request.resource.data.keys().hasAny(['coverageDemands'])
+        && !request.resource.data.keys().hasAny(['coverageDemands', 'locked', 'snapshot', 'journeyValidation'])
+        && request.resource.data.get('journeyValidationVersion', 0) == 0
         && request.resource.data.name is string
         && request.resource.data.month is int
-        && request.resource.data.year is int;
+        && request.resource.data.year is int
+        && canAccessDPUnit(request.resource.data.get('unitId', null));
       allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
         && request.resource.data.name is string
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coverageDemands']);
-      allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.delete == true);
+        && canAccessDPUnit(resource.data.get('unitId', null))
+        && request.resource.data.get('unitId', '') == resource.data.get('unitId', '')
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'coverageDemands',
+          'locked',
+          'snapshot',
+          'journeyValidation',
+          'journeyValidationVersion'
+        ]);
+      // Exclusão passa pela API para remover filhos e registrar auditoria atomicamente.
+      allow delete: if false;
 
       // Turnos (subcoleção)
       match /shifts/{shiftId} {
         allow read: if isAuth() && (
           isAdmin() ||
-          getPerms().dp.schedules.view == true ||
+          (getPerms().dp.schedules.view == true && canAccessDPUnit(resource.data.get('unitId', null))) ||
           isOwnShift(resource.data)
         );
-        allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
-          && request.resource.data.keys().hasAll(['userId', 'date', 'startTime', 'endTime'])
-          && request.resource.data.userId is string
-          && request.resource.data.date is string
-          && hasNoBizneoDayOffPublicationFields(request.resource.data);
-        allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
-          && request.resource.data.userId is string
-          && keepsBizneoDayOffPublicationFieldsUnchanged()
-          && resource.data.get('bizneoOperationId', '') == '';
-        allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
-          && resource.data.get('bizneoOperationId', '') == '';
+        // Criação/alteração passam pela API, que deriva cobertura e elegibilidade de metas.
+        allow create, update: if false;
+        allow delete: if false;
       }
     }
 
@@ -765,7 +849,7 @@ service cloud.firestore {
     match /{path=**}/shifts/{shiftId} {
       allow read: if isAuth() && (
         isAdmin() ||
-        getPerms().dp.schedules.view == true ||
+        (getPerms().dp.schedules.view == true && canAccessDPUnit(resource.data.get('unitId', null))) ||
         isOwnShift(resource.data)
       );
       allow write: if false;

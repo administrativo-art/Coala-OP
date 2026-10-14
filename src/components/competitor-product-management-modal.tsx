@@ -87,7 +87,7 @@ export function CompetitorProductManagementModal({ isOpen, onClose }: { isOpen: 
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="space-y-3 mb-4">
                 <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <div className="relative flex-grow w-full">
+                    <div className="relative grow w-full">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             placeholder="Buscar por mercadoria, concorrente ou vínculo..."
