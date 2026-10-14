@@ -1,6 +1,0 @@
-.expo/
-dist/
-
-# Projeto Android gerado pelo prebuild do Expo; refeito a cada build.
-android/
-node_modules/

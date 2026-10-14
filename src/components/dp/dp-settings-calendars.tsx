@@ -139,10 +139,10 @@ export function DPSettingsCalendars({ onSelect }: { onSelect?: (id: string) => v
 
   return (
     <div className="space-y-5">
-      <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px]">
+      <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px] shadow-none ring-1 ring-white/10">
         <div>
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Calendários de trabalho</p>
-          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-[-0.05em]">{calendars.length}</p>
+          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{calendars.length}</p>
           <p className="mt-1 text-base font-extrabold">Calendários de feriados</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">

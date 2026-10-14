@@ -42,13 +42,13 @@ export function StoneScopeSelector({
       </div>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(180px,0.85fr)_minmax(0,1fr)] lg:items-end">
         <label className="grid gap-1.5 text-sm font-semibold text-ds-ink-2">Unidade / conta bancária
-          <select aria-label="Vínculo oficial" disabled={busy || !mappings.length} className="h-11 rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-semibold text-ds-ink outline-none focus:ring-2 focus:ring-ds-accent" value={mappingId} onChange={event => onMappingChange(event.target.value)}>
+          <select aria-label="Vínculo oficial" disabled={busy || !mappings.length} className="h-11 rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-semibold text-ds-ink outline-hidden focus:ring-2 focus:ring-ds-accent" value={mappingId} onChange={event => onMappingChange(event.target.value)}>
             <option value="">{mappings.length ? "Selecione o vínculo oficial" : "Nenhum vínculo carregado"}</option>
             {mappings.map(item => <option key={item.id} value={item.id}>{item.kioskName} — {item.accountName}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-sm font-semibold text-ds-ink-2">StoneCode
-          <select aria-label="StoneCode" disabled={busy || !mapping} className="h-11 rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-semibold text-ds-ink outline-none focus:ring-2 focus:ring-ds-accent disabled:text-muted-foreground" value={stoneCode} onChange={event => onStoneCodeChange(event.target.value)}>
+          <select aria-label="StoneCode" disabled={busy || !mapping} className="h-11 rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-semibold text-ds-ink outline-hidden focus:ring-2 focus:ring-ds-accent disabled:text-muted-foreground" value={stoneCode} onChange={event => onStoneCodeChange(event.target.value)}>
             <option value="">{mapping ? "Selecione" : "Selecione a unidade primeiro"}</option>
             {mapping?.stoneCodes.map(item => <option key={item} value={item}>{item}</option>)}
           </select>

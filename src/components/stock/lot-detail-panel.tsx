@@ -181,7 +181,7 @@ export function LotDetailPanel({
       <aside
         role="dialog"
         aria-label={`Lote ${lot.lotNumber}`}
-        className="fixed bottom-0 right-0 top-0 z-[51] flex w-[460px] max-w-full flex-col bg-[#fffdf9] shadow-[-24px_0_60px_rgba(0,0,0,.18)]"
+        className="fixed bottom-0 right-0 top-0 z-51 flex w-[460px] max-w-full flex-col bg-[#fffdf9] shadow-[-24px_0_60px_rgba(0,0,0,.18)]"
       >
         <div className="flex flex-col gap-3.5 bg-[#15151c] px-6 pb-[22px] pt-5 text-[#f3f2ee]">
           <div className="flex items-center gap-2">
@@ -208,13 +208,13 @@ export function LotDetailPanel({
               )}
             </div>
             <div className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-pretty text-[19px] font-extrabold leading-[1.25] tracking-[-.02em]">{fullName}</span>
+              <span className="text-pretty text-[19px] font-extrabold leading-tight tracking-[-.02em]">{fullName}</span>
               <span className="text-xs leading-normal text-[#a9a8b3]">{specA}</span>
               {specB && <span className="-mt-1 text-xs leading-normal text-[#8e8d99]">{specB}</span>}
             </div>
           </div>
           <div
-            className="grid overflow-hidden rounded-[14px] border border-white/10 bg-white/[.06]"
+            className="grid overflow-hidden rounded-[14px] border border-white/10 bg-white/6"
             style={{ gridTemplateColumns: `repeat(${parts.length}, minmax(0, 1fr))` }}
           >
             {parts.map((part, index) => (
@@ -299,7 +299,7 @@ export function LotDetailPanel({
                   onChange={(event) => { setBaixaQty(event.target.value); setBaixaError(''); }}
                   inputMode="decimal"
                   placeholder="0"
-                  className="h-[42px] rounded-[11px] border border-[#e3dfd6] px-3 text-[15px] font-bold outline-none focus:border-[#5b5bd6]"
+                  className="h-[42px] rounded-[11px] border border-[#e3dfd6] px-3 text-[15px] font-bold outline-hidden focus:border-[#5b5bd6]"
                 />
               </label>
               <label className="flex flex-col gap-1.5 text-xs font-bold text-[#4a4f57]">
@@ -308,7 +308,7 @@ export function LotDetailPanel({
                   value={baixaObs}
                   onChange={(event) => { setBaixaObs(event.target.value); setBaixaError(''); }}
                   rows={2}
-                  className="resize-y rounded-[11px] border border-[#e3dfd6] px-3 py-2.5 text-[13px] outline-none focus:border-[#5b5bd6]"
+                  className="resize-y rounded-[11px] border border-[#e3dfd6] px-3 py-2.5 text-[13px] outline-hidden focus:border-[#5b5bd6]"
                 />
               </label>
               {baixaError && <span className="text-xs font-semibold text-[#be123c]">{baixaError}</span>}
@@ -412,7 +412,7 @@ export function LotDetailPanel({
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span className="flex flex-col items-start gap-1">
-      <span className="text-[10.5px] font-extrabold uppercase tracking-[.1em] text-[#9a9ba1]">{label}</span>
+      <span className="text-[10.5px] font-extrabold uppercase tracking-widest text-[#9a9ba1]">{label}</span>
       {children}
     </span>
   );

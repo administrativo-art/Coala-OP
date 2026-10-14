@@ -64,10 +64,10 @@ function toDate(ts: unknown): Date | undefined {
 }
 
 const RISK_CONFIG: Record<VacationRisk, { label: string; bg: string; text: string }> = {
-  VENCIDA:  { label: 'Vencida', bg: 'bg-ds-danger-bg dark:bg-ds-danger',      text: 'text-ds-danger dark:text-ds-danger'      },
-  CRITICA:  { label: 'Crítica', bg: 'bg-ds-warn-bg dark:bg-ds-warn', text: 'text-ds-warn dark:text-ds-warn' },
-  ATENCAO:  { label: 'Atenção', bg: 'bg-ds-warn-bg dark:bg-ds-warn', text: 'text-ds-warn dark:text-ds-warn' },
-  EM_DIA:   { label: 'Em dia',  bg: 'bg-ds-ok-bg dark:bg-ds-ok',   text: 'text-ds-ok dark:text-ds-ok'   },
+  VENCIDA:  { label: 'Vencida', bg: 'bg-red-100 dark:bg-red-900/30',      text: 'text-red-700 dark:text-red-300'      },
+  CRITICA:  { label: 'Crítica', bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-300' },
+  ATENCAO:  { label: 'Atenção', bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-300' },
+  EM_DIA:   { label: 'Em dia',  bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-300'   },
 };
 
 const RISK_ACCENT: Record<VacationRisk, string> = {
@@ -176,7 +176,7 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
     >
       <div className="flex items-center gap-3">
         <span
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: item.user.color || '#8B5CF6' }}
         >
           {initials(item.user.username)}
@@ -184,8 +184,8 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-sm font-semibold">{item.user.username}</span>
-            <span className={`inline-flex flex-shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
-              {risk === 'VENCIDA' && <span className="h-1.5 w-1.5 rounded-full bg-ds-danger animate-pulse" />}
+            <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
+              {risk === 'VENCIDA' && <span className="h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />}
               {cfg.label}
             </span>
           </div>
@@ -217,7 +217,7 @@ function ScheduledCard({ item, onOpen }: { item: Enriched; onOpen: () => void })
     >
       <div className="flex items-center gap-3">
         <span
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: item.user.color || '#8B5CF6' }}
         >
           {initials(item.user.username)}
@@ -253,7 +253,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
     >
       <div className="flex items-center gap-3">
         <span
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: item.user.color || '#8B5CF6' }}
         >
           {initials(item.user.username)}
@@ -263,7 +263,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
           {meta && <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{meta}</div>}
         </div>
       </div>
-      <Progress value={progress} className="mt-3 h-[5px] [&>*]:bg-ds-ink-faint" />
+      <Progress value={progress} className="mt-3 h-[5px] *:bg-slate-400" />
       <div className="mt-2 text-[11px] text-muted-foreground">
         Aquisição até {format(end, 'dd/MM/yyyy', { locale: ptBR })}
       </div>
@@ -274,7 +274,7 @@ function AquisitivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
 function CardSkeleton() {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-l-4 border-l-muted bg-card px-4 py-3.5 animate-pulse">
-      <div className="h-9 w-9 flex-shrink-0 rounded-full bg-muted" />
+      <div className="h-9 w-9 shrink-0 rounded-full bg-muted" />
       <div className="flex-1 space-y-2">
         <div className="h-3.5 w-3/5 rounded bg-muted" />
         <div className="h-[5px] w-full rounded bg-muted" />
@@ -285,11 +285,11 @@ function CardSkeleton() {
 }
 
 const KPI_TONES = {
-  neutral: 'border-ds-border-input bg-ds-muted text-ds-ink-2 dark:border-ds-border-input dark:bg-ds-dark dark:text-ds-ink-faint',
-  warning: 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn',
-  danger: 'border-ds-danger-bg bg-ds-danger-bg text-ds-danger dark:border-ds-danger-bg dark:bg-ds-danger dark:text-ds-danger',
-  purple: 'border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink dark:border-ds-accent-soft dark:bg-ds-accent dark:text-ds-accent-ink',
-  info: 'border-ds-info-bg bg-ds-info-bg text-ds-info dark:border-ds-info-bg dark:bg-ds-info dark:text-ds-info',
+  neutral: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300',
+  warning: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  danger: 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  purple: 'border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-900 dark:bg-purple-950/30 dark:text-purple-300',
+  info: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300',
 } as const;
 
 function KpiCard({
@@ -358,7 +358,7 @@ function QueueRow({
         </span>
         {kind === 'scheduling' && item.noticeDeadline ? (
           <span className={`mt-0.5 block text-[11px] font-extrabold ${
-            (item.noticeDaysLeft ?? 0) <= 60 ? 'text-ds-danger dark:text-ds-danger' : 'text-ds-ok dark:text-ds-ok'
+            (item.noticeDaysLeft ?? 0) <= 60 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'
           }`}>
             Avisar até {format(item.noticeDeadline, 'dd/MM/yyyy')} · {item.noticeDaysLeft} dias
           </span>
@@ -370,7 +370,7 @@ function QueueRow({
       <span className="text-[10px] font-black uppercase tracking-[0.08em] text-muted-foreground">
         {kind === 'approval' ? 'Etapa 1 · decisão' : 'Antes da etapa 1 · registro'}
       </span>
-      <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-ds-dark px-3.5 text-[12.5px] font-extrabold text-white dark:bg-ds-neutral-bg dark:text-ds-ink">
+      <span className="flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-slate-950 px-3.5 text-[12.5px] font-extrabold text-white dark:bg-slate-100 dark:text-slate-950">
         Abrir ficha
         <ArrowUpRight className="h-3.5 w-3.5" />
       </span>
@@ -397,7 +397,7 @@ function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void })
     <button
       type="button"
       onClick={onOpen}
-      className="grid w-full gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-left transition-colors hover:bg-ds-info-bg dark:hover:bg-ds-info md:grid-cols-[minmax(220px,1.15fr)_minmax(180px,.85fr)_minmax(260px,1.3fr)_auto] md:items-center"
+      className="grid w-full gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-left transition-colors hover:bg-sky-50/45 dark:hover:bg-sky-950/15 md:grid-cols-[minmax(220px,1.15fr)_minmax(180px,.85fr)_minmax(260px,1.3fr)_auto] md:items-center"
     >
       <span className="flex min-w-0 items-center gap-3">
         <span
@@ -413,20 +413,20 @@ function TrailRow({ trail, onOpen }: { trail: ActiveTrail; onOpen: () => void })
       </span>
 
       <span className="min-w-0">
-        <span className="block text-[11px] font-black uppercase tracking-[0.07em] text-ds-info dark:text-ds-info">
+        <span className="block text-[11px] font-black uppercase tracking-[0.07em] text-sky-700 dark:text-sky-300">
           Etapa {stageIndex + 1} de {VACATION_WORKFLOW_DISPLAY_STAGE_META.length} · {stage.short}
         </span>
         <span className="mt-1 block truncate text-[11px] font-semibold text-muted-foreground">
           {period} · {record.days}d
         </span>
         <span className="mt-2 flex items-center gap-2">
-          <Progress value={progress} className="h-1.5 flex-1 [&>*]:bg-ds-info" />
+          <Progress value={progress} className="h-1.5 flex-1 *:bg-sky-600" />
           <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{completedSteps}/{VACATION_WORKFLOW_DISPLAY_STAGE_META.length}</span>
         </span>
       </span>
 
-      <span className="min-w-0 rounded-xl bg-ds-info-bg px-3 py-2 dark:bg-ds-info">
-        <span className="block truncate text-[12px] font-extrabold text-ds-ink dark:text-ds-ink-faint">{summary.action}</span>
+      <span className="min-w-0 rounded-xl bg-sky-50 px-3 py-2 dark:bg-sky-950/30">
+        <span className="block truncate text-[12px] font-extrabold text-slate-900 dark:text-slate-100">{summary.action}</span>
         <span className="mt-0.5 block text-[10.5px] font-semibold text-muted-foreground">Responsável: {summary.owner}</span>
       </span>
 
@@ -679,11 +679,11 @@ export function DPFeriasManager() {
       </div>
 
       {(isLoading || pendingScheduling.length > 0) && (
-        <section className="rounded-[18px] border border-ds-border-input bg-card p-4 dark:border-ds-border-input">
+        <section className="rounded-[18px] border border-slate-300 bg-card p-4 dark:border-slate-700">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-ds-seg text-xs font-black text-ds-ink-2 dark:bg-ds-dark-hover dark:text-ds-ink-faint">•</span>
-            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-ds-ink-2 dark:text-ds-ink-faint">Pendente de agendamento</h2>
-            {!isLoading && <Badge className="bg-ds-dark-hover text-white hover:bg-ds-dark-hover">{pendingScheduling.length}</Badge>}
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-slate-200 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">•</span>
+            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-slate-700 dark:text-slate-200">Pendente de agendamento</h2>
+            {!isLoading && <Badge className="bg-slate-700 text-white hover:bg-slate-700">{pendingScheduling.length}</Badge>}
             <span className="ml-auto text-[11.5px] font-semibold text-muted-foreground">Saldo de férias ainda não distribuído · comece ou complete o agendamento</span>
           </div>
           <div className="mt-3 space-y-2">
@@ -702,12 +702,12 @@ export function DPFeriasManager() {
       )}
 
       {riskFilter === 'ALL' && awaitingApproval.length > 0 && (
-        <section className="rounded-[18px] border border-ds-warn-bg bg-gradient-to-b from-amber-50 to-card p-4 dark:border-ds-warn-bg dark:from-amber-950/25">
+        <section className="rounded-[18px] border border-amber-300 bg-linear-to-b from-amber-50 to-card p-4 dark:border-amber-900 dark:from-amber-950/25">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-ds-warn-bg text-xs font-black text-ds-warn dark:bg-ds-warn dark:text-ds-warn">!</span>
-            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-ds-warn dark:text-ds-warn">Aguardando aprovação</h2>
-            {!isLoading && <Badge className="bg-ds-warn text-white hover:bg-ds-warn">{awaitingApproval.length}</Badge>}
-            <span className="ml-auto text-[11.5px] font-semibold text-ds-warn dark:text-ds-warn">Ordenado por prazo concessivo · a decisão acontece na ficha</span>
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-amber-200 text-xs font-black text-amber-900 dark:bg-amber-900 dark:text-amber-200">!</span>
+            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-amber-900 dark:text-amber-200">Aguardando aprovação</h2>
+            {!isLoading && <Badge className="bg-amber-900 text-white hover:bg-amber-900">{awaitingApproval.length}</Badge>}
+            <span className="ml-auto text-[11.5px] font-semibold text-amber-800/75 dark:text-amber-300/75">Ordenado por prazo concessivo · a decisão acontece na ficha</span>
           </div>
           <div className="mt-3 space-y-2">
             {isLoading
@@ -725,12 +725,12 @@ export function DPFeriasManager() {
       )}
 
       {activeTrails.length > 0 && (
-        <section className="rounded-[18px] border border-ds-info-bg bg-gradient-to-b from-sky-50/80 to-card p-4 dark:border-ds-info-bg dark:from-sky-950/20">
+        <section className="rounded-[18px] border border-sky-200 bg-linear-to-b from-sky-50/80 to-card p-4 dark:border-sky-900 dark:from-sky-950/20">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-ds-info-bg text-xs font-black text-ds-info dark:bg-ds-info dark:text-ds-info">→</span>
-            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-ds-info dark:text-ds-info">Trilhas em andamento</h2>
-            <Badge className="bg-ds-info text-white hover:bg-ds-info">{activeTrails.length}</Badge>
-            <span className="ml-auto text-[11.5px] font-semibold text-ds-info dark:text-ds-info">Do aviso à finalização · etapa, responsável e próxima ação</span>
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-sky-200 text-xs font-black text-sky-900 dark:bg-sky-900 dark:text-sky-200">→</span>
+            <h2 className="text-[13px] font-black uppercase tracking-[0.02em] text-sky-900 dark:text-sky-200">Trilhas em andamento</h2>
+            <Badge className="bg-sky-800 text-white hover:bg-sky-800">{activeTrails.length}</Badge>
+            <span className="ml-auto text-[11.5px] font-semibold text-sky-800/75 dark:text-sky-300/75">Do aviso à finalização · etapa, responsável e próxima ação</span>
           </div>
           <div className="mt-3 space-y-2">
             {activeTrails.map(trail => (
@@ -800,7 +800,7 @@ export function DPFeriasManager() {
       {riskFilter === 'ALL' && scheduled.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-ds-accent" />
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Férias agendadas</h2>
             <Badge variant="secondary" className="text-xs">{scheduled.length}</Badge>
           </div>
@@ -870,7 +870,7 @@ export function DPFeriasManager() {
               monthVacations.map(v => (
                 <div key={v.id} className="flex items-center gap-3 rounded-xl border p-2.5">
                   <span
-                    className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                    className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     style={{ background: v.color }}
                   >
                     {initials(v.name)}

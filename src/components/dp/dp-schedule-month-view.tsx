@@ -327,7 +327,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
 
   return (
     <div
-      className="dp-schedules-redesign flex flex-col gap-[6px] bg-ds-info-bg lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px] lg:flex-row"
+      className="dp-schedules-redesign flex flex-col gap-[6px] bg-[#eef1f6] lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px] lg:flex-row"
       style={{ fontFamily: "'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif" }}
     >
       <DPSchedulesSidebar
@@ -369,19 +369,19 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
       />
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-ds-border bg-ds-surface">
-        {!selectedSchedule && <div className="flex flex-wrap items-center gap-3 border-b border-ds-info-bg px-[22px] py-[14px]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[#e6e4e0] bg-white">
+        {!selectedSchedule && <div className="flex flex-wrap items-center gap-3 border-b border-[#eef1f6] px-[22px] py-[14px]">
           <button
             type="button"
             onClick={() => router.push('/dashboard/dp/schedules')}
             aria-label="Voltar para todos os meses"
-            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-ds-info-bg text-ds-ink-muted outline-none hover:bg-ds-surface focus-visible:ring-2 focus-visible:ring-ds-accent"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-hidden hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
           >
             <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.4} />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="dp-schedule-month-title text-[19px] font-black leading-6 tracking-[-0.02em] text-ds-ink">{MONTHS[month - 1]} de {year}</h1>
-            <p className="mt-0.5 text-[12.5px] font-semibold text-ds-ink-muted">
+            <h1 className="dp-schedule-month-title text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">{MONTHS[month - 1]} de {year}</h1>
+            <p className="mt-0.5 text-[12.5px] font-semibold text-[#64748b]">
               {accessibleActiveUnits.length} {accessibleActiveUnits.length === 1 ? 'unidade' : 'unidades'} · {startedActiveUnitCount} {startedActiveUnitCount === 1 ? 'escala iniciada' : 'escalas iniciadas'}
             </p>
           </div>
@@ -410,7 +410,7 @@ export function DPScheduleMonthView({ year, month }: { year: number; month: numb
         </div>}
 
         {(schedulesError || unitsError || calendarsError) && (
-          <div className="rounded-lg border border-ds-warn-bg bg-ds-warn-bg p-2.5 text-xs text-ds-warn">
+          <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
             Alguns dados não carregaram. A criação de escalas está bloqueada para evitar duplicidades.
           </div>
         )}

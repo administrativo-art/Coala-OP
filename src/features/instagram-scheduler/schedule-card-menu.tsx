@@ -249,7 +249,7 @@ export function ScheduleCardMenu({
             type="button"
             disabled={busy}
             aria-label={`Ações de ${instagramPostTitle(item)}`}
-            className="grid h-7 w-7 place-items-center rounded-md text-[#7A5646] outline-none hover:bg-[#F4ECE2] focus-visible:ring-2 focus-visible:ring-[#D90F6F] disabled:opacity-50"
+            className="grid h-7 w-7 place-items-center rounded-md text-[#7A5646] outline-hidden hover:bg-[#F4ECE2] focus-visible:ring-2 focus-visible:ring-[#D90F6F] disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
           </button>

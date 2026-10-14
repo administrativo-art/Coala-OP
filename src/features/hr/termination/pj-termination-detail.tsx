@@ -134,10 +134,10 @@ export function PjTerminationDetail({
           <span className="ml-auto font-mono text-xs text-slate-500">{process.request.protocol}</span>
         </div>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border bg-white p-5 shadow-xs">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.1em] text-violet-600">Distrato por mútuo acordo</p>
+              <p className="text-xs font-black uppercase tracking-widest text-violet-600">Distrato por mútuo acordo</p>
               <h1 className="mt-1 text-2xl font-black">{contract.provider.legalName}</h1>
               <p className="mt-2 text-sm font-semibold text-slate-500">Término em {dateLabel(terminationDate)} · {process.terminationReason}</p>
             </div>
@@ -147,13 +147,13 @@ export function PjTerminationDetail({
         </section>
 
         <section className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border bg-white p-5 shadow-xs">
             <div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-pink-600" /><h2 className="font-black">Contratante congelada</h2></div>
             <p className="mt-3 font-bold">{contract.contractor.legalName}</p>
             <p className="text-sm text-slate-500">{CnpjValidator.format(contract.contractor.cnpj)}</p>
             <p className="mt-2 text-sm">Representante: {contract.contractor.representative.name}</p>
           </div>
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border bg-white p-5 shadow-xs">
             <div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-violet-600" /><h2 className="font-black">Contratada congelada</h2></div>
             <p className="mt-3 font-bold">{contract.provider.legalName}</p>
             <p className="text-sm text-slate-500">{CnpjValidator.format(contract.provider.cnpj)}</p>
@@ -161,7 +161,7 @@ export function PjTerminationDetail({
           </div>
         </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border bg-white p-5 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-black">Contrato original</h2>
@@ -172,7 +172,7 @@ export function PjTerminationDetail({
           </div>
         </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border bg-white p-5 shadow-xs">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><h2 className="font-black">Dados do distrato</h2><p className="mt-1 text-sm text-slate-500">O valor é calculado automaticamente por trinta avos. A geração final exige nota fiscal e pagamento já confirmado.</p></div>
             <StepStatus status={steps.get("document_audit")?.status} />
@@ -214,7 +214,7 @@ export function PjTerminationDetail({
           {agreement?.lastError ? <p className="mt-3 text-sm font-semibold text-red-700">{agreement.lastError}</p> : null}
         </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between"><div><h2 className="font-black">Acessos e obrigações remanescentes</h2><p className="mt-1 text-sm text-slate-500">A revogação é liberada na data do encerramento. Depois da assinatura, confirme devoluções e eliminação de dados.</p></div><StepStatus status={steps.get("operational")?.status} /></div>
           {!contractReached ? <p className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900"><LockKeyhole className="h-4 w-4" />Aguardando {dateLabel(terminationDate)} para revogar os acessos.</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
@@ -237,14 +237,14 @@ export function PjTerminationDetail({
           </div>
         </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border bg-white p-5 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="font-black">Fechamento</h2><p className="mt-1 text-sm text-slate-500">O cadastro será inativado somente após distrato assinado, acessos revogados e obrigações concluídas.</p></div>
             {!readOnly ? <Button disabled={busy || process.status === "completed" || !allRequiredDone} onClick={() => onAction({ action: "complete" })}>{process.status === "completed" ? "Processo concluído" : "Concluir encerramento PJ"}</Button> : <Badge variant="outline">Acompanhamento somente leitura</Badge>}
           </div>
         </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border bg-white p-5 shadow-xs">
           <div className="flex items-center gap-2"><History className="h-5 w-5 text-slate-500" /><h2 className="font-black">Histórico</h2></div>
           <div className="mt-3 space-y-2">{events.slice(0, 12).map((event) => <div key={event.id ?? `${event.type}-${event.at}`} className="rounded-xl border bg-slate-50 p-3 text-sm"><p className="font-semibold">{event.message}</p><p className="mt-1 text-xs text-slate-500">{new Date(event.at).toLocaleString("pt-BR")} · {event.actorName}</p></div>)}</div>
         </section>

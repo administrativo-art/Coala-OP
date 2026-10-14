@@ -1,111 +1,58 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
+import { privacyRequestCreateSchema, type PrivacyRequestCreateInput } from "@/features/privacy/security";
+import { type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { logAction } from "@/lib/log-action";
-import { cleanText, pickEnum, requirePrivacyUser, serializeDate, ttlFrom } from "../_lib";
+import { buildActionLogRecord } from "@/lib/log-action";
+import { AppError } from "@/lib/observability/app-error";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
+import { authenticatePrivacyUser, requirePrivacyManage, requirePrivacyView, serializeDate, ttlFrom } from "../_lib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const requestTypes = ["access", "correction", "deletion", "information", "consent_revocation", "opposition", "other"] as const;
-const subjectTypes = ["candidate", "employee", "former_employee", "internal_user", "supplier", "other"] as const;
-const origins = ["email", "whatsapp", "in_person", "phone", "system", "other"] as const;
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+type WorkspaceResource = { workspaceId: string };
 
 function serializeRequest(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot) {
   const data = doc.data() ?? {};
-  return {
-    id: doc.id,
-    workspace_id: data.workspace_id ?? "",
-    subjectName: data.subjectName ?? "",
-    subjectEmail: data.subjectEmail ?? "",
-    subjectType: data.subjectType ?? "other",
-    requestType: data.requestType ?? "other",
-    origin: data.origin ?? "other",
-    description: data.description ?? "",
-    status: data.status ?? "open",
-    owner: data.owner ?? null,
-    response: data.response ?? null,
-    dueAt: serializeDate(data.dueAt),
-    completedAt: serializeDate(data.completedAt),
-    createdAt: serializeDate(data.createdAt) ?? "",
-    updatedAt: serializeDate(data.updatedAt) ?? "",
-  };
+  return { id: doc.id, workspace_id: data.workspace_id ?? "", subjectName: data.subjectName ?? "", subjectEmail: data.subjectEmail ?? "", subjectType: data.subjectType ?? "other", requestType: data.requestType ?? "other", origin: data.origin ?? "other", description: data.description ?? "", status: data.status ?? "open", owner: data.owner ?? null, response: data.response ?? null, dueAt: serializeDate(data.dueAt), completedAt: serializeDate(data.completedAt), createdAt: serializeDate(data.createdAt) ?? "", updatedAt: serializeDate(data.updatedAt) ?? "" };
 }
 
-export async function GET(request: NextRequest) {
-  try {
-    const context = await requirePrivacyUser(request);
-    const snapshot = await dbAdmin
-      .collection("privacyRequests")
-      .where("workspace_id", "==", context.workspace_id)
-      .limit(100)
-      .get();
-    const requests = snapshot.docs
-      .map(serializeRequest)
-      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
-    return NextResponse.json({ requests });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao listar pedidos." }, { status: 403 });
-  }
-}
+const listContract = defineSecurityContract({ schemaVersion: 1, id: "privacy.request.list", version: 1, surface: { method: "GET", path: "/api/privacy/requests" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "privacy.request.view" }, resourceScope: { kind: "workspace" }, input: { kind: "none" }, effects: { mode: "read", audit: "none" }, errorExposure: "sanitized" });
+const createContract = defineSecurityContract({ schemaVersion: 1, id: "privacy.request.create", version: 1, surface: { method: "POST", path: "/api/privacy/requests" }, exposure: "authenticated", identity: { kind: "active-user" }, authorization: { kind: "permission", action: "privacy.request.manage" }, resourceScope: { kind: "workspace" }, input: { kind: "schema", schema: "privacy.request.create-input", unknownFields: "reject" }, effects: { mode: "write", audit: "server-authoritative" }, errorExposure: "sanitized" });
 
-export async function POST(request: NextRequest) {
-  try {
-    const context = await requirePrivacyUser(request);
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body) return NextResponse.json({ error: "Payload invalido." }, { status: 400 });
+const workspace = (actor: ServerUserContext): WorkspaceResource => ({ workspaceId: actor.workspace_id });
+const assertWorkspace = ({ actor, resource }: { actor: ServerUserContext; resource: WorkspaceResource }) => {
+  if (!resource.workspaceId || resource.workspaceId !== actor.workspace_id) throw new AppError({ code: "PRIVACY_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
+};
+const listEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext, undefined, WorkspaceResource>(listContract, {
+  authenticate: ({ request }) => authenticatePrivacyUser(request), loadResource: ({ actor }) => workspace(actor), authorize: ({ actor }) => requirePrivacyView(actor), assertScope: assertWorkspace,
+});
+const createEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, ServerUserContext, PrivacyRequestCreateInput, WorkspaceResource>(createContract, {
+  authenticate: ({ request }) => authenticatePrivacyUser(request),
+  async parseInput({ request }) { const parsed = privacyRequestCreateSchema.safeParse(await request.json().catch(() => null)); if (!parsed.success) throw new AppError({ code: "PRIVACY_REQUEST_INPUT_INVALID", kind: "VALIDATION", safeMessage: parsed.error.issues[0]?.message ?? "Pedido inválido." }); return parsed.data; },
+  loadResource: ({ actor }) => workspace(actor), authorize: ({ actor }) => requirePrivacyManage(actor), assertScope: assertWorkspace,
+});
 
-    const subjectName = cleanText(body.subjectName, 160);
-    const subjectEmail = cleanText(body.subjectEmail, 180).toLowerCase();
-    const description = cleanText(body.description, 3000);
-    if (!subjectName || !description) {
-      return NextResponse.json({ error: "Nome do titular e descricao sao obrigatorios." }, { status: 400 });
-    }
+export const GET = secureRoute({ contract: listContract, enforcer: listEnforcer }, async ({ security }) => {
+  const snapshot = await dbAdmin.collection("privacyRequests").where("workspace_id", "==", security.resource.workspaceId).limit(100).get();
+  const requests = snapshot.docs.map(serializeRequest).sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+  return NextResponse.json({ requests });
+});
 
-    const now = new Date();
-    const dueAtRaw = cleanText(body.dueAt, 40);
-    const dueAt = dueAtRaw ? new Date(`${dueAtRaw}T12:00:00`) : null;
-    const ref = dbAdmin.collection("privacyRequests").doc();
-    const payload = {
-      workspace_id: context.workspace_id,
-      subjectName,
-      subjectEmail,
-      subjectType: pickEnum(body.subjectType, subjectTypes, "other"),
-      requestType: pickEnum(body.requestType, requestTypes, "other"),
-      origin: pickEnum(body.origin, origins, "other"),
-      description,
-      status: "open",
-      owner: cleanText(body.owner, 120) || null,
-      response: null,
-      dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? Timestamp.fromDate(dueAt) : null,
-      completedAt: null,
-      createdAt: Timestamp.fromDate(now),
-      updatedAt: Timestamp.fromDate(now),
-      ttl: ttlFrom(now, 365 * 3),
-      createdBy: { user_id: context.userDoc.id, username: context.userDoc.username },
-    };
-    await ref.set(payload);
-
-    await logAction({
-      workspace_id: context.workspace_id,
-      user_id: context.userDoc.id,
-      username: context.userDoc.username,
-      module: "privacy.requests",
-      action: "privacy_request_created",
-      metadata: {
-        target_type: "privacy_request",
-        target_id: ref.id,
-        target_name: subjectName,
-        request_type: payload.requestType,
-        subject_type: payload.subjectType,
-      },
-      ttl_days: 365,
-    });
-
-    const doc = await ref.get();
-    return NextResponse.json({ request: serializeRequest(doc) }, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao criar pedido." }, { status: 400 });
-  }
-}
+export const POST = secureRoute({ contract: createContract, enforcer: createEnforcer }, async ({ security }) => {
+  const { actor, input, resource } = security;
+  const now = new Date();
+  const ref = dbAdmin.collection("privacyRequests").doc();
+  const payload = { workspace_id: resource.workspaceId, subjectName: input.subjectName, subjectEmail: input.subjectEmail?.toLowerCase() ?? "", subjectType: input.subjectType, requestType: input.requestType, origin: input.origin, description: input.description, status: "open", owner: input.owner || null, response: null, dueAt: input.dueAt ? Timestamp.fromDate(new Date(`${input.dueAt}T12:00:00Z`)) : null, completedAt: null, createdAt: Timestamp.fromDate(now), updatedAt: Timestamp.fromDate(now), ttl: ttlFrom(now, 365 * 3), createdBy: { user_id: actor.userDoc.id, username: actor.userDoc.username } };
+  const auditRef = dbAdmin.collection("actionLogs").doc();
+  await dbAdmin.runTransaction(async (transaction) => {
+    transaction.set(ref, payload);
+    transaction.set(auditRef, buildActionLogRecord({ workspace_id: resource.workspaceId, user_id: actor.userDoc.id, username: actor.userDoc.username, module: "privacy.requests", action: "privacy_request_created", metadata: { target_type: "privacy_request", target_id: ref.id, target_name: input.subjectName, request_type: input.requestType, subject_type: input.subjectType }, ttl_days: 365, trust_source: "server-authoritative", event_namespace: "privacy" }));
+  });
+  return NextResponse.json({ request: serializeRequest(await ref.get()) }, { status: 201 });
+});

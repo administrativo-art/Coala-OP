@@ -1,15 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Download, Eye, FileDown, FileStack, Loader2, LockKeyhole, Plus, Search, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { FilterChips } from "@/components/patterns/filter-chips";
-import { PageHero } from "@/components/patterns/page-hero";
-import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill";
 import { useAuth } from "@/hooks/use-auth";
 import type { DocumentTemplateWorkflowStatus } from "@/features/hr/documents/document-template-workflow";
 import {
@@ -70,12 +67,19 @@ function templateStatusLabel(template: DocumentTemplate) {
   return documentTemplateDisplayStatus(template);
 }
 
-function templateStatusVariant(template: DocumentTemplate): StatusPillVariant {
+function templateStatusClasses(template: DocumentTemplate) {
   const label = templateStatusLabel(template);
-  if (template.workflowStatus === "superseded" || template.workflowStatus === "archived") return "neutral";
-  if (template.status === "published" || template.workflowStatus === "published") return "ok";
-  if (label === "Em mapeamento pela IA" || label === "Em teste visual" || label === "Pronto para homologação do RH") return "info";
-  return "warn";
+  if (template.workflowStatus === "superseded" || template.workflowStatus === "archived") {
+    return "bg-slate-100 text-slate-600";
+  }
+  if (template.status === "published" || template.workflowStatus === "published") {
+    return "bg-emerald-50 text-emerald-700";
+  }
+  if (label === "Em mapeamento pela IA") return "bg-violet-50 text-violet-700";
+  if (label === "Em edição manual") return "bg-amber-50 text-amber-700";
+  if (label === "Em teste visual") return "bg-sky-50 text-sky-700";
+  if (label === "Pronto para homologação do RH") return "bg-indigo-50 text-indigo-700";
+  return "bg-amber-50 text-amber-700";
 }
 
 function templateUsage(template: DocumentTemplate) {
@@ -118,6 +122,8 @@ function variableStats(template: DocumentTemplate) {
 
 export default function DocumentTemplatesPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const embedded = pathname.startsWith("/dashboard/settings");
   const { firebaseUser, permissions } = useAuth();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,8 +138,14 @@ export default function DocumentTemplatesPage() {
   const canView = hasFormalizationPermission(permissions, "templates.view");
   const canManage = hasFormalizationPermission(permissions, "templates.manage");
 
+  useEffect(() => {
+    if (!embedded) {
+      router.replace("/dashboard/settings?department=pessoal&tab=document-templates");
+    }
+  }, [embedded, router]);
+
   const loadTemplates = useCallback(async () => {
-    if (!firebaseUser || !canView) return;
+    if (!embedded || !firebaseUser || !canView) return;
     setLoading(true);
     try {
       const token = await firebaseUser.getIdToken();
@@ -146,7 +158,7 @@ export default function DocumentTemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, firebaseUser]);
+  }, [canView, embedded, firebaseUser]);
 
   useEffect(() => { void loadTemplates(); }, [loadTemplates]);
 
@@ -202,7 +214,7 @@ export default function DocumentTemplatesPage() {
   );
 
   function openTemplateFlow(template: DocumentTemplate) {
-    router.push(`/dashboard/documents/templates/${encodeURIComponent(template.id)}`);
+    router.push(`/dashboard/settings/documents/templates/${encodeURIComponent(template.id)}`);
   }
 
   async function createTemplate() {
@@ -222,7 +234,7 @@ export default function DocumentTemplatesPage() {
       const uploadResponse = await fetch(`/api/documents/templates/${encodeURIComponent(payload.template.id)}/file`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
       const uploadPayload = await uploadResponse.json();
       if (!uploadResponse.ok) throw new Error(uploadPayload.error || "Modelo criado, mas o DOCX não foi enviado.");
-      router.push(`/dashboard/documents/templates/${encodeURIComponent(payload.template.id)}`);
+      router.push(`/dashboard/settings/documents/templates/${encodeURIComponent(payload.template.id)}`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao criar modelo.");
     } finally {
@@ -230,48 +242,71 @@ export default function DocumentTemplatesPage() {
     }
   }
 
+  if (!embedded) {
+    return <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" aria-label="Abrindo configurações de modelos" /></div>;
+  }
+
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar modelos.</p>;
 
   return (
-    <div className="space-y-4">
-      <PageHero
-        kicker="Documentos"
-        title="Modelos"
-        subtitle={`${templates.length} ${templates.length === 1 ? "modelo" : "modelos"}`}
-        actions={canManage ? <Button type="button" variant="primary-page" size="md" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo modelo</Button> : null}
-        chips={<FilterChips
-          chips={listCategories.filter((item) => item !== "Todos").map((item) => ({ value: item, label: item === "Financeiro e recibos" ? "Financeiro" : item }))}
-          value={listCategory === "Todos" ? null : listCategory}
-          onChange={(value) => setListCategory(value ?? "Todos")}
-        />}
-      >
-        <div className="relative max-w-xl">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" aria-hidden />
-          <Input aria-label="Buscar modelo" className="h-11 rounded-ds-btn pl-10 text-sm" placeholder="Buscar modelo..." value={search} onChange={(event) => setSearch(event.target.value)} />
+    <div className="overflow-hidden rounded-2xl border bg-white shadow-xs">
+      <div className={`flex flex-col gap-3 border-b px-5 sm:flex-row sm:items-end sm:justify-between lg:px-6 ${embedded ? "py-4" : "py-5"}`}>
+        {embedded ? (
+          <div>
+            <p className="text-sm font-black text-slate-950">Biblioteca de modelos</p>
+            <p className="mt-0.5 text-xs text-slate-500">Crie, prepare, versione e publique os modelos usados pelos fluxos documentais.</p>
+          </div>
+        ) : (
+          <div><p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p><h1 className="text-xl font-black text-slate-950">Modelos</h1></div>
+        )}
+        {canManage ? <Button size="sm" className="h-10 gap-2 rounded-xl px-4 shadow-xs" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" />Novo modelo</Button> : null}
+      </div>
+      <div className="space-y-3 px-5 pb-2 pt-4 lg:px-6">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input className="h-11 rounded-xl pl-10 text-sm" placeholder="Buscar modelo..." value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
-      </PageHero>
-      {message ? <div role="alert" className="rounded-ds-btn bg-ds-danger-bg px-3 py-2 text-xs font-semibold text-ds-danger">{message}</div> : null}
-      {loading ? <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div> : filtered.length === 0 ? (
-        <div className="grid min-h-52 place-items-center rounded-ds-card border border-dashed border-ds-border-input p-8 text-center"><div><FileStack className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Nenhum modelo encontrado</p><p className="mt-1 text-xs text-slate-500">Ajuste a busca ou selecione outra categoria.</p></div></div>
+        <div className="flex flex-wrap gap-2">
+          {listCategories.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={`h-8 rounded-full border px-3.5 text-xs font-bold transition ${
+                listCategory === item
+                  ? "border-violet-600 bg-violet-600 text-white shadow-xs"
+                  : "border-slate-200 bg-white text-slate-500 hover:border-violet-200 hover:text-violet-700"
+              }`}
+              onClick={() => setListCategory(item)}
+            >
+              {item === "Financeiro e recibos" ? "Financeiro" : item}
+            </button>
+          ))}
+        </div>
+      </div>
+      {message ? <div className="mx-5 mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 lg:mx-6">{message}</div> : null}
+      {loading ? <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div> : filtered.length === 0 ? (
+        <div className="m-5 grid min-h-52 place-items-center rounded-xl border border-dashed bg-white p-8 text-center lg:m-6"><div><FileStack className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Nenhum modelo encontrado</p><p className="mt-1 text-xs text-slate-500">Ajuste a busca ou selecione outra categoria.</p></div></div>
       ) : (
-        <div className="grid gap-3.5 md:grid-cols-2">
+        <div className="grid gap-3.5 px-5 pb-6 pt-4 md:grid-cols-2 lg:px-6">
           {filtered.map((template) => {
             const stats = variableStats(template);
             return (
               <article
                 key={template.id}
-                className="flex flex-col rounded-ds-card border border-ds-border bg-ds-surface p-4 transition-shadow hover:shadow-ds-lift"
+                className="flex flex-col rounded-2xl border bg-white p-4 transition hover:border-teal-200 hover:shadow-md"
               >
                 <div className="flex items-start gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-ds-btn bg-ds-accent-soft text-ds-accent-ink"><FileStack className="h-4 w-4" /></span>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-700"><FileStack className="h-4 w-4" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm font-black leading-5 text-slate-950">{template.name}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
                       <span>{template.category} · versão {template.version}</span>
-                      {template.isSystem ? <span className="inline-flex items-center gap-1 rounded-full bg-ds-neutral-bg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ds-neutral"><LockKeyhole className="h-2.5 w-2.5" />Sistema</span> : null}
+                      {template.isSystem ? <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-700"><LockKeyhole className="h-2.5 w-2.5" />Sistema</span> : null}
                     </div>
                   </div>
-                  <StatusPill className="shrink-0" variant={templateStatusVariant(template)}>{templateStatusLabel(template)}</StatusPill>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide ${templateStatusClasses(template)}`}>
+                    {templateStatusLabel(template)}
+                  </span>
                 </div>
 
                 <div className="mt-3 grid grid-cols-[1.3fr_1fr_.9fr] gap-2 border-y py-2.5">

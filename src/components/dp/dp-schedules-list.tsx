@@ -1,13 +1,12 @@
 "use client";
 
-import { PageHero } from "@/components/patterns/page-hero";
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, getDocs, limit, query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
@@ -19,16 +18,19 @@ import {
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
 import { buildBizneoExportDayOffBlockers } from '@/lib/dp-bizneo-export-preflight';
+import { resolveBizneoShiftId } from '@/lib/dp-shift-bizneo';
 import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
 import { formatDPSchedulePeriod, getAutomaticDPSchedulePeriods } from '@/lib/dp-schedule-periods';
 import { filterUnitsByAccess } from '@/lib/unit-access';
 import { resolveDPUnitCity } from '@/lib/dp-unit-city';
 import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
+import { buildMonthlyTransportVoucherSummaries } from '@/lib/dp-transport-voucher-summary';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -57,6 +59,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/features/audit/client';
 import { DPSchedulesSidebar, type DPSchedulesSidebarGroup } from '@/components/dp/dp-schedules-sidebar';
 import { useDPScheduleFilledDays } from '@/hooks/use-dp-schedule-filled-days';
+import { useDPSchedulesShifts } from '@/hooks/use-dp-schedules-shifts';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,6 +71,10 @@ const MONTHS = [
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 4 }, (_, i) => currentYear - 1 + i);
 const PLANNING_YEARS = Array.from({ length: 6 }, (_, i) => currentYear + i);
+
+function formatBRLCents(amountCents: number) {
+  return (amountCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
 const BRAZILIAN_STATE_NAMES: Record<string, string> = {
   AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará',
@@ -87,15 +94,6 @@ function stateCodeOf(state: string) {
   if (BRAZILIAN_STATE_NAMES[upper]) return upper;
   return Object.entries(BRAZILIAN_STATE_NAMES)
     .find(([, name]) => normalizeLocationLabel(name) === normalizeLocationLabel(state))?.[0] ?? '—';
-}
-
-function resolveBizneoShiftId(def?: { bizneoTemplateId?: string; code?: string }) {
-  const explicitId = String(def?.bizneoTemplateId ?? '').trim();
-  if (explicitId) return explicitId.replace(/^#/, '');
-
-  const rawCode = String(def?.code ?? '').trim();
-  const numericCode = rawCode.match(/^#?(\d+)$/);
-  return numericCode?.[1] ?? '';
 }
 
 function getShiftWeekday(date: string) {
@@ -498,15 +496,15 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       const allShifts: (DPShift & { scheduleUnitId?: string })[] = [];
       await Promise.all(
         schedulesToExport.map(async (sched) => {
-          const snap = await getDocs(query(
-            collection(db, 'dp_schedules', sched.id, 'shifts'),
-            limit(MAX_SHIFTS_PER_SCHEDULE_EXPORT + 1),
-          ));
-          if (snap.size > MAX_SHIFTS_PER_SCHEDULE_EXPORT) {
+          const payload = await authenticatedApiRequest<{ shifts: DPShift[] }>(
+            `/api/dp/schedules/${encodeURIComponent(sched.id)}/shifts`,
+            { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
+          );
+          if (payload.shifts.length > MAX_SHIFTS_PER_SCHEDULE_EXPORT) {
             throw new Error(`A escala ${sched.name} excede o limite seguro de exportação.`);
           }
-          snap.docs.forEach(d => {
-            allShifts.push({ id: d.id, ...d.data(), scheduleUnitId: sched.unitId } as any);
+          payload.shifts.forEach((shift) => {
+            allShifts.push({ ...shift, scheduleUnitId: sched.unitId });
           });
         })
       );
@@ -746,7 +744,7 @@ export function DPSchedulesList() {
     shiftDefsLoading,
     shiftDefsError,
   } = useDP();
-  const { permissions, user, isDefaultAdmin } = useAuth();
+  const { permissions, user, users, isDefaultAdmin } = useAuth();
   const router = useRouter();
   const [addMonthOpen, setAddMonthOpen] = useState(false);
   const [exportBizneoOpen, setExportBizneoOpen] = useState(false);
@@ -939,6 +937,30 @@ export function DPSchedulesList() {
 
   const effectiveYear = years.includes(selectedYear) ? selectedYear : (years[0] ?? currentYear);
 
+  const selectedYearSchedules = React.useMemo(
+    () => visibleSchedules.filter((schedule) => schedule.year === effectiveYear),
+    [effectiveYear, visibleSchedules],
+  );
+  const {
+    shifts: selectedYearShifts,
+    loading: transportVoucherLoading,
+    failedScheduleIds: transportVoucherFailedScheduleIds,
+  } = useDPSchedulesShifts(selectedYearSchedules.map((schedule) => schedule.id));
+  const transportVoucherByPeriod = React.useMemo(
+    () => buildMonthlyTransportVoucherSummaries({
+      schedules: selectedYearSchedules,
+      shifts: selectedYearShifts,
+      users,
+    }),
+    [selectedYearSchedules, selectedYearShifts, users],
+  );
+  const transportVoucherFailedPeriods = React.useMemo(() => {
+    const failedIds = new Set(transportVoucherFailedScheduleIds);
+    return new Set(selectedYearSchedules
+      .filter((schedule) => failedIds.has(schedule.id))
+      .map((schedule) => formatDPSchedulePeriod(schedule.year, schedule.month)));
+  }, [selectedYearSchedules, transportVoucherFailedScheduleIds]);
+
   const monthCards = React.useMemo(
     () => Array.from({ length: 12 }, (_, i) => ({ name: MONTHS[i], ...summarize(effectiveYear, i + 1) })),
     [effectiveYear, summarize],
@@ -976,10 +998,10 @@ export function DPSchedulesList() {
   }, [currentMonth, currentYear, summarize, totalUnits]);
 
   const toneStyles: Record<'active' | 'draft' | 'locked' | 'empty', { card: string; bar: string; status: string }> = {
-    active: { card: 'border-ds-accent-soft bg-ds-surface shadow-[0_16px_28px_-22px_rgba(219,39,119,0.65)]', bar: 'bg-ds-accent', status: 'text-ds-accent-ink' },
-    draft: { card: 'border-ds-info-bg bg-ds-surface', bar: 'bg-ds-info', status: 'text-ds-info' },
-    locked: { card: 'border-ds-info-bg bg-ds-surface', bar: 'bg-ds-info', status: 'text-ds-info' },
-    empty: { card: 'border-ds-info-bg bg-ds-muted', bar: 'bg-ds-info-bg', status: 'text-ds-ink-faint' },
+    active: { card: 'border-[#f9a8c4] bg-white shadow-[0_16px_28px_-22px_rgba(219,39,119,0.65)]', bar: 'bg-[#db2777]', status: 'text-[#db2777]' },
+    draft: { card: 'border-[#dbe7f4] bg-white', bar: 'bg-[#0ea5e9]', status: 'text-[#0369a1]' },
+    locked: { card: 'border-[#e3e9f1] bg-white', bar: 'bg-[#94a3b8]', status: 'text-[#94a3b8]' },
+    empty: { card: 'border-[#e3e9f1] bg-[#f5f7fa]', bar: 'bg-[#d9e0e9]', status: 'text-[#a3aec0]' },
   };
 
   if (schedulesLoading && schedules.length === 0) {
@@ -1008,7 +1030,7 @@ export function DPSchedulesList() {
 
   return (
     <div
-      className="dp-schedules-redesign flex flex-col gap-[6px] bg-ds-info-bg lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px] lg:flex-row"
+      className="dp-schedules-redesign flex flex-col gap-[6px] bg-[#eef1f6] lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px] lg:flex-row"
       style={{ fontFamily: "'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif" }}
     >
       <DPSchedulesSidebar
@@ -1021,39 +1043,47 @@ export function DPSchedulesList() {
         emptyLabel={unitQuery ? 'Nenhuma unidade encontrada.' : 'Nenhuma unidade disponível.'}
       />
 
-      <div className="no-scrollbar min-w-0 flex-1 overflow-y-auto bg-ds-info-bg">
+      <div className="no-scrollbar min-w-0 flex-1 overflow-y-auto bg-[#eef1f6]">
       <div className="mx-auto max-w-[1180px] px-[18px] pb-11 pt-7 md:px-[34px] md:pt-[34px]">
       {ancillaryErrors.length > 0 && (
-        <div className="mb-4 rounded-[12px] border border-ds-warn-bg bg-ds-warn-bg p-2.5 text-xs text-ds-warn">
+        <div className="mb-4 rounded-[12px] border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
           <p className="font-medium">Alguns dados auxiliares de Escalas não carregaram.</p>
-          <p className="mt-1 text-ds-warn">{ancillaryErrors[0]}</p>
+          <p className="mt-1 text-amber-800/80">{ancillaryErrors[0]}</p>
         </div>
       )}
 
-      <PageHero
-        kicker="Escalas operacionais"
-        title="Meses de escala"
-        subtitle={<>
-          {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'}
-          {overview.states > 0 && ` · ${overview.states} ${overview.states === 1 ? 'estado' : 'estados'}`}
-          {overview.cities > 0 && ` · ${overview.cities} ${overview.cities === 1 ? 'cidade' : 'cidades'}`}
-          {' · escalas montadas por mês'}
-        </>}
-        actions={<>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#db2777]">Escalas operacionais</p>
+          <h1 className="dp-schedules-list-title mt-[7px] text-[29px] font-black leading-[34px] tracking-tight text-[#0f172a]">Meses de escala</h1>
+          <p className="mt-2 text-[13.5px] font-semibold text-[#64748b]">
+            {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'}
+            {overview.states > 0 && ` · ${overview.states} ${overview.states === 1 ? 'estado' : 'estados'}`}
+            {overview.cities > 0 && ` · ${overview.cities} ${overview.cities === 1 ? 'cidade' : 'cidades'}`}
+            {' · escalas montadas por mês'}
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {visibleSchedules.some((schedule) => schedule.unitId) && (
-            <Button type="button" variant="ds-secondary" size="md" onClick={() => setExportBizneoOpen(true)} disabled={!exportDependenciesReady}>
+            <Button
+              onClick={() => setExportBizneoOpen(true)}
+              variant="outline"
+              size="sm"
+              disabled={!exportDependenciesReady}
+              className="h-9 rounded-[11px] border-[#dbe2eb] bg-white px-[14px] text-[13px] font-extrabold text-[#475569] hover:bg-[#f8fafc]"
+            >
               <Download className="mr-2 h-4 w-4" />
               Exportar para o Bizneo
             </Button>
           )}
           {permissions.dp?.schedules?.create && (
-            <Button type="button" variant="primary-page" size="md" onClick={() => setAddMonthOpen(true)}>
+            <Button type="button" size="sm" onClick={() => setAddMonthOpen(true)} className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]">
               <Plus className="mr-2 h-4 w-4" />
               Adicionar mês
             </Button>
           )}
-        </>}
-      />
+        </div>
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         {years.map((year) => {
@@ -1067,12 +1097,12 @@ export function DPSchedulesList() {
               className={cn(
                 'flex h-[34px] items-center gap-2 rounded-[11px] border px-[15px] text-[13.5px] font-extrabold transition-colors',
                 active
-                  ? 'border-ds-border-input bg-ds-dark text-white'
-                  : 'border-ds-info-bg bg-ds-surface text-ds-ink-2 hover:bg-ds-surface',
+                  ? 'border-[#0f172a] bg-[#0f172a] text-white'
+                  : 'border-[#e3e9f1] bg-white text-[#475569] hover:bg-[#f8fafc]',
               )}
             >
               {year}
-              <span className={cn('text-[11px] font-extrabold', active ? 'text-ds-ink-faint' : 'text-ds-ink-faint')}>
+              <span className={cn('text-[11px] font-extrabold', active ? 'text-[#8a96aa]' : 'text-[#a3aec0]')}>
                 · {meta}
               </span>
             </button>
@@ -1080,12 +1110,12 @@ export function DPSchedulesList() {
         })}
         <div className="ml-auto hidden flex-wrap items-center gap-[14px] md:flex">
           {([
-            ['Em andamento', 'bg-ds-accent'],
-            ['Rascunho', 'bg-ds-info'],
-            ['Trancada', 'bg-ds-info'],
-            ['Não iniciada', 'bg-ds-info-bg'],
+            ['Em andamento', 'bg-[#db2777]'],
+            ['Rascunho', 'bg-[#0ea5e9]'],
+            ['Trancada', 'bg-[#94a3b8]'],
+            ['Não iniciada', 'bg-[#d9e0e9]'],
           ] as const).map(([label, dot]) => (
-            <span key={label} className="flex items-center gap-1.5 text-[11.5px] font-bold text-ds-ink-faint">
+            <span key={label} className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#7d8a9d]">
               <span className={cn('h-2 w-2 rounded-[3px]', dot)} />
               {label}
             </span>
@@ -1096,45 +1126,104 @@ export function DPSchedulesList() {
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {monthCards.map((card) => {
           const s = toneStyles[card.tone];
+          const transportVoucher = transportVoucherByPeriod.get(card.period);
+          const transportVoucherUnavailable = transportVoucherFailedPeriods.has(card.period);
           return (
-            <button
+            <article
               key={card.period}
-              type="button"
-              onClick={() => router.push(`/dashboard/dp/schedules/month/${card.period}`)}
               className={cn(
                 'flex flex-col rounded-[16px] border px-4 pb-[14px] pt-[15px] text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
                 s.card,
               )}
             >
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/dp/schedules/month/${card.period}`)}
+                className="flex w-full flex-1 flex-col text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2"
+              >
               <div className="flex items-center gap-2">
-                <span className={cn('text-[15.5px] font-black tracking-[-0.01em]', card.tone === 'empty' ? 'text-ds-ink-faint' : 'text-ds-ink')}>{card.name}</span>
-                {card.allLocked && <Lock className="h-3 w-3 text-ds-info" />}
+                <span className={cn('text-[15.5px] font-black tracking-[-0.01em]', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#0f172a]')}>{card.name}</span>
+                {card.allLocked && <Lock className="h-3 w-3 text-[#94a3b8]" />}
                 <span className={cn('ml-auto text-[10.5px] font-extrabold', s.status)}>
                   {card.statusLabel}
                 </span>
               </div>
-              <div className="mt-[13px] h-[5px] overflow-hidden rounded-[3px] bg-ds-info-bg">
+              <div className="mt-[13px] h-[5px] overflow-hidden rounded-[3px] bg-[#e7ecf2]">
                 <div className={cn('h-full rounded-full', s.bar)} style={{ width: `${card.pct}%` }} />
               </div>
               <div className="mt-[9px] flex items-baseline gap-1.5 whitespace-nowrap">
-                <span className={cn('text-[12.5px] font-extrabold tabular-nums', card.tone === 'empty' ? 'text-ds-ink-faint' : 'text-ds-info')}>
+                <span className={cn('text-[12.5px] font-extrabold tabular-nums', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#334155]')}>
                   {card.hasData ? `${card.startedCount} de ${totalUnits}` : `0 de ${totalUnits}`}
                 </span>
-                <span className="text-[11.5px] font-bold text-ds-ink-faint">unidades</span>
+                <span className="text-[11.5px] font-bold text-[#a3aec0]">unidades</span>
                 {card.alert && (
-                  <span className="ml-auto rounded-md bg-ds-danger-bg px-[7px] py-0.5 text-[10.5px] font-black text-ds-accent-ink">
+                  <span className="ml-auto rounded-md bg-[#fee2e6] px-[7px] py-0.5 text-[10.5px] font-black text-[#be123c]">
                     {card.alert}
                   </span>
                 )}
               </div>
-            </button>
+              </button>
+              {card.hasData ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={transportVoucherLoading || transportVoucherUnavailable}
+                      className="mt-3 border-t border-ds-divider pt-2.5 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink disabled:cursor-default"
+                      aria-label={`Ver vale-transporte de ${card.name} de ${effectiveYear}`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-ds-ink-faint">Vale-transporte</span>
+                        <span className="text-[11.5px] font-black tabular-nums text-ds-ink-2">
+                          {transportVoucherLoading
+                            ? 'Calculando…'
+                            : transportVoucherUnavailable
+                              ? 'Indisponível'
+                              : formatBRLCents(transportVoucher?.totalCents ?? 0)}
+                        </span>
+                      </div>
+                      {!transportVoucherLoading && !transportVoucherUnavailable ? (
+                        <span className="mt-1 flex items-center justify-between gap-2 text-[10.5px] font-semibold text-ds-ink-muted">
+                          <span>{transportVoucher?.people.length ?? 0} colaboradora{transportVoucher?.people.length === 1 ? '' : 's'}</span>
+                          <span className="flex items-center gap-0.5 font-bold text-ds-ink-2">
+                            Ver detalhes <ChevronRight className="h-3 w-3" />
+                          </span>
+                        </span>
+                      ) : null}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[340px] overflow-hidden p-0" align="start" sideOffset={8}>
+                    <div className="flex items-start justify-between gap-4 border-b border-ds-divider bg-ds-surface px-4 py-3">
+                      <div>
+                        <p className="text-sm font-bold text-ds-ink">Vale-transporte · {card.name}</p>
+                        <p className="mt-0.5 text-xs text-ds-ink-muted">Consolidado entre todas as unidades.</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-black tabular-nums text-ds-ink">{formatBRLCents(transportVoucher?.totalCents ?? 0)}</span>
+                    </div>
+                    {transportVoucher?.people.length ? (
+                      <div className="max-h-72 divide-y divide-ds-divider overflow-y-auto">
+                        {transportVoucher.people.map((person) => (
+                          <div key={person.userId} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3 text-xs">
+                            <span className="truncate font-semibold text-ds-ink">{person.name}</span>
+                            <span className="text-ds-ink-muted">{person.days} dia{person.days === 1 ? '' : 's'}</span>
+                            <span className="font-bold tabular-nums text-ds-ink">{formatBRLCents(person.amountCents)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="px-4 py-7 text-center text-sm text-ds-ink-muted">Nenhuma colaboradora com vale-transporte neste mês.</p>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+            </article>
           );
         })}
       </div>
 
       {attention.length > 0 && (
-        <div className="mt-[26px] rounded-[16px] border border-ds-info-bg bg-ds-surface px-[18px] py-4">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Precisa de atenção</p>
+        <div className="mt-[26px] rounded-[16px] border border-[#e3e9f1] bg-white px-[18px] py-4">
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Precisa de atenção</p>
           <div className="mt-3 grid gap-[10px] sm:grid-cols-2 lg:grid-cols-3">
             {attention.map((a) => (
               <button
@@ -1144,26 +1233,26 @@ export function DPSchedulesList() {
                 className={cn(
                   'flex items-start gap-[9px] rounded-[12px] border px-3 py-[11px] text-left transition-colors',
                   a.tone === 'err'
-                    ? 'border-ds-accent-soft bg-ds-muted hover:bg-ds-accent-soft'
-                    : 'border-ds-warn bg-ds-warn-bg hover:bg-ds-warn-bg',
+                    ? 'border-[#fecdd6] bg-[#fef2f4] hover:bg-[#ffe8ed]'
+                    : 'border-[#fde68a] bg-[#fffbeb] hover:bg-[#fff7d6]',
                 )}
               >
                 <AlertTriangle
                   className={cn(
                     'mt-0.5 h-3.5 w-3.5 shrink-0',
-                    a.tone === 'err' ? 'text-ds-accent-ink' : 'text-ds-warn',
+                    a.tone === 'err' ? 'text-[#e11d48]' : 'text-[#d97706]',
                   )}
                 />
                 <span className="min-w-0">
                   <span
                     className={cn(
                       'block text-[12.5px] font-extrabold',
-                      a.tone === 'err' ? 'text-ds-accent-ink' : 'text-ds-warn',
+                      a.tone === 'err' ? 'text-[#e11d48]' : 'text-[#b45309]',
                     )}
                   >
                     {a.title}
                   </span>
-                  <span className="mt-0.5 block text-[11.5px] font-semibold text-ds-ink-faint">{a.detail}</span>
+                  <span className="mt-0.5 block text-[11.5px] font-semibold text-[#7d8a9d]">{a.detail}</span>
                 </span>
               </button>
             ))}

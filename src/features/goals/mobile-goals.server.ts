@@ -4,14 +4,15 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { AppError } from "@/lib/observability/app-error";
 import { canAccessUnit } from "@/lib/unit-access";
-import { safeAvatarUrl } from "@/features/collaborator-schedule/mobile-schedule";
-import { loadScheduledGoalDateKeys } from "@/features/collaborator-schedule/mobile-schedule.server";
+import { safeAvatarUrl, safePersonColor } from "@/features/collaborator-schedule/mobile-schedule";
+import { loadScheduledGoalEvidence } from "@/features/collaborator-schedule/mobile-schedule.server";
 import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
 import type { EmployeeGoal, GoalPeriodDoc } from "@/types";
-import { mobileGoalDays, mobileGoalPrize, mobileGoalSummary, mobileGoalTeam, type MobileGoalPeriodInput } from "./mobile-goals";
+import { mobileGoalDays, mobileGoalPrize, mobileGoalSummary, mobileGoalTeam, mobileGoalsOverview, type MobileGoalPeriodInput } from "./mobile-goals";
 
 const MAX_ACTIVE_PERIODS = 10;
 const MAX_EMPLOYEE_GOALS = 200;
+const MAX_OVERVIEW_PERIODS = 200;
 
 const TYPE_LABELS: Record<GoalPeriodDoc["templateType"] & string, string> = {
   revenue: "Faturamento",
@@ -44,6 +45,27 @@ export async function listMobileGoalUnits(actor: ServerUserContext) {
     .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
 }
 
+/**
+ * Goals under way in every unit of the user's scope, without team or prize: one bounded read of the
+ * active periods, on demand. Units outside the scope are dropped before anything leaves the server.
+ */
+export async function loadMobileGoalsOverview(actor: ServerUserContext) {
+  const units = await listMobileGoalUnits(actor);
+  const today = todayInClosureTimezone();
+  const allowed = new Set(units.map((unit) => unit.id));
+  const snapshot = units.length ? await dbAdmin.collection("goalPeriods").where("status", "==", "active")
+    .select("kioskId", "templateType", "startDate", "endDate", "targetValue", "currentValue").limit(MAX_OVERVIEW_PERIODS).get() : null;
+  const rows = (snapshot?.docs ?? []).filter((document) => allowed.has(String(document.get("kioskId") ?? ""))).map((document) => {
+    const type = (document.get("templateType") ?? "revenue") as MobileGoalPeriodInput["type"];
+    return {
+      id: document.id, kioskId: String(document.get("kioskId")), type, typeLabel: TYPE_LABELS[type] ?? "Meta",
+      startDate: dayKey(document.get("startDate"), today), endDate: dayKey(document.get("endDate"), today),
+      currentValue: Number(document.get("currentValue") ?? 0), targetValue: Number(document.get("targetValue") ?? 0),
+    };
+  });
+  return { today, ...mobileGoalsOverview(units, rows) };
+}
+
 /** Active goals of one unit, with the team scoreboard and the prize forecast. Read on demand, never polled. */
 export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: string) {
   assertCanViewMobileGoals(actor);
@@ -52,22 +74,29 @@ export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: str
   const periodsSnapshot = await dbAdmin.collection("goalPeriods").where("kioskId", "==", kioskId).where("status", "==", "active").limit(MAX_ACTIVE_PERIODS).get();
   const periods = periodsSnapshot.docs.map((document) => ({ ...(document.data() as GoalPeriodDoc), id: document.id }));
   const goalSnapshots = await Promise.all(periods.map((period) =>
-    dbAdmin.collection("employeeGoals").where("periodId", "==", period.id).limit(MAX_EMPLOYEE_GOALS).get()));
+    dbAdmin.collection("employeeGoals").where("periodId", "==", period.id).limit(MAX_EMPLOYEE_GOALS + 1).get()));
+  if (goalSnapshots.some((snapshot) => snapshot.size > MAX_EMPLOYEE_GOALS)) {
+    failure("PARTICIPANT_LIMIT_REACHED", "Há participantes demais para validar a meta com segurança.", "VALIDATION");
+  }
   const employeeIds = [...new Set(goalSnapshots.flatMap((snapshot) => snapshot.docs.map((document) => String(document.get("employeeId") ?? ""))).filter(Boolean))];
   const userSnapshots = employeeIds.length ? await dbAdmin.getAll(...employeeIds.map((id) => dbAdmin.collection("users").doc(id))) : [];
   const names = new Map(userSnapshots.map((snapshot) => [snapshot.id, String(snapshot.get("username") || snapshot.get("name") || "Colaborador")]));
   const avatars = new Map(userSnapshots.map((snapshot) => [snapshot.id, safeAvatarUrl(snapshot.get("avatarUrl"))]));
-  const unit = periods.some((period) => period.distributionMode === "scheduled_days") ? await dbAdmin.collection("kiosks").doc(kioskId).get() : null;
-  const unitName = String(unit?.get("name") || unit?.get("displayName") || "");
-  // The period itself says how its days are counted; "scheduled days" come from the unit's schedule, as in the web panel.
-  const scheduledDays = await Promise.all(periods.map((period, index) => period.distributionMode !== "scheduled_days" ? null
-    : loadScheduledGoalDateKeys({
+  const colors = new Map(userSnapshots.map((snapshot) => [snapshot.id, safePersonColor(snapshot.get("color"))]));
+  const unit = await dbAdmin.collection("kiosks").doc(kioskId).get();
+  const unitName = String(unit.get("name") || unit.get("displayName") || "");
+  // A evidência da escala também remove coberturas externas do placar e do prêmio.
+  const scheduleEvidence = await Promise.all(periods.map((period, index) =>
+    loadScheduledGoalEvidence({
       kioskName: unitName, startKey: dayKey(period.startDate, today), endKey: dayKey(period.endDate, today),
       employeeIds: [...new Set(goalSnapshots[index]!.docs.map((document) => String(document.get("employeeId") ?? "")).filter(Boolean))],
-    }).catch(() => null)));
+    })));
 
   const goals = periods.map((period, index) => {
-    const employeeGoals = goalSnapshots[index]!.docs.map((document) => ({ ...(document.data() as EmployeeGoal), id: document.id }));
+    const externalCoverageUserIds = new Set(scheduleEvidence[index]!.externalCoverageUserIds);
+    const employeeGoals = goalSnapshots[index]!.docs
+      .map((document) => ({ ...(document.data() as EmployeeGoal), id: document.id }))
+      .filter((goal) => !externalCoverageUserIds.has(goal.employeeId));
     const input: MobileGoalPeriodInput = {
       id: period.id,
       type: period.templateType ?? "revenue",
@@ -80,7 +109,7 @@ export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: str
       dailyProgress: period.dailyProgress ?? {},
       shiftCount: period.shifts?.length ?? 1,
       method: period.goalMethodSnapshot ?? null,
-      activeDays: scheduledDays[index] ?? undefined,
+      activeDays: period.distributionMode === "scheduled_days" ? scheduleEvidence[index]!.dateKeys : undefined,
     };
     const team = mobileGoalTeam(employeeGoals);
     const prize = mobileGoalPrize(input, team);
@@ -89,12 +118,15 @@ export async function loadMobileUnitGoals(actor: ServerUserContext, kioskId: str
       typeLabel: TYPE_LABELS[input.type] ?? "Meta",
       startDate: input.startKey,
       endDate: input.endKey,
+      // True when the daily share is spread over the days the unit is actually scheduled, not the calendar.
+      distributedBySchedule: period.distributionMode === "scheduled_days" && scheduleEvidence[index]!.dateKeys.length > 0,
       summary: mobileGoalSummary(input, today),
       days: mobileGoalDays(input, today),
       team: team
         .map((row) => ({
           name: names.get(row.employeeId) ?? "Colaborador",
           avatarUrl: avatars.get(row.employeeId) ?? null,
+          color: colors.get(row.employeeId) ?? null,
           isMe: row.employeeId === actor.userDoc.id,
           role: row.role,
           currentValue: row.currentValue,

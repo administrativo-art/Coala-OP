@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { E2E_USER } from "../support/global-setup";
+import { E2E_USER, resetFinancialE2EFixtures } from "../support/global-setup";
+
+test.beforeEach(async () => {
+  await resetFinancialE2EFixtures();
+});
 
 test("identifica um lembrete sem alterar a despesa e o preserva na auditoria", async ({ page }) => {
   await page.goto("/login");
@@ -25,7 +29,7 @@ test("identifica um lembrete sem alterar a despesa e o preserva na auditoria", a
   await page.getByRole("button", { name: "Registrar como já existente" }).click();
 
   await expect(page.getByText("Cobrança identificada.", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: /Cobranças identificadas/ }).click();
+  await page.getByRole("radio", { name: /Cobranças identificadas/ }).click();
   await expect(page.getByText("Lembrete", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Nome, valor e pagamento foram preservados", { exact: false }).first()).toBeVisible();
 });
@@ -43,14 +47,16 @@ test("ativa o opt-in e identifica automaticamente somente pelo boleto idêntico"
   await automation.click();
   await expect(automation).toHaveAttribute("aria-checked", "true");
 
-  await page.getByLabel("Buscar cobranças").fill("Cobrança automática documental E2E");
+  await page.getByPlaceholder("Buscar fornecedor, assunto, valor, conta ou telefone...").fill("Cobrança automática documental E2E");
   await expect(page.getByText("Cobrança automática documental E2E", { exact: true }).first()).toBeVisible();
   await page.getByText("Cobrança automática documental E2E", { exact: true }).first().click();
   await page.getByRole("button", { name: "Analisar cobrança" }).click();
   await expect(page.getByText("Cobrança analisada contra despesas, previsões e pagamentos.", { exact: true })).toBeVisible();
 
-  await page.getByRole("tab", { name: /Cobranças identificadas/ }).click();
-  await expect(page.getByText("Cobrança automática documental E2E", { exact: true }).first()).toBeVisible();
+  await page.getByRole("radio", { name: /Cobranças identificadas/ }).click();
+  const identifiedCharge = page.getByRole("button", { name: /Abrir cobrança Cobrança automática documental E2E/ });
+  await expect(identifiedCharge).toBeVisible();
+  await identifiedCharge.click();
   await expect(page.getByText("Identificação automática em", { exact: false })).toBeVisible();
   await expect(page.getByText("Nome, valor e pagamento foram preservados", { exact: false }).first()).toBeVisible();
 });

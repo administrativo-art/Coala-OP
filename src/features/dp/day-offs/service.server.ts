@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { FieldValue, Timestamp, type DocumentReference, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
 import type { ServerUserContext } from '@/lib/auth-server';
+import { resolveDPJourney } from '@/lib/dp-journey-resolution';
 import { isPredictedDayOffDate } from '@/lib/dp-shift-rules';
 import { dbAdmin } from '@/lib/firebase-admin';
 import {
@@ -15,6 +16,7 @@ import {
 } from '@/lib/integrations/bizneo-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
+import type { DPJourney } from '@/types';
 import type {
   PublishDayOffInput,
   PublishDayOffResult,
@@ -24,6 +26,7 @@ import type {
 
 const OPERATIONS_COLLECTION = 'dp_bizneo_day_off_operations';
 const SHIFT_QUERY_LIMIT = 200;
+const JOURNEY_QUERY_LIMIT = 100;
 const PUBLISHING_LEASE_MS = 2 * 60 * 1000;
 const AUDIT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -285,12 +288,64 @@ async function prepareDayOff(params: {
     }
 
     if (input.source === 'predicted') {
+      const primaryUnitId = typeof userSnapshot.get('unitId') === 'string' && userSnapshot.get('unitId')
+        ? String(userSnapshot.get('unitId'))
+        : input.unitId;
+      const primaryUnitSnapshot = primaryUnitId === input.unitId
+        ? unitSnapshot
+        : await transaction.get(dbAdmin.collection('dp_units').doc(primaryUnitId));
+      if (!primaryUnitSnapshot.exists || primaryUnitSnapshot.get('isArchived') === true) {
+        throw new AppError({ code: 'DP_DAY_OFF_PRIMARY_UNIT_UNAVAILABLE', kind: 'DATA_INTEGRITY', safeMessage: 'A unidade principal da colaboradora não está disponível.' });
+      }
+      const unitGroupId = typeof primaryUnitSnapshot.get('groupId') === 'string' ? String(primaryUnitSnapshot.get('groupId')) : undefined;
+      const unitGroupSnapshot = unitGroupId
+        ? await transaction.get(dbAdmin.collection('dp_unitGroups').doc(unitGroupId))
+        : null;
+      const unitOrganizationId = typeof primaryUnitSnapshot.get('organizationId') === 'string'
+        ? String(primaryUnitSnapshot.get('organizationId'))
+        : unitGroupSnapshot?.exists && typeof unitGroupSnapshot.get('organizationId') === 'string'
+          ? String(unitGroupSnapshot.get('organizationId'))
+          : undefined;
+      const journeySnapshot = await transaction.get(
+        dbAdmin.collection('dp_journeys')
+          .where('status', 'in', ['published', 'archived'])
+          .limit(JOURNEY_QUERY_LIMIT + 1),
+      );
+      if (journeySnapshot.size > JOURNEY_QUERY_LIMIT) {
+        throw new AppError({ code: 'DP_DAY_OFF_JOURNEY_CATALOG_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há jornadas demais para validar esta folga com segurança.' });
+      }
+      const resolution = resolveDPJourney({
+        journeys: journeySnapshot.docs.map((document) => ({ id: document.id, ...document.data() } as DPJourney)),
+        target: {
+          collaboratorId: input.userId,
+          ...(typeof userSnapshot.get('jobRoleId') === 'string' ? { jobRoleId: String(userSnapshot.get('jobRoleId')) } : {}),
+          jobFunctionIds: Array.isArray(userSnapshot.get('jobFunctionIds')) ? userSnapshot.get('jobFunctionIds') : [],
+          unitId: primaryUnitId,
+          ...(unitGroupId ? { unitGroupId } : {}),
+          ...(unitOrganizationId ? { unitOrganizationId } : {}),
+        },
+        date: input.date,
+      });
+      if (resolution.status !== 'resolved') {
+        throw new AppError({
+          code: resolution.status === 'ambiguous' ? 'DP_DAY_OFF_JOURNEY_AMBIGUOUS' : 'DP_DAY_OFF_JOURNEY_NOT_FOUND',
+          kind: resolution.status === 'ambiguous' ? 'CONFLICT' : 'EXPECTED_BUSINESS',
+          safeMessage: 'Não foi possível resolver uma única jornada vigente para confirmar esta folga prevista.',
+        });
+      }
+      if ((resolution.journey.scaleValidation?.mode ?? 'consecutive_days') !== 'consecutive_days') {
+        throw new AppError({ code: 'DP_DAY_OFF_JOURNEY_MANUAL_REVIEW', kind: 'EXPECTED_BUSINESS', safeMessage: 'Esta jornada exige revisão manual e não gera folga prevista automaticamente.' });
+      }
       const workedDates = new Set(
         relevantShifts
           .filter((document) => document.get('type') !== 'day_off')
           .map((document) => String(document.get('date') ?? '')),
       );
-      if (!isPredictedDayOffDate(workedDates, input.date)) {
+      if (!isPredictedDayOffDate(
+        workedDates,
+        input.date,
+        resolution.journey.weeklyRest?.maxConsecutiveWorkDays ?? 6,
+      )) {
         throw new AppError({
           code: 'DP_DAY_OFF_PREDICTION_CHANGED',
           kind: 'CONFLICT',
@@ -410,6 +465,9 @@ async function prepareDayOff(params: {
       ...(!existingDayOff ? { createdAt: now } : {}),
     };
     transaction.set(shiftRef, shiftPayload, { merge: true });
+    if (!existingDayOff) {
+      transaction.update(scheduleRef, { journeyValidationVersion: FieldValue.increment(1) });
+    }
     transaction.set(operationRef, {
       workspaceId: context.workspace_id,
       scheduleId,
@@ -774,6 +832,8 @@ async function markDayOffRemoved(
   requestId: string,
 ) {
   await dbAdmin.runTransaction(async (transaction) => {
+    const scheduleRef = dbAdmin.collection('dp_schedules').doc(prepared.scheduleId);
+    const scheduleSnapshot = await transaction.get(scheduleRef);
     const operationSnapshot = await transaction.get(prepared.operationRef);
     const shiftSnapshot = await transaction.get(prepared.shiftRef);
     if (!operationSnapshot.exists) {
@@ -793,6 +853,9 @@ async function markDayOffRemoved(
 
     const now = Timestamp.now();
     transaction.delete(prepared.shiftRef);
+    if (scheduleSnapshot.exists) {
+      transaction.update(scheduleRef, { journeyValidationVersion: FieldValue.increment(1) });
+    }
     transaction.update(prepared.operationRef, {
       status: 'removed',
       removedAt: now,

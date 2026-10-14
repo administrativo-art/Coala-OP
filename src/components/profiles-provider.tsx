@@ -147,6 +147,7 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         await addDoc(collection(db, "profiles"), profile);
     } catch(error) {
         console.error("Error adding profile:", error);
+        throw error;
     }
   }, []);
 
@@ -157,18 +158,20 @@ export function ProfilesProvider({ children }: { children: React.ReactNode }) {
         await updateDoc(profileRef, dataToUpdate);
     } catch(error) {
         console.error("Error updating profile:", error);
+        throw error;
     }
   }, []);
 
   const deleteProfile = useCallback(async (profileId: string) => {
     const profileToDelete = profiles.find(p => p.id === profileId);
-    if (profileToDelete?.isDefaultAdmin) return;
+    if (profileToDelete?.isDefaultAdmin || profileId === adminProfileId) throw new Error('O perfil administrador não pode ser excluído.');
     try {
         await deleteDoc(doc(db, "profiles", profileId));
     } catch(error) {
         console.error("Error deleting profile:", error);
+        throw error;
     }
-  }, [profiles]);
+  }, [adminProfileId, profiles]);
 
   const value: ProfilesContextType = useMemo(() => ({
     profiles,

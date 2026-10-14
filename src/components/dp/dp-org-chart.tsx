@@ -65,34 +65,34 @@ type PersonTreeOptions = {
 
 const ORG_TONES = [
   {
-    header: "bg-ds-accent-soft text-ds-accent-ink border-ds-accent-soft",
-    dot: "bg-ds-accent",
-    badge: "bg-ds-accent-soft text-ds-accent-ink",
-    progress: "bg-ds-accent",
+    header: "bg-pink-50 text-pink-700 border-pink-100",
+    dot: "bg-pink-600",
+    badge: "bg-pink-50 text-pink-700",
+    progress: "bg-pink-600",
   },
   {
-    header: "bg-ds-accent-soft text-ds-accent-ink border-ds-accent-soft",
-    dot: "bg-ds-accent",
-    badge: "bg-ds-accent-soft text-ds-accent-ink",
-    progress: "bg-ds-accent",
+    header: "bg-violet-50 text-violet-700 border-violet-100",
+    dot: "bg-violet-600",
+    badge: "bg-violet-50 text-violet-700",
+    progress: "bg-violet-600",
   },
   {
-    header: "bg-ds-info-bg text-ds-info border-ds-info-bg",
-    dot: "bg-ds-info",
-    badge: "bg-ds-info-bg text-ds-info",
-    progress: "bg-ds-info",
+    header: "bg-sky-50 text-sky-700 border-sky-100",
+    dot: "bg-sky-600",
+    badge: "bg-sky-50 text-sky-700",
+    progress: "bg-sky-600",
   },
   {
-    header: "bg-ds-ok-bg text-ds-ok border-ds-ok-bg",
-    dot: "bg-ds-ok",
-    badge: "bg-ds-ok-bg text-ds-ok",
-    progress: "bg-ds-ok",
+    header: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    dot: "bg-emerald-600",
+    badge: "bg-emerald-50 text-emerald-700",
+    progress: "bg-emerald-600",
   },
   {
-    header: "bg-ds-warn-bg text-ds-warn border-ds-warn-bg",
-    dot: "bg-ds-warn",
-    badge: "bg-ds-warn-bg text-ds-warn",
-    progress: "bg-ds-warn",
+    header: "bg-amber-50 text-amber-700 border-amber-100",
+    dot: "bg-amber-600",
+    badge: "bg-amber-50 text-amber-700",
+    progress: "bg-amber-600",
   },
 ];
 
@@ -712,20 +712,20 @@ function StatCard({
   tone?: "slate" | "pink" | "emerald" | "sky";
 }) {
   const toneClass = {
-    slate: "text-ds-ink",
-    pink: "text-ds-accent-ink",
-    emerald: "text-ds-ok",
-    sky: "text-ds-info",
+    slate: "text-slate-950",
+    pink: "text-pink-600",
+    emerald: "text-emerald-600",
+    sky: "text-sky-600",
   }[tone];
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border border-ds-border bg-ds-surface px-4 py-3 shadow-sm">
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-ds-ink-faint">{title}</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{title}</p>
         <p className={cn("mt-1 text-3xl font-bold leading-none", toneClass)}>{value}</p>
-        <p className="mt-2 text-[11px] text-ds-ink-faint">{hint}</p>
+        <p className="mt-2 text-[11px] text-slate-400">{hint}</p>
       </div>
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-ds-border bg-ds-muted text-ds-ink-muted">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
         <Icon className="h-5 w-5" />
       </div>
     </div>
@@ -746,18 +746,18 @@ function CollaboratorPill({
   const unitNames = units ? getUserUnitNames(user, units) : [];
   const content = (
     <>
-      <Avatar className="h-10 w-10 shrink-0 border-2 border-white shadow-sm">
+      <Avatar className="h-10 w-10 shrink-0 border-2 border-white shadow-xs">
         <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
-        <AvatarFallback className="bg-ds-warn-bg text-xs font-bold text-ds-warn">{initials(user.username)}</AvatarFallback>
+        <AvatarFallback className="bg-amber-100 text-xs font-bold text-amber-600">{initials(user.username)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1 overflow-hidden text-left">
-        <p className="truncate text-sm font-bold text-ds-ink">{user.username}</p>
-        <p className="truncate text-xs text-ds-ink-muted">{user.email}</p>
-        <p className="truncate text-xs text-ds-ink-faint">
+        <p className="truncate text-sm font-bold text-slate-950">{user.username}</p>
+        <p className="truncate text-xs text-slate-500">{user.email}</p>
+        <p className="truncate text-xs text-slate-400">
           {summarizeFunctions(user.jobFunctionNames)}
         </p>
         {unitNames.length > 0 ? (
-          <p className="mt-0.5 truncate text-[11px] font-medium text-ds-info">
+          <p className="mt-0.5 truncate text-[11px] font-medium text-sky-600">
             {unitNames.join(", ")}
           </p>
         ) : null}
@@ -767,7 +767,7 @@ function CollaboratorPill({
 
   if (!onSelect) {
     return (
-      <div className="flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-ds-border bg-ds-surface px-3 py-2.5 shadow-sm">
+      <div className="flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-xs">
         {content}
       </div>
     );
@@ -778,10 +778,10 @@ function CollaboratorPill({
       type="button"
       onClick={() => onSelect(user)}
       className={cn(
-        "flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border bg-ds-surface px-3 py-2.5 text-left shadow-sm transition",
+        "flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border bg-white px-3 py-2.5 text-left shadow-xs transition",
         selected
-          ? "border-ds-accent-soft ring-2 ring-ds-accent-soft"
-          : "border-ds-border hover:border-ds-accent-soft hover:bg-ds-accent-soft"
+          ? "border-pink-300 ring-2 ring-pink-100"
+          : "border-slate-200 hover:border-pink-200 hover:bg-pink-50/30"
       )}
     >
       {content}
@@ -822,17 +822,17 @@ function PersonTreeCard({
         onClick={() => node.user && onSelect(node.user)}
         disabled={!node.user}
         className={cn(
-          "w-48 overflow-hidden rounded-2xl border bg-ds-surface text-center shadow-sm transition",
+          "w-48 overflow-hidden rounded-2xl border bg-white text-center shadow-xs transition",
           selected
-            ? "border-ds-accent-soft shadow-pink-100 ring-2 ring-ds-accent-soft"
+            ? "border-pink-400 shadow-pink-100 ring-2 ring-pink-300"
             : node.user
-              ? "border-ds-border hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-md"
-              : "border-dashed border-ds-border-input bg-ds-muted"
+              ? "border-slate-200 hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md"
+              : "border-dashed border-slate-300 bg-slate-50"
         )}
       >
         <div className={cn("flex h-12 items-center justify-center border-b", tone.header)}>
           {node.user ? (
-            <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+            <Avatar className="h-9 w-9 border-2 border-white shadow-xs">
               <AvatarImage src={node.user.avatarUrl || undefined} alt={node.user.username} />
               <AvatarFallback
                 className="text-xs font-bold"
@@ -842,28 +842,28 @@ function PersonTreeCard({
               </AvatarFallback>
             </Avatar>
           ) : (
-            <span className="grid h-9 w-9 place-items-center rounded-full border-2 border-white bg-ds-surface text-[10px] font-bold text-ds-ink-faint shadow-sm">
+            <span className="grid h-9 w-9 place-items-center rounded-full border-2 border-white bg-white text-[10px] font-bold text-slate-400 shadow-xs">
               Vago
             </span>
           )}
         </div>
         <div className="px-3 py-3">
-          <p className="truncate text-xs font-bold text-ds-ink">{node.user?.username ?? "Cargo vago"}</p>
+          <p className="truncate text-xs font-bold text-slate-950">{node.user?.username ?? "Cargo vago"}</p>
           <p
             className={cn(
               "mt-0.5 truncate text-[10px] font-bold",
               effectiveFunctionNames.length === 0
-                ? "text-ds-ink-faint"
+                ? "text-slate-400"
                 : isVacant
-                  ? "text-ds-info"
-                  : "text-ds-ok"
+                  ? "text-sky-700"
+                  : "text-emerald-700"
             )}
           >
             {functionLine}
           </p>
-          <p className="mt-1 truncate text-[11px] text-ds-ink-muted">{node.role.publicTitle || node.role.name}</p>
+          <p className="mt-1 truncate text-[11px] text-slate-500">{node.role.publicTitle || node.role.name}</p>
           {unitNames.length > 0 ? (
-            <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-wide text-ds-info">
+            <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-wide text-sky-600">
               {unitNames.join(", ")}
             </p>
           ) : null}
@@ -871,8 +871,8 @@ function PersonTreeCard({
             <span className={cn(
               "rounded-full border px-2 py-0.5 text-[9px] font-bold",
               isVacant
-                ? "border-ds-warn-bg bg-ds-warn-bg text-ds-warn"
-                : "border-ds-ok-bg bg-ds-ok-bg text-ds-ok"
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
             )}>
               {isVacant ? "Vago" : "Ativo"}
             </span>
@@ -884,7 +884,7 @@ function PersonTreeCard({
         <button
           type="button"
           onClick={onToggle}
-          className="absolute -bottom-3 grid h-6 w-6 place-items-center rounded-full border border-ds-border bg-ds-surface text-ds-ink-faint shadow-sm transition hover:border-ds-accent-soft hover:text-ds-accent-ink"
+          className="absolute -bottom-3 grid h-6 w-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-xs transition hover:border-pink-200 hover:text-pink-600"
           aria-label={expanded ? "Recolher reportes" : "Expandir reportes"}
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -930,14 +930,14 @@ function PersonTreeNodeView({
 
       {hasChildren && expanded && (
         <>
-          <div className="h-7 w-px border-l border-ds-border" />
+          <div className="h-7 w-px border-l border-slate-200" />
           <div className="relative flex gap-8">
             {node.directReports.length > 1 && (
-              <div className="absolute left-20 right-20 top-0 border-t border-ds-border" />
+              <div className="absolute left-20 right-20 top-0 border-t border-slate-200" />
             )}
             {node.directReports.map((child) => (
               <div key={child.id} className="flex flex-col items-center">
-                <div className="h-7 w-px border-l border-ds-border" />
+                <div className="h-7 w-px border-l border-slate-200" />
                 <PersonTreeNodeView
                   node={child}
                   expandedIds={expandedIds}
@@ -984,21 +984,21 @@ function UserDetailPanel({
       : [];
 
   return (
-    <aside className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
-      <div className="flex items-center justify-between border-b border-ds-divider px-4 py-3">
-        <h3 className="text-sm font-bold text-ds-ink">Detalhe</h3>
+    <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)]">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <h3 className="text-sm font-bold text-slate-950">Detalhe</h3>
         <button
           type="button"
           onClick={onClose}
-          className="grid h-8 w-8 place-items-center rounded-xl text-ds-ink-faint transition hover:bg-ds-neutral-bg hover:text-ds-ink"
+          className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-900"
           aria-label="Fechar detalhe"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="bg-ds-accent-soft px-5 py-6 text-center">
-        <Avatar className="mx-auto h-16 w-16 border-4 border-white shadow-sm">
+      <div className="bg-pink-50 px-5 py-6 text-center">
+        <Avatar className="mx-auto h-16 w-16 border-4 border-white shadow-xs">
           <AvatarImage src={detail.user.avatarUrl || undefined} alt={detail.user.username} />
           <AvatarFallback
             className="text-lg font-bold"
@@ -1007,49 +1007,49 @@ function UserDetailPanel({
             {initials(detail.user.username)}
           </AvatarFallback>
         </Avatar>
-        <h3 className="mt-3 truncate text-lg font-bold text-ds-ink">{detail.user.username}</h3>
-        <p className="mt-1 truncate text-sm font-bold text-ds-ok">
+        <h3 className="mt-3 truncate text-lg font-bold text-slate-950">{detail.user.username}</h3>
+        <p className="mt-1 truncate text-sm font-bold text-emerald-700">
           {functionLine}
         </p>
-        <p className="truncate text-sm text-ds-ink-muted">
+        <p className="truncate text-sm text-slate-500">
           {detail.role?.publicTitle || detail.user.jobRoleName || detail.role?.name || "Sem cargo"}
         </p>
-        <p className="mt-1 truncate text-xs font-bold uppercase tracking-wide text-ds-info">
+        <p className="mt-1 truncate text-xs font-bold uppercase tracking-wide text-sky-700">
           {unitNames.join(", ")}
         </p>
         <div className="mt-3 flex justify-center gap-2">
-          <span className="rounded-full border border-ds-accent-soft bg-ds-surface px-3 py-1 text-xs font-bold text-ds-accent-ink">
+          <span className="rounded-full border border-pink-200 bg-white/70 px-3 py-1 text-xs font-bold text-pink-700">
             {department}
           </span>
-          <span className="rounded-full border border-ds-ok-bg bg-ds-surface px-3 py-1 text-xs font-bold text-ds-ok">
+          <span className="rounded-full border border-emerald-200 bg-white/70 px-3 py-1 text-xs font-bold text-emerald-700">
             Ativo
           </span>
         </div>
       </div>
 
-      <div className="divide-y divide-ds-divider">
+      <div className="divide-y divide-slate-100">
         {detail.manager && (
           <div className="px-5 py-4">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">Reporta para</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Reporta para</p>
             <button
               type="button"
               onClick={() => onSelectUser(detail.manager!)}
-              className="mt-2 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-ds-muted"
+              className="mt-2 flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-slate-50"
             >
               <Avatar className="h-8 w-8">
                 <AvatarImage src={detail.manager.avatarUrl || undefined} alt={detail.manager.username} />
-                <AvatarFallback className="bg-ds-warn-bg text-[10px] font-bold text-ds-warn">
+                <AvatarFallback className="bg-amber-100 text-[10px] font-bold text-amber-600">
                   {initials(detail.manager.username)}
                 </AvatarFallback>
               </Avatar>
-              <span className="truncate text-sm font-bold text-ds-ink">{detail.manager.username}</span>
+              <span className="truncate text-sm font-bold text-slate-800">{detail.manager.username}</span>
             </button>
           </div>
         )}
 
         <div className="px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">Organização</p>
-          <p className="mt-2 text-sm text-ds-ink-muted">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Organização</p>
+          <p className="mt-2 text-sm text-slate-600">
             {operationalLinks.organizationNames.length > 0
               ? operationalLinks.organizationNames.join(", ")
               : "Sem organização vinculada"}
@@ -1057,8 +1057,8 @@ function UserDetailPanel({
         </div>
 
         <div className="px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">Grupo</p>
-          <p className="mt-2 text-sm text-ds-ink-muted">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Grupo</p>
+          <p className="mt-2 text-sm text-slate-600">
             {operationalLinks.groupNames.length > 0
               ? operationalLinks.groupNames.join(", ")
               : "Sem grupo vinculado"}
@@ -1066,56 +1066,56 @@ function UserDetailPanel({
         </div>
 
         <div className="px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">Responsável por</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Responsável por</p>
           <div className="mt-2 space-y-2">
             {responsibilityTargets.length > 0 ? (
               responsibilityTargets.map((target) => (
-                <div key={`${target.type}-${target.name}`} className="rounded-xl border border-ds-divider bg-ds-muted px-3 py-2">
-                  <p className="text-sm font-bold text-ds-ink-2">{target.type} · {target.name}</p>
+                <div key={`${target.type}-${target.name}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-sm font-bold text-slate-700">{target.type} · {target.name}</p>
                   {target.sourceName ? (
-                    <p className="mt-0.5 text-xs text-ds-ink-faint">{target.sourceName}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">{target.sourceName}</p>
                   ) : null}
                 </div>
               ))
             ) : (
-              <p className="text-sm text-ds-ink-muted">Nenhum grupo ou organização.</p>
+              <p className="text-sm text-slate-600">Nenhum grupo ou organização.</p>
             )}
           </div>
         </div>
 
         {responsibleUnitNames.length > 0 && responsibilityTargets.length === 0 ? (
           <div className="px-5 py-4">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">Responsabilidade por unidade</p>
-            <p className="mt-2 text-sm text-ds-ink-muted">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Responsabilidade por unidade</p>
+            <p className="mt-2 text-sm text-slate-600">
               {responsibleUnitNames.join(", ")}
             </p>
           </div>
         ) : null}
 
         <div className="px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Reportes diretos · {detail.directReports.length}
           </p>
           <div className="mt-3 space-y-2">
             {detail.directReports.length === 0 ? (
-              <p className="text-sm text-ds-ink-muted">Nenhum reporte direto no filtro atual.</p>
+              <p className="text-sm text-slate-500">Nenhum reporte direto no filtro atual.</p>
             ) : (
               detail.directReports.map((user) => (
                 <button
                   key={user.id}
                   type="button"
                   onClick={() => onSelectUser(user)}
-                  className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-ds-muted"
+                  className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-slate-50"
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
-                    <AvatarFallback className="bg-ds-ok-bg text-[10px] font-bold text-ds-ok">
+                    <AvatarFallback className="bg-emerald-100 text-[10px] font-bold text-emerald-600">
                       {initials(user.username)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ds-ink">{user.username}</p>
-                    <p className="truncate text-xs text-ds-ink-faint">{user.jobRoleName || "Sem cargo"}</p>
+                    <p className="truncate text-sm font-bold text-slate-800">{user.username}</p>
+                    <p className="truncate text-xs text-slate-400">{user.jobRoleName || "Sem cargo"}</p>
                   </div>
                 </button>
               ))
@@ -1124,13 +1124,13 @@ function UserDetailPanel({
         </div>
 
         <div className="space-y-3 px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ds-ink-faint">Contato</p>
-          <div className="flex items-center gap-2 text-sm text-ds-ink-muted">
-            <Mail className="h-4 w-4 text-ds-ink-faint" />
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Contato</p>
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Mail className="h-4 w-4 text-slate-400" />
             <span className="min-w-0 truncate">{detail.user.email || "Sem e-mail cadastrado"}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-ds-ink-muted">
-            <Phone className="h-4 w-4 text-ds-ink-faint" />
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Phone className="h-4 w-4 text-slate-400" />
             <span className="min-w-0 truncate">{phone || "Sem telefone cadastrado"}</span>
           </div>
         </div>
@@ -1359,24 +1359,24 @@ export function DPOrgChart() {
     return (
       <div
         key={item.node.role.id}
-        className="border-b border-ds-divider px-4 py-3 last:border-b-0"
+        className="border-b border-slate-100 px-4 py-3 last:border-b-0"
         style={{ paddingLeft: `${16 + item.depth * 28}px` }}
       >
         <div className="flex flex-col gap-3">
           <div className="flex min-w-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} />
-              <span className="w-7 shrink-0 text-right font-mono text-[11px] text-ds-ink-faint">{index + 1}</span>
+              <span className="w-7 shrink-0 text-right font-mono text-[11px] text-slate-400">{index + 1}</span>
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-bold text-ds-ink">{item.node.role.name}</p>
+                  <p className="truncate text-sm font-bold text-slate-950">{item.node.role.name}</p>
                   {item.node.role.departmentName ? (
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", tone.badge)}>
                       {item.node.role.departmentName}
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-0.5 truncate text-xs text-ds-ink-muted">{item.node.role.publicTitle || item.node.role.name}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-500">{item.node.role.publicTitle || item.node.role.name}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {displayFunctionBadges(roleFunctions).map((name) => (
                     <span
@@ -1384,15 +1384,15 @@ export function DPOrgChart() {
                       className={cn(
                         "rounded-full border px-2 py-0.5 text-[10px] font-bold",
                         name === "Sem função"
-                          ? "border-ds-border bg-ds-muted text-ds-ink-faint"
-                          : "border-ds-ok-bg bg-ds-ok-bg text-ds-ok"
+                          ? "border-slate-200 bg-slate-50 text-slate-400"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
                       )}
                     >
                       {name}
                     </span>
                   ))}
                   {roleFunctions.length > 2 ? (
-                    <span className="rounded-full border border-ds-border bg-ds-surface px-2 py-0.5 text-[10px] font-bold text-ds-ink-faint">
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">
                       +{roleFunctions.length - 2}
                     </span>
                   ) : null}
@@ -1403,21 +1403,21 @@ export function DPOrgChart() {
               <button
                 type="button"
                 onClick={() => toggleListRole(item.node.role.id)}
-                className="flex shrink-0 items-center gap-2 rounded-full border border-ds-border bg-ds-surface px-3 py-1 text-xs font-bold text-ds-ink-muted transition hover:border-ds-accent-soft hover:text-ds-accent-ink"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-pink-200 hover:text-pink-700"
                 aria-expanded={listExpanded}
               >
                 {item.node.directUsers.length} ocupante{item.node.directUsers.length === 1 ? "" : "s"}
                 {listExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
             ) : (
-              <span className="shrink-0 rounded-full border border-dashed border-ds-border px-3 py-1 text-xs font-bold text-ds-ink-faint">
+              <span className="shrink-0 rounded-full border border-dashed border-slate-200 px-3 py-1 text-xs font-bold text-slate-400">
                 Sem colaborador direto
               </span>
             )}
           </div>
 
           {hasUsers && listExpanded ? (
-            <div className="ml-12 flex flex-wrap gap-2 rounded-xl border border-ds-divider bg-ds-muted p-2">
+            <div className="ml-12 flex flex-wrap gap-2 rounded-xl border border-slate-100 bg-slate-50/60 p-2">
               {item.node.directUsers.map((user) => (
                 <button
                   key={user.id}
@@ -1426,8 +1426,8 @@ export function DPOrgChart() {
                   className={cn(
                     "max-w-full truncate rounded-full border px-3 py-1 text-xs font-bold transition",
                     selectedUserId === user.id
-                      ? "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink ring-2 ring-ds-accent-soft"
-                      : "border-ds-border bg-ds-surface text-ds-ink-2 hover:border-ds-accent-soft hover:text-ds-accent-ink"
+                      ? "border-pink-300 bg-pink-50 text-pink-700 ring-2 ring-pink-100"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-pink-200 hover:text-pink-700"
                   )}
                 >
                   {user.username}
@@ -1530,7 +1530,7 @@ export function DPOrgChart() {
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex w-full flex-wrap gap-1 rounded-2xl bg-ds-neutral-bg p-1 lg:w-auto">
+        <div className="flex w-full flex-wrap gap-1 rounded-2xl bg-slate-100/70 p-1 lg:w-auto">
           {([
             { value: "tree", label: "Árvore" },
             { value: "list", label: "Lista" },
@@ -1544,8 +1544,8 @@ export function DPOrgChart() {
               className={cn(
                 "rounded-xl px-4 py-2 text-sm font-semibold transition",
                 viewMode === item.value
-                  ? "bg-ds-surface text-ds-ink shadow-sm"
-                  : "text-ds-ink-muted hover:bg-ds-surface hover:text-ds-ink"
+                  ? "bg-white text-slate-950 shadow-xs"
+                  : "text-slate-500 hover:bg-white/70 hover:text-slate-900"
               )}
             >
               {item.label}
@@ -1553,36 +1553,36 @@ export function DPOrgChart() {
           ))}
         </div>
         <div className="relative w-full lg:max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar pessoa ou cargo."
-            className="h-11 rounded-xl border-ds-border bg-ds-surface pl-9 shadow-sm placeholder:text-ds-ink-faint focus-visible:ring-ds-accent-soft"
+            className="h-11 rounded-xl border-slate-200 bg-white pl-9 shadow-xs placeholder:text-slate-400 focus-visible:ring-pink-200"
           />
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-sm text-ds-ink-muted">
+        <label className="flex items-center gap-2 text-sm text-slate-500">
           <Switch checked={showEmptyRoles} onCheckedChange={setShowEmptyRoles} />
           Mostrar cargos sem colaboradores
         </label>
-        <label className="flex items-center gap-2 text-sm text-ds-ink-muted">
+        <label className="flex items-center gap-2 text-sm text-slate-500">
           <Switch checked={showInactiveRoles} onCheckedChange={setShowInactiveRoles} />
           Mostrar cargos inativos
         </label>
       </div>
 
       {chart.detachedRoleCount > 0 && (
-        <Card className="border-ds-warn-bg bg-ds-warn-bg">
+        <Card className="border-amber-200 bg-amber-50/70">
           <CardContent className="flex items-start gap-3 p-4">
-            <ShieldAlert className="mt-0.5 h-5 w-5 text-ds-warn" />
+            <ShieldAlert className="mt-0.5 h-5 w-5 text-amber-700" />
             <div className="space-y-1">
-              <p className="text-sm font-medium text-ds-warn">
+              <p className="text-sm font-medium text-amber-900">
                 {chart.detachedRoleCount} cargo{chart.detachedRoleCount === 1 ? "" : "s"} sem hierarquia definida.
               </p>
-              <p className="text-sm text-ds-warn">
+              <p className="text-sm text-amber-800">
                 {chart.detachedRoleCount === 1 ? "Esse cargo aponta" : "Esses cargos apontam"} para um superior inexistente ou removido. Corrija em <strong>Cargos e funções</strong>.
               </p>
             </div>
@@ -1593,48 +1593,48 @@ export function DPOrgChart() {
       <div className={cn("grid gap-4", selectedUserDetail && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
         <div className="min-w-0 space-y-4">
           {viewMode === "tree" && (
-            <section className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ds-border bg-ds-surface px-4 py-3 backdrop-blur">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleCollapseAll}
-                    className="rounded-xl border border-ds-border bg-ds-surface px-3 py-2 text-sm font-medium text-ds-ink-muted transition hover:bg-ds-muted"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                   >
                     Recolher
                   </button>
                   <button
                     type="button"
                     onClick={handleExpandAll}
-                    className="rounded-xl border border-ds-border bg-ds-surface px-3 py-2 text-sm font-medium text-ds-ink-muted transition hover:bg-ds-muted"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                   >
                     Expandir
                   </button>
-                  <p className="text-sm text-ds-ink-faint">scroll para zoom · arraste para mover · clique num cartão para detalhe</p>
+                  <p className="text-sm text-slate-400">scroll para zoom · arraste para mover · clique num cartão para detalhe</p>
                 </div>
-                <div className="flex items-center rounded-xl border border-ds-border bg-ds-surface p-1 shadow-sm">
+                <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-xs">
                   <button
                     type="button"
                     onClick={() => setZoom((current) => Math.max(current - 0.1, 0.45))}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-ds-ink-muted transition hover:bg-ds-neutral-bg hover:text-ds-ink"
+                    className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
                     aria-label="Diminuir zoom"
                   >
                     <Minus className="h-4 w-4" />
                   </button>
-                  <span className="w-12 text-center text-xs font-bold tabular-nums text-ds-ink-muted">{Math.round(zoom * 100)}%</span>
+                  <span className="w-12 text-center text-xs font-bold tabular-nums text-slate-500">{Math.round(zoom * 100)}%</span>
                   <button
                     type="button"
                     onClick={() => setZoom((current) => Math.min(current + 0.1, 1.6))}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-ds-ink-muted transition hover:bg-ds-neutral-bg hover:text-ds-ink"
+                    className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
                     aria-label="Aumentar zoom"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
-                  <div className="mx-1 h-5 w-px bg-ds-seg" />
+                  <div className="mx-1 h-5 w-px bg-slate-200" />
                   <button
                     type="button"
                     onClick={resetTreeView}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-ds-ink-muted transition hover:bg-ds-neutral-bg hover:text-ds-ink"
+                    className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
                     aria-label="Centralizar árvore"
                   >
                     <RotateCcw className="h-4 w-4" />
@@ -1642,7 +1642,7 @@ export function DPOrgChart() {
                 </div>
               </div>
               <div
-                className="min-h-[640px] cursor-grab overflow-hidden bg-ds-surface bg-[radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.14)_1px,transparent_0)] bg-[length:24px_24px] p-10 active:cursor-grabbing xl:min-h-[720px]"
+                className="min-h-[640px] cursor-grab overflow-hidden bg-[#f8fafc] bg-[radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.14)_1px,transparent_0)] bg-size-[24px_24px] p-10 active:cursor-grabbing xl:min-h-[720px]"
                 onWheel={handleTreeWheel}
                 onPointerDown={handlePanPointerDown}
                 onPointerMove={handlePanPointerMove}
@@ -1650,7 +1650,7 @@ export function DPOrgChart() {
                 onPointerCancel={handlePanPointerEnd}
               >
                 {personRoots.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-ds-border bg-ds-surface p-6 text-sm text-ds-ink-muted">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 p-6 text-sm text-slate-500">
                     Nenhum colaborador corresponde aos filtros atuais.
                   </div>
                 ) : (
@@ -1681,13 +1681,13 @@ export function DPOrgChart() {
           )}
 
           {viewMode === "list" && (
-            <section className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm">
-              <div className="border-b border-ds-divider px-4 py-3">
-                <h3 className="text-sm font-bold text-ds-ink">Lista hierárquica</h3>
-                <p className="mt-1 text-xs text-ds-ink-muted">Cargos ordenados por profundidade e reporting line.</p>
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+              <div className="border-b border-slate-100 px-4 py-3">
+                <h3 className="text-sm font-bold text-slate-950">Lista hierárquica</h3>
+                <p className="mt-1 text-xs text-slate-500">Cargos ordenados por profundidade e reporting line.</p>
               </div>
               {flatRoles.length === 0 ? (
-                <div className="p-6 text-sm text-ds-ink-muted">Nenhum cargo no filtro atual.</div>
+                <div className="p-6 text-sm text-slate-500">Nenhum cargo no filtro atual.</div>
               ) : (
                 flatRoles.map(renderFlatRole)
               )}
@@ -1699,7 +1699,7 @@ export function DPOrgChart() {
               {departmentGroups.map((group, groupIndex) => {
                 const tone = ORG_TONES[groupIndex % ORG_TONES.length];
                 return (
-                  <section key={group.name} className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm">
+                  <section key={group.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                     <div className={cn("flex items-center justify-between gap-3 border-b px-5 py-4", tone.header)}>
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-sm font-bold text-white", tone.dot)}>
@@ -1716,11 +1716,11 @@ export function DPOrgChart() {
                       {group.items.map(({ node }) => {
                         const roleFunctions = functionsByRoleId.get(node.role.id) ?? [];
                         return (
-                          <div key={node.role.id} className="min-w-0 overflow-hidden rounded-xl border border-ds-border bg-ds-surface p-3 shadow-sm">
+                          <div key={node.role.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-ds-ink">{node.role.name}</p>
-                                <p className="truncate text-xs text-ds-ink-muted">{node.role.publicTitle || node.role.name}</p>
+                                <p className="truncate text-sm font-bold text-slate-950">{node.role.name}</p>
+                                <p className="truncate text-xs text-slate-500">{node.role.publicTitle || node.role.name}</p>
                               </div>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1">
@@ -1730,15 +1730,15 @@ export function DPOrgChart() {
                                   className={cn(
                                     "rounded-full border px-2 py-0.5 text-[10px] font-bold",
                                     name === "Sem função"
-                                      ? "border-ds-border bg-ds-muted text-ds-ink-faint"
-                                      : "border-ds-ok-bg bg-ds-ok-bg text-ds-ok"
+                                      ? "border-slate-200 bg-slate-50 text-slate-400"
+                                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
                                   )}
                                 >
                                   {name}
                                 </span>
                               ))}
                               {roleFunctions.length > 2 ? (
-                                <span className="rounded-full border border-ds-border bg-ds-surface px-2 py-0.5 text-[10px] font-bold text-ds-ink-faint">
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">
                                   +{roleFunctions.length - 2}
                                 </span>
                               ) : null}
@@ -1755,11 +1755,11 @@ export function DPOrgChart() {
                                   />
                                 ))}
                                 {node.directUsers.length > 2 ? (
-                                  <p className="text-xs font-medium text-ds-ink-faint">+{node.directUsers.length - 2} pessoa{node.directUsers.length - 2 === 1 ? "" : "s"}</p>
+                                  <p className="text-xs font-medium text-slate-400">+{node.directUsers.length - 2} pessoa{node.directUsers.length - 2 === 1 ? "" : "s"}</p>
                                 ) : null}
                               </div>
                             ) : (
-                              <p className="mt-3 text-xs text-ds-ink-faint">Sem colaborador direto.</p>
+                              <p className="mt-3 text-xs text-slate-400">Sem colaborador direto.</p>
                             )}
                           </div>
                         );
@@ -1777,7 +1777,7 @@ export function DPOrgChart() {
                 const tone = ORG_TONES[groupIndex % ORG_TONES.length];
                 const percent = usersInScope.length > 0 ? Math.round((group.userCount / usersInScope.length) * 100) : 0;
                 return (
-                  <section key={group.depth} className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm">
+                  <section key={group.depth} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                     <div className={cn("flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4", tone.header)}>
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold text-white", tone.dot)}>
@@ -1789,7 +1789,7 @@ export function DPOrgChart() {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="hidden h-2 w-40 rounded-full bg-ds-surface md:block">
+                        <div className="hidden h-2 w-40 rounded-full bg-white/50 md:block">
                           <div className={cn("h-full rounded-full", tone.progress)} style={{ width: `${Math.max(6, percent)}%` }} />
                         </div>
                         <span className="text-sm font-bold">{percent}%</span>
@@ -1801,11 +1801,11 @@ export function DPOrgChart() {
                           ? node.user.jobFunctionNames ?? []
                           : functionsByRoleId.get(node.role.id) ?? [];
                         return (
-                          <div key={node.id} className="min-w-0 overflow-hidden rounded-xl border border-ds-border bg-ds-surface p-3 shadow-sm">
+                          <div key={node.id} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-ds-ink">{node.user?.username ?? "Cargo vago"}</p>
-                                <p className="truncate text-xs text-ds-ink-muted">{node.role.publicTitle || node.role.name}</p>
+                                <p className="truncate text-sm font-bold text-slate-950">{node.user?.username ?? "Cargo vago"}</p>
+                                <p className="truncate text-xs text-slate-500">{node.role.publicTitle || node.role.name}</p>
                               </div>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1">
@@ -1815,15 +1815,15 @@ export function DPOrgChart() {
                                   className={cn(
                                     "rounded-full border px-2 py-0.5 text-[10px] font-bold",
                                     name === "Sem função"
-                                      ? "border-ds-border bg-ds-muted text-ds-ink-faint"
-                                      : "border-ds-ok-bg bg-ds-ok-bg text-ds-ok"
+                                      ? "border-slate-200 bg-slate-50 text-slate-400"
+                                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
                                   )}
                                 >
                                   {name}
                                 </span>
                               ))}
                               {roleFunctions.length > 2 ? (
-                                <span className="rounded-full border border-ds-border bg-ds-surface px-2 py-0.5 text-[10px] font-bold text-ds-ink-faint">
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">
                                   +{roleFunctions.length - 2}
                                 </span>
                               ) : null}
@@ -1837,7 +1837,7 @@ export function DPOrgChart() {
                                   selected={selectedUserId === node.user.id}
                                 />
                               ) : (
-                                <p className="rounded-xl border border-dashed border-ds-border bg-ds-muted px-3 py-2 text-xs text-ds-ink-muted">
+                                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                                   Sem colaborador nesta posição.
                                 </p>
                               )}
@@ -1852,14 +1852,14 @@ export function DPOrgChart() {
             </div>
           )}
 
-          <section className="overflow-hidden rounded-2xl border border-ds-border bg-ds-surface shadow-sm">
-            <div className="border-b border-ds-divider px-4 py-3">
-              <h3 className="text-sm font-bold text-ds-ink">Colaboradores sem cargo</h3>
-              <p className="mt-1 text-xs text-ds-ink-muted">Eles continuam operando normalmente, mas ainda não aparecem no organograma.</p>
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <h3 className="text-sm font-bold text-slate-950">Colaboradores sem cargo</h3>
+              <p className="mt-1 text-xs text-slate-500">Eles continuam operando normalmente, mas ainda não aparecem no organograma.</p>
             </div>
             <div className="grid gap-2 p-4 md:grid-cols-2 xl:grid-cols-3">
               {chart.usersWithoutRole.length === 0 ? (
-                <p className="text-sm text-ds-ink-muted">Nenhum colaborador ativo sem cargo no filtro atual.</p>
+                <p className="text-sm text-slate-500">Nenhum colaborador ativo sem cargo no filtro atual.</p>
               ) : (
                 chart.usersWithoutRole.map((user) => (
                   <CollaboratorPill

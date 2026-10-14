@@ -89,7 +89,7 @@ export function PulseHero({ kicker, title, titleId, subtitle, actions, search, c
       </div>
       </div>
 
-      <div aria-hidden={!stuck} className={cn("sticky top-3 z-30 h-0", stack ? "!mt-0" : "-mb-5")}>
+      <div aria-hidden={!stuck} className={cn("sticky top-3 z-30 h-0", stack ? "mt-0!" : "-mb-5")}>
         <div
           className={cn(
             "absolute inset-x-0 top-0 flex items-center gap-3 rounded-ds-card-lg bg-ds-dark px-5 py-2.5 text-ds-on-dark shadow-ds-modal ring-1 ring-white/10",

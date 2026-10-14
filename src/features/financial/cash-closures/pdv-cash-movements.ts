@@ -77,6 +77,33 @@ function paymentMethods(raw: unknown) {
   return byId;
 }
 
+function providerMovementId(source: UnknownRecord) {
+  return text(field(source, ["codigo", "Codigo", "id", "Id", "codMovimento", "codigoMovimento"]));
+}
+
+// The PDV sends it as `descricao` (seen in the live `getSangria` response on 2026-10-12); the rest are tolerated spellings.
+const WITHDRAWAL_REASON_KEYS = ["descricao", "Descricao", "descr", "motivo", "Motivo", "observacao", "Observacao"];
+const WITHDRAWAL_REASON_MAX_LENGTH = 200;
+
+/**
+ * Free text the operator typed at the PDV when making the sangria, by the PDV-issued movement id.
+ * Absent or blank simply means "no reason". Kept apart from the movement so closure hashes do not change.
+ */
+export function parsePdvWithdrawalReasons(input: { withdrawals: unknown; filialId: string }) {
+  const reasons = new Map<string, string>();
+  for (const value of rows(input.withdrawals)) {
+    const source = record(value);
+    if (!source) continue;
+    const movementFilialId = filialId(source);
+    if (movementFilialId && movementFilialId !== input.filialId) continue;
+    const id = providerMovementId(source);
+    const raw = field(source, WITHDRAWAL_REASON_KEYS);
+    const reason = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, WITHDRAWAL_REASON_MAX_LENGTH).trim() : "";
+    if (id && reason) reasons.set(id, reason);
+  }
+  return reasons;
+}
+
 function parseMovement(input: {
   value: unknown;
   kind: CashClosureCashMovementKind;
@@ -111,7 +138,7 @@ function parseMovement(input: {
   const classified = paymentMethodId ? input.paymentMethodById.get(paymentMethodId) : undefined;
   const paymentMethodName = directPaymentMethodName ?? classified?.name ?? null;
   const normalizedPaymentName = paymentMethodName ? normalizeName(paymentMethodName) : "";
-  const providerId = text(field(source, ["codigo", "Codigo", "id", "Id", "codMovimento", "codigoMovimento"]));
+  const providerId = providerMovementId(source);
   const id = providerId ?? `${input.kind}-${date}-${input.index}`;
   return {
     id,

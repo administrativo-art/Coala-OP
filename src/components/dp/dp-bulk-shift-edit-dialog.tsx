@@ -126,6 +126,7 @@ export function DPBulkShiftEditPanel({
     return selectedDates.filter((date) => dates.has(date)).length;
   }, [selectedDates, swapUserId, vacationDatesByUser]);
   const hasTimeChange = Boolean(startTime && endTime);
+  const selectedDefinition = shiftDefinitions.find((item) => item.id === shiftDefinitionId);
 
   const affectedUsers = React.useMemo(
     () => uniqSorted(selectedShifts.map((item) => item.userName)),
@@ -202,8 +203,13 @@ export function DPBulkShiftEditPanel({
       return;
     }
 
-    if (action === 'replace' && hasTimeChange && startTime >= endTime) {
-      toast({ title: 'O horário final deve ser posterior ao horário inicial.', variant: 'destructive' });
+    if (action === 'replace' && hasTimeChange && startTime === endTime) {
+      toast({ title: 'O início e o fim do turno não podem ser iguais.', variant: 'destructive' });
+      return;
+    }
+
+    if (action === 'replace' && hasTimeChange && startTime > endTime && selectedDefinition?.overnight !== true) {
+      toast({ title: 'Selecione um turno noturno para atravessar a meia-noite.', variant: 'destructive' });
       return;
     }
 
@@ -246,13 +252,13 @@ export function DPBulkShiftEditPanel({
   }
 
   return (
-    <aside className="flex flex-col overflow-hidden border-l border-ds-info-bg bg-ds-surface min-[1180px]:sticky min-[1180px]:top-0 min-[1180px]:h-[calc(100vh-10rem)] min-[1180px]:max-h-[780px] max-[1179px]:mt-3 max-[1179px]:rounded-[14px] max-[1179px]:border">
-      <div className="flex shrink-0 items-start gap-2 border-b border-ds-info-bg px-[14px] py-[13px]">
+    <aside className="flex flex-col overflow-hidden border-l border-[#e3e9f1] bg-white min-[1180px]:sticky min-[1180px]:top-0 min-[1180px]:h-[calc(100vh-10rem)] min-[1180px]:max-h-[780px] max-[1179px]:mt-3 max-[1179px]:rounded-[14px] max-[1179px]:border">
+      <div className="flex shrink-0 items-start gap-2 border-b border-[#eef1f6] px-[14px] py-[13px]">
         <div className="min-w-0">
-          <div className="text-[13.5px] font-black leading-4 text-ds-ink">Edição em lote</div>
-          <p className="mt-0.5 text-[11.5px] font-semibold leading-4 text-ds-info">As opções acompanham a escala.</p>
+          <div className="text-[13.5px] font-black leading-4 text-[#0f172a]">Edição em lote</div>
+          <p className="mt-0.5 text-[11.5px] font-semibold leading-4 text-[#94a3b8]">As opções acompanham a escala.</p>
         </div>
-        <button type="button" onClick={onCancel} aria-label="Fechar edição em lote" className="ml-auto grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg text-ds-info outline-none hover:bg-ds-muted focus-visible:ring-2 focus-visible:ring-ds-accent">
+        <button type="button" onClick={onCancel} aria-label="Fechar edição em lote" className="ml-auto grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg text-[#94a3b8] outline-hidden hover:bg-[#f6f8fb] focus-visible:ring-2 focus-visible:ring-[#db2777]">
           <X className="h-[13px] w-[13px]" strokeWidth={2.6} />
         </button>
       </div>
@@ -260,10 +266,10 @@ export function DPBulkShiftEditPanel({
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-[14px]">
         <div className="flex flex-wrap gap-1.5">
           {[`${selectedShifts.length} turnos`, `${affectedUsers.length} pessoas`, `${affectedUnits.length} unidades`].map((label) => (
-            <span key={label} className="rounded-[7px] border border-ds-info-bg px-[9px] py-[3px] text-[11px] font-extrabold leading-4 text-ds-ink-2">{label}</span>
+            <span key={label} className="rounded-[7px] border border-[#e3e9f1] px-[9px] py-[3px] text-[11px] font-extrabold leading-4 text-[#475569]">{label}</span>
           ))}
           {visiblePeople.length > 0 && (
-            <button type="button" className="ml-auto rounded-[7px] border border-ds-info-bg bg-ds-info-bg px-[9px] py-[3px] text-[11px] font-extrabold leading-4 text-ds-info hover:bg-ds-info-bg" onClick={() => onTogglePerson?.(visibleShiftIds)}>
+            <button type="button" className="ml-auto rounded-[7px] border border-[#bfdbfe] bg-[#eff6ff] px-[9px] py-[3px] text-[11px] font-extrabold leading-4 text-[#1d4ed8] hover:bg-[#dbeafe]" onClick={() => onTogglePerson?.(visibleShiftIds)}>
               {allVisibleSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}
             </button>
           )}
@@ -271,7 +277,7 @@ export function DPBulkShiftEditPanel({
 
         {visiblePeople.length > 0 && (
           <>
-            <p className="mt-[14px] text-[11.5px] font-extrabold text-ds-info">Selecionar por colaboradora</p>
+            <p className="mt-[14px] text-[11.5px] font-extrabold text-[#334155]">Selecionar por colaboradora</p>
             <div className="no-scrollbar mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
               {visiblePeople.map((person) => {
                 const selectedCount = person.shiftIds.filter((shiftId) => selectedIdSet.has(shiftId)).length;
@@ -281,11 +287,11 @@ export function DPBulkShiftEditPanel({
                     key={person.id}
                     type="button"
                     onClick={() => onTogglePerson?.(person.shiftIds)}
-                    className={`flex h-[29px] max-w-full items-center gap-1.5 rounded-[9px] border py-0 pl-1 pr-[9px] ${fullySelected ? 'border-ds-accent-soft bg-ds-accent-soft' : 'border-ds-info-bg bg-ds-surface hover:bg-ds-surface'}`}
+                    className={`flex h-[29px] max-w-full items-center gap-1.5 rounded-[9px] border py-0 pl-1 pr-[9px] ${fullySelected ? 'border-[#f7cfe1] bg-[#fdf0f6]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
                   >
                     <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[8px] font-black text-white" style={{ backgroundColor: personColor(person.name) }}>{initials(person.name)}</span>
-                    <span className="truncate text-[11.5px] font-extrabold text-ds-info">{person.name.split(' ')[0]}</span>
-                    <span className={`shrink-0 text-[10px] font-extrabold tabular-nums ${fullySelected ? 'text-ds-accent-ink' : 'text-ds-info'}`}>{selectedCount}/{person.shiftIds.length}</span>
+                    <span className="truncate text-[11.5px] font-extrabold text-[#334155]">{person.name.split(' ')[0]}</span>
+                    <span className={`shrink-0 text-[10px] font-extrabold tabular-nums ${fullySelected ? 'text-[#db2777]' : 'text-[#94a3b8]'}`}>{selectedCount}/{person.shiftIds.length}</span>
                   </button>
                 );
               })}
@@ -294,12 +300,12 @@ export function DPBulkShiftEditPanel({
         )}
 
         {selectedShifts.length === 0 ? (
-          <div className="mt-[14px] rounded-[12px] border border-dashed border-ds-info-bg px-[14px] py-[22px] text-center text-[11.5px] font-bold leading-[1.5] text-ds-ink-faint">
+          <div className="mt-[14px] rounded-[12px] border border-dashed border-[#dfe6f0] px-[14px] py-[22px] text-center text-[11.5px] font-bold leading-normal text-[#a3aec0]">
             Selecione os turnos na escala para liberar as opções.
           </div>
         ) : (
           <>
-            <p className="mt-[15px] text-[11.5px] font-extrabold text-ds-info">Ação</p>
+            <p className="mt-[15px] text-[11.5px] font-extrabold text-[#334155]">Ação</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {([['replace', 'Substituir'], ['clear', 'Remover']] as const).map(([value, label]) => (
                 <button
@@ -308,8 +314,8 @@ export function DPBulkShiftEditPanel({
                   onClick={() => setAction(value)}
                   className={`rounded-[10px] border py-[9px] text-xs font-extrabold transition-colors ${
                     action === value
-                      ? value === 'clear' ? 'border-ds-accent-soft bg-ds-muted text-ds-accent-ink' : 'border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink'
-                      : 'border-ds-info-bg bg-ds-surface text-ds-ink-muted hover:bg-ds-surface'
+                      ? value === 'clear' ? 'border-[#fbd0da] bg-[#fef2f4] text-[#be123c]' : 'border-[#f7cfe1] bg-[#fdf0f6] text-[#db2777]'
+                      : 'border-[#e9edf4] bg-white text-[#64748b] hover:bg-[#f8fafc]'
                   }`}
                 >
                   {label}
@@ -319,29 +325,29 @@ export function DPBulkShiftEditPanel({
 
             {action === 'replace' ? (
               <>
-                <div className="mt-3 rounded-[12px] border border-ds-info-bg p-3">
-                  <p className="text-[11.5px] font-extrabold text-ds-info">Turno</p>
+                <div className="mt-3 rounded-[12px] border border-[#e9edf4] p-3">
+                  <p className="text-[11.5px] font-extrabold text-[#334155]">Turno</p>
                   <div className="mt-[7px] flex flex-col gap-[5px]">
                     <button
                       type="button"
                       onClick={() => setShiftDefinitionId('')}
-                      className={`flex items-center gap-[9px] rounded-[9px] border px-[10px] py-2 text-left ${!shiftDefinitionId ? 'border-ds-accent-soft bg-ds-accent-soft' : 'border-ds-info-bg bg-ds-surface hover:bg-ds-surface'}`}
+                      className={`flex items-center gap-[9px] rounded-[9px] border px-[10px] py-2 text-left ${!shiftDefinitionId ? 'border-[#f7cfe1] bg-[#fdf0f6]' : 'border-[#e9edf4] bg-white hover:bg-[#f8fafc]'}`}
                     >
-                      <span className={`h-[7px] w-[7px] rounded-full ${!shiftDefinitionId ? 'bg-ds-accent' : 'bg-ds-info-bg'}`} />
-                      <span className={`text-xs font-extrabold ${!shiftDefinitionId ? 'text-ds-accent-ink' : 'text-ds-ink-2'}`}>Manual</span>
+                      <span className={`h-[7px] w-[7px] rounded-full ${!shiftDefinitionId ? 'bg-[#db2777]' : 'bg-[#cbd5e1]'}`} />
+                      <span className={`text-xs font-extrabold ${!shiftDefinitionId ? 'text-[#db2777]' : 'text-[#475569]'}`}>Manual</span>
                     </button>
-                    {shiftDefinitions.map((definition) => {
+                    {shiftDefinitions.filter((definition) => definition.isArchived !== true).map((definition) => {
                       const selected = shiftDefinitionId === definition.id;
                       return (
                         <button
                           key={definition.id}
                           type="button"
                           onClick={() => handleDefinitionChange(definition.id)}
-                          className={`flex items-center gap-[9px] rounded-[9px] border px-[10px] py-2 text-left ${selected ? 'border-ds-accent-soft bg-ds-accent-soft' : 'border-ds-info-bg bg-ds-surface hover:bg-ds-surface'}`}
+                          className={`flex items-center gap-[9px] rounded-[9px] border px-[10px] py-2 text-left ${selected ? 'border-[#f7cfe1] bg-[#fdf0f6]' : 'border-[#e9edf4] bg-white hover:bg-[#f8fafc]'}`}
                         >
-                          <span className={`h-[7px] w-[7px] rounded-full ${selected ? 'bg-ds-accent' : 'bg-ds-info-bg'}`} />
-                          <span className={`min-w-0 flex-1 truncate text-xs font-extrabold ${selected ? 'text-ds-accent-ink' : 'text-ds-ink-2'}`}>{definition.name}</span>
-                          <span className="shrink-0 text-[11px] font-bold tabular-nums text-ds-info">{definition.startTime}–{definition.endTime}</span>
+                          <span className={`h-[7px] w-[7px] rounded-full ${selected ? 'bg-[#db2777]' : 'bg-[#cbd5e1]'}`} />
+                          <span className={`min-w-0 flex-1 truncate text-xs font-extrabold ${selected ? 'text-[#db2777]' : 'text-[#475569]'}`}>{definition.name}</span>
+                          <span className="shrink-0 text-[11px] font-bold tabular-nums text-[#94a3b8]">{definition.startTime}–{definition.endTime}</span>
                         </button>
                       );
                     })}
@@ -349,60 +355,60 @@ export function DPBulkShiftEditPanel({
 
                   <div className="mt-[11px] grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[11.5px] font-extrabold text-ds-info">Início</label>
-                      <Input type="time" value={startTime} onChange={(event) => { setStartTime(event.target.value); setShiftDefinitionId(''); }} className="mt-1.5 h-[34px] rounded-[9px] border-ds-info-bg bg-ds-surface px-[9px] text-[12.5px] font-bold text-ds-ink" />
+                      <label className="text-[11.5px] font-extrabold text-[#334155]">Início</label>
+                      <Input type="time" value={startTime} onChange={(event) => { setStartTime(event.target.value); setShiftDefinitionId(''); }} className="mt-1.5 h-[34px] rounded-[9px] border-[#e3e9f1] bg-white px-[9px] text-[12.5px] font-bold text-[#0f172a]" />
                     </div>
                     <div>
-                      <label className="text-[11.5px] font-extrabold text-ds-info">Fim</label>
-                      <Input type="time" value={endTime} onChange={(event) => { setEndTime(event.target.value); setShiftDefinitionId(''); }} className="mt-1.5 h-[34px] rounded-[9px] border-ds-info-bg bg-ds-surface px-[9px] text-[12.5px] font-bold text-ds-ink" />
+                      <label className="text-[11.5px] font-extrabold text-[#334155]">Fim</label>
+                      <Input type="time" value={endTime} onChange={(event) => { setEndTime(event.target.value); setShiftDefinitionId(''); }} className="mt-1.5 h-[34px] rounded-[9px] border-[#e3e9f1] bg-white px-[9px] text-[12.5px] font-bold text-[#0f172a]" />
                     </div>
                   </div>
                 </div>
 
                 {people.length > 0 && (
-                  <div className="mt-3 rounded-[12px] border border-ds-info-bg p-3">
+                  <div className="mt-3 rounded-[12px] border border-[#e9edf4] p-3">
                     <div className="flex items-baseline gap-[7px]">
-                      <label className="text-[11.5px] font-extrabold text-ds-info">Trocar colaboradora</label>
-                      <span className="text-[10.5px] font-bold text-ds-ink-faint">{swapPerson ? `para ${swapPerson.name}` : 'opcional'}</span>
+                      <label className="text-[11.5px] font-extrabold text-[#334155]">Trocar colaboradora</label>
+                      <span className="text-[10.5px] font-bold text-[#a3aec0]">{swapPerson ? `para ${swapPerson.name}` : 'opcional'}</span>
                     </div>
                     <Select value={swapUserId || '__keep__'} onValueChange={(value) => setSwapUserId(value === '__keep__' ? '' : value)}>
-                      <SelectTrigger className="mt-2 h-9 rounded-[9px] border-ds-info-bg bg-ds-surface text-xs font-bold text-ds-ink-2"><SelectValue placeholder="Manter colaboradora atual" /></SelectTrigger>
+                      <SelectTrigger className="mt-2 h-9 rounded-[9px] border-[#e3e9f1] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Manter colaboradora atual" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__keep__">Manter colaboradora atual</SelectItem>
                         {people.map((person) => <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {swapDayOffWarning > 0 && <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-ds-accent-ink"><AlertTriangle className="h-3 w-3 shrink-0" />{swapPerson?.name} tem folga em {swapDayOffWarning} dia(s).</p>}
-                    {swapVacationWarning > 0 && <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-ds-accent-ink"><AlertTriangle className="h-3 w-3 shrink-0" />{swapPerson?.name} está de férias em {swapVacationWarning} dia(s).</p>}
+                    {swapDayOffWarning > 0 && <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#be123c]"><AlertTriangle className="h-3 w-3 shrink-0" />{swapPerson?.name} tem folga em {swapDayOffWarning} dia(s).</p>}
+                    {swapVacationWarning > 0 && <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#be123c]"><AlertTriangle className="h-3 w-3 shrink-0" />{swapPerson?.name} está de férias em {swapVacationWarning} dia(s).</p>}
                   </div>
                 )}
               </>
             ) : (
-              <div className="mt-3 flex gap-2 rounded-[12px] border border-ds-accent-soft bg-ds-muted px-3 py-[11px] text-[11.5px] font-bold leading-[1.45] text-ds-accent-ink">
+              <div className="mt-3 flex gap-2 rounded-[12px] border border-[#fbd0da] bg-[#fef2f4] px-3 py-[11px] text-[11.5px] font-bold leading-[1.45] text-[#be123c]">
                 <AlertTriangle className="mt-0.5 h-[15px] w-[15px] shrink-0" />
                 <p>Os turnos selecionados serão excluídos sem criar folgas no lugar.</p>
               </div>
             )}
 
             {preview && (preview.predictedAdded.length > 0 || preview.predictedRemoved.length > 0) && (
-              <div className="mt-3 rounded-[12px] border border-ds-warn bg-ds-warn-bg px-3 py-[10px] text-[11.5px] font-bold leading-[1.5] text-ds-warn">
+              <div className="mt-3 rounded-[12px] border border-[#fde68a] bg-[#fffbeb] px-3 py-[10px] text-[11.5px] font-bold leading-normal text-[#b45309]">
                 {preview.predictedAdded.length > 0 && <p>Novas folgas previstas: {preview.predictedAdded.map(formatDate).join(', ')}.</p>}
                 {preview.predictedRemoved.length > 0 && <p>Folgas previstas removidas: {preview.predictedRemoved.map(formatDate).join(', ')}.</p>}
               </div>
             )}
 
-            <p className="mt-[14px] text-[11.5px] font-extrabold text-ds-info">Pessoas selecionadas</p>
+            <p className="mt-[14px] text-[11.5px] font-extrabold text-[#334155]">Pessoas selecionadas</p>
             <div className="no-scrollbar mt-[7px] flex max-h-[200px] flex-col gap-1.5 overflow-y-auto">
               {selectedGroups.map(([userId, items]) => (
-                <div key={userId} className="flex items-center gap-2 rounded-[10px] border border-ds-info-bg px-[10px] py-2">
+                <div key={userId} className="flex items-center gap-2 rounded-[10px] border border-[#e9edf4] px-[10px] py-2">
                   <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full text-[8.5px] font-black text-white" style={{ backgroundColor: personColor(items[0].userName) }}>{initials(items[0].userName)}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-extrabold text-ds-ink">{items[0].userName}</p>
-                    <p className="truncate text-[10.5px] font-bold text-ds-info">{items.map(({ shift }) => formatDate(shift.date)).join(', ')}</p>
-                    <p className="truncate text-[10.5px] font-bold text-ds-info">{items[0].unitName}</p>
+                    <p className="truncate text-xs font-extrabold text-[#0f172a]">{items[0].userName}</p>
+                    <p className="truncate text-[10.5px] font-bold text-[#94a3b8]">{items.map(({ shift }) => formatDate(shift.date)).join(', ')}</p>
+                    <p className="truncate text-[10.5px] font-bold text-[#94a3b8]">{items[0].unitName}</p>
                   </div>
-                  <span className="shrink-0 text-[11px] font-extrabold tabular-nums text-ds-ink-muted">{items.length}</span>
-                  <button type="button" aria-label={`Remover ${items[0].userName} da seleção`} onClick={() => onRemoveSelected?.(items.map(({ shift }) => shift.id))} className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] text-ds-info hover:bg-ds-muted hover:text-ds-ink-muted">
+                  <span className="shrink-0 text-[11px] font-extrabold tabular-nums text-[#64748b]">{items.length}</span>
+                  <button type="button" aria-label={`Remover ${items[0].userName} da seleção`} onClick={() => onRemoveSelected?.(items.map(({ shift }) => shift.id))} className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] text-[#b6c0cf] hover:bg-[#f6f8fb] hover:text-[#64748b]">
                     <X className="h-3 w-3" strokeWidth={2.6} />
                   </button>
                 </div>
@@ -412,10 +418,10 @@ export function DPBulkShiftEditPanel({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-ds-info-bg px-[14px] py-3">
+      <div className="shrink-0 border-t border-[#eef1f6] px-[14px] py-3">
         <Button
           type="button"
-          className={`h-[38px] w-full rounded-[10px] text-[12.5px] font-extrabold text-white ${action === 'clear' ? 'bg-ds-accent hover:bg-ds-accent' : 'bg-ds-accent hover:bg-ds-accent'}`}
+          className={`h-[38px] w-full rounded-[10px] text-[12.5px] font-extrabold text-white ${action === 'clear' ? 'bg-[#e11d48] hover:bg-[#be123c]' : 'bg-[#db2777] hover:bg-[#be185d]'}`}
           onClick={handleApply}
           disabled={selectedShifts.length === 0 || submitting || swapDayOffWarning > 0 || swapVacationWarning > 0}
         >

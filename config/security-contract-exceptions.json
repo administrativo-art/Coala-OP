@@ -1,4 +1,19 @@
 {
   "schemaVersion": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "source": "src/app/api/hr/onboarding/route.ts",
+      "methods": ["GET", "POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "A inclusão de Aprendiz e a exclusão explícita de Societário alteram esta rota legada extensa; a migração integral exige caracterização dedicada dos fluxos de integração e convite.",
+      "expiresAt": "2026-11-14"
+    },
+    {
+      "source": "src/app/api/users/route.ts",
+      "methods": ["POST"],
+      "owner": "plataforma-seguranca",
+      "reason": "A inclusão do vínculo Societário alterou esta rota legada de criação; a migração integral será tratada com o contrato completo de criação e convite de usuários.",
+      "expiresAt": "2026-11-14"
+    }
+  ]
 }

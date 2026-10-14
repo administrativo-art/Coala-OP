@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { PageHero } from "@/components/patterns/page-hero";
 import {
   Command,
   CommandEmpty,
@@ -88,11 +87,11 @@ function ManualInput(props: {
   onChange: (value: string) => void;
 }) {
   if (props.binding.format === "multiline") {
-    return <textarea className="min-h-24 w-full rounded-md border bg-ds-surface p-2 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)} />;
+    return <textarea className="min-h-24 w-full rounded-md border bg-white p-2 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)} />;
   }
   if (props.binding.format === "boolean_br") {
     return (
-      <select className="h-10 w-full rounded-md border bg-ds-surface px-3 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)}>
+      <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)}>
         <option value="">Selecione...</option>
         <option value="true">Sim</option>
         <option value="false">Não</option>
@@ -101,7 +100,7 @@ function ManualInput(props: {
   }
   if (props.binding.format === "select") {
     return (
-      <select className="h-10 w-full rounded-md border bg-ds-surface px-3 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)}>
+      <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={props.value} onChange={(event) => props.onChange(event.target.value)}>
         <option value="">Selecione...</option>
         {(props.binding.options ?? []).map((option) => <option key={option}>{option}</option>)}
       </select>
@@ -168,7 +167,7 @@ function PartySearchSelect(props: {
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="h-10 w-full justify-between bg-ds-surface font-normal sm:col-span-2"
+          className="h-10 w-full justify-between bg-white font-normal sm:col-span-2"
         >
           <span className="truncate">{selectedLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -176,7 +175,7 @@ function PartySearchSelect(props: {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] min-w-[min(92vw,560px)] p-0"
+        className="w-(--radix-popover-trigger-width) min-w-[min(92vw,560px)] p-0"
       >
         <Command>
           <CommandInput placeholder="Buscar por nome, CPF, CNPJ ou e-mail..." />
@@ -198,7 +197,7 @@ function PartySearchSelect(props: {
                       <Check className={`mr-2 h-4 w-4 ${props.selection === value ? "opacity-100" : "opacity-0"}`} />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">{option.name}</span>
-                        <span className="block truncate text-[11px] text-ds-ink-muted">
+                        <span className="block truncate text-[11px] text-slate-500">
                           {[option.document, option.email].filter(Boolean).join(" · ") || "Sem documento ou e-mail"}
                         </span>
                       </span>
@@ -223,7 +222,7 @@ function PartySearchSelect(props: {
                       <Check className={`mr-2 h-4 w-4 ${props.selection === value ? "opacity-100" : "opacity-0"}`} />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">{option.name}</span>
-                        <span className="block truncate text-[11px] text-ds-ink-muted">
+                        <span className="block truncate text-[11px] text-slate-500">
                           {[option.document, option.email].filter(Boolean).join(" · ") || "Sem documento ou e-mail"}
                         </span>
                       </span>
@@ -276,7 +275,7 @@ function SchemaFieldInput(props: {
   const current = valueAt(formValues, field.key);
   const set = (value: unknown) => onChange(withValueAt(formValues, field.key, value));
   const label = (
-    <span className="text-xs font-bold text-ds-ink-2">
+    <span className="text-xs font-bold text-slate-700">
       {field.label}{field.required ? " *" : ""}
     </span>
   );
@@ -304,9 +303,9 @@ function SchemaFieldInput(props: {
       });
     };
     return (
-      <div className="space-y-2 rounded-lg border bg-ds-muted p-3">
+      <div className="space-y-2 rounded-lg border bg-slate-50 p-3">
         {label}
-        <p className="text-[11px] text-ds-ink-muted">
+        <p className="text-[11px] text-slate-500">
           Selecione uma pessoa ou empresa cadastrada, ou informe uma parte avulsa.
         </p>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(200px,1fr)]">
@@ -374,7 +373,7 @@ function SchemaFieldInput(props: {
               {!isManual
               && ["company", "external_company"].includes(partyType)
               && snapshot.signatureName ? (
-                <p className="text-[11px] font-medium text-ds-accent-ink sm:col-span-2">
+                <p className="text-[11px] font-medium text-violet-700 sm:col-span-2">
                   Assinatura pela empresa: {String(snapshot.signatureName)}
                   {snapshot.email ? ` · ${String(snapshot.email)}` : ""}
                 </p>
@@ -389,16 +388,16 @@ function SchemaFieldInput(props: {
   if (field.kind === "repeatable") {
     const rows = Array.isArray(current) ? current.map(record) : [];
     return (
-      <div className="space-y-2 rounded-lg border bg-ds-muted p-3">
+      <div className="space-y-2 rounded-lg border bg-slate-50 p-3">
         <div className="flex items-center justify-between gap-2">
           {label}
           <Button type="button" size="sm" variant="outline" onClick={() => set([...rows, {}])}>Adicionar item</Button>
         </div>
         {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="grid gap-2 rounded-md border bg-ds-surface p-2 sm:grid-cols-[1fr_1fr_auto]">
+          <div key={rowIndex} className="grid gap-2 rounded-md border bg-white p-2 sm:grid-cols-[1fr_1fr_auto]">
             {(field.itemFields ?? []).map((itemField) => (
               <label key={itemField.key} className="space-y-1">
-                <span className="text-[10px] font-bold text-ds-ink-muted">{itemField.label}</span>
+                <span className="text-[10px] font-bold text-slate-600">{itemField.label}</span>
                 <Input
                   type={itemField.kind === "number" || itemField.kind === "currency" ? "number" : itemField.kind === "date" ? "date" : "text"}
                   step={itemField.kind === "currency" ? "0.01" : undefined}
@@ -416,7 +415,7 @@ function SchemaFieldInput(props: {
                 />
               </label>
             ))}
-            <Button type="button" size="sm" variant="ghost" className="self-end text-ds-danger" onClick={() => set(rows.filter((_, index) => index !== rowIndex))}>Remover</Button>
+            <Button type="button" size="sm" variant="ghost" className="self-end text-rose-600" onClick={() => set(rows.filter((_, index) => index !== rowIndex))}>Remover</Button>
           </div>
         ))}
       </div>
@@ -427,7 +426,7 @@ function SchemaFieldInput(props: {
     return (
       <label className="block space-y-1.5">
         {label}
-        <select className="h-10 w-full rounded-md border bg-ds-surface px-3 text-sm" value={String(current ?? "")} onChange={(event) => set(field.kind === "boolean" ? event.target.value === "true" : event.target.value)}>
+        <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={String(current ?? "")} onChange={(event) => set(field.kind === "boolean" ? event.target.value === "true" : event.target.value)}>
           <option value="">Selecione...</option>
           {field.kind === "boolean"
             ? <><option value="true">Sim</option><option value="false">Não</option></>
@@ -440,9 +439,9 @@ function SchemaFieldInput(props: {
   return (
     <label className="block space-y-1.5">
       {label}
-      {field.helpText ? <span className="block text-[11px] text-ds-ink-muted">{field.helpText}</span> : null}
+      {field.helpText ? <span className="block text-[11px] text-slate-500">{field.helpText}</span> : null}
       {field.kind === "multiline" ? (
-        <textarea className="min-h-24 w-full rounded-md border bg-ds-surface p-2 text-sm" value={String(current ?? "")} onChange={(event) => set(event.target.value)} />
+        <textarea className="min-h-24 w-full rounded-md border bg-white p-2 text-sm" value={String(current ?? "")} onChange={(event) => set(event.target.value)} />
       ) : (
         <Input
           type={field.kind === "date" ? "date" : field.kind === "number" || field.kind === "currency" ? "number" : "text"}
@@ -631,25 +630,29 @@ export function DocumentGeneratorWorkspace(props: {
     }
   }
 
-  if (!canGenerate) return <p className="p-6 text-sm text-ds-ink-muted">Sem permissão para gerar documentos.</p>;
+  if (!canGenerate) return <p className="p-6 text-sm text-slate-500">Sem permissão para gerar documentos.</p>;
 
   return (
     <div className={props.embedded ? "h-full" : "space-y-4"}>
-      {!props.embedded ? <PageHero kicker="Documentos" title="Gerador de documentos" subtitle="Escolha um modelo publicado, confira os dados e gere uma prévia oficial." /> : null}
+      {!props.embedded ? <header>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p>
+        <h1 className="text-xl font-black text-slate-950">Gerador de documentos</h1>
+        <p className="text-xs text-slate-500">Escolha um modelo publicado, confira os dados e gere uma prévia oficial.</p>
+      </header> : null}
 
-      {message ? <div className="rounded-lg border border-ds-danger-bg bg-ds-danger-bg px-3 py-2 text-xs font-semibold text-ds-danger">{message}</div> : null}
-      {notice ? <div className="rounded-lg border border-ds-accent-soft bg-ds-accent-soft px-3 py-2 text-xs font-semibold text-ds-accent-ink">{notice}</div> : null}
+      {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
+      {notice ? <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">{notice}</div> : null}
 
       <div className={props.embedded
         ? "grid min-h-[680px] lg:grid-cols-[280px_minmax(0,1fr)]"
         : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]"
       }>
-        <section className={props.embedded ? "border-r bg-ds-surface" : "rounded-ds-card border border-ds-border bg-ds-surface"}>
+        <section className={props.embedded ? "border-r bg-white" : "rounded-lg border bg-white shadow-xs"}>
           <header className="border-b px-4 py-3">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-black text-ds-ink">Modelos</h2>
+              <h2 className="text-sm font-black text-slate-900">Modelos</h2>
               {props.embedded && props.onBack ? (
-                <button type="button" className="text-[11px] font-bold text-ds-accent-ink" onClick={props.onBack}>
+                <button type="button" className="text-[11px] font-bold text-teal-700" onClick={props.onBack}>
                   Voltar à fila
                 </button>
               ) : null}
@@ -657,15 +660,15 @@ export function DocumentGeneratorWorkspace(props: {
           </header>
           <div className="p-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input className="pl-9" placeholder="Buscar modelo..." value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} />
             </div>
-            {loading ? <div className="grid min-h-32 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div> : (
+            {loading ? <div className="grid min-h-32 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div> : (
               <div className={props.embedded ? "mt-3 grid gap-2" : "mt-3 grid gap-2 md:grid-cols-2"}>
                 {filteredTemplates.map((template) => (
                   <button
                     key={template.id}
-                    className={`rounded-lg border p-3 text-left transition ${templateId === template.id ? "border-ds-accent-soft bg-ds-accent-soft ring-1 ring-ds-accent-soft" : "hover:border-ds-accent-soft"}`}
+                    className={`rounded-lg border p-3 text-left transition ${templateId === template.id ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500" : "hover:border-teal-200"}`}
                     onClick={() => {
                       setTemplateId(template.id);
                       setManualValues({});
@@ -675,11 +678,11 @@ export function DocumentGeneratorWorkspace(props: {
                     }}
                   >
                     <span className="flex items-start gap-2">
-                      <FileStack className="mt-0.5 h-4 w-4 shrink-0 text-ds-accent-ink" />
+                      <FileStack className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
                       <span>
-                        <span className="block text-xs font-black text-ds-ink">{template.name}</span>
-                        <span className="mt-1 block text-[11px] text-ds-ink-muted">{template.category} · versão {template.version}</span>
-                        {template.isSystem ? <span className="mt-2 inline-flex rounded-full bg-ds-accent-soft px-2 py-0.5 text-[9px] font-bold uppercase text-ds-accent-ink">Modelo do sistema</span> : null}
+                        <span className="block text-xs font-black text-slate-900">{template.name}</span>
+                        <span className="mt-1 block text-[11px] text-slate-500">{template.category} · versão {template.version}</span>
+                        {template.isSystem ? <span className="mt-2 inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-bold uppercase text-violet-700">Modelo do sistema</span> : null}
                       </span>
                     </span>
                   </button>
@@ -689,28 +692,28 @@ export function DocumentGeneratorWorkspace(props: {
           </div>
         </section>
 
-        <section className={props.embedded ? "bg-ds-surface" : "rounded-ds-card border border-ds-border bg-ds-surface"}>
+        <section className={props.embedded ? "bg-[#fbfaf8]" : "rounded-lg border bg-white shadow-xs"}>
           <header className="border-b px-4 py-3">
-            <h2 className="text-sm font-black text-ds-ink">2. Dados e geração</h2>
+            <h2 className="text-sm font-black text-slate-900">2. Dados e geração</h2>
           </header>
           {!selected ? (
-            <div className="grid min-h-64 place-items-center p-6 text-center text-xs text-ds-ink-muted">
-              <div><FilePlus2 className="mx-auto mb-2 h-8 w-8 text-ds-ink-faint" />Selecione um modelo para continuar.</div>
+            <div className="grid min-h-64 place-items-center p-6 text-center text-xs text-slate-500">
+              <div><FilePlus2 className="mx-auto mb-2 h-8 w-8 text-slate-300" />Selecione um modelo para continuar.</div>
             </div>
           ) : selected.formSchema ? (
             <div className="space-y-4 p-4">
               <div className="flex flex-wrap gap-2">
                 {selected.formSchema.steps.map((step, index) => (
-                  <button key={step.id} type="button" onClick={() => setSchemaStep(index)} className={`rounded-full px-3 py-1 text-[10px] font-bold ${schemaStep === index ? "bg-ds-accent text-white" : "bg-ds-neutral-bg text-ds-ink-muted"}`}>
+                  <button key={step.id} type="button" onClick={() => setSchemaStep(index)} className={`rounded-full px-3 py-1 text-[10px] font-bold ${schemaStep === index ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600"}`}>
                     {index + 1}. {step.title}
                   </button>
                 ))}
               </div>
               {selected.formSchema.anchor !== "none" ? (
                 <label className="block space-y-1.5">
-                  <span className="text-xs font-bold text-ds-ink-2">Colaborador{selected.formSchema.anchor === "employee" ? " *" : ""}</span>
+                  <span className="text-xs font-bold text-slate-700">Colaborador{selected.formSchema.anchor === "employee" ? " *" : ""}</span>
                   <Input placeholder="Buscar colaborador..." value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} />
-                  <select className="h-10 w-full rounded-md border bg-ds-surface px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+                  <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
                     <option value="">Selecione...</option>
                     {filteredEmployees.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
                   </select>
@@ -718,8 +721,8 @@ export function DocumentGeneratorWorkspace(props: {
               ) : null}
               <div className="space-y-3">
                 <div>
-                  <h3 className="text-sm font-black text-ds-ink">{selected.formSchema.steps[schemaStep]?.title}</h3>
-                  {selected.formSchema.steps[schemaStep]?.description ? <p className="text-xs text-ds-ink-muted">{selected.formSchema.steps[schemaStep].description}</p> : null}
+                  <h3 className="text-sm font-black text-slate-900">{selected.formSchema.steps[schemaStep]?.title}</h3>
+                  {selected.formSchema.steps[schemaStep]?.description ? <p className="text-xs text-slate-500">{selected.formSchema.steps[schemaStep].description}</p> : null}
                 </div>
                 {(selected.formSchema.steps[schemaStep]?.fields ?? []).map((field) => (
                   <SchemaFieldInput
@@ -743,12 +746,12 @@ export function DocumentGeneratorWorkspace(props: {
                 )}
               </div>
               {result ? (
-                <div className={`rounded-lg border p-3 ${result.pdfAvailable ? "border-ds-ok-bg bg-ds-ok-bg" : "border-ds-warn-bg bg-ds-warn-bg"}`}>
-                  <p className="flex items-center gap-2 text-xs font-black text-ds-ink">
-                    {result.pdfAvailable ? <FileCheck2 className="h-4 w-4 text-ds-ok" /> : <CircleAlert className="h-4 w-4 text-ds-warn" />}
+                <div className={`rounded-lg border p-3 ${result.pdfAvailable ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                  <p className="flex items-center gap-2 text-xs font-black text-slate-900">
+                    {result.pdfAvailable ? <FileCheck2 className="h-4 w-4 text-emerald-600" /> : <CircleAlert className="h-4 w-4 text-amber-600" />}
                     {result.pdfAvailable ? "Prévia em PDF pronta para conferência" : "DOCX gerado; PDF ainda indisponível"}
                   </p>
-                  <p className="mt-1 text-[11px] text-ds-ink-muted">
+                  <p className="mt-1 text-[11px] text-slate-600">
                     {result.pdfAvailable
                       ? "Abra o PDF, confira o conteúdo e depois volte à fila para aprovar."
                       : "A conversão não foi concluída. O documento não poderá ser aprovado até o PDF existir."}
@@ -772,7 +775,7 @@ export function DocumentGeneratorWorkspace(props: {
             </div>
           ) : selected.isSystem ? (
             <div className="space-y-4 p-4">
-              <div className="rounded-lg border border-ds-accent-soft bg-ds-accent-soft p-3 text-xs text-ds-accent-ink">
+              <div className="rounded-lg border border-violet-100 bg-violet-50 p-3 text-xs text-violet-900">
                 {selected.renderer === "uniform"
                   ? "Este termo é gerado pela própria movimentação de uniformes, usando o mesmo padrão documental."
                   : "Este é um modelo institucional protegido e não possui campos de colaborador."}
@@ -785,9 +788,9 @@ export function DocumentGeneratorWorkspace(props: {
           ) : (
             <div className="space-y-4 p-4">
               <label className="block space-y-1.5">
-                <span className="text-xs font-bold text-ds-ink-2">Colaborador</span>
+                <span className="text-xs font-bold text-slate-700">Colaborador</span>
                 <Input placeholder="Buscar colaborador..." value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} />
-                <select className="h-10 w-full rounded-md border bg-ds-surface px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+                <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
                   <option value="">Selecione...</option>
                   {filteredEmployees.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
                 </select>
@@ -795,8 +798,8 @@ export function DocumentGeneratorWorkspace(props: {
 
               {manualFields.map(([placeholder, binding]) => (
                 <label key={placeholder} className="block space-y-1.5">
-                  <span className="text-xs font-bold text-ds-ink-2">{binding.label}{binding.required ? " *" : ""}</span>
-                  {binding.helpText ? <span className="block text-[11px] text-ds-ink-muted">{binding.helpText}</span> : null}
+                  <span className="text-xs font-bold text-slate-700">{binding.label}{binding.required ? " *" : ""}</span>
+                  {binding.helpText ? <span className="block text-[11px] text-slate-500">{binding.helpText}</span> : null}
                   <ManualInput binding={binding} value={manualValues[placeholder] ?? ""} onChange={(value) => setManualValues((current) => ({ ...current, [placeholder]: value }))} />
                 </label>
               ))}
@@ -807,9 +810,9 @@ export function DocumentGeneratorWorkspace(props: {
               </Button>
 
               {result ? (
-                <div className={`rounded-lg border p-3 ${result.pdfAvailable ? "border-ds-ok-bg bg-ds-ok-bg" : "border-ds-warn-bg bg-ds-warn-bg"}`}>
-                  <p className="flex items-center gap-2 text-xs font-black text-ds-ink">
-                    {result.pdfAvailable ? <FileCheck2 className="h-4 w-4 text-ds-ok" /> : <CircleAlert className="h-4 w-4 text-ds-warn" />}
+                <div className={`rounded-lg border p-3 ${result.pdfAvailable ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                  <p className="flex items-center gap-2 text-xs font-black text-slate-900">
+                    {result.pdfAvailable ? <FileCheck2 className="h-4 w-4 text-emerald-600" /> : <CircleAlert className="h-4 w-4 text-amber-600" />}
                     Prévia registrada
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">

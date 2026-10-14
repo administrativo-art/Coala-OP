@@ -394,7 +394,7 @@ export function SignageMediaLibrary({ open, onOpenChange, request, canManage, sl
                 />
               )}
               <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-ds-ink-2">
-                <input type="checkbox" checked={unusedOnly} onChange={(event) => setUnusedOnly(event.target.checked)} className="h-4 w-4 accent-[var(--ds-dark)]" />
+                <input type="checkbox" checked={unusedOnly} onChange={(event) => setUnusedOnly(event.target.checked)} className="h-4 w-4 accent-(--ds-dark)" />
                 Só as sem uso
               </label>
             </div>
@@ -433,7 +433,7 @@ export function SignageMediaLibrary({ open, onOpenChange, request, canManage, sl
                           onClick={() => { setSelectedId(item.id); setRenaming(null); setConfirm(null); }}
                           onDoubleClick={() => { if (pick) { pick.onPick(item); onOpenChange(false); } }}
                           className={cn(
-                            'relative block w-full rounded-ds-md border p-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft',
+                            'relative block w-full rounded-ds-md border p-1.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft',
                             isSelected ? 'border-ds-modal bg-ds-modal-soft' : 'border-ds-border bg-ds-surface hover:bg-ds-muted',
                           )}
                         >

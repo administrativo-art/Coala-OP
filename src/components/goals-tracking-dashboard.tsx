@@ -1025,7 +1025,7 @@ function DailyAnalysisModal({ open, onOpenChange, period, title, subjectName, ac
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[1200px] grid h-[min(92vh,1180px)] w-[min(94vw,1200px)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-ds-card-lg border border-ds-border bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
+      <DialogContent className="max-w-[1200px]! grid h-[min(92vh,1180px)] w-[min(94vw,1200px)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-ds-card-lg border border-ds-border bg-white p-0 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.52)]">
         <div className="px-5 pb-6 pt-8 sm:px-12 sm:pb-7 sm:pt-10">
           <div className="flex items-start gap-4 pr-4 sm:pr-12">
             <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-pink-500 text-white shadow-[0_10px_24px_-14px_rgba(236,72,153,0.8)]">
@@ -1334,7 +1334,7 @@ export function EmployeeDailyModal({
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!max-w-[1120px] w-[min(96vw,1120px)] overflow-hidden rounded-ds-card border border-ds-border bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+        <DialogContent className="max-w-[1120px]! w-[min(96vw,1120px)] overflow-hidden rounded-ds-card border border-ds-border bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
           <div className="flex items-center gap-4 border-b border-ds-divider px-5 py-4">
             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
               {initials}
@@ -1357,7 +1357,7 @@ export function EmployeeDailyModal({
                   { label: 'Dias gerais batidos', value: `${generalHitCount}/${elapsedRowsDays.length}`, hint: 'status da unidade', color: 'text-emerald-600' },
                 ].map(({ label, value, hint, color }) => (
                   <div key={label} className="rounded-ds-md border border-ds-border bg-ds-warm px-3 py-2.5">
-                    <p className="text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint">{label}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-ds-ink-faint">{label}</p>
                     <p className={`mt-1 text-sm font-extrabold tabular-nums ${color}`}>{value}</p>
                     <p className="mt-1 text-[10px] font-semibold text-ds-ink-faint">{hint}</p>
                   </div>
@@ -1385,7 +1385,7 @@ export function EmployeeDailyModal({
                 </div>
 
                 <div className="overflow-x-auto rounded-ds-md border border-ds-border bg-white">
-                  <div className={`grid min-w-[920px] ${cols} border-b border-ds-divider bg-ds-warm px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint`}>
+                  <div className={`grid min-w-[920px] ${cols} border-b border-ds-divider bg-ds-warm px-4 py-2 text-[9px] font-black uppercase tracking-widest text-ds-ink-faint`}>
                     <span>Dia</span>
                     {hasShiftCol && <span>Turno</span>}
                     <span className="text-right">Colaborador</span>
@@ -1468,7 +1468,7 @@ export function EmployeeDailyModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[620px] w-[min(96vw,620px)] overflow-hidden rounded-ds-card border border-ds-border bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+      <DialogContent className="max-w-[620px]! w-[min(96vw,620px)] overflow-hidden rounded-ds-card border border-ds-border bg-white p-0 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
         {/* Cabeçalho */}
         <div className="flex items-center gap-4 border-b border-ds-divider px-5 py-4">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-extrabold ${avatarClass}`}>
@@ -1494,7 +1494,7 @@ export function EmployeeDailyModal({
                 { label: 'Dias batidos', value: `${hitCount}/${elapsedCount}`, color: 'text-ds-ink-2' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-ds-md border border-ds-border bg-ds-warm px-3 py-2.5 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint">{label}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-ds-ink-faint">{label}</p>
                   <p className={`mt-1 text-sm font-extrabold tabular-nums ${color}`}>{value}</p>
                 </div>
               ))}
@@ -1563,7 +1563,7 @@ export function EmployeeDailyModal({
 
                 return (
                   <div className="overflow-hidden rounded-ds-md border border-ds-border bg-white">
-                    <div className={`grid ${cols} border-b border-ds-divider bg-ds-warm px-4 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-ds-ink-faint`}>
+                    <div className={`grid ${cols} border-b border-ds-divider bg-ds-warm px-4 py-2 text-[9px] font-black uppercase tracking-widest text-ds-ink-faint`}>
                       <span>Dia</span>
                       {hasShiftCol && <span>Turno</span>}
                       <span className="text-right">Alvo/dia</span>
@@ -2308,7 +2308,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[95vw] w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
+      <DialogContent className="max-w-[95vw]! w-[95vw] h-[95vh] p-0 overflow-hidden flex flex-col">
         {/* ── Cabeçalho ── */}
         <div className="pl-6 pr-16 pt-5 pb-4 border-b border-border/40 flex items-start justify-between gap-4 shrink-0">
           <div>
@@ -2325,12 +2325,12 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
 
             {/* ── KPI Cards ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-xs">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Acumulado</p>
                 <p className="text-xl font-black tabular-nums">R$ {fmt(stats.value)}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">de R$ {fmt(stats.alvo)}</p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-xs">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">% da Meta</p>
                 <p className={`text-xl font-black tabular-nums ${actualPct >= 100 ? 'text-green-500' : 'text-amber-500'}`}>{actualPct.toFixed(1)}%</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Esperado hoje: {expectedPct.toFixed(1)}%</p>
@@ -2338,7 +2338,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   {diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)} pp {diff >= 0 ? 'à frente' : 'atrás'}
                 </p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-xs">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Projeção</p>
                 <p className={`text-xl font-black tabular-nums ${stats.projection >= stats.alvo ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(stats.projection)}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -2348,7 +2348,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   {pct(stats.projection, stats.alvo).toFixed(1)}% da meta
                 </p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-xs">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Ritmo Necessário</p>
                 <p className={`text-xl font-black tabular-nums ${paceActual >= paceNeeded ? 'text-green-500' : 'text-rose-500'}`}>R$ {fmt(paceNeeded)}/dia</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Atual: R$ {fmt(paceActual)}/dia</p>
@@ -2356,7 +2356,7 @@ function KioskSummaryModal({ open, onOpenChange, group, employeeGoals, getUserNa
                   {paceActual >= paceNeeded ? '▲' : '▼'} R$ {fmt(Math.abs(paceActual - paceNeeded))}/dia
                 </p>
               </div>
-              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-sm">
+              <div className="p-3 rounded-xl border border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 shadow-xs">
                 <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">Consistência</p>
                 <p className="text-xl font-black tabular-nums text-blue-500">{kioskDaysWithSale}/{activeDateKeys.length} dias</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Dias com venda</p>
@@ -3238,7 +3238,12 @@ export function GoalsTrackingDashboard() {
                   {revenuePeriods.map(period => {
                     const stats = calcMonthlyStats(period, distributionSnapshot);
                     const { refDate, periodEnd } = getPeriodContext(period);
-                    const periodEgs = employeeGoals.filter(goal => goal.periodId === period.id);
+                    const externalCoverageUserIds = new Set(
+                      distributionSnapshot?.externalCoverageUserIdsByPeriodId?.[period.id] ?? [],
+                    );
+                    const periodEgs = employeeGoals.filter(goal => (
+                      goal.periodId === period.id && !externalCoverageUserIds.has(goal.employeeId)
+                    ));
                     const collaboratorIds = Array.from(new Set(periodEgs.map(goal => goal.employeeId)));
                     const roleByCollaborator = new Map(collaboratorIds.map(id => {
                       const goals = periodEgs.filter(goal => goal.employeeId === id);
@@ -3435,7 +3440,12 @@ export function GoalsTrackingDashboard() {
                             </p>
                           </div>
                           {(() => {
-                            const periodEgs = employeeGoals.filter(eg => eg.periodId === period.id);
+                            const externalCoverageUserIds = new Set(
+                              distributionSnapshot?.externalCoverageUserIdsByPeriodId?.[period.id] ?? [],
+                            );
+                            const periodEgs = employeeGoals.filter(eg => (
+                              eg.periodId === period.id && !externalCoverageUserIds.has(eg.employeeId)
+                            ));
                             if (periodEgs.length === 0) {
                               return (
                                 <div className="rounded-ds-card border border-dashed border-ds-border bg-ds-warm px-5 py-8 text-center">
@@ -3519,7 +3529,7 @@ export function GoalsTrackingDashboard() {
                           const { value, alvo } = calcMonthlyStats(period, distributionSnapshot);
                           const pPct = pct(value, alvo);
                           return (
-                            <Card key={period.id} className="p-5 border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors shadow-sm rounded-2xl">
+                            <Card key={period.id} className="p-5 border-slate-300/60 dark:border-border/40 bg-ds-muted dark:bg-slate-800/40 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors shadow-xs rounded-2xl">
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2">
                                   <div className={`h-2 w-2 rounded-full ${typeStyle.dot} animate-pulse`} />

@@ -92,7 +92,7 @@ const emptyIncidentForm = {
 
 type Kind = "requests" | "incidents";
 
-export function PrivacyGovernancePanel() {
+export function PrivacyGovernancePanel({ canManage }: { canManage: boolean }) {
   const { firebaseUser } = useAuth();
   const { toast } = useToast();
   const [requests, setRequests] = useState<PrivacyRequest[]>([]);
@@ -142,12 +142,13 @@ export function PrivacyGovernancePanel() {
   );
 
   function openForm() {
+    if (!canManage) return;
     setFormError(null);
     setFormOpen(true);
   }
 
   async function submit() {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     setFormError(null);
     setSubmitting(true);
     try {
@@ -169,7 +170,7 @@ export function PrivacyGovernancePanel() {
   }
 
   async function closeRequest(item: PrivacyRequest) {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     setBusyId(item.id);
     try {
       const payload = await updatePrivacyRequest(firebaseUser, item.id, { status: "completed", owner: item.owner ?? "", response: item.response ?? "Atendimento registrado internamente." });
@@ -182,7 +183,7 @@ export function PrivacyGovernancePanel() {
   }
 
   async function resolveIncident(item: SecurityIncident) {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManage) return;
     setBusyId(item.id);
     try {
       const payload = await updateSecurityIncident(firebaseUser, item.id, { status: "resolved", owner: item.owner ?? "", resolutionNotes: item.resolutionNotes ?? "Resolvido internamente." });
@@ -198,6 +199,11 @@ export function PrivacyGovernancePanel() {
 
   return (
     <div className="space-y-4">
+      {!canManage ? (
+        <p role="note" className="rounded-ds-btn border border-ds-alert-border bg-ds-alert-bg px-4 py-3 text-[13px] font-semibold text-ds-alert-ink">
+          Acesso somente para consulta. Alterações exigem permissão de gestão de usuários, perfis ou colaboradores.
+        </p>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Pedidos em aberto" value={stats.openRequests} />
         <StatTile label="Pedidos finalizados" value={stats.closedRequests} />
@@ -215,9 +221,11 @@ export function PrivacyGovernancePanel() {
             { value: "incidents", label: `Incidentes internos ${incidents.length}` },
           ]}
         />
-        <Button type="button" variant="primary-page" size="md" onClick={openForm}>
-          + {kind === "requests" ? "Registrar pedido" : "Registrar incidente"}
-        </Button>
+        {canManage ? (
+          <Button type="button" variant="primary-page" size="md" onClick={openForm}>
+            + {kind === "requests" ? "Registrar pedido" : "Registrar incidente"}
+          </Button>
+        ) : null}
       </div>
 
       <section className="rounded-ds-card-lg border border-ds-border bg-ds-warm">
@@ -237,7 +245,7 @@ export function PrivacyGovernancePanel() {
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
                 <StatusPill variant={statusVariant(item.status)}>{statusLabels[item.status]}</StatusPill>
-                {item.status !== "completed" && item.status !== "rejected" ? (
+                {canManage && item.status !== "completed" && item.status !== "rejected" ? (
                   <Button type="button" variant="ds-secondary" size="xs" loading={busyId === item.id} loadingLabel="Concluindo…" onClick={() => void closeRequest(item)}>
                     Concluir pedido
                   </Button>
@@ -258,7 +266,7 @@ export function PrivacyGovernancePanel() {
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
                 <StatusPill variant={statusVariant(item.status)}>{statusLabels[item.status]}</StatusPill>
-                {item.status !== "resolved" && item.status !== "dismissed" ? (
+                {canManage && item.status !== "resolved" && item.status !== "dismissed" ? (
                   <Button type="button" variant="ds-secondary" size="xs" loading={busyId === item.id} loadingLabel="Resolvendo…" onClick={() => void resolveIncident(item)}>
                     Resolver incidente
                   </Button>
@@ -271,8 +279,8 @@ export function PrivacyGovernancePanel() {
       </section>
 
       <SidePanel
-        open={formOpen}
-        onOpenChange={setFormOpen}
+        open={canManage && formOpen}
+        onOpenChange={(open) => setFormOpen(canManage && open)}
         kicker={kind === "requests" ? "Pedido de titular" : "Incidente interno"}
         title={kind === "requests" ? "Registrar pedido" : "Registrar incidente"}
         subtitle="Fica registrado internamente e entra na auditoria."

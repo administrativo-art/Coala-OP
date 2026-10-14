@@ -43,7 +43,7 @@ export function DarkField({ label, children }: { label: string; children: React.
 }
 
 export const darkControlClass =
-  'h-10 w-full rounded-ds-btn border border-white/[.12] bg-white/[.06] px-3 text-[13px] font-semibold text-ds-on-dark outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker [color-scheme:dark]';
+  'h-10 w-full rounded-ds-btn border border-white/12 bg-white/6 px-3 text-[13px] font-semibold text-ds-on-dark outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker scheme-dark';
 
 /** Barra de atingimento: 100% preenche a trilha; acima disso mantém cheia e muda de cor. */
 export function AttainmentBar({ pct, className }: { pct: number; className?: string }) {
@@ -78,7 +78,7 @@ export function EmptyBox({ children }: { children: React.ReactNode }) {
 export function HoverHint({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span className="group/hint relative inline-flex align-middle">
-      <button type="button" aria-label={label} className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-ds-ink-faint hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+      <button type="button" aria-label={label} className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-ds-ink-faint hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
         <Info aria-hidden="true" className="h-3.5 w-3.5" />
       </button>
       <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden w-max max-w-[260px] -translate-x-1/2 rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2 text-left text-[12px] font-semibold normal-case leading-snug tracking-normal text-ds-ink-2 shadow-ds-menu group-hover/hint:block group-focus-within/hint:block">

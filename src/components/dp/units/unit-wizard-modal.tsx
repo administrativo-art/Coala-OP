@@ -266,7 +266,7 @@ export function UnitWizardModal({
             {isEdit ? "Editar unidade" : dialog.mode === "sync" ? "Nova unidade · sincronizada" : "Nova unidade"}
           </p>
           <div>
-            <p className={cn("break-words text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em]", !form.name.trim() && "text-ds-on-dark-muted")}>
+            <p className={cn("wrap-break-word text-[30px] font-extrabold leading-[1.05] tracking-[-0.03em]", !form.name.trim() && "text-ds-on-dark-muted")}>
               {form.name.trim() || "Sem nome"}
             </p>
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -274,7 +274,7 @@ export function UnitWizardModal({
               {selectedGroup ? <SideTag>{selectedGroup.name}</SideTag> : <SideTag muted>Sem grupo</SideTag>}
             </div>
           </div>
-          <dl className="space-y-2.5 rounded-ds-btn-lg bg-white/[.06] p-4 text-[12.5px]">
+          <dl className="space-y-2.5 rounded-ds-btn-lg bg-white/6 p-4 text-[12.5px]">
             <SideFact label="Função no estoque" value={STOCK_ROLE_LABELS[form.stockRole]} />
             <SideFact label="Cobertura" value={COVERAGE_MODE_LABELS[form.coverageMode]} />
             <SideFact label="PDV Legal" value={form.pdvFilialId ? `ID ${form.pdvFilialId}` : "Sem vínculo"} />
@@ -503,7 +503,7 @@ export function UnitWizardModal({
 
 function SideTag({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
   return (
-    <span className={cn("inline-flex h-[22px] items-center rounded-ds-pill px-2.5 text-[11.5px] font-semibold", muted ? "bg-white/[.06] text-ds-on-dark-muted" : "bg-white/[.12] text-ds-on-dark")}>
+    <span className={cn("inline-flex h-[22px] items-center rounded-ds-pill px-2.5 text-[11.5px] font-semibold", muted ? "bg-white/6 text-ds-on-dark-muted" : "bg-white/12 text-ds-on-dark")}>
       {children}
     </span>
   );

@@ -9,7 +9,8 @@ import { SectionEditModal } from './SectionEditModal';
 import { getStatusBadge } from '../lib/field-format';
 import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
 import { EmployeeProbationCard } from './EmployeeProbationCard';
-import { canEditField, canViewField } from '@/types/rh';
+import { ProfileChangeRequestsCard } from './ProfileChangeRequestsCard';
+import { canEditField, canRequestFieldChange, canViewField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
 const SECTION_LABELS: Record<string, string> = {
@@ -75,6 +76,7 @@ export function MyProfilePage() {
     consentimento_imagem_voz,
     ciencia_privacidade_onboarding,
     periodo_experiencia,
+    changeRequests,
   } = profileState.data;
   const { label: statusLabel, color: statusColor } = getStatusBadge(employee.status);
   const initials = employee.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
@@ -104,7 +106,8 @@ export function MyProfilePage() {
       key,
       entry,
       fv: fieldValues[key],
-      editable: canEditField(entry, ownerRole, visibilityContext, fieldMap.access_matrix),
+      editable: canEditField(entry, ownerRole, visibilityContext, fieldMap.access_matrix)
+        || canRequestFieldChange(entry, ownerRole, visibilityContext, fieldMap.access_matrix),
     });
     return acc;
   }, {});
@@ -114,15 +117,15 @@ export function MyProfilePage() {
   return (
     <div className="max-w-2xl space-y-4">
       {/* Header card */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm p-5">
+      <div className="rounded-xl border border-gray-100 bg-white shadow-xs p-5">
         <div className="flex items-start gap-4">
           <div className="shrink-0">
             {employee.photo_url ? (
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-white shadow">
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-white shadow-sm">
                 <Image src={employee.photo_url} alt={employee.name} width={64} height={64} className="object-cover w-full h-full" />
               </div>
             ) : (
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center ring-2 ring-white shadow">
+              <div className="w-16 h-16 rounded-full bg-linear-to-br from-violet-400 to-violet-600 flex items-center justify-center ring-2 ring-white shadow-sm">
                 <span className="text-white text-lg font-semibold">{initials}</span>
               </div>
             )}
@@ -143,6 +146,8 @@ export function MyProfilePage() {
         fieldMap={fieldMap}
         fieldValues={fieldValues}
       />
+
+      <ProfileChangeRequestsCard requests={changeRequests} canReview={false} />
 
       <ImageVoiceConsentCard
         employeeId={employee.bizneo_employee_id}

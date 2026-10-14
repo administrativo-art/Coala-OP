@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, ChevronDown, FolderOpen, Loader2, Search, Settings2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock3, FolderOpen, Loader2, Search, Settings2, ShieldCheck, X } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
@@ -10,9 +10,6 @@ import type { User } from "@/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { HeroChip } from "@/components/patterns/hero-chip";
-import { PageHero } from "@/components/patterns/page-hero";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPersonName } from "@/lib/person-name";
@@ -45,23 +42,23 @@ function VisibilityMenu({ value, inherited, onChange }: {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="inline-flex h-9 min-w-[168px] items-center justify-between gap-2 rounded-ds-btn border border-ds-border-input bg-ds-surface px-3 text-xs font-black text-ds-ink-2 hover:bg-slate-50">
+        <button type="button" className="inline-flex h-9 min-w-[168px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-xs hover:bg-slate-50">
           <span className="inline-flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${current.color}`} />{inherited ? `Herdado: ${current.label}` : current.label}</span>
-          <ChevronDown className="h-3.5 w-3.5 text-ds-ink-faint" />
+          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 rounded-xl p-1.5 shadow-xl">
         {inherited !== undefined ? (
           <DropdownMenuItem onSelect={() => onChange("inherit")} className="cursor-pointer rounded-lg px-3 py-2.5">
             <span className="min-w-0 flex-1"><span className="block text-sm font-black">Herdar da pasta</span><span className="block text-[11px] font-semibold text-slate-500">Acompanha alterações do padrão</span></span>
-            {inherited ? <Check className="h-4 w-4 text-ds-ok" /> : null}
+            {inherited ? <Check className="h-4 w-4 text-emerald-600" /> : null}
           </DropdownMenuItem>
         ) : null}
         {VISIBILITY_OPTIONS.map((option) => (
           <DropdownMenuItem key={option.id} onSelect={() => onChange(option.id)} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
             <span className={`h-2.5 w-2.5 rounded-full ${option.color}`} />
             <span className="min-w-0 flex-1"><span className="block text-sm font-black">{option.label}</span><span className="block text-[11px] font-semibold text-slate-500">{option.description}</span></span>
-            {!inherited && value === option.id ? <Check className="h-4 w-4 text-ds-ok" /> : null}
+            {!inherited && value === option.id ? <Check className="h-4 w-4 text-emerald-600" /> : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -137,11 +134,11 @@ function SummaryPill({
   tone?: "slate" | "green" | "amber" | "red" | "blue";
 }) {
   const toneClass = {
-    slate: "bg-ds-neutral-bg text-ds-neutral",
-    green: "bg-ds-ok-bg text-ds-ok",
-    amber: "bg-ds-warn-bg text-ds-warn",
-    red: "bg-ds-danger-bg text-ds-danger",
-    blue: "bg-ds-info-bg text-ds-info",
+    slate: "bg-slate-50 text-slate-700",
+    green: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+    red: "bg-rose-50 text-rose-700",
+    blue: "bg-sky-50 text-sky-700",
   }[tone];
 
   return (
@@ -149,6 +146,53 @@ function SummaryPill({
       <Icon className="h-3 w-3" />
       {value} {label}
     </span>
+  );
+}
+
+function OverviewMetric({
+  label,
+  description,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  description: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "amber" | "emerald" | "rose";
+}) {
+  const toneClass = {
+    amber: {
+      shell: "border-amber-100 bg-amber-50/60",
+      icon: "bg-amber-100 text-amber-700",
+      value: "text-amber-700",
+    },
+    emerald: {
+      shell: "border-emerald-100 bg-emerald-50/60",
+      icon: "bg-emerald-100 text-emerald-700",
+      value: "text-emerald-700",
+    },
+    rose: {
+      shell: "border-rose-100 bg-rose-50/60",
+      icon: "bg-rose-100 text-rose-700",
+      value: "text-rose-700",
+    },
+  }[tone];
+
+  return (
+    <div className={`rounded-lg border px-2.5 py-2 shadow-xs ${toneClass.shell}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+          <p className={`mt-0.5 text-lg font-black leading-none ${toneClass.value}`}>{value}</p>
+          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-500">{description}</p>
+        </div>
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${toneClass.icon}`}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -171,21 +215,21 @@ function DocumentCollaboratorCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface text-left transition duration-[180ms] ease-ds-lift hover:-translate-y-[3px] hover:shadow-ds-lift motion-reduce:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent"
+      className="group overflow-hidden rounded-xl border border-[#dedfe4] bg-white text-left shadow-xs transition hover:-translate-y-0.5 hover:border-[#df2f78]/40 hover:shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
-      <div className="flex min-h-[58px] items-center justify-between gap-2 bg-ds-muted px-2.5 py-2">
+      <div className="flex min-h-[58px] items-center justify-between gap-2 bg-[#fbfbfc] px-2.5 py-2">
         <div className="flex min-w-0 items-start gap-2">
           <AvatarMark user={user} />
           <div className="min-w-0">
-            <p className="truncate text-xs font-black text-ds-ink">{displayName}</p>
-            <p className="truncate text-[11px] font-bold text-ds-ink-muted">{user.jobRoleName || "Sem cargo"}</p>
-            <p className="truncate text-[10px] font-medium text-ds-ink-faint">
+            <p className="truncate text-xs font-black text-[#1d1d26]">{displayName}</p>
+            <p className="truncate text-[11px] font-bold text-[#777784]">{user.jobRoleName || "Sem cargo"}</p>
+            <p className="truncate text-[10px] font-medium text-[#8f8f9b]">
               {unitNames.length ? unitNames.join(", ") : "Sem unidade"}
             </p>
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Badge variant={isActive ? "default" : "secondary"} className={`h-5 px-2 text-[10px] ${isActive ? "bg-ds-ok text-white hover:bg-ds-ok" : ""}`}>
+          <Badge variant={isActive ? "default" : "secondary"} className={`h-5 px-2 text-[10px] ${isActive ? "bg-emerald-600 text-white hover:bg-emerald-600" : ""}`}>
             {isActive ? "Ativo" : "Inativo"}
           </Badge>
           {pendingReview > 0 ? (
@@ -367,36 +411,59 @@ export default function DPDocumentsPage() {
   }
 
   return (
-    <div className="min-w-0 space-y-3">
-      <PageHero
-        kicker="Departamento pessoal"
-        title="Documentos dos colaboradores"
-        subtitle="Acesse as pastas individuais e acompanhe pendências, validações e vencimentos."
-        actions={<>
+    <div className="min-w-0 space-y-2.5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#df2f78]">Departamento pessoal</p>
+          <h1 className="text-xl font-black tracking-tight text-[#1d1d26]">Documentos dos colaboradores</h1>
+          <p className="text-xs font-medium text-[#777784]">
+            Acesse as pastas individuais e acompanhe pendências, validações e vencimentos.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {showStorageNotice ? (
-            <span className="inline-flex items-center rounded-ds-btn bg-ds-ok-bg px-2.5 py-1.5 text-[11px] font-bold text-ds-ok">
-              <ShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
+              <ShieldCheck className="mr-1.5 inline h-3.5 w-3.5" />
               Acesso autenticado no backend
-            </span>
+            </div>
           ) : null}
           {canManage ? (
-            <Button type="button" variant="ds-secondary" size="md" onClick={() => void openVisibilitySettings()}>
-              <Settings2 className="mr-2 h-4 w-4" />
+            <Button size="sm" variant="outline" className="h-9 gap-2 rounded-lg text-xs" onClick={() => void openVisibilitySettings()}>
+              <Settings2 className="h-4 w-4" />
               Configurar visibilidade
             </Button>
           ) : null}
-        </>}
-        chips={<>
-          <HeroChip value={totals.pending} label="em análise" tone="warning" />
-          <HeroChip value={totals.validated} label="validados" tone="info" />
-          <HeroChip value={totals.alerts} label="alertas" tone="danger" />
-        </>}
-      />
+        </div>
+      </div>
 
-      <div className="rounded-ds-btn border border-ds-border bg-ds-surface p-2">
+      <div className="grid gap-2 md:grid-cols-3">
+        <OverviewMetric
+          label="Em análise"
+          description="Arquivos em lotes aguardando revisão."
+          value={totals.pending}
+          icon={Clock3}
+          tone="amber"
+        />
+        <OverviewMetric
+          label="Validados"
+          description="Documentos conferidos e liberados."
+          value={totals.validated}
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <OverviewMetric
+          label="Alertas"
+          description="Rejeitados, vencidos ou exigindo ação."
+          value={totals.alerts}
+          icon={AlertTriangle}
+          tone="rose"
+        />
+      </div>
+
+      <div className="rounded-lg border border-[#dedfe4] bg-white p-2 shadow-xs">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-64 flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ds-ink-faint" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9d9da9]" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -413,7 +480,7 @@ export default function DPDocumentsPage() {
       </div>
 
       {error ? (
-        <div className="rounded-ds-card bg-ds-danger-bg p-4 text-sm font-bold text-ds-danger" role="alert">{error}</div>
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm font-bold text-rose-700">{error}</div>
       ) : null}
 
       {loading ? (
@@ -421,7 +488,7 @@ export default function DPDocumentsPage() {
           {[...Array(6)].map((_, index) => <Skeleton key={index} className="h-[58px] rounded-xl" />)}
         </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-ds-border bg-white p-12 text-center text-sm font-bold text-ds-ink-muted">
+        <div className="rounded-3xl border border-dashed border-[#dedfe4] bg-white p-12 text-center text-sm font-bold text-[#777784]">
           <FolderOpen className="mx-auto mb-3 h-8 w-8" />
           Nenhum colaborador encontrado para os filtros atuais.
         </div>
@@ -443,17 +510,23 @@ export default function DPDocumentsPage() {
         </div>
       )}
 
-      <Dialog open={visibilityOpen} onOpenChange={(open) => { if (!open) closeVisibilitySettings(); }}>
-        <DialogContent className="flex max-h-[84vh] max-w-4xl flex-col gap-0 overflow-hidden rounded-ds-modal bg-ds-input p-0">
-          <DialogHeader className="border-b border-ds-border px-6 py-4 text-left">
-            <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-ink">Documentos do colaborador</p>
-            <DialogTitle className="text-[21px] font-extrabold text-ds-ink">Visibilidade por pasta e documento</DialogTitle>
-            <DialogDescription className="max-w-2xl text-[13px] text-ds-ink-muted">Cada pasta define o padrão. Um tipo pode herdar esse padrão ou usar outro nível da matriz de acesso.</DialogDescription>
-          </DialogHeader>
+      {visibilityOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4">
+          <section className="flex max-h-[84vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-3 border-b px-4 py-3">
+              <div>
+                <p className="text-xs font-black uppercase text-[#df2f78]">Documentos do colaborador</p>
+                <h2 className="mt-0.5 text-base font-black text-slate-900">Visibilidade por pasta e documento</h2>
+                <p className="mt-0.5 max-w-2xl text-xs font-semibold text-slate-500">Cada pasta define o padrão. Um tipo pode herdar esse padrão ou usar outro nível da matriz de acesso.</p>
+              </div>
+              <button type="button" onClick={closeVisibilitySettings} className="grid h-9 w-9 place-items-center rounded-lg border text-slate-500 hover:bg-slate-50" aria-label="Fechar">
+                <X className="h-4 w-4" />
+              </button>
+            </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
               {visibilityLoading ? (
-                <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-ds-accent-ink" /></div>
+                <div className="grid min-h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-[#df2f78]" /></div>
               ) : documentVisibility ? (
                 <div className="divide-y rounded-xl border">
                   {EMPLOYEE_DOCUMENT_CATEGORIES.map((category) => {
@@ -464,9 +537,9 @@ export default function DPDocumentsPage() {
                       <div key={category.id}>
                         <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                           <button type="button" onClick={() => setExpandedVisibilityCategory(expanded ? null : category.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                            <FolderOpen className="h-4 w-4 shrink-0 text-ds-ink-faint" />
-                            <span className="min-w-0"><span className="block truncate text-sm font-black text-ds-ink">{category.label}</span><span className="block text-xs font-semibold text-ds-ink-faint">{types.length} tipos de documento</span></span>
-                            <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-ds-ink-faint transition-transform sm:ml-2 ${expanded ? "rotate-180" : ""}`} />
+                            <FolderOpen className="h-4 w-4 shrink-0 text-slate-400" />
+                            <span className="min-w-0"><span className="block truncate text-sm font-black text-slate-800">{category.label}</span><span className="block text-xs font-semibold text-slate-400">{types.length} tipos de documento</span></span>
+                            <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform sm:ml-2 ${expanded ? "rotate-180" : ""}`} />
                           </button>
                           <VisibilityMenu
                             value={categoryVisibility}
@@ -477,12 +550,12 @@ export default function DPDocumentsPage() {
                           />
                         </div>
                         {expanded ? (
-                          <div className="border-t bg-ds-muted px-4 py-2 sm:pl-11">
+                          <div className="border-t bg-slate-50/70 px-4 py-2 sm:pl-11">
                             {types.map((type) => {
                               const override = documentVisibility.document_types?.[type.code];
                               return (
-                                <div key={type.code} className="flex flex-col gap-2 border-b border-ds-divider py-2.5 last:border-0 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="min-w-0"><p className="text-sm font-bold text-ds-ink-2">{type.label}</p><p className="font-mono text-[10px] text-ds-ink-faint">{type.code}</p></div>
+                                <div key={type.code} className="flex flex-col gap-2 border-b border-slate-200/70 py-2.5 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0"><p className="text-sm font-bold text-slate-700">{type.label}</p><p className="font-mono text-[10px] text-slate-400">{type.code}</p></div>
                                   <VisibilityMenu
                                     value={override ?? categoryVisibility}
                                     inherited={!override}
@@ -506,18 +579,19 @@ export default function DPDocumentsPage() {
               ) : null}
             </div>
 
-          <DialogFooter className="flex flex-col gap-3 border-t border-ds-border px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:space-x-0">
-            <p role="status" className={`text-xs font-bold ${visibilityMessage === "Visibilidade salva." ? "text-ds-ok" : "text-ds-danger"}`}>{visibilityMessage}</p>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ds-ghost" onClick={closeVisibilitySettings}>Cancelar</Button>
-              <Button type="button" variant="primary-modal" onClick={() => void saveVisibilitySettings()} disabled={visibilitySaving || visibilityLoading || !documentVisibility}>
-                {visibilitySaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Salvar visibilidade
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <footer className="flex flex-col gap-3 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className={`text-xs font-bold ${visibilityMessage === "Visibilidade salva." ? "text-emerald-700" : "text-rose-600"}`}>{visibilityMessage}</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeVisibilitySettings}>Cancelar</Button>
+                <Button onClick={() => void saveVisibilitySettings()} disabled={visibilitySaving || visibilityLoading || !documentVisibility} className="gap-2 bg-[#df2f78] hover:bg-[#c81f69]">
+                  {visibilitySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Salvar visibilidade
+                </Button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

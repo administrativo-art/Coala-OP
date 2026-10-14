@@ -10,7 +10,7 @@ export function MonthFilter({ label, value, months, onChange }: { label: string;
       aria-label={label}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-8 w-full rounded-lg border border-ds-border bg-ds-surface px-3 text-xs font-semibold capitalize text-ds-ink-muted outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+      className="h-8 w-full rounded-lg border border-ds-border bg-ds-surface px-3 text-xs font-semibold capitalize text-ds-ink-muted outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
     >
       {options.map((month) => (
         <option key={month.key} value={month.key}>{month.label}</option>

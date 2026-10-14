@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { parseSchedulePeriod, safeAvatarUrl, toMobileSchedule } from "../../src/features/collaborator-schedule/mobile-schedule";
+import { mobileProfileRole, parseSchedulePeriod, safeAvatarUrl, safePersonColor, toMobileSchedule, visibleTeamUnitIds } from "../../src/features/collaborator-schedule/mobile-schedule";
 import { goalDistributionDays, mobileGoalDays, mobileGoalSummary, type MobileGoalPeriodInput } from "../../src/features/goals/mobile-goals";
 import { defaultAdminPermissions, defaultGuestPermissions } from "../../src/types";
 
@@ -15,11 +15,23 @@ test("the app schedule lists each person once, the viewer first, and never expos
   const view = toMobileSchedule({
     year: 2026, month: 10, published: true,
     teamUnits: [{ id: "unit-x", name: "Unidade X", shifts: [shift("u-ana", "2026-10-09"), shift("u-bia", "2026-10-09", { startTime: "14:00", endTime: "20:00" }), shift("u-ana", "2026-10-10", { type: "day_off", shiftName: "Folga" })] }],
-  }, new Map([["u-ana", "https://cdn.example/ana.jpg"], ["u-bia", null]]));
+  }, new Map([["u-ana", "https://cdn.example/ana.jpg"], ["u-bia", null]]), new Map([["u-ana", "#BDB2FF"]]));
   const unit = view.units[0]!;
   assert.deepEqual(unit.people.map((person) => [person.name, person.isMe, person.avatarUrl]), [["Bia", true, null], ["Ana", false, "https://cdn.example/ana.jpg"]]);
   assert.deepEqual(unit.shifts.map((entry) => [unit.people[entry.person]!.name, entry.date, entry.type]), [["Ana", "2026-10-09", "work"], ["Bia", "2026-10-09", "work"], ["Ana", "2026-10-10", "day_off"]]);
   assert.equal(JSON.stringify(view).includes("u-ana"), false);
+  assert.deepEqual(unit.people.map((person) => person.color), [null, "#BDB2FF"]);
+});
+
+test("only a plain hex colour leaves the server", () => {
+  assert.equal(safePersonColor("#bdb2ff"), "#BDB2FF");
+  for (const value of ["red", "#fff", "#BDB2FF80", "url(x)", "", null, 7]) assert.equal(safePersonColor(value), null);
+});
+
+test("the month's schedule is shown whether or not it is locked", () => {
+  const builder = readFileSync("src/features/collaborator-schedule/server.ts", "utf8");
+  assert.doesNotMatch(builder, /\.filter\(\(doc\) => doc\.get\("locked"\) === true\)/);
+  assert.match(builder, /Number\(right\.get\("locked"\) === true\) - Number\(left\.get\("locked"\) === true\)/);
 });
 
 test("only https photo links leave the server", () => {
@@ -68,7 +80,9 @@ test("schedule and profile reuse the web rules and need the app permission", () 
   const server = readFileSync("src/features/collaborator-schedule/mobile-schedule.server.ts", "utf8");
   assert.match(server, /permissions\.app\?\.schedule\?\.view !== true/);
   assert.match(server, /buildCollaboratorSchedulePayload\(actor, year, month, await extraScheduleUnits\(actor\)\)/);
-  assert.match(readFileSync("src/features/goals/mobile-goals.server.ts", "utf8"), /period\.distributionMode !== "scheduled_days" \? null/);
+  const goalsServer = readFileSync("src/features/goals/mobile-goals.server.ts", "utf8");
+  assert.match(goalsServer, /period\.distributionMode === "scheduled_days" \? scheduleEvidence\[index\]!\.dateKeys : undefined/);
+  assert.match(goalsServer, /\.filter\(\(goal\) => !externalCoverageUserIds\.has\(goal\.employeeId\)\)/);
   assert.match(readFileSync("src/app/api/dp/mobile-schedule/route.ts", "utf8"), /action: "app\.schedule\.view"/);
   const profile = readFileSync("src/app/api/mobile/profile/route.ts", "utf8");
   assert.match(profile, /authorization: \{ kind: "owner" \}/);
@@ -103,4 +117,29 @@ test("the schedule of other units needs its own app permission and stays inside 
   // O portal do colaborador continua sem unidades extras.
   const portal = readFileSync("src/features/collaborator-schedule/server.ts", "utf8");
   assert.match(portal, /extraTeamUnitIds: string\[\] \| "all" = \[\]/);
+});
+
+test("an admin without linked units keeps every unit with team shifts", () => {
+  const teamUnitIds = visibleTeamUnitIds(["dp-norte", "dp-sul"], new Set<string>(), "all");
+  assert.deepEqual(teamUnitIds, ["dp-norte", "dp-sul"]);
+  const mobile = toMobileSchedule({
+    year: 2026, month: 10, published: true,
+    teamUnits: teamUnitIds.map((id) => ({ id, name: id, shifts: [shift("u-ana", "2026-10-09")] })),
+  }, new Map());
+  assert.deepEqual(mobile.units.map((unit) => unit.id), ["dp-norte", "dp-sul"]);
+});
+
+test("a restricted user keeps only permitted team units", () => {
+  assert.deepEqual(
+    visibleTeamUnitIds(["dp-norte", "dp-sul"], new Set(["dp-norte"]), ["dp-norte"]),
+    ["dp-norte"],
+  );
+  assert.deepEqual(visibleTeamUnitIds(["dp-norte", "dp-sul"], new Set(), []), []);
+});
+
+test("the app profile prefers a registered function and falls back to the role", () => {
+  assert.equal(mobileProfileRole({ jobFunctionNames: [" Líder de loja "], jobRoleName: "Gerente" }), "Líder de loja");
+  assert.equal(mobileProfileRole({ jobFunctionNames: ["", "Atendente"], jobRoleName: "Gerente" }), "Atendente");
+  assert.equal(mobileProfileRole({ jobFunctionNames: [], jobRoleName: " Gerente " }), "Gerente");
+  assert.equal(mobileProfileRole({ jobFunctionNames: [""], jobRoleName: "" }), null);
 });

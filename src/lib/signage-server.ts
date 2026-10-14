@@ -11,6 +11,7 @@ import { AppError } from './observability/app-error';
 import {
   getSignageAssetUrl,
   getSlideScreenIds,
+  hasUnitFirstScreen,
   isSignageOrientation,
   SIGNAGE_DEFAULT_SCREEN_NAME,
   SIGNAGE_STORAGE_BUCKET,
@@ -72,11 +73,11 @@ function extraScreen(id: string, data: FirebaseFirestore.DocumentData, kioskName
 }
 
 /**
- * Todas as telas: a padrão de cada unidade (id igual ao da unidade, sem cadastro) e as
- * cadastradas em `screens`. Lê `kiosks` e `screens` inteiras; ambas crescem com o número
- * de unidades e de TVs, não com o uso.
+ * Todas as telas cadastradas: a primeira de cada unidade (id igual ao da unidade), quando existe,
+ * e as demais em `screens`. Unidade sem tela cadastrada não tem tela nenhuma. Lê `kiosks` e
+ * `screens` inteiras; ambas crescem com o número de unidades e de TVs, não com o uso.
  */
-export async function listSignageScreens(): Promise<SignageScreen[]> {
+export async function listSignageUnitsAndScreens(): Promise<{ kiosks: Kiosk[]; screens: SignageScreen[] }> {
   const [kiosksSnap, screensSnap] = await Promise.all([
     dbAdmin.collection('kiosks').get(),
     signageDbAdmin.collection('screens').get(),
@@ -85,13 +86,19 @@ export async function listSignageScreens(): Promise<SignageScreen[]> {
   const kioskById = new Map(kiosks.map((kiosk) => [kiosk.id, kiosk]));
   const screenDocs = new Map(screensSnap.docs.map((doc) => [doc.id, doc.data()]));
 
-  const screens = kiosks.map((kiosk) => defaultScreen(kiosk, screenDocs.get(kiosk.id)));
+  const screens = kiosks
+    .filter((kiosk) => hasUnitFirstScreen(kiosk, screenDocs.has(kiosk.id)))
+    .map((kiosk) => defaultScreen(kiosk, screenDocs.get(kiosk.id)));
   for (const [id, data] of screenDocs) {
-    if (kioskById.has(id)) continue; // documento de mesmo id da unidade só renomeia a tela padrão
+    if (kioskById.has(id)) continue; // documento de mesmo id da unidade é a primeira tela dela
     const kiosk = kioskById.get(data.kioskId);
     if (kiosk) screens.push(extraScreen(id, data, kiosk.name));
   }
-  return screens;
+  return { kiosks, screens };
+}
+
+export async function listSignageScreens(): Promise<SignageScreen[]> {
+  return (await listSignageUnitsAndScreens()).screens;
 }
 
 /** Uma tela pelo id, ou `null`. Duas leituras; três quando é uma tela adicional. */
@@ -101,7 +108,8 @@ export async function resolveSignageScreen(screenId: string): Promise<SignageScr
     dbAdmin.collection('kiosks').doc(screenId).get(),
   ]);
   if (kioskSnap.exists) {
-    return defaultScreen({ id: kioskSnap.id, ...kioskSnap.data() } as Kiosk, screenSnap.data());
+    const kiosk = { id: kioskSnap.id, ...kioskSnap.data() } as Kiosk;
+    return hasUnitFirstScreen(kiosk, screenSnap.exists) ? defaultScreen(kiosk, screenSnap.data()) : null;
   }
   const data = screenSnap.data();
   if (!screenSnap.exists || !data || typeof data.kioskId !== 'string') return null;

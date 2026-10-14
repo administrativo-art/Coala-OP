@@ -55,7 +55,7 @@ test("the purchasing typography covers pages and portalled surfaces", () => {
     "utf8",
   );
 
-  assert.match(globalStyles, /\.font-purchasing[\s\S]*Inter Tight Variable/);
+  assert.match(globalStyles, /@utility font-purchasing[\s\S]*Inter Tight Variable/);
   assert.match(pageFrame, /font-purchasing/);
   assert.match(quotationModal, /font-purchasing/);
   assert.match(directPurchaseModal, /font-purchasing/);

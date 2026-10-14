@@ -18,5 +18,6 @@ export type AuditLogEntry = {
   ip_address: string | null;
   timestamp: string | null;
   ttl: string | null;
+  trust_source: "client-declared" | "server-authoritative" | null;
+  event_namespace: string | null;
 };
-

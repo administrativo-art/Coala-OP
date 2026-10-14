@@ -532,7 +532,7 @@ function EditSheet({
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="__none__">— Nenhum —</SelectItem>
-                      {shiftDefinitions.map(def => (
+                      {shiftDefinitions.filter((def) => def.isArchived !== true || def.id === field.value).map(def => (
                         <SelectItem key={def.id} value={def.id}>
                           {def.name} ({def.startTime}–{def.endTime})
                         </SelectItem>

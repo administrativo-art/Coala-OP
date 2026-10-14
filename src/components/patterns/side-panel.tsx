@@ -30,11 +30,11 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[var(--ds-scrim)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-(--ds-scrim) data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
           data-ui="side-panel"
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex w-[460px] max-w-full flex-col bg-ds-warm font-ds shadow-ds-side outline-none",
+            "fixed inset-y-0 right-0 z-50 flex h-dvh max-h-dvh w-[460px] max-w-full flex-col overflow-hidden rounded-l-[20px] bg-ds-warm font-ds shadow-ds-side outline-hidden",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right duration-200",
             className
           )}
@@ -52,7 +52,7 @@ export function SidePanel({ open, onOpenChange, kicker, title, subtitle, highlig
             {highlights && <div className="mt-4 flex gap-6 text-[26px] font-extrabold">{highlights}</div>}
             <DialogPrimitive.Close
               aria-label="Fechar"
-              className="absolute right-4 top-4 rounded-ds-sm p-1.5 text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              className="absolute right-4 top-4 rounded-ds-sm p-1.5 text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white/40"
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </DialogPrimitive.Close>

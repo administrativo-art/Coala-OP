@@ -1,28 +1,61 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { verifyAuth } from "@/lib/verify-auth";
+import { AppError } from "@/lib/observability/app-error";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
-export async function POST(req: NextRequest) {
-  try {
-    const decoded = await verifyAuth(req);
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-    if (!decoded.uid) {
-      return NextResponse.json({ error: "Usuário inválido." }, { status: 401 });
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+type OwnerResource = { ownerId: string };
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "auth.last-login.update",
+  version: 1,
+  surface: { method: "POST", path: "/api/auth/last-login" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "owner" },
+  resourceScope: { kind: "owner" },
+  input: { kind: "none" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+const enforcer = createStandardSecurityEnforcer<
+  NextRequest,
+  StaticRouteContext,
+  unknown,
+  ServerUserContext,
+  undefined,
+  OwnerResource
+>(contract, {
+  authenticate: ({ request }) => requireUser(request).catch((cause) => {
+    throw new AppError({ code: "LAST_LOGIN_AUTH_REQUIRED", kind: "AUTHENTICATION", cause });
+  }),
+  loadResource: ({ actor }) => ({ ownerId: actor.decoded.uid }),
+  authorize: ({ actor, resource }) => {
+    if (resource.ownerId !== actor.decoded.uid) {
+      throw new AppError({ code: "LAST_LOGIN_OWNER_FORBIDDEN", kind: "AUTHORIZATION" });
     }
+  },
+  assertScope: ({ actor, resource }) => {
+    if (resource.ownerId !== actor.decoded.uid) {
+      throw new AppError({ code: "LAST_LOGIN_SCOPE_FORBIDDEN", kind: "AUTHORIZATION" });
+    }
+  },
+});
 
-    await dbAdmin.collection("users").doc(decoded.uid).set(
-      {
-        lastLoginAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Falha ao registrar último acesso.";
-    return NextResponse.json({ error: message }, { status: 401 });
-  }
-}
+export const POST = secureRoute({ contract, enforcer }, async ({ security }) => {
+  await dbAdmin.collection("users").doc(security.resource.ownerId).set(
+    { lastLoginAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+  return NextResponse.json({ ok: true });
+});

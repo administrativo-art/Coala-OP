@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, runTransaction, setDoc, updateDoc, where } from "firebase/firestore";
 
 import { assertFirestoreEmulatorSafety } from "../helpers/firestore-emulator-safety.mjs";
 
@@ -100,12 +100,18 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
         }),
         setDoc(doc(firestore, "users/editor"), {
           profileId: "schedule-editor",
+          unitIds: ["unit-1"],
+          profileCompliance: { status: "complete", policyVersion: 1 },
+        }),
+        setDoc(doc(firestore, "users/schedule-admin"), {
+          profileId: "schedule-editor",
           profileCompliance: { status: "complete", policyVersion: 1 },
         }),
         setDoc(doc(firestore, "dp_schedules/schedule-1"), {
           name: "Setembro de 2026",
           month: 9,
           year: 2026,
+          unitId: "unit-1",
         }),
         setDoc(doc(firestore, "dp_schedules/schedule-1/shifts/managed-day-off"), {
           userId: "collaborator-1",
@@ -116,6 +122,14 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
           type: "day_off",
           bizneoOperationId: "operation-1",
           bizneoSyncStatus: "published",
+        }),
+        setDoc(doc(firestore, "dp_schedules/schedule-1/shifts/work-existing"), {
+          userId: "collaborator-1",
+          unitId: "unit-1",
+          date: "2026-09-08",
+          startTime: "10:00",
+          endTime: "16:15",
+          type: "work",
         }),
       ]);
     });
@@ -129,6 +143,17 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
         "2026-09-08": [{ startTime: "09:00", endTime: "12:00", minimumPeople: 2 }],
       },
     }));
+    await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+      unitId: "unit-2",
+    }));
+    await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+      locked: true,
+      snapshot: { users: {} },
+      journeyValidation: { status: "ok", version: 0 },
+    }));
+    await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+      journeyValidationVersion: 999,
+    }));
     await assertFails(setDoc(doc(editor, "dp_schedules/schedule-forged-demand"), {
       name: "Outubro de 2026",
       month: 10,
@@ -137,7 +162,20 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
         "2026-10-01": [{ startTime: "09:00", endTime: "12:00", minimumPeople: 2 }],
       },
     }));
-    await assertSucceeds(setDoc(doc(editor, "dp_schedules/schedule-1/shifts/work"), {
+    await assertFails(setDoc(doc(editor, "dp_schedules/schedule-forged-lock"), {
+      name: "Outubro de 2026",
+      month: 10,
+      year: 2026,
+      locked: true,
+      journeyValidationVersion: 0,
+    }));
+    await assertFails(setDoc(doc(editor, "dp_schedules/schedule-forged-version"), {
+      name: "Outubro de 2026",
+      month: 10,
+      year: 2026,
+      journeyValidationVersion: 1,
+    }));
+    await assertFails(setDoc(doc(editor, "dp_schedules/schedule-1/shifts/work"), {
       userId: "collaborator-1",
       unitId: "unit-1",
       date: "2026-09-08",
@@ -164,7 +202,58 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
       endTime: "16:15",
     }));
     await assertFails(deleteDoc(doc(editor, "dp_schedules/schedule-1/shifts/managed-day-off")));
+    await assertFails(deleteDoc(doc(editor, "dp_schedules/schedule-1/shifts/work-existing")));
+    await assertFails(deleteDoc(doc(environment.authenticatedContext("schedule-admin", { isDefaultAdmin: true }).firestore(), "dp_schedules/schedule-1")));
     await assertFails(getDoc(doc(editor, "dp_bizneo_day_off_operations/operation-1")));
+  } finally {
+    await environment.cleanup();
+  }
+});
+
+test("escala respeita o escopo de unidades e participante de meta só nasce pela API", async () => {
+  assertFirestoreEmulatorSafety({ projectId });
+  const environment = await initializeTestEnvironment({ projectId, firestore: { rules } });
+  try {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const firestore = context.firestore();
+      await Promise.all([
+        setDoc(doc(firestore, "profiles/schedule-reader"), {
+          permissions: { dp: { schedules: { view: true, create: true } }, goals: { manage: true } },
+        }),
+        setDoc(doc(firestore, "users/scoped-reader"), {
+          profileId: "schedule-reader",
+          unitIds: ["unit-1"],
+          profileCompliance: { status: "complete", policyVersion: 1 },
+        }),
+        setDoc(doc(firestore, "dp_schedules/allowed-schedule"), { name: "Permitida", month: 9, year: 2026, unitId: "unit-1" }),
+        setDoc(doc(firestore, "dp_schedules/blocked-schedule"), { name: "Bloqueada", month: 9, year: 2026, unitId: "unit-2" }),
+        setDoc(doc(firestore, "dp_schedules/allowed-schedule/shifts/allowed-shift"), { userId: "someone", unitId: "unit-1", date: "2026-09-01", type: "work" }),
+        setDoc(doc(firestore, "dp_schedules/blocked-schedule/shifts/blocked-shift"), { userId: "someone", unitId: "unit-2", date: "2026-09-01", type: "work", originUnitId: "unit-9", exceptionReason: "Cobertura externa" }),
+        setDoc(doc(firestore, "goalPeriods/active-period"), { kioskId: "unit-1", status: "active", currentValue: 0 }),
+      ]);
+    });
+
+    const scoped = environment.authenticatedContext("scoped-reader").firestore();
+    await assertSucceeds(getDoc(doc(scoped, "dp_schedules/allowed-schedule")));
+    await assertFails(getDoc(doc(scoped, "dp_schedules/blocked-schedule")));
+    await assertSucceeds(getDoc(doc(scoped, "dp_schedules/allowed-schedule/shifts/allowed-shift")));
+    await assertFails(getDoc(doc(scoped, "dp_schedules/blocked-schedule/shifts/blocked-shift")));
+    await assertSucceeds(getDocs(query(collection(scoped, "dp_schedules"), where("unitId", "==", "unit-1"))));
+    await assertFails(getDocs(collection(scoped, "dp_schedules")));
+    await assertSucceeds(runTransaction(scoped, async (transaction) => {
+      const target = doc(scoped, "dp_schedules/new-scoped-schedule");
+      const existing = await transaction.get(target);
+      if (!existing.exists()) {
+        transaction.set(target, { name: "Nova", month: 10, year: 2026, unitId: "unit-1" });
+      }
+    }));
+    await assertFails(setDoc(doc(scoped, "employeeGoals/forged-external-participant"), {
+      periodId: "period-1", employeeId: "someone", kioskId: "unit-1", fraction: 1, targetValue: 100, currentValue: 0,
+    }));
+    await assertSucceeds(updateDoc(doc(scoped, "goalPeriods/active-period"), { currentValue: 50 }));
+    await assertFails(updateDoc(doc(scoped, "goalPeriods/active-period"), {
+      status: "closed", closedBy: "scoped-reader", closureSnapshot: {},
+    }));
   } finally {
     await environment.cleanup();
   }

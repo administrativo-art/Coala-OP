@@ -148,7 +148,7 @@ export default async function PublicAssetPage({ params }: { params: Promise<{ co
     <main className="min-h-screen bg-ds-page px-4 py-6 text-ds-ink sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-5">
         <section className="overflow-hidden rounded-[18px] border border-ds-border bg-ds-surface">
-          <div className="relative flex aspect-[16/10] items-center justify-center bg-ds-muted sm:aspect-[16/7]">
+          <div className="relative flex aspect-16/10 items-center justify-center bg-ds-muted sm:aspect-16/7">
             {asset.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={asset.imageUrl} alt={asset.name} className="h-full w-full object-contain" />

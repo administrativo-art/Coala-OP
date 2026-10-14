@@ -74,7 +74,7 @@ export function ResultCenterSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] max-h-[var(--radix-popover-content-available-height)] overflow-hidden p-2"
+        className="w-(--radix-popover-trigger-width) max-h-(--radix-popover-content-available-height) overflow-hidden p-2"
         align="start"
         sideOffset={4}
       >
@@ -87,7 +87,7 @@ export function ResultCenterSelect({
             className="h-9 pl-8"
           />
         </div>
-        <div className="max-h-[min(16rem,calc(var(--radix-popover-content-available-height)-4.5rem))] touch-pan-y overflow-y-scroll overscroll-contain pr-1 [scrollbar-gutter:stable]">
+        <div className="max-h-[min(16rem,calc(var(--radix-popover-content-available-height)-4.5rem))] touch-pan-y overflow-y-scroll overscroll-contain pr-1 scrollbar-gutter-stable">
           <div className="space-y-0.5">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option) => {

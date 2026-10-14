@@ -5,9 +5,8 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { AppError } from "@/lib/observability/app-error";
 import { canAccessUnit } from "@/lib/unit-access";
 import type { RepositionActivity } from "@/types";
-import { safeAvatarUrl } from "@/features/collaborator-schedule/mobile-schedule";
 import { syncRepositionTaskSafely } from "./lib/task-sync";
-import { buildMobileReceipt, receiveMobileRepositionSchema, toMobileRepositionActivity } from "./mobile-receipt";
+import { buildMobileReceipt, mobileRepositionPhotoUrl, readMobileRepositionPhoto, receiveMobileRepositionSchema, toMobileRepositionActivity } from "./mobile-receipt";
 
 const AWAITING_RECEIPT: RepositionActivity["status"] = "Aguardando recebimento";
 const LIST_LIMIT = 50;
@@ -38,11 +37,30 @@ export async function listMobileRepositionsToReceive(actor: ServerUserContext) {
   // Product photo from the registration, as in the stock count; the product id itself stays on the server.
   const productIds = [...new Set(activities.flatMap((activity) => activity.rows.map((row) => row.productId)).filter(Boolean))];
   const products = productIds.length ? await dbAdmin.getAll(...productIds.map((id) => dbAdmin.collection("products").doc(id))) : [];
-  const images = new Map(products.map((product) => [product.id, safeAvatarUrl(product.get("imageUrl"))]));
+  const images = new Map(products.map((product) => [product.id, product.get("imageUrl")]));
   return {
-    activities: activities.map((activity) => ({ ...activity, rows: activity.rows.map(({ productId, ...row }) => ({ ...row, imageUrl: images.get(productId) ?? null })) })),
+    activities: activities.map((activity) => ({ ...activity, rows: activity.rows.map(({ productId, ...row }) => ({ ...row, imageUrl: mobileRepositionPhotoUrl(activity.id, row, images.get(productId)) })) })),
     truncated: snapshot.size > LIST_LIMIT,
   };
+}
+
+/** A receipt photo can only be read through a dispatched lot in an accessible destination. */
+export async function loadMobileRepositionPhoto(input: { activityId: string; baseProductId: string; lotId: string }, actor: ServerUserContext) {
+  assertCanReceiveMobileReposition(actor);
+  const result = await readMobileRepositionPhoto(input, {
+    authorized: true,
+    async loadActivity(id) {
+      const snapshot = await dbAdmin.collection("repositionActivities").doc(id).get();
+      return snapshot.exists ? { id: snapshot.id, ...snapshot.data() } as RepositionActivity : null;
+    },
+    canAccessDestination: (unitId) => canReceiveAt(actor, unitId),
+    async loadImage(productId) { return (await dbAdmin.collection("products").doc(productId).get()).get("imageUrl"); },
+  });
+  if (!result.ok) {
+    if (result.reason === "not_awaiting") failure("PHOTO_NOT_AWAITING", "Esta reposição não está mais aguardando recebimento.");
+    failure("PHOTO_NOT_FOUND", "Foto não encontrada.", "NOT_FOUND");
+  }
+  return { unitId: result.unitId, contentType: result.photo.contentType, bytes: Buffer.from(result.photo.base64, "base64") };
 }
 
 /** Records the receipt at the destination unit. Stock only moves when the reposition is finalized in Coala One. */

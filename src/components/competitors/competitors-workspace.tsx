@@ -298,7 +298,7 @@ export function CompetitorsWorkspace() {
                         type="button"
                         onClick={() => setPriceProduct(product)}
                         aria-label={`Preço de ${competitorById.get(competitorId)?.name ?? competitorId} para ${simulation.name}: ver histórico ou registrar`}
-                        className="ml-auto flex flex-col items-end gap-1 rounded-ds-sm px-1.5 py-1 text-right transition-colors hover:bg-ds-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+                        className="ml-auto flex flex-col items-end gap-1 rounded-ds-sm px-1.5 py-1 text-right transition-colors hover:bg-ds-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
                       >
                         <span className="font-ds-mono text-[13px] font-bold">{brl(latest.price)}</span>
                         {kind === "above" ? <StatusPill variant="danger">+{gap!.toFixed(0)}% acima</StatusPill> : null}

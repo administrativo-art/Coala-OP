@@ -83,7 +83,7 @@ function DetailField({ label, value, mono = false }: { label: string; value: str
   return (
     <div className="min-w-0">
       <p className={KICKER_CLASS}>{label}</p>
-      <p className={cn("mt-[3px] break-words text-[12.5px] font-semibold text-ds-ink dark:text-foreground", mono && "font-mono")}>
+      <p className={cn("mt-[3px] wrap-break-word text-[12.5px] font-semibold text-ds-ink dark:text-foreground", mono && "font-mono")}>
         {value || "—"}
       </p>
     </div>

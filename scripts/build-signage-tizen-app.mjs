@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceDir = path.join(repoRoot, 'tizen', 'coala-signage');
-const iconPath = path.join(repoRoot, 'public', 'icons', 'coala-shakes-192.png');
+const iconPath = path.join(repoRoot, 'public', 'icons', 'coala-signage-192.png');
 const logoPath = path.join(repoRoot, 'public', 'icons', 'coala-shakes-512.png');
 const WIDGET_NAME = 'CoalaSignage';
 const DEFAULT_SERVER = 'https://op.coalashakes.com';

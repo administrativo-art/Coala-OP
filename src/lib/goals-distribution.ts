@@ -1,8 +1,9 @@
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { eachDayOfInterval } from 'date-fns';
 
 import { db } from '@/lib/firebase';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { countsDPShiftTowardGoals } from '@/lib/dp-external-coverage';
 import type { DPUnit, EmployeeGoal, GoalClosureSnapshot, GoalDistributionMode, GoalPeriodDoc } from '@/types';
 
 type ShiftRecord = {
@@ -12,6 +13,7 @@ type ShiftRecord = {
   type?: 'work' | 'day_off';
   startTime?: string;
   endTime?: string;
+  countsTowardGoals?: boolean;
 };
 
 function extractShiftTimes(label: string): { start: string; end: string } | null {
@@ -26,6 +28,8 @@ export interface GoalDistributionSnapshot {
   // key: `${kioskId}__${userId}` — scoped to kiosk so employees in multiple units don't bleed over
   workedDaysByKioskAndUser: Record<string, string[]>;
   shiftLabelByKioskUserAndDate: Record<string, Record<string, string>>;
+  /** Pessoas em cobertura externa, por período. Nunca podem receber meta/prêmio da unidade de execução. */
+  externalCoverageUserIdsByPeriodId?: Record<string, string[]>;
 }
 
 function dateKey(date: Date) {
@@ -89,6 +93,21 @@ export function getEmployeeDistributionDayCount(
 
 const IN_CHUNK_SIZE = 30;
 
+function monthKeysBetween(startKey: string, endKey: string) {
+  const [startYear, startMonth] = startKey.split('-').map(Number);
+  const [endYear, endMonth] = endKey.split('-').map(Number);
+  const result: Array<{ year: number; month: number }> = [];
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    result.push({ year, month });
+    if (result.length > 24) throw new Error('O período da meta é longo demais para validar a escala.');
+    month += 1;
+    if (month === 13) { year += 1; month = 1; }
+  }
+  return result;
+}
+
 // kioskNameById: optional map from kiosk Firestore ID → kiosk display name.
 // When provided, shifts are scoped per-kiosk using dp_unit name matching,
 // so employees working in multiple units don't bleed shifts across kiosks.
@@ -103,6 +122,7 @@ export async function loadGoalDistributionSnapshot(
     goalIdsByPeriodShiftAndDate: {},
     workedDaysByKioskAndUser: {},
     shiftLabelByKioskUserAndDate: {},
+    externalCoverageUserIdsByPeriodId: {},
   };
 
   if (periods.length === 0 || employeeGoals.length === 0) return empty;
@@ -130,15 +150,19 @@ export async function loadGoalDistributionSnapshot(
   const goalIdsByPeriodShiftAndDate = new Map<string, Set<string>>();
   const workedDateSetsByKioskAndUser = new Map<string, Set<string>>();
   const shiftLabelsByKioskUserAndDate = new Map<string, Record<string, string>>();
+  const externalCoverageUserIdsByPeriodId = new Map<string, Set<string>>();
 
   // Build unitId → kioskId mapping when kiosk names are available.
   // Fetches dp_units once to match by name (fuzzy).
   const unitIdToKioskId = new Map<string, string>();
   if (kioskNameById && Object.keys(kioskNameById).length > 0) {
     try {
-      const dpUnitsSnap = await getDocs(collection(db, 'dp_units'));
+      const dpUnitsSnap = await getDocs(query(collection(db, 'dp_units'), orderBy('name'), limit(501)));
+      if (dpUnitsSnap.size > 500) throw new Error('Há unidades demais para validar a distribuição de metas.');
       const dpUnits = dpUnitsSnap.docs.map(d => ({ id: d.id, ...d.data() } as DPUnit));
+      const requestedKioskIds = new Set(periods.map((period) => period.kioskId));
       for (const [kioskId, kioskName] of Object.entries(kioskNameById)) {
+        if (!requestedKioskIds.has(kioskId)) continue;
         const matched = matchDPUnitForKiosk(kioskName, dpUnits);
         if (matched) unitIdToKioskId.set(matched.id, kioskId);
       }
@@ -149,28 +173,25 @@ export async function loadGoalDistributionSnapshot(
 
   const allEmployeeIds = [...new Set(employeeGoals.map(g => g.employeeId))];
 
-  // Step 1: Find dp_schedules for the relevant year(s) + month(s).
-  const years = [...new Set(periods.map(p => p.startDate?.toDate?.()?.getFullYear() ?? new Date().getFullYear()))];
-  const neededMonthYears = new Set(periods.map(p => {
-    const d = p.startDate?.toDate?.() ?? new Date();
-    return `${d.getFullYear()}-${d.getMonth() + 1}`;
-  }));
-
   // scheduleId → kioskId (resolved from unitId, or null if unknown)
   const scheduleKioskId = new Map<string, string | null>();
-  for (const year of years) {
-    try {
+  const scheduleUnitId = new Map<string, string>();
+  for (const [unitId, kioskId] of unitIdToKioskId) {
+    for (const { year, month } of monthKeysBetween(globalRangeStart, globalRangeEnd)) {
       const schedulesSnap = await getDocs(
-        query(collection(db, 'dp_schedules'), where('year', '==', year))
+        query(
+          collection(db, 'dp_schedules'),
+          where('unitId', '==', unitId),
+          where('year', '==', year),
+          where('month', '==', month),
+          limit(2),
+        )
       );
+      if (schedulesSnap.size > 1) throw new Error('Há mais de uma escala da unidade na mesma competência.');
       for (const doc of schedulesSnap.docs) {
-        const data = doc.data() as { month?: number; year?: number; unitId?: string };
-        if (!neededMonthYears.has(`${data.year}-${data.month}`)) continue;
-        const kioskId = data.unitId ? (unitIdToKioskId.get(data.unitId) ?? null) : null;
         scheduleKioskId.set(doc.id, kioskId);
+        scheduleUnitId.set(doc.id, unitId);
       }
-    } catch (error) {
-      console.warn('[goals-distribution] failed to load dp_schedules', { year, error });
     }
   }
 
@@ -186,6 +207,18 @@ export async function loadGoalDistributionSnapshot(
     if (shift.date < globalRangeStart || shift.date > globalRangeEnd) return;
 
     const resolvedKioskId = scheduleKioskId.get(scheduleId) ?? null;
+    if (!countsDPShiftTowardGoals(shift)) {
+      // Sem unidade de execução resolvida não é seguro excluir a pessoa de outra unidade.
+      if (!resolvedKioskId) return;
+      for (const { period, startKey, endKey } of periodRanges) {
+        if (period.kioskId !== resolvedKioskId) continue;
+        if (shift.date < startKey || shift.date > endKey) continue;
+        const excluded = externalCoverageUserIdsByPeriodId.get(period.id) ?? new Set<string>();
+        excluded.add(shift.userId);
+        externalCoverageUserIdsByPeriodId.set(period.id, excluded);
+      }
+      return;
+    }
 
     // Determine which kiosks this shift should contribute to.
     // If we resolved a kiosk from the unit, use only that one.
@@ -255,14 +288,16 @@ export async function loadGoalDistributionSnapshot(
   for (const [scheduleId] of scheduleKioskId) {
     for (let i = 0; i < allEmployeeIds.length; i += IN_CHUNK_SIZE) {
       const chunk = allEmployeeIds.slice(i, i + IN_CHUNK_SIZE);
-      try {
-        const shiftsSnap = await getDocs(
-          query(collection(db, 'dp_schedules', scheduleId, 'shifts'), where('userId', 'in', chunk))
-        );
-        shiftsSnap.docs.forEach(d => processShift(d.data() as ShiftRecord, scheduleId));
-      } catch (error) {
-        console.warn('[goals-distribution] failed to load shifts', { scheduleId, error });
-      }
+      const shiftsSnap = await getDocs(
+        query(
+          collection(db, 'dp_schedules', scheduleId, 'shifts'),
+          where('unitId', '==', scheduleUnitId.get(scheduleId)),
+          where('userId', 'in', chunk),
+          limit(501),
+        )
+      );
+      if (shiftsSnap.size > 500) throw new Error('Há turnos demais para validar a distribuição de metas.');
+      shiftsSnap.docs.forEach(d => processShift(d.data() as ShiftRecord, scheduleId));
     }
   }
 
@@ -280,6 +315,9 @@ export async function loadGoalDistributionSnapshot(
       Array.from(workedDateSetsByKioskAndUser.entries()).map(([key, dates]) => [key, Array.from(dates).sort()])
     ),
     shiftLabelByKioskUserAndDate: Object.fromEntries(shiftLabelsByKioskUserAndDate.entries()),
+    externalCoverageUserIdsByPeriodId: Object.fromEntries(
+      Array.from(externalCoverageUserIdsByPeriodId.entries()).map(([periodId, userIds]) => [periodId, Array.from(userIds).sort()]),
+    ),
   };
 }
 

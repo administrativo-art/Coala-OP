@@ -56,7 +56,7 @@ function AvatarMark({ user, size = 44 }: { user: User; size?: number }) {
     <Avatar className="shrink-0 rounded-xl" style={{ width: size, height: size }}>
       <AvatarImage src={user.avatarUrl || undefined} alt={displayName} className="rounded-xl object-cover" />
       <AvatarFallback
-        className="rounded-xl bg-ds-ink-faint font-extrabold tracking-[.02em] text-white"
+        className="rounded-xl bg-[#8a8a94] font-extrabold tracking-[.02em] text-white"
         style={{ backgroundColor: user.color || '#8a8a94', fontSize: size < 40 ? 12 : 14 }}
       >
         {initials(displayName)}
@@ -69,7 +69,7 @@ function StatusPill({ active }: { active: boolean }) {
   return (
     <span
       className={`inline-flex h-[22px] items-center gap-1.5 rounded-full px-2.5 text-[11px] font-extrabold ${
-        active ? 'bg-ds-ok-bg text-ds-ok' : 'bg-ds-muted text-ds-ink-faint'
+        active ? 'bg-[#eafaf2] text-[#008963]' : 'bg-[#f1f2f5] text-[#8a8a94]'
       }`}
     >
       {active ? 'Ativo' : 'Desligado'}
@@ -90,28 +90,28 @@ function CollaboratorInfoTile({
 }) {
   const toneClass = {
     slate: {
-      shell: 'bg-ds-muted',
-      icon: 'bg-ds-surface text-ds-ink-muted',
-      value: 'text-ds-ink',
-      label: 'text-ds-ink-muted',
+      shell: 'bg-[#f7f8fa]',
+      icon: 'bg-white text-[#7b8291]',
+      value: 'text-[#1d1d26]',
+      label: 'text-[#777784]',
     },
     green: {
-      shell: 'bg-ds-ok-bg',
-      icon: 'bg-ds-surface text-ds-ok',
-      value: 'text-ds-ok',
-      label: 'text-ds-ok',
+      shell: 'bg-[#eafaf2]',
+      icon: 'bg-white text-[#008963]',
+      value: 'text-[#006f50]',
+      label: 'text-[#008963]',
     },
     blue: {
-      shell: 'bg-ds-info-bg',
-      icon: 'bg-ds-surface text-ds-info',
-      value: 'text-ds-info',
-      label: 'text-ds-info',
+      shell: 'bg-[#eef8fd]',
+      icon: 'bg-white text-[#0876aa]',
+      value: 'text-[#075f8a]',
+      label: 'text-[#0876aa]',
     },
   }[tone];
 
   return (
     <div className={`flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 ${toneClass.shell}`}>
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md shadow-sm ${toneClass.icon}`}>
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md shadow-xs ${toneClass.icon}`}>
         <Icon className="h-3 w-3" />
       </span>
       <div className="min-w-0">
@@ -140,15 +140,15 @@ function CollaboratorCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group overflow-hidden rounded-xl border border-ds-accent-soft bg-ds-surface text-left shadow-sm transition hover:-translate-y-0.5 hover:border-ds-accent hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent"
+      className="group overflow-hidden rounded-xl border border-[#f1c7da] bg-white text-left shadow-xs transition hover:-translate-y-0.5 hover:border-[#df2f78]/45 hover:shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
       <div className="flex items-start justify-between gap-2 p-2.5">
         <div className="flex min-w-0 items-start gap-2">
           <AvatarMark user={user} size={38} />
           <div className="min-w-0">
-            <p className="truncate text-xs font-black leading-tight text-ds-ink">{displayName}</p>
-            <p className="truncate text-[10px] font-bold text-ds-ink-muted">{user.jobRoleName || 'Sem cargo'}</p>
-            <p className="truncate text-[9px] font-medium text-ds-ink-faint">
+            <p className="truncate text-xs font-black leading-tight text-[#1d1d26]">{displayName}</p>
+            <p className="truncate text-[10px] font-bold text-[#777784]">{user.jobRoleName || 'Sem cargo'}</p>
+            <p className="truncate text-[9px] font-medium text-[#8f8f9b]">
               {unitNames.length ? unitNames.join(', ') : 'Sem unidade'}
             </p>
           </div>
@@ -178,9 +178,9 @@ function CollaboratorCard({
           />
         </div>
 
-        <div className="flex items-center justify-between border-t border-ds-divider pt-1.5 text-[9px] font-bold">
-          <span className="text-ds-ink-muted">desde {fmtDate(user.admissionDate)}</span>
-          <span className="inline-flex items-center gap-1 text-ds-accent-ink group-hover:underline">
+        <div className="flex items-center justify-between border-t border-[#ececf0] pt-1.5 text-[9px] font-bold">
+          <span className="text-[#777784]">desde {fmtDate(user.admissionDate)}</span>
+          <span className="inline-flex items-center gap-1 text-[#df2f78] group-hover:underline">
             Abrir perfil <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
           </span>
         </div>
@@ -277,23 +277,23 @@ export default function DPCollaboratorsPage() {
         chips={<HeroChip value={visibleActiveCount} label="ativos" tone="info" />}
       />
 
-      <div className="rounded-xl border border-ds-border bg-ds-surface p-2.5 shadow-[0_2px_8px_rgba(15,23,42,.05)]">
-        <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.08em] text-ds-ink-faint">
+      <div className="rounded-xl border border-[#e2e0da] bg-white p-2.5 shadow-[0_2px_8px_rgba(15,23,42,.05)]">
+        <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.08em] text-[#9d9da9]">
           <SlidersHorizontal className="h-[15px] w-[15px]" />
           Filtros e visualização
         </div>
         <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_120px_150px_150px_auto] lg:items-center">
           <div className="relative min-w-60 flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-ds-ink-faint" />
+            <Search className="absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-[#9d9da9]" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar por nome, e-mail, cargo, matrícula…"
-              className="h-8 rounded-md border-0 bg-ds-muted pl-9 text-xs font-medium placeholder:text-ds-ink-faint"
+              className="h-8 rounded-md border-0 bg-[#f6f5f2] pl-9 text-xs font-medium placeholder:text-[#9d9da9]"
             />
           </div>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-            <SelectTrigger className="h-8 w-full rounded-md border-ds-border bg-ds-surface text-[11px] font-bold text-ds-ink-2"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="active">Ativos</SelectItem>
@@ -301,14 +301,14 @@ export default function DPCollaboratorsPage() {
             </SelectContent>
           </Select>
           <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="h-8 w-full rounded-md border-ds-border bg-ds-surface text-[11px] font-bold text-ds-ink-2"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as unidades</SelectItem>
               {activeUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="h-8 w-full rounded-md border-ds-border bg-ds-surface text-[11px] font-bold text-ds-ink-2"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as funções</SelectItem>
               {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
@@ -318,19 +318,19 @@ export default function DPCollaboratorsPage() {
             type="single"
             value={viewMode}
             onValueChange={(value) => value && setViewMode(value as 'table' | 'cards')}
-            className="h-8 justify-start gap-0.5 rounded-md bg-ds-muted p-0.5"
+            className="h-8 justify-start gap-0.5 rounded-md bg-[#eceae4] p-0.5"
           >
             <ToggleGroupItem
               value="cards"
               aria-label="Cards"
-              className="h-7 w-7 rounded-md text-ds-ink-faint data-[state=on]:bg-ds-surface data-[state=on]:text-ds-accent-ink data-[state=on]:shadow-sm"
+              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-xs"
             >
               <Grid2X2 className="h-[17px] w-[17px]" />
             </ToggleGroupItem>
             <ToggleGroupItem
               value="table"
               aria-label="Tabela"
-              className="h-7 w-7 rounded-md text-ds-ink-faint data-[state=on]:bg-ds-surface data-[state=on]:text-ds-accent-ink data-[state=on]:shadow-sm"
+              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-xs"
             >
               <List className="h-[17px] w-[17px]" />
             </ToggleGroupItem>
@@ -349,7 +349,7 @@ export default function DPCollaboratorsPage() {
           </div>
         )
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border bg-ds-surface py-10 text-center text-sm text-muted-foreground shadow-sm">
+        <div className="rounded-xl border bg-white py-10 text-center text-sm text-muted-foreground shadow-xs">
           <Briefcase className="mx-auto mb-2 h-8 w-8" />
           Nenhum colaborador encontrado.
         </div>
@@ -370,11 +370,11 @@ export default function DPCollaboratorsPage() {
           })}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-[20px] border border-ds-border bg-ds-surface shadow-[0_2px_10px_rgba(15,23,42,.06)]">
+        <div className="overflow-hidden rounded-[20px] border border-[#e2e0da] bg-white shadow-[0_2px_10px_rgba(15,23,42,.06)]">
           <div className="overflow-x-auto">
             <div className="min-w-[980px]">
               <div
-                className="grid items-center gap-3.5 border-b border-ds-divider bg-ds-surface px-5 py-3 text-[10.5px] font-extrabold uppercase tracking-[.07em] text-ds-ink-faint"
+                className="grid items-center gap-3.5 border-b border-[#ececf0] bg-[#fbfbfc] px-5 py-3 text-[10.5px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]"
                 style={{ gridTemplateColumns: COLLABORATOR_GRID }}
               >
                 <span>Colaborador</span>
@@ -400,25 +400,25 @@ export default function DPCollaboratorsPage() {
                         router.push(`/dashboard/dp/collaborators/${user.id}`);
                       }
                     }}
-                    className="grid cursor-pointer items-center gap-3.5 border-t border-ds-divider px-5 py-3 transition hover:bg-ds-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ds-accent"
+                    className="grid cursor-pointer items-center gap-3.5 border-t border-[#f2f2f5] px-5 py-3 transition hover:bg-[#fbfbfc] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#df2f78]"
                     style={{ gridTemplateColumns: COLLABORATOR_GRID }}
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <AvatarMark user={user} size={36} />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-extrabold text-ds-ink">{formatPersonName(user.username) || user.username}</p>
-                        <p className="truncate text-xs font-medium text-ds-ink-faint">{user.email || '—'}</p>
+                        <p className="truncate text-sm font-extrabold text-[#1d1d26]">{formatPersonName(user.username) || user.username}</p>
+                        <p className="truncate text-xs font-medium text-[#a6a6b0]">{user.email || '—'}</p>
                       </div>
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-semibold text-ds-ink-2">{user.jobRoleName || '—'}</p>
+                      <p className="truncate text-[13.5px] font-semibold text-[#494952]">{user.jobRoleName || '—'}</p>
                       {user.jobFunctionNames?.length ? (
-                        <p className="truncate text-xs font-medium text-ds-ink-faint">{user.jobFunctionNames.join(', ')}</p>
+                        <p className="truncate text-xs font-medium text-[#a6a6b0]">{user.jobFunctionNames.join(', ')}</p>
                       ) : null}
                     </div>
-                    <p className="truncate text-[13px] font-medium text-ds-ink-muted">{unitNames.length ? unitNames.join(', ') : '—'}</p>
-                    <p className="truncate text-[13px] font-medium text-ds-ink-muted">{shiftName || '—'}</p>
-                    <p className="truncate text-[13px] font-medium text-ds-ink-muted">{fmtDate(user.admissionDate)}</p>
+                    <p className="truncate text-[13px] font-medium text-[#6f6f7c]">{unitNames.length ? unitNames.join(', ') : '—'}</p>
+                    <p className="truncate text-[13px] font-medium text-[#6f6f7c]">{shiftName || '—'}</p>
+                    <p className="truncate text-[13px] font-medium text-[#6f6f7c]">{fmtDate(user.admissionDate)}</p>
                     <div><StatusPill active={user.isActive !== false} /></div>
                     <div className="text-right">
                       <button
@@ -427,7 +427,7 @@ export default function DPCollaboratorsPage() {
                           event.stopPropagation();
                           router.push(`/dashboard/dp/collaborators/${user.id}`);
                         }}
-                        className="inline-flex h-8 items-center rounded-[9px] border border-ds-border bg-ds-surface px-3 text-[12.5px] font-extrabold text-ds-ink-muted hover:bg-ds-muted"
+                        className="inline-flex h-8 items-center rounded-[9px] border border-[#e2e0da] bg-white px-3 text-[12.5px] font-extrabold text-[#6f6f7c] hover:bg-[#f6f5f2]"
                       >
                         Abrir
                       </button>
@@ -441,14 +441,14 @@ export default function DPCollaboratorsPage() {
       )}
       <Dialog open={newUserOpen} onOpenChange={setNewUserOpen}>
         <DialogContent className="max-h-[84vh] w-[calc(100vw-1rem)] overflow-y-auto rounded-lg p-0 sm:max-w-[min(720px,calc(100vw-1rem))]">
-          <DialogHeader className="space-y-0 border-b border-ds-divider px-3.5 pb-2.5 pt-3 text-left">
-            <p className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[.1em] text-ds-accent-ink">
+          <DialogHeader className="space-y-0 border-b border-[#f0efeb] px-3.5 pb-2.5 pt-3 text-left">
+            <p className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-widest text-[#df2f78]">
               Gestão do colaborador
-              <span className="text-ds-accent-ink">›</span>
-              <span className="text-ds-accent-ink">Novo usuário</span>
+              <span className="text-[#e2b8cd]">›</span>
+              <span className="text-[#c9a6b8]">Novo usuário</span>
             </p>
-            <DialogTitle className="mt-1 text-base font-black tracking-[-.02em] text-ds-ink">Novo usuário</DialogTitle>
-            <DialogDescription className="mt-1 max-w-[640px] text-[11px] font-medium leading-[1.4] text-ds-ink-muted">
+            <DialogTitle className="mt-1 text-base font-black tracking-[-.02em] text-[#181820]">Novo usuário</DialogTitle>
+            <DialogDescription className="mt-1 max-w-[640px] text-[11px] font-medium leading-[1.4] text-[#6f6f7c]">
               Cadastre o acesso e o vínculo inicial do colaborador. Vale-transporte é tratado no perfil do colaborador.
             </DialogDescription>
           </DialogHeader>

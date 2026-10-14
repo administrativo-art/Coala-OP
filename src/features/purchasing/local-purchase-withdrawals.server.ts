@@ -13,7 +13,7 @@ import { resolvePdvFilialId } from "@/lib/kiosk-identifiers";
 import { AppError } from "@/lib/observability/app-error";
 import { canAccessUnit } from "@/lib/unit-access";
 import { compareClosureTimestamps, formatClosureTime, todayInClosureTimezone } from "@/features/financial/cash-closures/date";
-import { parsePdvCashMovements } from "@/features/financial/cash-closures/pdv-cash-movements";
+import { parsePdvCashMovements, parsePdvWithdrawalReasons } from "@/features/financial/cash-closures/pdv-cash-movements";
 import { eligibleMovement, withdrawalSourceId } from "@/features/financial/cash-closures/withdrawal-classification";
 import { LOCAL_PURCHASE_WITHDRAWAL_LINKS } from "@/features/financial/cash-closures/withdrawal-classification.server";
 import { FINANCIAL_COLLECTIONS } from "@/features/financial/lib/constants";
@@ -77,11 +77,13 @@ function unitFromSnapshot(snapshot: FirebaseFirestore.DocumentSnapshot): Unit | 
 }
 
 function unitWithdrawals(input: { workspaceId: string; unit: Unit; date: string; raw: unknown; methods: unknown }) {
+  const reasons = parsePdvWithdrawalReasons({ withdrawals: input.raw, filialId: input.unit.pdvFilialId });
   return parsePdvCashMovements({ withdrawals: input.raw, supplies: [], paymentMethods: input.methods, date: input.date, filialId: input.unit.pdvFilialId })
     // Only a PDV-issued identifier is an idempotency key for money; synthetic ones never reach the app.
     .filter((movement) => eligibleMovement(movement) && movement.identitySource === "provider")
     .map((movement) => ({
       movement,
+      reason: reasons.get(movement.id) ?? null,
       sourceId: withdrawalSourceId({ workspaceId: input.workspaceId, unitId: input.unit.id, pdvFilialId: input.unit.pdvFilialId }, movement.id),
     }));
 }
@@ -150,6 +152,7 @@ export async function listOpenLocalPurchaseWithdrawals(actor: ServerUserContext)
       time: formatClosureTime(row.movement.occurredAt),
       amountCents: row.movement.amountCents,
       operatorName: row.movement.operatorId ? names[row.movement.operatorId] ?? null : null,
+      reason: row.reason,
     }));
   // Only worth reading when there is a sangria to reconcile them with.
   return { withdrawals, awaitingPurchases: withdrawals.length ? await awaitingPurchases(actor) : [], window, partial };

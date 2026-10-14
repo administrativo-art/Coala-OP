@@ -24,7 +24,7 @@ function cpfCnpj(value: string | null | undefined) {
 }
 function stepState(process: OnboardingProcess, step: PjOnboardingStepId) { return process.pjWorkflow?.steps?.[step]?.status ?? 'pending'; }
 
-const INPUT = 'mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100';
+const INPUT = 'mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-hidden focus:border-violet-400 focus:ring-2 focus:ring-violet-100';
 const LABEL = 'text-[11px] font-black uppercase tracking-wide text-slate-500';
 const PRIMARY = 'inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-4 text-xs font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50';
 const SECONDARY = 'inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50';
@@ -141,7 +141,7 @@ export function PjOnboardingDetailPanel({
   const healthMeta = ONBOARDING_HEALTH_META[operationalStatus.health];
   const canOpenStep = (step: PjOnboardingStepId) => PJ_ONBOARDING_STEP_ORDER.indexOf(step) <= currentIndex || stepState(process, step) === 'completed';
 
-  function Card({ children }: { children: React.ReactNode }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{children}</div>; }
+  function Card({ children }: { children: React.ReactNode }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">{children}</div>; }
   function Header({ title, description }: { title: string; description: string }) { return <div className="mb-5"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-violet-700">Etapa {PJ_ONBOARDING_STEP_ORDER.indexOf(selectedStep) + 1} de 8</p><h2 className="mt-1 text-lg font-black text-slate-950">{title}</h2><p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{description}</p></div>; }
   function ActionButton({ action, children, onClick, disabled, secondary = false }: { action: string; children: React.ReactNode; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
     return <button type="button" disabled={!canManage || busy !== null || disabled} onClick={onClick} className={secondary ? SECONDARY : PRIMARY}>{busy === action ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{children}</button>;
@@ -245,7 +245,7 @@ export function PjOnboardingDetailPanel({
       <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-6">
         <div className="flex min-w-0 items-start gap-3.5">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-violet-700 text-white"><Building2 className="h-5 w-5" /></span>
-          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">Integração de prestadora · PJ</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">{workflow.provider.legalName}</h1><p className="mt-1 break-all text-xs font-semibold text-slate-500">{cpfCnpj(workflow.provider.cnpj)} · {workflow.provider.email}</p><p className="mt-2 text-xs font-bold text-slate-600">Contratante: {process.employerUnitName ?? 'Não definida'} · início {date(workflow.terms.contractStartDate)}</p></div>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-violet-700">Integração de prestadora · PJ</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">{workflow.provider.legalName}</h1><p className="mt-1 break-all text-xs font-semibold text-slate-500">{cpfCnpj(workflow.provider.cnpj)} · {workflow.provider.email}</p><p className="mt-2 text-xs font-bold text-slate-600">Contratante: {process.employerUnitName ?? 'Não definida'} · início {date(workflow.terms.contractStartDate)}</p></div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center"><p className="text-[9px] font-black uppercase text-slate-400">Concluídas</p><p className="mt-1 text-lg font-black text-emerald-600">{completedSteps}</p></div>
@@ -260,7 +260,7 @@ export function PjOnboardingDetailPanel({
       </div>
     </section>
     <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><div className="mb-3 rounded-xl bg-violet-700 p-3 text-white"><div className="flex items-center gap-2"><Building2 className="h-4 w-4" /><span className="text-[10px] font-black uppercase tracking-wider">Integração PJ</span></div><p className="mt-2 text-xs font-semibold opacity-85">Oito etapas, sem rotinas trabalhistas de CLT.</p></div><nav className="space-y-1">{PJ_ONBOARDING_STEP_ORDER.map((step, index) => {
+      <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs"><div className="mb-3 rounded-xl bg-violet-700 p-3 text-white"><div className="flex items-center gap-2"><Building2 className="h-4 w-4" /><span className="text-[10px] font-black uppercase tracking-wider">Integração PJ</span></div><p className="mt-2 text-xs font-semibold opacity-85">Oito etapas, sem rotinas trabalhistas de CLT.</p></div><nav className="space-y-1">{PJ_ONBOARDING_STEP_ORDER.map((step, index) => {
         const state = stepState(process, step); const selected = selectedStep === step; const enabled = canOpenStep(step);
         return <button key={step} type="button" disabled={!enabled} onClick={() => setSelectedStep(step)} className={`flex w-full items-start gap-2 rounded-xl px-3 py-2.5 text-left transition ${selected ? 'bg-violet-50 text-violet-900 ring-1 ring-violet-200' : enabled ? 'text-slate-700 hover:bg-slate-50' : 'cursor-not-allowed text-slate-300'}`}>
           <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-black ${state === 'completed' ? 'bg-emerald-500 text-white' : state === 'active' || state === 'correction_required' ? 'bg-violet-700 text-white' : 'bg-slate-100 text-slate-400'}`}>{state === 'completed' ? <Check className="h-3 w-3" /> : index + 1}</span><span><span className="block text-[11px] font-black leading-snug">{PJ_ONBOARDING_STEP_LABELS[step]}</span>{state === 'correction_required' ? <span className="text-[9px] font-bold text-amber-700">Correção solicitada</span> : null}</span>

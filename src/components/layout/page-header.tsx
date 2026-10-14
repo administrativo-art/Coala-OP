@@ -35,7 +35,7 @@ export function PageHeader({ title, titleSize = 'default', description, actions,
               ariaLabel={back.ariaLabel ?? `Voltar para ${back.parentLabel}`}
               iconOnly
               variant="ghost"
-              className="h-8 w-8 shrink-0 rounded-lg bg-white p-0 text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
+              className="h-8 w-8 shrink-0 rounded-lg bg-white p-0 text-[#777784] shadow-xs ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
               iconClassName="h-5 w-5"
             />
             <span className="shrink-0 text-xs font-black text-[#8f8f9b]">{back.parentLabel}</span>

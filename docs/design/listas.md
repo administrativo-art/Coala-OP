@@ -13,6 +13,7 @@
 - A linha inteira é o alvo do clique e abre o `SidePanel`. Clicar em outra linha troca o conteúdo do painel.
 - Sem ícones de ação na linha. Exceção: o checkbox de seleção em massa (com `stopPropagation`).
 - Ações em massa: barra fixa no rodapé da tela com contagem e ações; nunca no fim da lista.
+- Catálogos históricos que permitem arquivamento abrem em **Ativos** e separam **Arquivados** por chips mutuamente exclusivos dentro do `ControlPanel`. Não misturar os dois estados na mesma lista nem adicionar uma terceira opção “Todos” quando a finalidade for operacional.
 
 ## Lote (Controle de Estoque)
 Uma linha: [lote em mono 12.5/700 + StatusPill] · [quiosque 13/600 / local 12 #6e737a] · [VALIDADE kicker + data em mono] · [quantidades 19/800 + unidade 12 #5f646c] · "›".

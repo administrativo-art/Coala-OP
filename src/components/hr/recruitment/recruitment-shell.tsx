@@ -325,8 +325,8 @@ function QuestionConditionEditor({
   const parentOptions = parentQuestion ? getQuestionOptions(parentQuestion) : [];
   const isDark = variant === 'dark';
   const fieldClass = isDark
-    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
   const labelClass = isDark
     ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
     : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
@@ -475,8 +475,8 @@ function QuestionSectionEditor({
     ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
     : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
   const fieldClass = isDark
-    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
 
   return (
     <div className="mt-2">
@@ -514,8 +514,8 @@ function QuestionParentEditor({
     ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
     : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
   const fieldClass = isDark
-    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
 
   return (
     <div className="mt-2">
@@ -661,7 +661,7 @@ function QuestionDraftSectionControls({
             criterionCode: getRecruitmentSectionCriterionCode(event.target.value) || draft.criterionCode,
           })}
           placeholder="Ex: Teste prático, Cultura, Disponibilidade local"
-          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+          className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10"
         />
       </div>
     </div>
@@ -690,8 +690,8 @@ function QuestionDraftScoringControls({
     ? 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400'
     : 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
   const fieldClass = isDark
-    ? 'h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+    ? 'h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-sm text-slate-100 outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
 
   return (
     <div className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,180px)_minmax(0,180px)] ${
@@ -938,8 +938,8 @@ function QuestionScoringEditor({
   const rubric = question.scoring?.rubric ?? (question.scoring?.criterionCode ? RECRUITMENT_DEFAULT_RUBRICS[question.scoring.criterionCode] : undefined);
   const isDark = variant === 'dark';
   const fieldClass = isDark
-    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60';
   const labelClass = isDark
     ? 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-600'
     : 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
@@ -1131,7 +1131,7 @@ function RecruitmentMetricCard({
   }[tone];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
       <p className={`mt-1 text-2xl font-bold leading-none ${toneClass}`}>{value}</p>
       {description ? <p className="mt-2 text-[11px] text-slate-400">{description}</p> : null}
@@ -1151,7 +1151,7 @@ function RecruitmentModernStepTabs<T extends string>({
   const activeIndex = Math.max(0, steps.findIndex(step => step.value === active));
 
   return (
-    <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
+    <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-xs">
       {steps.map((step, index) => {
         const isActive = step.value === active;
         const isDone = index < activeIndex;
@@ -1170,7 +1170,7 @@ function RecruitmentModernStepTabs<T extends string>({
             >
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
                 isActive
-                  ? 'bg-[#EE6FA8] text-white shadow-sm'
+                  ? 'bg-[#EE6FA8] text-white shadow-xs'
                   : isDone
                     ? 'bg-emerald-500 text-white'
                     : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
@@ -1348,8 +1348,8 @@ function RecruitmentQuestionsDesigner({
     ? 'h-4 w-4 rounded border-slate-700 bg-slate-900 text-indigo-500 disabled:opacity-40'
     : 'h-4 w-4 rounded border-slate-300 text-[#EE6FA8] disabled:opacity-40';
   const inputClass = isDark
-    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
-    : 'rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none focus:ring-2 focus:ring-pink-200 disabled:opacity-60';
+    ? 'rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50'
+    : 'rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-hidden focus:ring-2 focus:ring-pink-200 disabled:opacity-60';
   const labelClass = isDark
     ? 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500'
     : 'mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400';
@@ -1372,7 +1372,7 @@ function RecruitmentQuestionsDesigner({
         : 'border-slate-800 bg-slate-950/70'
       : isSubquestion
         ? 'border-slate-100 bg-white'
-        : 'border-slate-100 bg-white shadow-sm';
+        : 'border-slate-100 bg-white shadow-xs';
     const summaryClass = isDark
       ? 'text-slate-200 hover:bg-slate-900/70'
       : 'text-slate-900 hover:bg-pink-50/40';
@@ -1752,7 +1752,7 @@ function RecruitmentQuestionsDesigner({
                   value={inlineDraft.text}
                   onChange={event => onInlineDraftChange({ text: event.target.value })}
                   placeholder="Texto da subpergunta..."
-                  className={`h-9 rounded-lg border px-3 text-xs outline-none focus:ring-2 ${
+                  className={`h-9 rounded-lg border px-3 text-xs outline-hidden focus:ring-2 ${
                     isDark
                       ? 'border-slate-800 bg-slate-950 text-slate-100 placeholder-slate-600 focus:ring-indigo-500/30'
                       : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:ring-pink-200'
@@ -1761,7 +1761,7 @@ function RecruitmentQuestionsDesigner({
                 <select
                   value={inlineDraft.type}
                   onChange={event => onInlineDraftChange({ type: event.target.value as HrFormQuestion['type'] })}
-                  className={`h-9 rounded-lg border px-3 text-xs outline-none focus:ring-2 ${
+                  className={`h-9 rounded-lg border px-3 text-xs outline-hidden focus:ring-2 ${
                     isDark
                       ? 'border-slate-800 bg-slate-950 text-slate-100 focus:ring-indigo-500/30'
                       : 'border-slate-200 bg-white text-slate-700 focus:ring-pink-200'
@@ -1890,7 +1890,7 @@ function RecruitmentQuestionsDesigner({
         return (
           <section
             key={section.id}
-            className={`overflow-hidden rounded-lg border shadow-sm ${
+            className={`overflow-hidden rounded-lg border shadow-xs ${
               isDark ? 'border-slate-800 bg-slate-950/50' : 'border-l-4 border-slate-200 border-l-[#EE6FA8] bg-white'
             }`}
           >
@@ -2040,7 +2040,7 @@ function sortCandidatesByMode(candidates: Candidate[], sortMode: CandidateSortMo
 function ResumeInput({ value, onChange }: { value: File | null; onChange: (f: File | null) => void }) {
   return value ? (
     <div className="flex items-center gap-2 p-2.5 bg-slate-900 border border-indigo-500/30 rounded-xl">
-      <Paperclip className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+      <Paperclip className="h-4 w-4 text-indigo-400 shrink-0" />
       <span className="text-sm text-slate-300 truncate flex-1">{value.name}</span>
       <button type="button" onClick={() => onChange(null)} className="text-slate-500 hover:text-white">
         <X className="h-4 w-4" />
@@ -2136,7 +2136,7 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800 p-4">
           <h2 className="text-lg font-bold text-white">Novo Candidato</h2>
@@ -2149,7 +2149,7 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Vaga (opcional)</label>
               <select value={form.jobOpeningId} onChange={handleOpeningChange}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Sem vaga vinculada</option>
                 {activeOpenings.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}
               </select>
@@ -2159,25 +2159,25 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome *</label>
               <input type="text" value={form.name} onChange={set('name')} required
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                 placeholder="Nome completo" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">E-mail *</label>
               <input type="email" value={form.email} onChange={set('email')} required
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                 placeholder="email@exemplo.com" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Telefone</label>
               <input type="tel" value={form.phone} onChange={set('phone')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                 placeholder="(11) 9 0000-0000" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Cargo *</label>
               <select value={form.jobRoleId} onChange={set('jobRoleId')} required
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Selecione</option>
                 {roles.filter(r => r.isActive !== false).map(r => (
                   <option key={r.id} value={r.id}>{r.name}</option>
@@ -2187,7 +2187,7 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Origem</label>
               <select value={form.source} onChange={set('source')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Não informado</option>
                 {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -2199,7 +2199,7 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Observações</label>
               <textarea value={form.notes} onChange={set('notes')} rows={2}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
                 placeholder="Anotações iniciais…" />
             </div>
           </div>
@@ -2436,7 +2436,7 @@ function CandidateDetailPanel({ candidate, roles, openings, units, getToken, can
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md h-full bg-slate-950 border-l border-slate-800 flex flex-col shadow-2xl overflow-hidden">
         <div className="flex items-start justify-between gap-3 border-b border-slate-800 p-4">
           <div className="flex-1 min-w-0">
@@ -2447,7 +2447,7 @@ function CandidateDetailPanel({ candidate, roles, openings, units, getToken, can
             <h2 className="text-lg font-bold text-white truncate">{candidate.name}</h2>
             <p className="text-sm text-slate-500 truncate mt-0.5">{candidate.email}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 flex-shrink-0">
+          <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800 shrink-0">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -2469,7 +2469,7 @@ function CandidateDetailPanel({ candidate, roles, openings, units, getToken, can
                     value={employerUnitId}
                     onChange={event => setEmployerUnitId(event.target.value)}
                     disabled={!!statusAction}
-                    className="mt-1.5 h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs text-white outline-none focus:border-emerald-500"
+                    className="mt-1.5 h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-xs text-white outline-hidden focus:border-emerald-500"
                   >
                     <option value="">Selecione a empresa responsável</option>
                     {employerUnits.map(unit => (
@@ -2579,7 +2579,7 @@ function CandidateDetailPanel({ candidate, roles, openings, units, getToken, can
               {canManage ? (
                 <select value={form.status}
                   onChange={e => setForm(prev => ({ ...prev, status: e.target.value as CandidateStatus }))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                   {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
                 </select>
               ) : (
@@ -2600,27 +2600,27 @@ function CandidateDetailPanel({ candidate, roles, openings, units, getToken, can
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome</label>
               <input type="text" value={form.name} onChange={set('name')} disabled={!canManage}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Telefone</label>
               <input type="tel" value={form.phone} onChange={set('phone')} disabled={!canManage}
                 placeholder="—"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60" />
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">E-mail</label>
             <input type="email" value={form.email} onChange={set('email')} disabled={!canManage}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60" />
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Origem</label>
             {canManage ? (
               <select value={form.source} onChange={set('source')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Não informado</option>
                 {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -2768,7 +2768,7 @@ function CandidateDetailPanel({ candidate, roles, openings, units, getToken, can
             <label className="block text-xs font-medium text-slate-400 mb-1.5">Observações</label>
             <textarea value={form.notes} onChange={set('notes')} disabled={!canManage} rows={4}
               placeholder={canManage ? 'Anotações sobre o candidato…' : '—'}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none disabled:opacity-60" />
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none disabled:opacity-60" />
           </div>
 
           {stageHistory.length > 0 && (
@@ -2878,7 +2878,7 @@ function CandidateInitials({ name }: { name: string }) {
   ];
   const color = colors[name.charCodeAt(0) % colors.length];
   return (
-    <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white flex-shrink-0`}>
+    <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white shrink-0`}>
       {initials}
     </div>
   );
@@ -2918,7 +2918,7 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
   return (
     <div
       ref={setNodeRef} style={style} {...attributes}
-      className={`group relative overflow-hidden rounded-[10px] border border-slate-200 bg-white p-3 text-slate-900 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 hover:shadow-md ${isDragging ? 'ring-2 ring-indigo-200' : ''}`}
+      className={`group relative overflow-hidden rounded-[10px] border border-slate-200 bg-white p-3 text-slate-900 shadow-xs transition-all hover:border-slate-300 hover:bg-slate-50 hover:shadow-md ${isDragging ? 'ring-2 ring-indigo-200' : ''}`}
     >
       <span className={`absolute inset-x-0 top-0 h-0.5 ${statusCfg.color}`} />
       <button onClick={onOpen} className="w-full text-left">
@@ -2960,7 +2960,7 @@ function DraggableCard({ candidate, stage, onOpen }: { candidate: Candidate; sta
           <div
             {...listeners}
             onClick={e => e.stopPropagation()}
-            className="mt-0.5 flex-shrink-0 cursor-grab p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+            className="mt-0.5 shrink-0 cursor-grab p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
           >
             <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor">
               <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
@@ -3021,7 +3021,7 @@ function DroppableColumn({ status, stage, candidates, onCardOpen }: {
     : 0;
 
   return (
-    <div className="flex w-[282px] flex-shrink-0 flex-col rounded-[14px] bg-slate-50/80 p-2 shadow-sm">
+    <div className="flex w-[282px] shrink-0 flex-col rounded-[14px] bg-slate-50/80 p-2 shadow-xs">
       <div className="mb-2 flex items-center gap-2 border-b border-slate-200/80 px-1.5 pb-2.5 pt-1">
         <span className={`h-2 w-2 shrink-0 rounded-full ${cfg.color}`} />
         <div className="min-w-0 flex-1">
@@ -3118,7 +3118,7 @@ function DeleteConfirmModal({ candidate, getToken, onClose, onDeleted }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
       <div className="relative z-10 w-full max-w-xs space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-red-500/10 rounded-xl">
@@ -3491,9 +3491,9 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
       <div className="relative z-10 flex max-h-[82vh] w-full max-w-lg flex-col rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-800 p-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 p-4">
           <h2 className="text-lg font-bold text-white">{isEdit ? 'Editar vaga' : 'Criar vaga'}</h2>
           <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800">
             <X className="h-4 w-4" />
@@ -3504,13 +3504,13 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Título da vaga *</label>
               <input type="text" value={form.title} onChange={set('title')} required
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                 placeholder="Ex: Gerente de Produção – Unidade SP" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Cargo *</label>
               <select value={form.jobRoleId} onChange={handleRoleChange} required
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Selecione</option>
                 {roles.filter(r => r.isActive !== false).map(r => (
                   <option key={r.id} value={r.id}>{r.name}</option>
@@ -3520,7 +3520,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Função</label>
               <select value={form.functionId} onChange={handleFunctionChange}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Sem função específica</option>
                 {compatibleFunctions.map(fn => (
                   <option key={fn.id} value={fn.id}>{fn.name}</option>
@@ -3574,7 +3574,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 value={form.functionId ? form.compositionPreset : 'role_100'}
                 onChange={event => setForm(prev => ({ ...prev, compositionPreset: event.target.value as RecruitmentCompositionPreset }))}
                 disabled={!form.functionId}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-60"
               >
                 {COMPOSITION_PRESET_OPTIONS.map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -3611,7 +3611,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                         onChange={event => setScoringAlertJustification(event.target.value)}
                         rows={2}
                         placeholder="Explique por que a vaga pode ser publicada mesmo com estes alertas."
-                        className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                       />
                     </div>
                   )}
@@ -3621,12 +3621,12 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Nº de vagas</label>
               <input type="number" min="1" value={form.slots} onChange={set('slots')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Unidade</label>
               <select value={form.unitId} onChange={handleUnitChange}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Não especificada</option>
                 {units.map(unit => (
                   <option key={unit.id} value={unit.id}>{unit.name}</option>
@@ -3636,7 +3636,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Turno</label>
               <select value={form.shiftDefinitionId} onChange={set('shiftDefinitionId')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Não especificado</option>
                 {availableShiftDefinitions.map(shift => (
                   <option key={shift.id} value={shift.id}>
@@ -3648,12 +3648,12 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Localidade</label>
               <input type="text" value={form.location} onChange={set('location')} placeholder="Ex: São Paulo, SP"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Modalidade de trabalho</label>
               <select value={form.workType} onChange={set('workType')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                 <option value="">Não especificado</option>
                 {WORK_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -3665,7 +3665,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 value={form.contractTypeLabel}
                 onChange={set('contractTypeLabel')}
                 placeholder="Ex: CLT, PJ, temporário"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
               />
             </div>
             <div className="col-span-2">
@@ -3674,30 +3674,30 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 value={form.workSchedule}
                 onChange={set('workSchedule')}
                 rows={2}
-                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 placeholder="Ex: Escala 6x1, turnos alternados, disponibilidade para fins de semana."
               />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Início das inscrições</label>
               <input type="date" value={form.applicationStartAt} onChange={set('applicationStartAt')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Fim das inscrições</label>
               <input type="date" value={form.applicationEndAt} onChange={set('applicationEndAt')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Encerra em</label>
               <input type="date" value={form.closesAt} onChange={set('closesAt')}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm" />
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm" />
             </div>
             {isEdit && (
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Status</label>
                 <select value={form.status} onChange={set('status')}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm">
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm">
                   {(Object.keys(OPENING_STATUS_CONFIG) as JobOpeningStatus[]).map(s => (
                     <option key={s} value={s}>{OPENING_STATUS_CONFIG[s].label}</option>
                   ))}
@@ -3707,7 +3707,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Descrição</label>
               <textarea value={form.description} onChange={set('description')} rows={3}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
                 placeholder="Sobre a vaga, contexto, dia a dia…" />
             </div>
             <div className="col-span-2">
@@ -3715,7 +3715,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 Requisitos <span className="text-slate-600 font-normal">(um por linha)</span>
               </label>
               <textarea value={form.requirements} onChange={set('requirements')} rows={4}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none font-mono"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none font-mono"
                 placeholder="Experiência com gestão de equipes&#10;Disponibilidade de horário&#10;Residir em SP" />
             </div>
             <div className="col-span-2">
@@ -3726,7 +3726,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 value={form.benefits}
                 onChange={set('benefits')}
                 rows={3}
-                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 font-mono text-sm text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 placeholder="Vale-transporte&#10;Bonificações&#10;Day-off aniversário"
               />
             </div>
@@ -3748,7 +3748,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                   value={form.salaryLabel}
                   onChange={set('salaryLabel')}
                   placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 />
               </div>
               )}
@@ -3759,7 +3759,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 value={form.successMessage}
                 onChange={set('successMessage')}
                 rows={3}
-                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 placeholder="Ex: Recebemos sua candidatura. A equipe de recrutamento vai analisar suas informações e entrar em contato quando houver atualização."
               />
             </div>
@@ -3769,7 +3769,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                 value={form.lgpdContractText}
                 onChange={set('lgpdContractText')}
                 rows={4}
-                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 placeholder="Texto completo do contrato/termo LGPD exibido ao candidato antes do envio."
               />
             </div>
@@ -3874,7 +3874,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                         type="text"
                         value={stage.label}
                         onChange={event => updateStage(stage.id, { label: event.target.value })}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                       />
                       <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{STATUS_CONFIG[stage.id].label}</p>
                     </div>
@@ -3888,7 +3888,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                           dueDays: event.target.value === '' ? null : Number(event.target.value),
                         })}
                         placeholder="dias"
-                        className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                       />
                     </div>
                     <div className="flex items-center justify-end gap-1">
@@ -3947,7 +3947,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                             type="text"
                             value={question.text}
                             onChange={event => updateQuestion(question.id, { text: event.target.value })}
-                            className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                            className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                           />
                           <QuestionSectionEditor
                             question={question}
@@ -4000,7 +4000,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                               onChange={event => updateQuestionOptions(question.id, event.target.value)}
                               rows={3}
                               placeholder={'Opções, uma por linha\nManhã\nTarde/noite\nFlexível'}
-                              className="mt-3 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                              className="mt-3 w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                             />
                           )}
                           <QuestionScoringEditor
@@ -4019,7 +4019,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                         <select
                           value={question.type}
                           onChange={event => updateQuestion(question.id, { type: event.target.value as HrFormQuestion['type'] })}
-                          className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                          className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                         >
                           {QUESTION_TYPES.map(type => (
                             <option key={type.value} value={type.value}>{type.label}</option>
@@ -4066,7 +4066,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                     type="text"
                     value={questionDraft.text}
                     onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                     placeholder="Ex: Você tem disponibilidade aos domingos?"
                   />
                 </div>
@@ -4076,7 +4076,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                     type="text"
                     value={questionDraft.sectionTitle}
                     onChange={event => setQuestionDraft(prev => ({ ...prev, sectionTitle: event.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                     placeholder="Ex: Disponibilidade"
                   />
                 </div>
@@ -4086,7 +4086,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                     value={questionDraft.parentQuestionId}
                     onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
                     disabled={questions.length === 0}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-50"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm disabled:opacity-50"
                   >
                     <option value="">Pergunta principal</option>
                     {questions.map(question => (
@@ -4127,7 +4127,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                   <select
                     value={questionDraft.type}
                     onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm"
                   >
                     {QUESTION_TYPES.map(type => (
                       <option key={type.value} value={type.value}>{type.label}</option>
@@ -4158,7 +4158,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
                       value={questionDraft.optionsText}
                       onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
                       rows={3}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 text-sm resize-none"
                       placeholder={'Manhã\nTarde/noite\nFlexível'}
                     />
                   </div>
@@ -4178,7 +4178,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
           </div>
           {error && <ErrorLine msg={error} />}
         </form>
-        <div className="flex flex-shrink-0 justify-end gap-2 border-t border-slate-800 p-4">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-slate-800 p-4">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white rounded-xl hover:bg-slate-800">
             Cancelar
           </button>
@@ -4282,13 +4282,13 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
         <p className="text-slate-500 text-sm">{openings.filter(o => o.status === 'open').length} vagas abertas</p>
         {canManage && (
           <button onClick={() => setModal('new')}
-            className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
+            className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-slate-800">
             <Plus className="h-4 w-4" /> Criar vaga
           </button>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-xs">
         <div className="relative min-w-0 flex-1 basis-full sm:basis-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -4296,13 +4296,13 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
             value={search}
             onChange={event => setSearch(event.target.value)}
             placeholder="Buscar vaga, cargo ou unidade…"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
         <select
           value={filterStatus}
           onChange={event => setFilterStatus(event.target.value as JobOpeningStatus | '')}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
         >
           <option value="">Todos os status</option>
           <option value="open">Abertas</option>
@@ -4312,7 +4312,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
         <select
           value={filterRole}
           onChange={event => setFilterRole(event.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
         >
           <option value="">Todos os cargos</option>
           {roles.filter(role => role.isActive !== false).map(role => (
@@ -4322,7 +4322,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
         <select
           value={filterUnit}
           onChange={event => setFilterUnit(event.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
         >
           <option value="">Todas as unidades</option>
           {unitOptions.map(unit => (
@@ -4353,7 +4353,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
       )}
 
       {openings.length > 0 && filteredOpenings.length === 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center shadow-xs">
           <SlidersHorizontal className="mx-auto mb-3 h-8 w-8 text-slate-300" />
           <p className="text-sm font-semibold text-slate-700">Nenhuma vaga encontrada com esses filtros.</p>
           <p className="mt-1 text-sm text-slate-500">Ajuste a busca ou limpe os filtros para ver todas as vagas.</p>
@@ -4383,7 +4383,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
                 const scoringSummary = getOpeningScoringSummary(opening);
                 return (
                   <div key={opening.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:border-slate-300">
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-colors hover:border-slate-300">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -4435,7 +4435,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {opening.status === 'open' && (
                           <a
                             href={`${PUBLIC_RECRUITMENT_URL}/${opening.slug}`}
@@ -4500,7 +4500,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setDeleteTarget(null)} />
           <div className="relative z-10 w-full max-w-xs space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
             <h3 className="font-bold text-slate-950">Excluir vaga?</h3>
             <p className="text-sm text-slate-500">"{deleteTarget.title}" será removida permanentemente.</p>
@@ -4618,17 +4618,17 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nome ou e-mail…"
-            className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 w-52 text-sm" />
+            className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 w-52 text-sm" />
         </div>
         {roleOptions.length > 0 && (
           <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-            className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
             <option value="">Todos os cargos</option>
             {roleOptions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         )}
         <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
-          className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+          className="px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-300 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
           <option value="">Avaliação</option>
           <option value="1">1+ estrela</option>
           <option value="2">2+ estrelas</option>
@@ -4716,7 +4716,7 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
 
       {reactivationTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setReactivationTarget(null)} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setReactivationTarget(null)} />
           <div className="relative z-10 w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -4747,7 +4747,7 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
                     setReactivationOpeningId(openingId);
                     setReactivationStage(stages[0]?.id ?? 'applied');
                   }}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 >
                   <option value="">Selecione uma vaga</option>
                   {activeOpenings.map(opening => (
@@ -4767,7 +4767,7 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
                   value={reactivationStage}
                   onChange={event => setReactivationStage(event.target.value as CandidateStatus)}
                   disabled={!reactivationOpeningId}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-hidden focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50"
                 >
                   {reactivationStages.map(stage => (
                     <option key={stage.id} value={stage.id}>{stage.label}</option>
@@ -4798,7 +4798,7 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
                   onChange={event => setReactivationNote(event.target.value)}
                   rows={3}
                   placeholder="Ex: Retomar pela entrevista com liderança."
-                  className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  className="w-full resize-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-600 outline-hidden focus:ring-2 focus:ring-indigo-500/30"
                 />
               </div>
 
@@ -4983,7 +4983,7 @@ function IntegrationModelSettingsEditor({ roles, functions, getToken, canManage,
               value={query}
               onChange={event => setQuery(event.target.value)}
               placeholder="Buscar cargo ou função..."
-              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-slate-400"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-hidden focus:border-slate-400"
             />
           </div>
         </div>
@@ -5085,7 +5085,7 @@ function IntegrationModelSettingsEditor({ roles, functions, getToken, canManage,
                       value={stage.label}
                       onChange={event => updateStage(stage.id, { label: event.target.value })}
                       disabled={!canManage}
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400 disabled:opacity-60"
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-hidden focus:border-slate-400 disabled:opacity-60"
                     />
                   </div>
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -5096,7 +5096,7 @@ function IntegrationModelSettingsEditor({ roles, functions, getToken, canManage,
                       value={stage.dueDays ?? ''}
                       onChange={event => updateStage(stage.id, { dueDays: event.target.value === '' ? null : Number(event.target.value) })}
                       disabled={!canManage}
-                      className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400 disabled:opacity-60"
+                      className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-hidden focus:border-slate-400 disabled:opacity-60"
                     />
                   </label>
                 </div>
@@ -5420,7 +5420,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
 
   if (modelOptions.length === 0) {
     return (
-      <div className="w-full min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+      <div className="w-full min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-xs">
         <Briefcase className="mx-auto mb-3 h-10 w-10 text-slate-300" />
         <p className="text-sm font-medium text-slate-500">
           Nenhum cargo ou função disponível para configurar modelo.
@@ -5431,7 +5431,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
         <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold text-slate-950">Selecionar cargo ou função</h2>
@@ -5454,7 +5454,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                   }}
                   onBlur={() => window.setTimeout(() => setSelectorOpen(false), 140)}
                   placeholder="Buscar cargo ou função..."
-                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-hidden placeholder:text-slate-400"
                 />
                 {selectedOption ? (
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-500">
@@ -5554,7 +5554,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
               type="button"
               onClick={saveModel}
               disabled={saving || !selected}
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#EE6FA8] px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] disabled:opacity-60"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#EE6FA8] px-5 text-sm font-semibold text-white shadow-xs hover:bg-[#D9528E] disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar modelo
@@ -5577,7 +5577,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
       />
 
       {modelStep !== 'form' && (
-      <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div>
             <h3 className="text-sm font-bold text-slate-950">
@@ -5600,7 +5600,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.publicTitle}
                 onChange={event => setModelText(prev => ({ ...prev, publicTitle: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder={selected?.name ?? 'Título público'}
               />
             </div>
@@ -5610,7 +5610,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.locationLabel}
                 onChange={event => setModelText(prev => ({ ...prev, locationLabel: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Ex: JK - São Paulo"
               />
             </div>
@@ -5620,7 +5620,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.workSchedule}
                 onChange={event => setModelText(prev => ({ ...prev, workSchedule: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Ex: Escala 6x1, fins de semana alternados"
               />
             </div>
@@ -5630,7 +5630,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.workType}
                 onChange={event => setModelText(prev => ({ ...prev, workType: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
               >
                 <option value="">Definir na vaga</option>
                 {WORK_TYPE_OPTIONS.map(option => (
@@ -5644,7 +5644,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.contractTypeLabel}
                 onChange={event => setModelText(prev => ({ ...prev, contractTypeLabel: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Ex: CLT, PJ, temporário"
               />
             </div>
@@ -5654,7 +5654,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.deadlineLabel}
                 onChange={event => setModelText(prev => ({ ...prev, deadlineLabel: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Ex: Inscrições de 01/07 a 15/07"
               />
             </div>
@@ -5674,7 +5674,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={modelText.salaryLabel}
                 onChange={event => setModelText(prev => ({ ...prev, salaryLabel: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Ex: R$ 1.800, R$ 1.800 a R$ 2.750 ou A combinar"
               />
             </div>
@@ -5686,7 +5686,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 onChange={event => setModelText(prev => ({ ...prev, publicDescription: event.target.value }))}
                 disabled={!canManage}
                 rows={5}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Texto base que aparecerá na vaga pública."
               />
             </div>
@@ -5697,7 +5697,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 onChange={event => setModelText(prev => ({ ...prev, publicRequirements: event.target.value }))}
                 disabled={!canManage}
                 rows={5}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder={'Um por linha\nAtendimento ao cliente\nDisponibilidade de horário\nExperiência com atendimento'}
               />
             </div>
@@ -5708,7 +5708,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 onChange={event => setModelText(prev => ({ ...prev, benefits: event.target.value }))}
                 disabled={!canManage}
                 rows={4}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder={'Um por linha\nVale-transporte\nBonificações'}
               />
             </div>
@@ -5719,7 +5719,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 onChange={event => setModelText(prev => ({ ...prev, successMessage: event.target.value }))}
                 disabled={!canManage}
                 rows={3}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Ex: Recebemos sua candidatura. A equipe de recrutamento vai analisar suas informações e entrar em contato quando houver atualização."
               />
             </div>
@@ -5730,7 +5730,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 onChange={event => setModelText(prev => ({ ...prev, lgpdContractText: event.target.value }))}
                 disabled={!canManage}
                 rows={5}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Texto completo do contrato/termo LGPD exibido ao candidato antes do envio."
               />
             </div>
@@ -5738,7 +5738,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
 
           <div className={modelStep === 'public' ? 'min-w-0 rounded-2xl border border-slate-200 bg-[#f0eee9] p-4' : 'hidden'}>
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Prévia da página pública</p>
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
               <div className="bg-[#2A1F2A] p-4 text-white">
                 <div className="flex flex-wrap gap-1.5">
                   {(modelText.locationLabel.trim() || 'Unidade definida na vaga') && (
@@ -5822,7 +5822,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
       )}
 
       {modelStep === 'form' && (
-      <section className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-slate-950">Formulário</h3>
@@ -5895,7 +5895,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={draft.text}
                 onChange={event => setDraft(prev => ({ ...prev, text: event.target.value }))}
                 placeholder="Ex: Tem disponibilidade aos domingos?"
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10"
               />
             </div>
             <div>
@@ -5903,7 +5903,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
               <select
                 value={draft.type}
                 onChange={event => setDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-hidden focus:ring-2 focus:ring-slate-900/10"
               >
                 {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
@@ -5914,7 +5914,7 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 value={draft.parentQuestionId}
                 onChange={event => setDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
                 disabled={questions.length === 0}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
               >
                 <option value="">Pergunta principal</option>
                 {questions.map(question => (
@@ -5943,13 +5943,13 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
                 onChange={event => setDraft(prev => ({ ...prev, optionsText: event.target.value }))}
                 rows={3}
                 placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 lg:col-span-3"
+                className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 lg:col-span-3"
               />
             )}
             <button
               type="button"
               onClick={addQuestion}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] lg:col-span-3"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-xs hover:bg-[#D9528E] lg:col-span-3"
             >
               <Plus className="h-4 w-4" /> Adicionar campo
             </button>
@@ -6265,7 +6265,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
             href={`${PUBLIC_RECRUITMENT_URL}/banco-de-talentos`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 shadow-xs hover:bg-slate-50"
           >
             <ExternalLink className="h-4 w-4" /> Ver no site
           </a>
@@ -6274,7 +6274,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               type="button"
               onClick={saveForm}
               disabled={saving}
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] disabled:opacity-60"
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-xs hover:bg-[#D9528E] disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Salvar alterações
@@ -6337,14 +6337,14 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
               type="button"
               onClick={saveForm}
               disabled={saving}
-              className="hidden h-8 items-center gap-2 rounded-full bg-[#EE6FA8] px-3 text-xs font-semibold text-white shadow-sm hover:bg-[#D9528E] disabled:opacity-60 md:inline-flex"
+              className="hidden h-8 items-center gap-2 rounded-full bg-[#EE6FA8] px-3 text-xs font-semibold text-white shadow-xs hover:bg-[#D9528E] disabled:opacity-60 md:inline-flex"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               Salvar alterações
             </button>
           )}
         </div>
-        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="grid min-w-0 gap-3 lg:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Título</label>
@@ -6352,7 +6352,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 value={form.title}
                 onChange={event => setForm(prev => ({ ...prev, title: event.target.value }))}
                 disabled={!canManage}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
               />
             </div>
             <div>
@@ -6362,7 +6362,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 onChange={event => setForm(prev => ({ ...prev, description: event.target.value }))}
                 disabled={!canManage}
                 rows={3}
-                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
               />
             </div>
             <div>
@@ -6372,7 +6372,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 onChange={event => setForm(prev => ({ ...prev, consentText: event.target.value }))}
                 disabled={!canManage}
                 rows={3}
-                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
               />
             </div>
             <div>
@@ -6382,7 +6382,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 onChange={event => setForm(prev => ({ ...prev, successMessage: event.target.value }))}
                 disabled={!canManage}
                 rows={3}
-                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Mensagem exibida depois que o candidato envia o cadastro."
               />
             </div>
@@ -6393,7 +6393,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 onChange={event => setForm(prev => ({ ...prev, lgpdContractText: event.target.value }))}
                 disabled={!canManage}
                 rows={5}
-                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 placeholder="Texto completo do contrato/termo LGPD exibido ao candidato antes do envio."
               />
             </div>
@@ -6419,7 +6419,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
           <h3 className="text-sm font-bold text-slate-950">Campos fixos</h3>
           <p className="mt-1 text-xs text-slate-500">Sempre presentes no formulário para proteger o fluxo público. Não podem ser removidos.</p>
         </div>
-        <div className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-xs">
           {['Nome completo', 'E-mail', 'Telefone / WhatsApp', 'Currículo', 'Consentimento LGPD'].map((item, index) => (
             <div key={item} className="flex items-center justify-between border-b border-slate-100 px-4 py-3 last:border-b-0">
               <div className="flex items-center gap-3">
@@ -6499,7 +6499,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
       {canManage && (
         <section className="min-w-0 space-y-3">
           <h3 className="text-sm font-bold text-slate-950">Adicionar campo</h3>
-          <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
             <QuestionDraftSectionControls
               draft={questionDraft}
               questions={form.questions}
@@ -6512,7 +6512,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                   value={questionDraft.text}
                   onChange={event => setQuestionDraft(prev => ({ ...prev, text: event.target.value }))}
                   placeholder="Ex: Tem disponibilidade aos domingos?"
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10"
                 />
               </div>
               <div>
@@ -6520,7 +6520,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                 <select
                   value={questionDraft.type}
                   onChange={event => setQuestionDraft(prev => ({ ...prev, type: event.target.value as HrFormQuestion['type'] }))}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-hidden focus:ring-2 focus:ring-slate-900/10"
                 >
                   {QUESTION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
                 </select>
@@ -6531,7 +6531,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                   value={questionDraft.parentQuestionId}
                   onChange={event => setQuestionDraft(prev => ({ ...prev, parentQuestionId: event.target.value }))}
                   disabled={form.questions.length === 0}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-hidden focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                 >
                   <option value="">Pergunta principal</option>
                   {form.questions.map(question => (
@@ -6564,13 +6564,13 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
                   onChange={event => setQuestionDraft(prev => ({ ...prev, optionsText: event.target.value }))}
                   rows={3}
                   placeholder={'Opções, uma por linha\nSim\nNão\nTalvez'}
-                  className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-900/10 lg:col-span-3"
+                  className="resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-slate-900/10 lg:col-span-3"
                 />
               )}
               <button
                 type="button"
                 onClick={addQuestion}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#D9528E] lg:col-span-3"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#EE6FA8] px-4 text-sm font-semibold text-white shadow-xs hover:bg-[#D9528E] lg:col-span-3"
               >
                 <Plus className="h-4 w-4" /> Adicionar campo
               </button>
@@ -7034,12 +7034,12 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   };
 
   return (
-    <div className="personal-recruitment-density flex min-h-[calc(100vh-5rem)] w-full min-w-0 flex-col space-y-3 overflow-x-hidden rounded-xl border border-white/70 bg-white/85 p-3 text-slate-900 shadow-sm backdrop-blur">
+    <div className="personal-recruitment-density flex min-h-[calc(100vh-5rem)] w-full min-w-0 flex-col space-y-3 overflow-x-hidden rounded-xl border border-white/70 bg-white/85 p-3 text-slate-900 shadow-xs backdrop-blur-sm">
 
       {refreshError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900"><span>{refreshError}</span><button type="button" onClick={() => void loadData()} className="font-black text-amber-800 underline underline-offset-2">Tentar atualizar novamente</button></div> : null}
 
       {/* A integração possui um cabeçalho próprio com status, busca e histórico. */}
-      {section !== 'integration' && <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
+      {section !== 'integration' && <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-xs md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-400">{sectionMeta.eyebrow}</p>
           <h1 className="text-lg font-bold tracking-tight text-slate-950">{sectionMeta.title}</h1>
@@ -7053,7 +7053,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
             <button
               type="button"
               onClick={() => { setViewMode('openings'); setFilterOpening(''); }}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-xs font-medium text-white shadow-sm hover:bg-slate-800"
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-xs font-medium text-white shadow-xs hover:bg-slate-800"
             >
               <Briefcase className="h-4 w-4" />
               Voltar para vagas
@@ -7087,7 +7087,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
                   </span>
                 )}
               </div>
-              <svg width="48" height="28" className="flex-shrink-0 text-indigo-400">
+              <svg width="48" height="28" className="shrink-0 text-indigo-400">
                 {stats.sparkData.map((v, i) => {
                   const max = Math.max(...stats.sparkData, 1);
                   const bh = Math.max((v / max) * 24, 2);
@@ -7164,7 +7164,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
       {/* ─── Pipeline filters ─── */}
       {section === 'jobs' && viewMode !== 'openings' && (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-xs">
           <div className="mr-2 hidden items-center gap-2 border-r border-slate-100 pr-3 text-sm font-semibold text-slate-950 md:flex">
             <Kanban className="h-4 w-4 text-slate-500" />
             Board
@@ -7174,12 +7174,12 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar candidato e e-mail…"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20" />
           </div>
 
           {openings.length > 0 && (
             <select value={filterOpening} onChange={e => setFilterOpening(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
               <option value="">Todas as vagas</option>
               {openings.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}
             </select>
@@ -7187,7 +7187,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
           {locationOptions.length > 0 && (
             <select value={filterLocation} onChange={e => setFilterLocation(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
               <option value="">Todas unidades</option>
               {locationOptions.map(loc => <option key={loc} value={loc}>{loc}</option>)}
             </select>
@@ -7195,14 +7195,14 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
           {sourceOptions.length > 0 && (
             <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
               <option value="">Todas origens</option>
               {sourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
             </select>
           )}
 
           <select value={filterRating} onChange={e => setFilterRating(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
             <option value="">Avaliação</option>
             <option value="1">1+ estrela</option>
             <option value="2">2+ estrelas</option>
@@ -7212,7 +7212,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           </select>
 
           <select value={filterEligibility} onChange={e => setFilterEligibility(e.target.value as CandidateEligibilityFilter)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
             <option value="">Elegibilidade</option>
             <option value="eligible">Apenas elegíveis</option>
             <option value="not_eligible">Não atende mínimo</option>
@@ -7220,7 +7220,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           </select>
 
           <select value={sortMode} onChange={e => setSortMode(e.target.value as CandidateSortMode)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20">
             <option value="recent">Mais recentes</option>
             <option value="score_desc">Maior score</option>
             <option value="score_asc">Menor score</option>
@@ -7244,7 +7244,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           )}
           <button
             type="button"
-            className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50"
           >
             <SlidersHorizontal className="h-4 w-4" />
             Filtros
@@ -7253,7 +7253,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       )}
 
       {section === 'jobs' && viewMode !== 'openings' && selectedOpening && (
-        <div className="rounded-2xl border border-pink-100 bg-pink-50/60 p-4 shadow-sm">
+        <div className="rounded-2xl border border-pink-100 bg-pink-50/60 p-4 shadow-xs">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -7276,7 +7276,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
               {selectedOpeningPipelineStages.map(stage => {
                 const cfg = STATUS_CONFIG[stage.id];
                 return (
-                  <span key={stage.id} className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+                  <span key={stage.id} className="rounded-xl border border-white bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs">
                     <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${cfg.color}`} />
                     {stage.label}: {selectedOpeningStatusCounts[stage.id]}
                   </span>
@@ -7287,7 +7287,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
                   href={`${PUBLIC_RECRUITMENT_URL}/${selectedOpening.slug}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:text-slate-950"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:text-slate-950"
                 >
                   Ver vaga pública
                 </a>
@@ -7295,7 +7295,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
               <button
                 type="button"
                 onClick={() => { setViewMode('openings'); setFilterOpening(''); }}
-                className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
+                className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800"
               >
                 Voltar para vagas
               </button>
@@ -7391,9 +7391,9 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
                     <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/60 hover:bg-slate-800/40 transition-colors">
                       <button onClick={toggle} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                         {isCollapsed
-                          ? <ChevronRight className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />
-                          : <ChevronDown className="h-3.5 w-3.5 text-slate-500 flex-shrink-0" />}
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.color}`} />
+                          ? <ChevronRight className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                          : <ChevronDown className="h-3.5 w-3.5 text-slate-500 shrink-0" />}
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.color}`} />
                         <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">{cfg.label}</span>
                         <span className="text-xs text-slate-600 ml-1">{group.length}</span>
                       </button>
@@ -7427,7 +7427,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
                                 <EligibilityBadge candidate={candidate} />
                               </div>
                             </div>
-                            {candidate.resumeUrl && <Paperclip className="h-3 w-3 text-slate-600 flex-shrink-0" />}
+                            {candidate.resumeUrl && <Paperclip className="h-3 w-3 text-slate-600 shrink-0" />}
                           </div>
                           <span className="text-xs text-slate-400 truncate hidden md:block">{candidate.jobRoleName ?? '—'}</span>
                           <div className="hidden lg:block"><RatingStars value={candidate.rating ?? 0} readonly /></div>

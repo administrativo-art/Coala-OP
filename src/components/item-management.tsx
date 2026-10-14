@@ -470,7 +470,7 @@ const COUNTING_MODE_TEXT: Record<CountingUnitOption, string> = {
   content: 'Unidade do conteúdo',
 };
 
-export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) {
+export function ItemManagement({ view, onViewChange }: CadastrosTabProps) {
   const { products, loading: productsLoading, getProductFullName, updateProduct, updateMultipleProducts, deleteMultipleProducts } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { activeCategories, loading: categoriesLoading } = useOperationalItemCategories();
@@ -626,7 +626,6 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
       <div className="flex flex-col gap-4">
         <CadastrosHero
           kicker="Cadastros operacionais"
-          tabs={tabs}
           search={{ value: searchTerm, onChange: setSearchTerm, placeholder: 'Buscar por insumo, marca, insumo base ou cód. de barras' }}
           status={{ value: status, onChange: changeStatus, activeCount, inactiveCount, inactiveLabel: 'Arquivados' }}
           manage={{ label: 'Categorias de item', onClick: () => setIsOperationalCategoriesOpen(true) }}
@@ -668,7 +667,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
                   isMuted={!!product.isArchived}
                   onOpen={() => setOpenId(product.id)}
                 >
-                  <div className="relative -mx-[18px] -mt-[18px] flex h-[110px] items-end justify-between overflow-hidden rounded-t-[20px] bg-[repeating-linear-gradient(135deg,#f1efe9_0_10px,#e9e6df_10px_20px)] px-3.5 py-3">
+                  <div className="relative mx-[-18px] mt-[-18px] flex h-[110px] items-end justify-between overflow-hidden rounded-t-[20px] bg-[repeating-linear-gradient(135deg,#f1efe9_0_10px,#e9e6df_10px_20px)] px-3.5 py-3">
                     {product.imageUrl ? (
                       <Image src={product.imageUrl} alt="" fill sizes="270px" className="object-cover" />
                     ) : null}
@@ -682,7 +681,7 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
                     </span>
                   </div>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="break-words text-[17px] font-extrabold leading-[1.2] tracking-[-0.02em]">{product.baseName}</span>
+                    <span className="wrap-break-word text-[17px] font-extrabold leading-[1.2] tracking-[-0.02em]">{product.baseName}</span>
                     <span className="truncate text-xs text-[#8a8f99]">{subOf(product)}</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">

@@ -26,11 +26,16 @@ export function CloseGoalModal({ open, onOpenChange, period }: CloseGoalModalPro
   const handleClose = async (status: 'closed' | 'cancelled') => {
     if (!period || !note.trim()) return;
     setLoading(true);
-    await closePeriod(period.id, status, note.trim(), user?.id ?? '');
-    toast({ title: status === 'closed' ? 'Meta encerrada.' : 'Meta cancelada.' });
-    setNote('');
-    setLoading(false);
-    onOpenChange(false);
+    try {
+      await closePeriod(period.id, status, note.trim(), user?.id ?? '');
+      toast({ title: status === 'closed' ? 'Meta encerrada.' : 'Meta cancelada.' });
+      setNote('');
+      onOpenChange(false);
+    } catch {
+      toast({ title: 'Não foi possível encerrar a meta.', description: 'A escala ou a equipe mudou. Atualize os dados e tente novamente.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -14,11 +14,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/audit` | [page.tsx](../../src/app/dashboard/audit/page.tsx) | [stock-session-management.tsx](../../src/components/stock-session-management.tsx) |
 
-## collaborator (2)
+## collaborator (3)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/collaborator` | [page.tsx](../../src/app/dashboard/collaborator/page.tsx) | [collaborator-dashboard-panel.tsx](../../src/components/collaborator-dashboard-panel.tsx) |
+| `dashboard/collaborator/requests` | [page.tsx](../../src/app/dashboard/collaborator/requests/page.tsx) | [collaborator-requests-page.tsx](../../src/features/hr/requests/collaborator-requests-page.tsx) |
 | `dashboard/collaborator/schedule` | [page.tsx](../../src/app/dashboard/collaborator/schedule/page.tsx) | [collaborator-schedule-page.tsx](../../src/components/collaborator-schedule-page.tsx) |
 
 ## commercial (1)
@@ -53,18 +54,19 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) | [template-variable-wizard.tsx](../../src/components/hr/documents/template-variable-wizard.tsx), [collective-agreements-panel.tsx](../../src/components/hr/documents/collective-agreements-panel.tsx) |
 | `dashboard/documents/templates` | [page.tsx](../../src/app/dashboard/documents/templates/page.tsx) | [document-template-workflow.ts](../../src/features/hr/documents/document-template-workflow.ts), [document-template-display-status.ts](../../src/features/hr/documents/document-template-display-status.ts) |
 
-## dp (23)
+## dp (24)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/dp/collaborators/[userId]/documents` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx) | [inline-confirm.tsx](../../src/components/patterns/inline-confirm.tsx), [employee-document-options.ts](../../src/lib/hr/employee-document-options.ts) |
-| `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | [user-management.tsx](../../src/components/user-management.tsx) |
+| `dashboard/dp/collaborators/[userId]/edit` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx) | Ler a própria página |
 | `dashboard/dp/collaborators/[userId]` | [page.tsx](../../src/app/dashboard/dp/collaborators/[userId]/page.tsx) | [use-toast.ts](../../src/hooks/use-toast.ts), [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts) |
 | `dashboard/dp/collaborators` | [page.tsx](../../src/app/dashboard/dp/collaborators/page.tsx) | [hero-chip.tsx](../../src/components/patterns/hero-chip.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/dp/documents` | [page.tsx](../../src/app/dashboard/dp/documents/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [index.ts](../../src/types/index.ts) |
 | `dashboard/dp/ferias/[userId]` | [page.tsx](../../src/app/dashboard/dp/ferias/[userId]/page.tsx) | [dp-ferias-profile.tsx](../../src/components/dp/dp-ferias-profile.tsx) |
 | `dashboard/dp/ferias` | [page.tsx](../../src/app/dashboard/dp/ferias/page.tsx) | [dp-ferias-manager.tsx](../../src/components/dp/dp-ferias-manager.tsx), [page-header.tsx](../../src/components/layout/page-header.tsx) |
 | `dashboard/dp` | [page.tsx](../../src/app/dashboard/dp/page.tsx) | [use-dp-bootstrap.ts](../../src/hooks/use-dp-bootstrap.ts), [use-dp-schedules-shifts.ts](../../src/hooks/use-dp-schedules-shifts.ts) |
+| `dashboard/dp/requests` | [page.tsx](../../src/app/dashboard/dp/requests/page.tsx) | [hr-requests-page.tsx](../../src/features/hr/requests/hr-requests-page.tsx) |
 | `dashboard/dp/schedules/[id]` | [page.tsx](../../src/app/dashboard/dp/schedules/[id]/page.tsx) | [dp-context.tsx](../../src/components/dp-context.tsx), [dp-schedule-editor.tsx](../../src/components/dp/dp-schedule-editor.tsx) |
 | `dashboard/dp/schedules/month/[period]` | [page.tsx](../../src/app/dashboard/dp/schedules/month/[period]/page.tsx) | [dp-schedule-month-view.tsx](../../src/components/dp/dp-schedule-month-view.tsx), [dp-schedule-periods.ts](../../src/lib/dp-schedule-periods.ts) |
 | `dashboard/dp/schedules` | [page.tsx](../../src/app/dashboard/dp/schedules/page.tsx) | [dp-schedules-list.tsx](../../src/components/dp/dp-schedules-list.tsx) |
@@ -275,10 +277,11 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/rh/me` | [page.tsx](../../src/app/dashboard/rh/me/page.tsx) | [MyProfilePage.tsx](../../src/features/rh/components/MyProfilePage.tsx) |
 | `dashboard/rh/sync` | [page.tsx](../../src/app/dashboard/rh/sync/page.tsx) | [SyncPanel.tsx](../../src/features/rh/components/SyncPanel.tsx) |
 
-## settings (3)
+## settings (4)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
+| `dashboard/settings/documents/templates/[id]` | [page.tsx](../../src/app/dashboard/settings/documents/templates/[id]/page.tsx) | [page.tsx](../../src/app/dashboard/documents/templates/[id]/page.tsx) |
 | `dashboard/settings` | [page.tsx](../../src/app/dashboard/settings/page.tsx) | [use-hr-bootstrap.ts](../../src/hooks/use-hr-bootstrap.ts), [permission-guard.tsx](../../src/components/permission-guard.tsx) |
 | `dashboard/settings/pdv-sync` | [page.tsx](../../src/app/dashboard/settings/pdv-sync/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [pdv-sync-management.tsx](../../src/components/pdv-sync-management.tsx) |
 | `dashboard/settings/units` | [page.tsx](../../src/app/dashboard/settings/units/page.tsx) | [permission-guard.tsx](../../src/components/permission-guard.tsx), [dp-runtime-guard.tsx](../../src/components/dp-runtime-guard.tsx) |
@@ -337,4 +340,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **160 páginas** no checkout usado para a geração.
+Total: **163 páginas** no checkout usado para a geração.

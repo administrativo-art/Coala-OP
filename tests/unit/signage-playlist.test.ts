@@ -145,7 +145,7 @@ test("cada tela tem a própria sequência; sem posição própria vale a ordem g
   assert.deepEqual(buildPublishedSlides("vitrine", slides).map((item) => [item.id, item.order]), [["b", 0], ["c", 1], ["a", 2]]);
 });
 
-test("slide anterior às telas pertence à tela padrão da unidade", () => {
+test("slide anterior às telas pertence à primeira tela da unidade", () => {
   assert.deepEqual(getSlideScreenIds({ kioskIds: ["k1", "k2"] }), ["k1", "k2"]);
   assert.deepEqual(getSlideScreenIds({ kioskIds: ["k1"], screenIds: [] }), ["k1"]);
   assert.deepEqual(getSlideScreenIds({ kioskIds: ["k1"], screenIds: ["vitrine"] }), ["vitrine"]);

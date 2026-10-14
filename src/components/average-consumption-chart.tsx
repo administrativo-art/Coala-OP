@@ -303,7 +303,7 @@ function ConsumptionCard({ data, onCompareClick, formatDisplayQuantity, periodIc
             </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-grow">
+      <CardContent className="grow">
         <div className={cn("text-4xl font-bold flex items-center gap-2", periodColorClass)}>
           <PeriodIcon className="h-8 w-8" />
           <span>{data.periodChangePct.toFixed(0)}%</span>
@@ -718,7 +718,7 @@ export function AverageConsumptionChart() {
                                 )}
                             </div>
                         </div>
-                        <div className="flex-shrink-0">
+                        <div className="shrink-0">
                             <ToggleGroup type="single" value={view} onValueChange={(v) => { if (v) setView(v as any)}}>
                                 <ToggleGroupItem value="cards">Cards</ToggleGroupItem>
                                 <ToggleGroupItem value="chart">Comparativo</ToggleGroupItem>

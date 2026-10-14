@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { useForm, type FieldPath, type FieldValues, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,7 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Segmented } from '@/components/patterns/segmented';
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt, Inbox } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -41,7 +42,30 @@ type ProfileManagementModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit: boolean;
+  initialAction?: 'manage' | 'create' | 'edit' | 'duplicate';
+  initialProfile?: Profile | null;
 };
+
+export async function logProfileAudit(
+  firebaseUser: FirebaseUser | null,
+  action: string,
+  target: Pick<Profile, 'id' | 'name'> | null,
+  metadata: Record<string, unknown> = {},
+) {
+  if (!firebaseUser) return;
+  try {
+    await createAuditLog(firebaseUser, {
+      module: 'settings.profiles',
+      action,
+      targetType: 'profile',
+      targetId: target?.id,
+      targetName: target?.name,
+      metadata,
+    });
+  } catch (error) {
+    console.warn('[ProfileManagementModal] Falha ao registrar auditoria.', error);
+  }
+}
 
 function flattenPermissions(value: unknown, prefix = ""): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -85,10 +109,14 @@ function DuplicateProfileModal({
   profileToDuplicate,
   onClose,
   onConfirm,
+  error,
+  saving,
 }: {
   profileToDuplicate: Profile | null;
   onClose: () => void;
   onConfirm: (newName: string) => void;
+  error: string | null;
+  saving: boolean;
 }) {
   const [newName, setNewName] = useState('');
 
@@ -102,24 +130,27 @@ function DuplicateProfileModal({
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Duplicar perfil "{profileToDuplicate.name}"</DialogTitle>
-          <DialogDescription>
+      <DialogContent flush className="overflow-hidden border-ds-border bg-ds-surface p-0 sm:max-w-[560px]" overlayClassName="bg-black/55 backdrop-blur-[2px]">
+        <DialogHeader className="border-b border-ds-divider px-5 py-5 pr-14 text-left sm:px-6">
+          <p className="text-[10.5px] font-black uppercase tracking-[.12em] text-ds-accent-kicker">Perfil de acesso</p>
+          <DialogTitle className="mt-1.5 text-xl font-black text-ds-ink">Duplicar perfil</DialogTitle>
+          <DialogDescription className="mt-1.5 text-xs font-medium leading-5 text-ds-ink-muted">
             Insira um nome para o novo perfil que terá as mesmas permissões.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
+        <div className="bg-ds-page px-5 py-5 sm:px-6">
+          <p className="mb-3 rounded-ds-md border border-ds-border bg-ds-surface px-3 py-2 text-xs font-semibold text-ds-ink-muted">Origem: <span className="font-black text-ds-ink">{profileToDuplicate.name}</span></p>
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Nome do novo perfil"
           />
+          {error ? <p role="alert" className="mt-2 text-xs text-ds-danger">{error}</p> : null}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => onConfirm(newName)} disabled={!newName.trim()}>
-            Criar Duplicata
+        <DialogFooter className="flex-row justify-end gap-2 border-t border-ds-divider px-5 py-4 sm:space-x-0 sm:px-6">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={() => onConfirm(newName)} disabled={!newName.trim() || saving} loading={saving}>
+            Criar cópia
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -127,13 +158,15 @@ function DuplicateProfileModal({
   );
 }
 
-export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileManagementModalProps) {
+export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAction = 'manage', initialProfile = null }: ProfileManagementModalProps) {
   const { profiles, addProfile, updateProfile, deleteProfile, adminProfileId } = useProfiles();
   const { firebaseUser } = useAuth();
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
   const [profileToDuplicate, setProfileToDuplicate] = useState<Profile | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -147,16 +180,25 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     if (open) {
       setShowForm(false);
       setEditingProfile(null);
+      setActionError(null);
+      if (!canEdit) return;
+      if (initialAction === 'create') handleAddNew();
+      if (initialAction === 'edit' && initialProfile) handleEdit(initialProfile);
+      if (initialAction === 'duplicate' && initialProfile) setProfileToDuplicate(initialProfile);
     }
+  // The opening action is captured once; profile updates from the listener must not reset a form in progress.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleAddNew = () => {
+    setActionError(null);
     setEditingProfile(null);
     form.reset({ name: '', permissions: defaultGuestPermissions });
     setShowForm(true);
   };
 
   const handleEdit = (profile: Profile) => {
+    setActionError(null);
     setEditingProfile(profile);
     
     const mergeRecursive = (target: Record<string, any>, source: Record<string, any>) => {
@@ -202,73 +244,76 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
   const handleDeleteConfirm = async () => {
     if (profileToDelete) {
-      await deleteProfile(profileToDelete.id);
-      await logProfileAudit('profile_deleted', profileToDelete, {
-        name: profileToDelete.name,
-        is_default_admin: profileToDelete.isDefaultAdmin === true,
-      });
+      try {
+        await deleteProfile(profileToDelete.id);
+        await logProfileAudit(firebaseUser, 'profile_deleted', profileToDelete, {
+          name: profileToDelete.name,
+          is_default_admin: profileToDelete.isDefaultAdmin === true,
+        });
+      } catch {
+        setActionError('Não foi possível excluir o perfil. Tente novamente.');
+      }
       setProfileToDelete(null);
     }
   };
 
   const handleDuplicateClick = (profile: Profile) => {
+    setActionError(null);
     setProfileToDuplicate(profile);
   };
 
   const handleDuplicateConfirm = async (newName: string) => {
-    if (profileToDuplicate) {
+    if (!profileToDuplicate || saving) return;
+    setSaving(true);
+    setActionError(null);
+    try {
       await addProfile({
         name: newName,
         permissions: profileToDuplicate.permissions,
       });
-      await logProfileAudit('profile_duplicated', profileToDuplicate, {
+      await logProfileAudit(firebaseUser, 'profile_duplicated', profileToDuplicate, {
         source_profile_id: profileToDuplicate.id,
         source_profile_name: profileToDuplicate.name,
         new_name: newName,
       });
       setProfileToDuplicate(null);
-    }
-  };
-
-  const logProfileAudit = async (
-    action: string,
-    target: Pick<Profile, 'id' | 'name'> | null,
-    metadata: Record<string, unknown> = {}
-  ) => {
-    if (!firebaseUser) return;
-    try {
-      await createAuditLog(firebaseUser, {
-        module: 'settings.profiles',
-        action,
-        targetType: 'profile',
-        targetId: target?.id,
-        targetName: target?.name,
-        metadata,
-      });
-    } catch (error) {
-      console.warn('[ProfileManagementModal] Falha ao registrar auditoria.', error);
+      if (initialAction === 'duplicate') onOpenChange(false);
+    } catch {
+      setActionError('Não foi possível copiar o perfil. Confira suas permissões e tente novamente.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const onSubmit = async (values: ProfileFormValues) => {
-    if (editingProfile) {
-      const changes = permissionDiff(editingProfile.permissions, values.permissions);
-      await updateProfile({ ...editingProfile, permissions: values.permissions, name: values.name });
-      await logProfileAudit('profile_updated', editingProfile, {
-        before_name: editingProfile.name,
-        after_name: values.name,
-        changed_permissions: Object.keys(changes),
-        permission_changes: changes,
-      });
-    } else {
-      await addProfile(values);
-      await logProfileAudit('profile_created', { id: '', name: values.name }, {
-        name: values.name,
-        permission_count: Object.keys(flattenPermissions(values.permissions)).length,
-      });
+    if (saving) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      if (editingProfile) {
+        const changes = permissionDiff(editingProfile.permissions, values.permissions);
+        await updateProfile({ ...editingProfile, permissions: values.permissions, name: values.name });
+        await logProfileAudit(firebaseUser, 'profile_updated', editingProfile, {
+          before_name: editingProfile.name,
+          after_name: values.name,
+          changed_permissions: Object.keys(changes),
+          permission_changes: changes,
+        });
+      } else {
+        await addProfile(values);
+        await logProfileAudit(firebaseUser, 'profile_created', { id: '', name: values.name }, {
+          name: values.name,
+          permission_count: Object.keys(flattenPermissions(values.permissions)).length,
+        });
+      }
+      setShowForm(false);
+      setEditingProfile(null);
+      if (initialAction !== 'manage') onOpenChange(false);
+    } catch {
+      setActionError('Não foi possível salvar o perfil. Confira suas permissões e tente novamente.');
+    } finally {
+      setSaving(false);
     }
-    setShowForm(false);
-    setEditingProfile(null);
   };
 
   const renderPermissionSwitch = (
@@ -282,7 +327,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       control={form.control}
       name={name}
       render={({ field }) => (
-        <FormItem className={`flex flex-row items-center justify-between rounded-lg border p-3 ${indented ? 'ml-6 bg-muted/30' : ''}`}>
+        <FormItem className={`flex flex-row items-center justify-between gap-4 rounded-ds-md border border-ds-border bg-ds-input p-3.5 ${indented ? 'ml-4 border-l-2 border-l-ds-accent sm:ml-6' : ''}`}>
           <div className="space-y-0.5">
             <FormLabel>{label}</FormLabel>
             <FormDescription className="text-xs">{description}</FormDescription>
@@ -304,7 +349,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
       control={form.control}
       name={name}
       render={({ field }) => (
-        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm bg-muted/30">
+        <FormItem className="flex flex-row items-center justify-between gap-4 rounded-ds-md border border-ds-border bg-ds-modal-soft p-4">
           <div className="space-y-0.5">
             <FormLabel className="text-base">{label}</FormLabel>
             {description && <FormDescription>{description}</FormDescription>}
@@ -330,7 +375,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
         control={form.control}
         name={primaryPath}
         render={({ field }) => (
-          <FormItem className={`flex flex-row items-center justify-between rounded-lg border p-3 ${indented ? 'ml-6 bg-muted/30' : ''}`}>
+          <FormItem className={`flex flex-row items-center justify-between gap-4 rounded-ds-md border border-ds-border bg-ds-input p-3.5 ${indented ? 'ml-4 border-l-2 border-l-ds-accent sm:ml-6' : ''}`}>
             <div className="space-y-0.5">
               <FormLabel>{label}</FormLabel>
               <FormDescription className="text-xs">{description}</FormDescription>
@@ -385,6 +430,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const appScheduleViewWatch = form.watch('permissions.app.schedule.view' as any);
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
+  const dpRequestsViewWatch = form.watch('permissions.dp.requests.view' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
   const dpCollaboratorsOwnOnlyWatch = form.watch('permissions.dp.collaborators.ownProfileOnly' as any);
   // Every profile carries two lists: what it may do in the web system and what it may do in the Android app.
@@ -433,72 +479,106 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Gerenciar perfis</DialogTitle>
-            <DialogDescription>Crie perfis de permissão para atribuir aos usuários.</DialogDescription>
+      <Dialog open={open && initialAction !== 'duplicate'} onOpenChange={onOpenChange}>
+        <DialogContent flush className="flex h-[92vh] max-h-[92vh] flex-col overflow-hidden border-ds-border bg-ds-surface p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]" overlayClassName="bg-black/55 backdrop-blur-[2px]">
+          <DialogHeader className="shrink-0 border-b border-ds-divider bg-ds-surface px-5 py-5 pr-14 text-left sm:px-6">
+            <p className="text-[10.5px] font-black uppercase tracking-[.12em] text-ds-accent-kicker">Perfil de acesso</p>
+            <DialogTitle className="mt-1.5 text-xl font-black tracking-[-.02em] text-ds-ink">{initialAction === 'create' ? 'Novo perfil' : initialAction === 'edit' ? `Editar perfil · ${initialProfile?.name ?? ''}` : 'Gerenciar perfis'}</DialogTitle>
+            <DialogDescription className="mt-1.5 max-w-3xl text-xs font-medium leading-5 text-ds-ink-muted">Defina, em linguagem operacional, o que este perfil pode consultar e executar no Coala One e no Coala Go.</DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto -mx-6 px-6">
+          <div className="min-h-0 flex-1 overflow-hidden bg-ds-page">
           {showForm ? (
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 h-full flex flex-col">
-                <div className="flex-1 overflow-hidden">
-                    <ScrollArea className="h-full pr-6">
-                        <div className="space-y-4">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1 overflow-hidden px-4 pt-4 sm:px-6 sm:pt-5">
+                    <ScrollArea className="h-full pr-3">
+                        <div className="mx-auto max-w-[980px] space-y-4 pb-5">
+                          <section className="rounded-ds-btn-lg border border-ds-border bg-ds-surface p-4">
                             <FormField
                             control={form.control}
                             name="name"
                             render={({ field }) => (
                                 <FormItem>
-                                <FormLabel>Nome do perfil</FormLabel>
-                                <FormControl><Input placeholder="ex: Operador de quiosque" {...field} /></FormControl>
+                                <FormLabel className="text-xs font-bold text-ds-ink-2">Nome do perfil</FormLabel>
+                                <FormControl><Input placeholder="Ex.: Operador de quiosque" {...field} /></FormControl>
                                 <FormMessage />
                                 </FormItem>
                             )}
                             />
-                            <Segmented
+                            <div className="mt-4">
+                              <Segmented
                               aria-label="Lista de permissões"
                               value={permissionScope}
                               onChange={setPermissionScope}
-                              options={[{ value: 'system', label: 'Coala One · Sistema' }, { value: 'app', label: 'Coala One · APP' }]}
-                            />
-                            {/* The app list stays mounted but hidden with the system list so neither loses edits when switching. */}
-                            <div className={permissionScope === 'app' ? 'space-y-2' : 'hidden'}>
-                              <p className="text-sm text-muted-foreground">Permissões do aplicativo Android. São independentes das do sistema: liberar uma função no sistema não a libera no aplicativo.</p>
-                              <h3 className="pt-2 text-lg font-semibold">Compra local</h3>
-                              {renderPermissionSwitch("permissions.app.localPurchase.register" as any, "Registrar compra local", "Permite fotografar a nota e o comprovante, revisar e registrar uma compra recebida na unidade, e vinculá-la à sangria do caixa.")}
-                              {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, os itens ficam como consumo direto.", !appLocalPurchaseWatch, true)}
-                              <h3 className="pt-4 text-lg font-semibold">Estoque</h3>
-                              {renderPermissionSwitch("permissions.app.stockCount.perform" as any, "Contar estoque", "Permite iniciar, salvar e concluir a contagem de estoque das unidades do usuário pelo aplicativo.")}
-                              {renderPermissionSwitch("permissions.app.reposition.receive" as any, "Recebimento", "Permite conferir e registrar o recebimento das reposições enviadas para as unidades do usuário. As demais etapas da reposição continuam só no sistema.")}
-                              <h3 className="pt-4 text-lg font-semibold">Metas</h3>
-                              {renderPermissionSwitch("permissions.app.goals.view" as any, "Ver metas", "Permite ver as metas em andamento das unidades do usuário, o resultado de cada colega da unidade e a previsão de prêmio por pessoa.")}
-                              <h3 className="pt-4 text-lg font-semibold">Escala</h3>
-                              {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
-                              {renderPermissionSwitch("permissions.app.schedule.viewAllUnits" as any, "Ver escala de todas as unidades", "Para gestores: mostra também a escala publicada das outras unidades do acesso da pessoa, mesmo sem ela estar escalada nelas.", !appScheduleViewWatch, true)}
-                              <h3 className="pt-4 text-lg font-semibold">Signage</h3>
-                              {renderPermissionSwitch("permissions.app.signage.manage" as any, "Adicionar telas", "Permite cadastrar telas do Coala Signage nas unidades do usuário, lendo com o celular o QR code que o monitor mostra. As mídias continuam sendo montadas no sistema.")}
+                              options={[{ value: 'system', label: 'Coala One · Sistema' }, { value: 'app', label: 'Coala Go · APP' }]}
+                              />
+                            </div>
+                          </section>
+                            {/* As duas listas ficam montadas para preservar alterações ao trocar de aba. */}
+                            <div className={permissionScope === 'app' ? 'space-y-3' : 'hidden'}>
+                              <p className="rounded-ds-md border border-ds-border bg-ds-surface px-4 py-3 text-sm leading-6 text-ds-ink-muted">
+                                As permissões do aplicativo Android são independentes das permissões do sistema. Liberar uma função no Coala One não a libera automaticamente no Coala Go.
+                              </p>
+                              <Accordion
+                                type="multiple"
+                                defaultValue={['app-local-purchase']}
+                                className="w-full rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4"
+                              >
+                                <AccordionItem value="app-local-purchase">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><ShoppingCart className="mr-2 h-5 w-5" /> Compra local</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.localPurchase.register" as any, "Registrar compra local", "Permite fotografar a nota e o comprovante, revisar e registrar uma compra recebida na unidade, e vinculá-la à sangria do caixa.")}
+                                    {renderPermissionSwitch("permissions.app.localPurchase.stockEntry" as any, "Dar entrada em estoque", "Permite que a compra registrada dê entrada no estoque da própria unidade. Sem ela, os itens ficam como consumo direto.", !appLocalPurchaseWatch, true)}
+                                  </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="app-stock">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><ClipboardCheck className="mr-2 h-5 w-5" /> Estoque</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.stockCount.perform" as any, "Contar estoque", "Permite iniciar, salvar e concluir a contagem de estoque das unidades do usuário pelo aplicativo.")}
+                                    {renderPermissionSwitch("permissions.app.reposition.receive" as any, "Recebimento", "Permite conferir e registrar o recebimento das reposições enviadas para as unidades do usuário. As demais etapas da reposição continuam só no sistema.")}
+                                  </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="app-goals">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><Target className="mr-2 h-5 w-5" /> Metas</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.goals.view" as any, "Ver metas", "Permite ver as metas em andamento das unidades do usuário, o resultado de cada colega da unidade e a previsão de prêmio por pessoa.")}
+                                  </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="app-schedule">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><CalendarDays className="mr-2 h-5 w-5" /> Escala</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.schedule.view" as any, "Ver escala", "Permite consultar a escala publicada das unidades em que a pessoa está lotada, com os turnos de todos da equipe.")}
+                                    {renderPermissionSwitch("permissions.app.schedule.viewAllUnits" as any, "Ver escala de todas as unidades", "Para gestores: mostra também a escala publicada das outras unidades do acesso da pessoa, mesmo sem ela estar escalada nelas.", !appScheduleViewWatch, true)}
+                                  </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="app-signage">
+                                  <AccordionTrigger className="flex items-center justify-between border-b py-4 text-lg font-semibold">
+                                    <div className="flex items-center"><MonitorPlay className="mr-2 h-5 w-5" /> Coala Signage</div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="space-y-2 p-1 pt-4">
+                                    {renderPermissionSwitch("permissions.app.signage.manage" as any, "Adicionar telas", "Permite cadastrar telas do Coala Signage nas unidades do usuário, lendo com o celular o QR code que o monitor mostra. As mídias continuam sendo montadas no sistema.")}
+                                  </AccordionContent>
+                                </AccordionItem>
+                              </Accordion>
                             </div>
                             <div className={permissionScope === 'system' ? '' : 'hidden'}>
                             <Accordion
                               type="multiple"
-                              defaultValue={[
-                                'dashboard',
-                                'stock',
-                                'commercial',
-                                'settings',
-                                'tasks',
-                                'forms',
-                                'signage',
-                                'financial',
-                                'purchasing_v2',
-                                'formalization',
-                                'dp',
-                                'help',
-                              ]}
-                              className="w-full"
+                              defaultValue={['dashboard']}
+                              className="w-full rounded-ds-btn-lg border border-ds-border bg-ds-surface px-4"
                             >
                             
                             {/* ── DASHBOARD ── */}
@@ -708,6 +788,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                       {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Gerenciar Cargos, Funções e Organograma", "Permite manter cadastros do DP usados em cargos, funções e estrutura organizacional.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Gerenciar Acesso por Escala", "Permite acessar diagnósticos e auditorias ligados à política de acesso por escala.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar turnos reutilizáveis.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.settings.manageTime" as any, "Gerenciar Tempo", "Permite configurar jornadas e políticas de hora extra.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.dp.settings.manageAbsences" as any, "Gerenciar Ausências", "Permite configurar tipos, regras e vigência de ausências.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de trabalho e feriados.", !settingsViewWatch)}
                                     </div>
 
@@ -957,6 +1039,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.dp.schedules.delete" as any, "Excluir Escalas", "Permite excluir escalas completas.", !dpSchedulesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.export" as any, "Exportar para Bizneo", "Permite gerar o arquivo de exportação.", !dpSchedulesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.publishBizneo" as any, "Publicar no Bizneo", "Permite confirmar folgas e alterar a escala publicada no Bizneo.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.assignExternal" as any, "Escalar outra unidade", "Permite trazer uma pessoa de outra unidade como cobertura excepcional.", !dpSchedulesViewWatch, true)}
                                   </div>
                                 </div>
 
@@ -984,6 +1067,15 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   </div>
                                 </div>
 
+                                {/* Solicitações dos colaboradores */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Inbox className="h-4 w-4" /> Solicitações dos colaboradores</h4>
+                                  {renderPermissionSwitch("permissions.dp.requests.view" as any, "Visualizar solicitações", "Permite consultar a central de solicitações das pessoas dentro do escopo de unidades.", !dpViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.dp.requests.review" as any, "Analisar solicitações", "Permite aprovar, rejeitar e gerar novamente os documentos resultantes.", !dpRequestsViewWatch, true)}
+                                  </div>
+                                </div>
+
                                 {/* Uniformes */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Shirt className="h-4 w-4" /> Controle de uniformes</h4>
@@ -999,6 +1091,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Settings className="h-4 w-4" /> Configurações do DP</h4>
                                   {renderPermissionSwitch("permissions.dp.settings.manageUnits" as any, "Gerenciar Unidades", "Permite criar e editar unidades (quiosques) no DP.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar definições de turnos.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.settings.manageTime" as any, "Gerenciar Tempo", "Permite configurar jornadas e políticas de hora extra.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.settings.manageAbsences" as any, "Gerenciar Ausências", "Permite configurar tipos, regras e vigência de ausências.", !dpViewWatch)}
                                   {renderPermissionSwitch("permissions.dp.settings.manageCalendars" as any, "Gerenciar Calendários", "Permite criar e editar calendários de feriados.", !dpViewWatch)}
                                 </div>
                               </AccordionContent>
@@ -1017,21 +1111,24 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         </div>
                     </ScrollArea>
                 </div>
-                <DialogFooter className="pt-4 border-t shrink-0">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-                  <Button type="submit">{editingProfile ? 'Salvar alterações' : 'Criar perfil'}</Button>
+                <DialogFooter className="shrink-0 flex-row items-center gap-2 border-t border-ds-divider bg-ds-surface px-5 py-4 sm:space-x-0 sm:px-6">
+                  {actionError ? <p role="alert" className="mr-auto text-xs font-semibold text-ds-danger">{actionError}</p> : <p className="mr-auto hidden text-xs font-medium text-ds-ink-muted sm:block">As permissões são aplicadas ao salvar o perfil.</p>}
+                  <Button type="button" variant="outline" disabled={saving} onClick={() => initialAction === 'manage' ? setShowForm(false) : onOpenChange(false)}>Cancelar</Button>
+                  <Button type="submit" loading={saving}>{editingProfile ? 'Salvar alterações' : 'Criar perfil'}</Button>
                 </DialogFooter>
               </form>
             </Form>
           ) : (
             <>
+              <div className="h-full overflow-y-auto p-5 sm:p-6">
+              {actionError ? <p role="alert" className="text-sm text-ds-danger">{actionError}</p> : null}
               {canEdit && (
                 <Button onClick={handleAddNew} className="w-full">
                   <PlusCircle className="mr-2 h-4 w-4" /> Adicionar novo perfil
                 </Button>
               )}
               <Separator className="my-4" />
-              <div className="flex-1 overflow-y-auto -mx-6 px-6">
+              <div className="mt-4">
                 <ScrollArea className="h-full pr-4">
                   <div className="space-y-2">
                     {profiles.length > 0 ? profiles.map(profile => (
@@ -1040,7 +1137,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                         {canEdit && <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClick(profile)}><Copy className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(profile)}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin}>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => handleDeleteClick(profile)} disabled={profile.isDefaultAdmin || profile.id === adminProfileId}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>}
@@ -1050,6 +1147,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                     )}
                   </div>
                 </ScrollArea>
+              </div>
               </div>
             </>
           )}
@@ -1068,7 +1166,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
       <DuplicateProfileModal
         profileToDuplicate={profileToDuplicate}
-        onClose={() => setProfileToDuplicate(null)}
+        error={actionError}
+        saving={saving}
+        onClose={() => {
+          setProfileToDuplicate(null);
+          if (initialAction === 'duplicate') onOpenChange(false);
+        }}
         onConfirm={handleDuplicateConfirm}
       />
     </>

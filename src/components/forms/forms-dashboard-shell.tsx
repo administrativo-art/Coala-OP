@@ -545,7 +545,7 @@ function KpiCard({
   const Icon = toneMeta.icon;
 
   return (
-    <Card className="relative overflow-hidden border-slate-200 bg-white shadow-sm">
+    <Card className="relative overflow-hidden border-slate-200 bg-white shadow-xs">
       <div className={cn("absolute inset-x-0 top-0 h-1", toneMeta.accent)} />
       <CardContent className="flex min-h-[116px] flex-col justify-between gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
@@ -2056,7 +2056,7 @@ export function FormsDashboardShell() {
               const visual = getModelVisual(model.id, modelIndex);
               const Icon = visual.icon;
               return (
-                <Card key={model.id} className="border-slate-200 shadow-sm">
+                <Card key={model.id} className="border-slate-200 shadow-xs">
                   <CardContent className="flex min-h-[180px] flex-col justify-between p-6">
                     <div className="space-y-4">
                       <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", visual.className)}>
@@ -2504,7 +2504,7 @@ export function FormsDashboardShell() {
             <div className="rounded-xl bg-slate-50 p-4">
               <div className="flex items-center gap-4">
                 <div
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-xs"
                   style={{ backgroundColor: projectForm.color || PROJECT_COLOR_PRESETS[0] }}
                 >
                   <ProjectIcon className="h-5 w-5" />
@@ -2592,7 +2592,7 @@ export function FormsDashboardShell() {
         <DialogContent className="max-w-2xl overflow-hidden p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-xs">
                 <Layers3 className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -2655,7 +2655,7 @@ export function FormsDashboardShell() {
       </Dialog>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="!w-[min(94vw,1040px)] !max-w-[1040px] overflow-hidden rounded-2xl p-0">
+        <DialogContent className="w-[min(94vw,1040px)]! max-w-[1040px]! overflow-hidden rounded-2xl p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white">
@@ -2935,7 +2935,7 @@ export function FormsDashboardShell() {
         <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white shadow-xs">
                 <Layers3 className="h-5 w-5" />
               </div>
               <div className="min-w-0">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { InlineConfirm } from "@/components/patterns/inline-confirm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -224,7 +223,7 @@ function highlightedTemplateText(text: string, mapping: TemplateFieldMapping) {
     return (
       <mark
         key={`${index}-${key}`}
-        className="mx-0.5 inline rounded border border-ds-warn-bg bg-ds-warn-bg px-1 py-0.5 font-mono text-[0.82em] font-bold text-ds-warn shadow-[inset_0_-1px_0_rgba(180,83,9,0.18)]"
+        className="mx-0.5 inline rounded border border-amber-300 bg-amber-200 px-1 py-0.5 font-mono text-[0.82em] font-bold text-amber-950 shadow-[inset_0_-1px_0_rgba(180,83,9,0.18)]"
         title={`${label} · ${part}`}
         aria-label={`${label}: ${part}`}
       >
@@ -244,7 +243,7 @@ function TemplateTextBlockView({
   const text = highlightedTemplateText(block.text, mapping);
   if (block.kind === "title") {
     return (
-      <h2 className="mb-8 border-b border-ds-border-input pb-5 text-center text-xl font-bold uppercase leading-snug">
+      <h2 className="mb-8 border-b border-slate-400 pb-5 text-center text-xl font-bold uppercase leading-snug">
         {text}
       </h2>
     );
@@ -299,7 +298,7 @@ function templateUsage(template: TemplateDetail) {
 function SystemKeySelect({ value, onChange }: { value: string; onChange: (key: string) => void }) {
   return (
     <select
-      className="h-9 w-full rounded-md border bg-ds-surface px-2 text-xs"
+      className="h-9 w-full rounded-md border bg-white px-2 text-xs"
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >
@@ -356,29 +355,29 @@ function ManualFieldEditor({ binding, onChange }: { binding: ManualFieldBinding;
   return (
     <div className="grid gap-3 lg:grid-cols-4">
       <label className="block space-y-1">
-        <span className="text-[10px] font-bold uppercase text-ds-ink-muted">Label para quem gera</span>
+        <span className="text-[10px] font-bold uppercase text-slate-500">Label para quem gera</span>
         <Input className="h-9 text-xs" value={binding.label} placeholder="Ex.: Valor do recibo" onChange={(event) => onChange({ ...binding, label: event.target.value })} />
       </label>
       <label className="block space-y-1">
-        <span className="text-[10px] font-bold uppercase text-ds-ink-muted">Tipo</span>
-        <select className="h-9 w-full rounded-md border bg-ds-surface px-2 text-xs" value={binding.format} onChange={(event) => onChange({ ...binding, format: event.target.value as ManualFieldFormat })}>
+        <span className="text-[10px] font-bold uppercase text-slate-500">Tipo</span>
+        <select className="h-9 w-full rounded-md border bg-white px-2 text-xs" value={binding.format} onChange={(event) => onChange({ ...binding, format: event.target.value as ManualFieldFormat })}>
           {MANUAL_FIELD_FORMATS.map((format) => (
             <option key={format} value={format}>{MANUAL_FIELD_FORMAT_LABELS[format]}</option>
           ))}
         </select>
-        <span className="block text-[10px] text-ds-ink-faint">{FORMAT_SAMPLES[binding.format]}</span>
+        <span className="block text-[10px] text-slate-400">{FORMAT_SAMPLES[binding.format]}</span>
       </label>
       <label className="block space-y-1">
-        <span className="text-[10px] font-bold uppercase text-ds-ink-muted">Valor padrão</span>
+        <span className="text-[10px] font-bold uppercase text-slate-500">Valor padrão</span>
         <Input className="h-9 text-xs" value={binding.defaultValue ?? ""} placeholder="Opcional" onChange={(event) => onChange({ ...binding, defaultValue: event.target.value || undefined })} />
       </label>
-      <label className="flex items-center gap-2 rounded-lg border bg-ds-muted px-3 text-xs font-semibold text-ds-ink-2">
-        <input className="h-4 w-4 accent-ds-accent-soft" type="checkbox" checked={binding.required} onChange={(event) => onChange({ ...binding, required: event.target.checked })} />
+      <label className="flex items-center gap-2 rounded-lg border bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+        <input className="h-4 w-4 accent-violet-700" type="checkbox" checked={binding.required} onChange={(event) => onChange({ ...binding, required: event.target.checked })} />
         Obrigatório na geração
       </label>
       {binding.format === "select" ? (
         <label className="block space-y-1 lg:col-span-4">
-          <span className="text-[10px] font-bold uppercase text-ds-ink-muted">Opções (separadas por vírgula)</span>
+          <span className="text-[10px] font-bold uppercase text-slate-500">Opções (separadas por vírgula)</span>
           <Input className="h-9 text-xs" value={binding.options?.join(", ") ?? ""} placeholder="Ex.: Integral, Meio período" onChange={(event) => onChange({ ...binding, options: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} />
         </label>
       ) : null}
@@ -388,11 +387,11 @@ function ManualFieldEditor({ binding, onChange }: { binding: ManualFieldBinding;
 
 function ManualValueInput({ binding, value, onChange }: { binding: ManualFieldBinding; value: string; onChange: (next: string) => void }) {
   if (binding.format === "multiline") {
-    return <textarea className="min-h-20 w-full rounded-md border bg-ds-surface p-2 text-xs" value={value} onChange={(event) => onChange(event.target.value)} />;
+    return <textarea className="min-h-20 w-full rounded-md border bg-white p-2 text-xs" value={value} onChange={(event) => onChange(event.target.value)} />;
   }
   if (binding.format === "boolean_br") {
     return (
-      <select className="h-9 w-full rounded-md border bg-ds-surface px-2 text-xs" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="h-9 w-full rounded-md border bg-white px-2 text-xs" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">—</option>
         <option value="true">Sim</option>
         <option value="false">Não</option>
@@ -401,7 +400,7 @@ function ManualValueInput({ binding, value, onChange }: { binding: ManualFieldBi
   }
   if (binding.format === "select") {
     return (
-      <select className="h-9 w-full rounded-md border bg-ds-surface px-2 text-xs" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="h-9 w-full rounded-md border bg-white px-2 text-xs" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">—</option>
         {(binding.options ?? []).map((option) => (
           <option key={option} value={option}>{option}</option>
@@ -428,7 +427,11 @@ function ManualValueInput({ binding, value, onChange }: { binding: ManualFieldBi
 
 export default function DocumentTemplateDetailPage() {
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
   const router = useRouter();
+  const templatesBasePath = pathname.startsWith("/dashboard/settings/")
+    ? "/dashboard/settings/documents/templates"
+    : "/dashboard/documents/templates";
   const { firebaseUser, permissions, activeUsers } = useAuth();
   const canView = hasFormalizationPermission(permissions, "templates.view");
   const canManage = hasFormalizationPermission(permissions, "templates.manage");
@@ -453,7 +456,6 @@ export default function DocumentTemplateDetailPage() {
   const [integrityBusy, setIntegrityBusy] = useState(false);
   const [cloningTemplate, setCloningTemplate] = useState(false);
   const [message, setMessage] = useState("");
-  const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [aiPlan, setAiPlan] = useState<AiMappingPlan | null>(null);
   const [aiBlocked, setAiBlocked] = useState(false);
@@ -669,7 +671,7 @@ export default function DocumentTemplateDetailPage() {
     }
   }
 
-  async function advanceOfficialWorkflow(confirmed = false) {
+  async function advanceOfficialWorkflow() {
     if (!template || (!template.officialCandidate && !template.isSystem) || !template.workflowStatus) return;
     const action = DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[template.workflowStatus];
     if (!action) return;
@@ -684,10 +686,10 @@ export default function DocumentTemplateDetailPage() {
       setMessage("Confirme a conferência do layout e do preenchimento com dados fictícios.");
       return;
     }
-    if (action.next === "published" && !confirmed) {
-      setPendingConfirm("publish");
-      return;
-    }
+    if (
+      action.next === "published"
+      && !window.confirm("Homologar e publicar esta versão? A versão oficial anterior será substituída.")
+    ) return;
     setWorkflowBusy(true);
     setMessage("");
     setNotice("");
@@ -721,16 +723,13 @@ export default function DocumentTemplateDetailPage() {
     }
   }
 
-  async function returnForAdjustments(confirmed = false) {
+  async function returnForAdjustments() {
     if (!template || !["rh_approval", "legal_review"].includes(String(template.workflowStatus))) return;
     if (!workflowNote.trim()) {
       setMessage("Informe o motivo da devolução para ajustes.");
       return;
     }
-    if (!confirmed) {
-      setPendingConfirm("return");
-      return;
-    }
+    if (!window.confirm("Devolver esta versão para edição manual? As validações técnicas atuais serão invalidadas.")) return;
     setReturningForAdjustments(true);
     setMessage("");
     setNotice("");
@@ -792,7 +791,7 @@ export default function DocumentTemplateDetailPage() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao criar a nova versão.");
-      router.push(`/dashboard/documents/templates/${encodeURIComponent(payload.template.id)}?prepare=1`);
+      router.push(`${templatesBasePath}/${encodeURIComponent(payload.template.id)}?prepare=1`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao criar a nova versão.");
     } finally {
@@ -1013,11 +1012,8 @@ export default function DocumentTemplateDetailPage() {
     }
   }
 
-  async function discardDocument(id: string, confirmed = false) {
-    if (!confirmed) {
-      setPendingConfirm(`discard:${id}`);
-      return;
-    }
+  async function discardDocument(id: string) {
+    if (!window.confirm("Descartar esta prévia? O arquivo será excluído.")) return;
     setBusyDocument(id);
     setMessage("");
     try {
@@ -1036,9 +1032,9 @@ export default function DocumentTemplateDetailPage() {
     }
   }
 
-  if (!canView) return <p className="p-6 text-sm text-ds-ink-muted">Sem permissão para acessar modelos.</p>;
-  if (loading) return <div className="grid min-h-52 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div>;
-  if (!template) return <p className="p-6 text-sm text-ds-danger">{message || "Modelo não encontrado."}</p>;
+  if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar modelos.</p>;
+  if (loading) return <div className="grid min-h-52 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div>;
+  if (!template) return <p className="p-6 text-sm text-rose-600">{message || "Modelo não encontrado."}</p>;
 
   const published = template.status === "published";
   const officialTemplate = Boolean(template.officialCandidate || template.isSystem);
@@ -1179,18 +1175,18 @@ export default function DocumentTemplateDetailPage() {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-2 z-20 flex flex-col gap-4 rounded-2xl border bg-ds-surface px-4 py-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky top-2 z-20 flex flex-col gap-4 rounded-2xl border bg-white/95 px-4 py-4 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <button className="mb-1 inline-flex items-center gap-1 text-[11px] font-bold text-ds-accent-ink hover:text-ds-accent-ink" onClick={() => router.push("/dashboard/documents/templates")}>
+          <button className="mb-1 inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900" onClick={() => router.push("/dashboard/settings?department=pessoal&tab=document-templates")}>
             <ArrowLeft className="h-3.5 w-3.5" />Modelos
           </button>
-          <h1 className="truncate text-lg font-black leading-tight text-ds-ink">{template.name}</h1>
+          <h1 className="truncate text-lg font-black leading-tight text-slate-950">{template.name}</h1>
           <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${
-            published ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-warn-bg text-ds-warn"
+            published ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
           }`}>
               {documentTemplateDisplayStatus({ ...template, aiMappingPlan: aiPlan })}
           </span>
-          <p className="mt-2 text-xs text-ds-ink-muted">
+          <p className="mt-2 text-xs text-slate-600">
             {template.category} · versão {template.version} · {templateUsage(template).label.toLocaleLowerCase("pt-BR")}
           </p>
         </div>
@@ -1206,13 +1202,13 @@ export default function DocumentTemplateDetailPage() {
             </Button>
           ) : null}
           {template.previewUrl ? (
-            <Button size="sm" variant="outline" className="h-9 gap-2 rounded-lg bg-ds-surface" onClick={() => void openTemplateFile("preview")}>
+            <Button size="sm" variant="outline" className="h-9 gap-2 rounded-lg bg-white" onClick={() => void openTemplateFile("preview")}>
               <Eye className="h-4 w-4" />Visualizar prévia
             </Button>
           ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="outline" className="h-9 w-9 rounded-lg bg-ds-surface" aria-label="Mais ações do modelo">
+              <Button size="icon" variant="outline" className="h-9 w-9 rounded-lg bg-white" aria-label="Mais ações do modelo">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -1279,27 +1275,9 @@ export default function DocumentTemplateDetailPage() {
         </div>
       </div>
 
-      {pendingConfirm ? (
-        <InlineConfirm
-          message={pendingConfirm === "publish"
-            ? "Homologar e publicar esta versão? A versão oficial anterior será substituída."
-            : pendingConfirm === "return"
-              ? "Devolver esta versão para edição manual? As validações técnicas atuais serão invalidadas."
-              : "Descartar esta prévia? O arquivo será excluído."}
-          confirmLabel={pendingConfirm === "publish" ? "Homologar e publicar" : pendingConfirm === "return" ? "Devolver para ajustes" : "Descartar prévia"}
-          onCancel={() => setPendingConfirm(null)}
-          onConfirm={() => {
-            const kind = pendingConfirm;
-            setPendingConfirm(null);
-            if (kind === "publish") void advanceOfficialWorkflow(true);
-            else if (kind === "return") void returnForAdjustments(true);
-            else if (kind.startsWith("discard:")) void discardDocument(kind.slice("discard:".length), true);
-          }}
-        />
-      ) : null}
-      {message ? <div className="rounded-lg border border-ds-danger-bg bg-ds-danger-bg px-3 py-2 text-xs font-semibold text-ds-danger">{message}</div> : null}
-      {notice ? <div className="rounded-lg border border-ds-ok-bg bg-ds-ok-bg px-3 py-2 text-xs font-semibold text-ds-ok">{notice}</div> : null}
-      <nav className="flex flex-wrap gap-1 rounded-xl border bg-ds-surface p-1 shadow-sm" aria-label="Áreas do modelo">
+      {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
+      {notice ? <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{notice}</div> : null}
+      <nav className="flex flex-wrap gap-1 rounded-xl border bg-white p-1 shadow-xs" aria-label="Áreas do modelo">
         {([
           ["overview", "Visão geral"],
           ["text", "Texto integral"],
@@ -1310,7 +1288,7 @@ export default function DocumentTemplateDetailPage() {
           <button
             key={view}
             className={`rounded-lg px-4 py-2 text-xs font-extrabold transition ${
-              activeView === view ? "bg-ds-accent text-white shadow-sm" : "text-ds-ink-muted hover:bg-ds-muted hover:text-ds-ink"
+              activeView === view ? "bg-violet-700 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
             }`}
             onClick={() => setActiveView(view)}
           >
@@ -1319,31 +1297,31 @@ export default function DocumentTemplateDetailPage() {
         ))}
       </nav>
       {template.sourceIntegrity?.valid === false ? (
-        <div className="rounded-lg border border-ds-danger-bg bg-ds-danger-bg px-4 py-3">
-          <p className="text-xs font-black text-ds-danger">O DOCX não corresponde mais ao mapeamento desta versão</p>
-          <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] text-ds-danger">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+          <p className="text-xs font-black text-rose-900">O DOCX não corresponde mais ao mapeamento desta versão</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] text-rose-800">
             {template.sourceIntegrity.issues?.map((issue) => <li key={`${issue.code}-${issue.message}`}>{issue.message}</li>)}
           </ul>
         </div>
       ) : null}
       {!layoutValid ? (
-        <div className="rounded-lg border border-ds-warn-bg bg-ds-warn-bg px-4 py-3">
-          <p className="text-xs font-black text-ds-warn">Modelo fora da área segura do papel timbrado</p>
-          <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] text-ds-warn">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-black text-amber-900">Modelo fora da área segura do papel timbrado</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] text-amber-800">
             {template.templateValidation?.issues.map((issue) => <li key={`${issue.code}-${issue.message}`}>{issue.message}</li>)}
           </ul>
         </div>
       ) : null}
       {!documentStandardValid ? (
-        <div className="rounded-lg border border-ds-warn-bg bg-ds-warn-bg px-4 py-3">
-          <p className="text-xs font-black text-ds-warn">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-black text-amber-900">
             A preparação automática precisa de validação manual
           </p>
-          <p className="mt-1 text-[11px] text-ds-warn">
+          <p className="mt-1 text-[11px] text-amber-800">
             O original foi preservado. A versão preparada só poderá ser publicada
             depois que estes pontos forem resolvidos:
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] text-ds-warn">
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] text-amber-800">
             {template.documentStandardValidation?.issues.map((issue) => (
               <li key={`${issue.code}-${issue.message}`}>{issue.message}</li>
             ))}
@@ -1352,14 +1330,14 @@ export default function DocumentTemplateDetailPage() {
       ) : null}
 
       {officialTemplate && activeView === "overview" ? (
-        <section className="overflow-hidden rounded-xl border border-ds-accent-soft bg-ds-surface shadow-sm">
-          <header className="border-b border-ds-accent-soft bg-gradient-to-b from-violet-50/60 to-white px-5 py-4">
-            <h2 className="text-[15px] font-black text-ds-ink">
+        <section className="overflow-hidden rounded-xl border border-violet-100 bg-white shadow-xs">
+          <header className="border-b border-violet-100 bg-linear-to-b from-violet-50/60 to-white px-5 py-4">
+            <h2 className="text-[15px] font-black text-slate-950">
               {visualTestComplete
                 ? template.isSystem ? "Modelo oficial" : "Aprovação da nova versão oficial"
                 : template.isSystem ? "Preparação do modelo oficial" : "Preparação da nova versão oficial"}
             </h2>
-            <p className="mt-1 text-xs text-ds-ink-muted">
+            <p className="mt-1 text-xs text-slate-500">
               {visualTestComplete
                 ? "A preparação foi concluída. O modelo entra em uso após a homologação do RH."
                 : "Conclua o mapeamento da IA, a validação humana e o teste visual. Cada avanço fica registrado."}
@@ -1371,28 +1349,28 @@ export default function DocumentTemplateDetailPage() {
               {officialStages.map((stage, index) => (
                 <div key={stage.label} className="relative flex flex-col items-center px-1 text-center">
                   {index < officialStages.length - 1 ? (
-                    <span className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-0.5 ${stage.complete ? "bg-ds-ok" : "bg-ds-seg"}`} />
+                    <span className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-0.5 ${stage.complete ? "bg-emerald-600" : "bg-slate-200"}`} />
                   ) : null}
                   <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full text-xs font-black ${
-                    stage.complete ? "bg-ds-ok text-white" : stage.current ? "bg-ds-accent text-white shadow-[0_0_0_7px_rgba(109,40,217,.10)]" : "border-2 border-ds-border bg-ds-surface text-ds-ink-faint"
+                    stage.complete ? "bg-emerald-600 text-white" : stage.current ? "bg-violet-700 text-white shadow-[0_0_0_7px_rgba(109,40,217,.10)]" : "border-2 border-slate-200 bg-white text-slate-400"
                   }`}>
                     {stage.complete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
                   </span>
-                  <p className={`mt-2 text-xs font-extrabold leading-tight ${stage.current ? "text-ds-accent-ink" : stage.complete ? "text-ds-ink" : "text-ds-ink-faint"}`}>{stage.label}</p>
-                  <p className="mt-1 min-h-4 text-[10px] text-ds-ink-faint">{stage.meta}</p>
-                  {stage.current ? <span className="mt-1 rounded-full border border-ds-accent-soft bg-ds-accent-soft px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-ds-accent-ink">Você está aqui</span> : null}
+                  <p className={`mt-2 text-xs font-extrabold leading-tight ${stage.current ? "text-violet-700" : stage.complete ? "text-slate-800" : "text-slate-400"}`}>{stage.label}</p>
+                  <p className="mt-1 min-h-4 text-[10px] text-slate-400">{stage.meta}</p>
+                  {stage.current ? <span className="mt-1 rounded-full border border-violet-100 bg-violet-50 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-violet-700">Você está aqui</span> : null}
                 </div>
               ))}
             </div>
           </div>
 
           {!visualTestComplete && template.workflowStatus === "technical_validation" ? (
-            <div className="flex flex-col gap-3 border-t border-ds-accent-soft bg-ds-accent-soft px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-violet-100 bg-violet-50/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-black text-ds-ink">
+                <p className="text-xs font-black text-slate-900">
                   Continue na etapa {aiMappingComplete ? aiReviewComplete ? "3" : "2" : "1"}
                 </p>
-                <p className="mt-1 text-xs text-ds-ink-muted">
+                <p className="mt-1 text-xs text-slate-500">
                   {aiMappingComplete
                     ? aiReviewComplete
                       ? "Gere o teste visual, confira o documento e aprove a preparação."
@@ -1401,19 +1379,19 @@ export default function DocumentTemplateDetailPage() {
                 </p>
               </div>
               {canManage ? (
-                <Button className="shrink-0 gap-2 bg-ds-accent hover:bg-ds-accent" disabled={aiBusy} onClick={startPreparation}>
+                <Button className="shrink-0 gap-2 bg-violet-700 hover:bg-violet-800" disabled={aiBusy} onClick={startPreparation}>
                   {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
                   {aiMappingComplete ? aiReviewComplete ? "Abrir teste visual" : "Revisar sugestões" : "Iniciar mapeamento"}
                 </Button>
               ) : null}
             </div>
           ) : workflowAction ? (
-            <div className="grid gap-5 border-t border-ds-accent-soft bg-ds-accent-soft px-5 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
+            <div className="grid gap-5 border-t border-violet-100 bg-violet-50/40 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-ds-accent-ink">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-violet-700">
                   Agora · {DOCUMENT_TEMPLATE_WORKFLOW_LABELS[template.workflowStatus ?? "technical_validation"]}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-ds-ink-muted">
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
                   {template.workflowStatus === "technical_validation"
                     ? "A preparação técnica foi aprovada. Registre a evidência e envie esta versão para homologação do RH."
                     : template.workflowStatus === "legal_review"
@@ -1422,10 +1400,10 @@ export default function DocumentTemplateDetailPage() {
                 </p>
                 <div className="mt-3 space-y-2">
                   {officialChecklist.map((item) => (
-                    <div key={item.label} className="flex items-center gap-2 rounded-lg border bg-ds-surface px-3 py-2">
+                    <div key={item.label} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2">
                       {item.kind === "human" && !template.isSystem ? (
                         <input
-                          className="h-4 w-4 shrink-0 accent-ds-accent-soft"
+                          className="h-4 w-4 shrink-0 accent-violet-700"
                           type="checkbox"
                           checked={item.label.includes("Layout") ? layoutAttested : fictionalDataAttested}
                           onChange={(event) => {
@@ -1434,23 +1412,23 @@ export default function DocumentTemplateDetailPage() {
                           }}
                         />
                       ) : item.ok ? null : (
-                        <CircleAlert className="h-4 w-4 shrink-0 text-ds-warn" />
+                        <CircleAlert className="h-4 w-4 shrink-0 text-amber-600" />
                       )}
                       <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-bold text-ds-ink">{item.label}</span>
-                        <span className="block truncate text-[10px] text-ds-ink-faint">{item.evidence}</span>
+                        <span className="block text-xs font-bold text-slate-800">{item.label}</span>
+                        <span className="block truncate text-[10px] text-slate-400">{item.evidence}</span>
                       </span>
-                      <span className={`text-[10px] font-extrabold ${item.ok ? "text-ds-ok" : "text-ds-warn"}`}>{item.ok ? "OK" : "Pendente"}</span>
+                      <span className={`text-[10px] font-extrabold ${item.ok ? "text-emerald-700" : "text-amber-700"}`}>{item.ok ? "OK" : "Pendente"}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="flex flex-col border-ds-accent-soft lg:border-l lg:pl-5">
-                <label className="text-xs font-extrabold text-ds-ink">
+              <div className="flex flex-col border-violet-100 lg:border-l lg:pl-5">
+                <label className="text-xs font-extrabold text-slate-800">
                   {awaitingRhApproval ? "Parecer da homologação do RH" : "Evidência da validação técnica"} *
                 </label>
                 <textarea
-                  className="mt-2 min-h-24 flex-1 resize-none rounded-xl border bg-ds-surface p-3 text-xs"
+                  className="mt-2 min-h-24 flex-1 resize-none rounded-xl border bg-white p-3 text-xs"
                   placeholder={awaitingRhApproval
                     ? "Ex.: Versão homologada pelo RH, sem ressalvas."
                     : "Ex.: Mapeamento conferido e teste visual aprovado com dados fictícios."}
@@ -1460,7 +1438,7 @@ export default function DocumentTemplateDetailPage() {
                 {template.officialCandidate && template.workflowStatus === "technical_validation" ? (
                   <Button
                     variant="outline"
-                    className="mt-3 h-10 w-full gap-2 border-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft"
+                    className="mt-3 h-10 w-full gap-2 border-violet-200 text-violet-700 hover:bg-violet-50"
                     disabled={workflowBusy}
                     onClick={startPreparation}
                   >
@@ -1469,7 +1447,7 @@ export default function DocumentTemplateDetailPage() {
                   </Button>
                 ) : null}
                 <Button
-                  className="mt-2 h-11 w-full gap-2 bg-ds-accent font-extrabold hover:bg-ds-accent"
+                  className="mt-2 h-11 w-full gap-2 bg-violet-700 font-extrabold hover:bg-violet-800"
                   disabled={workflowBusy || !workflowCanAdvance || !workflowNote.trim() || officialChecklist.some((item) => !item.ok)}
                   onClick={() => void advanceOfficialWorkflow()}
                 >
@@ -1479,7 +1457,7 @@ export default function DocumentTemplateDetailPage() {
                 {awaitingRhApproval && canManage ? (
                   <Button
                     variant="outline"
-                    className="mt-2 h-10 w-full gap-2 border-ds-danger-bg text-ds-danger hover:bg-ds-danger-bg"
+                    className="mt-2 h-10 w-full gap-2 border-rose-200 text-rose-700 hover:bg-rose-50"
                     disabled={returningForAdjustments || !workflowNote.trim()}
                     onClick={() => void returnForAdjustments()}
                   >
@@ -1488,17 +1466,17 @@ export default function DocumentTemplateDetailPage() {
                   </Button>
                 ) : null}
                 {template.contentUpdatedBy && firebaseUser?.uid === template.contentUpdatedBy ? (
-                  <p className="mt-2 rounded-lg bg-ds-warn-bg px-3 py-2 text-[10px] font-semibold text-ds-warn">
+                  <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800">
                     Atenção: o homologador atual também participou da última edição. Esta ocorrência será registrada na auditoria.
                   </p>
                 ) : null}
-                <p className="mt-2 text-center text-[10px] text-ds-ink-faint">
+                <p className="mt-2 text-center text-[10px] text-slate-400">
                   {workflowAction.next === "published" ? "Publica a versão e substitui a anterior em uso" : `Avança para ${DOCUMENT_TEMPLATE_WORKFLOW_LABELS[workflowAction.next]}`}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 border-t border-ds-ok-bg bg-ds-ok-bg px-5 py-4 text-xs font-extrabold text-ds-ok">
+            <div className="flex items-center gap-2 border-t border-emerald-100 bg-emerald-50 px-5 py-4 text-xs font-extrabold text-emerald-800">
               <CheckCircle2 className="h-5 w-5" />Versão homologada e publicada. A versão oficial anterior foi marcada como substituída.
             </div>
           )}
@@ -1506,10 +1484,10 @@ export default function DocumentTemplateDetailPage() {
       ) : null}
 
       {activeView === "history" ? (
-        <section className="overflow-hidden rounded-xl border bg-ds-surface shadow-sm">
+        <section className="overflow-hidden rounded-xl border bg-white shadow-xs">
           <header className="border-b px-5 py-4">
-            <h2 className="text-sm font-black text-ds-ink">Histórico da versão</h2>
-            <p className="mt-1 text-xs text-ds-ink-muted">Transições, responsáveis, decisões e ressalvas ficam preservados nesta versão.</p>
+            <h2 className="text-sm font-black text-slate-950">Histórico da versão</h2>
+            <p className="mt-1 text-xs text-slate-500">Transições, responsáveis, decisões e ressalvas ficam preservados nesta versão.</p>
           </header>
           {(template.workflowHistory ?? []).length ? (
             <div className="divide-y">
@@ -1517,61 +1495,61 @@ export default function DocumentTemplateDetailPage() {
                 <div key={`${event.at ?? "event"}-${index}`} className="grid gap-2 px-5 py-4 md:grid-cols-[150px_minmax(0,1fr)_220px]">
                   <div>
                     <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-extrabold uppercase ${
-                      event.decision === "return" ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-ok-bg text-ds-ok"
+                      event.decision === "return" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"
                     }`}>
                       {event.decision === "return" ? "Devolvido" : "Avançou"}
                     </span>
-                    <p className="mt-1 text-[11px] text-ds-ink-faint">{formatDateTime(event.at ?? undefined)}</p>
+                    <p className="mt-1 text-[11px] text-slate-400">{formatDateTime(event.at ?? undefined)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-black text-ds-ink">{DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.from]} → {DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.to]}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-ds-ink-muted">{event.note || "Sem observação registrada."}</p>
+                    <p className="text-xs font-black text-slate-900">{DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.from]} → {DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.to]}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{event.note || "Sem observação registrada."}</p>
                   </div>
-                  <div className="text-xs text-ds-ink-muted">
-                    <p className="font-bold text-ds-ink">{event.actorName || "Usuário"}</p>
+                  <div className="text-xs text-slate-500">
+                    <p className="font-bold text-slate-800">{event.actorName || "Usuário"}</p>
                     <p className="mt-1">{event.sameActorAsEditor ? "Também participou da edição" : "Responsável distinto da edição"}</p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="px-5 py-10 text-center text-xs text-ds-ink-muted">Nenhuma transição registrada nesta versão.</p>
+            <p className="px-5 py-10 text-center text-xs text-slate-500">Nenhuma transição registrada nesta versão.</p>
           )}
         </section>
       ) : null}
 
       {activeView === "text" ? (
-        <section className="overflow-hidden rounded-xl border bg-ds-surface shadow-sm">
+        <section className="overflow-hidden rounded-xl border bg-white shadow-xs">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
             <div>
-              <h2 className="flex items-center gap-2 text-sm font-black text-ds-ink">
-                <BookOpenText className="h-4 w-4 text-ds-accent-ink" />
+              <h2 className="flex items-center gap-2 text-sm font-black text-slate-950">
+                <BookOpenText className="h-4 w-4 text-violet-700" />
                 Texto integral do modelo
               </h2>
-              <p className="mt-1 text-xs text-ds-ink-muted">
+              <p className="mt-1 text-xs text-slate-500">
                 Leia a matriz completa antes da geração. As variáveis aparecem destacadas, mas não são substituídas nesta visualização.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-ds-ink-muted">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500">
               <span>{variables.length} variável(is) · {documentTextOccurrences} ocorrência(s)</span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-4 w-8 rounded border border-ds-warn-bg bg-ds-warn-bg" />
+                <span className="h-4 w-8 rounded border border-amber-300 bg-amber-200" />
                 Variável do sistema
               </span>
             </div>
           </header>
-          <div className="bg-ds-muted px-3 py-6 sm:px-6 lg:px-10">
+          <div className="bg-[#f1efeb] px-3 py-6 sm:px-6 lg:px-10">
             {documentTextLoading ? (
-              <div className="flex min-h-64 items-center justify-center gap-2 text-sm font-semibold text-ds-ink-muted">
+              <div className="flex min-h-64 items-center justify-center gap-2 text-sm font-semibold text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" />Carregando o texto integral...
               </div>
             ) : documentTextError ? (
-              <div className="mx-auto max-w-3xl rounded-xl border border-ds-danger-bg bg-ds-danger-bg px-4 py-3 text-sm font-semibold text-ds-danger">
+              <div className="mx-auto max-w-3xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                 {documentTextError}
               </div>
             ) : documentText?.length ? (
               <article
-                className="mx-auto min-h-[720px] max-w-4xl rounded-sm border border-ds-border bg-ds-surface px-8 py-10 text-[15px] text-ds-ink shadow-[0_12px_35px_rgba(15,23,42,0.10)] sm:px-14 sm:py-14"
+                className="mx-auto min-h-[720px] max-w-4xl rounded-sm border border-slate-200 bg-white px-8 py-10 text-[15px] text-slate-950 shadow-[0_12px_35px_rgba(15,23,42,0.10)] sm:px-14 sm:py-14"
                 style={{ fontFamily: "Cambria, Caladea, Georgia, serif" }}
               >
                 {documentText.map((block) => (
@@ -1579,25 +1557,25 @@ export default function DocumentTemplateDetailPage() {
                 ))}
               </article>
             ) : (
-              <p className="py-16 text-center text-sm text-ds-ink-muted">O modelo não possui texto extraível.</p>
+              <p className="py-16 text-center text-sm text-slate-500">O modelo não possui texto extraível.</p>
             )}
           </div>
         </section>
       ) : null}
 
       {contentEditable && activeView === "fields" && template.storagePath ? (
-        <section id="ai-preparation-phase" className="rounded-lg border border-ds-accent-soft bg-ds-surface shadow-sm">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-accent-soft px-4 py-3">
+        <section id="ai-preparation-phase" className="rounded-lg border border-violet-100 bg-white shadow-xs">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-100 px-4 py-3">
             <div>
-              <h2 className="flex items-center gap-2 text-sm font-black text-ds-ink">
-                <Sparkles className="h-4 w-4 text-ds-accent-ink" />
+              <h2 className="flex items-center gap-2 text-sm font-black text-slate-900">
+                <Sparkles className="h-4 w-4 text-violet-600" />
                 {!aiPlan
                   ? "1. Mapeamento dos locais pela IA"
                   : aiPlan.reviewed
                     ? "Mapeamento da IA concluído"
                     : "2. Edição manual das sugestões da IA"}
               </h2>
-              <p className="text-xs text-ds-ink-muted">
+              <p className="text-xs text-slate-500">
                 {!aiPlan
                   ? "A IA identifica possíveis trechos para variáveis. Nenhuma alteração é aplicada automaticamente."
                   : aiPlan.reviewed
@@ -1606,22 +1584,22 @@ export default function DocumentTemplateDetailPage() {
               </p>
             </div>
             {!aiPlan ? (
-              <Button size="sm" variant="outline" className="h-8 border-ds-accent-soft text-xs text-ds-accent-ink" disabled={aiBusy || aiBlocked} onClick={() => void proposeAiPlan()}>
+              <Button size="sm" variant="outline" className="h-8 border-violet-200 text-xs text-violet-700" disabled={aiBusy || aiBlocked} onClick={() => void proposeAiPlan()}>
                 {aiBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
                 Mapear locais com IA
               </Button>
             ) : aiPlan.reviewed ? (
-              <Button size="sm" className="h-8 gap-2 bg-ds-accent text-xs hover:bg-ds-accent" onClick={() => setVariableWizardOpen(true)}>
+              <Button size="sm" className="h-8 gap-2 bg-violet-700 text-xs hover:bg-violet-800" onClick={() => setVariableWizardOpen(true)}>
                 <Pencil className="h-3.5 w-3.5" />Continuar edição manual
               </Button>
             ) : (
-              <Button size="sm" variant="ghost" className="h-8 text-xs text-ds-ink-muted" disabled={aiBusy} onClick={() => void proposeAiPlan()}>
+              <Button size="sm" variant="ghost" className="h-8 text-xs text-slate-500" disabled={aiBusy} onClick={() => void proposeAiPlan()}>
                 Refazer análise
               </Button>
             )}
           </header>
           {aiBlocked ? (
-            <div className="m-4 rounded-lg border border-ds-danger-bg bg-ds-danger-bg p-3 text-xs text-ds-danger">
+            <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
               <p className="font-black">Envio à IA bloqueado: a matriz parece conter dados pessoais reais.</p>
               <ul className="mt-1 list-disc pl-4">
                 {aiFindings.map((finding, index) => <li key={`${finding.type}-${index}`}>{finding.type}: {finding.maskedEvidence}</li>)}
@@ -1631,61 +1609,61 @@ export default function DocumentTemplateDetailPage() {
             <div className="space-y-3 p-4">
               {!aiPlan.reviewed ? (
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-ds-accent-soft bg-ds-accent-soft px-3 py-2">
-                    <p className="text-xs font-bold text-ds-accent-ink">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2">
+                    <p className="text-xs font-bold text-violet-900">
                       A IA encontrou {aiPlan.mappings.length} possível(is) local(is); {selectedAiMappings.size} selecionado(s).
                     </p>
-                    <span className="text-[10px] font-semibold text-ds-accent-ink">Baixa confiança aparece destacada em amarelo</span>
+                    <span className="text-[10px] font-semibold text-violet-700">Baixa confiança aparece destacada em amarelo</span>
                   </div>
                   <div className="overflow-x-auto rounded-lg border">
                     <table className="w-full min-w-[760px] text-left text-xs">
-                      <thead className="bg-ds-muted text-[10px] uppercase text-ds-ink-muted">
+                      <thead className="bg-slate-50 text-[10px] uppercase text-slate-500">
                         <tr><th className="p-2">Usar</th><th className="p-2">Trecho exato</th><th className="p-2">Variável sugerida</th><th className="p-2">Ocorrências</th><th className="p-2">Confiança</th><th className="p-2">Justificativa</th></tr>
                       </thead>
                       <tbody className="divide-y">
                         {aiPlan.mappings.map((item, index) => (
-                          <tr key={`${item.exactText}-${index}`} className={item.confidence < 0.75 ? "bg-ds-warn-bg" : ""}>
+                          <tr key={`${item.exactText}-${index}`} className={item.confidence < 0.75 ? "bg-amber-50" : ""}>
                             <td className="p-2"><input aria-label={`Usar sugestão ${index + 1}`} type="checkbox" checked={selectedAiMappings.has(index)} onChange={(event) => setSelectedAiMappings((current) => {
                               const next = new Set(current);
                               if (event.target.checked) next.add(index); else next.delete(index);
                               return next;
                             })} /></td>
-                            <td className="max-w-64 p-2 font-medium text-ds-ink">{item.exactText}</td>
-                            <td className="p-2"><code className="rounded bg-ds-neutral-bg px-1 py-0.5">{`{{${item.variableKey}}}`}</code></td>
+                            <td className="max-w-64 p-2 font-medium text-slate-800">{item.exactText}</td>
+                            <td className="p-2"><code className="rounded bg-slate-100 px-1 py-0.5">{`{{${item.variableKey}}}`}</code></td>
                             <td className="p-2">{item.expectedOccurrences}</td>
                             <td className="p-2 font-bold">{Math.round(item.confidence * 100)}%</td>
-                            <td className="max-w-72 p-2 text-ds-ink-muted">{item.rationale}</td>
+                            <td className="max-w-72 p-2 text-slate-500">{item.rationale}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                   {aiPlan.formSchemaProposal ? (
-                    <label className="flex items-center gap-2 text-xs font-semibold text-ds-ink-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
                       <input type="checkbox" checked={acceptAiSchema} onChange={(event) => setAcceptAiSchema(event.target.checked)} />
                       Aplicar também o formulário proposto, se ele passar na validação
                     </label>
                   ) : null}
                   <div className="flex justify-end">
-                    <Button size="sm" className="gap-2 bg-ds-accent hover:bg-ds-accent" disabled={aiBusy || selectedAiMappings.size === 0} onClick={() => void applyAiPlan()}>
+                    <Button size="sm" className="gap-2 bg-violet-700 hover:bg-violet-800" disabled={aiBusy || selectedAiMappings.size === 0} onClick={() => void applyAiPlan()}>
                       {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}Aplicar selecionados e editar documento
                     </Button>
                   </div>
                 </>
               ) : (
-                <div className="flex items-center gap-3 rounded-lg border border-ds-ok-bg bg-ds-ok-bg px-4 py-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ds-ok text-white">
+                <div className="flex items-center gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">
                     <CheckCircle2 className="h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-xs font-black text-ds-ok">Sugestões revisadas e aplicadas</p>
-                    <p className="mt-0.5 text-[11px] text-ds-ok">A fase 1 terminou. Continue na edição para ajustar outros trechos e seguir ao teste visual.</p>
+                    <p className="text-xs font-black text-emerald-900">Sugestões revisadas e aplicadas</p>
+                    <p className="mt-0.5 text-[11px] text-emerald-700">A fase 1 terminou. Continue na edição para ajustar outros trechos e seguir ao teste visual.</p>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <p className="px-4 py-5 text-xs text-ds-ink-muted">Inicie a análise para a IA indicar os possíveis locais de inserção. A fonte só será enviada após essa ação.</p>
+            <p className="px-4 py-5 text-xs text-slate-500">Inicie a análise para a IA indicar os possíveis locais de inserção. A fonte só será enviada após essa ação.</p>
           )}
         </section>
       ) : null}
@@ -1713,38 +1691,38 @@ export default function DocumentTemplateDetailPage() {
           <CollectiveAgreementsPanel canManage={canManage} />
         ) : null}
 
-      {activeView === "fields" ? <section id="template-fields-phase" className={`rounded-lg border bg-ds-surface shadow-sm ${
+      {activeView === "fields" ? <section id="template-fields-phase" className={`rounded-lg border bg-white shadow-xs ${
         variableWizardOpen || (contentEditable && !aiPlan?.reviewed) ? "hidden" : ""
       }`}>
         <header className="border-b px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-black text-ds-ink">Campos do modelo</h2>
-              <p className="text-xs text-ds-ink-muted">
+              <h2 className="text-sm font-black text-slate-900">Campos do modelo</h2>
+              <p className="text-xs text-slate-500">
                 {variables.length} no DOCX · {automaticVariables.length + mappableVariables.filter((key) => mapping[key]?.kind === "system").length} automáticos ·{" "}
                 {manualBindings.length} preenchidos na geração ·{" "}
-                {pendingCount > 0 ? <span className="font-bold text-ds-warn">{pendingCount} pendente(s)</span> : <span className="font-bold text-ds-ok">todos definidos</span>}
+                {pendingCount > 0 ? <span className="font-bold text-amber-700">{pendingCount} pendente(s)</span> : <span className="font-bold text-emerald-700">todos definidos</span>}
               </p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               {contentEditable && template.storagePath ? (
-                <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-lg border-ds-accent-soft text-xs text-ds-accent-ink" onClick={startPreparation}>
+                <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-lg border-violet-200 text-xs text-violet-700" onClick={startPreparation}>
                   <Wand2 className="h-3.5 w-3.5" />Editar texto no documento
                 </Button>
               ) : null}
-              {contentEditable ? <Button size="sm" className="h-8 rounded-lg bg-ds-accent text-xs hover:bg-ds-accent" disabled={saving} onClick={() => void saveMapping()}>
+              {contentEditable ? <Button size="sm" className="h-8 rounded-lg bg-violet-700 text-xs hover:bg-violet-800" disabled={saving} onClick={() => void saveMapping()}>
                 {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}Salvar mapeamento
               </Button> : null}
             </div>
           </div>
           {!contentEditable ? (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-ds-accent-soft bg-ds-accent-soft px-3 py-2 text-xs font-semibold text-ds-accent-ink">
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800">
               <Lock className="h-4 w-4" />Versão protegida. Para alterar qualquer campo, devolva para ajustes ou crie uma nova versão.
             </div>
           ) : null}
           <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ds-ink-faint" />
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <Input className="h-9 pl-9 text-xs" placeholder="Buscar token ou campo..." value={fieldSearch} onChange={(event) => setFieldSearch(event.target.value)} />
             </div>
             <div className="flex flex-wrap gap-1">
@@ -1756,7 +1734,7 @@ export default function DocumentTemplateDetailPage() {
               ] as Array<[FieldFilter, string]>).map(([filter, label]) => (
                 <button
                   key={filter}
-                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${fieldFilter === filter ? "bg-ds-accent-soft text-ds-accent-ink" : "bg-ds-neutral-bg text-ds-ink-muted"}`}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold ${fieldFilter === filter ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-500"}`}
                   onClick={() => setFieldFilter(filter)}
                 >
                   {label}
@@ -1766,10 +1744,10 @@ export default function DocumentTemplateDetailPage() {
           </div>
         </header>
         <div>
-          {variables.length === 0 ? <p className="px-4 py-8 text-center text-xs text-ds-ink-muted">Envie um DOCX para o sistema analisar os campos.</p> : null}
+          {variables.length === 0 ? <p className="px-4 py-8 text-center text-xs text-slate-500">Envie um DOCX para o sistema analisar os campos.</p> : null}
           {fieldGroups.map(([group, rows]) => (
             <div key={group} className="border-b last:border-b-0">
-              <div className="bg-ds-muted px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.07em] text-ds-ink-muted">
+              <div className="bg-slate-50 px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.07em] text-slate-500">
                 {group} · {rows.length}
               </div>
               <div className="divide-y">
@@ -1787,32 +1765,32 @@ export default function DocumentTemplateDetailPage() {
                     <div key={row.key}>
                       <button
                         className={`grid w-full items-center gap-3 px-4 py-3 text-left md:grid-cols-[minmax(190px,0.8fr)_minmax(180px,1fr)_110px_minmax(180px,0.8fr)_24px] ${
-                          row.pending ? "bg-ds-warn-bg" : "hover:bg-ds-muted"
+                          row.pending ? "bg-amber-50/50" : "hover:bg-slate-50"
                         }`}
                         disabled={directAutomatic || !contentEditable}
                         onClick={() => toggleField(row.key)}
                       >
-                        <code className="truncate rounded bg-ds-neutral-bg px-1.5 py-0.5 font-mono text-[11px] text-ds-ink-2">{`{{${row.key}}}`}</code>
+                        <code className="truncate rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">{`{{${row.key}}}`}</code>
                         <span className="min-w-0">
-                          <span className="block truncate text-xs font-bold text-ds-ink">{row.label}</span>
-                          <span className="block truncate text-[10px] text-ds-ink-faint">{fieldOutputSample(row.key, binding)}</span>
+                          <span className="block truncate text-xs font-bold text-slate-800">{row.label}</span>
+                          <span className="block truncate text-[10px] text-slate-400">{fieldOutputSample(row.key, binding)}</span>
                         </span>
                         <span className={`w-fit rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase ${
-                          row.pending ? "bg-ds-warn-bg text-ds-warn" : row.manual ? "bg-ds-info-bg text-ds-info" : "bg-ds-ok-bg text-ds-ok"
+                          row.pending ? "bg-amber-100 text-amber-800" : row.manual ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"
                         }`}>{origin}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-ds-ink-muted">
-                          {sensitive ? <span className="rounded-full bg-ds-danger-bg px-2 py-0.5 font-extrabold text-ds-danger">LGPD</span> : null}
+                        <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                          {sensitive ? <span className="rounded-full bg-rose-50 px-2 py-0.5 font-extrabold text-rose-700">LGPD</span> : null}
                           {binding?.kind === "manual" && binding.required ? "Obrigatório" : binding?.kind === "system" && binding.required !== false ? "Obrigatório" : ""}
                         </span>
-                        {row.pending ? <CircleAlert className="h-4 w-4 text-ds-warn" /> : !directAutomatic && contentEditable ? (
-                          expanded ? <ChevronDown className="h-4 w-4 text-ds-ink-faint" /> : <ChevronRight className="h-4 w-4 text-ds-ink-faint" />
-                        ) : <Lock className="h-3.5 w-3.5 text-ds-ink-faint" />}
+                        {row.pending ? <CircleAlert className="h-4 w-4 text-amber-600" /> : !directAutomatic && contentEditable ? (
+                          expanded ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />
+                        ) : <Lock className="h-3.5 w-3.5 text-slate-300" />}
                       </button>
                       {expanded && contentEditable && !directAutomatic ? (
-                        <div className="border-t bg-ds-surface px-4 py-4">
+                        <div className="border-t bg-[#fbfaf8] px-4 py-4">
                           <div className="mb-3 flex flex-wrap items-center gap-2">
                             <select
-                              className="h-8 rounded-md border bg-ds-surface px-2 text-xs"
+                              className="h-8 rounded-md border bg-white px-2 text-xs"
                               value={binding ? binding.kind : ""}
                               onChange={(event) => {
                                 const kind = event.target.value;
@@ -1826,7 +1804,7 @@ export default function DocumentTemplateDetailPage() {
                               <option value="manual">Preencher na geração</option>
                             </select>
                             {!binding && suggestion ? (
-                              <button className="inline-flex items-center gap-1 rounded-full bg-ds-accent-soft px-2 py-1 text-[10px] font-bold text-ds-accent-ink" onClick={() => setBinding(row.key, { kind: "system", key: suggestion })}>
+                              <button className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700" onClick={() => setBinding(row.key, { kind: "system", key: suggestion })}>
                                 <Sparkles className="h-3 w-3" />Usar sugestão: {CATALOG_LABELS.get(suggestion) ?? suggestion}
                               </button>
                             ) : null}
@@ -1835,7 +1813,7 @@ export default function DocumentTemplateDetailPage() {
                             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_180px]">
                               <SystemKeySelect value={binding.key} onChange={(next) => setBinding(row.key, { ...binding, key: next })} />
                               <select
-                                className="h-9 w-full rounded-md border bg-ds-surface px-2 text-xs"
+                                className="h-9 w-full rounded-md border bg-white px-2 text-xs"
                                 value={binding.formatter ?? "source"}
                                 onChange={(event) => {
                                   const formatter = event.target.value as DocumentOutputFormatter;
@@ -1844,8 +1822,8 @@ export default function DocumentTemplateDetailPage() {
                               >
                                 {DOCUMENT_OUTPUT_FORMATTERS.map((formatter) => <option key={formatter} value={formatter}>{OUTPUT_FORMATTER_LABELS[formatter]}</option>)}
                               </select>
-                              <label className="flex items-center gap-2 rounded-lg border bg-ds-surface px-3 text-xs font-semibold text-ds-ink-2">
-                                <input className="h-4 w-4 accent-ds-accent-soft" type="checkbox" checked={binding.required !== false} onChange={(event) => setBinding(row.key, { ...binding, required: event.target.checked })} />
+                              <label className="flex items-center gap-2 rounded-lg border bg-white px-3 text-xs font-semibold text-slate-700">
+                                <input className="h-4 w-4 accent-violet-700" type="checkbox" checked={binding.required !== false} onChange={(event) => setBinding(row.key, { ...binding, required: event.target.checked })} />
                                 Bloquear se vazio
                               </label>
                             </div>
@@ -1860,18 +1838,18 @@ export default function DocumentTemplateDetailPage() {
             </div>
           ))}
           {variables.length > 0 && fieldGroups.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-ds-ink-muted">Nenhum campo corresponde ao filtro selecionado.</p>
+            <p className="px-4 py-8 text-center text-xs text-slate-500">Nenhum campo corresponde ao filtro selecionado.</p>
           ) : null}
         </div>
       </section> : null}
 
-      {activeView === "generated" ? <section className="rounded-lg border bg-ds-surface shadow-sm">
+      {activeView === "generated" ? <section className="rounded-lg border bg-white shadow-xs">
         <header className="border-b px-4 py-3">
-          <h2 className="text-sm font-black text-ds-ink">Documentos gerados</h2>
-          <p className="text-xs text-ds-ink-muted">Prévias ficam em conferência até serem finalizadas.</p>
+          <h2 className="text-sm font-black text-slate-900">Documentos gerados</h2>
+          <p className="text-xs text-slate-500">Prévias ficam em conferência até serem finalizadas.</p>
         </header>
         {generated.length === 0 ? (
-          <p className="px-4 py-6 text-center text-xs text-ds-ink-muted">Nenhum documento gerado com este modelo ainda.</p>
+          <p className="px-4 py-6 text-center text-xs text-slate-500">Nenhum documento gerado com este modelo ainda.</p>
         ) : (
           <div className="divide-y">
             {generated.map((item) => {
@@ -1880,12 +1858,12 @@ export default function DocumentTemplateDetailPage() {
               const busy = busyDocument === item.id;
               return (
                 <div key={item.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-                  <FileStack className="h-4 w-4 shrink-0 text-ds-ink-faint" />
+                  <FileStack className="h-4 w-4 shrink-0 text-slate-400" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-ds-ink">{item.employeeName ?? item.employeeId ?? item.onboardingId ?? "—"}</p>
-                    <p className="text-[11px] text-ds-ink-muted">{formatDateTime(item.generatedAt)} · por {item.generatedByName ?? "—"}</p>
+                    <p className="truncate text-xs font-bold text-slate-800">{item.employeeName ?? item.employeeId ?? item.onboardingId ?? "—"}</p>
+                    <p className="text-[11px] text-slate-500">{formatDateTime(item.generatedAt)} · por {item.generatedByName ?? "—"}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${isReview ? "bg-ds-warn-bg text-ds-warn" : isApproved ? "bg-ds-info-bg text-ds-info" : "bg-ds-ok-bg text-ds-ok"}`}>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${isReview ? "bg-amber-50 text-amber-700" : isApproved ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>
                     {isReview ? "Em conferência" : isApproved ? "Aprovado" : "Finalizado"}
                   </span>
                   <div className="flex shrink-0 gap-1">
@@ -1896,12 +1874,12 @@ export default function DocumentTemplateDetailPage() {
                     {isReview && canReview ? (
                       <>
                         <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" disabled={busy || !published} onClick={() => openGenerateDialog(item)}><Wand2 className="h-3.5 w-3.5" />Corrigir</Button>
-                        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-ds-info" disabled={busy || !item.pdfAvailable} onClick={() => void changeGeneratedStatus(item.id, "approved")}><CheckCircle2 className="h-3.5 w-3.5" />Aprovar</Button>
-                        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-ds-danger" disabled={busy} onClick={() => void discardDocument(item.id)}><Trash2 className="h-3.5 w-3.5" />Descartar</Button>
+                        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-sky-700" disabled={busy || !item.pdfAvailable} onClick={() => void changeGeneratedStatus(item.id, "approved")}><CheckCircle2 className="h-3.5 w-3.5" />Aprovar</Button>
+                        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-rose-600" disabled={busy} onClick={() => void discardDocument(item.id)}><Trash2 className="h-3.5 w-3.5" />Descartar</Button>
                       </>
                     ) : null}
                     {isApproved && canReview ? (
-                      <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-ds-ok" disabled={busy} onClick={() => void changeGeneratedStatus(item.id, "final")}><Lock className="h-3.5 w-3.5" />Finalizar</Button>
+                      <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-emerald-700" disabled={busy} onClick={() => void changeGeneratedStatus(item.id, "final")}><Lock className="h-3.5 w-3.5" />Finalizar</Button>
                     ) : null}
                   </div>
                 </div>
@@ -1916,9 +1894,9 @@ export default function DocumentTemplateDetailPage() {
           <DialogHeader className="border-b px-5 py-4"><DialogTitle>Gerar: {template.name}</DialogTitle></DialogHeader>
           <div className="max-h-[65vh] space-y-4 overflow-y-auto px-5 py-4">
             <div className="space-y-1.5">
-              <span className="text-xs font-bold text-ds-ink-2">Colaborador</span>
+              <span className="text-xs font-bold text-slate-700">Colaborador</span>
               <Input className="h-9 text-xs" placeholder="Buscar colaborador..." value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} />
-              <select className="h-10 w-full rounded-md border bg-ds-surface px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+              <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
                 <option value="">Selecione...</option>
                 {filteredEmployees.map((user) => (
                   <option key={user.id} value={user.id}>{user.username}</option>
@@ -1926,18 +1904,18 @@ export default function DocumentTemplateDetailPage() {
               </select>
             </div>
             {manualBindings.length ? (
-              <div className="space-y-3 rounded-lg border bg-ds-muted p-3">
-                <p className="text-xs font-black text-ds-ink-2">Preencha para gerar</p>
+              <div className="space-y-3 rounded-lg border bg-slate-50 p-3">
+                <p className="text-xs font-black text-slate-700">Preencha para gerar</p>
                 {manualBindings.map(([placeholder, binding]) => (
                   <label key={placeholder} className="block space-y-1">
-                    <span className="text-xs font-bold text-ds-ink-2">{binding.label || placeholder}{binding.required ? " *" : ""}</span>
-                    {binding.helpText ? <span className="block text-[11px] text-ds-ink-muted">{binding.helpText}</span> : null}
+                    <span className="text-xs font-bold text-slate-700">{binding.label || placeholder}{binding.required ? " *" : ""}</span>
+                    {binding.helpText ? <span className="block text-[11px] text-slate-500">{binding.helpText}</span> : null}
                     <ManualValueInput binding={binding} value={manualForm[placeholder] ?? ""} onChange={(next) => setManualForm((current) => ({ ...current, [placeholder]: next }))} />
                   </label>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-ds-ink-muted">Este modelo não possui campos manuais — todos os dados vêm do sistema.</p>
+              <p className="text-xs text-slate-500">Este modelo não possui campos manuais — todos os dados vêm do sistema.</p>
             )}
           </div>
           <div className="flex justify-end gap-2 border-t px-5 py-3">

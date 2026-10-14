@@ -79,12 +79,12 @@ function MapBlock({ placement, selected, recent, locked, onSelect, onResize, onR
       ref={sortable.setNodeRef}
       style={{ gridColumn: `span ${mapSpan(w)} / span ${mapSpan(w)}`, minHeight: mapHeight(h), transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }}
       className={cn(
-        "relative flex min-w-0 flex-col justify-between rounded-ds-card border bg-ds-surface p-2 text-left shadow-sm",
+        "relative flex min-w-0 flex-col justify-between rounded-ds-card border bg-ds-surface p-2 text-left shadow-xs",
         selected ? "border-ds-accent ring-2 ring-ds-accent" : "border-ds-border",
         sortable.isDragging && "z-10 opacity-80 shadow-ds-lift",
       )}
     >
-      <button type="button" onClick={onSelect} aria-pressed={selected} className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left focus-visible:outline-none">
+      <button type="button" onClick={onSelect} aria-pressed={selected} className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left focus-visible:outline-hidden">
         <span className="flex w-full items-center gap-1.5">
           <Icon className="h-3.5 w-3.5 shrink-0 text-ds-accent-ink" aria-hidden="true" />
           <span className="truncate text-[11.5px] font-extrabold leading-tight text-ds-ink">{definition?.title ?? placement.widgetId}</span>

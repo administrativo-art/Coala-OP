@@ -210,7 +210,7 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
       {/* Header */}
       <div className="flex items-center gap-3 border-b px-[22px] py-5">
         <span
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
           style={{ background: user.color || '#8B5CF6' }}
         >
           {initials(user.username)}
@@ -226,8 +226,8 @@ function DrawerBody({ user, unitName, vacations, calendars, canEdit, canApprove 
       {/* Body */}
       <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-[22px] py-[18px]">
         {multiOpen && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-ds-warn-bg bg-ds-warn px-3.5 py-3">
-            <span className="flex-shrink-0 text-sm text-ds-warn dark:text-ds-warn">⚠</span>
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3.5 py-3">
+            <span className="shrink-0 text-sm text-amber-600 dark:text-amber-400">⚠</span>
             <p className="text-xs leading-relaxed">
               {openCycles.length} ciclos concessivos em aberto ao mesmo tempo. O mais urgente é o{' '}
               <b>Ciclo {openCycles[0].id}</b>, vencido/vencendo em {fmt(openCycles[0].concessivePeriod.end)}.
@@ -335,7 +335,7 @@ function CycleBlock({
       <div className="flex items-start gap-3">
         {!done ? (
           <div
-            className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-full"
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full"
             style={{ background: `conic-gradient(from -90deg, ${rc.fg} ${progress * 3.6}deg, hsl(var(--secondary)) 0deg)` }}
           >
             <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-card">
@@ -343,7 +343,7 @@ function CycleBlock({
             </div>
           </div>
         ) : (
-          <div className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-full bg-ds-ok text-[22px] text-ds-ok dark:text-ds-ok">
+          <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-green-500/15 text-[22px] text-green-700 dark:text-green-400">
             ✓
           </div>
         )}
@@ -453,7 +453,7 @@ function RecordRow({
   return (
     <div className="flex flex-wrap items-start gap-2.5 rounded-[10px] bg-muted px-3 py-2.5">
       <div
-        className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-lg text-xs font-extrabold"
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg text-xs font-extrabold"
         style={
           isVenda
             ? { background: 'rgba(59,130,246,0.14)', color: '#1D4ED8' }
@@ -499,14 +499,14 @@ function RecordRow({
             <Button
               type="button"
               size="sm"
-              className="h-8 rounded-lg bg-ds-dark px-3 text-[11.5px] text-white hover:bg-ds-dark-hover dark:bg-ds-neutral-bg dark:text-ds-ink dark:hover:bg-ds-seg"
+              className="h-8 rounded-lg bg-slate-950 px-3 text-[11.5px] text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-300"
               onClick={onReview}
             >
               <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
               Revisar e decidir
             </Button>
           ) : (
-            <span className="rounded-full border border-ds-warn-bg bg-ds-warn-bg px-2 py-1 text-[10px] font-semibold text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn">
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
               Sem permissão para decidir
             </span>
           )
@@ -528,7 +528,7 @@ function RecordRow({
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8 rounded-lg border-ds-danger-bg text-ds-danger hover:bg-ds-danger-bg hover:text-ds-danger dark:border-ds-danger-bg dark:text-ds-danger dark:hover:bg-ds-danger"
+            className="h-8 w-8 rounded-lg border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
             onClick={onDelete}
             aria-label="Excluir período lançado"
           >

@@ -1,14 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { EmptyResults, ListHead, ListShell, ListSkeleton } from "@/components/cadastros/cadastros-ui";
 import { ControlPanel, ControlSearch } from "@/components/patterns/control-panel";
 import { LiftRow } from "@/components/patterns/lift-row";
-import { ProfileManagementModal } from "@/components/profile-management-modal";
+import { InlineConfirm } from "@/components/patterns/inline-confirm";
+import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
+import { ProfileManagementModal, logProfileAudit } from "@/components/profile-management-modal";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Check } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
+import type { Profile } from "@/types";
 
 type AccessProfilesSettingsProps = {
   canEdit: boolean;
@@ -16,10 +21,251 @@ type AccessProfilesSettingsProps = {
 
 const ROW_TEMPLATE = "minmax(240px,1.6fr) minmax(200px,1fr)";
 
+const AREA_LABELS: Record<string, string> = {
+  dashboard: "Painel", registration: "Cadastros", stock: "Estoque", assets: "Patrimônio",
+  pricing: "Precificação", commercial: "Comercial", settings: "Configurações", tasks: "Tarefas",
+  goals: "Metas", help: "Ajuda", reposition: "Reposição", itemRequests: "Solicitações",
+  signage: "Sinalização", dp: "Pessoal", financial: "Financeiro", hr: "RH", app: "Aplicativo",
+  purchasing: "Compras", recruitment: "Recrutamento", forms: "Formulários",
+};
+
+const PERMISSION_LABELS: Record<string, string> = {
+  view: "Visualizar",
+  add: "Adicionar",
+  edit: "Editar",
+  delete: "Excluir",
+  create: "Criar",
+  manage: "Gerenciar",
+  approve: "Aprovar",
+  perform: "Realizar",
+  start: "Iniciar",
+  receive: "Receber",
+  finalize: "Finalizar",
+  cancel: "Cancelar",
+  export: "Exportar",
+  import: "Importar",
+  audit: "Auditoria",
+  operational: "Painel de operações",
+  pricing: "Precificação",
+  settings: "Configurações",
+  technicalSheets: "Fichas técnicas",
+  collaborator: "Painel do colaborador",
+  inventoryControl: "Controle de estoque",
+  uniforms: "Uniformes",
+  stockCount: "Contagem de estoque",
+  requestItem: "Solicitar item",
+  analysis: "Análises",
+  purchasing: "Compras",
+  returns: "Devoluções",
+  conversions: "Conversões",
+  predefinedLists: "Listas predefinidas",
+  addLot: "Adicionar lote",
+  editLot: "Editar lote",
+  writeDown: "Dar baixa",
+  transfer: "Transferir",
+  viewHistory: "Ver histórico",
+  deliver: "Entregar",
+  dispose: "Descartar",
+  manageEvaluation: "Gerenciar avaliação",
+  restock: "Reposição sugerida",
+  consumption: "Consumo",
+  projection: "Projeção",
+  valuation: "Valoração",
+  suggest: "Sugerir",
+  deleteHistory: "Excluir histórico",
+  updateStatus: "Atualizar situação",
+  printLabels: "Imprimir etiquetas",
+  retire: "Baixar patrimônio",
+  simulate: "Simular",
+  manageParameters: "Gerenciar parâmetros",
+  manageUsers: "Gerenciar usuários",
+  manageKiosks: "Gerenciar unidades",
+  manageProfiles: "Gerenciar perfis",
+  manageLabels: "Gerenciar etiquetas",
+  managePublicBio: "Gerenciar perfil público",
+  viewAiCosts: "Ver custos de IA",
+  prepareDispatch: "Preparar envio",
+  schedules: "Escalas",
+  publishBizneo: "Publicar no Bizneo",
+  assignExternal: "Escalar pessoa de outra unidade",
+  vacation: "Férias",
+  requests: "Solicitações dos colaboradores",
+  viewAll: "Ver todos",
+  request: "Solicitar",
+  review: "Analisar",
+  manageSettings: "Gerenciar configurações",
+  collaborators: "Colaboradores",
+  ownProfileOnly: "Somente o próprio perfil",
+  terminate: "Desligar colaborador",
+  syncProfile: "Sincronizar perfil",
+  manageUnits: "Gerenciar unidades",
+  manageShifts: "Gerenciar turnos",
+  manageCalendars: "Gerenciar calendários",
+  manageTime: "Gerenciar jornadas e horas",
+  manageAbsences: "Gerenciar tipos de ausência",
+  dashboard: "Visão geral",
+  cashFlow: "Fluxo de caixa",
+  financialFlow: "Fluxo financeiro",
+  expenses: "Despesas",
+  inbox: "Caixa de entrada",
+  audits: "Auditorias",
+  reconciliation: "Conciliação",
+  cardStatements: "Extratos de cartão",
+  personnelCosts: "Custos de pessoal",
+  beneficiaries: "Beneficiários",
+  paymentRequests: "Solicitações de pagamento",
+  cashClosures: "Fechamentos de caixa",
+  cashDeposits: "Depósitos de caixa",
+  interIntegration: "Integração bancária",
+  pay: "Pagar",
+  analyze: "Analisar",
+  link: "Vincular",
+  discard: "Descartar",
+  ignore: "Ignorar",
+  effectuate: "Efetivar",
+  confirm: "Confirmar",
+  correct: "Corrigir",
+  classifyAdjustments: "Classificar ajustes",
+  administer: "Administrar",
+  close: "Fechar",
+  reconcile: "Conciliar",
+  viewMaskedPaymentData: "Ver dados de pagamento mascarados",
+  managePaymentData: "Gerenciar dados de pagamento",
+  authorize: "Autorizar",
+  submit: "Enviar",
+  refresh: "Atualizar",
+  viewProof: "Ver comprovante",
+  adjustExpected: "Ajustar valor esperado",
+  reopen: "Reabrir",
+  resync: "Sincronizar novamente",
+  issue: "Emitir",
+  adjust: "Ajustar",
+  createQuotation: "Criar cotação",
+  finalizeQuotation: "Finalizar cotação",
+  createPurchase: "Criar compra",
+  receivePurchase: "Receber compra",
+  cancelPurchase: "Cancelar compra",
+  revertPurchaseStage: "Voltar etapa da compra",
+  manageFinancialLink: "Gerenciar vínculo financeiro",
+  manageBaseItems: "Gerenciar itens-base",
+  localPurchase: "Compra local",
+  register: "Registrar",
+  stockEntry: "Dar entrada em estoque",
+  schedule: "Escala",
+  viewAllUnits: "Ver todas as unidades",
+  employees: "Colaboradores",
+  org_chart: "Organograma",
+  roles: "Cargos",
+  functions: "Funções",
+  navigation: "Navegação",
+  formalization: "Formalização",
+  propagate: "Propagar alterações",
+  onboarding: "Admissão",
+  aso: "ASO",
+  accountant: "Contabilidade",
+  documents: "Documentos",
+  companyDocuments: "Documentos da empresa",
+  templates: "Modelos",
+  signatures: "Assinaturas",
+  consents: "Consentimentos",
+  sensitiveData: "Dados sensíveis",
+  generate: "Gerar",
+  publish: "Publicar",
+  send: "Enviar",
+  pipeline: "Etapas do processo",
+  talent_pool: "Banco de talentos",
+  hire: "Contratar",
+  global: "Configurações gerais",
+  analytics: "Análises",
+  projects: "Projetos",
+  view_all_projects: "Ver todos os projetos",
+  create_projects: "Criar projetos",
+  manage_templates: "Gerenciar modelos",
+  view_analytics: "Ver análises",
+  manage_taxonomy: "Gerenciar categorias",
+  configure_templates: "Configurar modelos",
+  view_occurrences: "Ver ocorrências",
+  edit_occurrences_admin: "Editar ocorrências como administrador",
+  export_occurrences: "Exportar ocorrências",
+  reprocess_occurrences: "Reprocessar ocorrências",
+  view_personal_targets: "Ver metas individuais",
+  export_personal_targets: "Exportar metas individuais",
+  view_collaborator_rankings: "Ver classificação dos colaboradores",
+  manage_retention_policy: "Gerenciar política de retenção",
+  manage_task_rules: "Gerenciar regras de tarefas",
+  resolve_occurrences: "Resolver ocorrências",
+  validate_occurrence_resolution: "Validar resolução de ocorrências",
+};
+
+function activePermissions(value: unknown, path = ""): string[] {
+  if (value === true) return [path];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value).flatMap(([key, child]) => activePermissions(child, path ? `${path}.${key}` : key));
+}
+
+export function readablePermission(path: string) {
+  return path
+    .split(".")
+    .slice(1)
+    .map((segment) => PERMISSION_LABELS[segment] ?? segment
+      .replace(/_/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/^./, (letter) => letter.toLocaleUpperCase("pt-BR")))
+    .join(" · ");
+}
+
 export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps) {
-  const { profiles, loading, adminProfileId } = useProfiles();
+  const { profiles, loading, adminProfileId, deleteProfile } = useProfiles();
+  const { firebaseUser, isDefaultAdmin } = useAuth();
   const [managerOpen, setManagerOpen] = useState(false);
+  const [managerAction, setManagerAction] = useState<"create" | "edit" | "duplicate">("create");
+  const [managerProfile, setManagerProfile] = useState<Profile | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState("");
+  const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? null;
+  const selectedIsAdministrator = selectedProfile?.id === adminProfileId || selectedProfile?.isDefaultAdmin === true;
+  const selectedPermissions = useMemo(() => activePermissions(selectedProfile?.permissions), [selectedProfile]);
+  const permissionAreas = useMemo(() => {
+    const areas = new Map<string, string[]>();
+    for (const path of selectedPermissions) {
+      const [area] = path.split(".");
+      areas.set(area, [...(areas.get(area) ?? []), path]);
+    }
+    return [...areas.entries()];
+  }, [selectedPermissions]);
+  const copyBlocked = !isDefaultAdmin && (selectedProfile?.permissions.settings?.manageUsers === true || selectedProfile?.permissions.settings?.manageProfiles === true);
+
+  const openManager = (action: "create" | "edit" | "duplicate", profile: Profile | null = null) => {
+    if (!canEdit) return;
+    setConfirmDelete(false);
+    setSelectedProfileId(null);
+    setManagerAction(action);
+    setManagerProfile(profile);
+    setManagerOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!canEdit || !selectedProfile || selectedIsAdministrator || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteProfile(selectedProfile.id);
+      await logProfileAudit(firebaseUser, "profile_deleted", selectedProfile, {
+        name: selectedProfile.name,
+        is_default_admin: false,
+      });
+      setConfirmDelete(false);
+      setSelectedProfileId(null);
+    } catch {
+      setDeleteError("Não foi possível excluir o perfil. Tente novamente.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const sortedProfiles = useMemo(
     () => [...profiles].sort((left, right) => {
@@ -39,7 +285,7 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
       <ControlPanel className="flex flex-col gap-4 px-[26px] pb-5 pt-[22px]">
         <div>
           <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-accent-kicker">Perfis de permissão</p>
-          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-[-0.05em]">{loading ? "—" : profiles.length}</p>
+          <p className="mt-1 font-ds-mono text-[44px] font-bold leading-none tracking-tighter">{loading ? "—" : profiles.length}</p>
           <p className="mt-1 text-base font-extrabold">{profiles.length === 1 ? "Perfil disponível" : "Perfis disponíveis"}</p>
           <p className="mt-2 max-w-2xl text-[13px] text-ds-on-dark-2">
             Defina quais módulos, informações e ações ficam disponíveis para cada perfil de acesso do Coala One.
@@ -47,8 +293,8 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <ControlSearch value={search} onChange={setSearch} placeholder="Buscar perfil" />
-          <Button type="button" variant="primary-page" size="xl" disabled={!canEdit} onClick={() => setManagerOpen(true)}>
-            Gerenciar perfis
+          <Button type="button" variant="primary-page" size="xl" disabled={!canEdit} onClick={() => openManager("create")}>
+            Novo perfil
           </Button>
         </div>
       </ControlPanel>
@@ -68,7 +314,11 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
         {visibleProfiles.map((profile) => {
           const isAdministrator = profile.id === adminProfileId || profile.isDefaultAdmin === true;
           return (
-            <LiftRow key={profile.id} interactive={false} className="grid items-center gap-3.5 px-5 py-[11px] last:border-b-0" style={{ gridTemplateColumns: ROW_TEMPLATE }}>
+            <LiftRow key={profile.id} selected={selectedProfileId === profile.id} onClick={() => {
+              setSelectedProfileId(profile.id);
+              setConfirmDelete(false);
+              setDeleteError(null);
+            }} className="grid items-center gap-3.5 px-5 py-[11px] last:border-b-0" style={{ gridTemplateColumns: ROW_TEMPLATE }}>
               <p className="truncate text-[13.5px] font-bold">{profile.name}</p>
               <div className="flex items-center gap-2">
                 <StatusPill variant={isAdministrator ? "info" : "neutral"}>{isAdministrator ? "Administrador do sistema" : "Personalizado"}</StatusPill>
@@ -87,7 +337,73 @@ export function AccessProfilesSettings({ canEdit }: AccessProfilesSettingsProps)
         O perfil é aplicado ao colaborador conforme o cargo e a função configurados em “Cargos e funções”.
       </p>
 
-      <ProfileManagementModal open={managerOpen} onOpenChange={setManagerOpen} canEdit={canEdit} />
+      <SidePanel
+        open={!!selectedProfile}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedProfileId(null);
+            setConfirmDelete(false);
+            setDeleteError(null);
+          }
+        }}
+        kicker="Perfil de acesso"
+        title={selectedProfile?.name ?? "Perfil"}
+        subtitle={selectedIsAdministrator ? "Administrador do sistema" : "Perfil personalizado"}
+      >
+        {selectedProfile ? (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <PanelField label="Tipo">{selectedIsAdministrator ? "Administrador do sistema" : "Personalizado"}</PanelField>
+              <PanelField label="Permissões ativas">{selectedPermissions.length}</PanelField>
+            </div>
+            <PanelSection title="Permissões ativas" aside={`${selectedPermissions.length} no total`}>
+              {permissionAreas.length ? permissionAreas.map(([area, paths]) => (
+                <div key={area} className="rounded-ds-md bg-ds-warm px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[12.5px] font-black text-ds-ink">{AREA_LABELS[area] ?? area}</p>
+                    <span className="rounded-full bg-ds-muted px-2 py-0.5 text-[10.5px] font-bold text-ds-ink-muted">{paths.length}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {paths.map((path) => (
+                      <span key={path} className="inline-flex items-center gap-1 rounded-ds-sm border border-ds-border bg-ds-surface px-2 py-1 text-[11px] font-semibold text-ds-ink-muted">
+                        <Check className="h-3 w-3 text-ds-ok" />
+                        {readablePermission(path)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )) : <p className="text-[12.5px] text-ds-ink-muted">Nenhuma permissão ativa neste perfil.</p>}
+            </PanelSection>
+            {canEdit ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="ds-secondary" size="md" disabled={copyBlocked} onClick={() => openManager("duplicate", selectedProfile)}>Copiar perfil</Button>
+                  <Button type="button" variant="ds-secondary" size="md" onClick={() => openManager("edit", selectedProfile)}>Editar perfil</Button>
+                </div>
+                {copyBlocked ? <p className="text-xs text-ds-ink-muted">Somente o administrador pode copiar um perfil com permissões de gestão de usuários ou perfis.</p> : null}
+                <div className="mt-auto border-t border-ds-divider pt-4">
+                  {selectedIsAdministrator ? (
+                    <p className="text-xs text-ds-ink-muted">O perfil administrador do sistema não pode ser excluído.</p>
+                  ) : confirmDelete ? (
+                    <InlineConfirm
+                      message={`Excluir o perfil “${selectedProfile.name}”? Esta ação não pode ser desfeita.`}
+                      loading={deleting}
+                      onConfirm={() => void handleDelete()}
+                      onCancel={() => setConfirmDelete(false)}
+                      returnFocusRef={deleteButtonRef}
+                    />
+                  ) : (
+                    <Button ref={deleteButtonRef} type="button" variant="danger-link" size="sm" onClick={() => setConfirmDelete(true)}>Excluir perfil</Button>
+                  )}
+                  {deleteError ? <p role="alert" className="mt-2 text-xs text-ds-danger">{deleteError}</p> : null}
+                </div>
+              </>
+            ) : <p role="note" className="text-xs text-ds-ink-muted">Você pode consultar este perfil, mas não alterá-lo.</p>}
+          </>
+        ) : null}
+      </SidePanel>
+
+      <ProfileManagementModal open={managerOpen} onOpenChange={setManagerOpen} canEdit={canEdit} initialAction={managerAction} initialProfile={managerProfile} />
     </div>
   );
 }

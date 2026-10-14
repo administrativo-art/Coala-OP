@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
+import { z } from "zod";
 
 import { requireUser } from "@/lib/auth-server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -15,6 +16,10 @@ import {
   type ProfileAccessMatrix,
   type ProfileBlockConfig,
 } from "@/types/rh";
+import { AppError } from "@/lib/observability/app-error";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,6 +100,9 @@ function cleanAccess(access: FieldMapEntry["access"]) {
 }
 
 function cleanEntry(entry: FieldMapEntry): FieldMapEntry {
+  const selfServicePolicy = ['inherit', 'blocked', 'direct', 'approval'].includes(String(entry.self_service_policy))
+    ? entry.self_service_policy
+    : undefined;
   const clean: FieldMapEntry = {
     bizneo_id: entry.bizneo_id || "coala_internal",
     label: entry.label,
@@ -103,6 +111,7 @@ function cleanEntry(entry: FieldMapEntry): FieldMapEntry {
     visibility: entry.visibility,
     employee_visible: entry.employee_visible === true,
     employee_editable: entry.employee_editable === true,
+    ...(selfServicePolicy ? { self_service_policy: selfServicePolicy } : {}),
     order: Number.isFinite(entry.order) ? entry.order : 0,
   };
   if (entry.required !== undefined) clean.required = entry.required === true;
@@ -110,7 +119,9 @@ function cleanEntry(entry: FieldMapEntry): FieldMapEntry {
   if (entry.options?.length) clean.options = entry.options.filter(Boolean);
   if (entry.lgpd) {
     clean.lgpd = {
-      category: entry.lgpd.category,
+      // Valores legados "confidential" pertencem à dimensão de acesso,
+      // não à natureza do dado definida pela LGPD.
+      category: entry.lgpd.category === "sensitive" ? "sensitive" : "personal",
       legal_basis: entry.lgpd.legal_basis,
       retention: entry.lgpd.retention,
       requires_consent: entry.lgpd.requires_consent === true,
@@ -302,12 +313,85 @@ async function loadOrCreateFieldMap(actor: Awaited<ReturnType<typeof requireUser
   return { ref, snap: await ref.get() };
 }
 
-export async function GET(request: NextRequest) {
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+type WorkspaceResource = { workspaceId: string };
+
+const updateInputSchema = z.object({
+  version: z.string().trim().max(120).optional(),
+  fields: z.record(z.string(), z.unknown()),
+  profile_blocks: z.record(z.string(), z.unknown()).optional(),
+  section_order: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  access_matrix: z.unknown().optional(),
+}).strict();
+
+const getContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "rh.field-map.read",
+  version: 1,
+  surface: { method: "GET", path: "/api/rh/field-map" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "rh.fields.configure" },
+  resourceScope: { kind: "workspace" },
+  input: { kind: "none" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+const putContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "rh.field-map.update",
+  version: 1,
+  surface: { method: "PUT", path: "/api/rh/field-map" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "rh.fields.configure" },
+  resourceScope: { kind: "workspace" },
+  input: { kind: "schema", schema: "rh-field-map-update", unknownFields: "reject" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+async function authenticateFieldMapUser(request: NextRequest) {
+  return requireUser(request).catch((cause) => {
+    throw new AppError({ code: "RH_FIELD_MAP_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", safeMessage: "Autenticação necessária.", cause, reportable: false });
+  });
+}
+
+function authorizeFieldMapUser(actor: Awaited<ReturnType<typeof requireUser>>) {
+  if (!canConfigureRhFields(actor)) {
+    throw new AppError({ code: "RH_FIELD_MAP_CONFIGURE_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para configurar campos.", reportable: false });
+  }
+}
+
+function assertFieldMapWorkspace(actor: Awaited<ReturnType<typeof requireUser>>, resource: WorkspaceResource) {
+  if (!resource.workspaceId || resource.workspaceId !== actor.workspace_id) {
+    throw new AppError({ code: "RH_FIELD_MAP_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
+  }
+}
+
+const getEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, Awaited<ReturnType<typeof requireUser>>, undefined, WorkspaceResource>(getContract, {
+  authenticate: ({ request }) => authenticateFieldMapUser(request),
+  loadResource: ({ actor }) => ({ workspaceId: actor.workspace_id }),
+  authorize: ({ actor }) => authorizeFieldMapUser(actor),
+  assertScope: ({ actor, resource }) => assertFieldMapWorkspace(actor, resource),
+});
+
+const putEnforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, Awaited<ReturnType<typeof requireUser>>, z.infer<typeof updateInputSchema>, WorkspaceResource>(putContract, {
+  authenticate: ({ request }) => authenticateFieldMapUser(request),
+  async parseInput({ request }) {
+    const parsed = updateInputSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) throw new AppError({ code: "RH_FIELD_MAP_INPUT_INVALID", kind: "VALIDATION", safeMessage: parsed.error.issues[0]?.message ?? "Configuração de campos inválida.", reportable: false });
+    return parsed.data;
+  },
+  loadResource: ({ actor }) => ({ workspaceId: actor.workspace_id }),
+  authorize: ({ actor }) => authorizeFieldMapUser(actor),
+  assertScope: ({ actor, resource }) => assertFieldMapWorkspace(actor, resource),
+});
+
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => {
   try {
-    const actor = await requireUser(request);
-    if (!canConfigureRhFields(actor)) {
-      return NextResponse.json({ error: "Sem permissão para configurar campos." }, { status: 403 });
-    }
+    const actor = security.actor;
 
     const { snap } = await loadOrCreateFieldMap(actor);
     const data = snap.data() ?? {};
@@ -324,16 +408,12 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Falha ao carregar campos.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-}
+});
 
-export async function PUT(request: NextRequest) {
+export const PUT = secureRoute({ contract: putContract, enforcer: putEnforcer }, async ({ security }) => {
   try {
-    const actor = await requireUser(request);
-    if (!canConfigureRhFields(actor)) {
-      return NextResponse.json({ error: "Sem permissão para configurar campos." }, { status: 403 });
-    }
-
-    const body = await request.json().catch(() => null);
+    const actor = security.actor;
+    const body = security.input;
     const fields = body?.fields;
     const profileBlocks = body?.profile_blocks;
     const sectionOrder = cleanSectionOrder(body?.section_order);
@@ -391,4 +471,4 @@ export async function PUT(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Falha ao salvar campos.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-}
+});

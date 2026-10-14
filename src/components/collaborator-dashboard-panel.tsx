@@ -18,10 +18,12 @@ import {
   FileText,
   Flag,
   FolderOpen,
+  Inbox,
   ListOrdered,
   Loader2,
   MapPin,
   Minus,
+  MoreHorizontal,
   Plus,
   UserRound,
 } from "lucide-react";
@@ -51,6 +53,7 @@ import {
 } from "@/lib/goals-distribution";
 import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +67,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function dateKey(value: Date) {
   return format(value, "yyyy-MM-dd");
@@ -486,7 +497,7 @@ function TimelineItem({
         {!isLast ? <span className="absolute right-[-8px] top-7 h-[calc(100%+0.75rem)] w-px bg-ds-divider" /> : null}
       </div>
 
-      <div className="rounded-ds-card border border-ds-border bg-ds-surface p-4 shadow-sm">
+      <div className="rounded-ds-card border border-ds-border bg-ds-surface p-4 shadow-xs">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -927,7 +938,7 @@ function SidebarCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 shadow-sm">
+    <div className="rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 shadow-xs">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <span className="text-ds-ink-muted">{icon}</span>
@@ -1196,7 +1207,7 @@ function SidebarMetas({
     <Dialog>
       <DialogTrigger asChild>
         <button type="button" className="block w-full text-left">
-          <div className="rounded-ds-card-lg border bg-ds-surface p-4 shadow-sm transition-colors hover:border-ds-divider hover:bg-ds-muted">
+          <div className="rounded-ds-card-lg border bg-ds-surface p-4 shadow-xs transition-colors hover:border-ds-divider hover:bg-ds-muted">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Flag className="h-4 w-4 text-ds-ink-muted" />
@@ -1376,27 +1387,29 @@ function QuickAccessCard({
   title,
   description,
   tone,
+  menu,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   description: string;
   tone: string;
+  menu?: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg border bg-ds-surface p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md"
-    >
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-ds-card ${tone}`}>
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-ds-ink">{title}</span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-ds-ink-muted">{description}</span>
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-ds-ink-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ds-accent-ink" />
-    </Link>
+    <div className="relative min-h-24 rounded-ds-card-lg border bg-ds-surface shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md">
+      <Link href={href} className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg p-4 pr-11">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-ds-card ${tone}`}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-ds-ink">{title}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-ds-ink-muted">{description}</span>
+        </span>
+        {!menu ? <ChevronRight className="h-4 w-4 shrink-0 text-ds-ink-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ds-accent-ink" /> : null}
+      </Link>
+      {menu ? <div className="absolute right-3 top-1/2 z-2 -translate-y-1/2">{menu}</div> : null}
+    </div>
   );
 }
 
@@ -1666,7 +1679,7 @@ function CollaboratorDashboardPanelInner() {
             meta={task.description}
             action={
               <Button asChild size="sm" variant="outline">
-                <Link href={task.link || "/dashboard/tasks"}>Concluir</Link>
+                <Link href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}>Concluir</Link>
               </Button>
             }
             isLast={isLast}
@@ -1810,10 +1823,10 @@ function CollaboratorDashboardPanelInner() {
           </div>
 
           {/* Acessos rápidos */}
-          {(canViewTechnicalSheets(permissions) || canAccessOwnProfile) ? (
+          {(canViewTechnicalSheets(permissions) || canAccessOwnProfile || (permissions.dashboard.collaborator ?? permissions.dashboard.view)) ? (
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">Acessos rápidos</p>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {canViewTechnicalSheets(permissions) ? (
                   <QuickAccessCard
                     href="/dashboard/commercial"
@@ -1841,6 +1854,33 @@ function CollaboratorDashboardPanelInner() {
                     tone="bg-ds-ok-bg text-ds-ok"
                   />
                 ) : null}
+                <QuickAccessCard
+                  href="/dashboard/collaborator/requests"
+                  icon={<Inbox className="h-5 w-5" />}
+                  title="Minhas solicitações"
+                  description="Pedidos, análises e termos"
+                  tone="bg-ds-warn-bg text-ds-warn"
+                  menu={
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" aria-label="Abrir tipos de solicitação" className="grid h-9 w-9 place-items-center rounded-full text-ds-ink-muted hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+                          <MoreHorizontal className="h-5 w-5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64 rounded-ds-btn-lg p-2">
+                        <DropdownMenuLabel className="text-[10.5px] uppercase tracking-[0.14em] text-ds-ink-faint">Nova solicitação</DropdownMenuLabel>
+                        <DropdownMenuItem asChild className="rounded-ds-md p-2.5">
+                          <Link href="/dashboard/collaborator/requests?new=transport_voucher">
+                            <Inbox className="h-4 w-4 text-ds-warn" />
+                            <span><span className="block font-bold">Vale-transporte</span><span className="block text-[11px] text-ds-ink-faint">Adesão, alteração, suspensão ou reativação</span></span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled className="rounded-ds-md text-xs">Novos tipos serão adicionados aqui.</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  }
+                />
               </div>
             </div>
           ) : null}

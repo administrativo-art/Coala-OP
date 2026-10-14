@@ -3,6 +3,11 @@ export function safeAvatarUrl(value: unknown) {
   return typeof value === "string" && /^https:\/\/[^\s]+$/.test(value.trim()) && value.length <= 2000 ? value.trim() : null;
 }
 
+/** Colour the schedule editor gave the person; only a plain hex leaves the server. */
+export function safePersonColor(value: unknown) {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value.trim()) ? value.trim().toUpperCase() : null;
+}
+
 export function parseSchedulePeriod(yearRaw: string | null, monthRaw: string | null, today: string) {
   const currentYear = Number(today.slice(0, 4));
   const year = yearRaw === null ? currentYear : Number(yearRaw);
@@ -10,6 +15,23 @@ export function parseSchedulePeriod(yearRaw: string | null, monthRaw: string | n
   // Same bounds as the web collaborator schedule.
   if (!Number.isInteger(year) || year < 2020 || year > currentYear + 2 || !Number.isInteger(month) || month < 1 || month > 12) return null;
   return { year, month };
+}
+
+/** Keep every unit with team shifts for the default admin; other callers stay within their resolved unit access. */
+export function visibleTeamUnitIds(
+  unitIds: string[],
+  linkedUnitIds: ReadonlySet<string>,
+  extraTeamUnitIds: string[] | "all",
+) {
+  return unitIds.filter((unitId) => extraTeamUnitIds === "all" || linkedUnitIds.has(unitId));
+}
+
+/** The app presents the person's first registered function; their role is the fallback. */
+export function mobileProfileRole(user: { jobFunctionNames?: unknown; jobRoleName?: unknown }) {
+  const functions = user.jobFunctionNames;
+  const firstFunction = Array.isArray(functions) ? functions.find((value) => typeof value === "string" && value.trim()) : null;
+  if (typeof firstFunction === "string") return firstFunction.trim();
+  return typeof user.jobRoleName === "string" && user.jobRoleName.trim() ? user.jobRoleName.trim() : null;
 }
 
 type TeamShift = {
@@ -24,6 +46,7 @@ type TeamShift = {
 export function toMobileSchedule(
   payload: { year: number; month: number; published: boolean; teamUnits: Array<{ id: string; name: string; shifts: TeamShift[] }> },
   avatarByUserId: Map<string, string | null>,
+  colorByUserId: Map<string, string | null> = new Map(),
 ) {
   return {
     year: payload.year,
@@ -36,7 +59,7 @@ export function toMobileSchedule(
       const people = order
         .map((userId) => {
           const sample = unit.shifts.find((shift) => shift.userId === userId)!;
-          return { userId, name: sample.employeeName, role: sample.employeeRole, isMe: sample.isCurrentUser, avatarUrl: avatarByUserId.get(userId) ?? null };
+          return { userId, name: sample.employeeName, role: sample.employeeRole, isMe: sample.isCurrentUser, avatarUrl: avatarByUserId.get(userId) ?? null, color: colorByUserId.get(userId) ?? null };
         })
         .sort((left, right) => Number(right.isMe) - Number(left.isMe) || left.name.localeCompare(right.name, "pt-BR"));
       const indexByUser = new Map(people.map((person, index) => [person.userId, index]));

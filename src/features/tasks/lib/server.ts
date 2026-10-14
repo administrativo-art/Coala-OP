@@ -20,6 +20,7 @@ import type {
 } from "@/features/forms/analytics/task-model";
 import { canActOnTask, canViewTask } from "@/features/tasks/lib/server-access";
 import { canAccessUnit } from "@/lib/unit-access";
+import { safeInternalPath } from "@/lib/safe-return-path";
 import {
   type LegacyTaskOriginType,
   type Task,
@@ -232,6 +233,13 @@ function assertTaskWorkspace(data: FirestoreRecord, context: ServerUserContext) 
 
 function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
   const createdBy = isRecord(data.created_by) ? data.created_by : null;
+  const originLink = safeInternalPath(
+    typeof data.originLink === "string"
+      ? data.originLink
+      : typeof data.origin_link === "string"
+        ? data.origin_link
+        : null,
+  );
   return {
     id,
     ...(typeof data.workspace_id === "string" ? { workspaceId: data.workspace_id } : {}),
@@ -365,11 +373,7 @@ function adaptTaskDoc(id: string, data: FirestoreRecord): Task {
       : typeof data.visibility_scope === "string"
         ? { visibilityScope: data.visibility_scope as Task["visibilityScope"] }
         : {}),
-    ...(typeof data.originLink === "string"
-      ? { originLink: data.originLink }
-      : typeof data.origin_link === "string"
-        ? { originLink: data.origin_link }
-        : {}),
+    ...(originLink ? { originLink } : {}),
     origin: normalizeOrigin(data.origin),
     history: normalizeHistory(data.history),
     createdAt: toIsoString(data.createdAt ?? data.created_at),
@@ -777,6 +781,7 @@ export async function createManualTask(params: {
   const status = await resolveInitialStatusDoc(projectId, subprojectId);
   const now = new Date().toISOString();
   const history = [buildHistoryItem(params.context, "created", "Tarefa criada manualmente.")];
+  const originLink = safeInternalPath(params.input.originLink);
 
   const taskRef =
     typeof params.input.idempotencyKey === "string" && params.input.idempotencyKey.trim()
@@ -817,7 +822,7 @@ export async function createManualTask(params: {
     priority: params.input.priority ?? "normal",
     ...(params.input.unitId ? { unit_id: params.input.unitId, unitId: params.input.unitId } : {}),
     ...(params.input.unitName ? { unit_name: params.input.unitName, unitName: params.input.unitName } : {}),
-    ...(params.input.originLink ? { origin_link: params.input.originLink, originLink: params.input.originLink } : {}),
+    ...(originLink ? { origin_link: originLink, originLink } : {}),
     watcher_user_ids: params.input.watcherUserIds ?? [],
     watcher_profile_ids: params.input.watcherProfileIds ?? [],
     watcher_role_ids: params.input.watcherRoleIds ?? [],
@@ -1239,8 +1244,9 @@ export async function updateTaskDocument(params: {
     nextData.visibility_scope = params.updates.visibilityScope;
   }
   if (typeof params.updates.originLink === "string") {
-    nextData.originLink = params.updates.originLink;
-    nextData.origin_link = params.updates.originLink;
+    const originLink = safeInternalPath(params.updates.originLink);
+    nextData.originLink = originLink ?? FieldValue.delete();
+    nextData.origin_link = originLink ?? FieldValue.delete();
   }
   if (Array.isArray(params.updates.history)) {
     nextData.history = params.updates.history;

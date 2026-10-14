@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useTasks } from '@/hooks/use-tasks';
+import { resolveSafeReturnPath } from '@/lib/safe-return-path';
 
 export type TaskListItem = Task | (LegacyTask & { legacy: true });
 
@@ -50,17 +51,17 @@ export function TaskList({ tasks, onTaskSelect, getTaskStatusLabel, getTaskMeta 
 
   const handleTaskClick = (task: TaskListItem) => {
     if (isLegacyTaskItem(task)) {
-      router.push(task.link);
+      router.push(resolveSafeReturnPath(task.link, "/dashboard/tasks"));
       return;
     }
 
     if (task.legacyLink) {
-      router.push(task.legacyLink);
+      router.push(resolveSafeReturnPath(task.legacyLink, "/dashboard/tasks"));
       return;
     }
 
     if (task.origin.kind === 'legacy' && task.originLink) {
-      router.push(task.originLink);
+      router.push(resolveSafeReturnPath(task.originLink, "/dashboard/tasks"));
       return;
     }
 
@@ -105,7 +106,7 @@ export function TaskList({ tasks, onTaskSelect, getTaskStatusLabel, getTaskMeta 
             ) : (
                  StatusIcon ? <StatusIcon className={`h-6 w-6 mt-1 shrink-0 ${statusInfo?.color}`} /> : null
             )}
-            <div className="flex-grow">
+            <div className="grow">
               <p className="font-semibold">{task.title}</p>
               {!isLegacy && createdAt ? (
                 <div className="text-sm text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:gap-4">

@@ -1,12 +1,14 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-11: [Coala Go Kotlin](../../apps/coala-one-android/README.md), package `coalaone.go`, único mobile após autorização expressa de retirada do Expo/APK antigo (não havia usuários). APK assinado/metadados/hash/link `/app/CoalaGo.apk` preparados localmente; [matriz](coala-go-parity.md) registra testes/lacunas. Extensões autorizadas: foto privada do recebimento e seleção de package na atestação/versão; [acesso/privacidade](access-and-privacy.md) documenta controles. Estoque/compras/signage continuam Traçados; testes locais não homologam serviços reais/aparelhos físicos. Sem publicação.
+
 2026-10-05: [Instagram](flows/instagram-publishing.md) passa a usar dimensões reais nas prévias e avaliação de proporção por formato; detalhes permitem editar a legenda de agendamentos ainda editáveis, com auditoria e invalidação segura do contêiner preparado. Regressões cobertas em `tests/unit/instagram-media-presentation.test.ts`; não equivale a homologação visual ou publicação real na Meta. A superfície externa permanece fora da contagem de grupos das páginas internas.
 
 Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1. Os nomes são grupos de investigação, sujeitos a divisão ou fusão quando a sequência ponta a ponta for confirmada. **Localizado** significa que as páginas proprietárias foram identificadas; não significa fluxo traçado ou regra aprovada.
 
 A [verificação por grupo](flow-verification.md) registra referências e lacunas na base principal para cada grupo; `Traçado` não significa teste integrado aprovado.
 
-Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 25 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
+Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
@@ -17,11 +19,12 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `cash-flow` | 4 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
 | `catalog` | 1 | Traçado | [Fichas técnicas](flows/catalog.md) — verificação de acesso e custo pendente |
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
-| `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — privacidade/custo e teste integrado pendentes |
+| `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
+| `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
-| `document-templates` | 4 | Traçado | [Cadastro e publicação](flows/document-templates.md) — percurso complementado; verificação integrada pendente |
+| `document-templates` | 5 | Traçado | [Cadastro e publicação](flows/document-templates.md) — percurso complementado; verificação integrada pendente |
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
@@ -52,7 +55,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `rh-bizneo` | 6 | Traçado | [Perfis e sincronização](flows/rh-bizneo.md) — percurso complementado; verificação integrada pendente |
 | `sales-reconciliation` | 1 | Traçado | [Conciliação de vendas](flows/stone-sales-review.md) — visão anual/mensal desde janeiro de 2026, snapshots normalizados, rotina limitada de backfill/revisão tardia, fechamento/reabertura, eventos adversos Stone e NSU Stone do PDV cobertos localmente; amostra real confirmou somente o contrato PDV, sem homologar API Stone, scheduler/webhook, backfill real ou liquidação bancária |
 | `stone-receipts` | 1 | Traçado | [Conciliação de recebimentos](flows/stone-sales-review.md) — comparador local Stone × crédito importado na conta vinculada, com estados conservadores e sem escrita financeira; Stone/banco reais, scheduler e homologação visual pendentes |
-| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de endereço, turnos e funcionamento das unidades cobertos por contratos locais; verificação integrada pendente |
+| `settings` | 4 | Traçado | [Configurações gerais](flows/settings.md) — custos de IA e Google Cloud mantêm escopo por projeto e cobertura conservadora; fatos rápidos de unidades e fluxo local de perfis cobertos por contratos; verificação integrada pendente |
 | `signage` | 1 | Traçado | [Slides, publicação e heartbeat](flows/signage.md) — percurso complementado; verificação integrada pendente |
 | `stock-analysis` | 9 | Traçado | [Análises de estoque](flows/stock-analysis.md) — política automática com 30%, compra direta por unidade e comparação local; motor/legado testados em emulador; E2E, piloto e ativação pendentes |
 | `stock-control` | 6 | Traçado | [Lotes, baixa e transferência](flows/stock-control.md) — percurso complementado; verificação integrada pendente |
@@ -66,9 +69,9 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `uniforms` | 1 | Traçado | [Uniformes](flows/uniforms.md) — percurso complementado; verificação integrada pendente |
 | `vacations` | 2 | Traçado | [Agendamento](flows/vacation-scheduling.md), [aviso](flows/vacation-notice.md), [contador](flows/vacation-accountant-dispatch.md), [recibos](flows/vacation-receipts.md), [pagamento e encerramento](flows/vacation-payment-closure.md) — verificação integrada pendente |
 
-Total inicial: **53 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
+Total atual: **56 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
 
-Na integração documental da main, nenhum grupo é promovido a Verificado pelas execuções do worktree de correções. São 53 grupos traçados, 73 guias de subfluxo e validação comportamental parcial.
+Nenhum grupo é promovido a Verificado apenas pelas execuções locais. São 56 grupos traçados, 75 guias de subfluxo e validação comportamental parcial.
 
 Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.
 

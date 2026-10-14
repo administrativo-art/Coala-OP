@@ -19,7 +19,7 @@ import {
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
-  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
+  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt, Inbox,
   Files, Building2, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale} from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -199,6 +199,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
               { label: "Uniforme", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
+              { label: "Solicitações", href: "/dashboard/dp/requests", icon: Inbox, show: permissions.dp?.requests?.view },
               { label: "Desligamento", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
             ],
           },
@@ -215,12 +216,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             href: "/dashboard/documents/generated",
             icon: FileStack,
             show: hasFormalizationPermission(permissions, "documents.view"),
-          },
-          {
-            label: "Modelos",
-            href: "/dashboard/documents/templates",
-            icon: FileStack,
-            show: hasFormalizationPermission(permissions, "templates.view"),
           },
           {
             label: "Documentos da empresa",
@@ -428,7 +423,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   }
 
   const itemBase =
-    "group/item relative flex min-h-9 items-center gap-2.5 rounded-ds-btn px-2.5 py-1.5 text-[13px] font-semibold text-ds-on-dark-sub transition-[color,background,transform] duration-200 hover:translate-x-0.5 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:transition-none motion-reduce:hover:translate-x-0";
+    "group/item relative flex min-h-9 items-center gap-2.5 rounded-ds-btn px-2.5 py-1.5 text-[13px] font-semibold text-ds-on-dark-sub transition-[color,background,transform] duration-200 hover:translate-x-0.5 hover:bg-white/6 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:transition-none motion-reduce:hover:translate-x-0";
   const itemActive = "bg-white/10 font-extrabold text-white";
   const iconClass =
     "shrink-0 transition-[transform,color] duration-300 ease-out group-hover/item:-rotate-6 group-hover/item:scale-125 group-hover/item:text-ds-accent-kicker motion-reduce:transition-none motion-reduce:group-hover/item:rotate-0 motion-reduce:group-hover/item:scale-100";
@@ -473,7 +468,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             onClick={() => toggleGroup(item.href)}
             aria-expanded={isOpen}
             aria-label={isOpen ? `Recolher ${item.label}` : `Expandir ${item.label}`}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded-ds-sm text-ds-on-dark-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-ds-sm text-ds-on-dark-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
           >
             <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none", isOpen && "rotate-180")} aria-hidden="true" />
           </button>
@@ -495,12 +490,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       onClick={() => onOpenChange(false)}
       title={expanded ? undefined : label}
       className={cn(
-        "group/quick relative flex items-center rounded-ds-btn-lg text-[13px] font-extrabold text-ds-on-dark-sub transition-[color,background,transform] duration-200 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:transition-none",
+        "group/quick relative flex items-center rounded-ds-btn-lg text-[13px] font-extrabold text-ds-on-dark-sub transition-[color,background,transform] duration-200 hover:bg-white/6 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker motion-reduce:transition-none",
         expanded ? "h-10 gap-2.5 px-3 hover:translate-x-0.5 motion-reduce:hover:translate-x-0" : "mx-auto h-10 w-10 justify-center",
         current && itemActive
       )}
     >
-      {current && <span aria-hidden="true" className={cn("absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent", expanded ? "-left-0" : "-left-1")} />}
+      {current && <span aria-hidden="true" className={cn("absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent", expanded ? "left-0" : "-left-1")} />}
       <Icon className="h-[18px] w-[18px] shrink-0 transition-transform duration-300 group-hover/quick:-rotate-6 group-hover/quick:scale-110 motion-reduce:transition-none" />
       {expanded ? <span className="truncate">{label}</span> : <span className="sr-only">{label}</span>}
     </Link>
@@ -511,7 +506,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
       {/* Reserva do trilho fica no layout (lg:pl-[88px]); a barra expandida flutua por cima da tela. */}
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-[var(--ds-scrim)] transition-opacity duration-300 lg:hidden",
+          "fixed inset-0 z-40 bg-(--ds-scrim) transition-opacity duration-300 lg:hidden",
           open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         )}
         onClick={() => onOpenChange(false)}
@@ -533,17 +528,17 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           "fixed bottom-3 left-3 top-3 z-50 flex flex-col overflow-hidden rounded-ds-panel bg-ds-dark font-ds text-ds-on-dark ring-1 ring-white/10",
           "transition-[width,transform,box-shadow] duration-300 ease-out motion-reduce:transition-none",
           expanded ? "w-[280px] shadow-ds-modal" : "w-[76px] shadow-ds-panel",
-          open ? "pointer-events-auto translate-x-0" : "pointer-events-none -translate-x-[130%] lg:pointer-events-auto lg:translate-x-0"
+          open ? "pointer-events-auto translate-x-0" : "pointer-events-none translate-x-[-130%] lg:pointer-events-auto lg:translate-x-0"
         )}
       >
         <div className={cn("relative flex shrink-0 items-center justify-center", expanded ? "px-4 pb-2 pt-4" : "px-2 pb-2 pt-4")}>
-          <Link href="/dashboard" onClick={() => onOpenChange(false)} className="rounded-ds-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker" aria-label="Coala One, início">
+          <Link href="/dashboard" onClick={() => onOpenChange(false)} className="rounded-ds-btn focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker" aria-label="Coala One, início">
             <SystemBrand collapsed={!expanded} accent="One" animation="shimmer" />
           </Link>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-ds-md text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker lg:hidden"
+            className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-ds-md text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker lg:hidden"
             aria-label="Fechar menu"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -559,7 +554,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
 
         <div aria-hidden="true" className="mx-4 my-1 h-px shrink-0 bg-white/10" />
 
-        <nav className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", expanded ? "px-3 py-1" : "px-2 py-1")}>
+        <nav className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-none [&::-webkit-scrollbar]:hidden", expanded ? "px-3 py-1" : "px-2 py-1")}>
           {expanded ? (
             navSections.map((section) => {
               const isOpen = openSections.has(section.key);
@@ -574,10 +569,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       onClick={() => toggleSection(section.key)}
                       aria-expanded={isOpen}
                       className={cn(
-                        "group/section relative mt-1 flex w-full items-center gap-2.5 rounded-ds-btn px-2.5 py-2 text-left text-[12.5px] font-bold tracking-[0.02em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                        "group/section relative mt-1 flex w-full items-center gap-2.5 rounded-ds-btn px-2.5 py-2 text-left text-[12.5px] font-bold tracking-[0.02em] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
                         isOpen || sectionActive
-                          ? "bg-white/[0.06] text-ds-on-dark"
-                          : "text-ds-on-dark-2 hover:bg-white/[0.04] hover:text-ds-on-dark"
+                          ? "bg-white/6 text-ds-on-dark"
+                          : "text-ds-on-dark-2 hover:bg-white/4 hover:text-ds-on-dark"
                       )}
                     >
                       {(isOpen || sectionActive) && <span aria-hidden="true" className="absolute -left-1 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-ds-accent" />}
@@ -610,7 +605,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                     const hasChildren = (item.children?.length ?? 0) > 0;
                     const virtual = item.href.startsWith("__group:");
                     const railButton = cn(
-                      "group/item relative mx-auto flex h-10 w-10 items-center justify-center rounded-ds-btn-lg text-ds-on-dark-sub transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                      "group/item relative mx-auto flex h-10 w-10 items-center justify-center rounded-ds-btn-lg text-ds-on-dark-sub transition-colors hover:bg-white/6 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
                       active && itemActive
                     );
                     const inner = (

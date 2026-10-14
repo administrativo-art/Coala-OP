@@ -2,7 +2,7 @@
 
 Índice gerado de `flow-matrix.csv` e das importações locais alcançáveis a partir das páginas ativas. Ajuda a escolher onde investigar; uma string `/api/` encontrada no código **não prova** que a chamada ocorre nem que seja a única entrada do fluxo. Chamadas montadas dinamicamente, jobs, webhooks e importações além de cinco níveis podem não aparecer. Coleções e permissões abaixo são apenas literais encontrados nos arquivos percorridos; podem pertencer a outro ramo, faltar chamadas indiretas e não comprovam autorização efetiva. Confirme cada candidato na interface, na rota, no serviço e nos testes antes de marcar um grupo como traçado.
 
-Grupos com página ativa: **55**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
+Grupos com página ativa: **56**. Atualize com `python3 scripts/generate-flow-entrypoints.py` e confira com `--check`.
 
 ## `assets`
 
@@ -190,7 +190,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/page.tsx`](../../src/app/dashboard/collaborator/page.tsx).
 
-Arquivos locais percorridos: 31.
+Arquivos locais percorridos: 32.
 
 Chamadas candidatas encontradas:
 
@@ -259,6 +259,25 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `stock.stockCount.perform` — [`src/hooks/use-all-tasks.tsx`](../../src/hooks/use-all-tasks.tsx)
 - `stock.stockCount.view` — [`src/components/stock-audit-provider.tsx`](../../src/components/stock-audit-provider.tsx)
 
+## `collaborator-requests`
+
+Páginas: [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx), [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx).
+
+Arquivos locais percorridos: 30.
+
+Chamadas candidatas encontradas:
+
+- `/api/collaborator/requests` — interface [`src/features/hr/requests/client.ts`](../../src/features/hr/requests/client.ts); rota candidata [`src/app/api/collaborator/requests/route.ts`](../../src/app/api/collaborator/requests/route.ts)
+- `/api/collaborator/requests/` — interface [`src/features/hr/requests/client.ts`](../../src/features/hr/requests/client.ts); rota candidata [`src/app/api/collaborator/requests/[requestId]/route.ts`](../../src/app/api/collaborator/requests/%5BrequestId%5D/route.ts)
+- `/api/dev/transport-voucher-templates/` — interface [`src/features/hr/requests/collaborator-requests-page.tsx`](../../src/features/hr/requests/collaborator-requests-page.tsx); rota candidata [`src/app/api/dev/transport-voucher-templates/[kind]/route.ts`](../../src/app/api/dev/transport-voucher-templates/%5Bkind%5D/route.ts)
+
+Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
+
+- `dashboard.collaborator` — [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx)
+- `dashboard.view` — [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx)
+- `dp.requests.review` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
+- `dp.requests.view` — [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx)
+
 ## `collaborator-schedule`
 
 Páginas: [`src/app/dashboard/collaborator/schedule/page.tsx`](../../src/app/dashboard/collaborator/schedule/page.tsx).
@@ -321,9 +340,9 @@ Chamadas candidatas encontradas:
 
 ## `document-templates`
 
-Páginas: [`src/app/dashboard/documents/templates/[id]/page.tsx`](../../src/app/dashboard/documents/templates/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/templates/page.tsx`](../../src/app/dashboard/documents/templates/page.tsx).
+Páginas: [`src/app/dashboard/documents/templates/[id]/page.tsx`](../../src/app/dashboard/documents/templates/%5Bid%5D/page.tsx), [`src/app/dashboard/documents/templates/page.tsx`](../../src/app/dashboard/documents/templates/page.tsx), [`src/app/dashboard/settings/documents/templates/[id]/page.tsx`](../../src/app/dashboard/settings/documents/templates/%5Bid%5D/page.tsx).
 
-Arquivos locais percorridos: 18.
+Arquivos locais percorridos: 19.
 
 Chamadas candidatas encontradas:
 
@@ -339,15 +358,12 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/dp/page.tsx`](../../src/app/dashboard/dp/page.tsx).
 
-Arquivos locais percorridos: 14.
+Arquivos locais percorridos: 16.
 
 Chamadas candidatas encontradas:
 
+- `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
 - `/api/hr/terminations` — interface [`src/features/hr/termination/active-terminations-card.tsx`](../../src/features/hr/termination/active-terminations-card.tsx); rota candidata [`src/app/api/hr/terminations/route.ts`](../../src/app/api/hr/terminations/route.ts)
-
-Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
-
-- `dp_schedules` — [`src/hooks/use-dp-schedules-shifts.ts`](../../src/hooks/use-dp-schedules-shifts.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
@@ -357,22 +373,23 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/schedules/[id]/page.tsx`](../../src/app/dashboard/dp/schedules/%5Bid%5D/page.tsx), [`src/app/dashboard/dp/schedules/month/[period]/page.tsx`](../../src/app/dashboard/dp/schedules/month/%5Bperiod%5D/page.tsx), [`src/app/dashboard/dp/schedules/page.tsx`](../../src/app/dashboard/dp/schedules/page.tsx).
 
-Arquivos locais percorridos: 36.
+Arquivos locais percorridos: 40.
 
 Chamadas candidatas encontradas:
 
 - `/api/audit/log` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/log/route.ts`](../../src/app/api/audit/log/route.ts)
 - `/api/audit/logs` — interface [`src/features/audit/client.ts`](../../src/features/audit/client.ts); rota candidata [`src/app/api/audit/logs/route.ts`](../../src/app/api/audit/logs/route.ts)
-- `/api/dp/schedules/` — interface [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx)
+- `/api/dp/schedules/` — interface [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
 
 Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
 
 - `dp_calendars` — [`src/hooks/use-dp-holidays.ts`](../../src/hooks/use-dp-holidays.ts)
-- `dp_schedules` — [`src/components/dp/dp-schedules-list.tsx`](../../src/components/dp/dp-schedules-list.tsx)
+- `dp_schedules` — [`src/hooks/use-dp-shifts.ts`](../../src/hooks/use-dp-shifts.ts)
 - `kiosks` — [`src/components/kiosks-provider.tsx`](../../src/components/kiosks-provider.tsx)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
+- `dp.schedules.assignExternal` — [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx)
 - `dp.schedules.create` — [`src/components/dp/dp-schedule-month-view.tsx`](../../src/components/dp/dp-schedule-month-view.tsx)
 - `dp.schedules.delete` — [`src/components/dp/dp-schedule-month-view.tsx`](../../src/components/dp/dp-schedule-month-view.tsx)
 - `dp.schedules.edit` — [`src/components/dp/dp-schedule-editor.tsx`](../../src/components/dp/dp-schedule-editor.tsx)
@@ -626,13 +643,13 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/goals/analysis/page.tsx`](../../src/app/dashboard/goals/analysis/page.tsx), [`src/app/dashboard/goals/registration/page.tsx`](../../src/app/dashboard/goals/registration/page.tsx), [`src/app/dashboard/goals/tracking/page.tsx`](../../src/app/dashboard/goals/tracking/page.tsx).
 
-Arquivos locais percorridos: 57.
+Arquivos locais percorridos: 60.
 
 Chamadas candidatas encontradas:
 
 - `/api/ai/analyze-goals` — interface [`src/components/goals-tracking-dashboard.tsx`](../../src/components/goals-tracking-dashboard.tsx); rota candidata [`src/app/api/ai/analyze-goals/route.ts`](../../src/app/api/ai/analyze-goals/route.ts)
 - `/api/catalogo` — interface [`src/components/product-simulation-category-provider.tsx`](../../src/components/product-simulation-category-provider.tsx); rota candidata [`src/app/api/catalogo/route.ts`](../../src/app/api/catalogo/route.ts)
-- `/api/dp/schedules/` — interface [`src/hooks/use-dp-shifts.ts`](../../src/hooks/use-dp-shifts.ts)
+- `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 
@@ -850,7 +867,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 73.
+Arquivos locais percorridos: 75.
 
 Chamadas candidatas encontradas:
 
@@ -922,14 +939,19 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.collaborators.syncProfile` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.collaborators.terminate` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
 - `dp.collaborators.view` — [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx)
+- `dp.requests.review` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.requests.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.schedules.assignExternal` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.create` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.delete` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.edit` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.export` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.publishBizneo` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.settings.manageAbsences` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageCalendars` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageShifts` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.settings.manageTime` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.settings.manageUnits` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.vacation.approve` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.vacation.manageSettings` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1087,13 +1109,15 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/page.tsx`](../../src/app/dashboard/page.tsx).
 
-Arquivos locais percorridos: 65.
+Arquivos locais percorridos: 67.
 
 Chamadas candidatas encontradas:
 
 - `/api/dashboard/layouts` — interface [`src/features/management-dashboard/use-layouts.ts`](../../src/features/management-dashboard/use-layouts.ts); rota candidata [`src/app/api/dashboard/layouts/route.ts`](../../src/app/api/dashboard/layouts/route.ts)
-- `/api/dp/schedules/` — interface [`src/hooks/use-dp-shifts.ts`](../../src/hooks/use-dp-shifts.ts)
+- `/api/dp/schedules/` — interface [`src/features/dp/schedules/client.ts`](../../src/features/dp/schedules/client.ts); rota candidata [`src/app/api/dp/schedules/[scheduleId]/route.ts`](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts)
 - `/api/financial/data` — interface [`src/features/financial/hooks/use-financial-collection.tsx`](../../src/features/financial/hooks/use-financial-collection.tsx); rota candidata [`src/app/api/financial/data/route.ts`](../../src/app/api/financial/data/route.ts)
+- `/api/goals/employee-goals` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx); rota candidata [`src/app/api/goals/employee-goals/route.ts`](../../src/app/api/goals/employee-goals/route.ts)
+- `/api/goals/periods/` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/base-products/` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)
 - `/api/registry/products` — interface [`src/components/products-provider.tsx`](../../src/components/products-provider.tsx)
@@ -1346,7 +1370,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/rh/config/fields/page.tsx`](../../src/app/dashboard/rh/config/fields/page.tsx), [`src/app/dashboard/rh/config/roles/page.tsx`](../../src/app/dashboard/rh/config/roles/page.tsx), [`src/app/dashboard/rh/employees/[bizneo_employee_id]/page.tsx`](../../src/app/dashboard/rh/employees/%5Bbizneo_employee_id%5D/page.tsx), [`src/app/dashboard/rh/employees/page.tsx`](../../src/app/dashboard/rh/employees/page.tsx), [`src/app/dashboard/rh/me/page.tsx`](../../src/app/dashboard/rh/me/page.tsx), [`src/app/dashboard/rh/sync/page.tsx`](../../src/app/dashboard/rh/sync/page.tsx).
 
-Arquivos locais percorridos: 34.
+Arquivos locais percorridos: 39.
 
 Chamadas candidatas encontradas:
 
@@ -1370,7 +1394,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 214.
+Arquivos locais percorridos: 233.
 
 Chamadas candidatas encontradas:
 
@@ -1385,6 +1409,12 @@ Chamadas candidatas encontradas:
 - `/api/companies/cnpj/` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/companies/cnpj/[cnpj]/route.ts`](../../src/app/api/companies/cnpj/%5Bcnpj%5D/route.ts)
 - `/api/companies/document-signatories` — interface [`src/components/entity-management.tsx`](../../src/components/entity-management.tsx); rota candidata [`src/app/api/companies/document-signatories/route.ts`](../../src/app/api/companies/document-signatories/route.ts)
 - `/api/documents/generate` — interface [`src/components/hr/recruitment/recruitment-onboarding-view.tsx`](../../src/components/hr/recruitment/recruitment-onboarding-view.tsx); rota candidata [`src/app/api/documents/generate/route.ts`](../../src/app/api/documents/generate/route.ts)
+- `/api/documents/templates` — interface [`src/app/dashboard/documents/templates/page.tsx`](../../src/app/dashboard/documents/templates/page.tsx); rota candidata [`src/app/api/documents/templates/route.ts`](../../src/app/api/documents/templates/route.ts)
+- `/api/documents/templates/` — interface [`src/app/dashboard/documents/templates/page.tsx`](../../src/app/dashboard/documents/templates/page.tsx); rota candidata [`src/app/api/documents/templates/[id]/route.ts`](../../src/app/api/documents/templates/%5Bid%5D/route.ts)
+- `/api/documents/templates/system-letterhead-blank/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-receipt-standard/preview` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/documents/templates/system-receipt-standard/source` — interface [`src/features/hr/documents/system-template-catalog.ts`](../../src/features/hr/documents/system-template-catalog.ts)
+- `/api/dp/time/` — interface [`src/hooks/use-dp-time-config.ts`](../../src/hooks/use-dp-time-config.ts)
 - `/api/financial/accounts` — interface [`src/features/financial/components/settings/account-plans-management.tsx`](../../src/features/financial/components/settings/account-plans-management.tsx); rota candidata [`src/app/api/financial/accounts/route.ts`](../../src/app/api/financial/accounts/route.ts)
 - `/api/financial/beneficiaries/entities/` — interface [`src/components/entity-ficha-modal.tsx`](../../src/components/entity-ficha-modal.tsx); rota candidata [`src/app/api/financial/beneficiaries/entities/[entityId]/route.ts`](../../src/app/api/financial/beneficiaries/entities/%5BentityId%5D/route.ts)
 - `/api/financial/budget-inputs` — interface [`src/features/financial/components/settings/budgets-management.tsx`](../../src/features/financial/components/settings/budgets-management.tsx); rota candidata [`src/app/api/financial/budget-inputs/route.ts`](../../src/app/api/financial/budget-inputs/route.ts)
@@ -1502,14 +1532,19 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 - `dp.collaborators.syncProfile` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.collaborators.terminate` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.collaborators.view` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
+- `dp.requests.review` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.requests.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.schedules.assignExternal` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.create` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.delete` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.edit` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.export` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.publishBizneo` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.schedules.view` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
+- `dp.settings.manageAbsences` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.settings.manageCalendars` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.settings.manageShifts` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
+- `dp.settings.manageTime` — [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx)
 - `dp.settings.manageUnits` — [`src/components/dp/dp-settings-units.tsx`](../../src/components/dp/dp-settings-units.tsx)
 - `dp.vacation.approve` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
 - `dp.vacation.manageSettings` — [`src/components/profile-management-modal.tsx`](../../src/components/profile-management-modal.tsx)
@@ -1707,6 +1742,8 @@ Chamadas candidatas encontradas:
 
 - `/api/ai/analyze-consumption` — interface [`src/components/consumption-analysis-dashboard.tsx`](../../src/components/consumption-analysis-dashboard.tsx); rota candidata [`src/app/api/ai/analyze-consumption/route.ts`](../../src/app/api/ai/analyze-consumption/route.ts)
 - `/api/catalogo` — interface [`src/components/product-simulation-category-provider.tsx`](../../src/components/product-simulation-category-provider.tsx); rota candidata [`src/app/api/catalogo/route.ts`](../../src/app/api/catalogo/route.ts)
+- `/api/goals/employee-goals` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx); rota candidata [`src/app/api/goals/employee-goals/route.ts`](../../src/app/api/goals/employee-goals/route.ts)
+- `/api/goals/periods/` — interface [`src/components/goals-provider.tsx`](../../src/components/goals-provider.tsx)
 - `/api/purchasing/pending-by-destination` — interface [`src/components/purchasing/pending-purchase-notices.tsx`](../../src/components/purchasing/pending-purchase-notices.tsx); rota candidata [`src/app/api/purchasing/pending-by-destination/route.ts`](../../src/app/api/purchasing/pending-by-destination/route.ts)
 - `/api/purchasing/pending-by-destination/ignore` — interface [`src/components/purchasing/pending-purchase-notices.tsx`](../../src/components/purchasing/pending-purchase-notices.tsx); rota candidata [`src/app/api/purchasing/pending-by-destination/ignore/route.ts`](../../src/app/api/purchasing/pending-by-destination/ignore/route.ts)
 - `/api/registry/base-products` — interface [`src/components/base-products-provider.tsx`](../../src/components/base-products-provider.tsx)

@@ -158,7 +158,7 @@ function PlanRowBody({
           aria-expanded={expanded}
           aria-label={`${expanded ? "Recolher" : "Expandir"} ${node.name}`}
           onClick={onToggle}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-ds-sm text-[11px] text-ds-ink-faint hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-ds-sm text-[11px] text-ds-ink-faint hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
         >
           {expanded ? "▾" : "▸"}
         </button>
@@ -169,7 +169,7 @@ function PlanRowBody({
         type="button"
         aria-label={`Abrir ${node.name}`}
         onClick={onOpen}
-        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-ds-sm py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-ds-sm py-1.5 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
       >
         <span className="w-12 shrink-0 font-ds-mono text-[11px] tabular-nums text-ds-ink-faint">{number}</span>
         <span className={cn("min-w-0 truncate text-[13.5px]", depth === 0 ? "font-bold" : "font-semibold")}>{node.name}</span>
@@ -201,7 +201,7 @@ function SortableRow({ node, number, depth, handlers }: { node: PlanNode<Account
             <button
               type="button"
               aria-label={`Reordenar ${node.name}`}
-              className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-ds-sm text-ds-ink-faint hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
+              className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded-ds-sm text-ds-ink-faint hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
               {...attributes}
               {...listeners}
             >

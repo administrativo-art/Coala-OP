@@ -44,7 +44,7 @@ export function ConsumptionDetailsModal({ open, onOpenChange, baseProduct, repor
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-grow min-h-0 overflow-auto border rounded-lg mt-4">
+        <div className="grow min-h-0 overflow-auto border rounded-lg mt-4">
             <Table className="min-w-[520px]">
               <TableHeader className="sticky top-0 bg-muted z-10">
                 <TableRow>

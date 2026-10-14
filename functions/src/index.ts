@@ -15,7 +15,7 @@ import { assertActiveSession } from './active-session.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
-export { onFieldUpdate } from './rh/field-update.js';
+export { onFieldUpdate, reviewFieldChangeRequest } from './rh/field-update.js';
 export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automations.js';
 export { stonePortfolioDailySync } from './stone-portfolio-job.js';
 export { stonePixDailyRequest } from './stone-pix-job.js';

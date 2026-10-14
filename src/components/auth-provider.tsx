@@ -433,7 +433,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.error ?? "Erro ao atualizar usuário.");
+      const message = typeof payload?.error === "string"
+        ? payload.error
+        : typeof payload?.error?.message === "string"
+          ? payload.error.message
+          : "Erro ao atualizar usuário.";
+      throw new Error(message);
     }
   }, []);
   

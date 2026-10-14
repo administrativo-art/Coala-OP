@@ -94,23 +94,23 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
           
           {/* Summary Cards */}
           {!isInstruction && <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-xs">
               <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Preço de Venda</p>
               <p className="text-lg font-black text-ds-ink">{priceResolution.available ? formatCurrency(priceResolution.price) : 'Indisponível'}</p>
             </div>
-            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-xs">
               <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Custo (CMV)</p>
               <p className="text-lg font-black text-ds-ink">{formatCurrency(simulation.totalCmv)}</p>
             </div>
-            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-xs">
               <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Margem Bruta R$</p>
               <p className="text-lg font-black text-ds-ink">{formatCurrency(metrics.grossMargin)}</p>
             </div>
-            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-xs">
               <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Margem Bruta %</p>
               <p className="text-lg font-black text-ds-ink">{metrics.grossMarginPct.toFixed(1)}%</p>
             </div>
-            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-xs">
               <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">M. Contribuição</p>
               <p className={cn(
                 "text-xl font-black",
@@ -119,7 +119,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
                 {metrics.profitPercentage.toFixed(1)}%
               </p>
             </div>
-            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-sm">
+            <div className="bg-ds-surface p-4 rounded-ds-md border shadow-xs">
               <p className="text-[10px] font-bold text-ds-ink-faint uppercase mb-1">Markup</p>
               <p className="text-lg font-black text-ds-ink-2">{metrics.markup.toFixed(2)}x</p>
             </div>
@@ -128,7 +128,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
           <div className="grid gap-5 lg:grid-cols-[1fr_258px]">
             <div className="space-y-8">
               {/* Composition */}
-              <div className="bg-ds-surface rounded-ds-card border shadow-sm overflow-hidden">
+              <div className="bg-ds-surface rounded-ds-card border shadow-xs overflow-hidden">
                 <div className="px-6 py-4 border-b bg-ds-warm">
                   <h3 className="text-sm font-bold text-ds-ink flex items-center gap-2">
                     <Utensils className="h-4 w-4 text-ds-accent-ink" />
@@ -162,7 +162,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
               </div>
 
               {/* Instructions */}
-              <div className="bg-ds-surface rounded-ds-card border shadow-sm overflow-hidden">
+              <div className="bg-ds-surface rounded-ds-card border shadow-xs overflow-hidden">
                 <div className="px-6 py-4 border-b bg-ds-warm">
                   <h3 className="text-sm font-bold text-ds-ink flex items-center gap-2">
                     <LayoutDashboard className="h-4 w-4 text-ds-accent-ink" />
@@ -192,7 +192,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
               </div>
 
               {isInstruction && qualityStandards.length > 0 && (
-                <div className="overflow-hidden rounded-ds-card border bg-ds-surface shadow-sm">
+                <div className="overflow-hidden rounded-ds-card border bg-ds-surface shadow-xs">
                   <div className="flex items-center gap-2 border-b bg-slate-950 px-6 py-4 text-white">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                     <h3 className="text-sm font-bold">Padrão de Qualidade</h3>
@@ -224,7 +224,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
             <div className="space-y-6">
               {/* Photo */}
               {simulation.ppo?.referenceImageUrl ? (
-                <div className="bg-ds-surface p-2 rounded-ds-card border shadow-sm">
+                <div className="bg-ds-surface p-2 rounded-ds-card border shadow-xs">
                    <img src={simulation.ppo.referenceImageUrl} alt={`Foto de referência de ${simulation.name}`} className="w-full aspect-square object-contain rounded-ds-md" />
                 </div>
               ) : (
@@ -235,7 +235,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
               )}
 
               {/* Specs */}
-              <div className="bg-ds-surface p-6 rounded-ds-card border shadow-sm space-y-4">
+              <div className="bg-ds-surface p-6 rounded-ds-card border shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-ds-ink-faint" />
@@ -271,7 +271,7 @@ export default function FullTechnicalSheetView({ simulation, variant = 'complete
               </div>
               
               {/* Categorização & Kiosks */}
-              <div className="bg-ds-surface p-6 rounded-ds-card border shadow-sm space-y-4">
+              <div className="bg-ds-surface p-6 rounded-ds-card border shadow-xs space-y-4">
                 <div className="space-y-3">
                   <h4 className="text-[10px] font-black text-ds-ink-faint uppercase tracking-widest">Localização e Categoria</h4>
                   <div className="space-y-2">

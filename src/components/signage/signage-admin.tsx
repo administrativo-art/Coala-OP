@@ -132,7 +132,7 @@ function SortableSlideRow(props: SlideRowProps) {
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(SLIDE_ROW_GRID, 'bg-ds-surface', isDragging && 'relative z-[2] rounded-ds-btn shadow-ds-lift')}
+      className={cn(SLIDE_ROW_GRID, 'bg-ds-surface', isDragging && 'relative z-2 rounded-ds-btn shadow-ds-lift')}
     >
       <SlideRowContent
         {...props}
@@ -141,7 +141,7 @@ function SortableSlideRow(props: SlideRowProps) {
             type="button"
             {...attributes}
             {...listeners}
-            className="cursor-grab touch-none rounded-ds-sm p-0.5 text-ds-ink-faint hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
+            className="cursor-grab touch-none rounded-ds-sm p-0.5 text-ds-ink-faint hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink active:cursor-grabbing"
             aria-label={`Reordenar ${props.slide.title}`}
           >
             <GripVertical aria-hidden="true" className="h-4 w-4" />
@@ -245,7 +245,7 @@ export function SignageAdmin() {
 
   const enabledKiosks = useMemo(() => allowedKiosks.filter((kiosk) => kiosk.signageEnabled !== false), [allowedKiosks]);
 
-  // Telas das unidades com signage; a padrão de cada unidade vem primeiro.
+  // Telas das unidades com signage; a primeira de cada unidade vem antes.
   const enabledScreens = useMemo(() => {
     const enabledIds = new Set(enabledKiosks.map((kiosk) => kiosk.id));
     return screens
@@ -738,10 +738,12 @@ export function SignageAdmin() {
           {visibleStatuses.map(({ kiosk, screens: unitScreens, onlineCount, slideCount, activeSlideCount, pendingPublication }) => {
             const isSelected = kiosk.id === selectedKioskId;
             const single = unitScreens.length === 1 ? unitScreens[0] : null;
-            const unitVariant = single
+            const unitVariant = unitScreens.length === 0
+              ? 'neutral'
+              : single
               ? single.health.variant
               : onlineCount === unitScreens.length ? 'ok' : onlineCount > 0 ? 'warn' : unitScreens.some(({ lastSeenAt }) => lastSeenAt) ? 'danger' : 'neutral';
-            const unitLabel = single ? single.health.label : `${onlineCount} de ${unitScreens.length} no ar`;
+            const unitLabel = unitScreens.length === 0 ? 'Nenhuma tela' : single ? single.health.label : `${onlineCount} de ${unitScreens.length} no ar`;
             return (
               <button
                 key={kiosk.id}
@@ -749,7 +751,7 @@ export function SignageAdmin() {
                 aria-pressed={isSelected}
                 onClick={() => setSelectedKioskId(kiosk.id)}
                 className={cn(
-                  'rounded-ds-card border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                  'rounded-ds-card border p-4 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
                   isSelected ? 'border-ds-accent-ink bg-ds-accent-row shadow-[inset_3px_0_0_var(--ds-accent-ink)]' : 'border-ds-border bg-ds-surface hover:bg-ds-muted',
                 )}
               >
@@ -758,7 +760,9 @@ export function SignageAdmin() {
                   <StatusPill variant={unitVariant} className="gap-1.5"><LiveDot variant={unitVariant} />{unitLabel}</StatusPill>
                 </div>
                 <p className="mt-2 text-[13px] font-semibold text-ds-ink-2">
-                  {single
+                  {unitScreens.length === 0
+                    ? 'Cadastre a primeira tela para montar a playlist.'
+                    : single
                     ? (slideCount === 0
                       ? 'Sem slides'
                       : `${activeSlideCount} de ${slideCount} ${slideCount === 1 ? 'slide ativo' : 'slides ativos'} · ciclo de ${formatSignageDuration(single.cycleMs)}`)
@@ -778,7 +782,7 @@ export function SignageAdmin() {
         </div>
       )}
 
-      {selectedKiosk && (unitHasManyScreens || canManage) && unitScreenStatuses.length > 0 && (
+      {selectedKiosk && (unitScreenStatuses.length === 0 || unitHasManyScreens || canManage) && (
         <section aria-label={`Telas de ${selectedKiosk.name}`} className="rounded-ds-card border border-ds-border bg-ds-surface px-[18px] py-3.5">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="mr-1 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Telas de {selectedKiosk.name}</h2>
@@ -792,7 +796,7 @@ export function SignageAdmin() {
                   title={health.label}
                   onClick={() => setSelectedScreenId(screen.id)}
                   className={cn(
-                    'inline-flex h-9 items-center gap-2 rounded-ds-pill border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
+                    'inline-flex h-9 items-center gap-2 rounded-ds-pill border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink focus-visible:ring-offset-2',
                     active ? 'border-ds-accent-ink bg-ds-accent-soft text-ds-accent-ink' : 'border-ds-border-input bg-ds-surface text-ds-ink-2 hover:bg-ds-muted',
                   )}
                 >
@@ -802,6 +806,11 @@ export function SignageAdmin() {
                 </button>
               );
             })}
+            {unitScreenStatuses.length === 0 && (
+              <p className="mr-1 text-[13px] text-ds-ink-muted">
+                Nenhuma tela cadastrada. {canManage ? 'Adicione aqui ou leia o QR code do monitor no Coala Go.' : 'Peça a quem gerencia o signage para cadastrar a primeira.'}
+              </p>
+            )}
             {canManage && screenForm?.mode !== 'add' && (
               <Button type="button" variant="ds-link" size="xs" onClick={() => { setScreenError(null); setScreenForm({ mode: 'add', name: '' }); }}>
                 <Plus aria-hidden="true" className="h-3.5 w-3.5" />
@@ -1075,7 +1084,7 @@ export function SignageAdmin() {
                 )}
               </div>
 
-              {canManage && !selectedScreen.isDefault && (
+              {canManage && (
                 <div className="mt-4 border-t border-ds-divider pt-3">
                   {confirmDeleteScreen ? (
                     <InlineConfirm

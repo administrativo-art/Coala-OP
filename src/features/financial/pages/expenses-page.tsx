@@ -1349,7 +1349,7 @@ export function ExpensesPage() {
               type="button"
               onClick={pill.onClear}
               aria-label={`Remover filtro ${pill.label}`}
-              className="grid h-4 w-4 place-items-center rounded-full text-ds-ink-faint hover:bg-ds-neutral-bg hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+              className="grid h-4 w-4 place-items-center rounded-full text-ds-ink-faint hover:bg-ds-neutral-bg hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
             >
               <X aria-hidden="true" className="h-3 w-3" />
             </button>
@@ -1359,7 +1359,7 @@ export function ExpensesPage() {
           <button
             type="button"
             onClick={clearExpenseFilters}
-            className="inline-flex h-[26px] items-center gap-1 rounded-full px-2 text-xs font-bold text-ds-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+            className="inline-flex h-[26px] items-center gap-1 rounded-full px-2 text-xs font-bold text-ds-accent-ink hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
           >
             <RotateCcw aria-hidden="true" className="h-3 w-3" /> Limpar filtros
           </button>
@@ -1550,7 +1550,7 @@ function SortHeader({
         onClick={onClick}
         className={cn(
           LIST_KICKER,
-          "inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-ds-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
+          "inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink",
           active && "text-ds-accent-ink",
         )}
       >

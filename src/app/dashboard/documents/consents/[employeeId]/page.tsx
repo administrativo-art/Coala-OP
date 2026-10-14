@@ -7,8 +7,6 @@ import { ArrowLeft, CheckCircle2, Image as ImageIcon, Loader2, Plus, ShieldCheck
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageHero } from "@/components/patterns/page-hero";
-import { StatusPill } from "@/components/ui/status-pill";
 import { useAuth } from "@/hooks/use-auth";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import type { ImageVoiceConsentState } from "@/features/hr/consents/image-voice-consent";
@@ -96,32 +94,33 @@ export default function ImageVoiceConsentManagementPage() {
     }
   }
 
-  if (!canView) return <p className="p-6 text-sm text-ds-ink-muted">Sem permissão para consultar consentimentos.</p>;
-  if (loading) return <div className="grid min-h-52 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div>;
+  if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para consultar consentimentos.</p>;
+  if (loading) return <div className="grid min-h-52 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div>;
 
   return (
     <div className="space-y-4">
-      <PageHero
-        kicker="Departamento pessoal"
-        title={`Imagem e voz — ${employeeName || fallbackEmployeeName}`}
-        subtitle="Decisão vigente, prova da manifestação e inventário dos usos operacionais."
-        actions={<Button asChild variant="ds-secondary" size="md"><Link href="/dashboard/dp/collaborators"><ArrowLeft className="mr-2 h-4 w-4" />Voltar aos colaboradores</Link></Button>}
-      />
-      {message ? <div className="rounded-ds-btn bg-ds-danger-bg px-3 py-2 text-xs font-semibold text-ds-danger" role="alert">{message}</div> : null}
-      {notice ? <div className="rounded-ds-btn bg-ds-ok-bg px-3 py-2 text-xs font-semibold text-ds-ok" role="status">{notice}</div> : null}
+      <div>
+        <Link href="/dashboard/dp/collaborators" className="inline-flex items-center gap-1 text-xs font-bold text-teal-700">
+          <ArrowLeft className="h-3.5 w-3.5" />Voltar aos colaboradores
+        </Link>
+        <h1 className="mt-1 text-xl font-black text-slate-950">Imagem e voz — {employeeName || fallbackEmployeeName}</h1>
+        <p className="text-xs text-slate-500">Decisão vigente, prova da manifestação e inventário dos usos operacionais.</p>
+      </div>
+      {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
+      {notice ? <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{notice}</div> : null}
 
-      <section className="grid gap-3 rounded-ds-card border border-ds-border bg-ds-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div><p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Estado</p><p className="mt-1 font-black text-ds-ink">{consent ? STATUS_LABELS[consent.status] : "—"}</p></div>
-        <div><p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Decisão</p><p className="mt-1 text-sm font-semibold">{formatDate(consent?.decisionAt)}</p></div>
-        <div><p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Canal</p><p className="mt-1 text-sm font-semibold">{consent?.decisionChannel || "—"}</p></div>
-        <div><p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Efeito operacional</p><p className="mt-1 text-sm font-semibold">{consent?.operationalEffectStatus ?? "—"}</p></div>
-        <div className="sm:col-span-2"><p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Termo</p><p className="mt-1 break-all text-xs">Versão {consent?.termVersion || "—"} · hash {consent?.termHash || "—"}</p></div>
-        <div className="sm:col-span-2"><p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Revogação</p><p className="mt-1 text-xs">{formatDate(consent?.revokedAt)}{consent?.revocationReason ? ` · ${consent.revocationReason}` : ""}</p></div>
+      <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-xs sm:grid-cols-2 lg:grid-cols-4">
+        <div><p className="text-[10px] font-bold uppercase text-slate-400">Estado</p><p className="mt-1 font-black text-slate-900">{consent ? STATUS_LABELS[consent.status] : "—"}</p></div>
+        <div><p className="text-[10px] font-bold uppercase text-slate-400">Decisão</p><p className="mt-1 text-sm font-semibold">{formatDate(consent?.decisionAt)}</p></div>
+        <div><p className="text-[10px] font-bold uppercase text-slate-400">Canal</p><p className="mt-1 text-sm font-semibold">{consent?.decisionChannel || "—"}</p></div>
+        <div><p className="text-[10px] font-bold uppercase text-slate-400">Efeito operacional</p><p className="mt-1 text-sm font-semibold">{consent?.operationalEffectStatus ?? "—"}</p></div>
+        <div className="sm:col-span-2"><p className="text-[10px] font-bold uppercase text-slate-400">Termo</p><p className="mt-1 break-all text-xs">Versão {consent?.termVersion || "—"} · hash {consent?.termHash || "—"}</p></div>
+        <div className="sm:col-span-2"><p className="text-[10px] font-bold uppercase text-slate-400">Revogação</p><p className="mt-1 text-xs">{formatDate(consent?.revokedAt)}{consent?.revocationReason ? ` · ${consent.revocationReason}` : ""}</p></div>
       </section>
 
       {canManage ? (
-        <section className="rounded-ds-card border border-ds-border bg-ds-surface">
-          <header className="border-b px-4 py-3"><h2 className="flex items-center gap-2 text-sm font-black"><Plus className="h-4 w-4 text-ds-accent-ink" />Registrar publicação</h2></header>
+        <section className="rounded-xl border bg-white shadow-xs">
+          <header className="border-b px-4 py-3"><h2 className="flex items-center gap-2 text-sm font-black"><Plus className="h-4 w-4 text-teal-700" />Registrar publicação</h2></header>
           <div className="grid gap-3 p-4 md:grid-cols-4">
             <Input value={channel} onChange={(event) => setChannel(event.target.value)} placeholder="Canal: Instagram, site..." />
             <Input className="md:col-span-2" value={asset} onChange={(event) => setAsset(event.target.value)} placeholder="Ativo, campanha ou URL interna" />
@@ -135,25 +134,25 @@ export default function ImageVoiceConsentManagementPage() {
         </section>
       ) : null}
 
-      <section className="rounded-ds-card border border-ds-border bg-ds-surface">
-        <header className="border-b px-4 py-3"><h2 className="flex items-center gap-2 text-sm font-black"><ShieldCheck className="h-4 w-4 text-ds-accent-ink" />Inventário de usos</h2></header>
+      <section className="rounded-xl border bg-white shadow-xs">
+        <header className="border-b px-4 py-3"><h2 className="flex items-center gap-2 text-sm font-black"><ShieldCheck className="h-4 w-4 text-violet-700" />Inventário de usos</h2></header>
         {!consent?.usages.length ? (
-          <p className="p-6 text-center text-xs text-ds-ink-muted">Nenhum uso registrado.</p>
+          <p className="p-6 text-center text-xs text-slate-500">Nenhum uso registrado.</p>
         ) : (
           <div className="divide-y">
             {consent.usages.map((usage) => (
               <div key={usage.usageId} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-black text-ds-ink">{usage.channel}</p>
-                  <p className="break-all text-xs text-ds-ink-muted">{usage.asset}</p>
-                  <p className="text-[10px] text-ds-ink-faint">Publicado em {formatDate(usage.publishedAt)} · registrado em {formatDate(usage.registeredAt)}</p>
+                  <p className="text-xs font-black text-slate-800">{usage.channel}</p>
+                  <p className="break-all text-xs text-slate-600">{usage.asset}</p>
+                  <p className="text-[10px] text-slate-400">Publicado em {formatDate(usage.publishedAt)} · registrado em {formatDate(usage.registeredAt)}</p>
                 </div>
                 {usage.removedAt ? (
-                  <StatusPill variant="ok" className="gap-1"><CheckCircle2 className="h-3 w-3" />Retirado em {formatDate(usage.removedAt)}</StatusPill>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700"><CheckCircle2 className="h-3 w-3" />Retirado em {formatDate(usage.removedAt)}</span>
                 ) : canManage ? (
-                  <Button size="sm" variant="outline" className="text-xs text-ds-danger" disabled={busy} onClick={() => void action({ action: "mark_removed", usageId: usage.usageId })}>Registrar retirada</Button>
+                  <Button size="sm" variant="outline" className="text-xs text-rose-700" disabled={busy} onClick={() => void action({ action: "mark_removed", usageId: usage.usageId })}>Registrar retirada</Button>
                 ) : (
-                  <StatusPill variant="warn">Em circulação</StatusPill>
+                  <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">Em circulação</span>
                 )}
               </div>
             ))}

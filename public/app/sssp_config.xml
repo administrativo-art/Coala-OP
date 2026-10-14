@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget>
-  <ver>1.1.0</ver>
-  <size>80184</size>
+  <ver>1.1.1</ver>
+  <size>88179</size>
   <widgetname>CoalaSignage</widgetname>
   <webtype>tizen</webtype>
 </widget>

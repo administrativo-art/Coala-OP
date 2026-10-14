@@ -10,6 +10,7 @@ import { type LegacyTask, NotificationCenter } from "./notification-center";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
 import { cn } from "@/lib/utils";
 import { useNavTrail } from "@/components/navigation/nav-trail";
+import { resolveSafeReturnPath } from "@/lib/safe-return-path";
 
 // ── Route label map (mirrors sidebar) ────────────────────────────────────────
 
@@ -47,6 +48,8 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/dp/collaborators": "Gestão do colaborador",
   "/dashboard/dp/schedules": "Gestão do colaborador",
   "/dashboard/dp/ferias": "Gestão do colaborador",
+  "/dashboard/dp/requests": "Gestão do colaborador",
+  "/dashboard/collaborator/requests": "Painel do colaborador",
   "/dashboard/stock/uniforms": "Gestão do colaborador",
   "/dashboard/dp/settings": "Departamento pessoal",
   "/dashboard/documents": "Documentos",
@@ -55,6 +58,7 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/purchasing": "Compras",
   "/dashboard/registration": "Configurações",
   "/dashboard/settings": "Configurações",
+  "/dashboard/settings/documents/templates": "Configurações",
   "/dashboard/help": "Ajuda",
 };
 
@@ -102,6 +106,8 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/dp/terminations": "Desligamentos CLT",
   "/dashboard/dp/schedules": "Escalas de trabalho",
   "/dashboard/dp/ferias": "Férias da equipe",
+  "/dashboard/dp/requests": "Solicitações dos colaboradores",
+  "/dashboard/collaborator/requests": "Minhas solicitações",
   "/dashboard/stock/uniforms": "Uniformes",
   "/dashboard/dp/settings": "Configurações do DP",
   "/dashboard/dp/settings/collaborators": "Colaboradores",
@@ -125,6 +131,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/hr/recruitment/integration": "Integração",
   "/dashboard/registration": "Cadastros",
   "/dashboard/settings": "Configurações",
+  "/dashboard/settings/documents/templates": "Modelos de documentos",
   "/dashboard/help": "Ajuda",
   "/dashboard/signage": "Coala Signage",
 };
@@ -164,7 +171,7 @@ function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
   if (expiringCount === 0 && taskCount === 0) return null;
 
   const chip = "inline-flex h-7 items-center gap-2 whitespace-nowrap rounded-full bg-white/[0.07] px-3 text-[12px] font-semibold text-ds-on-dark-2 ring-1 ring-inset ring-white/10";
-  const see = "ml-0.5 font-extrabold text-ds-accent-kicker hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
+  const see = "ml-0.5 font-extrabold text-ds-accent-kicker hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker";
 
   return (
     <div className="flex items-center gap-2" aria-label="Pendências">
@@ -223,7 +230,7 @@ function PendingChips({ tasks }: { tasks: LegacyTask[] }) {
                 {tasks.slice(0, 6).map((task) => (
                   <Link
                     key={task.id}
-                    href={task.link || "/dashboard/tasks"}
+                    href={resolveSafeReturnPath(task.link, "/dashboard/tasks")}
                     className="block rounded-lg px-2 py-2 text-xs hover:bg-muted/60"
                   >
                     <p className="truncate font-medium text-foreground">{task.title}</p>
@@ -290,6 +297,8 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Integração", href: "/dashboard/hr/recruitment/integration", section: "Gestão do colaborador" },
   { label: "Escalas de trabalho", href: "/dashboard/dp/schedules", section: "Gestão do colaborador" },
   { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Gestão do colaborador" },
+  { label: "Solicitações dos colaboradores", href: "/dashboard/dp/requests", section: "Gestão do colaborador" },
+  { label: "Minhas solicitações", href: "/dashboard/collaborator/requests", section: "Painel do colaborador" },
   { label: "Uniformes", href: "/dashboard/stock/uniforms", section: "Gestão do colaborador" },
   { label: "Desligamentos CLT", href: "/dashboard/dp/terminations", section: "Gestão do colaborador" },
   { label: "Configurações do DP", href: "/dashboard/settings?department=pessoal&tab=roles", section: "Departamento pessoal" },
@@ -383,10 +392,10 @@ function HeaderSearch() {
         "flex h-8 w-full cursor-text items-center gap-2 rounded-full border bg-white/[0.07] px-3.5 text-xs text-ds-on-dark-muted transition-[border-color,box-shadow,background] duration-200",
         open ? "border-ds-accent-kicker bg-white/10 ring-2 ring-ds-accent-kicker/30" : "border-white/10 hover:bg-white/10"
       )}>
-        <Search className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+        <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <input
           ref={inputRef}
-          className="flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-ds-on-dark-muted"
+          className="flex-1 bg-transparent text-[13px] text-white outline-hidden placeholder:text-ds-on-dark-muted"
           placeholder="Buscar…"
           value={query}
           onChange={e => { setQuery(e.target.value); setCursor(0); setOpen(true); }}
@@ -413,7 +422,7 @@ function HeaderSearch() {
                 i === cursor ? "bg-muted" : "hover:bg-muted/60"
               )}
             >
-              <ArrowRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+              <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium">{item.label}</p>
                 <p className="truncate text-[10px] text-muted-foreground">{item.section}</p>
@@ -456,7 +465,7 @@ export function Header({ onMenuClick, tasks, gutterClassName = "mx-4 md:mx-8" }:
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 flex-shrink-0 text-ds-on-dark-2 hover:bg-white/10 hover:text-white lg:hidden"
+          className="h-8 w-8 shrink-0 text-ds-on-dark-2 hover:bg-white/10 hover:text-white lg:hidden"
           onClick={onMenuClick}
           aria-label="Abrir menu"
         >

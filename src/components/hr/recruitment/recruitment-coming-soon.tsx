@@ -15,7 +15,7 @@ export function RecruitmentComingSoon({ title }: { title: string }) {
         </p>
         <Link
           href="/dashboard/hr/recruitment/integration"
-          className="mt-4 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-pink-700"
+          className="mt-4 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-xs hover:bg-pink-700"
         >
           Acessar Integração
           <ArrowRight className="h-4 w-4" aria-hidden="true" />

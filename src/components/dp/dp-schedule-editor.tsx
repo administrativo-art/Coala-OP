@@ -8,10 +8,11 @@ import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
-import { useDPShifts } from '@/hooks/use-dp-shifts';
+import { notifyDPScheduleShiftsChanged, useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
 import { useDPScheduleVacations } from '@/hooks/use-dp-schedule-vacations';
+import { useDPScheduleJourneyValidation } from '@/hooks/use-dp-schedule-journey-validation';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
@@ -111,12 +112,12 @@ const MONTHS = [
 ];
 
 const WEEK_TONES = [
-  { bar: 'border-l-sky-400', bg: 'bg-ds-info-bg', hover: 'hover:bg-ds-info-bg', text: 'text-ds-info' },
-  { bar: 'border-l-violet-400', bg: 'bg-ds-accent-soft', hover: 'hover:bg-ds-accent-soft', text: 'text-ds-accent-ink' },
-  { bar: 'border-l-emerald-400', bg: 'bg-ds-ok-bg', hover: 'hover:bg-ds-ok-bg', text: 'text-ds-ok' },
-  { bar: 'border-l-amber-400', bg: 'bg-ds-warn-bg', hover: 'hover:bg-ds-warn-bg', text: 'text-ds-warn' },
-  { bar: 'border-l-rose-400', bg: 'bg-ds-danger-bg', hover: 'hover:bg-ds-danger-bg', text: 'text-ds-danger' },
-  { bar: 'border-l-cyan-400', bg: 'bg-ds-info-bg', hover: 'hover:bg-ds-info-bg', text: 'text-ds-info' },
+  { bar: 'border-l-sky-400', bg: 'bg-sky-50', hover: 'hover:bg-sky-100', text: 'text-sky-700' },
+  { bar: 'border-l-violet-400', bg: 'bg-violet-50', hover: 'hover:bg-violet-100', text: 'text-violet-700' },
+  { bar: 'border-l-emerald-400', bg: 'bg-emerald-50', hover: 'hover:bg-emerald-100', text: 'text-emerald-700' },
+  { bar: 'border-l-amber-400', bg: 'bg-amber-50', hover: 'hover:bg-amber-100', text: 'text-amber-700' },
+  { bar: 'border-l-rose-400', bg: 'bg-rose-50', hover: 'hover:bg-rose-100', text: 'text-rose-700' },
+  { bar: 'border-l-cyan-400', bg: 'bg-cyan-50', hover: 'hover:bg-cyan-100', text: 'text-cyan-700' },
 ] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,12 +132,13 @@ function weekOfMonth(year: number, month: number, day: number) {
   return Math.floor((day + firstDow - 1) / 7) + 1;
 }
 
-// Anel de "dias consecutivos" no estilo do protótipo: cinza (1–4), âmbar (5–6),
-// vermelho cheio (7+). Mostra a contagem no centro.
-function StreakRing({ count }: { count: number }) {
-  const pct = Math.round((Math.min(count, 7) / 7) * 100);
-  const danger = count >= 7;
-  const warn = count >= 5 && count < 7;
+// Anel de dias consecutivos. As cores se adaptam ao limite da jornada efetiva
+// do colaborador, em vez de pressuporem que toda a escala usa 6×1.
+function StreakRing({ count, maxAllowed = 6 }: { count: number; maxAllowed?: number }) {
+  const dangerAt = maxAllowed + 1;
+  const pct = Math.round((Math.min(count, dangerAt) / dangerAt) * 100);
+  const danger = count > maxAllowed;
+  const warn = count >= Math.max(1, maxAllowed - 1) && count <= maxAllowed;
   const fill = danger
     ? 'hsl(var(--destructive))'
     : warn
@@ -189,6 +191,7 @@ const shiftSchema = z.object({
   shiftDefinitionId: z.string().optional(),
   startTime: z.string().min(1, 'Informe o horário de início.'),
   endTime: z.string().min(1, 'Informe o horário de fim.'),
+  exceptionReason: z.string().optional(),
 });
 
 type ShiftFormValues = z.infer<typeof shiftSchema>;
@@ -215,11 +218,28 @@ interface ShiftDialogProps {
 function ShiftDialog({
   scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations, onDelete,
 }: ShiftDialogProps) {
-  const { activeUsers } = useAuth();
+  const { activeUsers, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { addShift, updateShift } = useDPShifts(scheduleId);
+  const api = useAuthenticatedApi();
   const { toast } = useToast();
   const isEdit = !!shift;
+  const canAssignExternal = isDefaultAdmin || permissions.dp?.schedules?.assignExternal === true;
+  type ExternalCandidate = {
+    id: string;
+    username: string;
+    originUnitId: string;
+    originUnitName: string;
+    jobRoleName?: string;
+    jobFunctionNames?: string[];
+    shiftDefinitionId?: string;
+  };
+  const [externalMode, setExternalMode] = useState(shift?.assignmentKind === 'external_coverage');
+  const [candidateSearch, setCandidateSearch] = useState('');
+  const [externalCandidates, setExternalCandidates] = useState<ExternalCandidate[]>([]);
+  const [selectedExternal, setSelectedExternal] = useState<ExternalCandidate | null>(null);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [candidateError, setCandidateError] = useState<string | null>(null);
 
   // Pre-set unit from column click — hide unit selector if locked
   const unitLocked = !isEdit && !!defaultUnitId;
@@ -231,8 +251,7 @@ function ShiftDialog({
   const operationalUsers = (() => {
     const all = activeUsers.filter(u => u.operacional === true);
     if (!activeUnitIdForDefs) return all;
-    const linked = all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
-    return linked.length > 0 ? linked : all; // fallback to all if no unitIds configured
+    return all.filter(u => userMatchesDPUnit(u, activeUnitIdForDefs, units, kiosks));
   })();
 
   const form = useForm<ShiftFormValues>({
@@ -244,6 +263,7 @@ function ShiftDialog({
       shiftDefinitionId: shift?.shiftDefinitionId ?? '',
       startTime: shift?.startTime ?? '',
       endTime: shift?.endTime ?? '',
+      exceptionReason: shift?.exceptionReason ?? '',
     },
   });
 
@@ -256,9 +276,21 @@ function ShiftDialog({
         shiftDefinitionId: shift?.shiftDefinitionId ?? '',
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
+        exceptionReason: shift?.exceptionReason ?? '',
       });
+      const isExternal = shift?.assignmentKind === 'external_coverage';
+      setExternalMode(isExternal);
+      setCandidateSearch('');
+      setExternalCandidates([]);
+      setCandidateError(null);
+      setSelectedExternal(isExternal && shift ? {
+        id: shift.userId,
+        username: shift.userName ?? activeUsers.find((candidate) => candidate.id === shift.userId)?.username ?? 'Colaboradora externa',
+        originUnitId: shift.originUnitId ?? '',
+        originUnitName: units.find((unit) => unit.id === shift.originUnitId)?.name ?? shift.originUnitId ?? 'Unidade de origem',
+      } : null);
     }
-  }, [open, shift, defaultDate, defaultUnitId]);
+  }, [activeUsers, defaultDate, defaultUnitId, form, open, shift, units]);
 
   const selectedUserId = form.watch('userId');
   const selectedDate = form.watch('date');
@@ -288,7 +320,33 @@ function ShiftDialog({
     }
   }
 
+  async function searchExternalCandidates() {
+    const term = candidateSearch.trim();
+    if (term.length < 2) {
+      setCandidateError('Digite ao menos dois caracteres para buscar.');
+      return;
+    }
+    setCandidateLoading(true);
+    setCandidateError(null);
+    try {
+      const result = await api<{ candidates: ExternalCandidate[]; truncated: boolean }>(
+        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/external-candidates?search=${encodeURIComponent(term)}&limit=15`,
+        { fallbackError: 'Falha ao buscar colaboradoras de outras unidades.' },
+      );
+      setExternalCandidates(result.candidates);
+      if (result.candidates.length === 0) setCandidateError('Nenhuma colaboradora externa encontrada com essa busca.');
+    } catch (candidateFailure) {
+      setCandidateError(candidateFailure instanceof Error ? candidateFailure.message : 'Não foi possível buscar colaboradoras externas.');
+    } finally {
+      setCandidateLoading(false);
+    }
+  }
+
   async function onSubmit(values: ShiftFormValues) {
+    if (externalMode && !values.exceptionReason?.trim()) {
+      form.setError('exceptionReason', { message: 'Informe o motivo da cobertura em outra unidade.' });
+      return;
+    }
     if (dayOffOccupied?.get(values.userId)?.has(values.date)) {
       toast({
         title: 'Existe uma folga confirmada nesta data.',
@@ -309,14 +367,22 @@ function ShiftDialog({
     }
 
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
-    const userName = operationalUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
+    const userName = selectedExternal?.username ?? activeUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
+    const payload = {
+      ...values,
+      exceptionReason: externalMode ? values.exceptionReason?.trim() : undefined,
+      scheduleId,
+      ...(userName ? { userName } : {}),
+      type: 'work' as const,
+      hasConflict: hasCrossConflict,
+    };
     try {
       if (isEdit && shift) {
-        await updateShift({ ...shift, ...values, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
+        await updateShift({ ...shift, ...payload });
         toast({ title: 'Turno atualizado.' });
       } else {
-        await addShift({ ...values, scheduleId, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
-        toast({ title: 'Turno adicionado.' });
+        await addShift(payload);
+        toast({ title: externalMode ? 'Cobertura externa adicionada.' : 'Turno adicionado.' });
       }
       if (hasCrossConflict) {
         toast({
@@ -339,17 +405,17 @@ function ShiftDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideClose
-        overlayClassName="!bg-ds-dark/[0.42]"
-        className="max-h-[86vh] !max-w-[430px] gap-0 overflow-y-auto !rounded-[18px] border-0 bg-ds-surface !p-5 shadow-[0_40px_80px_-30px_rgba(15,23,42,0.6)]"
+        overlayClassName="bg-[#0f172a]/42!"
+        className="max-h-[86vh] max-w-[430px]! gap-0 overflow-y-auto rounded-[18px]! border-0 bg-white p-5! shadow-[0_40px_80px_-30px_rgba(15,23,42,0.6)]"
       >
         <DialogHeader className="relative space-y-0 pr-10 text-left">
-          <DialogTitle className="text-[16.5px] font-black leading-tight tracking-[-0.015em] text-ds-ink">
+          <DialogTitle className="text-[16.5px] font-black leading-tight tracking-[-0.015em] text-[#0f172a]">
             {isEdit ? 'Editar turno' : 'Novo turno'} · {modalDateLabel}
           </DialogTitle>
-          <DialogDescription className="mt-1 text-[12.5px] font-semibold leading-[1.45] text-ds-ink-faint">
+          <DialogDescription className="mt-1 text-[12.5px] font-semibold leading-[1.45] text-[#7d8a9d]">
             {modalUnitName} · colaboradora e faixa de horário.
           </DialogDescription>
-          <DialogClose className="absolute -right-0 -top-0 grid h-7 w-7 place-items-center rounded-[9px] border border-ds-info-bg text-ds-info transition-colors hover:border-ds-info-bg hover:bg-ds-surface hover:text-ds-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-info">
+          <DialogClose className="absolute right-0 top-0 grid h-7 w-7 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#94a3b8] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] hover:text-[#475569] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#0ea5e9]">
             <X className="h-[13px] w-[13px]" strokeWidth={2.6} />
             <span className="sr-only">Fechar</span>
           </DialogClose>
@@ -358,26 +424,86 @@ function ShiftDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
 
-            <FormField control={form.control} name="userId" render={({ field }) => (
+            {!externalMode ? <FormField control={form.control} name="userId" render={({ field }) => (
               <FormItem className="mt-[15px] space-y-2">
-                <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Colaboradora</FormLabel>
+                <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Colaboradora</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl><SelectTrigger className="h-9 rounded-[9px] border-ds-info-bg bg-ds-surface px-2.5 text-xs font-bold text-ds-info focus:ring-2 focus:ring-ds-info focus:ring-offset-0"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                  <SelectContent className="rounded-[11px] border-ds-info-bg text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
+                  <FormControl><SelectTrigger className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                  <SelectContent className="rounded-[11px] border-[#e3e9f1] text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
                     {operationalUsers.map(u => (
                       <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {operationalUsers.length === 0 ? <p className="text-[11px] font-semibold text-muted-foreground">Nenhuma colaboradora vinculada a esta unidade.</p> : null}
                 <FormMessage className="text-[11px]" />
               </FormItem>
-            )} />
+            )} /> : (
+              <div className="mt-[15px] space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black text-foreground">Cobertura externa</p>
+                    <p className="text-[11px] font-semibold text-muted-foreground">Não altera o vínculo e não participa das metas desta unidade.</p>
+                  </div>
+                  <Badge variant="outline" className="border-primary/30 bg-background text-[10px] font-bold text-primary">Exceção</Badge>
+                </div>
+                {!selectedExternal || !isEdit ? (
+                  <div className="flex gap-2">
+                    <Input aria-label="Buscar colaboradora de outra unidade" value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchExternalCandidates(); } }} placeholder="Nome da colaboradora" className="h-9 text-xs" />
+                    <Button type="button" variant="outline" size="sm" disabled={candidateLoading} onClick={() => void searchExternalCandidates()}>{candidateLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Buscar'}</Button>
+                  </div>
+                ) : null}
+                {externalCandidates.length > 0 ? (
+                  <FormField control={form.control} name="userId" render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">Colaboradora externa</FormLabel>
+                      <Select value={field.value} onValueChange={(value) => { field.onChange(value); setSelectedExternal(externalCandidates.find((candidate) => candidate.id === value) ?? null); }}>
+                        <FormControl><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                        <SelectContent>{externalCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.username} · {candidate.originUnitName}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <FormMessage className="text-[11px]" />
+                    </FormItem>
+                  )} />
+                ) : null}
+                {selectedExternal ? (
+                  <div className="rounded-lg border border-border bg-background px-3 py-2">
+                    <p className="text-xs font-bold text-foreground">{selectedExternal.username}</p>
+                    <p className="text-[11px] text-muted-foreground">Unidade de origem: {selectedExternal.originUnitName}</p>
+                  </div>
+                ) : null}
+                {candidateError ? <p role="alert" className="text-[11px] font-semibold text-destructive">{candidateError}</p> : null}
+                <FormField control={form.control} name="exceptionReason" render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">Motivo da cobertura</FormLabel>
+                    <FormControl><textarea {...field} rows={3} placeholder="Ex.: cobertura pontual por ausência" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs outline-hidden focus:ring-2 focus:ring-ring" /></FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+              </div>
+            )}
+
+            {!isEdit && canAssignExternal ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setExternalMode((current) => !current);
+                  setSelectedExternal(null);
+                  setExternalCandidates([]);
+                  setCandidateError(null);
+                  form.setValue('userId', '');
+                  form.setValue('exceptionReason', '');
+                }}
+                className="mt-3 text-left text-xs font-extrabold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {externalMode ? 'Voltar para colaboradora da unidade' : 'Trazer colaborador de outra unidade'}
+              </button>
+            ) : null}
 
             {(!defaultDate || isEdit) && (
               <FormField control={form.control} name="date" render={({ field }) => (
                 <FormItem className="mt-[15px] space-y-2">
-                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Data</FormLabel>
-                  <FormControl><Input type="date" className="h-9 rounded-[9px] border-ds-info-bg bg-ds-surface px-2.5 text-xs font-bold text-ds-info focus-visible:ring-2 focus-visible:ring-ds-info focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Data</FormLabel>
+                  <FormControl><Input type="date" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
                   <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
@@ -386,10 +512,10 @@ function ShiftDialog({
             {!unitLocked && (
               <FormField control={form.control} name="unitId" render={({ field }) => (
                 <FormItem className="mt-[15px] space-y-2">
-                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Unidade</FormLabel>
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Unidade</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger className="h-9 rounded-[9px] border-ds-info-bg bg-ds-surface px-2.5 text-xs font-bold text-ds-info focus:ring-2 focus:ring-ds-info focus:ring-offset-0"><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
-                    <SelectContent className="rounded-[11px] border-ds-info-bg text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
+                    <FormControl><SelectTrigger className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
+                    <SelectContent className="rounded-[11px] border-[#e3e9f1] text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
                       {activeOperationalUnits(units).map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                       ))}
@@ -402,17 +528,18 @@ function ShiftDialog({
 
             <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
               <FormItem className="mt-[15px] space-y-2">
-                <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Turno</FormLabel>
+                <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turno</FormLabel>
                 <Select
                   value={field.value || '__none__'}
                   onValueChange={v => handleDefinitionChange(v === '__none__' ? '' : v)}
                 >
-                  <FormControl><SelectTrigger className="h-9 rounded-[9px] border-ds-info-bg bg-ds-surface px-2.5 text-xs font-bold text-ds-info focus:ring-2 focus:ring-ds-info focus:ring-offset-0"><SelectValue placeholder="Selecionar turno" /></SelectTrigger></FormControl>
-                  <SelectContent className="rounded-[11px] border-ds-info-bg text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
+                  <FormControl><SelectTrigger className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"><SelectValue placeholder="Selecionar turno" /></SelectTrigger></FormControl>
+                  <SelectContent className="rounded-[11px] border-[#e3e9f1] text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
                     <SelectItem value="__none__">— Manual —</SelectItem>
                     {(activeUnitIdForDefs
                       ? shiftDefinitions.filter(d => shiftDefinitionMatchesUnit(d, activeUnitIdForDefs))
                       : shiftDefinitions
+                    ).filter((definition) => definition.isArchived !== true || definition.id === field.value
                     ).map(def => (
                       <SelectItem key={def.id} value={def.id}>
                         {def.name} ({def.startTime}–{def.endTime})
@@ -427,15 +554,15 @@ function ShiftDialog({
             <div className="mt-[15px] grid grid-cols-2 gap-3">
               <FormField control={form.control} name="startTime" render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Início</FormLabel>
-                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-ds-info-bg bg-ds-surface px-2.5 text-xs font-bold text-ds-info focus-visible:ring-2 focus-visible:ring-ds-info focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Início</FormLabel>
+                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
                   <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
               <FormField control={form.control} name="endTime" render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Fim</FormLabel>
-                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-ds-info-bg bg-ds-surface px-2.5 text-xs font-bold text-ds-info focus-visible:ring-2 focus-visible:ring-ds-info focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Fim</FormLabel>
+                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
                   <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
@@ -451,15 +578,15 @@ function ShiftDialog({
               </div>
             )}
 
-            <DialogFooter className="!mt-6 !flex !flex-row !items-center !justify-between gap-3 sm:!justify-between sm:!space-x-0">
+            <DialogFooter className="mt-6! flex! flex-row! items-center! justify-between! gap-3 sm:justify-between! sm:space-x-0!">
               {isEdit && shift && onDelete ? (
-                <Button type="button" variant="outline" onClick={() => onDelete(shift)} className="h-[34px] rounded-[10px] border-ds-accent-soft px-[13px] text-[12.5px] font-extrabold text-ds-accent-ink hover:border-ds-accent-soft hover:bg-ds-muted hover:text-ds-accent-ink">
+                <Button type="button" variant="outline" onClick={() => onDelete(shift)} className="h-[34px] rounded-[10px] border-[#fbd0da] px-[13px] text-[12.5px] font-extrabold text-[#be123c] hover:border-[#f7a9bc] hover:bg-[#fef2f4] hover:text-[#be123c]">
                   Remover
                 </Button>
               ) : <span />}
               <div className="ml-auto flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-[34px] rounded-[10px] border-ds-info-bg px-3.5 text-[12.5px] font-extrabold text-ds-ink-2 hover:bg-ds-surface">Fechar</Button>
-              <Button type="submit" disabled={form.formState.isSubmitting || !!vacationConflict} className="h-[34px] rounded-[10px] bg-ds-accent px-4 text-[12.5px] font-extrabold text-white hover:bg-ds-accent">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-[34px] rounded-[10px] border-[#e6ebf2] px-3.5 text-[12.5px] font-extrabold text-[#475569] hover:bg-[#f8fafc]">Fechar</Button>
+              <Button type="submit" disabled={form.formState.isSubmitting || !!vacationConflict} className="h-[34px] rounded-[10px] bg-[#db2777] px-4 text-[12.5px] font-extrabold text-white hover:bg-[#be185d]">
                 {form.formState.isSubmitting ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Salvar turno'}
               </Button>
               </div>
@@ -565,6 +692,7 @@ interface ShiftCardProps {
   userColor?: string;
   shiftDef?: DPShiftDefinition;
   canEdit: boolean;
+  maxConsecutiveWorkDays?: number;
   selectionMode?: boolean;
   selected?: boolean;
   onSelect?: (shift: DPShift) => void;
@@ -580,6 +708,7 @@ function ShiftCard({
   userColor,
   shiftDef,
   canEdit,
+  maxConsecutiveWorkDays,
   selectionMode,
   selected,
   onSelect,
@@ -590,7 +719,8 @@ function ShiftCard({
   const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   const shiftLabel = shiftDef?.name?.trim() || 'Turno manual';
-  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
+  const externalCoverage = shift.assignmentKind === 'external_coverage';
+  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${externalCoverage ? ' · Cobertura externa, não participa das metas' : ''}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
     <div
       role={selectionMode ? 'button' : 'group'}
@@ -623,9 +753,10 @@ function ShiftCard({
 
       <div className="flex-1 min-w-0">
         <p className="font-semibold truncate text-foreground leading-tight">{userName}</p>
-        <p className="mt-px whitespace-normal break-words text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
+        <p className="mt-px whitespace-normal wrap-break-word text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
           {shiftLabel}
         </p>
+        {externalCoverage ? <p className="mt-0.5 text-[8.5px] font-extrabold uppercase leading-[10px] text-primary">Cobertura externa · não participa das metas</p> : null}
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
@@ -648,16 +779,16 @@ function ShiftCard({
           <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
         )}
         {shift.consecutiveDayCount && shift.consecutiveDayCount >= 1 && (
-          <StreakRing count={shift.consecutiveDayCount} />
+          <StreakRing count={shift.consecutiveDayCount} maxAllowed={maxConsecutiveWorkDays ?? shift.journeyResolution?.maxConsecutiveWorkDays ?? 6} />
         )}
       </div>
 
       {canEdit && !selectionMode && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-end gap-0.5 rounded-lg bg-background/90 pr-1.5 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-          <button type="button" aria-label={`Editar turno de ${userName}`} onClick={() => onEdit(shift)} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" aria-label={`Editar turno de ${userName}`} onClick={() => onEdit(shift)} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <Pencil className="h-3 w-3" />
           </button>
-          <button type="button" aria-label={`Remover turno de ${userName}`} onClick={() => onDelete(shift)} className="flex h-6 w-6 items-center justify-center rounded text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" aria-label={`Remover turno de ${userName}`} onClick={() => onDelete(shift)} className="flex h-6 w-6 items-center justify-center rounded text-destructive hover:bg-destructive/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
@@ -668,15 +799,20 @@ function ShiftCard({
 
 // ─── Ghost Shift Badge ────────────────────────────────────────────────────────
 
-function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationConflict }: {
+function GhostShiftBadge({ shift, unitName, consecutiveDayCount, maxConsecutiveWorkDays = 6, user, vacationConflict }: {
   shift: DPShift;
   unitName: string;
   consecutiveDayCount: number;
+  maxConsecutiveWorkDays?: number;
   user: { username: string; avatarUrl?: string; color?: string };
   vacationConflict?: DPVacationRecord | null;
 }) {
   const color = user.color ?? getUserColor(user.username);
-  const countColor = consecutiveDayCount >= 7 ? 'text-destructive' : consecutiveDayCount >= 5 ? 'text-ds-warn' : 'text-muted-foreground/60';
+  const countColor = consecutiveDayCount > maxConsecutiveWorkDays
+    ? 'text-destructive'
+    : consecutiveDayCount >= Math.max(1, maxConsecutiveWorkDays - 1)
+      ? 'text-orange-500'
+      : 'text-muted-foreground/60';
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   return (
     <div
@@ -781,10 +917,10 @@ function DayOffBadge({
   const badgeTone = conflictsWithWork || hasFailed || removalFailed
     ? 'border-destructive/30 bg-destructive/5 text-destructive'
     : isPendingRetry
-      ? 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn'
+      ? 'border-amber-300/60 bg-amber-50/70 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
       : explicit
-        ? 'border-ds-ok-bg bg-ds-ok-bg text-ds-ok dark:border-ds-ok-bg dark:bg-ds-ok dark:text-ds-ok'
-        : 'border-ds-info-bg bg-ds-info-bg text-ds-info dark:border-ds-info-bg dark:bg-ds-info dark:text-ds-info';
+        ? 'border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+        : 'border-sky-200 bg-sky-50/80 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300';
   return (
     <div
       className={cn(
@@ -811,7 +947,7 @@ function DayOffBadge({
             type="button"
             onClick={onPublish}
             className={cn(
-              'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-semibold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               hasFailed
                 ? 'border-destructive/30 hover:bg-destructive/10'
                 : 'border-border/60 bg-background/70 hover:bg-background',
@@ -829,7 +965,7 @@ function DayOffBadge({
           <button
             type="button"
             onClick={onRemove}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label={removalFailed ? `Tentar remover novamente a folga de ${user.username}` : `Remover folga de ${user.username}`}
             title={removalFailed ? 'Tentar remover novamente' : 'Remover folga'}
           >
@@ -857,7 +993,7 @@ function CoverageStatus({
       <div className={cn(
         'flex items-center justify-between gap-2 rounded-lg border border-dashed px-2.5 py-2',
         coverage.hasUnplannedShifts
-          ? 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn'
+          ? 'border-amber-300 bg-amber-50/60 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
           : 'border-border/70 bg-muted/20 text-muted-foreground',
       )}>
         <div className="flex min-w-0 items-center gap-2">
@@ -884,7 +1020,7 @@ function CoverageStatus({
       .map((window) => `${window.startTime}–${window.endTime} · ${window.minimumPeople} pessoa${window.minimumPeople === 1 ? '' : 's'}`)
       .join(', ');
     return (
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-ds-ok-bg bg-ds-ok-bg px-2.5 py-2 text-ds-ok dark:border-ds-ok-bg dark:bg-ds-ok dark:text-ds-ok" title={ranges}>
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50/60 px-2.5 py-2 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300" title={ranges}>
         <div className="min-w-0">
           <p className="text-[11px] font-semibold">Demanda coberta</p>
           <p className="truncate text-[10px]">{ranges}</p>
@@ -1128,8 +1264,8 @@ function UnassignedBadge({ user, statusLabel = 'Sem unidade vinculada' }: {
       className={cn(
         'rounded border px-2 py-1.5',
         isVacation
-          ? 'border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink dark:border-ds-accent-soft dark:bg-ds-accent dark:text-ds-accent-ink'
-          : 'border-ds-border bg-ds-muted text-ds-ink-muted dark:border-ds-border-input dark:bg-ds-dark dark:text-ds-ink-faint',
+          ? 'border-violet-200 bg-violet-50/70 text-violet-700 dark:border-violet-900 dark:bg-violet-950/20 dark:text-violet-300'
+          : 'border-slate-200 bg-slate-50/70 text-slate-600 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300',
       )}
       title={`${user.username} — ${isVacation ? 'Férias aprovadas' : 'Sem unidade vinculada neste dia'}`}
     >
@@ -1184,6 +1320,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     applyShiftsBatch,
     deleteShift: doDelete,
   } = useDPShifts(schedule.id);
+  const {
+    validation: journeyValidation,
+    loading: journeyValidationLoading,
+    error: journeyValidationError,
+  } = useDPScheduleJourneyValidation(schedule.id);
   const {
     vacations,
     loading: vacationsLoading,
@@ -1347,6 +1488,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         title: result.alreadyPublished ? 'Folga já confirmada.' : 'Folga confirmada.',
         description: 'O Bizneo reconheceu o dia como folga.',
       });
+      notifyDPScheduleShiftsChanged(params.scheduleId ?? schedule.id);
       return true;
     } catch (caught) {
       toast({
@@ -1383,6 +1525,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         title: result.alreadyRemoved ? 'Folga já removida.' : 'Folga removida.',
         description: 'O Bizneo e o Coala One foram atualizados.',
       });
+      notifyDPScheduleShiftsChanged(shift.scheduleId);
       setDayOffRemovalTarget(null);
     } catch (caught) {
       toast({
@@ -1413,8 +1556,12 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       const cleanSnapshot = JSON.parse(JSON.stringify({ users: snapshotUsers }));
       await updateSchedule({ ...schedule, locked: true, snapshot: cleanSnapshot });
       toast({ title: 'Escala trancada.' });
-    } catch {
-      toast({ title: 'Erro ao trancar escala.', variant: 'destructive' });
+    } catch (caught) {
+      toast({
+        title: 'Não foi possível trancar a escala.',
+        description: caught instanceof Error ? caught.message : 'Revise as jornadas aplicáveis.',
+        variant: 'destructive',
+      });
     } finally {
       setLocking(false);
     }
@@ -1663,7 +1810,31 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     ),
     [isPerUnit, prevSiblingWorkShifts, prevWorkShifts, siblingWorkShifts, workShifts]
   );
-  const consecutiveCountMap = streakState.countByShiftId;
+  const consecutiveCountMap = useMemo(() => {
+    const counts = new Map(streakState.countByShiftId);
+    workShifts.forEach((shift) => {
+      const resolvedCount = journeyValidation?.people[shift.userId]?.countsByDate[shift.date];
+      if (typeof resolvedCount === 'number') counts.set(shift.id, resolvedCount);
+    });
+    return counts;
+  }, [journeyValidation, streakState.countByShiftId, workShifts]);
+
+  const journeyPredictedDayOffsByUser = useMemo(() => {
+    const predictions = new Map<string, Array<{ date: string; sourceUnitId: string }>>();
+    if (!journeyValidation) return predictions;
+    const allWorkShifts = [...prevWorkShifts, ...prevSiblingWorkShifts, ...workShifts, ...siblingWorkShifts];
+    Object.entries(journeyValidation.people).forEach(([userId, person]) => {
+      const userShifts = allWorkShifts
+        .filter((shift) => shift.userId === userId)
+        .sort((left, right) => left.date.localeCompare(right.date));
+      const items = person.predictedDayOffDates.map((date) => ({
+        date,
+        sourceUnitId: [...userShifts].reverse().find((shift) => shift.date < date)?.unitId ?? schedule.unitId ?? '',
+      }));
+      if (items.length) predictions.set(userId, items);
+    });
+    return predictions;
+  }, [journeyValidation, prevSiblingWorkShifts, prevWorkShifts, schedule.unitId, siblingWorkShifts, workShifts]);
 
   // lastSundayShiftsByDate[date] = work shifts of THIS unit on that date.
   // Combines the current schedule with the previous month's own-unit shifts
@@ -1823,7 +1994,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
 
-    streakState.predictedDayOffsByUser.forEach((items, userId) => {
+    journeyPredictedDayOffsByUser.forEach((items, userId) => {
       items.forEach((item) => {
         let displayUnitId = item.sourceUnitId;
         if (isPerUnit && schedule.unitId) {
@@ -1869,7 +2040,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     operationalUsers,
     schedule.unitId,
     siblingDayOffShifts,
-    streakState.predictedDayOffsByUser,
+    journeyPredictedDayOffsByUser,
     units,
     userFilter,
   ]);
@@ -1962,9 +2133,15 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           if (vacationConflictByShiftId.has(shiftVacationKey(shift))) {
             alerts.push({ key: `vacation:${shift.id}`, label: `${userName}: turno durante férias`, tone: 'danger' });
           }
-          if ((shift.consecutiveDayCount ?? 0) >= 7) {
-            alerts.push({ key: `streak:${shift.id}`, label: `${userName}: ${shift.consecutiveDayCount} dias seguidos`, tone: 'warning' });
-          }
+          journeyValidation?.issues
+            .filter((issue) => issue.userId === shift.userId && issue.date === date)
+            .forEach((issue) => {
+              alerts.push({
+                key: `journey:${issue.code}:${shift.id}`,
+                label: `${userName}: ${issue.message}`,
+                tone: issue.blocking ? 'danger' : 'warning',
+              });
+            });
         });
 
         (dayOffIndex[date]?.[unit.id] ?? []).forEach(({ userId, shift }) => {
@@ -1983,7 +2160,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       });
     });
     return index;
-  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
+  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, journeyValidation, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
 
   const alertDates = useMemo(
     () => new Set(Array.from(alertsByCellKey.keys()).map((key) => key.slice(0, 10))),
@@ -2047,8 +2224,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       if (vacationConflictByShiftId.has(shiftVacationKey(shift))) issues.add(`vacation:${shift.id}`);
     });
     workDayOffConflictKeys.forEach((key) => issues.add(`day-off:${key}`));
+    journeyValidation?.issues.forEach((issue, index) => {
+      if (issue.blocking) issues.add(`journey:${issue.userId}:${issue.date ?? index}:${issue.code}`);
+    });
     return issues.size;
-  }, [crossConflictShiftIds, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
+  }, [crossConflictShiftIds, journeyValidation, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
   const coverageAlertCount = useMemo(
     () => [...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).length,
     [coverageByCellKey],
@@ -2188,18 +2368,18 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
   }
 
   return (
-    <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-ds-surface text-ds-ink' : 'space-y-4')}>
+    <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
       {/* Header */}
       <div className={cn(
         'flex flex-wrap items-center gap-3',
-        embedded && 'shrink-0 border-b border-ds-info-bg px-[22px] py-[14px]',
+        embedded && 'shrink-0 border-b border-[#eef1f6] px-[22px] py-[14px]',
       )}>
         {embedded && onBack ? (
           <button
             type="button"
             onClick={onBack}
             aria-label="Voltar para todos os meses"
-            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-ds-info-bg text-ds-ink-muted outline-none transition hover:bg-ds-surface focus-visible:ring-2 focus-visible:ring-ds-accent"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-hidden transition hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
           >
             <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.4} />
           </button>
@@ -2208,7 +2388,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         )}
         <div className="flex-1 min-w-0">
           {embedded ? (
-            <h1 className="dp-schedule-month-title truncate text-[19px] font-black leading-6 tracking-[-0.02em] text-ds-ink">
+            <h1 className="dp-schedule-month-title truncate text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
               {MONTHS[schedule.month - 1]} de {schedule.year} · {scheduleUnit?.name ?? 'Todas as unidades'}
             </h1>
           ) : (
@@ -2219,36 +2399,36 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           )}
         </div>
         {embedded && onPreviousMonth && onNextMonth && (
-          <div className="flex items-center overflow-hidden rounded-[10px] border border-ds-info-bg">
-            <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-ds-info-bg text-ds-ink-muted hover:bg-ds-surface" onClick={onPreviousMonth}>
+          <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
+            <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" className="h-8 w-8 rounded-none text-ds-ink-muted hover:bg-ds-surface" onClick={onNextMonth}>
+            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         )}
         {isPerUnit && (
-          <Button type="button" size="sm" variant="outline" onClick={() => setBizneoQueueOpen(true)} className="h-8 rounded-[10px] border-ds-info-bg bg-ds-info-bg px-3 text-[12.5px] font-extrabold text-ds-info hover:bg-ds-info-bg">
-            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-ds-info" />
+          <Button type="button" size="sm" variant="outline" onClick={() => setBizneoQueueOpen(true)} className="h-8 rounded-[10px] border-sky-200 bg-sky-50 px-3 text-[12.5px] font-extrabold text-sky-700 hover:bg-sky-100">
+            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-sky-500" />
             Bizneo · {bizneoQueueItems.length} pendente{bizneoQueueItems.length === 1 ? '' : 's'}
           </Button>
         )}
         {canManageSchedule && (
           schedule.locked ? (
-            <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="h-8 rounded-[10px] border-ds-warn-bg px-3 text-[12.5px] font-bold text-ds-warn hover:bg-ds-warn-bg">
+            <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="h-8 rounded-[10px] border-amber-300 px-3 text-[12.5px] font-bold text-amber-600 hover:bg-amber-50">
               <LockOpen className="mr-2 h-4 w-4" />
               {locking ? 'Destrancando...' : 'Destrancar'}
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={handleLock} disabled={locking} className="h-8 rounded-[10px] border-ds-info-bg px-3 text-[12.5px] font-bold text-ds-ink-2 hover:bg-ds-surface">
+            <Button size="sm" variant="outline" onClick={handleLock} disabled={locking} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
               <Lock className="mr-2 h-4 w-4" />
               {locking ? 'Trancando...' : 'Trancar'}
             </Button>
           )
         )}
         {canEdit && !bulkSelectionActive && (
-          <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-ds-info-bg px-3 text-[12.5px] font-bold text-ds-ink-2 hover:bg-ds-surface">
+          <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
             <Sparkles className="mr-2 h-4 w-4" />
             Editar em lote
           </Button>
@@ -2257,7 +2437,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           <Button
             size="sm"
             onClick={() => setAddDialog({ date: days[0]?.date ?? '', unitId: activeUnits[0]?.id ?? '' })}
-            className="h-8 rounded-[10px] bg-ds-accent px-[13px] text-[12.5px] font-extrabold text-white hover:bg-ds-accent"
+            className="h-8 rounded-[10px] bg-[#db2777] px-[13px] text-[12.5px] font-extrabold text-white hover:bg-[#be185d]"
           >
             <Plus className="mr-2 h-4 w-4" />
             Adicionar turno
@@ -2266,19 +2446,43 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       </div>
       <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
       {schedule.locked && (
-        <div className="flex items-center gap-2 text-xs text-ds-warn bg-ds-warn-bg dark:bg-ds-warn border border-ds-warn-bg dark:border-ds-warn-bg rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Escala trancada — dados de colaboradores e vale-transporte estão congelados.
         </div>
       )}
+      {!schedule.locked && journeyValidationLoading && (
+        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          Validando a jornada de cada colaborador e a sequência entre competências e unidades.
+        </div>
+      )}
+      {!schedule.locked && journeyValidationError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          A validação de jornadas não foi concluída: {journeyValidationError}
+        </div>
+      )}
+      {!schedule.locked && journeyValidation?.status === 'blocked' && (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {journeyValidation.issues.length} pendência{journeyValidation.issues.length === 1 ? '' : 's'} de jornada impedem o fechamento. {journeyValidation.issues[0]?.message}
+        </div>
+      )}
+      {!schedule.locked && journeyValidation?.status === 'ok' && workShifts.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+          Jornadas resolvidas e sequência contínua validada para esta escala.
+        </div>
+      )}
       {isArchivedUnitSchedule && (
-        <div className="flex items-center gap-2 rounded-lg border border-ds-border bg-ds-muted px-3 py-2 text-xs text-ds-ink-muted">
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Escala histórica preservada após a incorporação desta unidade. Alterações estão bloqueadas.
         </div>
       )}
       {canManageSchedule && !schedule.locked && vacationsLoading && (
-        <div className="flex items-center gap-2 rounded-lg border border-ds-info-bg bg-ds-info-bg px-3 py-2 text-xs text-ds-info dark:border-ds-info-bg dark:bg-ds-info dark:text-ds-info">
+        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300">
           <CalendarDays className="h-3.5 w-3.5 shrink-0" />
           Carregando férias aprovadas. A edição da escala será liberada após a validação.
         </div>
@@ -2292,7 +2496,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         </div>
       )}
       {ancillaryBootstrapError && (
-        <div className="flex items-center gap-2 text-xs text-ds-warn bg-ds-warn-bg border border-ds-warn-bg rounded-lg px-3 py-2 dark:bg-ds-warn dark:border-ds-warn-bg dark:text-ds-warn">
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Alguns dados auxiliares da escala não carregaram: {ancillaryBootstrapError}
         </div>
@@ -2307,11 +2511,11 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
       <div className="grid grid-cols-2 gap-[10px] lg:grid-cols-5">
         <Popover>
           <PopoverTrigger asChild>
-            <div className="cursor-pointer rounded-[13px] border border-ds-info-bg bg-ds-surface px-3 py-[10px] transition-colors hover:bg-ds-surface">
-              <div className="mb-1 flex items-center gap-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-ds-info">
+            <div className="cursor-pointer rounded-[13px] border border-[#e3e9f1] bg-white px-3 py-[10px] transition-colors hover:bg-[#f8fafc]">
+              <div className="mb-1 flex items-center gap-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#94a3b8]">
                 <span>Pessoas</span>
               </div>
-              <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-ds-ink">{uniqueCollaborators}</span><span className="text-[11px] font-bold text-ds-ink-faint">no mês</span></p>
+              <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-[#0f172a]">{uniqueCollaborators}</span><span className="text-[11px] font-bold text-[#a3aec0]">no mês</span></p>
             </div>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="start">
@@ -2333,42 +2537,42 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         <button
           type="button"
           onClick={() => { setUserFilter('__all__'); setOnlyAlerts(false); }}
-          className="rounded-[13px] border border-ds-info-bg bg-ds-surface px-3 py-[10px] text-left transition-colors hover:bg-ds-surface"
+          className="rounded-[13px] border border-[#e3e9f1] bg-white px-3 py-[10px] text-left transition-colors hover:bg-[#f8fafc]"
         >
-          <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-ds-info">
+          <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#94a3b8]">
             <span>Turnos</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-ds-ink">{workShifts.length}</span><span className="text-[11px] font-bold text-ds-ink-faint">em {days.length} dias</span></p>
+          <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-[#0f172a]">{workShifts.length}</span><span className="text-[11px] font-bold text-[#a3aec0]">em {days.length} dias</span></p>
         </button>
         <button
           type="button"
           onClick={() => setOnlyAlerts(true)}
-          className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${conflictCount > 0 ? 'border-ds-accent-soft bg-ds-muted' : 'border-ds-info-bg bg-ds-surface hover:bg-ds-surface'}`}
+          className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${conflictCount > 0 ? 'border-[#fecdd6] bg-[#fef2f4]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
         >
-          <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${conflictCount > 0 ? 'text-ds-accent-ink' : 'text-ds-info'}`}>
+          <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${conflictCount > 0 ? 'text-[#e11d48]' : 'text-[#94a3b8]'}`}>
             <span>Conflito{conflictCount !== 1 ? 's' : ''}</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${conflictCount > 0 ? 'text-ds-accent-ink' : 'text-ds-ink'}`}>{conflictCount}</span><span className={`text-[11px] font-bold ${conflictCount > 0 ? 'text-ds-danger' : 'text-ds-ink-faint'}`}>{conflictCount > 0 ? 'exigem revisão' : 'sem alertas'}</span></p>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${conflictCount > 0 ? 'text-[#e11d48]' : 'text-[#0f172a]'}`}>{conflictCount}</span><span className={`text-[11px] font-bold ${conflictCount > 0 ? 'text-[#fb7185]' : 'text-[#a3aec0]'}`}>{conflictCount > 0 ? 'exigem revisão' : 'sem alertas'}</span></p>
         </button>
         <button
           type="button"
           onClick={() => setOnlyAlerts(true)}
-          className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${coverageAlertCount > 0 ? 'border-ds-warn bg-ds-warn-bg' : 'border-ds-info-bg bg-ds-surface hover:bg-ds-surface'}`}
+          className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${coverageAlertCount > 0 ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
         >
-          <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${coverageAlertCount > 0 ? 'text-ds-warn' : 'text-ds-info'}`}>
+          <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#94a3b8]'}`}>
             <span>Cobertura</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-ds-warn' : 'text-ds-ink'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-ds-warn' : 'text-ds-ink-faint'}`}>{coverageAlertCount > 0 ? 'dias com lacuna' : 'sem lacunas'}</span></p>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias com lacuna' : 'sem lacunas'}</span></p>
         </button>
         <button
           type="button"
           onClick={() => setVtDialogOpen(true)}
-          className="rounded-[13px] border border-ds-info-bg bg-ds-surface px-3 py-[10px] text-left transition-colors hover:bg-ds-surface"
+          className="rounded-[13px] border border-[#e3e9f1] bg-white px-3 py-[10px] text-left transition-colors hover:bg-[#f8fafc]"
         >
-          <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-ds-info">
+          <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#94a3b8]">
             <span>Vale Transporte</span>
           </div>
-          <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-ds-ink">{vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span><span className="text-[11px] font-bold text-ds-ink-faint">{vtStats.breakdown.length} pessoas</span></p>
+          <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-[#0f172a]">{vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span><span className="text-[11px] font-bold text-[#a3aec0]">{vtStats.breakdown.length} pessoas</span></p>
         </button>
       </div>
 
@@ -2378,7 +2582,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
         {schedule.calendarId && (() => {
           const cal = calendars.find(c => c.id === schedule.calendarId);
           return cal ? (
-            <div className="flex h-[30px] items-center gap-[7px] rounded-[9px] border border-ds-info-bg bg-ds-surface px-[11px] text-xs font-bold text-ds-ink-muted">
+            <div className="flex h-[30px] items-center gap-[7px] rounded-[9px] border border-[#e6ebf2] bg-[#f8fafc] px-[11px] text-xs font-bold text-[#64748b]">
               <CalendarDays className="h-3 w-3 shrink-0" />
               {cal.name}
             </div>
@@ -2394,26 +2598,26 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           </Select>
         )}
         <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="h-[30px] w-[210px] rounded-[9px] border-ds-info-bg bg-ds-surface text-xs font-bold text-ds-ink-2 [&>span]:whitespace-nowrap"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
+          <SelectTrigger className="h-[30px] w-[210px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569] [&>span]:whitespace-nowrap"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todas as colaboradoras</SelectItem>
             {operationalUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={weekFilter} onValueChange={setWeekFilter}>
-          <SelectTrigger className="h-[30px] w-[120px] rounded-[9px] border-ds-info-bg bg-ds-surface text-xs font-bold text-ds-ink-2"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
+          <SelectTrigger className="h-[30px] w-[120px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Mês inteiro</SelectItem>
             {monthWeeks.map(w => <SelectItem key={w} value={String(w)}>Semana {w}</SelectItem>)}
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex">
-            Dias seguidos
-            <StreakRing count={3} />
-            <StreakRing count={6} />
-            <StreakRing count={7} />
-            <span className="normal-case tracking-normal">1–4 · 5–6 · 7+</span>
+          <span
+            className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex"
+            title="Indicador da sequência realizada na escala. A regra aplicável pertence à jornada do colaborador."
+          >
+            Sequência realizada
+            <span className="normal-case tracking-normal">o indicador se adapta ao limite da jornada</span>
           </span>
           <button
             type="button"
@@ -2437,19 +2641,19 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           <p className="text-sm">Nenhuma unidade cadastrada. Cadastre unidades em Configurações primeiro.</p>
         </div>
       ) : (
-        <div className="overflow-auto rounded-[14px] border border-ds-info-bg">
+        <div className="overflow-auto rounded-[14px] border border-[#e9edf4]">
           <table className="w-max min-w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/40">
                 {/* Sticky day column header */}
-                <th className="sticky left-0 z-20 min-w-[88px] border-b border-r border-ds-info-bg bg-ds-muted px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">
+                <th className="sticky left-0 z-20 min-w-[88px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">
                   Data
                 </th>
                 {isPerUnit ? (
                   <>
-                    <th className="min-w-[600px] border-b border-r border-ds-info-bg bg-ds-muted px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Turnos</th>
-                    <th className="w-[360px] min-w-[360px] border-b border-r border-ds-info-bg bg-ds-muted px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Folgas &amp; férias</th>
-                    <th className="w-44 min-w-44 border-b border-ds-info-bg bg-ds-muted px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-ds-info">Alertas</th>
+                    <th className="min-w-[600px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turnos</th>
+                    <th className="w-[360px] min-w-[360px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Folgas &amp; férias</th>
+                    <th className="w-44 min-w-44 border-b border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Alertas</th>
                   </>
                 ) : activeUnits.map(unit => (
                   <th
@@ -2481,7 +2685,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         {prevScheduleSourceUnit && (
                           <Badge
                             variant="outline"
-                            className="ml-auto border-ds-info-bg bg-ds-info-bg text-[9px] normal-case tracking-normal text-ds-info"
+                            className="ml-auto border-blue-200 bg-blue-50 text-[9px] normal-case tracking-normal text-blue-700"
                           >
                             Continuidade: {prevScheduleSourceUnit.name}
                           </Badge>
@@ -2493,13 +2697,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     const isSunday = dow === 0;
                     const isHoliday = holidaySet.has(date);
                     return (
-                      <tr key={`prev-${date}`} className={`border-b opacity-55 ${isHoliday ? 'bg-ds-warn-bg dark:bg-ds-warn' : isSunday ? 'bg-muted/20' : ''}`}>
-                        <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${isHoliday ? 'bg-ds-warn-bg dark:bg-ds-warn' : isSunday ? 'bg-muted/30' : 'bg-background'}`}>
+                      <tr key={`prev-${date}`} className={`border-b opacity-55 ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/20' : ''}`}>
+                        <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${isHoliday ? 'bg-orange-50 dark:bg-orange-900/10' : isSunday ? 'bg-muted/30' : 'bg-background'}`}>
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className={`text-[10px] font-medium uppercase tracking-wider ${isSunday ? 'text-ds-danger' : 'text-muted-foreground/60'}`}>{dowLabel}</span>
-                            <span className={`flex items-center justify-center h-7 w-7 rounded-full text-sm font-bold ${isSunday ? 'text-ds-danger' : 'text-muted-foreground/60'}`}>{day}</span>
+                            <span className={`text-[10px] font-medium uppercase tracking-wider ${isSunday ? 'text-red-400' : 'text-muted-foreground/60'}`}>{dowLabel}</span>
+                            <span className={`flex items-center justify-center h-7 w-7 rounded-full text-sm font-bold ${isSunday ? 'text-red-400' : 'text-muted-foreground/60'}`}>{day}</span>
                             {isHoliday && (
-                              <span className="text-[9px] font-semibold bg-ds-warn-bg dark:bg-ds-warn text-ds-warn dark:text-ds-warn rounded px-1 py-0.5 leading-none">
+                              <span className="text-[9px] font-semibold bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 rounded px-1 py-0.5 leading-none">
                                 Feriado
                               </span>
                             )}
@@ -2523,6 +2727,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                       userColor={user?.color}
                                       shiftDef={def}
                                       canEdit={false}
+                                      maxConsecutiveWorkDays={shift.journeyResolution?.maxConsecutiveWorkDays}
                                       onEdit={() => {}}
                                       onDelete={() => {}}
                                     />
@@ -2561,13 +2766,13 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                   : `Semana ${week}`;
 
                 const rowBg = isHoliday
-                  ? 'bg-ds-warn-bg dark:bg-ds-warn'
-                  : dayIsToday ? 'bg-ds-info-bg dark:bg-ds-info'
+                  ? 'bg-orange-50 dark:bg-orange-900/10'
+                  : dayIsToday ? 'bg-blue-50 dark:bg-blue-900/10'
                   : isWeekend ? 'bg-muted/20' : 'hover:bg-muted/10';
 
                 const stickyBg = isHoliday
-                  ? 'bg-ds-warn-bg dark:bg-ds-warn'
-                  : dayIsToday ? 'bg-ds-info-bg dark:bg-ds-info'
+                  ? 'bg-orange-50 dark:bg-orange-900/10'
+                  : dayIsToday ? 'bg-blue-50 dark:bg-blue-900/10'
                   : isWeekend ? 'bg-muted/30' : 'bg-background';
 
                 return (
@@ -2605,21 +2810,21 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                     <td className={`sticky left-0 z-10 border-r px-3 py-2 align-top ${stickyBg}`}>
                       <div className="flex flex-col items-center gap-0.5">
                         <span className={`text-[10px] font-medium uppercase tracking-wider
-                          ${isSunday ? 'text-ds-danger' : 'text-muted-foreground'}
+                          ${isSunday ? 'text-red-500' : 'text-muted-foreground'}
                         `}>
                           {dowLabel}
                         </span>
                         <span className={`flex items-center justify-center h-7 w-7 rounded-full text-sm font-bold
                           ${dayIsToday
                             ? 'bg-primary text-primary-foreground'
-                            : isSunday ? 'text-ds-danger'
+                            : isSunday ? 'text-red-500'
                             : 'text-foreground'
                           }
                         `}>
                           {day}
                         </span>
                         {isHoliday && (
-                          <span className="text-[9px] font-semibold bg-ds-warn-bg dark:bg-ds-warn text-ds-warn dark:text-ds-warn rounded px-1 py-0.5 leading-none">
+                          <span className="text-[9px] font-semibold bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 rounded px-1 py-0.5 leading-none">
                             Feriado
                           </span>
                         )}
@@ -2667,6 +2872,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             userColor={user?.color}
                             shiftDef={def}
                             canEdit={canEdit}
+                            maxConsecutiveWorkDays={journeyValidation?.people[shift.userId]?.journey?.maxConsecutiveWorkDays}
                             selectionMode={bulkSelectionActive}
                             selected={selectedShiftIds.includes(shift.id)}
                             onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
@@ -2686,6 +2892,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                               shift={ghost.shift}
                               unitName={ghost.unitName}
                               consecutiveDayCount={ghost.consecutiveDayCount}
+                              maxConsecutiveWorkDays={journeyValidation?.people[ghost.shift.userId]?.journey?.maxConsecutiveWorkDays}
                               user={user}
                               vacationConflict={vacationConflictForShift(ghost.shift)}
                             />
@@ -2764,7 +2971,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                         <button
                           type="button"
                           onClick={() => setManualDayOffDialog({ date, unitId: unit.id })}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ds-info-bg px-2 py-1.5 text-xs text-ds-info transition-colors hover:border-ds-info-bg hover:bg-ds-info-bg dark:border-ds-info-bg dark:hover:bg-ds-info"
+                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-300/70 px-2 py-1.5 text-xs text-sky-600/80 transition-colors hover:border-sky-500 hover:bg-sky-50 dark:border-sky-800 dark:hover:bg-sky-950/20"
                         >
                           <CalendarOff className="h-3 w-3 shrink-0" />
                           <span>Adicionar folga</span>
@@ -2774,23 +2981,23 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                       return (
                         <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="min-w-[200px] border-r p-0 align-top last:border-r-0">
                           {isPerUnit ? (
-                            <div className="grid min-h-[52px] grid-cols-[minmax(600px,1fr)_360px_176px] divide-x divide-ds-info-bg">
+                            <div className="grid min-h-[52px] grid-cols-[minmax(600px,1fr)_360px_176px] divide-x divide-[#eef1f6]">
                             <div className="p-2">
                               <div className="grid max-w-[600px] grid-cols-3 gap-1">
                                 {workCards}
                                 {addShiftButton}
                               </div>
                               {(ghostTags.some(Boolean) || lastSundayTags.some(Boolean)) && (
-                                <div className="mt-1.5 flex flex-col gap-1 border-t border-dashed border-ds-info-bg pt-1.5">
+                                <div className="mt-1.5 flex flex-col gap-1 border-t border-dashed border-[#e3e9f1] pt-1.5">
                                   {ghostTags.some(Boolean) && (
                                     <div className="flex items-start gap-1.5">
-                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-ds-ink-faint">Em outras unidades</span>
+                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Em outras unidades</span>
                                       <div className="flex min-w-0 flex-wrap gap-1">{ghostTags}</div>
                                     </div>
                                   )}
                                   {lastSundayTags.some(Boolean) && (
                                     <div className="flex items-start gap-1.5">
-                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-ds-ink-faint">Domingo passado</span>
+                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Domingo passado</span>
                                       <div className="flex min-w-0 flex-wrap gap-1">{lastSundayTags}</div>
                                     </div>
                                   )}
@@ -2819,7 +3026,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                         'flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] font-medium',
                                         alert.tone === 'danger'
                                           ? 'border-destructive/30 bg-destructive/5 text-destructive'
-                                          : 'border-ds-warn-bg bg-ds-warn-bg text-ds-warn dark:border-ds-warn-bg dark:bg-ds-warn dark:text-ds-warn',
+                                          : 'border-amber-300 bg-amber-50/70 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300',
                                       )}
                                     >
                                       <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />

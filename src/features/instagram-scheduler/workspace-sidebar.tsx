@@ -265,7 +265,7 @@ export function InstagramWorkspaceSidebar({
         aria-hidden="true"
         onClick={onCloseMobile}
         className={cn(
-          "fixed inset-0 z-40 bg-[var(--ds-scrim)] transition-opacity duration-200 lg:hidden",
+          "fixed inset-0 z-40 bg-(--ds-scrim) transition-opacity duration-200 lg:hidden",
           mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       />
@@ -293,7 +293,7 @@ export function InstagramWorkspaceSidebar({
           <SystemBrand collapsed={collapsed} accent="Pulse" />
           <button
             type="button"
-            className="grid h-9 w-9 place-items-center rounded-ds-md text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker lg:hidden"
+            className="grid h-9 w-9 place-items-center rounded-ds-md text-ds-on-dark-2 hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker lg:hidden"
             onClick={onCloseMobile}
             aria-label="Fechar menu"
           >
@@ -308,11 +308,11 @@ export function InstagramWorkspaceSidebar({
           className={cn(
             "group relative flex shrink-0 items-center gap-2 overflow-hidden rounded-ds-btn-lg bg-ds-accent text-left text-[14px] font-extrabold text-ds-dark",
             "transition-[transform,box-shadow,background] duration-200 hover:-translate-y-0.5 hover:bg-ds-accent-hover hover:shadow-ds-lift active:translate-y-0 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark",
+            "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-ds-dark",
             collapsed ? "h-11 w-11 justify-center self-center" : "w-full px-3.5 py-2.5",
           )}
         >
-          <span aria-hidden="true" className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden" />
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden" />
           <span aria-hidden="true" className="relative text-[20px] font-medium leading-none transition-transform duration-300 group-hover:rotate-90 motion-reduce:transition-none">+</span>
           {!collapsed && <span className="relative">Criar post</span>}
           {collapsed && <span className="sr-only">Criar post</span>}
@@ -320,13 +320,13 @@ export function InstagramWorkspaceSidebar({
 
         <nav
           ref={navRef}
-          className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain text-[14px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain text-[14px] scrollbar-none [&::-webkit-scrollbar]:hidden"
           onMouseLeave={() => setHover(null)}
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHover(null); }}
         >
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute left-0 right-0 rounded-ds-btn bg-gradient-to-r from-ds-accent/25 via-white/[0.07] to-transparent ring-1 ring-inset ring-white/10 transition-[transform,height,opacity] duration-200 ease-out motion-reduce:transition-none"
+            className="pointer-events-none absolute left-0 right-0 rounded-ds-btn bg-linear-to-r from-ds-accent/25 via-white/[0.07] to-transparent ring-1 ring-inset ring-white/10 transition-[transform,height,opacity] duration-200 ease-out motion-reduce:transition-none"
             style={{
               opacity: hover ? 1 : 0,
               height: hover?.height ?? 0,
@@ -357,7 +357,7 @@ export function InstagramWorkspaceSidebar({
                       type="button"
                       aria-expanded={open}
                       onClick={() => toggleGroup(group.title)}
-                      className="group flex w-full items-center justify-between rounded-ds-sm px-2.5 py-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted transition-colors hover:text-ds-on-dark-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                      className="group flex w-full items-center justify-between rounded-ds-sm px-2.5 py-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-on-dark-muted transition-colors hover:text-ds-on-dark-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
                     >
                       {group.title}
                       <ChevronDown className={cn("h-3 w-3 transition-transform duration-200 motion-reduce:transition-none", !open && "-rotate-90")} aria-hidden="true" />
@@ -388,9 +388,9 @@ export function InstagramWorkspaceSidebar({
                             onFocus={(event) => previewItem(event.currentTarget)}
                             className={cn(
                               "group/item relative flex w-full items-center gap-2.5 rounded-ds-btn px-2.5 py-2 text-left transition-[color,background,transform] duration-200 motion-reduce:transition-none",
-                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
+                              "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker",
                               collapsed && "justify-center px-0 py-1.5",
-                              active ? "font-extrabold text-white" : "text-ds-on-dark-sub hover:bg-white/[0.06] hover:text-white",
+                              active ? "font-extrabold text-white" : "text-ds-on-dark-sub hover:bg-white/6 hover:text-white",
                               !collapsed && "hover:translate-x-1",
                               !item.view && "opacity-70",
                             )}
@@ -422,7 +422,7 @@ export function InstagramWorkspaceSidebar({
         </nav>
 
         <div className="shrink-0 space-y-2">
-          <div className={cn("rounded-ds-btn-lg border border-white/10 bg-white/[0.06]", collapsed ? "p-1.5" : "p-2.5")}>
+          <div className={cn("rounded-ds-btn-lg border border-white/10 bg-white/6", collapsed ? "p-1.5" : "p-2.5")}>
             <div className={cn("flex items-center gap-2.5", collapsed && "justify-center")} title={collapsed ? [displayName, personRole].filter(Boolean).join(" · ") : undefined}>
               <Avatar className={cn("shrink-0 ring-2 ring-white/10 transition-[width,height] duration-300 motion-reduce:transition-none", collapsed ? "h-9 w-9" : "h-10 w-10")}>
                 {person?.avatarUrl ? <AvatarImage src={person.avatarUrl} alt={displayName} className="object-cover" /> : null}
@@ -439,7 +439,7 @@ export function InstagramWorkspaceSidebar({
               <button
                 type="button"
                 onClick={onLogout}
-                className="mt-2 flex w-full items-center gap-2 rounded-ds-sm px-2 py-1.5 text-left text-[12px] font-semibold text-ds-on-dark-sub transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
+                className="mt-2 flex w-full items-center gap-2 rounded-ds-sm px-2 py-1.5 text-left text-[12px] font-semibold text-ds-on-dark-sub transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker"
               >
                 <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                 Sair

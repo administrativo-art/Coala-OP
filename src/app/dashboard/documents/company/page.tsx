@@ -6,9 +6,6 @@ import { Building2, ChevronDown, Download, Eye, FileText, Folder, Loader2, Plus,
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { InlineConfirm } from "@/components/patterns/inline-confirm";
-import { StatusPill } from "@/components/ui/status-pill";
-import { PageHero } from "@/components/patterns/page-hero";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { COMPANY_DOCUMENT_CATEGORIES } from "@/lib/documents/company-document-categories";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
@@ -86,8 +83,6 @@ export default function CompanyDocumentsPage() {
   const [unitFilter, setUnitFilter] = useState("all");
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [removing, setRemoving] = useState(false);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [knownUnits, setKnownUnits] = useState<string[]>([]);
   const canView = hasFormalizationPermission(permissions, "companyDocuments.view");
@@ -279,26 +274,18 @@ export default function CompanyDocumentsPage() {
   }
 
   async function removeDocument(document: CompanyDocument) {
-    if (!firebaseUser) return;
-    setRemoving(true);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const response = await fetch(`/api/documents/company?id=${encodeURIComponent(document.id)}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        setMessage(payload.error || "Falha ao excluir documento.");
-        return;
-      }
-      setDocuments((current) => current.filter((item) => item.id !== document.id));
-      setDeletingId(null);
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Falha ao excluir documento.");
-    } finally {
-      setRemoving(false);
+    if (!firebaseUser || !window.confirm(`Excluir “${document.title}”?`)) return;
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch(`/api/documents/company?id=${encodeURIComponent(document.id)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error || "Falha ao excluir documento.");
+      return;
     }
+    setDocuments((current) => current.filter((item) => item.id !== document.id));
   }
 
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos da empresa.</p>;
@@ -324,22 +311,25 @@ export default function CompanyDocumentsPage() {
 
   return (
     <div className="space-y-3">
-      <PageHero
-        kicker="Documentos"
-        title="Documentos da empresa"
-        subtitle={loading ? undefined : `${documents.length} ${documents.length === 1 ? "arquivo" : "arquivos"}`}
-        actions={canManage ? <Button type="button" variant="primary-page" size="md" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Anexar documento</Button> : null}
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p>
+          <h1 className="text-xl font-black text-slate-950">Documentos da empresa</h1>
+        </div>
+        {canManage ? <Button size="sm" className="h-9 gap-2 rounded-lg" onClick={() => setDialogOpen(true)}>
+          <Plus className="h-4 w-4" /> Anexar documento
+        </Button> : null}
+      </div>
 
-      {message ? <div className="rounded-ds-btn bg-ds-danger-bg px-3 py-2 text-xs font-semibold text-ds-danger" role="alert">{message}</div> : null}
+      {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
+        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-xs lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
           <button
             type="button"
             onClick={selectAllDocuments}
             aria-current={categoryFilter === "all" ? "page" : undefined}
-            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-black ${categoryFilter === "all" ? "bg-ds-accent-row text-ds-accent-ink" : "text-slate-700 hover:bg-slate-50"}`}
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-black ${categoryFilter === "all" ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}
           >
             <Folder className={`h-4 w-4 shrink-0 ${categoryFilter === "all" ? "" : "text-slate-400"}`} />
             <span className="min-w-0 flex-1">Todos os documentos</span>
@@ -352,7 +342,7 @@ export default function CompanyDocumentsPage() {
             const noUnitCount = documents.filter((document) => document.category === item && !document.unit).length;
             return (
               <div key={item}>
-                <div className={`flex items-center gap-1 rounded-lg ${categoryFilter === item ? "bg-ds-accent-row text-ds-accent-ink" : "text-slate-700 hover:bg-slate-50"}`}>
+                <div className={`flex items-center gap-1 rounded-lg ${categoryFilter === item ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
                   <button
                     type="button"
                     onClick={() => selectCategory(item)}
@@ -384,7 +374,7 @@ export default function CompanyDocumentsPage() {
                           key={unitName}
                           type="button"
                           onClick={() => selectUnitWithinCategory(item, unitName)}
-                          className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${unitActive ? "bg-ds-accent-row text-ds-accent-ink" : "text-slate-600 hover:bg-slate-50"}`}
+                          className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${unitActive ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}
                         >
                           <Folder className={`h-3.5 w-3.5 shrink-0 ${unitActive ? "" : "text-slate-300"}`} />
                           <span className="min-w-0 flex-1 truncate">{unitName}</span>
@@ -395,7 +385,7 @@ export default function CompanyDocumentsPage() {
                     <button
                       type="button"
                       onClick={() => selectUnitWithinCategory(item, NO_UNIT_FILTER)}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${unitFilter === NO_UNIT_FILTER ? "bg-ds-accent-row text-ds-accent-ink" : "text-slate-600 hover:bg-slate-50"}`}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold ${unitFilter === NO_UNIT_FILTER ? "bg-pink-50 text-[#c81f69]" : "text-slate-600 hover:bg-slate-50"}`}
                     >
                       <Folder className={`h-3.5 w-3.5 shrink-0 ${unitFilter === NO_UNIT_FILTER ? "" : "text-slate-300"}`} />
                       <span className="min-w-0 flex-1 truncate">Sem unidade específica</span>
@@ -414,7 +404,7 @@ export default function CompanyDocumentsPage() {
             {categoryFilter === "all" ? "Todos os documentos" : categoryFilter}
             {unitFilter !== "all" ? ` › ${unitFilter === NO_UNIT_FILTER ? "Sem unidade específica" : unitFilter}` : ""}
           </p>
-          <div className="rounded-lg border bg-white p-2 shadow-sm">
+          <div className="rounded-lg border bg-white p-2 shadow-xs">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input className="h-9 pl-9 text-sm" placeholder="Buscar documento, categoria ou unidade..." value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -422,39 +412,28 @@ export default function CompanyDocumentsPage() {
           </div>
 
           {loading ? (
-            <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-ds-accent-ink" /></div>
+            <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div>
           ) : filtered.length === 0 ? (
             <div className="grid min-h-52 place-items-center rounded-lg border border-dashed bg-white p-8 text-center">
               <div><Building2 className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Nenhum documento encontrado</p></div>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface">
+            <div className="overflow-hidden rounded-lg border bg-white shadow-xs">
               {filtered.map((document) => (
-                <div key={document.id} className="border-b last:border-b-0">
-                <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-ds-btn bg-ds-accent-soft text-ds-accent-ink"><FileText className="h-4 w-4" /></span>
+                <div key={document.id} className="flex flex-col gap-3 border-b p-3 last:border-b-0 sm:flex-row sm:items-center">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700"><FileText className="h-4 w-4" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-black text-slate-900">{document.title}</p>
                     <p className="truncate text-xs text-slate-500">{document.category}{document.unit ? ` · ${document.unit}` : ""} · {formatSize(document.size)} · {document.uploadedByName || "Sistema"}</p>
                     {document.standardizedName ? <p className="truncate font-mono text-[10px] text-slate-400">{document.standardizedName}</p> : null}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <StatusPill>{formatDate(document.expiresAt)}</StatusPill>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold">{formatDate(document.expiresAt)}</span>
                     <Button size="icon" variant="outline" className="h-8 w-8" title="Visualizar" onClick={() => void accessDocument(document, "view")}><Eye className="h-4 w-4" /></Button>
                     <Button size="icon" variant="outline" className="h-8 w-8" title="Baixar" onClick={() => void accessDocument(document, "download")}><Download className="h-4 w-4" /></Button>
-                    {canManage ? <Button size="icon" variant="outline" className="h-8 w-8 text-ds-danger" title="Excluir" aria-label={`Excluir ${document.title}`} onClick={() => setDeletingId(document.id)}><Trash2 className="h-4 w-4" /></Button> : null}
+                    {canManage ? <Button size="icon" variant="outline" className="h-8 w-8 text-rose-600" title="Excluir" onClick={() => void removeDocument(document)}><Trash2 className="h-4 w-4" /></Button> : null}
                   </div>
                 </div>
-                {deletingId === document.id ? (
-                  <InlineConfirm
-                    className="mx-3 mb-3"
-                    message={`Excluir “${document.title}”? Esta ação não pode ser desfeita.`}
-                    loading={removing}
-                    onConfirm={() => void removeDocument(document)}
-                    onCancel={() => setDeletingId(null)}
-                  />
-                ) : null}
-              </div>
               ))}
             </div>
           )}
@@ -469,7 +448,7 @@ export default function CompanyDocumentsPage() {
         <DialogContent className="max-w-2xl rounded-2xl p-0">
           <DialogHeader className="border-b px-5 py-4">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-ds-accent-ink" />
+              <Sparkles className="h-4 w-4 text-[#df2f78]" />
               <DialogTitle className="text-base font-black text-slate-900">Anexar documentos</DialogTitle>
             </div>
             <p className="text-sm font-semibold text-slate-500">Selecione os arquivos. Categoria, título e unidade são sugeridos pela análise.</p>
@@ -478,9 +457,9 @@ export default function CompanyDocumentsPage() {
             <label
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}
-              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center hover:border-ds-accent hover:bg-pink-50/60"
+              className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center hover:border-[#df2f78]/50 hover:bg-pink-50/60"
             >
-              <Upload className="h-6 w-6 text-ds-accent-ink" />
+              <Upload className="h-6 w-6 text-[#df2f78]" />
               <div>
                 <p className="text-sm font-black text-slate-900">Arraste documentos para cá ou clique para selecionar</p>
                 <p className="mt-1 text-xs font-semibold text-slate-500">PDF, JPG ou PNG · até 10 MB por arquivo · pode selecionar vários de uma vez</p>
@@ -498,7 +477,7 @@ export default function CompanyDocumentsPage() {
             {pendingItems.length > 0 ? (
               <div className="space-y-3">
                 {pendingItems.map((item) => (
-                  <div key={item.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                  <div key={item.id} className="rounded-2xl border bg-white p-4 shadow-xs">
                     <div className="flex items-center justify-between gap-2">
                       <p className="min-w-0 truncate text-sm font-black text-slate-900" title={item.file.name}>{item.file.name} <span className="font-semibold text-slate-400">· {formatSize(item.file.size)}</span></p>
                       <button type="button" onClick={() => removePendingItem(item.id)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border text-slate-500 hover:bg-slate-50" title="Remover">
@@ -507,15 +486,15 @@ export default function CompanyDocumentsPage() {
                     </div>
 
                     {item.analyzing ? (
-                      <div className="mt-3 flex items-center gap-2 rounded-xl bg-pink-50 px-3 py-2 text-xs font-bold text-ds-accent-ink">
+                      <div className="mt-3 flex items-center gap-2 rounded-xl bg-pink-50 px-3 py-2 text-xs font-bold text-[#c81f69]">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analisando documento...
                       </div>
                     ) : item.aiAnalysis ? (
-                      <div className="mt-3 flex items-start gap-2 rounded-xl bg-pink-50 px-3 py-2 text-xs text-ds-accent-ink">
+                      <div className="mt-3 flex items-start gap-2 rounded-xl bg-pink-50 px-3 py-2 text-xs text-[#c81f69]">
                         <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                         <div>
                           <p className="font-black">Sugestão da IA: {item.aiAnalysis.category} · Confiança {Math.round(item.aiAnalysis.categoryConfidence * 100)}%</p>
-                          {item.aiAnalysis.warnings.length > 0 ? <p className="mt-0.5 font-semibold text-ds-accent-ink">{item.aiAnalysis.warnings[0]}</p> : null}
+                          {item.aiAnalysis.warnings.length > 0 ? <p className="mt-0.5 font-semibold text-[#c81f69]/80">{item.aiAnalysis.warnings[0]}</p> : null}
                         </div>
                       </div>
                     ) : null}
@@ -534,7 +513,7 @@ export default function CompanyDocumentsPage() {
           </div>
           <div className="flex justify-end gap-2 border-t px-5 py-3">
             <Button variant="outline" className="rounded-xl" onClick={() => setDialogOpen(false)}><X className="mr-2 h-4 w-4" />Cancelar</Button>
-            <Button className="rounded-xl bg-ds-accent text-white hover:bg-ds-accent" disabled={saving || readyToUploadCount === 0} onClick={() => void uploadAllDocuments()}>
+            <Button className="rounded-xl bg-[#df2f78] text-white hover:bg-[#c81f69]" disabled={saving || readyToUploadCount === 0} onClick={() => void uploadAllDocuments()}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
               Anexar{readyToUploadCount > 0 ? ` (${readyToUploadCount})` : ""}
             </Button>
