@@ -55,6 +55,10 @@ WorkManager repete usando o mesmo UUID, somente com rede, e valida a conta no en
 
 ## Handoff visual nativo
 
+Os padrões de interface do app (cores, tipografia, ícones, animações, seta de
+dropdown, seletor de unidade e como cada tela abre) estão em
+[`docs/design/app.md`](../../docs/design/app.md). Mudou um padrão, atualize lá.
+
 O handoff `Coala One App - Prototipo.dc.html` foi adaptado para **Coala Go**,
 sem runtime HTML ou dados fictícios no release. Inter Tight e JetBrains Mono
 estão embarcadas em `res/font`, com licenças SIL OFL em `assets/font-licenses`.
@@ -83,7 +87,7 @@ semanal. Compra, contagem e
 recebimento mantêm seus ViewModels, validações, confirmações e contratos.
 Limites/estados reais prevalecem sobre números, timers e sucessos do protótipo.
 
-`DesignMotionTest` verifica movimento, redução, fonte ampliada e o gesto vertical do resumo;
+`DesignMotionTest` verifica movimento, redução e fonte ampliada;
 `DesignScreensTest` captura telas nativas em simulação e navega nas novas abas;
 `ComposeFlowsTest` continua cobrindo as ações de negócio. As capturas liberam
 FLAG_SECURE somente na janela de teste, nunca no aplicativo distribuído.

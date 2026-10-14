@@ -68,6 +68,7 @@
 ## Design de interface
 
 - Ao criar ou alterar UI, leia `docs/design/README.md` e o arquivo do padrão que a tela usa (botões, listas, painel lateral, modais, feedback). O guia vivo está em `/dashboard/design`.
+- Ao criar ou alterar UI do aplicativo Android (`apps/coala-one-android`), leia `docs/design/app.md` em vez dos padrões web: o app tem `Tokens`, componentes e regras próprios (seta `DropdownChevron`, seletor `UnitPickerHeader`, barra do início sem gesto). Atualize esse arquivo no mesmo trabalho quando mudar um padrão.
 - Use os tokens `--ds-*` / classes `ds-*` e os componentes de `src/components/patterns/` (`LiftRow`, `SidePanel`, `WizardModal`, `InlineConfirm`, `Segmented`, `FilterChips`, `ControlPanel`), as variantes de `Button` e o `StatusPill`. Não use hex solto em `className` (o lint avisa).
 - Nunca use `alert()` ou `confirm()` (o lint bloqueia): erro em texto junto do campo e confirmação destrutiva inline com `InlineConfirm`.
 - Uma ação principal por área; rótulos no formato verbo + objeto. Percorra o checklist de `.github/pull_request_template.md` antes de concluir.
