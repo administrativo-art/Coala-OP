@@ -94,7 +94,7 @@
 ## Agent Skills do projeto
 
 - Skills próprias ficam nas localizações documentadas em `docs/engineering/agent-skills.md`; não crie cópias divergentes para clientes.
-- `coala-error-triage` é de invocação explícita, escreve somente em `.ai-work/error-triage/` e nunca publica issues.
+- `coala-error-triage`, `coala-security-audit` e `coala-security-supply-chain` são de invocação explícita. As skills de segurança escrevem somente em `.ai-work/security-audit/` ou `.ai-work/supply-chain/`, não corrigem o produto na primeira execução e nunca testam produção por padrão.
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
 

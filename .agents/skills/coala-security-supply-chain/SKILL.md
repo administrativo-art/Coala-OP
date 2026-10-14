@@ -1,18 +1,18 @@
 ---
-name: coala-supply-chain-audit
+name: coala-security-supply-chain
 description: Audita manifests, lockfiles e scripts de instalação do Coala-OP sem atualizar dependências. Use somente por invocação explícita; consultas externas e remediação exigem autorização separada.
 disable-model-invocation: true
 user-invocable: true
 ---
 
-# Coala supply chain audit
+# Coala security supply chain
 
 Audite deterministicamente dependências e superfícies de instalação. Esta skill é somente leitura por padrão e não interpreta CVEs sem uma fonte apropriada.
 
 ## Fluxo
 
 1. Leia `AGENTS.md`.
-2. Execute `node .agents/skills/coala-supply-chain-audit/scripts/inventory-dependencies.mjs`.
+2. Execute `node .agents/skills/coala-security-supply-chain/scripts/inventory-dependencies.mjs`.
 3. O script inspeciona manifests, lockfiles, dependências diretas, versões, Git/URL, scripts lifecycle, overrides, duplicidades e comandos de download/execução.
 4. Salve somente em `.ai-work/supply-chain/YYYY-MM-DD-HHMM[-N]/inventory.json`, `findings.json` e `report.md`.
 5. Classifique fatos locais separadamente de CVEs, risco de manutenção ou risco de mantenedor não verificados.

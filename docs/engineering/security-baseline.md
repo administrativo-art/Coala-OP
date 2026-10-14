@@ -10,7 +10,7 @@ Esta fase separa detecção de remediação. Encontrar uma vulnerabilidade, um s
 - CodeQL para JavaScript/TypeScript em pull requests, push para `main` e agenda semanal;
 - referências de GitHub Actions fixadas por SHA integral de release oficial;
 - ratchet de `npm audit` separado entre raiz e `functions`;
-- `coala-supply-chain-audit` local e explicit-only.
+- `coala-security-supply-chain` local e explicit-only.
 
 O CodeQL é report-only nesta fase: seus achados aparecem em code scanning, mas o job não é um required check. Erro de execução do scanner continua sendo falha do workflow.
 
