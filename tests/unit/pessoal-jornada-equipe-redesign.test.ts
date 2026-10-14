@@ -66,6 +66,9 @@ test('resumo de sincronização conta vinculados e perfis fora do padrão do car
 
 const files = [
   'src/components/dp/dp-settings-shifts.tsx',
+  'src/components/dp/dp-settings-journeys.tsx',
+  'src/components/dp/dp-settings-overtime.tsx',
+  'src/components/dp/dp-time-config-fields.tsx',
   'src/components/dp/dp-settings-calendars.tsx',
   'src/components/dp/dp-login-access-diagnostic.tsx',
   'src/components/dp/dp-login-access-audit.tsx',
@@ -98,4 +101,14 @@ test('Acesso por escala mostra uma visão por vez e a página usa o wrapper', ()
   const page = readFileSync('src/app/dashboard/settings/page.tsx', 'utf8');
   assert.match(page, /<DPLoginAccessSettings \/>/);
   assert.doesNotMatch(page, /<DPLoginAccessDiagnostic|<DPLoginAccessAudit/);
+});
+
+test('Pessoal organiza tempo sem quebrar o valor legado de deep link', () => {
+  const page = readFileSync('src/app/dashboard/settings/page.tsx', 'utf8');
+  assert.match(page, /value: "journey",\s*label: "Tempo"/);
+  assert.match(page, /children: pickPersonalTabs\(\["roles", "organogram", "access-profiles", "profile-fields"\]\)/);
+  assert.doesNotMatch(page, /value: "collaborator-profile",\s*label:/);
+  assert.match(page, /requestedTab === "collaborator-profile"/);
+  assert.match(page, /children: pickPersonalTabs\(\["work-journeys", "shifts", "absences", "overtime", "calendars"\]\)/);
+  assert.match(page, /children: pickPersonalTabs\(\["profile-compliance", "login-access", "privacy", "audit"\]\)/);
 });

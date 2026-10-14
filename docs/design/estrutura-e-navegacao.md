@@ -27,6 +27,10 @@ Telas de lista usam uma casca escura com contexto, indicadores ou abas, busca, f
 
 O guia entrega `ControlPanel` e `ControlIndicator` isolados. `ControlIndicator` recebe `tone` semântico, nunca uma cor hexadecimal. Unificar esse componente com implementações operacionais requer uma migração separada.
 
+## Abas de contexto
+
+Abas que trocam a seção ou o tipo de cadastro pertencem à faixa clara de navegação, acima do conteúdo. Elas não ficam dentro do `ControlPanel`: o painel escuro é reservado ao contexto da aba ativa, indicadores, busca, filtros e ações. O estado ativo usa superfície branca e sombra discreta; as demais opções permanecem transparentes. Contagens podem acompanhar o rótulo de forma secundária, sem transformar a aba em indicador de destaque.
+
 ## Barra lateral e cabeçalho que encolhe
 
 A navegação lateral (Coala One e Coala Pulse) e o painel escuro que vira faixa ao rolar estão em [barra-lateral.md](barra-lateral.md) e [cabecalho-e-etapas.md](cabecalho-e-etapas.md). O layout do dashboard reserva 88px à esquerda (trilho de 76px + margem); a barra expandida flutua por cima.

@@ -30,6 +30,7 @@
     "natasha:collect": "node --import tsx scripts/natasha-collect.mts",
     "natasha:collect-team": "node --import tsx scripts/natasha-collect-team.mts",
     "natasha:collect-availability": "node --import tsx scripts/natasha-collect-availability.mts",
+    "natasha:collect-journeys": "node --import tsx scripts/natasha-collect-journeys.mts",
     "natasha:collect-shift-definitions": "node --import tsx scripts/natasha-collect-shift-definitions.mts",
     "natasha:coverage": "node --import tsx scripts/natasha-coverage.mts",
     "natasha:preflight": "node --import tsx scripts/natasha-preflight.mts",

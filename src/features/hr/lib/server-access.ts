@@ -5,7 +5,6 @@ import {
   type PermissionSet,
   type User,
 } from "@/types";
-import { dbAdmin } from "@/lib/firebase-admin";
 import { requireUser } from "@/lib/auth-server";
 import { getUserDisplayName } from "@/lib/user-display";
 import {
@@ -58,6 +57,7 @@ export function serializeHrValue(value: unknown): unknown {
 }
 
 export type HrAccess = {
+  workspaceId: string;
   decoded: DecodedIdToken;
   isDefaultAdmin: boolean;
   profileId: string | null;
@@ -86,6 +86,7 @@ export async function assertHrAccess(
 
   const { decoded, permissions, isDefaultAdmin, profileId, userDoc } = context;
   const access: HrAccess = {
+    workspaceId: context.workspace_id,
     decoded,
     isDefaultAdmin,
     profileId,
@@ -120,6 +121,7 @@ export async function assertFormalizationAccess(
     throw new Error("Sem permissão para executar esta ação na formalização admissional.");
   }
   return {
+    workspaceId: context.workspace_id,
     decoded,
     isDefaultAdmin,
     profileId,

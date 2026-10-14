@@ -1268,7 +1268,7 @@ function entityContacts(entity: Entity): string[] {
 const entityCity = (entity: Entity) =>
   entity.address?.city ? `${entity.address.city}${entity.address.state ? `/${entity.address.state}` : ''}` : '—';
 
-export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps) {
+export function EntityManagement({ view, onViewChange }: CadastrosTabProps) {
   const { entities, loading, deleteEntity } = useEntities();
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
@@ -1376,7 +1376,6 @@ export function EntityManagement({ tabs, view, onViewChange }: CadastrosTabProps
       <div className="flex flex-col gap-4">
         <CadastrosHero
           kicker="Cadastros operacionais"
-          tabs={tabs}
           search={{ value: searchTerm, onChange: setSearchTerm, placeholder: 'Buscar por nome, CPF/CNPJ, e-mail ou telefone' }}
           status={{ value: status, onChange: changeStatus, activeCount, inactiveCount, inactiveLabel: 'Inativos' }}
           primary={{ label: 'Adicionar cadastro', onClick: handleAddNew }}

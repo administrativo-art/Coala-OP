@@ -20,9 +20,10 @@ export const saveWorkShiftSchema = z.object({
   startTime: timeSchema,
   endTime: timeSchema,
   type: z.literal('work').optional(),
+  exceptionReason: z.string().trim().min(3).max(500).optional(),
 }).strict().refine(
-  (shift) => shift.endTime > shift.startTime,
-  { message: 'O fim do turno deve ser posterior ao início.' },
+  (shift) => shift.endTime !== shift.startTime,
+  { message: 'O início e o fim do turno não podem ser iguais.' },
 );
 
 export type SaveWorkShiftInput = z.infer<typeof saveWorkShiftSchema>;
@@ -32,6 +33,7 @@ const bulkReplacePatchSchema = z.object({
   shiftDefinitionId: z.string().trim().min(1).max(180).nullable().optional(),
   startTime: timeSchema.optional(),
   endTime: timeSchema.optional(),
+  exceptionReason: z.string().trim().min(3).max(500).optional(),
 }).strict().superRefine((patch, context) => {
   const hasStart = patch.startTime !== undefined;
   const hasEnd = patch.endTime !== undefined;
@@ -42,10 +44,10 @@ const bulkReplacePatchSchema = z.object({
       path: hasStart ? ['endTime'] : ['startTime'],
     });
   }
-  if (patch.startTime && patch.endTime && patch.endTime <= patch.startTime) {
+  if (patch.startTime && patch.endTime && patch.endTime === patch.startTime) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'O fim do turno deve ser posterior ao início.',
+      message: 'O início e o fim do turno não podem ser iguais.',
       path: ['endTime'],
     });
   }

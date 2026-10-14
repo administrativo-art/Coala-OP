@@ -470,7 +470,7 @@ const COUNTING_MODE_TEXT: Record<CountingUnitOption, string> = {
   content: 'Unidade do conteúdo',
 };
 
-export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) {
+export function ItemManagement({ view, onViewChange }: CadastrosTabProps) {
   const { products, loading: productsLoading, getProductFullName, updateProduct, updateMultipleProducts, deleteMultipleProducts } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { activeCategories, loading: categoriesLoading } = useOperationalItemCategories();
@@ -626,7 +626,6 @@ export function ItemManagement({ tabs, view, onViewChange }: CadastrosTabProps) 
       <div className="flex flex-col gap-4">
         <CadastrosHero
           kicker="Cadastros operacionais"
-          tabs={tabs}
           search={{ value: searchTerm, onChange: setSearchTerm, placeholder: 'Buscar por insumo, marca, insumo base ou cód. de barras' }}
           status={{ value: status, onChange: changeStatus, activeCount, inactiveCount, inactiveLabel: 'Arquivados' }}
           manage={{ label: 'Categorias de item', onClick: () => setIsOperationalCategoriesOpen(true) }}

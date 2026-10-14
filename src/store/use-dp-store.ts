@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { auth, db } from '@/lib/firebase';
 import {
   collection, addDoc, updateDoc, deleteDoc, doc,
-  serverTimestamp, writeBatch, increment, getDocs, deleteField, runTransaction
+  serverTimestamp, writeBatch, increment, getDocs, deleteField, runTransaction, Timestamp
 } from 'firebase/firestore';
 import type {
   DPUnit, DPUnitGroup, DPUnitOrganization, DPShiftDefinition,
@@ -10,6 +10,10 @@ import type {
 } from '@/types';
 import { canonicalOperationalUnitId } from '@/lib/dp-units';
 import { buildDPScheduleDocumentId } from '@/lib/dp-schedule-periods';
+import {
+  buildShiftDefinitionUpdatePayload,
+  type DPShiftDefinitionUpdate,
+} from '@/lib/dp-shift-definition-write';
 import {
   authenticatedApiRequest,
   type AuthenticatedApiRequestInit,
@@ -88,8 +92,8 @@ export interface DPStoreState {
   addUnitGroup: (data: Omit<DPUnitGroup, 'id' | 'createdAt'>) => Promise<void>;
   updateUnitGroup: (group: DPUnitGroup) => Promise<void>;
   deleteUnitGroup: (groupId: string) => Promise<void>;
-  addShiftDefinition: (data: Omit<DPShiftDefinition, 'id' | 'createdAt'>) => Promise<void>;
-  updateShiftDefinition: (def: DPShiftDefinition) => Promise<void>;
+  addShiftDefinition: (data: Omit<DPShiftDefinition, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateShiftDefinition: (id: string, data: DPShiftDefinitionUpdate) => Promise<void>;
   deleteShiftDefinition: (defId: string) => Promise<void>;
   addSchedule: (data: Omit<DPSchedule, 'id' | 'createdAt' | 'shiftCount'>) => Promise<string>;
   updateSchedule: (schedule: DPSchedule) => Promise<void>;
@@ -216,29 +220,11 @@ async function requestFormUnitProjectSync() {
 }
 
 async function authorizedDpJson<T = Record<string, unknown>>(path: string, method: string, body?: unknown): Promise<T> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Usuário não autenticado.');
-
-  const token = await user.getIdToken();
-  const response = await fetch(path, {
+  return dpApiRequest<T>(path, {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-    },
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(body, (_key, value) => (value === undefined ? null : value)),
-    cache: 'no-store',
+    ...(body === undefined ? {} : { json: body }),
+    fallbackError: 'Não foi possível salvar os dados do Departamento Pessoal.',
   });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error ?? 'Falha ao salvar dados de unidades.');
-  }
-
-  return response.json().catch(() => ({})) as Promise<T>;
 }
 
 export const useDPStore = create<DPStoreState>((set, get) => ({
@@ -359,13 +345,17 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
     void requestFormUnitProjectSync();
   },
   addShiftDefinition: async (data) => {
-    await addDoc(collection(db, 'dp_shiftDefinitions'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
+    const payload = await authorizedDpJson<{ shift?: DPShiftDefinition }>('/api/dp/time/shifts', 'POST', data);
+    if (payload.shift) set((state) => ({ shiftDefinitions: [...state.shiftDefinitions, payload.shift!] }));
   },
-  updateShiftDefinition: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_shiftDefinitions', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
+  updateShiftDefinition: async (id, data) => {
+    const requestData = buildShiftDefinitionUpdatePayload(data as Record<string, unknown>);
+    const payload = await authorizedDpJson<{ shift?: DPShiftDefinition }>(`/api/dp/time/shifts/${encodeURIComponent(id)}`, 'PATCH', requestData);
+    if (payload.shift) set((state) => ({ shiftDefinitions: state.shiftDefinitions.map((definition) => definition.id === id ? payload.shift! : definition) }));
   },
   deleteShiftDefinition: async (defId) => {
-    await deleteDoc(doc(db, 'dp_shiftDefinitions', defId));
+    await authorizedDpJson(`/api/dp/time/shifts/${encodeURIComponent(defId)}`, 'DELETE');
+    set((state) => ({ shiftDefinitions: state.shiftDefinitions.filter((definition) => definition.id !== defId) }));
   },
   addSchedule: async (data) => {
     const state = get();
@@ -394,9 +384,15 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
       }
       transaction.set(
         scheduleRef,
-        stripUndefinedForCreate({ ...data, shiftCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
+        stripUndefinedForCreate({ ...data, shiftCount: 0, journeyValidationVersion: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
       );
     });
+    set((current) => ({
+      schedules: [
+        ...current.schedules.filter((schedule) => schedule.id !== scheduleRef.id),
+        { id: scheduleRef.id, ...data, unitId: canonicalUnitId ?? unit.id, shiftCount: 0, journeyValidationVersion: 0, createdAt: Timestamp.now() },
+      ],
+    }));
     return scheduleRef.id;
   },
   updateSchedule: async ({ id, ...data }) => {
@@ -405,7 +401,16 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
     if (existingUnit?.isArchived === true) {
       throw new Error('Escalas históricas de unidades incorporadas são somente para leitura.');
     }
-    await updateDoc(doc(db, 'dp_schedules', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
+    if (existing && typeof data.locked === 'boolean' && data.locked !== (existing.locked === true)) {
+      await authorizedDpJson(`/api/dp/schedules/${encodeURIComponent(id)}`, 'PATCH', data.locked
+        ? { action: 'lock', snapshot: data.snapshot ?? { users: {} } }
+        : { action: 'unlock' });
+    } else {
+      await updateDoc(doc(db, 'dp_schedules', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
+    }
+    set((state) => ({
+      schedules: state.schedules.map((schedule) => schedule.id === id ? { ...schedule, ...data, id } : schedule),
+    }));
   },
   deleteSchedule: async (scheduleId) => {
     const existing = get().schedules.find((schedule) => schedule.id === scheduleId);
@@ -413,11 +418,8 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
     if (existingUnit?.isArchived === true) {
       throw new Error('Escalas históricas de unidades incorporadas não podem ser excluídas.');
     }
-    const shiftsSnap = await getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'));
-    const batch = writeBatch(db);
-    shiftsSnap.docs.forEach(d => batch.delete(d.ref));
-    batch.delete(doc(db, 'dp_schedules', scheduleId));
-    await batch.commit();
+    await authorizedDpJson(`/api/dp/schedules/${encodeURIComponent(scheduleId)}`, 'DELETE');
+    set((state) => ({ schedules: state.schedules.filter((schedule) => schedule.id !== scheduleId) }));
   },
   addVacation: async (data) => {
     const response = await dpApiRequest<{ vacation: DPVacationRecord }>('/api/dp/vacations', {

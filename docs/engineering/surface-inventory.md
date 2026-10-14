@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **417 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **437 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **47 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -54,6 +54,10 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/catalogo` | GET | [src/app/api/catalogo/route.ts](../../src/app/api/catalogo/route.ts) | [catalog](flows/catalog.md) |
 | `/api/client/bootstrap` | GET | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) | [access-and-privacy](access-and-privacy.md) |
 | `/api/collaborator/dashboard` | GET | [src/app/api/collaborator/dashboard/route.ts](../../src/app/api/collaborator/dashboard/route.ts) | [collaborator-dashboard](flows/collaborator-dashboard.md) |
+| `/api/collaborator/requests` | GET, POST | [src/app/api/collaborator/requests/route.ts](../../src/app/api/collaborator/requests/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
+| `/api/collaborator/requests/[requestId]` | PATCH | [src/app/api/collaborator/requests/[requestId]/route.ts](../../src/app/api/collaborator/requests/%5BrequestId%5D/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
+| `/api/collaborator/requests/[requestId]/document` | GET | [src/app/api/collaborator/requests/[requestId]/document/route.ts](../../src/app/api/collaborator/requests/%5BrequestId%5D/document/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
+| `/api/collaborator/requests/[requestId]/signature` | GET, POST | [src/app/api/collaborator/requests/[requestId]/signature/route.ts](../../src/app/api/collaborator/requests/%5BrequestId%5D/signature/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
 | `/api/collaborator/schedule` | GET | [src/app/api/collaborator/schedule/route.ts](../../src/app/api/collaborator/schedule/route.ts) | [collaborator-schedule](flows/collaborator-schedule.md) |
 | `/api/companies` | POST | [src/app/api/companies/route.ts](../../src/app/api/companies/route.ts) | [registry](flows/registry.md) |
 | `/api/companies/[id]` | PUT | [src/app/api/companies/[id]/route.ts](../../src/app/api/companies/%5Bid%5D/route.ts) | [registry](flows/registry.md) |
@@ -62,6 +66,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/companies/cnpj/[cnpj]/refresh` | POST | [src/app/api/companies/cnpj/[cnpj]/refresh/route.ts](../../src/app/api/companies/cnpj/%5Bcnpj%5D/refresh/route.ts) | [registry](flows/registry.md) |
 | `/api/companies/document-signatories` | GET | [src/app/api/companies/document-signatories/route.ts](../../src/app/api/companies/document-signatories/route.ts) | [document-generation](flows/document-generation.md) |
 | `/api/dashboard/layouts` | GET, PUT, PATCH, DELETE | [src/app/api/dashboard/layouts/route.ts](../../src/app/api/dashboard/layouts/route.ts) | [platform-home](flows/platform-home.md) |
+| `/api/dev/transport-voucher-templates/[kind]` | GET | [src/app/api/dev/transport-voucher-templates/[kind]/route.ts](../../src/app/api/dev/transport-voucher-templates/%5Bkind%5D/route.ts) | [collaborator-requests](flows/collaborator-requests.md) |
 | `/api/documents/collective-agreements` | GET, POST | [src/app/api/documents/collective-agreements/route.ts](../../src/app/api/documents/collective-agreements/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/collective-agreements/[id]` | PATCH | [src/app/api/documents/collective-agreements/[id]/route.ts](../../src/app/api/documents/collective-agreements/%5Bid%5D/route.ts) | [company-documents](flows/company-documents.md) |
 | `/api/documents/company` | GET, POST, DELETE | [src/app/api/documents/company/route.ts](../../src/app/api/documents/company/route.ts) | [company-documents](flows/company-documents.md) |
@@ -90,13 +95,26 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/bootstrap` | GET | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) | [dp-overview](flows/dp-overview.md) |
 | `/api/dp/mobile-schedule` | GET | [src/app/api/dp/mobile-schedule/route.ts](../../src/app/api/dp/mobile-schedule/route.ts) | [collaborator-schedule](flows/collaborator-schedule.md) |
 | `/api/dp/natasha/availability` | GET | [src/app/api/dp/natasha/availability/route.ts](../../src/app/api/dp/natasha/availability/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/natasha/journeys` | GET | [src/app/api/dp/natasha/journeys/route.ts](../../src/app/api/dp/natasha/journeys/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/natasha/shift-definitions` | GET | [src/app/api/dp/natasha/shift-definitions/route.ts](../../src/app/api/dp/natasha/shift-definitions/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/natasha/team` | GET | [src/app/api/dp/natasha/team/route.ts](../../src/app/api/dp/natasha/team/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/schedules/[scheduleId]` | GET, PATCH, DELETE | [src/app/api/dp/schedules/[scheduleId]/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/coverage-demands/[date]` | PUT | [src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/coverage-demands/%5Bdate%5D/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/day-offs` | POST, DELETE | [src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/day-offs/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/schedules/[scheduleId]/external-candidates` | GET | [src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/external-candidates/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/schedules/[scheduleId]/journey-validation` | GET | [src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/journey-validation/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/schedules/[scheduleId]/shifts` | GET | [src/app/api/dp/schedules/[scheduleId]/shifts/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/shifts/[shiftId]` | PUT, PATCH, DELETE | [src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/%5BshiftId%5D/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/shifts/bulk` | POST | [src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/bulk/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/vacations/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/time/absence-types` | GET, POST | [src/app/api/dp/time/absence-types/route.ts](../../src/app/api/dp/time/absence-types/route.ts) | [dp-absences](flows/dp-absences.md) |
+| `/api/dp/time/absence-types/[id]` | GET, PATCH, DELETE | [src/app/api/dp/time/absence-types/[id]/route.ts](../../src/app/api/dp/time/absence-types/%5Bid%5D/route.ts) | [dp-absences](flows/dp-absences.md) |
+| `/api/dp/time/journeys` | GET, POST | [src/app/api/dp/time/journeys/route.ts](../../src/app/api/dp/time/journeys/route.ts) | [dp-configuration](flows/dp-configuration.md) |
+| `/api/dp/time/journeys/[id]` | GET, PATCH, DELETE | [src/app/api/dp/time/journeys/[id]/route.ts](../../src/app/api/dp/time/journeys/%5Bid%5D/route.ts) | [dp-configuration](flows/dp-configuration.md) |
+| `/api/dp/time/overtime-policies` | GET, POST | [src/app/api/dp/time/overtime-policies/route.ts](../../src/app/api/dp/time/overtime-policies/route.ts) | [dp-configuration](flows/dp-configuration.md) |
+| `/api/dp/time/overtime-policies/[id]` | GET, PATCH, DELETE | [src/app/api/dp/time/overtime-policies/[id]/route.ts](../../src/app/api/dp/time/overtime-policies/%5Bid%5D/route.ts) | [dp-configuration](flows/dp-configuration.md) |
+| `/api/dp/time/shifts` | GET, POST | [src/app/api/dp/time/shifts/route.ts](../../src/app/api/dp/time/shifts/route.ts) | [dp-configuration](flows/dp-configuration.md) |
+| `/api/dp/time/shifts/[id]` | GET, PATCH, DELETE | [src/app/api/dp/time/shifts/[id]/route.ts](../../src/app/api/dp/time/shifts/%5Bid%5D/route.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `/api/dp/unit-groups` | POST | [src/app/api/dp/unit-groups/route.ts](../../src/app/api/dp/unit-groups/route.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `/api/dp/unit-groups/[groupId]` | PATCH, DELETE | [src/app/api/dp/unit-groups/[groupId]/route.ts](../../src/app/api/dp/unit-groups/%5BgroupId%5D/route.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `/api/dp/unit-organizations` | POST | [src/app/api/dp/unit-organizations/route.ts](../../src/app/api/dp/unit-organizations/route.ts) | [dp-configuration](flows/dp-configuration.md) |
@@ -249,7 +267,9 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/forms/types` | GET, POST | [src/app/api/forms/types/route.ts](../../src/app/api/forms/types/route.ts) | [forms](flows/forms.md) |
 | `/api/forms/types/[typeId]` | GET, PATCH | [src/app/api/forms/types/[typeId]/route.ts](../../src/app/api/forms/types/%5BtypeId%5D/route.ts) | [forms](flows/forms.md) |
 | `/api/forms/upload` | POST, PATCH | [src/app/api/forms/upload/route.ts](../../src/app/api/forms/upload/route.ts) | [forms](flows/forms.md) |
+| `/api/goals/employee-goals` | POST | [src/app/api/goals/employee-goals/route.ts](../../src/app/api/goals/employee-goals/route.ts) | [goals](flows/goals.md) |
 | `/api/goals/mobile` | GET | [src/app/api/goals/mobile/route.ts](../../src/app/api/goals/mobile/route.ts) | [goals](flows/goals.md) |
+| `/api/goals/periods/[periodId]/status` | POST | [src/app/api/goals/periods/[periodId]/status/route.ts](../../src/app/api/goals/periods/%5BperiodId%5D/status/route.ts) | [goals](flows/goals.md) |
 | `/api/hr/accountant/[token]` | GET, POST | [src/app/api/hr/accountant/[token]/route.ts](../../src/app/api/hr/accountant/%5Btoken%5D/route.ts) | [onboarding-accountant](flows/onboarding-accountant.md) |
 | `/api/hr/apply` | POST | [src/app/api/hr/apply/route.ts](../../src/app/api/hr/apply/route.ts) | [recruitment](flows/recruitment.md) |
 | `/api/hr/aso-clinics` | GET, POST | [src/app/api/hr/aso-clinics/route.ts](../../src/app/api/hr/aso-clinics/route.ts) | [onboarding-aso](flows/onboarding-aso.md) |
@@ -489,6 +509,7 @@ Inclui **46 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `recalculateMinimumStock` | `onSchedule` | [functions/src/stock-min-recalc-schedule.ts](../../functions/src/stock-min-recalc-schedule.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcileGeneratedDocumentRetention` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `reconcilePdvSalesHistory` | `onSchedule` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `reviewFieldChangeRequest` | `onCall` | [functions/src/rh/field-update.ts](../../functions/src/rh/field-update.ts) | [dp-configuration](flows/dp-configuration.md) |
 | `scheduledDateAlerts` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `scheduledProfileCompletion` | `onSchedule` | [functions/src/rh/automations.ts](../../functions/src/rh/automations.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `stonePixDailyRequest` | `onSchedule` | [functions/src/stone-pix-job.ts](../../functions/src/stone-pix-job.ts) | [stone-sales-review](flows/stone-sales-review.md) |

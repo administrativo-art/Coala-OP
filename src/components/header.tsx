@@ -48,6 +48,8 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/dp/collaborators": "Gestão do colaborador",
   "/dashboard/dp/schedules": "Gestão do colaborador",
   "/dashboard/dp/ferias": "Gestão do colaborador",
+  "/dashboard/dp/requests": "Gestão do colaborador",
+  "/dashboard/collaborator/requests": "Painel do colaborador",
   "/dashboard/stock/uniforms": "Gestão do colaborador",
   "/dashboard/dp/settings": "Departamento pessoal",
   "/dashboard/documents": "Documentos",
@@ -56,6 +58,7 @@ const SECTION_MAP: Record<string, string> = {
   "/dashboard/purchasing": "Compras",
   "/dashboard/registration": "Configurações",
   "/dashboard/settings": "Configurações",
+  "/dashboard/settings/documents/templates": "Configurações",
   "/dashboard/help": "Ajuda",
 };
 
@@ -103,6 +106,8 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/dp/terminations": "Desligamentos CLT",
   "/dashboard/dp/schedules": "Escalas de trabalho",
   "/dashboard/dp/ferias": "Férias da equipe",
+  "/dashboard/dp/requests": "Solicitações dos colaboradores",
+  "/dashboard/collaborator/requests": "Minhas solicitações",
   "/dashboard/stock/uniforms": "Uniformes",
   "/dashboard/dp/settings": "Configurações do DP",
   "/dashboard/dp/settings/collaborators": "Colaboradores",
@@ -126,6 +131,7 @@ const LABEL_MAP: Record<string, string> = {
   "/dashboard/hr/recruitment/integration": "Integração",
   "/dashboard/registration": "Cadastros",
   "/dashboard/settings": "Configurações",
+  "/dashboard/settings/documents/templates": "Modelos de documentos",
   "/dashboard/help": "Ajuda",
   "/dashboard/signage": "Coala Signage",
 };
@@ -291,6 +297,8 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Integração", href: "/dashboard/hr/recruitment/integration", section: "Gestão do colaborador" },
   { label: "Escalas de trabalho", href: "/dashboard/dp/schedules", section: "Gestão do colaborador" },
   { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Gestão do colaborador" },
+  { label: "Solicitações dos colaboradores", href: "/dashboard/dp/requests", section: "Gestão do colaborador" },
+  { label: "Minhas solicitações", href: "/dashboard/collaborator/requests", section: "Painel do colaborador" },
   { label: "Uniformes", href: "/dashboard/stock/uniforms", section: "Gestão do colaborador" },
   { label: "Desligamentos CLT", href: "/dashboard/dp/terminations", section: "Gestão do colaborador" },
   { label: "Configurações do DP", href: "/dashboard/settings?department=pessoal&tab=roles", section: "Departamento pessoal" },

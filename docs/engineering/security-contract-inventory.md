@@ -2,9 +2,9 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **417**
-- Totalmente contratados: **57**
-- Legados congelados: **360**
+- Arquivos de rota: **437**
+- Totalmente contratados: **80**
+- Legados congelados: **357**
 - Exceções temporárias: **0**
 - Violações: **0**
 
@@ -31,6 +31,10 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/catalogo` | GET | `LEGACY_BASELINE` | [src/app/api/catalogo/route.ts](../../src/app/api/catalogo/route.ts) |
 | `/api/client/bootstrap` | GET | `LEGACY_BASELINE` | [src/app/api/client/bootstrap/route.ts](../../src/app/api/client/bootstrap/route.ts) |
 | `/api/collaborator/dashboard` | GET | `LEGACY_BASELINE` | [src/app/api/collaborator/dashboard/route.ts](../../src/app/api/collaborator/dashboard/route.ts) |
+| `/api/collaborator/requests` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/route.ts](../../src/app/api/collaborator/requests/route.ts) |
+| `/api/collaborator/requests/[requestId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/[requestId]/route.ts](../../src/app/api/collaborator/requests/[requestId]/route.ts) |
+| `/api/collaborator/requests/[requestId]/document` | GET ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/[requestId]/document/route.ts](../../src/app/api/collaborator/requests/[requestId]/document/route.ts) |
+| `/api/collaborator/requests/[requestId]/signature` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/collaborator/requests/[requestId]/signature/route.ts](../../src/app/api/collaborator/requests/[requestId]/signature/route.ts) |
 | `/api/collaborator/schedule` | GET | `LEGACY_BASELINE` | [src/app/api/collaborator/schedule/route.ts](../../src/app/api/collaborator/schedule/route.ts) |
 | `/api/companies` | POST | `LEGACY_BASELINE` | [src/app/api/companies/route.ts](../../src/app/api/companies/route.ts) |
 | `/api/companies/[id]` | PUT | `LEGACY_BASELINE` | [src/app/api/companies/[id]/route.ts](../../src/app/api/companies/[id]/route.ts) |
@@ -39,6 +43,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/companies/cnpj/[cnpj]/refresh` | POST | `LEGACY_BASELINE` | [src/app/api/companies/cnpj/[cnpj]/refresh/route.ts](../../src/app/api/companies/cnpj/[cnpj]/refresh/route.ts) |
 | `/api/companies/document-signatories` | GET | `LEGACY_BASELINE` | [src/app/api/companies/document-signatories/route.ts](../../src/app/api/companies/document-signatories/route.ts) |
 | `/api/dashboard/layouts` | DELETE ✓, GET ✓, PATCH ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dashboard/layouts/route.ts](../../src/app/api/dashboard/layouts/route.ts) |
+| `/api/dev/transport-voucher-templates/[kind]` | GET ✓ | `CONTRACTED` | [src/app/api/dev/transport-voucher-templates/[kind]/route.ts](../../src/app/api/dev/transport-voucher-templates/[kind]/route.ts) |
 | `/api/documents/collective-agreements` | GET, POST | `LEGACY_BASELINE` | [src/app/api/documents/collective-agreements/route.ts](../../src/app/api/documents/collective-agreements/route.ts) |
 | `/api/documents/collective-agreements/[id]` | PATCH | `LEGACY_BASELINE` | [src/app/api/documents/collective-agreements/[id]/route.ts](../../src/app/api/documents/collective-agreements/[id]/route.ts) |
 | `/api/documents/company` | DELETE, GET, POST | `LEGACY_BASELINE` | [src/app/api/documents/company/route.ts](../../src/app/api/documents/company/route.ts) |
@@ -64,16 +69,29 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/documents/templates/[id]/source` | GET | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/source/route.ts](../../src/app/api/documents/templates/[id]/source/route.ts) |
 | `/api/documents/templates/[id]/text` | GET | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/text/route.ts](../../src/app/api/documents/templates/[id]/text/route.ts) |
 | `/api/documents/templates/[id]/workflow` | PATCH | `LEGACY_BASELINE` | [src/app/api/documents/templates/[id]/workflow/route.ts](../../src/app/api/documents/templates/[id]/workflow/route.ts) |
-| `/api/dp/bootstrap` | GET | `LEGACY_BASELINE` | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) |
+| `/api/dp/bootstrap` | GET ✓ | `CONTRACTED` | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) |
 | `/api/dp/mobile-schedule` | GET ✓ | `CONTRACTED` | [src/app/api/dp/mobile-schedule/route.ts](../../src/app/api/dp/mobile-schedule/route.ts) |
 | `/api/dp/natasha/availability` | GET | `LEGACY_BASELINE` | [src/app/api/dp/natasha/availability/route.ts](../../src/app/api/dp/natasha/availability/route.ts) |
+| `/api/dp/natasha/journeys` | GET ✓ | `CONTRACTED` | [src/app/api/dp/natasha/journeys/route.ts](../../src/app/api/dp/natasha/journeys/route.ts) |
 | `/api/dp/natasha/shift-definitions` | GET | `LEGACY_BASELINE` | [src/app/api/dp/natasha/shift-definitions/route.ts](../../src/app/api/dp/natasha/shift-definitions/route.ts) |
 | `/api/dp/natasha/team` | GET | `LEGACY_BASELINE` | [src/app/api/dp/natasha/team/route.ts](../../src/app/api/dp/natasha/team/route.ts) |
+| `/api/dp/schedules/[scheduleId]` | DELETE ✓, GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/coverage-demands/[date]` | PUT | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/day-offs` | DELETE, POST | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts](../../src/app/api/dp/schedules/[scheduleId]/day-offs/route.ts) |
+| `/api/dp/schedules/[scheduleId]/external-candidates` | GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts](../../src/app/api/dp/schedules/[scheduleId]/external-candidates/route.ts) |
+| `/api/dp/schedules/[scheduleId]/journey-validation` | GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts](../../src/app/api/dp/schedules/[scheduleId]/journey-validation/route.ts) |
+| `/api/dp/schedules/[scheduleId]/shifts` | GET ✓ | `CONTRACTED` | [src/app/api/dp/schedules/[scheduleId]/shifts/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/route.ts) |
 | `/api/dp/schedules/[scheduleId]/shifts/[shiftId]` | DELETE, PATCH, PUT | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/shifts/bulk` | POST | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts) |
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/[scheduleId]/vacations/route.ts) |
+| `/api/dp/time/absence-types` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/absence-types/route.ts](../../src/app/api/dp/time/absence-types/route.ts) |
+| `/api/dp/time/absence-types/[id]` | DELETE ✓, GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time/absence-types/[id]/route.ts](../../src/app/api/dp/time/absence-types/[id]/route.ts) |
+| `/api/dp/time/journeys` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/journeys/route.ts](../../src/app/api/dp/time/journeys/route.ts) |
+| `/api/dp/time/journeys/[id]` | DELETE ✓, GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time/journeys/[id]/route.ts](../../src/app/api/dp/time/journeys/[id]/route.ts) |
+| `/api/dp/time/overtime-policies` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/overtime-policies/route.ts](../../src/app/api/dp/time/overtime-policies/route.ts) |
+| `/api/dp/time/overtime-policies/[id]` | DELETE ✓, GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time/overtime-policies/[id]/route.ts](../../src/app/api/dp/time/overtime-policies/[id]/route.ts) |
+| `/api/dp/time/shifts` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/shifts/route.ts](../../src/app/api/dp/time/shifts/route.ts) |
+| `/api/dp/time/shifts/[id]` | DELETE ✓, GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time/shifts/[id]/route.ts](../../src/app/api/dp/time/shifts/[id]/route.ts) |
 | `/api/dp/unit-groups` | POST | `LEGACY_BASELINE` | [src/app/api/dp/unit-groups/route.ts](../../src/app/api/dp/unit-groups/route.ts) |
 | `/api/dp/unit-groups/[groupId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/dp/unit-groups/[groupId]/route.ts](../../src/app/api/dp/unit-groups/[groupId]/route.ts) |
 | `/api/dp/unit-organizations` | POST | `LEGACY_BASELINE` | [src/app/api/dp/unit-organizations/route.ts](../../src/app/api/dp/unit-organizations/route.ts) |
@@ -226,7 +244,9 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/forms/types` | GET, POST | `LEGACY_BASELINE` | [src/app/api/forms/types/route.ts](../../src/app/api/forms/types/route.ts) |
 | `/api/forms/types/[typeId]` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/forms/types/[typeId]/route.ts](../../src/app/api/forms/types/[typeId]/route.ts) |
 | `/api/forms/upload` | PATCH, POST | `LEGACY_BASELINE` | [src/app/api/forms/upload/route.ts](../../src/app/api/forms/upload/route.ts) |
+| `/api/goals/employee-goals` | POST ✓ | `CONTRACTED` | [src/app/api/goals/employee-goals/route.ts](../../src/app/api/goals/employee-goals/route.ts) |
 | `/api/goals/mobile` | GET ✓ | `CONTRACTED` | [src/app/api/goals/mobile/route.ts](../../src/app/api/goals/mobile/route.ts) |
+| `/api/goals/periods/[periodId]/status` | POST ✓ | `CONTRACTED` | [src/app/api/goals/periods/[periodId]/status/route.ts](../../src/app/api/goals/periods/[periodId]/status/route.ts) |
 | `/api/hr/accountant/[token]` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/accountant/[token]/route.ts](../../src/app/api/hr/accountant/[token]/route.ts) |
 | `/api/hr/apply` | POST | `LEGACY_BASELINE` | [src/app/api/hr/apply/route.ts](../../src/app/api/hr/apply/route.ts) |
 | `/api/hr/aso-clinics` | GET, POST | `LEGACY_BASELINE` | [src/app/api/hr/aso-clinics/route.ts](../../src/app/api/hr/aso-clinics/route.ts) |
@@ -356,9 +376,9 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/purchasing/pending-by-destination/ignore` | POST | `LEGACY_BASELINE` | [src/app/api/purchasing/pending-by-destination/ignore/route.ts](../../src/app/api/purchasing/pending-by-destination/ignore/route.ts) |
 | `/api/registry/[...path]` | DELETE, GET, PATCH, POST | `LEGACY_BASELINE` | [src/app/api/registry/[...path]/route.ts](../../src/app/api/registry/[...path]/route.ts) |
 | `/api/registry/cnpj/[cnpj]` | GET | `LEGACY_BASELINE` | [src/app/api/registry/cnpj/[cnpj]/route.ts](../../src/app/api/registry/cnpj/[cnpj]/route.ts) |
-| `/api/rh/employee-profile/[employeeId]` | GET | `LEGACY_BASELINE` | [src/app/api/rh/employee-profile/[employeeId]/route.ts](../../src/app/api/rh/employee-profile/[employeeId]/route.ts) |
+| `/api/rh/employee-profile/[employeeId]` | GET ✓ | `CONTRACTED` | [src/app/api/rh/employee-profile/[employeeId]/route.ts](../../src/app/api/rh/employee-profile/[employeeId]/route.ts) |
 | `/api/rh/employee-profile/[employeeId]/image-voice-consent` | POST | `LEGACY_BASELINE` | [src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts](../../src/app/api/rh/employee-profile/[employeeId]/image-voice-consent/route.ts) |
-| `/api/rh/field-map` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/rh/field-map/route.ts](../../src/app/api/rh/field-map/route.ts) |
+| `/api/rh/field-map` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/rh/field-map/route.ts](../../src/app/api/rh/field-map/route.ts) |
 | `/api/settings/ai-management` | GET ✓ | `CONTRACTED` | [src/app/api/settings/ai-management/route.ts](../../src/app/api/settings/ai-management/route.ts) |
 | `/api/settings/public-bio` | GET, PUT | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/route.ts](../../src/app/api/settings/public-bio/route.ts) |
 | `/api/settings/public-bio/media` | POST | `LEGACY_BASELINE` | [src/app/api/settings/public-bio/media/route.ts](../../src/app/api/settings/public-bio/media/route.ts) |

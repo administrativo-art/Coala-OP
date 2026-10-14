@@ -224,6 +224,7 @@ export function prepareNatashaPositions(
     requiredRoleId: string | null;
     source: 'shift_definition' | 'custom';
     shiftDefinitionId: string | null;
+    journeyIds?: string[];
     override: boolean;
   }) => {
     for (let instance = 1; instance <= params.count; instance += 1) {
@@ -245,6 +246,8 @@ export function prepareNatashaPositions(
         endTime: params.endTime,
         slot: params.slot,
         requiredRoleId: params.requiredRoleId,
+        shiftDefinitionId: params.shiftDefinitionId,
+        ...(params.journeyIds?.length ? { journeyIds: params.journeyIds } : {}),
       });
       trace.push({
         positionId: id,
@@ -292,6 +295,7 @@ export function prepareNatashaPositions(
               slot: specification.slot, count: specification.count,
               requiredRoleId: specification.requiredRoleId, source: 'shift_definition',
               shiftDefinitionId: definition.id, override: true,
+              journeyIds: definition.journeyIds,
             });
           }
         }
@@ -310,6 +314,7 @@ export function prepareNatashaPositions(
           slot: template.slot, count: template.count,
           requiredRoleId: template.requiredRoleId, source: 'shift_definition',
           shiftDefinitionId: template.definition.id, override: false,
+          journeyIds: template.definition.journeyIds,
         });
       }
     }

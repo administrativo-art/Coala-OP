@@ -1,0 +1,38 @@
+export type DPShiftAssignment =
+  | { assignmentKind: 'regular'; countsTowardGoals: true }
+  | { assignmentKind: 'external_coverage'; originUnitId: string; countsTowardGoals: false };
+
+function strings(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry)) : [];
+}
+
+export function resolveDPShiftAssignment(params: {
+  executionUnitId: string;
+  executionUnitExternalId?: string;
+  user: { unitId?: unknown; unitIds?: unknown; assignedKioskIds?: unknown };
+}): DPShiftAssignment {
+  const { executionUnitId, executionUnitExternalId, user } = params;
+  const canonicalUnits = [...new Set([
+    typeof user.unitId === 'string' ? user.unitId : '',
+    ...strings(user.unitIds),
+  ].filter(Boolean))];
+  const allAffiliations = new Set([...canonicalUnits, ...strings(user.assignedKioskIds)]);
+  if (allAffiliations.has(executionUnitId) || (executionUnitExternalId && allAffiliations.has(executionUnitExternalId))) {
+    return { assignmentKind: 'regular', countsTowardGoals: true };
+  }
+  const originUnitId = canonicalUnits[0];
+  if (!originUnitId) throw new Error('EXTERNAL_COVERAGE_ORIGIN_REQUIRED');
+  return { assignmentKind: 'external_coverage', originUnitId, countsTowardGoals: false };
+}
+
+export function countsDPShiftTowardGoals(shift: { countsTowardGoals?: boolean }) {
+  return shift.countsTowardGoals !== false;
+}
+
+export function externalCoverageUserIds(
+  shifts: Array<{ userId?: string; countsTowardGoals?: boolean }>,
+) {
+  return new Set(shifts.flatMap((shift) => (
+    shift.userId && !countsDPShiftTowardGoals(shift) ? [shift.userId] : []
+  )));
+}

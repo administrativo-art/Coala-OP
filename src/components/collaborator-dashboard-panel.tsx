@@ -18,10 +18,12 @@ import {
   FileText,
   Flag,
   FolderOpen,
+  Inbox,
   ListOrdered,
   Loader2,
   MapPin,
   Minus,
+  MoreHorizontal,
   Plus,
   UserRound,
 } from "lucide-react";
@@ -65,6 +67,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function dateKey(value: Date) {
   return format(value, "yyyy-MM-dd");
@@ -1377,27 +1387,29 @@ function QuickAccessCard({
   title,
   description,
   tone,
+  menu,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   description: string;
   tone: string;
+  menu?: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg border bg-ds-surface p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md"
-    >
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-ds-card ${tone}`}>
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-ds-ink">{title}</span>
-        <span className="mt-0.5 block text-xs leading-relaxed text-ds-ink-muted">{description}</span>
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-ds-ink-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ds-accent-ink" />
-    </Link>
+    <div className="relative min-h-24 rounded-ds-card-lg border bg-ds-surface shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-divider hover:shadow-md">
+      <Link href={href} className="group flex min-h-24 items-center gap-3 rounded-ds-card-lg p-4 pr-11">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-ds-card ${tone}`}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-ds-ink">{title}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-ds-ink-muted">{description}</span>
+        </span>
+        {!menu ? <ChevronRight className="h-4 w-4 shrink-0 text-ds-ink-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ds-accent-ink" /> : null}
+      </Link>
+      {menu ? <div className="absolute right-3 top-1/2 z-2 -translate-y-1/2">{menu}</div> : null}
+    </div>
   );
 }
 
@@ -1811,10 +1823,10 @@ function CollaboratorDashboardPanelInner() {
           </div>
 
           {/* Acessos rápidos */}
-          {(canViewTechnicalSheets(permissions) || canAccessOwnProfile) ? (
+          {(canViewTechnicalSheets(permissions) || canAccessOwnProfile || (permissions.dashboard.collaborator ?? permissions.dashboard.view)) ? (
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ds-ink-muted">Acessos rápidos</p>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {canViewTechnicalSheets(permissions) ? (
                   <QuickAccessCard
                     href="/dashboard/commercial"
@@ -1842,6 +1854,33 @@ function CollaboratorDashboardPanelInner() {
                     tone="bg-ds-ok-bg text-ds-ok"
                   />
                 ) : null}
+                <QuickAccessCard
+                  href="/dashboard/collaborator/requests"
+                  icon={<Inbox className="h-5 w-5" />}
+                  title="Minhas solicitações"
+                  description="Pedidos, análises e termos"
+                  tone="bg-ds-warn-bg text-ds-warn"
+                  menu={
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" aria-label="Abrir tipos de solicitação" className="grid h-9 w-9 place-items-center rounded-full text-ds-ink-muted hover:bg-ds-muted hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+                          <MoreHorizontal className="h-5 w-5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64 rounded-ds-btn-lg p-2">
+                        <DropdownMenuLabel className="text-[10.5px] uppercase tracking-[0.14em] text-ds-ink-faint">Nova solicitação</DropdownMenuLabel>
+                        <DropdownMenuItem asChild className="rounded-ds-md p-2.5">
+                          <Link href="/dashboard/collaborator/requests?new=transport_voucher">
+                            <Inbox className="h-4 w-4 text-ds-warn" />
+                            <span><span className="block font-bold">Vale-transporte</span><span className="block text-[11px] text-ds-ink-faint">Adesão, alteração, suspensão ou reativação</span></span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled className="rounded-ds-md text-xs">Novos tipos serão adicionados aqui.</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  }
+                />
               </div>
             </div>
           ) : null}

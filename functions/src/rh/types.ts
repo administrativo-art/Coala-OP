@@ -23,6 +23,7 @@ export type EmployeeStatus  = 'active' | 'inactive' | 'terminated';
 export type NormalizedFieldVisibility = 'public' | 'restricted_total' | 'restricted_partial' | 'confidential';
 export type ProfileAccessActor = 'authenticated' | 'owner' | 'manager' | 'admin' | 'explicit';
 export type ProfileAccessPermission = 'hidden' | 'view' | 'edit';
+export type ProfileSelfServicePolicy = 'inherit' | 'blocked' | 'direct' | 'approval';
 export type ProfileAccessMatrixRule = Partial<Record<ProfileAccessActor, ProfileAccessPermission>> & {
   bindings?: FieldAccessBinding;
 };
@@ -33,7 +34,7 @@ export type ProfileAccessMatrix = {
 export type FieldType =
   | 'text' | 'multiline' | 'date' | 'number' | 'currency'
   | 'boolean' | 'single_select' | 'multi_select' | 'autonumber' | 'ref:jobRoles';
-export type FieldSource = 'bizneo_sync' | 'user_edit' | 'cf_automation';
+export type FieldSource = 'bizneo_sync' | 'user_edit' | 'cf_automation' | 'approved_self_service';
 
 export type FieldAccessBinding = {
   roleIds?: JobRoleId[];
@@ -62,6 +63,7 @@ export type FieldMapEntry = {
   visibility:        FieldVisibility;
   employee_visible:  boolean;
   employee_editable: boolean;
+  self_service_policy?: ProfileSelfServicePolicy;
   required?:         boolean;
   options?:          string[];
   triggers?:         TriggerConfig[];

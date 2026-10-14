@@ -1,6 +1,7 @@
 # Painel lateral (`SidePanel`)
 
 - 460px (máximo 100vw), entra pela direita, fundo #fffdf9, `--ds-shadow-side`. Véu `--ds-scrim`.
+- Os cantos superior e inferior esquerdos usam raio de 20px (`rounded-l-[20px]`) e o conteúdo é recortado pelo contorno (`overflow-hidden`). O lado direito permanece reto e encostado na borda da janela. Essa geometria é obrigatória para todo drawer lateral derivado do `SidePanel`; não arredondar os quatro cantos.
 - Fecha pelo ×, por clique no véu ou com **Esc**. O foco vai para o painel ao abrir e volta para a linha ao fechar.
 - **Topo escuro** (#15151c, padding 22px 24px): kicker rosa (#f08bb1, 10.5/800 caixa alta) com o identificador, nome 20/800 e especificação 12.5 #a9a8b3; números principais em 26/800.
 - **Corpo** (padding 20px 24px, gap 20):
