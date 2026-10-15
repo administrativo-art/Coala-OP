@@ -24,7 +24,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from './ui/skeleton';
-import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus, ChevronRight, Store, ClipboardList } from 'lucide-react';
+import { Save, ListOrdered, Inbox, ShieldCheck, Check, Trash2, Loader2, PlusCircle, AlertTriangle, Download, History, PackagePlus, ChevronRight, Store, ClipboardList, Warehouse } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -33,7 +33,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { RequestItemAdditionModal } from './request-item-addition-modal';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -59,6 +59,8 @@ const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
 const ADJUSTMENT_REASONS: { value: 'ENTRADA_CORRECAO', label: string }[] = [
     { value: 'ENTRADA_CORRECAO', label: 'Divergência na contagem do turno - acréscimo' },
 ];
+
+const COUNT_UNIT_PALETTE = ['bg-orange-400', 'bg-emerald-400', 'bg-violet-500', 'bg-sky-500'];
 
 const divergenceSchema = z.object({
     id: z.string(),
@@ -388,25 +390,77 @@ function KioskSelectionModal({
   kiosks: any[];
   onSelectKiosk: (kioskId: string) => void;
 }) {
+  const { matriz, otherKiosks } = useMemo(() => ({
+    matriz: kiosks.find((kiosk) => kiosk.id === 'matriz'),
+    otherKiosks: kiosks
+      .filter((kiosk) => kiosk.id !== 'matriz')
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR')),
+  }), [kiosks]);
+
+  const handleKioskSelect = (kioskId: string) => {
+    onOpenChange(false);
+    onSelectKiosk(kioskId);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        data-ui="stock-count-unit-picker"
+        className="max-w-xl rounded-2xl border-ds-border bg-ds-input shadow-ds-modal"
+      >
         <DialogHeader>
-          <DialogTitle>Iniciar nova contagem</DialogTitle>
-          <DialogDescription>Selecione o quiosque que você deseja contar.</DialogDescription>
+          <DialogTitle className="text-ds-ink">Iniciar nova contagem</DialogTitle>
+          <DialogDescription className="text-ds-ink-muted">
+            Escolha a unidade cujo estoque será contado.
+          </DialogDescription>
         </DialogHeader>
-        <div className="py-4 space-y-2">
-          {kiosks.map((kiosk) => (
-            <DialogClose key={kiosk.id} asChild>
-                <Button
-                variant="outline"
-                className="w-full justify-start text-base py-6 transition-all duration-200 hover:border-primary hover:shadow-lg hover:-translate-y-px"
-                onClick={() => onSelectKiosk(kiosk.id)}
-                >
-                {kiosk.name}
-                </Button>
-            </DialogClose>
-          ))}
+        <div className="space-y-4 pt-3">
+          {matriz && (
+            <button
+              type="button"
+              onClick={() => handleKioskSelect(matriz.id)}
+              className="flex w-full items-center justify-between rounded-xl border border-ds-modal bg-ds-modal-soft p-4 text-left transition-colors hover:bg-ds-modal-soft/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-modal focus-visible:ring-offset-2"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-ds-modal text-white">
+                  <Warehouse className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block font-semibold text-ds-ink">Centro de distribuição - Matriz</span>
+                  <span className="text-sm text-ds-ink-muted">Centro de distribuição · disponível para contar</span>
+                </span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-ds-ink-faint" aria-hidden="true" />
+            </button>
+          )}
+
+          {otherKiosks.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-ds-ink-faint">Quiosques</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {otherKiosks.map((kiosk, index) => (
+                  <button
+                    key={kiosk.id}
+                    type="button"
+                    onClick={() => handleKioskSelect(kiosk.id)}
+                    className="flex min-h-20 items-center gap-3 rounded-xl border border-ds-border bg-ds-surface p-4 text-left transition-colors hover:bg-ds-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ds-modal focus-visible:ring-offset-2"
+                  >
+                    <span
+                      className={cn('h-8 w-8 shrink-0 rounded-lg', COUNT_UNIT_PALETTE[index % COUNT_UNIT_PALETTE.length])}
+                      aria-hidden="true"
+                    />
+                    <span className="font-semibold text-ds-ink">{kiosk.name.replace(/^Quiosque\s+/i, '')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!matriz && otherKiosks.length === 0 && (
+            <p role="status" className="rounded-xl border border-ds-border bg-ds-surface p-4 text-sm text-ds-ink-muted">
+              Nenhuma unidade está disponível para iniciar uma contagem.
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
