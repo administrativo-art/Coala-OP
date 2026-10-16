@@ -97,7 +97,7 @@ function mapClassificationError(cause: unknown): never {
     throw new AppError({
       code: "CASH_SUPPLY_CLASSIFICATION_INVALID",
       kind: "VALIDATION",
-      safeMessage: message || "Não foi possível classificar este suprimento.",
+      safeMessage: "Não foi possível classificar este suprimento.",
       cause,
     });
   }
