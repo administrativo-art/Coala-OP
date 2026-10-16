@@ -2,6 +2,14 @@
 
 A implementação canônica de skills do projeto fica em `.agents/skills/<nome>/`. Entradas para outros clientes são links para a mesma pasta, nunca cópias divergentes.
 
+## coala-reposicao
+
+Invocação automática quando o usuário pede para trazer, listar ou recalcular a reposição de uma unidade ou da matriz; também pode ser chamada como `$coala-reposicao`.
+
+A skill consulta a necessidade física atual e a apresenta como **Comprar** na unidade base. Depois usa o insumo derivado, o fornecedor e o tipo de unidade da última compra confirmada para converter a mesma necessidade em unidades inteiras de compra, apresentadas como **Pedir** e agrupadas por fornecedor. A quantidade da compra anterior não é repetida como recomendação nem abatida da falta física. Compras ainda ativas e destinadas explicitamente à unidade aparecem separadas como aviso, sem abatimento automático.
+
+Item sem compra confirmada vinculada a derivado válido permanece com a necessidade em unidade base, no grupo `Sem derivado definido pela última compra`; a skill não infere fornecedor nem embalagem. A execução padrão é somente leitura e não cria pedidos, movimentações ou recebimentos.
+
 ## coala-error-triage
 
 Invocação no Codex ou Claude Code:
