@@ -111,6 +111,7 @@
 ## Agent Skills do projeto
 
 - Skills próprias ficam nas localizações documentadas em `docs/engineering/agent-skills.md`; não crie cópias divergentes para clientes.
+- `coala-reposicao` é acionada automaticamente quando o usuário pede para trazer ou recalcular uma reposição. Ela mostra a falta física como `Comprar`, converte essa necessidade pelo insumo derivado da última compra confirmada como `Pedir` e agrupa por fornecedor; a quantidade histórica nunca substitui a necessidade atual.
 - `coala-error-triage`, `coala-security-audit` e `coala-security-supply-chain` são de invocação explícita. As skills de segurança escrevem somente em `.ai-work/security-audit/` ou `.ai-work/supply-chain/`, não corrigem o produto na primeira execução e nunca testam produção por padrão.
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.

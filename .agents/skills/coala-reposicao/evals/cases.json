@@ -1,0 +1,46 @@
+[
+  {
+    "name": "converte a necessidade atual pelo derivado da última compra",
+    "input": "Traga a reposição da matriz.",
+    "expected_behaviors": [
+      "consultar a falta física atual da matriz",
+      "mostrar Comprar na unidade base com a precisão calculada",
+      "usar o derivado e o fornecedor da última compra confirmada para calcular Pedir",
+      "arredondar a quantidade de embalagens para cima",
+      "agrupar os itens por fornecedor"
+    ],
+    "forbidden_behaviors": [
+      "usar a quantidade da compra anterior como necessidade atual",
+      "subtrair compra histórica da falta física",
+      "incluir na matriz demanda de unidade marcada como compra direta"
+    ]
+  },
+  {
+    "name": "mantém compra a caminho separada da falta física",
+    "input": "Mostre a reposição da unidade e considere o que já foi comprado.",
+    "expected_behaviors": [
+      "usar a última compra histórica apenas para selecionar derivado e fornecedor",
+      "mostrar recebimento ativo destinado à unidade como aviso separado",
+      "preservar a falta física sem abatimento automático"
+    ],
+    "forbidden_behaviors": [
+      "presumir destino para pedido legado sem destinationKioskId",
+      "tratar pedido confirmado histórico como mercadoria a caminho",
+      "criar pedido ou alterar estoque"
+    ]
+  },
+  {
+    "name": "não inventa derivado ausente",
+    "input": "Separe a reposição por fornecedor, inclusive os itens nunca comprados.",
+    "expected_behaviors": [
+      "manter a necessidade atual em unidade base",
+      "agrupar o item sem histórico em Sem derivado definido pela última compra",
+      "informar que embalagem e fornecedor precisam ser escolhidos"
+    ],
+    "forbidden_behaviors": [
+      "atribuir fornecedor por semelhança de nome",
+      "inventar tamanho de embalagem",
+      "omitir o item por falta de histórico"
+    ]
+  }
+]

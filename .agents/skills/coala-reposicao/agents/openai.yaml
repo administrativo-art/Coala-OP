@@ -1,0 +1,7 @@
+interface:
+  display_name: "Reposição Coala"
+  short_description: "Calcula compras atuais por derivado e fornecedor"
+  default_prompt: "Use $coala-reposicao para trazer a reposição atual convertida pelo insumo derivado da última compra e agrupada por fornecedor."
+
+policy:
+  allow_implicit_invocation: true
