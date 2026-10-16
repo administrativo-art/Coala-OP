@@ -45,15 +45,15 @@ export function CashSuppliesPanel({ data, operatorId, editable, onClassify }: Pr
     () => data.lines.filter((line) => line.operatorId === operatorId),
     [data.lines, operatorId],
   );
-  const summary = cashSupplyClassificationSummary(lines);
+  const operator = data.operators.find((item) => item.operatorId === operatorId);
+  const finalized = operator?.status === "approved";
+  const summary = cashSupplyClassificationSummary(lines, { operatorStatus: operator?.status });
   const items = lines.flatMap((line) => cashSupplyMovements(line).map((movement) => ({
     line,
     movement,
     classification: cashSupplyClassificationForMovement(line, movement),
   })));
-  const finalized = data.operators.some((operator) =>
-    operator.operatorId === operatorId && operator.status === "approved",
-  );
+  const protectedHistory = finalized && items.some((item) => !item.classification);
 
   if (!requiresCashSupplyClassification(data.closure.date)) return null;
 
@@ -86,9 +86,13 @@ export function CashSuppliesPanel({ data, operatorId, editable, onClassify }: Pr
         </div>
         <span className={cn(
           "rounded-full px-2.5 py-1 text-[11px] font-black",
-          summary.pending > 0 ? "bg-ds-warn-bg text-ds-warn-ink" : "bg-ds-ok-bg text-ds-ok",
+          protectedHistory
+            ? "bg-ds-muted text-ds-ink-muted"
+            : summary.pending > 0 ? "bg-ds-warn-bg text-ds-warn-ink" : "bg-ds-ok-bg text-ds-ok",
         )}>
-          {summary.pending > 0 ? `${summary.pending} pendente(s)` : "Classificação concluída"}
+          {protectedHistory
+            ? "Finalizado · histórico preservado"
+            : summary.pending > 0 ? `${summary.pending} pendente(s)` : "Classificação concluída"}
         </span>
       </div>
     </CardHeader>
@@ -138,7 +142,11 @@ export function CashSuppliesPanel({ data, operatorId, editable, onClassify }: Pr
             </Button>
           </div>
           {saving && <p role="status" className="mt-2 text-xs font-semibold text-ds-ink-muted">Salvando classificação…</p>}
-          {finalized && <p className="mt-2 text-xs font-semibold text-ds-ink-muted">Reabra este operador para corrigir a classificação.</p>}
+          {finalized && <p className="mt-2 text-xs font-semibold text-ds-ink-muted">
+            {classification
+              ? "Reabra este operador para corrigir a classificação."
+              : "Este operador já estava finalizado e não foi alterado pela nova regra. Reabra-o somente se precisar revisar a contagem."}
+          </p>}
         </div>;
       })}
       {summary.cashFundCents > 0 && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ds-ok/20 bg-ds-ok-bg px-4 py-3 text-sm text-ds-ok">

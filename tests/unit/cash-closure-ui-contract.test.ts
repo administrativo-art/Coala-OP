@@ -90,10 +90,13 @@ test("sangrias aparecem junto da contagem e os cards principais não criam divis
 test("suprimentos são classificados por operador entre fundo de caixa e suprimento", () => {
   assert.match(countingDialogSource, /<CashSuppliesPanel/);
   assert.match(countingDialogSource, /missingSupplyClassification/);
+  assert.match(countingDialogSource, /operatorStatus: activeOperator\?\.status/);
   assert.match(countingDialogSource, /Financeiro × Caixa após fundo/);
   assert.match(suppliesPanelSource, /Fundo de caixa/);
   assert.match(suppliesPanelSource, /Suprimento/);
   assert.match(suppliesPanelSource, /não vai no malote/);
+  assert.match(suppliesPanelSource, /Finalizado · histórico preservado/);
+  assert.match(suppliesPanelSource, /não foi alterado pela nova regra/);
 });
 
 test("modal de contagem respeita a viewport e o fluxo interno usa o retorno canônico", () => {

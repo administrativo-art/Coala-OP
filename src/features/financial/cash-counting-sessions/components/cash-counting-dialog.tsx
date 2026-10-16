@@ -482,7 +482,7 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
   const missingFinanceNote = activeGroup?.lines.some((line) => (line.differenceCents ?? 0) < 0 && !line.note?.trim()) ?? false;
   const missingNote = missingReportedNote || missingFinanceNote;
   const supplySummary = activeGroup
-    ? cashSupplyClassificationSummary(activeGroup.lines)
+    ? cashSupplyClassificationSummary(activeGroup.lines, { operatorStatus: activeOperator?.status })
     : { required: false, total: 0, pending: 0, cashFundCents: 0, supplyCents: 0 };
   const missingSupplyClassification = supplySummary.required && supplySummary.pending > 0;
   const canEditReported = editable && !!permissions.financial?.cashClosures?.edit && !operatorFinalized;
