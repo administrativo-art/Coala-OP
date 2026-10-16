@@ -136,6 +136,7 @@ api,src/app/api/financial/cash-closures/[closureId]/finalize/route.ts,,docs/engi
 api,src/app/api/financial/cash-closures/[closureId]/reopen/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/[closureId]/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
+api,src/app/api/financial/cash-closures/[closureId]/supplies/route.ts,,docs/engineering/flows/cash-closures.md,Classificacao transacional de suprimentos em fundo de caixa ou suprimento a partir de 2026-11-01; contrato seguro e auditoria no servidor.
 api,src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts,,docs/engineering/flows/cash-closures.md,Classificacao transacional de sangrias com autenticacao e escopo de unidade/workspace; GET sem escrita.
 api,src/app/api/financial/cash-closures/months/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/financial/cash-closures/overview/route.ts,,docs/engineering/flows/cash-closures.md,Destino de investigacao; conferir metodo e ramo no handler.

@@ -35,6 +35,10 @@ const withdrawalsPanelSource = readFileSync(
   path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-withdrawals-panel.tsx"),
   "utf8",
 );
+const suppliesPanelSource = readFileSync(
+  path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-supplies-panel.tsx"),
+  "utf8",
+);
 
 test("contagem do Caixa não oferece atalho para copiar o esperado do PDV", () => {
   assert.doesNotMatch(dayPageSource, /Usar esperado/);
@@ -57,13 +61,39 @@ test("modal mostra todos os canais, as duas origens de justificativa e as três 
   assert.match(countingDialogSource, /Justificativa do Financeiro/);
   assert.match(countingDialogSource, /Caixa × PDV/);
   assert.match(countingDialogSource, /Financeiro × Caixa/);
-  assert.match(countingDialogSource, /Financeiro × PDV/);
+  assert.match(countingDialogSource, /Financeiro × malote esperado/);
 });
 
 test("classificação da sangria mostra a justificativa informada no PDV", () => {
   assert.match(withdrawalsPanelSource, /Justificativa informada no PDV/);
   assert.match(withdrawalsPanelSource, /setDescription\(selectedSource\?\.pdvReason \?\? ""\)/);
   assert.match(withdrawalsPanelSource, /isWithdrawalClassifiableAccount/);
+  assert.match(withdrawalsPanelSource, /Sangrias deste operador/);
+});
+
+test("modal informa o estado da data e permite selecionar o operador sem paginação manual", () => {
+  assert.match(countingDialogSource, /Contagem finalizada/);
+  assert.match(countingDialogSource, /Contagem em andamento/);
+  assert.match(countingDialogSource, /Contagem ainda não finalizada/);
+  assert.match(countingDialogSource, /groups\.map\(\(group, index\)/);
+  assert.doesNotMatch(countingDialogSource, /Próximo operador|>Anterior</);
+  assert.match(countingDialogSource, /\/reopen`/);
+  assert.match(countingDialogSource, /operatorId: target\.operatorId, reason: reopenReason\.trim\(\)/);
+});
+
+test("sangrias aparecem junto da contagem e os cards principais não criam divisor vertical", () => {
+  assert.match(countingDialogSource, /!\[3, 5\]\.includes\(activeStep\)/);
+  assert.match(countingDialogSource, /operatorId=\{activeGroup\.operatorId\}/);
+  assert.match(sessionPageSource, /rounded-\[18px\] border-0 bg-ds-warm shadow-none/);
+});
+
+test("suprimentos são classificados por operador entre fundo de caixa e suprimento", () => {
+  assert.match(countingDialogSource, /<CashSuppliesPanel/);
+  assert.match(countingDialogSource, /missingSupplyClassification/);
+  assert.match(countingDialogSource, /Financeiro × Caixa após fundo/);
+  assert.match(suppliesPanelSource, /Fundo de caixa/);
+  assert.match(suppliesPanelSource, /Suprimento/);
+  assert.match(suppliesPanelSource, /não vai no malote/);
 });
 
 test("modal de contagem respeita a viewport e o fluxo interno usa o retorno canônico", () => {

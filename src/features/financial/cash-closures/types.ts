@@ -53,6 +53,8 @@ export type CashClosureCashMovement = {
   kind: CashClosureCashMovementKind;
   /** Justificativa informada pelo operador no PDV; não é a observação da classificação financeira. */
   pdvReason?: string | null;
+  /** Descrição bruta do movimento no PDV. Em suprimentos, costuma ser um identificador automático. */
+  pdvDescription?: string | null;
   amountCents: number;
   occurredAt: string;
   date: string;
@@ -64,12 +66,25 @@ export type CashClosureCashMovement = {
   cancelled: boolean;
 };
 
+export type CashSupplyClassificationKind = "cash_fund" | "supply";
+
+export type CashSupplyClassification = {
+  movementId: string;
+  movementFingerprint: string;
+  kind: CashSupplyClassificationKind;
+  classifiedAt: string;
+  classifiedBy: string;
+  classifiedByName: string;
+};
+
 export type CashClosureLineMetadata = {
   grossCashCents?: number;
   changeCents?: number;
   supplyCents?: number;
   withdrawalCents?: number;
   cashMovements?: CashClosureCashMovement[];
+  /** Classificação operacional feita na contagem; não pertence à fonte do PDV. */
+  supplyClassifications?: CashSupplyClassification[];
   paymentRowCount?: number;
   firstCouponAt?: string;
   lastCouponAt?: string;
@@ -322,7 +337,8 @@ export type CashClosureAuditAction =
   | "deposit_paid"
   | "deposit_cancelled"
   | "deposit_excluded"
-  | "operator_states_migrated";
+  | "operator_states_migrated"
+  | "supply_classified";
 
 export type CashClosureAuditLog = {
   id: string;
