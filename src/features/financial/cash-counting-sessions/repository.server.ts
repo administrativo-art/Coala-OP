@@ -731,8 +731,11 @@ function sessionDepositBatch(input: {
   session: CashCountingSession;
   bag: CashCountingSessionBag;
   now: string;
+  coinHoldCents?: number;
+  reservedCoinDenominations?: CashDepositBatch["reservedCoinDenominations"];
 }): { batch: CashDepositBatch; item: CashDepositBatchItem } {
   const batchId = `${input.session.id}_deposit_${String(input.bag.sequence).padStart(3, "0")}`;
+  const coinHoldCents = input.coinHoldCents ?? 0;
   const exactDates = input.session.scopeAggregationVersion === 1
     ? Object.entries(input.session.finalizedOperatorCountsByDate)
       .filter(([, count]) => count > 0)
@@ -758,12 +761,13 @@ function sessionDepositBatch(input: {
     countingSessionId: input.session.id,
     countingSessionBagId: input.bag.id,
     denominations: input.bag.denominations,
+    reservedCoinDenominations: input.reservedCoinDenominations ?? [],
     sequence: input.bag.sequence,
     status: "locked",
     maxCents: CASH_DEPOSIT_MAX_CENTS,
-    grossTotalCents: input.bag.totalCents,
+    grossTotalCents: input.bag.totalCents + coinHoldCents,
     totalCents: input.bag.totalCents,
-    coinHoldCents: 0,
+    coinHoldCents,
     coinPreparedAt: input.now,
     coinPreparedBy: input.session.denominationsConfirmedBy,
     remainingCapacityCents: CASH_DEPOSIT_MAX_CENTS - input.bag.totalCents,
@@ -836,7 +840,15 @@ export async function confirmCashCountingSessionDenominations(input: {
       maxCents: CASH_DEPOSIT_MAX_CENTS,
       source: "initial_notes",
     });
-    const batches = bags.map((bag) => sessionDepositBatch({ session: preparedSession, bag, now }));
+    const reservedCoinDenominations = physical.denominations
+      .filter((entry) => entry.kind === "coin" && entry.quantity > 0);
+    const batches = bags.map((bag, index) => sessionDepositBatch({
+      session: preparedSession,
+      bag,
+      now,
+      coinHoldCents: index === 0 ? physical.coinTotalCents : 0,
+      reservedCoinDenominations: index === 0 ? reservedCoinDenominations : [],
+    }));
     const nextBags = bags.map((bag, index) => ({ ...bag, batchId: batches[index].batch.id }));
     const next: CashCountingSession = {
       ...preparedSession,
