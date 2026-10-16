@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **455**
-- Totalmente contratados: **101**
+- Arquivos de rota: **456**
+- Totalmente contratados: **102**
 - Legados congelados: **352**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -155,6 +155,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/cash-closures/[closureId]/finalize` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/finalize/route.ts](../../src/app/api/financial/cash-closures/[closureId]/finalize/route.ts) |
 | `/api/financial/cash-closures/[closureId]/reopen` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/reopen/route.ts](../../src/app/api/financial/cash-closures/[closureId]/reopen/route.ts) |
 | `/api/financial/cash-closures/[closureId]/split-deposit` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts](../../src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts) |
+| `/api/financial/cash-closures/[closureId]/supplies` | PATCH ✓ | `CONTRACTED` | [src/app/api/financial/cash-closures/[closureId]/supplies/route.ts](../../src/app/api/financial/cash-closures/[closureId]/supplies/route.ts) |
 | `/api/financial/cash-closures/[closureId]/withdrawals` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts](../../src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts) |
 | `/api/financial/cash-closures/months` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/months/route.ts](../../src/app/api/financial/cash-closures/months/route.ts) |
 | `/api/financial/cash-closures/overview` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/overview/route.ts](../../src/app/api/financial/cash-closures/overview/route.ts) |

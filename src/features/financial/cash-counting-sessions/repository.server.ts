@@ -8,7 +8,6 @@ import type { CashClosure, CashClosureActor, CashClosureOperator } from "@/featu
 import { CASH_DEPOSIT_MAX_CENTS, type CashDepositBatch, type CashDepositBatchItem } from "@/features/financial/cash-deposits/types";
 import { buildCashCountingBags, normalizeCashCountingDenominations } from "./denominations";
 import type {
-  CashCountingDenomination,
   CashCountingSession,
   CashCountingSessionAuditAction,
   CashCountingSessionAuditLog,

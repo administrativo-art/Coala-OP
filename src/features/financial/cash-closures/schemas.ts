@@ -34,6 +34,12 @@ export const finalizeCashClosureOperatorSchema = z.object({
   countingSessionId: z.string().uuid(),
 }).strict();
 
+export const classifyCashSupplySchema = z.object({
+  lineId: z.string().trim().min(1).max(300),
+  movementId: z.string().trim().min(1).max(300),
+  classification: z.enum(["cash_fund", "supply"]),
+}).strict();
+
 export const cashClosureExpectedAdjustmentSchema = z.object({
   lineId: z.string().trim().min(1).max(300),
   correctedExpectedCents: z.number().int().safe().min(0).max(100_000_000),

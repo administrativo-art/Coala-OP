@@ -130,7 +130,7 @@ export function CashWithdrawalsPanel({ data, editable, operatorId: operatorScope
   });
   if (!canView) return <p className="text-sm text-muted-foreground">A classificação de sangrias exige acesso às despesas. A finalização continua validando os vínculos no servidor.</p>;
   return <Card className="border-ds-border">
-    <CardHeader><CardTitle>Sangrias — despesas pagas em espécie</CardTitle><CardDescription>O PDV já descontou estas saídas do dinheiro esperado. Classifique cada uma ou vincule uma despesa existente; não haverá outro pagamento bancário. O plano de contas mostra folhas ativas de despesa e compras de insumos para estoque.</CardDescription></CardHeader>
+    <CardHeader><CardTitle>{operatorScopeId ? "Sangrias deste operador" : "Sangrias — despesas pagas em espécie"}</CardTitle><CardDescription>O PDV já descontou estas saídas do dinheiro esperado{operatorScopeId ? " na contagem acima" : ""}. Classifique cada uma ou vincule uma despesa existente; não haverá outro pagamento bancário. O plano de contas mostra folhas ativas de despesa e compras de insumos para estoque.</CardDescription></CardHeader>
     <CardContent className="space-y-3">
       {loading ? <p role="status">Consultando sangrias…</p> : !payload ? <Button variant="outline" onClick={refresh}>Tentar novamente</Button> : <>
         <p role="status" className="text-sm">{unresolved + orphaned.length} pendência(s) de vínculo. Todas as sangrias {operatorScopeId ? "deste operador" : "do fechamento"} devem estar classificadas para finalizar {operatorScopeId ? "sua contagem" : "a contagem"}.</p>

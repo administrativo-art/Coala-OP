@@ -145,11 +145,13 @@ function parseMovement(input: {
   const normalizedPaymentName = paymentMethodName ? normalizeName(paymentMethodName) : "";
   const providerId = providerMovementId(source);
   const id = providerId ?? `${input.kind}-${date}-${input.index}`;
+  const pdvDescription = withdrawalReason(source);
   return {
     id,
     identitySource: providerId ? "provider" : "synthetic",
     kind: input.kind,
-    ...(input.kind === "withdrawal" ? { pdvReason: withdrawalReason(source) } : {}),
+    pdvDescription,
+    ...(input.kind === "withdrawal" ? { pdvReason: pdvDescription } : {}),
     amountCents: toCents(numericAmount),
     occurredAt,
     date,
