@@ -12,6 +12,7 @@ import { notifyDPScheduleShiftsChanged, useDPShifts } from '@/hooks/use-dp-shift
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
 import { useDPScheduleVacations } from '@/hooks/use-dp-schedule-vacations';
+import { useDPScheduleAbsences } from '@/hooks/use-dp-schedule-absences';
 import { useDPScheduleJourneyValidation } from '@/hooks/use-dp-schedule-journey-validation';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
@@ -1330,6 +1331,7 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     loading: vacationsLoading,
     error: vacationsError,
   } = useDPScheduleVacations(schedule.id);
+  const { absences: scheduleAbsences, loading: absencesLoading, error: absencesError } = useDPScheduleAbsences(schedule.id);
   const { toast } = useToast();
   const api = useAuthenticatedApi();
   const bootstrapLoading =
@@ -2493,6 +2495,28 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
           {canManageSchedule && !schedule.locked
             ? 'Não foi possível validar as férias. A edição da escala está bloqueada até os dados serem carregados.'
             : 'Não foi possível validar as férias. Alguns conflitos podem não ser exibidos.'}
+        </div>
+      )}
+      {absencesLoading && (
+        <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          Carregando ausências aprovadas desta escala.
+        </div>
+      )}
+      {absencesError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {absencesError}
+        </div>
+      )}
+      {scheduleAbsences.length > 0 && (
+        <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
+          <div className="mb-1 flex items-center gap-2 font-extrabold"><CalendarOff className="h-3.5 w-3.5" />Ausências aprovadas na competência</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {scheduleAbsences.map((absence) => <span key={absence.requestId}>
+              {operationalUsers.find((person) => person.id === absence.beneficiaryUid)?.username ?? 'Colaborador'}: {format(parseISO(absence.startDate), 'dd/MM/yyyy')} a {format(parseISO(absence.endDate), 'dd/MM/yyyy')}
+            </span>)}
+          </div>
         </div>
       )}
       {ancillaryBootstrapError && (

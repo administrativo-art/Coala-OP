@@ -1,5 +1,9 @@
 # Regras operacionais do Coala One
 
+## Comunicação com o usuário
+
+- Quando o usuário disser **“simplifique”**, explique como se estivesse falando com uma pessoa leiga no assunto: use linguagem comum, frases diretas e exemplos concretos quando ajudarem. Explique os termos técnicos indispensáveis sem omitir riscos, limites ou decisões importantes.
+
 ## Localização e impacto
 
 - Em checkouts de promoção seletiva, uma referência de documentação pode não existir na branch. Nesse caso, consulte a versão aprovada em `main` por leitura (`git show <sha-main-validado>:<caminho>`), registre a origem e confirme a aplicabilidade no código local. Isso não autoriza importar código, configurações ou executar ferramentas ausentes no checkout.
@@ -107,6 +111,7 @@
 ## Agent Skills do projeto
 
 - Skills próprias ficam nas localizações documentadas em `docs/engineering/agent-skills.md`; não crie cópias divergentes para clientes.
+- `coala-reposicao` é acionada automaticamente quando o usuário pede para trazer ou recalcular uma reposição. Ela mostra a falta física como `Comprar`, converte essa necessidade pelo insumo derivado da última compra confirmada como `Pedir` e agrupa por fornecedor; a quantidade histórica nunca substitui a necessidade atual.
 - `coala-error-triage`, `coala-security-audit` e `coala-security-supply-chain` são de invocação explícita. As skills de segurança escrevem somente em `.ai-work/security-audit/` ou `.ai-work/supply-chain/`, não corrigem o produto na primeira execução e nunca testam produção por padrão.
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.

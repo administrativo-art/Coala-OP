@@ -31,6 +31,10 @@ const cashControlNavigationSource = readFileSync(
   path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-control-navigation.tsx"),
   "utf8",
 );
+const withdrawalsPanelSource = readFileSync(
+  path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-withdrawals-panel.tsx"),
+  "utf8",
+);
 
 test("contagem do Caixa não oferece atalho para copiar o esperado do PDV", () => {
   assert.doesNotMatch(dayPageSource, /Usar esperado/);
@@ -47,13 +51,19 @@ test("modal de contagem salva rascunho sem polling nem refresh durante a digita�
 });
 
 test("modal mostra todos os canais, as duas origens de justificativa e as três divergências", () => {
-  assert.match(countingDialogSource, /group\.lines\.map/);
+  assert.match(countingDialogSource, /activeGroup\.lines\.map/);
   assert.match(countingDialogSource, /reportedNote/);
   assert.match(countingDialogSource, /Justificativa do Caixa/);
   assert.match(countingDialogSource, /Justificativa do Financeiro/);
   assert.match(countingDialogSource, /Caixa × PDV/);
   assert.match(countingDialogSource, /Financeiro × Caixa/);
   assert.match(countingDialogSource, /Financeiro × PDV/);
+});
+
+test("classificação da sangria mostra a justificativa informada no PDV", () => {
+  assert.match(withdrawalsPanelSource, /Justificativa informada no PDV/);
+  assert.match(withdrawalsPanelSource, /setDescription\(selectedSource\?\.pdvReason \?\? ""\)/);
+  assert.match(withdrawalsPanelSource, /isWithdrawalClassifiableAccount/);
 });
 
 test("modal de contagem respeita a viewport e o fluxo interno usa o retorno canônico", () => {

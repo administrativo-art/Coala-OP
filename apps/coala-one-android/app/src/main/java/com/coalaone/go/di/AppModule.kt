@@ -4,8 +4,9 @@ import android.content.Context
 import com.coalaone.go.BuildConfig
 import com.coalaone.go.auth.*
 import com.coalaone.go.data.*
+import com.coalaone.go.push.PushController
+import com.coalaone.go.push.PushManager
 import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import dagger.Module
 import dagger.Provides
@@ -26,14 +27,14 @@ import javax.inject.Singleton
     @Provides @Singleton fun json() = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true }
     @Provides @Singleton fun firebase(@ApplicationContext context: Context): FirebaseAuth {
         // No credentials are bundled. Empty config keeps the debug simulation usable.
-        val options = FirebaseOptions.Builder().setApiKey(BuildConfig.FIREBASE_API_KEY.ifBlank { "unconfigured-public-api-key" }).setApplicationId(BuildConfig.FIREBASE_APP_ID.ifBlank { "1:000000000:android:unconfigured" }).setProjectId(BuildConfig.FIREBASE_PROJECT_ID.ifBlank { "demo-coala-go" }).build()
-        val app = FirebaseApp.getApps(context).firstOrNull() ?: FirebaseApp.initializeApp(context, options)
+        val app = FirebaseApp.getInstance()
         return FirebaseAuth.getInstance(app).also { if (BuildConfig.LOCAL_TEST) it.useEmulator("10.0.2.2", 9099) }
     }
     @Provides @Singleton fun auth(gateway: FirebaseGateway): AuthGateway = gateway
     @Provides @Singleton fun biometrics(store: BiometricStore): BiometricPreferences = store
     @Provides @Singleton fun attestation(impl: Attestation): AppAttestation = impl
     @Provides @Singleton fun updater(impl: AppUpdater): InstallerDownloader = impl
+    @Provides @Singleton fun push(impl: PushManager): PushController = impl
     @Provides @Singleton fun client(auth: AuthGateway, attestation: Attestation): OkHttpClient {
         val base = BuildConfig.API_BASE_URL.toHttpUrl()
         require(base.isHttps || BuildConfig.DEBUG && BuildConfig.LOCAL_TEST) { "API de release exige HTTPS" }

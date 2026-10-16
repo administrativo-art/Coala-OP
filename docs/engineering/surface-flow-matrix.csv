@@ -1,4 +1,22 @@
 kind,source,symbol,guide,note
+api,src/app/api/mobile/push/devices/route.ts,,docs/engineering/coala-go-parity.md,Registro e revogacao propria de push com sessao e atestacao mobile; sem rota publica de envio.
+api,src/app/api/collaborator/absence-requests/options/route.ts,,docs/engineering/flows/dp-absences.md,Opcoes proprias limitadas e capacidade operacional condicionada ao cutover RH.
+api,src/app/api/collaborator/absence-requests/preview/route.ts,,docs/engineering/flows/dp-absences.md,Previa autenticada sem persistencia ou aceitacao de pedido.
+api,src/app/api/collaborator/absence-requests/route.ts,,docs/engineering/flows/dp-absences.md,Listagem paginada propria ou atribuida e criacao propria RH condicionada ao gate.
+api,src/app/api/collaborator/absence-requests/[requestId]/route.ts,,docs/engineering/flows/dp-absences.md,Detalhe e transicoes autoritativas com versao esperada e operacao idempotente.
+api,src/app/api/collaborator/absence-requests/preparations/route.ts,,docs/engineering/flows/dp-absences.md,Preparacao privada de documentos obrigatorios antes da criacao do pedido.
+api,src/app/api/collaborator/absence-requests/[requestId]/attachments/[fileId]/route.ts,,docs/engineering/flows/dp-absences.md,Download autorizado e auditado; DELETE legado bloqueado; remocao somente pelo protocolo de retencao com geracao exata.
+api,src/app/api/dp/absence-retention/route.ts,,docs/engineering/flows/dp-absences.md,Lista paginada de casos de retencao RH por unidade e permissao DP.
+api,src/app/api/dp/absence-retention/[caseId]/decision/route.ts,,docs/engineering/flows/dp-absences.md,Decisao de custodiante com motivo e CAS; autorizacao nao exclui arquivo.
+api,src/app/api/dp/absence-retention/[caseId]/execute/route.ts,,docs/engineering/flows/dp-absences.md,Executor reconciliavel remove somente geracao autorizada atras do fence de vinculo; preserva recibo permanente.
+api,src/app/api/collaborator/absence-requests/[requestId]/notifications/reconcile/route.ts,,docs/engineering/flows/dp-absences.md,Retentativa explicita de evento corrente de aviso com ACL do pedido; sem GET com efeito.
+api,src/app/api/user-notifications/route.ts,,docs/engineering/access-and-privacy.md,Avisos genericos paginados do proprio usuario e marcacao de leitura idempotente.
+api,src/app/api/dp/absence-availability/[requestId]/reconcile/route.ts,,docs/engineering/flows/dp-absences.md,Reconciliacao RH somente em sombra; nao aplica turno nem consome outbox operacional.
+api,src/app/api/dp/absence-operational/[requestId]/reconcile/route.ts,,docs/engineering/flows/dp-absences.md,Reconcilia fence de ausencia operacional local sob gate e permissao de escala; aborta preparo ou retenta ativacao e reversao.
+api,src/app/api/dp/responsibility-coverages/route.ts,,docs/engineering/flows/dp-absences.md,Consulta e configura hierarquia de cobertura do DP por atividade e grupo ou unidade com permissao dedicada.
+api,src/app/api/dp/responsibility-tasks/route.ts,,docs/engineering/flows/dp-absences.md,Lista paginada de pendencias operacionais atribuidas ou sem cobertura conforme permissao e abrangencia.
+api,src/app/api/dp/responsibility-tasks/[taskId]/route.ts,,docs/engineering/flows/dp-absences.md,Primeiro responsavel elegivel assume por CAS e conclui com justificativa e auditoria.
+api,src/app/api/dp/schedules/[scheduleId]/absences/route.ts,,docs/engineering/flows/dp-absences.md,Projecao minima de ausencias aprovadas na competencia da escala sem motivo tipo ou documento.
 api,src/app/api/financial/acquirer-fees/route.ts,,docs/engineering/flows/stone-sales-review.md,Previa e apropriacao de taxas explicitas; admin padrao e escopo revalidados; sem novo debito bancario.
 api,src/app/api/admin/fix-receipts/route.ts,,docs/engineering/access-and-privacy.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/ai/analyze-consumption/route.ts,,docs/engineering/flows/stock-analysis.md,Destino de investigacao; conferir metodo e ramo no handler.
@@ -54,7 +72,7 @@ api,src/app/api/dashboard/layouts/route.ts,,docs/engineering/flows/platform-home
 api,src/app/api/dp/bootstrap/route.ts,,docs/engineering/flows/dp-overview.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/natasha/team/route.ts,,docs/engineering/flows/dp-schedules.md,Equipe candidata minima da Natasha; leitura autenticada por unidades com permissao dupla e limites fail-closed; sem escala ou escrita.
 api,src/app/api/dp/natasha/journeys/route.ts,,docs/engineering/flows/dp-schedules.md,Jornadas publicadas e historicas resolvidas por pessoa e data; leitura autenticada e limitada por unidades autorizadas; sem premissa manual nem escrita.
-api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Ferias da equipe candidata na competencia e continuidade; leitura autenticada limitada e sem folgas indisponibilidades ou escrita.
+api,src/app/api/dp/natasha/availability/route.ts,,docs/engineering/flows/dp-schedules.md,Disponibilidade candidata v2 cruza férias e ausências operacionais ativas com ack RH e readiness; leitura autenticada limitada sem folgas ou indisponibilidades externas.
 api,src/app/api/dp/natasha/shift-definitions/route.ts,,docs/engineering/flows/dp-schedules.md,Definicoes minimas de horario para unidades autorizadas; leitura limitada sem classificar posicoes nem escrever escala.
 api,src/app/api/dp/schedules/[scheduleId]/coverage-demands/[date]/route.ts,,docs/engineering/flows/dp-schedules.md,Destino de investigacao; conferir metodo e ramo no handler.
 api,src/app/api/dp/schedules/[scheduleId]/route.ts,,docs/engineering/flows/dp-schedules.md,Leitura pontual; trancamento com validacao autoritativa de jornada; destrancamento; ou exclusao transacional e auditada; todos revalidam permissao e unidade.
@@ -420,9 +438,14 @@ function,functions/src/index.ts,createUser,docs/engineering/runtime-surfaces.md,
 function,functions/src/index.ts,deleteUser,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,expireQuotations,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,hourlyPdvSync,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
-function,functions/src/index.ts,onProfileChange,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
+function,functions/src/index.ts,onProfileChange,docs/engineering/runtime-surfaces.md,onDocumentWritten; sincroniza claims e recalcula tarefas abertas quando permissoes do perfil mudam; deploy nao confirmado.
 function,functions/src/index.ts,onReceiptStatusChange,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
-function,functions/src/index.ts,onUserProfileChange,docs/engineering/runtime-surfaces.md,onDocumentWritten; consultar familia e consumidores no guia; deploy nao confirmado.
+function,functions/src/index.ts,onUserProfileChange,docs/engineering/runtime-surfaces.md,onDocumentWritten; reconcilia retencao e tarefas de cobertura apos mudanca do usuario; deploy nao confirmado.
+function,functions/src/index.ts,onResponsibilityUnitChange,docs/engineering/flows/dp-absences.md,onDocumentWritten; recalcula tarefas abertas quando unidade ou grupo efetivo muda; deploy nao confirmado.
+function,functions/src/index.ts,onResponsibilityUnitGroupChange,docs/engineering/flows/dp-absences.md,onDocumentWritten; recalcula tarefas abertas quando o grupo de unidades muda; deploy nao confirmado.
+function,functions/src/index.ts,absenceRetentionDailyReview,docs/engineering/flows/dp-absences.md,onSchedule; detector limitado de vencimentos e aviso privado sem exclusao; deploy nao confirmado.
+function,functions/src/index.ts,absenceRetentionReconciliation,docs/engineering/flows/dp-absences.md,onSchedule; continua cursors de reconciliacao por beneficiario limitados; deploy nao confirmado.
+function,functions/src/index.ts,absenceRetentionExecutionReconciliation,docs/engineering/flows/dp-absences.md,onSchedule; a cada 15 minutos reconcilia ate 20 exclusoes pela geracao exata; deploy nao confirmado.
 function,functions/src/index.ts,reactivateUser,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,reconcileGeneratedDocumentRetention,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,reconcilePdvSalesHistory,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.

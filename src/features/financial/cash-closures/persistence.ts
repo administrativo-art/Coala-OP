@@ -151,7 +151,11 @@ function normalizedSourceHash(built: BuiltCashClosure) {
           paymentRowCount: line.metadata.paymentRowCount,
           supplyCents: line.metadata.supplyCents,
           withdrawalCents: line.metadata.withdrawalCents,
-          cashMovements: line.metadata.cashMovements,
+          // A justificativa é evidência descritiva do PDV. Uma correção textual não muda
+          // a identidade financeira da origem nem invalida contagens já aprovadas.
+          cashMovements: line.metadata.cashMovements?.map(movement => Object.fromEntries(
+            Object.entries(movement).filter(([key]) => key !== "pdvReason"),
+          )),
         },
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),

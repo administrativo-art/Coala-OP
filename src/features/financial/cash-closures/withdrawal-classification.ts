@@ -20,7 +20,7 @@ export const withdrawalClassificationSchema = z.discriminatedUnion("action", [
 export type WithdrawalClassificationInput = z.infer<typeof withdrawalClassificationSchema>;
 export type WithdrawalSource = SourceSettlement & {
   kind: "cash_withdrawal"; closureId: string; operatorId: string; lineId: string;
-  movementId: string; occurredAt: string; identityVerified: boolean;
+  movementId: string; occurredAt: string; pdvReason: string | null; identityVerified: boolean;
 };
 export type WithdrawalClassification = {
   source: WithdrawalSource;
@@ -83,7 +83,7 @@ export function withdrawalSources(closure: CashClosure, lines: CashClosureLine[]
         workspaceId: closure.workspaceId, unitId: closure.kioskId, closureId: closure.id,
         operatorId: line.operatorId, lineId: line.id, movementId: movement.id,
         amountCents: movement.amountCents, competenceMonth: closure.date.slice(0, 7), settledOn: closure.date,
-        occurredAt: movement.occurredAt, identityVerified });
+        occurredAt: movement.occurredAt, pdvReason: movement.pdvReason ?? null, identityVerified });
     }
   }
   if (sources.length > MAX_WITHDRAWALS) issues.push("withdrawal_limit");
