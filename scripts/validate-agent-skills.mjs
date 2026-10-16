@@ -157,3 +157,47 @@ if (realpathSync(supplyLinkTarget) !== realpathSync(supplySkillRoot)) {
 }
 
 process.stdout.write("Skill coala-security-supply-chain validada.\n");
+
+const replenishmentSkillRoot = join(repositoryRoot, ".agents", "skills", "coala-reposicao");
+for (const relativePath of ["SKILL.md", "agents/openai.yaml", "evals/cases.json"]) {
+  const path = join(replenishmentSkillRoot, relativePath);
+  if (!existsSync(path)) throw new Error(`Arquivo obrigatório da reposição ausente: ${relativePath}`);
+}
+
+const replenishmentSkill = readFileSync(join(replenishmentSkillRoot, "SKILL.md"), "utf8");
+for (const expected of [
+  "name: coala-reposicao",
+  "Mostre esse valor como **Comprar**",
+  "Nunca use a quantidade da compra anterior como recomendação atual",
+  "Converta **Comprar** para unidades inteiras do derivado selecionado e arredonde para cima",
+  "Agrupe a lista final pelo fornecedor",
+  "Sem derivado definido pela última compra",
+]) {
+  if (!replenishmentSkill.includes(expected)) {
+    throw new Error(`Contrato ausente na skill de reposição: ${expected}`);
+  }
+}
+if (/TODO|PLACEHOLDER|TBD/.test(replenishmentSkill)) {
+  throw new Error("Skill de reposição contém placeholder não resolvido.");
+}
+
+const replenishmentOpenai = readFileSync(join(replenishmentSkillRoot, "agents", "openai.yaml"), "utf8");
+if (!replenishmentOpenai.includes("allow_implicit_invocation: true") || !replenishmentOpenai.includes("$coala-reposicao")) {
+  throw new Error("Skill de reposição deve permitir invocação automática e manter prompt explícito disponível.");
+}
+
+const replenishmentCases = JSON.parse(readFileSync(join(replenishmentSkillRoot, "evals", "cases.json"), "utf8"));
+if (!Array.isArray(replenishmentCases) || replenishmentCases.length < 3) {
+  throw new Error("Evals da skill de reposição estão ausentes ou incompletos.");
+}
+
+const replenishmentClaudeEntry = join(repositoryRoot, ".claude", "skills", "coala-reposicao");
+if (!existsSync(replenishmentClaudeEntry) || !lstatSync(replenishmentClaudeEntry).isSymbolicLink()) {
+  throw new Error("Entrada Claude da reposição deve ser symlink para a implementação canônica.");
+}
+const replenishmentLinkTarget = resolve(dirname(replenishmentClaudeEntry), readlinkSync(replenishmentClaudeEntry));
+if (realpathSync(replenishmentLinkTarget) !== realpathSync(replenishmentSkillRoot)) {
+  throw new Error("Entrada Claude não aponta para .agents/skills/coala-reposicao.");
+}
+
+process.stdout.write("Skill coala-reposicao validada.\n");
