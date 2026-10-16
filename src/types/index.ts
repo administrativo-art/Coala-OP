@@ -2496,6 +2496,7 @@ export type PurchaseOrder = {
   workspaceId: string;
   origin: PurchaseOrigin;
   quotationId?: string;
+  externalOrderNumber?: string | null;
   supplierId: string; // ref → entities collection
   supplierName?: string;
   destinationKioskId?: string; // operational destination; absent on legacy orders
