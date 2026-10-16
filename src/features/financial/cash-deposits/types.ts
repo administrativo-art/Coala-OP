@@ -15,6 +15,13 @@ export type CashDepositBatchLockReason =
   | "manual_lock"
   | null;
 
+export type CashDepositPhysicalDenomination = {
+  valueCents: number;
+  kind: "note" | "coin";
+  quantity: number;
+  totalCents: number;
+};
+
 export type CashDepositBatch = {
   id: string;
   workspaceId: string;
@@ -25,12 +32,8 @@ export type CashDepositBatch = {
   sourceScope?: "unit" | "counting_session";
   countingSessionId?: string | null;
   countingSessionBagId?: string | null;
-  denominations?: Array<{
-    valueCents: number;
-    kind: "note" | "coin";
-    quantity: number;
-    totalCents: number;
-  }>;
+  denominations?: CashDepositPhysicalDenomination[];
+  reservedCoinDenominations?: CashDepositPhysicalDenomination[];
   sequence: number;
   status: CashDepositBatchStatus;
   maxCents: number;
@@ -147,6 +150,8 @@ export function normalizeCashDepositBatch(batch: CashDepositBatch): CashDepositB
     kioskIds: batch.kioskIds?.length ? batch.kioskIds : [batch.kioskId],
     kioskNames: batch.kioskNames?.length ? batch.kioskNames : [batch.kioskName],
     sourceScope: batch.sourceScope ?? "unit",
+    denominations: batch.denominations ?? [],
+    reservedCoinDenominations: batch.reservedCoinDenominations ?? [],
     grossTotalCents: batch.grossTotalCents ?? batch.totalCents + coinHoldCents,
     coinHoldCents,
     coinPreparedAt: batch.coinPreparedAt ?? null,

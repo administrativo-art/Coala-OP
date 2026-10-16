@@ -28,7 +28,7 @@ Verificações executadas e verdes: `npm run verify`, `npm run check`, `npm run 
 - A lista visual de operadores é paginada em até 100 itens por página.
 - Competência `dre_only` permanece na DRE e não gera malote.
 - O físico precisa conferir exatamente com o valor elegível antes da formação dos malotes.
-- Somente cédulas formam malotes de até R$ 5.000; R$ 1 e centavos são registrados como retorno ao caixa/fundo de troco.
+- Somente cédulas formam malotes de até R$ 5.000. Cada malote persiste e exibe a quantidade por denominação para permitir a conferência sem soma manual. R$ 1 e centavos ficam fora do boleto, são registrados como retorno ao caixa/fundo de troco e aparecem, uma única vez, no resumo físico do primeiro malote.
 - Uma sessão composta somente por moedas conclui sem criar malote bancário. O endpoint de troca permanece apenas para dados legados.
 - O modal salva somente linhas sujas após 800 ms, serializa versões e invalida respostas pertencentes a outra unidade/data.
 - Após a confirmação física, correções preservam o histórico e geram ajuste de depósito.
