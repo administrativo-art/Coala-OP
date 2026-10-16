@@ -230,7 +230,8 @@ export type RecalculationSummary = {
  * pula e não sobrescreve um valor ajustado manualmente.
  *
  * Unidades de abastecimento/mistas (ver `loadSupplyMap`) usam a soma do consumo das unidades
- * atendidas, na mesma base mensal/quinzenal, com a mesma margem de 30%.
+ * atendidas que estejam roteadas via CD para o insumo, na mesma base mensal/quinzenal, com a
+ * mesma margem de 30%. Quando todos os destinos são compra direta, o mínimo legado do CD é zerado.
  */
 export async function runMinimumStockRecalculation(db: Firestore, now: Date): Promise<RecalculationSummary> {
   const quinzenas = lastCompleteQuinzenas(now);
@@ -269,17 +270,25 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
 
     // fonte primária: consumptionReports; só cai para movementHistory se o insumo nunca aparecer lá
     const sourceEntries = reportByProduct.get(doc.id) ?? movementByProduct.get(doc.id) ?? [];
-    if (sourceEntries.length === 0) {
+    const byKiosk = groupBy(sourceEntries, (e) => e.kioskId);
+
+    const stockLevels: Record<string, { min?: number; override?: boolean; supplyMode?: "cd" | "direct" }> =
+      product.stockLevels ?? {};
+    const supplyUnitsWithoutCdDependents = Array.from(supplyMap.entries())
+      .filter(([, servedIds]) =>
+        servedIds.size > 0 && Array.from(servedIds).every((servedId) => stockLevels[servedId]?.supplyMode === "direct"))
+      .map(([supplyId]) => supplyId);
+
+    if (sourceEntries.length === 0 && supplyUnitsWithoutCdDependents.length === 0) {
       summary.skippedNoData++;
       continue;
     }
 
-    const byKiosk = groupBy(sourceEntries, (e) => e.kioskId);
-
-    const stockLevels: Record<string, { min?: number; override?: boolean }> = product.stockLevels ?? {};
     // Quiosques sem linha no cadastro do insumo também entram assim que tiverem consumo
     // (ou, no caso de unidade de abastecimento, consumo das unidades atendidas).
-    const kioskIds = new Set<string>([...Object.keys(stockLevels), ...byKiosk.keys(), ...supplyMap.keys()]);
+    const kioskIds = sourceEntries.length === 0
+      ? new Set<string>(supplyUnitsWithoutCdDependents)
+      : new Set<string>([...Object.keys(stockLevels), ...byKiosk.keys(), ...supplyMap.keys()]);
 
     for (const kioskId of kioskIds) {
       const level = stockLevels[kioskId];
@@ -289,26 +298,32 @@ export async function runMinimumStockRecalculation(db: Firestore, now: Date): Pr
       }
 
       const served = supplyMap.get(kioskId);
-      const kioskEntries = served
-        ? Array.from(served).flatMap((servedKioskId) => byKiosk.get(servedKioskId) ?? [])
-        : byKiosk.get(kioskId) ?? [];
-      if (kioskEntries.length === 0) {
-        summary.skippedNoData++;
-        continue;
-      }
+      const routedKioskIds = served
+        ? Array.from(served).filter((servedKioskId) => stockLevels[servedKioskId]?.supplyMode !== "direct")
+        : [kioskId];
+      const hasNoCdDependents = served !== undefined && routedKioskIds.length === 0;
 
-      let total = 0;
-      for (const entry of kioskEntries) {
-        if (!windowKeys.has(quinzenaKey({ year: entry.year, month: entry.month, half: halfOfDay(entry.day) }))) continue; // fora da janela
-        total += entry.quantity;
-      }
-      const mean = total / divisor;
-      if (mean <= 0) {
-        summary.skippedNoData++;
-        continue;
-      }
+      let mean = 0;
+      let newMin = 0;
+      if (!hasNoCdDependents) {
+        const kioskEntries = routedKioskIds.flatMap((servedKioskId) => byKiosk.get(servedKioskId) ?? []);
+        if (kioskEntries.length === 0) {
+          summary.skippedNoData++;
+          continue;
+        }
 
-      const newMin = roundForUnit(mean * SAFETY_MARGIN, product.unit);
+        let total = 0;
+        for (const entry of kioskEntries) {
+          if (!windowKeys.has(quinzenaKey({ year: entry.year, month: entry.month, half: halfOfDay(entry.day) }))) continue; // fora da janela
+          total += entry.quantity;
+        }
+        mean = total / divisor;
+        if (mean <= 0) {
+          summary.skippedNoData++;
+          continue;
+        }
+        newMin = roundForUnit(mean * SAFETY_MARGIN, product.unit);
+      }
 
       batch.update(doc.ref, {
         [`stockLevels.${kioskId}.min`]: newMin,
