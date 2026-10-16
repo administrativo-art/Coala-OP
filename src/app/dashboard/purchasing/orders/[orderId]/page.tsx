@@ -74,7 +74,10 @@ import {
   type PurchaseOrderItem,
   type PurchasePaymentCondition,
 } from "@/types";
-import { purchaseTreatmentSkipsOperationalEntry } from "@/lib/purchasing-item-treatment";
+import {
+  getPurchaseOrderConfirmationIssues,
+  purchaseOrderDisplayCode,
+} from "@/lib/purchasing-order-readiness";
 import { cn } from "@/lib/utils";
 import {
   PurchasingPageFrame,
@@ -188,10 +191,6 @@ function fmtUnit(value?: number | null) {
   });
 }
 
-function orderCode(id: string) {
-  return `CMP-${id.slice(-8).toUpperCase()}`;
-}
-
 function lineGrossTotal(
   item: Pick<PurchaseOrderItem, "quantityOrdered" | "unitPriceOrdered">,
 ) {
@@ -215,6 +214,14 @@ function lineEffectiveUnitPrice(
 
 function isCardPayment(paymentMethod?: PaymentMethod) {
   return paymentMethod === "card_credit" || paymentMethod === "card_debit";
+}
+
+function formatOrderDate(value?: string | null) {
+  if (!value) return "Não informado";
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime())
+    ? "Não informado"
+    : format(parsed, "dd/MM/yyyy");
 }
 
 function getOrderSupplierName(
@@ -455,35 +462,20 @@ export default function PurchaseOrderPage() {
     () => goodsSubtotal + Number(order?.deliveryFee ?? 0),
     [goodsSubtotal, order?.deliveryFee],
   );
-  const unregisteredStockItems = useMemo(
-    () =>
-      displayItems.filter(
-        (item) =>
-          item.entryType !== "asset" &&
-          // Componentes de patrimônio, despesas e serviços são compras avulsas:
-          // não geram lote de estoque nem exigem cadastro de insumo.
-          !purchaseTreatmentSkipsOperationalEntry(item.itemTreatment) &&
-          (!item.productId || !item.baseItemId),
-      ),
-    [displayItems],
-  );
-
   const isCancelled = order?.status === "cancelled";
   const isCreated = order?.status === "created";
   const isReceived = !!order?.receivedAt;
   const isFinancialReversalPending =
     order?.financialReversalStatus === "pending";
+  const confirmationIssues = useMemo(
+    () =>
+      order
+        ? getPurchaseOrderConfirmationIssues(order, displayItems)
+        : [],
+    [displayItems, order],
+  );
   const isReadyForConfirmation =
-    !!order?.paymentDueDate &&
-    !!order?.paymentMethod &&
-    !!order?.accountPlanId &&
-    !!order?.resultCenterId &&
-    unregisteredStockItems.length === 0 &&
-    ((order?.deliveryFee ?? 0) <= 0 ||
-      (!!order?.freightAccountPlanId &&
-        !!order?.freightPaymentMode &&
-        (order.freightPaymentMode !== "separate" ||
-          String(order.freightSupplierName || "").trim().length >= 2)));
+    !!order && !itemsLoading && confirmationIssues.length === 0;
   const canEditOrder =
     !!order &&
     canEdit &&
@@ -580,23 +572,28 @@ export default function PurchaseOrderPage() {
 
   const openEdit = () => {
     if (!order) return;
+    const purchaseDate = String(order.purchaseDate || "").slice(0, 10);
+    const paymentDueDate = String(order.paymentDueDate || "").slice(0, 10);
+    const fallbackPaymentDate = purchaseDate || paymentDueDate;
     const installmentsCount = order.installmentsCount ?? 2;
     const installmentDueDates =
       order.installmentDueDates?.length === installmentsCount
         ? order.installmentDueDates
-        : buildMonthlyInstallmentDates(
-            order.paymentDueDate.slice(0, 10),
-            installmentsCount,
-          );
+        : fallbackPaymentDate
+          ? buildMonthlyInstallmentDates(fallbackPaymentDate, installmentsCount)
+          : [];
     setEditForm({
       paymentMethod: order.paymentMethod,
       paymentCondition: order.paymentCondition ?? "cash",
       installmentsCount,
       installmentDueDates,
-      paymentDueDate: (isCardPayment(order.paymentMethod)
-        ? order.purchaseDate || order.paymentDueDate
-        : order.paymentDueDate).slice(0, 10),
-      estimatedReceiptDate: order.estimatedReceiptDate.slice(0, 10),
+      paymentDueDate: isCardPayment(order.paymentMethod)
+        ? purchaseDate || paymentDueDate
+        : paymentDueDate,
+      estimatedReceiptDate: String(order.estimatedReceiptDate || "").slice(
+        0,
+        10,
+      ),
       deliveryFee: order.deliveryFee ?? 0,
       accountPlanId:
         order.accountPlanId ?? purchasingDefaults.goodsAccountPlanId ?? "",
@@ -632,6 +629,12 @@ export default function PurchaseOrderPage() {
       pending.push("Cartão da compra");
     if (!editForm.accountPlanId) pending.push("Plano de contas da mercadoria");
     if (!editForm.resultCenterId) pending.push("Centro de resultado");
+    if (
+      order?.receiptMode === "future_delivery" &&
+      !editForm.estimatedReceiptDate
+    ) {
+      pending.push("Previsão de recebimento");
+    }
     if (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId)
       pending.push("Plano de contas do frete");
     if (
@@ -642,7 +645,7 @@ export default function PurchaseOrderPage() {
       pending.push("Favorecido do frete");
     }
     return pending;
-  }, [editForm]);
+  }, [editForm, order?.receiptMode]);
 
   const handleSave = async () => {
     if (!order || !editForm) return;
@@ -841,7 +844,7 @@ export default function PurchaseOrderPage() {
             <div className="border-b border-zinc-100 px-5 py-[18px]">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs font-extrabold text-zinc-500">
-                  {orderCode(order.id)}
+                  {purchaseOrderDisplayCode(order)}
                 </span>
                 <PurchasingStatusBadge
                   label={
@@ -971,6 +974,57 @@ export default function PurchaseOrderPage() {
                   <span>Confirmar pedido</span>
                   <CheckCircle2 className="h-4 w-4" />
                 </Button>
+              ) : null}
+              {canConfirmOrder &&
+              (itemsLoading || confirmationIssues.length > 0) ? (
+                <div
+                  role="status"
+                  className="rounded-[10px] border border-amber-300 bg-amber-50 p-3 text-amber-950"
+                >
+                  <p className="text-xs font-extrabold">
+                    Antes de confirmar
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed">
+                    {itemsLoading
+                      ? "Verificando os itens do pedido…"
+                      : confirmationIssues
+                          .map((issue) => issue.label)
+                          .join(" · ")}
+                  </p>
+                  {!itemsLoading ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {confirmationIssues.some(
+                        (issue) => issue.scope === "order",
+                      ) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 border-amber-300 bg-white px-3 text-xs text-amber-950 hover:bg-amber-100"
+                          onClick={openEdit}
+                        >
+                          Completar dados
+                        </Button>
+                      ) : null}
+                      {confirmationIssues.some(
+                        (issue) => issue.scope === "items",
+                      ) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 border-amber-300 bg-white px-3 text-xs text-amber-950 hover:bg-amber-100"
+                          onClick={() => {
+                            setEditingItemId(null);
+                            setItemsEditOpen(true);
+                          }}
+                        >
+                          Revisar itens
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
               {canRegisterPayment ? (
                 <Button
@@ -1379,7 +1433,7 @@ export default function PurchaseOrderPage() {
                   <DetailSummaryRow
                     label={getPaymentDateLabel(order.paymentMethod)}
                   >
-                    {format(parseISO(order.paymentDueDate), "dd/MM/yyyy")}
+                    {formatOrderDate(order.paymentDueDate)}
                   </DetailSummaryRow>
                 )}
                 <DetailSummaryRow label="Valor previsto">
@@ -1524,7 +1578,7 @@ export default function PurchaseOrderPage() {
                   {RECEIPT_LABELS[order.receiptMode]}
                 </DetailSummaryRow>
                 <DetailSummaryRow label="Entrega prevista">
-                  {format(parseISO(order.estimatedReceiptDate), "dd/MM/yyyy")}
+                  {formatOrderDate(order.estimatedReceiptDate)}
                 </DetailSummaryRow>
                 {order.trackingInfo && (
                   <div className="space-y-1.5 border-t border-zinc-100 pt-3">
@@ -1613,21 +1667,17 @@ export default function PurchaseOrderPage() {
                           ? "Primeiro vencimento"
                           : getPaymentDateLabel(order.paymentMethod)
                       }
-                      value={format(
-                        parseISO(isCardPayment(order.paymentMethod)
+                      value={formatOrderDate(
+                        isCardPayment(order.paymentMethod)
                           ? order.purchaseDate || order.paymentDueDate
-                          : order.paymentDueDate),
-                        "dd/MM/yyyy",
+                          : order.paymentDueDate,
                       )}
                     />
                     <ActionSummaryItem
                       label="Entrega prevista"
                       value={
                         order.receiptMode === "future_delivery"
-                          ? format(
-                              parseISO(order.estimatedReceiptDate),
-                              "dd/MM/yyyy",
-                            )
+                          ? formatOrderDate(order.estimatedReceiptDate)
                           : "Retirada imediata"
                       }
                     />
@@ -2039,7 +2089,7 @@ export default function PurchaseOrderPage() {
                       Editar pedido
                     </SheetTitle>
                     <SheetDescription className="mt-1 text-xs leading-relaxed text-zinc-600">
-                      {orderCode(order.id)} · Atualize pagamento, classificação,
+                      {purchaseOrderDisplayCode(order)} · Atualize pagamento, classificação,
                       frete e entrega.
                     </SheetDescription>
                   </div>
@@ -2448,10 +2498,15 @@ export default function PurchaseOrderPage() {
                         <div className="space-y-1.5">
                           <Label className="text-[12px] font-bold text-zinc-700">
                             Entrega prevista
+                            <RequiredMark />
                           </Label>
                           <Input
                             type="date"
-                            className="h-10 rounded-[9px] border-zinc-200 bg-zinc-50 shadow-none"
+                            className={cn(
+                              "h-10 rounded-[9px] border-zinc-200 bg-zinc-50 shadow-none",
+                              !editForm.estimatedReceiptDate &&
+                                PENDING_FIELD_CLASS,
+                            )}
                             value={editForm.estimatedReceiptDate}
                             onChange={(event) =>
                               setEditForm(

@@ -4,6 +4,7 @@ import {
   type Firestore,
   type WriteBatch,
 } from "firebase-admin/firestore";
+import type { Auth } from "firebase-admin/auth";
 
 type UserRecord = Record<string, unknown>;
 type PendingWrite = (batch: WriteBatch) => void;
@@ -27,6 +28,60 @@ export type TerminationEffectsReport = {
 const TERMINAL_TASK_STATUSES = new Set(["completed", "rejected", "cancelled", "canceled"]);
 const TERMINAL_FORM_STATUSES = new Set(["completed", "cancelled", "canceled", "rejected"]);
 const TERMINAL_ASSET_STATUSES = new Set(["fora_de_uso", "vendido", "descartado", "baixado"]);
+const ACCESS_QUERY_LIMIT = 51;
+
+export class TerminationOccupancyGuardPending extends Error {
+  constructor() { super("pending_occupancy_guard"); }
+}
+
+/** Keep access revocation ahead of every occupational effect and never report a failed revocation as pending. */
+export async function runTerminatedUserProfile<T>(steps: { revoke: () => Promise<void>;
+  apply: () => Promise<T>; pending: () => Promise<void>; applied: (report: T) => Promise<void> }) {
+  await steps.revoke();
+  try {
+    const report = await steps.apply();
+    await steps.applied(report);
+    return "applied" as const;
+  } catch (error) {
+    if (!(error instanceof TerminationOccupancyGuardPending)) throw error;
+    await steps.pending();
+    return "pending_occupancy_guard" as const;
+  }
+}
+
+/** OFF legacy remains unchanged only when no bootstrap/cutover receipt exists. */
+export async function terminationOccupancyGuardPending(db: Firestore, workspaceId: string,
+  guardValue = process.env.DP_ABSENCE_OPERATIONAL_GUARD) {
+  if (guardValue && guardValue !== "off") return true;
+  const receipt = await db.collection("dp_absenceOperationalReadiness").doc(workspaceId).get();
+  return receipt.exists && ["bootstrapping", "ready"].includes(String(receipt.get("state")));
+}
+
+export async function revokeTerminatedUserAccess(params: {
+  auth: Auth; hrDb: Firestore; financialDb: Firestore; userId: string; sessionVersion: number;
+}) {
+  const at = new Date().toISOString();
+  // Repeated trigger delivery is safe: authorization is revoked before the occupational gate.
+  await params.auth.updateUser(params.userId, { disabled: true });
+  await params.auth.revokeRefreshTokens(params.userId);
+  await params.auth.setCustomUserClaims(params.userId, {});
+  const refs = new Map<string, DocumentReference>();
+  const directRef = params.hrDb.collection("rh_access_cache").doc(params.userId);
+  refs.set(directRef.path, directRef);
+  for (const field of ["auth_uid", "source_user_id"]) {
+    const matches = await params.hrDb.collection("rh_access_cache")
+      .where(field, "==", params.userId).limit(ACCESS_QUERY_LIMIT).get();
+    if (matches.size === ACCESS_QUERY_LIMIT) throw new Error("Termination access cache limit reached.");
+    matches.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));
+  }
+  const batch = params.hrDb.batch();
+  refs.forEach((ref) => batch.set(ref, { status: "inactive", is_active: false,
+    session_version: params.sessionVersion, access_revoked_at: at, updated_at: at }, { merge: true }));
+  await Promise.all([batch.commit(), params.financialDb.collection("users").doc(params.userId).set({
+    active: false, isDefaultAdmin: false, permissions: { view: false },
+    sessionVersion: params.sessionVersion, syncedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })]);
+}
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -88,7 +143,11 @@ export async function applyUserTerminationEffects(params: {
   userId: string;
   user: UserRecord;
   now?: Date;
+  workspaceId?: string;
 }): Promise<TerminationEffectsReport> {
+  if (await terminationOccupancyGuardPending(params.db, params.workspaceId ?? "coala")) {
+    throw new TerminationOccupancyGuardPending();
+  }
   const now = params.now ?? new Date();
   const appliedAt = now.toISOString();
   const effectiveDate = effectiveDateFor(params.user, now);

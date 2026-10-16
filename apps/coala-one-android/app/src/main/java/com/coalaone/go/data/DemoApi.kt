@@ -15,6 +15,8 @@ class DemoApi @Inject constructor() : ApiService {
     override suspend fun release() = Release(4, "0.2.0", 0, "/app/CoalaGo.apk")
     override suspend fun reset(request: ResetRequest) = Unit
     override suspend fun profile() = ProfileResponse(Profile(simulatedUserName, "simulation@invalid.local", "Atendente"), Modules(true, true, true, true, true, true))
+    override suspend fun registerPush(request: PushDeviceRegistration, expectedOwner: String) = PushDeviceRegistered(false)
+    override suspend fun removePush(request: PushDeviceRemoval, expectedOwner: String) = PushDeviceRemoved(false)
     override suspend fun avatar(photo: MultipartBody.Part) = AvatarResponse("")
     override suspend fun countContext() = CountContext(units, emptyList(), listOf(ExitReason("SAIDA_CONSUMO", "Venda/Consumo"), ExitReason("SAIDA_DESCARTE_VENCIMENTO", "Vencimento"), ExitReason("SAIDA_DESCARTE_AVARIA", "Avaria"), ExitReason("SAIDA_DESCARTE_OUTROS", "Outros")))
     override suspend fun startCount(request: StartCountRequest) = StartedCount(CountSession("simulation-count", unitOf(request.kioskId).id, unitOf(request.kioskId).name, "pending_review", "2026-10-01T12:00:00Z", items = listOf(CountItem("l1", "Leite integral (1 L)", "SIM-001", "2026-12-01", 12.0, "caixa"), CountItem("l2", "Açúcar refinado (1 kg)", "SIM-002", null, 5.0, "pacote"), CountItem("l3", "Copo descartável", "SIM-003", null, 8.0, "pacote"), CountItem("l4", "Canudo", "SIM-004", null, 2.0, "pacote"))), false)

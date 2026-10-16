@@ -10,6 +10,7 @@ import { isShiftDefinitionCompatibleWithJourney } from '@/lib/dp-time-config-rul
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney } from '@/types';
+import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 
 import type { BulkWorkShiftInput } from './schemas';
 
@@ -333,6 +334,20 @@ export async function applyWorkShiftBulkChange(params: {
     }
 
     const selectedPaths = new Set(selected.map(({ snapshot }) => snapshot.ref.path));
+    if (operationalGuardRequested()) {
+      const slices = selected.flatMap(({ snapshot, date }) => [
+        ...shiftOccupancySlices({ beneficiaryUid: String(snapshot.get('userId')), date,
+          startTime: snapshot.get('startTime') as string, endTime: snapshot.get('endTime') as string,
+          addsOccupancy: false }),
+        ...(input.action === 'delete' ? [] : shiftOccupancySlices({
+          beneficiaryUid: replacePatch?.userId ?? String(snapshot.get('userId')), date,
+          startTime: replacePatch?.startTime ?? snapshot.get('startTime') as string,
+          endTime: replacePatch?.endTime ?? snapshot.get('endTime') as string,
+          addsOccupancy: true,
+        })),
+      ]);
+      await guardOccupancyWrite(transaction, context.workspace_id, slices);
+    }
     const now = Timestamp.now();
     selected.forEach(({ snapshot, date }) => {
       if (input.action === 'delete') {

@@ -1,5 +1,6 @@
 import { dbAdmin } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import { setEmploymentCyclePatch } from '@/lib/employment-cycle.server';
 import {
   buildPublishedBizneoDayOffPayload,
   buildPublishedBizneoSchedulePayload,
@@ -132,7 +133,6 @@ export async function syncBizneoUserIds(): Promise<SyncUsersResult> {
     bizneoUsers.map(u => [u.email.toLowerCase(), u])
   );
 
-  const batch = dbAdmin.batch();
   let matched = 0;
   const unmatched: SyncUsersResult['unmatched'] = [];
   const matchedEmails = new Set<string>();
@@ -145,11 +145,21 @@ export async function syncBizneoUserIds(): Promise<SyncUsersResult> {
     if (bizneoUser) {
       const admissionDate = parseBizneoDate(resolveAdmissionDate(bizneoUser));
       const birthDate = parseBizneoDate(bizneoUser.birthday);
-      batch.update(doc.ref, {
+      const patch = {
         registrationIdBizneo: String(bizneoUser.id),
         ...(bizneoUser.avatar_url ? { avatarUrl: bizneoUser.avatar_url } : {}),
         ...(admissionDate ? { admissionDate } : {}),
         ...(birthDate ? { birthDate } : {}),
+      };
+      await dbAdmin.runTransaction(async (transaction) => {
+        const current = await transaction.get(doc.ref);
+        if (!current.exists) return;
+        const storedAdmission = current.get('admissionDate');
+        const admissionMillis = admissionDate?.toMillis();
+        const admissionChanged = admissionMillis !== undefined
+          && (typeof storedAdmission?.toMillis !== 'function'
+            || storedAdmission.toMillis() !== admissionMillis);
+        setEmploymentCyclePatch(transaction, doc.ref, current, patch, { cycleMutation: admissionChanged });
       });
       matched++;
       matchedEmails.add(email);
@@ -158,8 +168,6 @@ export async function syncBizneoUserIds(): Promise<SyncUsersResult> {
       unmatched.push({ coala: data.username ?? doc.id, email: data.email ?? '' });
     }
   }
-
-  await batch.commit();
 
   const bizneoOnly = bizneoUsers
     .filter(u => !matchedEmails.has(u.email.toLowerCase()))

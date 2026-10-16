@@ -109,7 +109,7 @@ test("reconhece os nomes de campo observados no payload real do PDV", () => {
   ]);
 });
 
-test("lê o motivo da sangria quando o PDV envia, por movimento e filial, sem alterar o movimento", () => {
+test("lê o motivo da sangria quando o PDV envia, por movimento e filial", () => {
   const withdrawals = [
     // Shape of the live PDV row: `codloja`, `dtmovimento` and the reason in `descricao`.
     { codigo: 101, codloja: 10, codusuario: 7, codformapgto: 1, valor: 20, dtmovimento: "2026-08-28T15:00:00", issangria: true, isCancelado: false, descricao: "  COMPRA DE\n LIMÃO  " },
@@ -126,5 +126,6 @@ test("lê o motivo da sangria quando o PDV envia, por movimento e filial, sem al
   assert.equal(reasons.get("105")?.length, 200);
   const movement = parsePdvCashMovements({ withdrawals, supplies: [], paymentMethods: [], date: "2026-08-28", filialId: "10" }).find((row) => row.id === "101");
   assert.equal(movement?.amountCents, 2_000);
-  assert.equal(movement && "reason" in movement, false);
+  assert.equal(movement?.pdvReason, "COMPRA DE LIMÃO");
+  assert.equal(parsePdvCashMovements({ withdrawals, supplies: [], paymentMethods: [], date: "2026-08-28", filialId: "10" }).find((row) => row.id === "102")?.pdvReason, null);
 });

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { assertAbsenceOperationalAdminWriteAllowed } from "./absence-operational-admin-gate.mjs";
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "smart-converter-752gf";
 const MAIN_DATABASE = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || "coala";
@@ -64,6 +65,9 @@ const app = getApps()[0] ?? initializeApp({ credential: credential(), projectId:
 const mainDb = getFirestore(app, MAIN_DATABASE);
 const checklistDb = getFirestore(app, CHECKLIST_DATABASE);
 const backupRef = mainDb.collection("system_migration_backups").doc(BACKUP_ID);
+
+if (APPLY || ROLLBACK) await assertAbsenceOperationalAdminWriteAllowed(mainDb,
+  process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? "coala");
 
 async function readContext() {
   const [source, target, organization, users, definitions, schedules, goals, checklistProjects] = await Promise.all([

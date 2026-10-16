@@ -6,6 +6,7 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
+import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices, type OccupancySlice } from '@/features/dp/absences/operational/occupancy-guard.server';
 
 const MAX_SHIFT_DELETIONS = 450;
 const AUDIT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -60,6 +61,17 @@ export async function deleteDPSchedule(params: {
       });
     }
 
+    if (operationalGuardRequested()) {
+      const slices: OccupancySlice[] = shifts.docs.flatMap((shift) => {
+        const beneficiaryUid = String(shift.get('userId') ?? '');
+        const date = String(shift.get('date') ?? '');
+        if (shift.get('type') === 'day_off') return [{ beneficiaryUid, date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }];
+        return shiftOccupancySlices({ beneficiaryUid, date,
+          startTime: shift.get('startTime') as string, endTime: shift.get('endTime') as string,
+          addsOccupancy: false });
+      });
+      await guardOccupancyWrite(transaction, context.workspace_id, slices, shifts.size + 2);
+    }
     const now = Timestamp.now();
     shifts.docs.forEach((shift) => transaction.delete(shift.ref));
     transaction.delete(scheduleRef);

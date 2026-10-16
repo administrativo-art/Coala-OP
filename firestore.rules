@@ -1007,6 +1007,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Tokens e instalações push são acessados somente pelo Admin SDK.
+    match /mobilePushTokens/{id} { allow read, write: if false; }
+    match /mobilePushInstallations/{id} { allow read, write: if false; }
+    match /userNotifications/{id} { allow read, write: if false; }
+    match /dp_absenceOperationalReadiness/{id} { allow read, write: if false; }
+    match /dp_absenceOperationalFences/{id} { allow read, write: if false; }
+    match /dp_absenceOccupancyClocks/{id} { allow read, write: if false; }
+    match /dp_absenceOperationalMarkers/{id} { allow read, write: if false; }
+    match /dp_absenceOperationalAvailability/{id} { allow read, write: if false; }
+
     // --- CATCH-ALL: bloqueia tudo não mapeado ---
     match /{document=**} {
       allow read, write: if false;
