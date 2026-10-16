@@ -48,7 +48,8 @@
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/coala-error-triage
-!.claude/skills/coala-supply-chain-audit
+!.claude/skills/coala-security-audit
+!.claude/skills/coala-security-supply-chain
 !.claude/skills/coala-reposicao
 
 # artefatos locais de agentes

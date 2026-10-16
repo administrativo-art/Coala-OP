@@ -72,6 +72,7 @@ test('serviço exige escala, unidade autorizada, projeção e sentinela', () => 
   assert.match(service, /\.select\(\.\.\.PROJECTED_FIELDS\)/);
   assert.match(service, /\.limit\(QUERY_LIMIT\)/);
   assert.match(service, /snapshot\.size === QUERY_LIMIT/);
+  assert.match(service, /document\.get\('isArchived'\) !== true/);
   assert.match(route, /Cache-Control': 'private, no-store'/);
 });
 

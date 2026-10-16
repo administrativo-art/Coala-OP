@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { natashaTeamDirectoryReportSchema } from './natasha-team-directory';
+import { assessNatashaOperationalAvailability } from './natasha-operational-availability';
 
 const idSchema = z.string().trim().min(1).max(180);
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -34,6 +35,10 @@ export const natashaAvailabilitySourceSchema = z.object({
   team: natashaTeamDirectoryReportSchema,
   vacationDocuments: z.array(z.record(z.string(), z.unknown())).max(300),
   sourceQuery: z.string().trim().min(1).max(300),
+  operational: z.object({ workspaceId: idSchema, sourceReady: z.boolean(), epoch: z.string().nullable(),
+    projectionDocuments: z.array(z.record(z.string(), z.unknown())).max(200),
+    requestDocuments: z.array(z.record(z.string(), z.unknown())).max(200),
+    sourceQuery: z.string().trim().min(1).max(300) }).strict(),
 }).strict();
 
 const availabilityVacationSchema = z.object({
@@ -48,7 +53,7 @@ const availabilityVacationSchema = z.object({
 
 export const natashaAvailabilityReportSchema = z.object({
   status: z.enum(['ready_for_confirmation', 'questions_pending', 'incomplete']),
-  scope: z.literal('candidate_vacations_and_external_unavailability_prompt'),
+  scope: z.literal('candidate_vacations_and_approved_absences_v2_external_prompts'),
   period: periodSchema,
   window: z.object({
     from: dateSchema,
@@ -57,9 +62,15 @@ export const natashaAvailabilityReportSchema = z.object({
   }).strict(),
   candidates: z.array(z.object({ id: idSchema, name: z.string().trim().min(1).max(180) }).strict()).max(50),
   approvedVacations: z.array(availabilityVacationSchema.extend({ status: z.literal('approved') })).max(300),
+  approvedAbsences: z.array(z.object({ id: idSchema, employeeId: idSchema,
+    employeeName: z.string().trim().min(1).max(180), unitId: idSchema,
+    startDate: dateSchema, endDate: dateSchema,
+    intervals: z.array(z.object({ date: dateSchema, fromMinute: z.number().int().min(0).max(1439),
+      toMinute: z.number().int().min(1).max(1440) }).strict()).min(1).max(180) }).strict()).max(200),
   unresolvedVacations: z.array(availabilityVacationSchema.extend({ status: z.enum(['pending', 'planned']) })).max(300),
   issues: z.array(z.object({
-    code: z.enum(['TEAM_SOURCE_INCOMPLETE', 'MALFORMED_VACATION', 'UNRESOLVED_VACATION']),
+    code: z.enum(['TEAM_SOURCE_INCOMPLETE', 'MALFORMED_VACATION', 'UNRESOLVED_VACATION',
+      'ABSENCE_SOURCE_INCOMPLETE', 'ABSENCE_PENDING', 'ABSENCE_INCONSISTENT']),
     vacationId: idSchema.optional(),
     employeeId: idSchema.optional(),
   }).strict()),
@@ -71,6 +82,9 @@ export const natashaAvailabilityReportSchema = z.object({
     requiresHumanConfirmation: z.literal(true),
     externalUnavailabilitiesIncluded: z.literal(false),
     dayOffsIncluded: z.literal(false),
+    approvedAbsencesIncluded: z.boolean(),
+    operationalSourceQuery: z.string(),
+    operationalDocumentsExamined: z.number().int().min(0),
   }).strict(),
 }).strict();
 
@@ -111,6 +125,13 @@ export function prepareNatashaAvailability(
   const issues: NatashaAvailabilityReport['issues'] = [];
   let candidateDocumentsExamined = 0;
   let ignoredSalesOrRejected = 0;
+  const operational = assessNatashaOperationalAvailability({ workspaceId: source.operational.workspaceId,
+    epoch: source.operational.epoch, sourceReady: source.operational.sourceReady,
+    from: window.from, through: window.through,
+    candidates: source.team.employees.map((employee) => ({ id: employee.id, name: employee.name,
+      allowedUnitIds: employee.allowedUnitIds })),
+    projections: source.operational.projectionDocuments, requests: source.operational.requestDocuments });
+  issues.push(...operational.issues.map((code) => ({ code })));
 
   if (source.team.status !== 'ready_for_confirmation') issues.push({ code: 'TEAM_SOURCE_INCOMPLETE' });
 
@@ -157,11 +178,12 @@ export function prepareNatashaAvailability(
     status: hasMalformedOrTeamIssue ? 'incomplete' as const
       : unresolvedVacations.length > 0 ? 'questions_pending' as const
         : 'ready_for_confirmation' as const,
-    scope: 'candidate_vacations_and_external_unavailability_prompt' as const,
+    scope: 'candidate_vacations_and_approved_absences_v2_external_prompts' as const,
     period: source.period,
     window,
     candidates,
     approvedVacations,
+    approvedAbsences: operational.approvedAbsences,
     unresolvedVacations,
     issues,
     evidence: {
@@ -172,6 +194,9 @@ export function prepareNatashaAvailability(
       requiresHumanConfirmation: true as const,
       externalUnavailabilitiesIncluded: false as const,
       dayOffsIncluded: false as const,
+      approvedAbsencesIncluded: operational.issues.length === 0,
+      operationalSourceQuery: source.operational.sourceQuery,
+      operationalDocumentsExamined: source.operational.projectionDocuments.length + source.operational.requestDocuments.length,
     },
   };
   return natashaAvailabilityReportSchema.parse(report);

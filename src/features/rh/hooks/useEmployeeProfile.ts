@@ -12,6 +12,7 @@ import type {
   RhRole,
   ImageVoiceConsentRecord,
   OnboardingPrivacyAcknowledgementRecord,
+  ProfileFieldChangeRequest,
 } from '@/types/rh';
 import { canViewField } from '@/types/rh';
 import type { ProbationProcessState } from '@/features/hr/integration/probation-process';
@@ -24,6 +25,7 @@ export type EmployeeProfileData = {
   consentimento_imagem_voz: ImageVoiceConsentRecord | null;
   ciencia_privacidade_onboarding: OnboardingPrivacyAcknowledgementRecord | null;
   periodo_experiencia: ProbationProcessState | null;
+  changeRequests: ProfileFieldChangeRequest[];
 };
 
 export type EmployeeProfileState =
@@ -32,6 +34,19 @@ export type EmployeeProfileState =
   | { status: 'error'; message: string }
   | { status: 'ok'; data: EmployeeProfileData };
 
+const employeeProfileCache = new Map<string, EmployeeProfileData>();
+const EMPLOYEE_PROFILE_CACHE_LIMIT = 25;
+
+function cacheEmployeeProfile(key: string, data: EmployeeProfileData) {
+  employeeProfileCache.delete(key);
+  employeeProfileCache.set(key, data);
+  while (employeeProfileCache.size > EMPLOYEE_PROFILE_CACHE_LIMIT) {
+    const oldestKey = employeeProfileCache.keys().next().value;
+    if (!oldestKey) break;
+    employeeProfileCache.delete(oldestKey);
+  }
+}
+
 function cleanIds(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 }
@@ -39,19 +54,24 @@ function cleanIds(values: Array<string | undefined | null>) {
 export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): EmployeeProfileState {
   const { firebaseUser, user } = useAuth();
   const [state, setState] = useState<EmployeeProfileState>({ status: 'idle' });
-  const loadedEmployeeId = useRef<string | null>(null);
+  const loadedProfileKey = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user || !bizneoEmployeeId) {
-      loadedEmployeeId.current = null;
+      loadedProfileKey.current = null;
       setState({ status: 'idle' });
       return;
     }
     let cancelled = false;
+    const profileKey = `${user.id}:${bizneoEmployeeId}`;
+    const cachedProfile = employeeProfileCache.get(profileKey);
 
     async function load() {
-      // Durante uma revalidação, preserva o conteúdo já renderizado para não remontar a página em skeletons.
-      if (loadedEmployeeId.current !== bizneoEmployeeId) {
+      // Exibe o último perfil autorizado imediatamente e revalida em segundo plano.
+      if (cachedProfile) {
+        loadedProfileKey.current = profileKey;
+        setState({ status: 'ok', data: cachedProfile });
+      } else if (loadedProfileKey.current !== profileKey) {
         setState({ status: 'loading' });
       }
       try {
@@ -64,8 +84,10 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Emp
           const payload = await response.json().catch(() => ({}));
           if (response.ok) {
             if (!cancelled) {
-              loadedEmployeeId.current = bizneoEmployeeId;
-              setState({ status: 'ok', data: payload as EmployeeProfileData });
+              const data = payload as EmployeeProfileData;
+              cacheEmployeeProfile(profileKey, data);
+              loadedProfileKey.current = profileKey;
+              setState({ status: 'ok', data });
             }
             return;
           }
@@ -129,22 +151,22 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Emp
         });
 
         if (!cancelled) {
-          loadedEmployeeId.current = bizneoEmployeeId;
-          setState({
-            status: 'ok',
-            data: {
-              employee,
-              fieldValues,
-              fieldMap,
-              cache,
-              consentimento_imagem_voz: employee.consentimento_imagem_voz ?? null,
-              ciencia_privacidade_onboarding: employee.ciencia_privacidade_onboarding ?? null,
-              periodo_experiencia: null,
-            },
-          });
+          const data: EmployeeProfileData = {
+            employee,
+            fieldValues,
+            fieldMap,
+            cache,
+            consentimento_imagem_voz: employee.consentimento_imagem_voz ?? null,
+            ciencia_privacidade_onboarding: employee.ciencia_privacidade_onboarding ?? null,
+            periodo_experiencia: null,
+            changeRequests: [],
+          };
+          cacheEmployeeProfile(profileKey, data);
+          loadedProfileKey.current = profileKey;
+          setState({ status: 'ok', data });
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && !employeeProfileCache.has(profileKey)) {
           const msg = err instanceof Error ? err.message : 'Erro ao carregar perfil.';
           setState({ status: 'error', message: msg });
         }
@@ -155,6 +177,11 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Emp
     return () => { cancelled = true; };
   }, [firebaseUser, user, bizneoEmployeeId, reloadKey]);
 
+  const requestedProfileKey = user && bizneoEmployeeId ? `${user.id}:${bizneoEmployeeId}` : null;
+  if (requestedProfileKey && loadedProfileKey.current !== requestedProfileKey) {
+    const cachedProfile = employeeProfileCache.get(requestedProfileKey);
+    return cachedProfile ? { status: 'ok', data: cachedProfile } : { status: 'loading' };
+  }
   return state;
 }
 

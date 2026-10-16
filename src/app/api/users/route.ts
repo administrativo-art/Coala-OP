@@ -60,6 +60,7 @@ function normalizeEmail(value: unknown) {
 function personRecordType(userData: Record<string, unknown>) {
   const role = text(userData.jobRoleName).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   if (role.includes("diretor") || role.includes("presidente") || role.includes("vice-presidente")) return "director";
+  if (userData.employmentRelationshipType === "partner") return "partner";
   if (userData.employmentRelationshipType === "pj") return "pj";
   if (userData.employmentRelationshipType === "internship") return "internship";
   return "employee";
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
     const rawUserData = record(body.userData);
     if (!isEmploymentRelationshipType(rawUserData.employmentRelationshipType)) {
-      return NextResponse.json({ error: "Selecione o tipo de vínculo: CLT, PJ ou Estágio." }, { status: 400 });
+      return NextResponse.json({ error: "Selecione o tipo de vínculo: CLT, Aprendiz, PJ, Estágio ou Societário." }, { status: 400 });
     }
     if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })) {
       return NextResponse.json(
@@ -203,6 +204,7 @@ export async function POST(request: NextRequest) {
       avatarUrl: text(userData.avatarUrl, 2000),
       operacional: userData.operacional === true,
       isActive: true,
+      employmentCycleVersion: 0,
       mustChangePassword: true,
       source: "manual_user_creation",
       createdAt: FieldValue.serverTimestamp(),

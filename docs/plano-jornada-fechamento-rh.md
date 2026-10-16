@@ -5,6 +5,8 @@
 **Última atualização:** 12/08/2026  
 **Responsável funcional:** RH / Administração
 
+> **Atualização de 14/10/2026:** o Coala passará a ter REP-P próprio, conforme [plano-rep-p-controle-de-ponto.md](plano-rep-p-controle-de-ponto.md). Quando ele for promovido, a fonte das batidas descrita na seção 2.1 deixa de ser o sistema externo e passa a ser a ARP do Coala; até lá, o sistema externo continua sendo a fonte oficial.
+
 ## 1. Objetivo
 
 Criar no Coala um subproduto completo de Jornada e Fechamento de RH capaz de:
@@ -1021,6 +1023,14 @@ No modo sombra, o reprocessamento atualizará somente resultados comparativos da
 As divergências entre o processo atual e o novo motor serão preservadas para análise e classificação.
 
 ## 17. Ausências
+
+**Incrementos locais em 15/10/2026:** Etapa 2 implementa pedidos próprios/terceiros, documentos, revisões, decisões, saldos e avisos pelo sino interno. Cada etapa humana tem SLA de 24 horas corridas; atraso fica sinalizado somente nas superfícies internas autorizadas, não é exposto ao solicitante e não produz decisão automática. Ausências não enviam e-mail nem push. Etapa 3 começou com projeção-sombra RH e ganhou protocolo local de intenção, relógios, marcadores, reconciliação e fonte limitada para a Natasha v2. O bootstrap, os bloqueios de writers conhecidos e todo o protocolo foram testados somente em emulador demo; não alteram escala nem marcações. ON real continua bloqueado até cobertura de todos os escritores legados, bootstrap de produção comprovado, retomada guardada de efeitos pendentes, cutover, validação dos índices e homologação. O estado detalhado e os critérios de passagem estão no [guia de ausências](engineering/flows/dp-absences.md). Não confundir código/testes locais com publicação ou homologação do ponto.
+
+**Contrato atualizado em 14/10/2026:** o catálogo de ausências já implementado e as próximas etapas seguem [Ausências do DP](engineering/flows/dp-absences.md). Reutilizar as configurações de tipos/regras/instruções existentes, sem catálogo paralelo. Férias e folgas continuam em seus domínios próprios; as referências genéricas abaixo a elas são insumos da apuração, não novos tipos da coleção `dp_absenceTypes`.
+
+A aprovação final na Etapa 2 criará a ocorrência histórica vinculada ao pedido; a Etapa 3 fornecerá disponibilidade à escala e a Etapa 4 aplicará tratamento ao ponto/folha. Marcação original, ocorrência e tratamento são registros distintos. Abono/crédito/justificativa não criam batidas fictícias nem alteram a fonte; correções e reversões preservam decisão e versão anteriores. A futura coleta não será bloqueada por uma ausência aprovada, e trabalho real conflitante será sinalizado para análise. AEJ e espelho refletirão o tratamento conforme os leiautes oficiais do MTE, preservando as marcações de origem.
+
+A hierarquia configurável, o acesso documental por etapa e a retenção dos anexos por 20 anos após o desligamento estão descritos no guia. Ao fim do prazo, o sistema apenas avisa e exige autorização expressa do DP; a remoção local apaga somente a geração autorizada do comprovante, sob trava do vínculo e reconciliação, preservando pedido, decisões, auditoria e recibo permanente. O DELETE legado permanece bloqueado. A retenção é uma política deste fluxo, não uma definição geral de guarda da ARP ou dos arquivos fiscais. As perguntas históricas da seção 39 sobre campos já existentes devem ser respondidas pelo cadastro, sem exigir uma nova decisão estrutural.
 
 ### 17.1. Papel na apuração
 
@@ -2194,6 +2204,8 @@ Relatórios e indicadores oficiais excluirão dados de teste e shadow por padrã
 
 ### 34.1. Estratégia
 
+**Decisão de 14/10/2026:** Tempo e PTRP usam o banco existente `coala-rh`, em coleções específicas e versionadas, conforme o [contrato de ausências](engineering/flows/dp-absences.md). A ARP do REP-P permanece em banco separado. Os catálogos atualmente em `coala` exigem transição controlada, preservando IDs, versões e consumidores; não duplicar fontes editáveis. O banco RH não substitui vigência, snapshots e histórico de reprocessamento. A mudança aqui é de arquitetura-alvo; não representa migração de dados reais.
+
 Adotar um monólito modular dentro da arquitetura atual do Coala, sem introduzir microserviços nesta fase.
 
 O Motor de Apuração de Jornada deverá ser um módulo de domínio isolado das telas e do conector externo, ainda que executado dentro da mesma aplicação.
@@ -3167,17 +3179,9 @@ Critérios técnicos complementares:
 
 ### Ausências e solicitações
 
-- Quais tipos de ausência existirão inicialmente?
-- Quais alteram a jornada esperada?
-- Quais poderão ser solicitados pelo colaborador?
-- Quais poderão ser cadastrados diretamente pelo RH?
-- Quais poderão ser comunicados pelo gestor?
-- Quais exigirão documento?
-- Quais exigirão aprovação?
-- Quais poderão ser parciais?
-- Quais efeitos padrão terão na folha?
-- Qual política de guarda será aplicada aos documentos médicos?
-- Em quais casos a aprovação de uma solicitação cria automaticamente uma ausência?
+Os tipos, vínculos/abrangência, quem inicia, unidade/contagem, limites, prazos, anexo e fluxo de aprovação são preenchidos no catálogo já existente. O documento aceito é descrito nas instruções. Não repetir essas escolhas como pendências estruturais. A hierarquia configurável, o acesso por etapa, a retenção dos anexos por 20 anos após o desligamento e a eliminação mediante autorização seguem [Ausências do DP](engineering/flows/dp-absences.md). A aprovação final criará a ocorrência histórica na Etapa 2, sem fabricar batidas.
+
+O SLA de análise foi definido em 24 horas corridas por etapa humana, contado da atribuição. O vencimento apenas sinaliza atraso internamente: não aprova, rejeita nem troca o responsável, e o solicitante não recebe o prazo ou o atraso. Os avisos de ausência ficam somente no sino, sem e-mail e sem push. A fila interna possui filtro paginado de vencidas. Quando uma ausência aprovada bloquear um período com turno futuro, a implementação local retira a pessoa do turno ativo, preserva o turno deslocado no histórico, exibe a ausência no período e cria uma pendência para o DP responsável pela escala mensal. Essa responsabilidade combina permissão da atividade com abrangência sobre o grupo de unidades, em hierarquia configurável; falta de cobertura aparece no painel e em fila própria, sem cair no limbo. Permanecem abertos o cutover/homologação operacional e o mapeamento de efeitos no ponto e na folha. As propostas de funcionamento não são requisitos legais por si sós; seguir a lista delimitada de pendências do guia.
 
 ### Ajustes e governança
 

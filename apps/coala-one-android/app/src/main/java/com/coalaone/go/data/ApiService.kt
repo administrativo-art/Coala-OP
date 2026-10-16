@@ -8,6 +8,8 @@ interface ApiService {
     @GET("api/app/version?packageName=coalaone.go") suspend fun release(): Release
     @POST("api/auth/forgot-password") suspend fun reset(@Body request: ResetRequest)
     @GET("api/mobile/profile") suspend fun profile(): ProfileResponse
+    @POST("api/mobile/push/devices") suspend fun registerPush(@Body request: PushDeviceRegistration, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRegistered
+    @HTTP(method = "DELETE", path = "api/mobile/push/devices", hasBody = true) suspend fun removePush(@Body request: PushDeviceRemoval, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRemoved
     @Multipart @POST("api/mobile/profile/photo") suspend fun avatar(@Part photo: MultipartBody.Part): AvatarResponse
     @GET("api/stock/mobile-count") suspend fun countContext(): CountContext
     @POST("api/stock/mobile-count/start") suspend fun startCount(@Body request: StartCountRequest): StartedCount
@@ -23,6 +25,7 @@ interface ApiService {
     @GET("api/dp/mobile-schedule") suspend fun schedule(@Query("year") year: Int, @Query("month") month: Int): MonthSchedule
     @GET("api/goals/mobile") suspend fun goalUnits(): GoalUnits
     @GET("api/goals/mobile") suspend fun goals(@Query("kioskId") kioskId: String): UnitGoals
+    @GET("api/goals/mobile?scope=all") suspend fun goalsOverview(): GoalsOverview
     @GET("api/signage/mobile") suspend fun signage(): SignageUnits
     @POST("api/signage/mobile/screens") suspend fun pair(@Body request: PairScreen): PairResponse
 }

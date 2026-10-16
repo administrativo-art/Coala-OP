@@ -121,6 +121,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                     Text("TIPO DA COMPRA", color = Tokens.muted, style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.2.sp))
                     Text(when { needsProof -> "Compra normal"; selected.withdrawal != null -> "Sangria · ${money(selected.withdrawal.amountCents)}"; else -> "Sangria fora da lista" }, style = MaterialTheme.typography.titleMedium)
                     selected.withdrawal?.let { Text("${it.unitName} · ${fullDate(it.date)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
+                    selected.withdrawal?.reason?.takeIf(String::isNotBlank)?.let { Text("Motivo no PDV: $it", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
                 }
                 Text("Alterar", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), modifier = Modifier.clickable(enabled = !feedback.busy, role = Role.Button, onClick = back).padding(8.dp))
             }
@@ -152,6 +153,8 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                             Text(money(withdrawal.amountCents), style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp))
                             Text(listOfNotNull(withdrawal.unitName, (shortDate(withdrawal.date) ?: withdrawal.date) + (withdrawal.time?.takeIf(String::isNotBlank)?.let { " às ${it.take(5)}" } ?: "")).joinToString(" · "), color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp))
                             withdrawal.operatorName?.takeIf(String::isNotBlank)?.let { Text(it, color = Tokens.muted, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp)) }
+                            // Only when the PDV sends it: what the operator typed there when taking the money out.
+                            withdrawal.reason?.takeIf(String::isNotBlank)?.let { Text("Motivo: $it", color = Tokens.ink, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp), maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                         }
                         Text("Anexar nota ›", color = Tokens.wine, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp))
                     }
@@ -190,7 +193,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
                 Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
                 if (!open && subtitle.isNotBlank()) Text(subtitle, color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             }
-            Text(if (open) "⌃" else "⌄", color = if (open) Tokens.wine else Tokens.faint)
+            DropdownChevron(open, if (open) Tokens.wine else Tokens.faint)
         }
         if (open) content()
     }
@@ -211,6 +214,7 @@ private fun centsText(value: Long) = java.math.BigDecimal.valueOf(value, 2).toPl
         run {
             withdrawal?.let { Column(Modifier.fillMaxWidth().background(Tokens.soft, RoundedCornerShape(12.dp)).border(1.dp, Tokens.border, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Text("Sangria de ${money(it.amountCents)}", style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp))
+                it.reason?.takeIf(String::isNotBlank)?.let { reason -> Text("Motivo no PDV: $reason", color = Tokens.muted, style = MaterialTheme.typography.bodySmall) }
                 Text("${it.unitName} · ${fullDate(it.date)}", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             } }
             Choices("Categoria", context?.accounts.orEmpty().map { it.id to it.name }, input.accountPlanId, enabled) { onChange(input.copy(accountPlanId = it)) }

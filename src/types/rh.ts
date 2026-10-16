@@ -31,7 +31,7 @@ export type FieldType =
   | 'multi_select'
   | 'autonumber'
   | 'ref:jobRoles';
-export type FieldSource = 'bizneo_sync' | 'user_edit' | 'cf_automation';
+export type FieldSource = 'bizneo_sync' | 'user_edit' | 'cf_automation' | 'approved_self_service';
 
 // ─── Trigger / Validation config ────────────────────────────────────────────
 export type TriggerConfig = {
@@ -110,6 +110,7 @@ export type FieldVisibilityContext = {
 
 export type ProfileAccessActor = 'authenticated' | 'owner' | 'manager' | 'admin' | 'explicit';
 export type ProfileAccessPermission = 'hidden' | 'view' | 'edit';
+export type ProfileSelfServicePolicy = 'inherit' | 'blocked' | 'direct' | 'approval';
 export type ProfileAccessMatrixRule = Partial<Record<ProfileAccessActor, ProfileAccessPermission>> & {
   bindings?: FieldAccessBinding;
 };
@@ -166,11 +167,13 @@ export type FieldMapEntry = {
   visibility:        FieldVisibility;
   employee_visible:  boolean;
   employee_editable: boolean;
+  /** Regra do titular do perfil. Ausente mantém o comportamento legado da matriz. */
+  self_service_policy?: ProfileSelfServicePolicy;
   required?:         boolean;
   help_text?:        string;
   options?:          string[];
   lgpd?: {
-    category: 'personal' | 'sensitive' | 'confidential';
+    category: 'personal' | 'sensitive';
     legal_basis: 'legal_obligation' | 'contract' | 'legitimate_interest' | 'consent' | 'life_protection' | 'health_guardianship';
     retention: 'employment_plus_5y' | 'termination_plus_90d' | 'termination_plus_2y' | 'manual_review';
     requires_consent?: boolean;
@@ -312,6 +315,18 @@ export type AuditLogEntry = {
   changed_by:  AuthUid;
   changed_at:  Timestamp;
   source:      FieldSource;
+};
+
+export type ProfileFieldChangeRequest = {
+  id: string;
+  status: 'pending_approval' | 'approved' | 'rejected';
+  employeeId: BizneoEmployeeId;
+  fieldKey: CoalaKey;
+  fieldLabel: string;
+  oldValue: unknown;
+  proposedValue: unknown;
+  requestedBy: AuthUid;
+  requestedAt: string;
 };
 
 // ─── AutomationTask ─────────────────────────────────────────────────────────
@@ -536,7 +551,21 @@ export function canEditField(
   matrix?: ProfileAccessMatrix,
 ): boolean {
   const permission = resolveFieldAccessPermission(entry.visibility, role, context, entry.access, matrix);
+  if (role === 'employee' && context.isOwner === true) {
+    if (entry.self_service_policy === 'blocked' || entry.self_service_policy === 'approval') return false;
+    if (entry.self_service_policy === 'direct') return permission !== 'hidden';
+  }
   return permission === 'edit';
+}
+
+export function canRequestFieldChange(
+  entry: FieldMapEntry,
+  role: RhRole,
+  context: FieldVisibilityContext = {},
+  matrix?: ProfileAccessMatrix,
+): boolean {
+  if (role !== 'employee' || context.isOwner !== true || entry.self_service_policy !== 'approval') return false;
+  return resolveFieldAccessPermission(entry.visibility, role, context, entry.access, matrix) !== 'hidden';
 }
 
 export function canViewField(

@@ -12,7 +12,7 @@ Item sem compra confirmada vinculada a derivado válido permanece com a necessid
 
 ## coala-error-triage
 
-Invocação no Codex:
+Invocação no Codex ou Claude Code:
 
 ```text
 $coala-error-triage
@@ -32,12 +32,35 @@ Ela não consulta serviços externos, publica issue, faz commit, push, deploy ou
 
 O fluxo operacional, a sanitização do export e os critérios humanos para transformar um grupo em issue estão em `error-triage-runbook.md`; as consultas read-only ficam em `observability-queries.md`.
 
-## coala-supply-chain-audit
+## coala-security-audit
 
-Invocação no Codex:
+Invocação no Codex ou Claude Code:
 
 ```text
-$coala-supply-chain-audit
+$coala-security-audit
+```
+
+A skill é explicit-only e coordena auditorias AppSec rastreáveis. A primeira execução cria somente diagnóstico, cobertura, hipóteses, plano de testes e relatório local; não corrige código nem testa produção. Os artefatos ficam em:
+
+```text
+.ai-work/security-audit/<id>/
+├── scope.json
+├── inventory.json
+├── coverage.json
+├── hypotheses.json
+├── findings.json
+├── test-plan.md
+└── report.md
+```
+
+Testes dinâmicos exigem escopo preenchido e ficam limitados, por padrão, a emuladores/projeto `demo-`, dados sintéticos e Playwright do repositório. Dependências são encaminhadas para `$coala-security-supply-chain`; implementação de correções permanece uma tarefa separada.
+
+## coala-security-supply-chain
+
+Invocação no Codex ou Claude Code:
+
+```text
+$coala-security-supply-chain
 ```
 
 A skill é explicit-only e somente leitura por padrão. Ela inventaria manifests, lockfiles, referências Git/URL, scripts lifecycle, ferramentas executadas por `npx`, comandos de instalação e pacotes duplicados, sem consultar rede ou interpretar CVEs.

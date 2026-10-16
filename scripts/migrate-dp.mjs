@@ -17,11 +17,13 @@
  */
 
 import { initializeApp, cert, getApps, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { assertAbsenceOperationalAdminWriteAllowed,
+  assertAbsenceRetentionEmploymentWriteAllowed } from './absence-operational-admin-gate.mjs';
 
 // ─── Resolve caminhos dos service accounts ────────────────────────────────────
 
@@ -244,6 +246,7 @@ async function migrateUsersAndRelational() {
       await opDB.collection('users').doc(entry.op_userId).update({
         username: entry.dp_name,
         ...dpFields,
+        employmentCycleVersion: FieldValue.increment(1),
       });
       dpToOp[entry.dp_id] = entry.op_userId;
       console.log(`  ✓ UPDATED  ${entry.dp_name} → ${entry.op_userId}`);
@@ -263,6 +266,7 @@ async function migrateUsersAndRelational() {
         profileId: defaultProfileId ?? '',
         assignedKioskIds: [],
         operacional: false,
+        employmentCycleVersion: 0,
         ...dpFields,
       });
 
@@ -317,6 +321,12 @@ async function migrateUsersAndRelational() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const phase = process.argv[2] ?? 'help';
+
+if (['phase1', 'phase2', 'all'].includes(phase)) {
+  await assertAbsenceOperationalAdminWriteAllowed(opDB,
+    process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? 'coala');
+}
+if (['phase2', 'all'].includes(phase)) await assertAbsenceRetentionEmploymentWriteAllowed(opDB);
 
 if (phase === 'phase1' || phase === 'all') {
   await migrateSimpleCollections();

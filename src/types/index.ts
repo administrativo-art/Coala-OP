@@ -751,10 +751,12 @@ export type PermissionSet = {
   signage: { view: boolean; manage: boolean; };
   dp: {
     view: boolean;
-    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; };
+    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
+    requests: { view: boolean; review: boolean; };
+    responsibilities: { manage: boolean; receiveUnassignedAlerts: boolean; };
     collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
-    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
+    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; };
     rh_role?: 'employee' | 'manager' | 'admin';
     rh?: {
       collaborators: { view: boolean; edit: boolean; };
@@ -947,7 +949,7 @@ export type User = {
   jobRoleName?: string;
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
-  employmentRelationshipType?: 'clt' | 'pj' | 'internship';
+  employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | 'partner';
   onboardingId?: string | null;
   /** Unidade jurídica responsável pelo vínculo; não se confunde com a unidade de trabalho. */
   employerUnitId?: string | null;
@@ -973,6 +975,7 @@ export type User = {
   admissionDate?: Timestamp;
   birthDate?: Timestamp;
   shiftDefinitionId?: string;
+  overnight?: boolean;
   loginRestrictionEnabled?: boolean;
   needsTransportVoucher?: boolean;
   transportVoucherValue?: number;
@@ -992,6 +995,20 @@ export type User = {
   isActive?: boolean;
   /** Incrementada ao suspender acesso; tokens com versão anterior permanecem inválidos após readmissão. */
   sessionVersion?: number;
+  /** Revisão monotônica do vínculo; protege retenção documental contra desligamento/readmissão concorrente. */
+  employmentCycleVersion?: number;
+  /** Trava interna e temporária. Nunca deve ser exibida ou alterada pelo cliente. */
+  absenceDocumentDeletionFence?: {
+    protocolVersion: 1;
+    workspaceId: string;
+    caseId: string;
+    operationId: string;
+    state: 'executing' | 'execution_unknown' | 'release_pending' | 'review_required';
+    employmentCycleVersion: number;
+    terminationDate: string;
+    startedAt: string;
+    updatedAt: string;
+  } | null;
   inactivationType?: 'temporary' | 'contract_termination';
   inactivationHistory?: Array<{
     type: 'temporary' | 'contract_termination' | 'reactivation';
@@ -1001,13 +1018,13 @@ export type User = {
     cause?: string | null;
     notes?: string | null;
     terminationDate?: string | null;
-    employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
+    employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | 'partner' | null;
   }>;
   terminationDate?: Timestamp;
   terminationReason?: string;
   terminationCause?: string;
   terminationNotes?: string;
-  terminationRelationshipType?: 'clt' | 'pj' | 'internship';
+  terminationRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | 'partner';
   terminationProcessId?: string;
   terminationEmployerUnitId?: string | null;
   terminationEmployerName?: string | null;
@@ -1523,7 +1540,7 @@ export type OnboardingProcess = {
   jobRoleName?: string | null;
   functionId?: string | null;
   functionName?: string | null;
-  employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
+  employmentRelationshipType?: 'clt' | 'apprenticeship' | 'pj' | 'internship' | null;
   unitId?: string | null;
   unitName?: string | null;
   employerUnitId?: string | null;
@@ -2023,7 +2040,7 @@ export type SignageSlide = {
   order: number;
   /** Unidades donas das telas em `screenIds`; derivado no servidor para o filtro de acesso. */
   kioskIds: string[];
-  /** Telas que exibem o slide. A tela padrão de uma unidade tem o mesmo id da unidade. */
+  /** Telas que exibem o slide. A primeira tela de uma unidade tem o mesmo id da unidade. */
   screenIds: string[];
   /** Posição por tela; sem entrada, vale `order`. */
   orderByScreen?: Record<string, number>;
@@ -2067,7 +2084,7 @@ export type SignageScreen = {
   deviceToken?: string;
   /** Posição física da tela, informada ao cadastrá-la; orienta o formato das artes. Ausente em telas antigas. */
   orientation?: 'landscape' | 'portrait';
-  /** Tela padrão da unidade: existe sem cadastro e não pode ser excluída. */
+  /** Primeira tela da unidade: usa o id da unidade e guarda o código no cadastro dela. */
   isDefault: boolean;
 };
 
@@ -2494,6 +2511,7 @@ export type PurchaseOrder = {
   workspaceId: string;
   origin: PurchaseOrigin;
   quotationId?: string;
+  externalOrderNumber?: string | null;
   supplierId: string; // ref → entities collection
   supplierName?: string;
   destinationKioskId?: string; // operational destination; absent on legacy orders
@@ -2964,10 +2982,12 @@ export const defaultGuestPermissions: PermissionSet = {
     signage: { view: false, manage: false },
     dp: {
       view: false,
-      schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false },
+      schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
+      requests: { view: false, review: false },
+      responsibilities: { manage: false, receiveUnassignedAlerts: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
-      settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
+      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false },
       rh_role: undefined,
       rh: { collaborators: { view: false, edit: false }, can_view_salary: false },
     },
@@ -3076,10 +3096,12 @@ export const defaultAdminPermissions: PermissionSet = {
     signage: { view: true, manage: true },
     dp: {
       view: true,
-      schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true },
+      schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
+      requests: { view: true, review: true },
+      responsibilities: { manage: true, receiveUnassignedAlerts: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
-      settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
+      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true },
       rh_role: 'admin' as const,
       rh: { collaborators: { view: true, edit: true }, can_view_salary: true },
     },
@@ -3644,6 +3666,223 @@ export type DPUnitGroup = {
   createdAt: Timestamp;
 } & DPUnitResponsibility;
 
+export type DPTimeConfigStatus = 'draft' | 'published' | 'archived';
+
+export type DPTimeApplicability = {
+  scope:
+    | { kind: 'company' }
+    | { kind: 'unit_organization'; id: string }
+    | { kind: 'unit_group'; id: string }
+    | { kind: 'unit'; id: string };
+  jobRoleIds?: string[];
+  jobFunctionIds?: string[];
+  collaboratorIds?: string[];
+};
+
+export type DPJourneyDay = {
+  dayIndex: number;
+  plannedMinutes: number;
+  isRestDay: boolean;
+};
+
+export type DPJourneyRegime =
+  | { mode: 'fixed' }
+  | { mode: 'flexible'; windowStart?: string; windowEnd?: string };
+
+export type DPWeeklyRestRule = {
+  /** fixed_cycle usa a posição zerada do ciclo; schedule permite escolher a data na escala. */
+  placement: 'fixed_cycle' | 'schedule';
+  /** Proteção aplicada sobre datas corridas, inclusive entre competências e unidades. */
+  maxConsecutiveWorkDays: number;
+  /** Regra opcional de CCT para coincidência do descanso com domingo. */
+  sundayCadenceWeeks?: number;
+};
+
+export type DPJourneyScaleValidation =
+  | { mode: 'consecutive_days' }
+  | { mode: 'manual_review' };
+
+export type DPJourney = {
+  id: string;
+  lineageId: string;
+  version: number;
+  status: DPTimeConfigStatus;
+  name: string;
+  description?: string;
+  weeklyMinutes: number;
+  cycleLengthDays: number;
+  days: DPJourneyDay[];
+  /** Ausente em jornadas anteriores à configuração; nesse caso equivale a fixed. */
+  regime?: DPJourneyRegime;
+  /** Ausente em jornadas anteriores; equivale a posição fixa e máximo de 6 dias. */
+  weeklyRest?: DPWeeklyRestRule;
+  /** Ausente em jornadas anteriores; equivale à validação automática por dias consecutivos. */
+  scaleValidation?: DPJourneyScaleValidation;
+  /** Intervalo usado apenas para projetar a saída esperada a partir da carga diária da jornada. */
+  expectedBreakMinutes?: number;
+  /** Quando ativo, um turno menor que a carga diária prevalece como expediente efetivo. */
+  useDefinedShiftWhenShorter?: boolean;
+  allowedShiftDefinitionIds?: string[];
+  applicability: DPTimeApplicability;
+  validFrom: string;
+  validTo?: string;
+  supersedesId?: string;
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+  updatedBy: string;
+  publishedAt?: Timestamp;
+  publishedBy?: string;
+  archivedAt?: Timestamp;
+  archivedBy?: string;
+};
+
+export type DPOvertimeCategory = {
+  id: string;
+  name: string;
+  trigger: 'workday' | 'specific_weekdays' | 'rest_day' | 'sunday' | 'holiday' | 'unplanned_work';
+  weekdays?: number[]; // 0=Dom, 1=Seg, ...; usado somente em specific_weekdays
+  ratePercent: number;
+  destination: 'payroll' | 'time_bank' | 'review';
+  bankCreditFactor?: number;
+  requiresApproval: boolean;
+};
+
+export type DPOvertimePolicy = {
+  id: string;
+  lineageId: string;
+  version: number;
+  status: DPTimeConfigStatus;
+  name: string;
+  description?: string;
+  collectiveAgreementReference?: string;
+  applicability: DPTimeApplicability;
+  validFrom: string;
+  validTo?: string;
+  dailyToleranceMinutes: number;
+  dailyOvertimeLimitMinutes?: number;
+  weeklyOvertimeLimitMinutes?: number;
+  categories: DPOvertimeCategory[];
+  timeBank: {
+    enabled: boolean;
+    allowNegativeBalance: boolean;
+    positiveLimitMinutes?: number;
+    negativeLimitMinutes?: number;
+    expirationDays?: number;
+    expiredBalanceDestination: 'payroll' | 'forfeit' | 'review';
+  };
+  externalCoverageRule: 'origin' | 'execution_unit' | 'manual_review';
+  supersedesId?: string;
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+  updatedBy: string;
+  publishedAt?: Timestamp;
+  publishedBy?: string;
+  archivedAt?: Timestamp;
+  archivedBy?: string;
+};
+
+export type DPAbsenceEmploymentRelationship = 'clt' | 'apprenticeship' | 'internship';
+export type DPAbsenceRequestUnit = 'day' | 'hour';
+export type DPAbsenceInitiator = 'collaborator' | 'manager' | 'dp' | 'system';
+export type DPAbsenceColor = 'pink' | 'red' | 'orange' | 'amber' | 'yellow' | 'green' | 'teal' | 'cyan' | 'blue' | 'indigo' | 'violet' | 'slate';
+
+export type DPAbsenceApprovalLevel =
+  | { kind: 'people'; personIds: string[] }
+  | { kind: 'function'; functionId: string; fallbackJobRoleId?: string }
+  | { kind: 'role'; jobRoleId: string };
+
+export type DPResponsibilityActivity = 'schedules' | 'vacations' | 'absences';
+export type DPResponsibilityScope = { kind: 'unit_group' | 'unit'; id: string };
+export type DPResponsibilityCoverage = {
+  id: string;
+  workspaceId: string;
+  activity: DPResponsibilityActivity;
+  scope: DPResponsibilityScope;
+  levels: DPAbsenceApprovalLevel[];
+  state: 'draft' | 'active';
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+export type DPResponsibilityTask = {
+  id: string;
+  workspaceId: string;
+  activity: DPResponsibilityActivity;
+  kind: 'absence_schedule_recomposition' | 'absence_cancellation_review';
+  scope: DPResponsibilityScope;
+  unitId: string;
+  requestId: string;
+  beneficiaryUid: string;
+  startDate: string;
+  endDate: string;
+  displacedShiftCount: number;
+  status: 'unassigned' | 'pending' | 'claimed' | 'resolved';
+  assignedUserIds: string[];
+  assignedLevel: number | null;
+  claimedByUid?: string;
+  claimedAt?: string;
+  resolvedByUid?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DPAbsencePolicy = {
+  id: string;
+  name: string;
+  employmentRelationshipTypes: DPAbsenceEmploymentRelationship[];
+  applicability: DPTimeApplicability;
+  calculation: 'scheduled_workdays' | 'calendar_days' | 'calendar_days_until_return';
+  maxUnitsPerRequest?: number;
+  maxUnitsPerPeriod?: number;
+  limitPeriod?: 'month' | 'year';
+  minimumNoticeDays?: number;
+  maximumRetroactiveDays?: number;
+  attachment: 'not_required' | 'required';
+  approvalFlow: 'automatic' | 'manager' | 'dp' | 'manager_then_dp';
+  approvalAssignments?: { manager?: DPAbsenceApprovalLevel[]; dp?: DPAbsenceApprovalLevel[] };
+  rejectionReasonRequired: boolean;
+  allowFutureEdit: boolean;
+  allowFutureCancel: boolean;
+  instructions?: string;
+};
+
+export type DPAbsenceType = {
+  id: string;
+  lineageId: string;
+  version: number;
+  status: DPTimeConfigStatus;
+  name: string;
+  description?: string;
+  color: DPAbsenceColor;
+  requestUnits: DPAbsenceRequestUnit[];
+  initiatedBy: DPAbsenceInitiator[];
+  workdayEffect: 'excused_absence' | 'unexcused_absence' | 'worked_credit' | 'time_bank_debit' | 'manual_review';
+  includeInAbsenteeism: boolean;
+  blocksSchedule: boolean;
+  policies: DPAbsencePolicy[];
+  validFrom: string;
+  validTo?: string;
+  supersedesId?: string;
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+  updatedBy: string;
+  publishedAt?: Timestamp;
+  publishedBy?: string;
+  archivedAt?: Timestamp;
+  archivedBy?: string;
+};
+
+export type DPShiftBreakType = 'none' | 'fixed' | 'flexible' | 'staggered';
+
 export type DPShiftDefinition = {
   id: string;
   code: string;
@@ -3652,13 +3891,27 @@ export type DPShiftDefinition = {
   endTime: string;     // HH:mm — fim do último range
   breakStart?: string; // HH:mm — início do intervalo (opcional); gera dois time_ranges no Bizneo
   breakEnd?: string;   // HH:mm — fim do intervalo
+  breakType?: DPShiftBreakType; // ausente em registros legados; inferido pelos horários fixos
+  breakDurationMinutes?: number; // usado em intervalos livres ou intercalados
+  breakWindowStart?: string; // HH:mm — início da janela do intervalo intercalado
+  breakWindowEnd?: string; // HH:mm — fim da janela do intervalo intercalado
   unitId?: string;     // legado: primeira unidade vinculada
   unitName?: string;   // legado: nome da primeira unidade vinculada
   unitIds?: string[];
   unitNames?: string[];
   daysOfWeek: number[]; // 0=Dom, 1=Seg, ...
   bizneoTemplateId?: string; // ID numérico do modelo no Bizneo (usado no shift_id do export)
+  journeyIds?: string[]; // configuração interna do Coala; não participa da exportação Bizneo
+  description?: string;
+  configurationNotes?: string;
+  overnight?: boolean;
+  expectedPunches?: number;
+  isArchived?: boolean;
+  archivedAt?: Timestamp;
+  archivedBy?: string;
   createdAt: Timestamp;
+  updatedAt?: Timestamp;
+  updatedBy?: string;
 };
 
 export type DPScheduleSnapshot = {
@@ -3675,6 +3928,15 @@ export type DPSchedule = {
   calendarId?: string; // optional: linked holiday calendar
   locked?: boolean;    // when true, snapshot is frozen
   snapshot?: DPScheduleSnapshot; // frozen user data at lock time
+  /** Incrementada a cada alteração de turno/folga para impedir fechamento com validação obsoleta. */
+  journeyValidationVersion?: number;
+  journeyValidation?: {
+    status: 'ok' | 'warning' | 'blocked';
+    checkedAt: Timestamp;
+    checkedBy: string;
+    version: number;
+    blockingIssueCount: number;
+  };
   coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
   createdAt: Timestamp;
 };
@@ -3686,10 +3948,15 @@ export type DPShift = {
   userId: string;            // referência ao users/ (Firebase UID)
   userName?: string;         // snapshot mínimo para a escala não depender do diretório carregado
   shiftDefinitionId?: string;
+  overnight?: boolean;
   date: string; // YYYY-MM-DD
   startTime: string;
   endTime: string;
   type: 'work' | 'day_off';
+  assignmentKind?: 'regular' | 'external_coverage';
+  originUnitId?: string;
+  exceptionReason?: string;
+  countsTowardGoals?: boolean;
   dayOffSource?: 'predicted' | 'manual';
   dayOffConfirmedAt?: Timestamp;
   dayOffConfirmedBy?: string;
@@ -3700,7 +3967,28 @@ export type DPShift = {
   bizneoLastErrorCode?: string;
   hasConflict?: boolean;
   consecutiveDayCount?: number;
+  journeyResolution?: {
+    journeyId: string;
+    lineageId: string;
+    version: number;
+    name: string;
+    resolvedBy: 'collaborator' | 'function' | 'job_role' | 'unit' | 'unit_group' | 'unit_organization' | 'company';
+    validationMode: 'consecutive_days' | 'manual_review';
+    maxConsecutiveWorkDays: number;
+    resolvedAt: Timestamp;
+  };
   createdAt: Timestamp;
+};
+
+/** Projeção operacional mínima exibida na escala; não contém motivo, tipo ou documento. */
+export type DPScheduleAbsence = {
+  requestId: string;
+  beneficiaryUid: string;
+  unitId: string;
+  startDate: string;
+  endDate: string;
+  intervals: Array<{ date: string; fromMinute: number; toMinute: number }>;
+  state: 'active';
 };
 
 export type DPCalendar = {

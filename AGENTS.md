@@ -1,5 +1,9 @@
 # Regras operacionais do Coala One
 
+## Comunicação com o usuário
+
+- Quando o usuário disser **“simplifique”**, explique como se estivesse falando com uma pessoa leiga no assunto: use linguagem comum, frases diretas e exemplos concretos quando ajudarem. Explique os termos técnicos indispensáveis sem omitir riscos, limites ou decisões importantes.
+
 ## Localização e impacto
 
 - Em checkouts de promoção seletiva, uma referência de documentação pode não existir na branch. Nesse caso, consulte a versão aprovada em `main` por leitura (`git show <sha-main-validado>:<caminho>`), registre a origem e confirme a aplicabilidade no código local. Isso não autoriza importar código, configurações ou executar ferramentas ausentes no checkout.
@@ -68,12 +72,15 @@
 ## Design de interface
 
 - Ao criar ou alterar UI, leia `docs/design/README.md` e o arquivo do padrão que a tela usa (botões, listas, painel lateral, modais, feedback). O guia vivo está em `/dashboard/design`.
+- Ao criar ou alterar UI do aplicativo Android (`apps/coala-one-android`), leia `docs/design/app.md` em vez dos padrões web: o app tem `Tokens`, componentes e regras próprios (seta `DropdownChevron`, seletor `UnitPickerHeader`, barra do início sem gesto). Atualize esse arquivo no mesmo trabalho quando mudar um padrão.
 - Use os tokens `--ds-*` / classes `ds-*` e os componentes de `src/components/patterns/` (`LiftRow`, `SidePanel`, `WizardModal`, `InlineConfirm`, `Segmented`, `FilterChips`, `ControlPanel`), as variantes de `Button` e o `StatusPill`. Não use hex solto em `className` (o lint avisa).
 - Nunca use `alert()` ou `confirm()` (o lint bloqueia): erro em texto junto do campo e confirmação destrutiva inline com `InlineConfirm`.
 - Uma ação principal por área; rótulos no formato verbo + objeto. Percorra o checklist de `.github/pull_request_template.md` antes de concluir.
 - Decisões de design em aberto ficam em `docs/design/decisoes/`; não escolha por conta própria um ponto listado ali como "em aberto".
 
 ## Padrão de construção de módulos
+
+- Toda implementação que passe a gerar um documento persistente (PDF, DOCX, termo, recibo, declaração ou relatório arquivado) deve registrar o modelo em `SYSTEM_DOCUMENT_TEMPLATES` na mesma alteração, para que apareça em Configurações → Pessoal → Documentos → Geração e publicação. O registro deve declarar o local/fluxo de geração e, quando a publicação estiver disponível, uma política explícita; a ausência de política mantém o documento restrito. A aba Modelos reutiliza a biblioteca oficial e não autoriza uma lista paralela. Siga `docs/engineering/generated-documents-registry.md`, atualize o teste do catálogo e documente o fluxo gerador.
 
 - Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.
 - Contratos de segurança declaram garantias, não algoritmos. Um enforcer customizado pode substituir o padrão e acrescentar controles superiores, desde que satisfaça todas as garantias mínimas declaradas e tenha testes comportamentais do fluxo.
@@ -105,7 +112,7 @@
 
 - Skills próprias ficam nas localizações documentadas em `docs/engineering/agent-skills.md`; não crie cópias divergentes para clientes.
 - `coala-reposicao` é acionada automaticamente quando o usuário pede para trazer ou recalcular uma reposição. Ela mostra a falta física como `Comprar`, converte essa necessidade pelo insumo derivado da última compra confirmada como `Pedir` e agrupa por fornecedor; a quantidade histórica nunca substitui a necessidade atual.
-- `coala-error-triage` é de invocação explícita, escreve somente em `.ai-work/error-triage/` e nunca publica issues.
+- `coala-error-triage`, `coala-security-audit` e `coala-security-supply-chain` são de invocação explícita. As skills de segurança escrevem somente em `.ai-work/security-audit/` ou `.ai-work/supply-chain/`, não corrigem o produto na primeira execução e nunca testam produção por padrão.
 - Rede, publicação, push, deploy e automação externa não são presumidos.
 - Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
 
@@ -119,7 +126,9 @@
 ## Agente de escalas do RH no Codex CLI
 
 - Natasha Romanoff é o único agente do Departamento de Recursos Humanos nesta fase. Montagem e revisão são capacidades do mesmo perfil `.codex/agents/natasha.toml`; o validador determinístico não é outro agente. Consulte `docs/engineering/natasha-schedule-agent.md` para o contrato e os limites do piloto.
-- O piloto é somente consultivo e local. Há um coletor CLI opcional de escala e rotas/CLIs separadas para equipe candidata, férias e definições de turno; todos são somente leitura, exigem escopo explícito e não foram implantados/validados em conjunto com dados reais. As rotas ainda existem apenas neste worktree e revalidam permissões e unidades antes de consultas limitadas. A disponibilidade não inclui folgas ou indisponibilidades externas, que continuam perguntas humanas. Adaptadores locais preparam demanda e posições; quantidade, função, classificação e exceções das posições são confirmações humanas, não inferências do nome/código do turno. Definição com intervalo bloqueia a preparação atual. Há validadores independentes, pré-voo e calculador limitado de alternativas. `ready_for_confirmation` não confirma fontes; `ready_for_solver` não é escala gerada; `search_limit` não é inviabilidade; alternativas não são publicação nem certificação completa. Não atribua à Natasha acesso real sem execução comprovada. O perfil não autoriza escrita em escalas, RH ou Bizneo. A sessão principal deve confirmar o acionamento real do perfil antes de atribuir-lhe qualquer resultado.
+- Em propostas da Natasha, toda pessoa confirmada na equipe precisa ter, em cada dia da competência, um turno compatível ou uma ausência explicitamente justificada por regra. “Sem posição”, “ocioso”, falta de demanda cadastrada e ausência de lançamento não são folga. A demanda de cobertura é mínimo operacional, não teto de alocação; qualquer pessoa elegível sem estado diário bloqueia a proposta até correção ou confirmação da condição aplicável.
+- Antes de montar, a Natasha deve usar o mesmo escopo confirmado em todas as fontes: equipe e vínculos, jornadas vigentes resolvidas por pessoa/data, catálogo e IDs de turnos, cobertura/funcionamento, férias/indisponibilidades, histórico anterior e continuidade seguinte. Uma declaração manual (“todos são 6×1”) não substitui o módulo Jornadas. Jornada ausente, ambígua, em revisão manual, turno não permitido ou divergência de competência/unidades bloqueia o pré-voo.
+- O piloto é somente consultivo e local. Há um coletor CLI opcional de escala e rotas/CLIs separadas para equipe candidata, férias, jornadas e definições de turno; todos são somente leitura, exigem escopo explícito e não foram implantados/validados em conjunto com dados reais. As rotas ainda existem apenas neste worktree e revalidam permissões e unidades antes de consultas limitadas. A disponibilidade não inclui folgas ou indisponibilidades externas, que continuam perguntas humanas. Adaptadores locais preparam demanda e posições; quantidade, função, classificação e exceções das posições são confirmações humanas, não inferências do nome/código do turno. Definição com intervalo bloqueia a preparação atual. Há validadores independentes, pré-voo e calculador limitado de alternativas. `ready_for_confirmation` não confirma fontes; `ready_for_solver` não é escala gerada; `search_limit` não é inviabilidade; alternativas não são publicação nem certificação completa. Não atribua à Natasha acesso real sem execução comprovada. O perfil não autoriza escrita em escalas, RH ou Bizneo. A sessão principal deve confirmar o acionamento real do perfil antes de atribuir-lhe qualquer resultado.
 
 ## Publicação do Coala-OP
 
@@ -160,6 +169,14 @@
 - Não repita no navegador uma alteração que o script já confirmou. Quando o uso tiver sido autorizado, limite-o ao escopo solicitado e confira somente os dados necessários, como descrição, valor, competência, vencimento, unidade/centro de resultado, plano de contas e status.
 - Quando uma ação necessária e segura estiver bloqueada por permissão, reautenticação ou confirmação pessoal, peça explicitamente ao desenvolvedor a autorização necessária pelo mecanismo disponível; não presuma recusa nem encerre a operação sem antes solicitar essa autorização.
 - Depois de autorizado, a IA pode iniciar o fluxo de autenticação da CLI e deve aguardar o desenvolvedor concluir diretamente no provedor. Nunca solicite nem manipule senhas, códigos ou outros segredos no chat.
+
+## Registro de compras a partir de comprovantes
+
+- Quando o desenvolvedor pedir para popular uma compra a partir de captura, pedido ou comprovante externo, faça o lançamento por backend/CLI com script determinístico; não use a interface nem o navegador para transcrever os dados.
+- O comprovante é evidência dos campos que ele mostra, não autorização para criar vínculos por semelhança. Não associe automaticamente fornecedor, produto, insumo, despesa, transação ou outro cadastro interno. Grave os textos observados e mantenha as referências vazias até uma instrução explícita ou uma chave determinística já fornecida.
+- Plano de contas e centro de resultado fazem parte do pré-voo do lançamento. Preencha somente quando houver regra aprovada ou orientação explícita; se não houver, apresente a pendência antes da escrita em vez de omitir silenciosamente ou inferir pelo nome do fornecedor.
+- O lançamento deve permanecer em revisão (`created`) para conferência e confirmação humana. Popular a compra não autoriza confirmar pedido, criar recebimento, movimentar estoque, sincronizar despesa nem associar a uma compra anterior.
+- Antes da escrita real, valide identificador externo, duplicidade, valores, datas, forma de pagamento, itens visíveis e estado atual. O script deve oferecer dry-run, invariantes dos documentos-alvo, backup idempotente e verificação pós-escrita; migração em banco real continua exigindo autorização própria.
 
 ## Limpeza de scripts operacionais
 

@@ -37,4 +37,6 @@ export type OpenLocalPurchaseWithdrawal = {
   time: string | null;
   amountCents: number;
   operatorName: string | null;
+  /** Motivo digitado no PDV ao fazer a sangria; nulo quando o PDV não o envia. */
+  reason: string | null;
 };

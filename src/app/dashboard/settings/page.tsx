@@ -18,6 +18,8 @@ import {
   preserveSettingsTabSelection,
   resolveRequestedSettingsTab,
 } from "@/lib/settings-tab-selection";
+import { resolveUnitAccess } from "@/lib/unit-access";
+import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 
 const CadastrosWorkspace = dynamic(
   () => import("@/components/cadastros/cadastros-workspace").then((m) => m.CadastrosWorkspace),
@@ -25,6 +27,22 @@ const CadastrosWorkspace = dynamic(
 );
 const DPSettingsShifts = dynamic(
   () => import("@/components/dp/dp-settings-shifts").then((m) => m.DPSettingsShifts),
+  { ssr: false }
+);
+const DPSettingsJourneys = dynamic(
+  () => import("@/components/dp/dp-settings-journeys").then((m) => m.DPSettingsJourneys),
+  { ssr: false }
+);
+const DPSettingsOvertime = dynamic(
+  () => import("@/components/dp/dp-settings-overtime").then((m) => m.DPSettingsOvertime),
+  { ssr: false }
+);
+const DPSettingsAbsences = dynamic(
+  () => import("@/components/dp/dp-settings-absences").then((m) => m.DPSettingsAbsences),
+  { ssr: false }
+);
+const DPResponsibilityCoverage = dynamic(
+  () => import("@/components/dp/dp-responsibility-coverage").then((m) => m.DPResponsibilityCoverage),
   { ssr: false }
 );
 const DPSettingsRoles = dynamic(
@@ -109,6 +127,14 @@ const RecruitmentFormsView = dynamic(
 );
 const AiBillingSettings = dynamic(
   () => import("@/components/ai-management/ai-billing-settings").then((m) => m.AiBillingSettings),
+  { ssr: false }
+);
+const GeneratedDocumentsSettings = dynamic(
+  () => import("@/components/settings/generated-documents-settings").then((m) => m.GeneratedDocumentsSettings),
+  { ssr: false }
+);
+const DocumentTemplatesSettings = dynamic(
+  () => import("@/app/dashboard/documents/templates/page").then((m) => m.default),
   { ssr: false }
 );
 
@@ -404,9 +430,19 @@ function DepartmentSubtabs({
 }
 
 export default function SettingsPage() {
-  const { permissions, isDefaultAdmin } = useAuth();
+  const { permissions, isDefaultAdmin, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const canManageGlobalTime = Boolean(
+    (isDefaultAdmin || permissions.dp?.settings?.manageTime)
+    && user
+    && resolveUnitAccess(user, { isDefaultAdmin }).allUnits
+  );
+  const canManageAbsences = Boolean(
+    (isDefaultAdmin || permissions.dp?.settings?.manageAbsences)
+    && user
+    && resolveUnitAccess(user, { isDefaultAdmin }).allUnits
+  );
 
   const operationalTabs: NestedTab[] = [
     {
@@ -537,15 +573,57 @@ export default function SettingsPage() {
       content: <InternalAuditPanel />,
     },
     {
+      value: "generated-documents",
+      label: "Geração e publicação",
+      title: "Geração e publicação de documentos",
+      description: "Configure como os documentos de pessoal são gerados, vinculados, assinados, arquivados e disponibilizados aos colaboradores.",
+      content: <GeneratedDocumentsSettings />,
+    },
+    {
+      value: "document-templates",
+      label: "Modelos",
+      title: "Modelos de documentos",
+      description: "Crie, prepare, versione e publique os modelos usados pelos fluxos de pessoal.",
+      content: <DocumentTemplatesSettings />,
+    },
+    {
+      value: "work-journeys",
+      label: "Jornadas",
+      title: "Jornadas",
+      description: "Configure cargas contratuais, ciclos, forma de apuração, abrangência, vigência e os turnos existentes que podem ser usados.",
+      content: <DPSettingsJourneys />,
+    },
+    {
       value: "shifts",
       label: "Turnos",
       title: "Turnos",
-      description: "Configure os turnos reutilizáveis do departamento pessoal.",
+      description: "Configure os horários reutilizáveis sem alterar o nome e o ID usados na integração Bizneo.",
       content: <DPSettingsShifts />,
     },
     {
+      value: "overtime",
+      label: "Hora extra",
+      title: "Hora extra",
+      description: "Configure regras, faixas, tolerâncias e banco de horas, sem cálculo financeiro nesta fase.",
+      content: <DPSettingsOvertime />,
+    },
+    {
+      value: "absences",
+      label: "Ausências",
+      title: "Ausências",
+      description: "Configure tipos, vínculos, abrangência, documentos, aprovação, limites e efeitos futuros na jornada.",
+      content: <DPSettingsAbsences />,
+    },
+    {
+      value: "responsibility-coverage",
+      label: "Coberturas",
+      title: "Coberturas do DP",
+      description: "Defina quem responde por cada atividade e grupo de unidades e identifique lacunas antes que uma tarefa fique sem responsável.",
+      content: <DPResponsibilityCoverage />,
+    },
+    {
       value: "calendars",
-      label: "Calendário",
+      label: "Calendários",
       title: "Calendários de trabalho",
       description: "Configure calendários de feriados usados nas escalas.",
       content: <DPSettingsCalendars />,
@@ -606,8 +684,26 @@ export default function SettingsPage() {
         permissions.settings.manageProfiles
       );
     }
+    if (tab.value === "generated-documents") {
+      return !!permissions.settings.view;
+    }
+    if (tab.value === "document-templates") {
+      return hasFormalizationPermission(permissions, "templates.view", isDefaultAdmin);
+    }
     if (tab.value === "shifts") {
       return !!permissions.dp?.settings?.manageShifts;
+    }
+    if (tab.value === "work-journeys" || tab.value === "overtime") {
+      return canManageGlobalTime;
+    }
+    if (tab.value === "absences") {
+      return canManageAbsences;
+    }
+    if (tab.value === "responsibility-coverage") {
+      return !!(
+        isDefaultAdmin
+        || permissions.dp?.responsibilities?.manage
+      );
     }
     if (tab.value === "calendars") {
       return !!permissions.dp?.settings?.manageCalendars;
@@ -622,25 +718,33 @@ export default function SettingsPage() {
       value: "team-structure",
       label: "Equipe e organograma",
       title: "Equipe e organograma",
-      description: "Gerencie cargos, funções e a estrutura organizacional.",
+      description: "Gerencie cargos, funções, perfis de colaboradores e a estrutura organizacional.",
       content: null,
-      children: pickPersonalTabs(["roles", "organogram", "access-profiles"]),
+      children: pickPersonalTabs(["roles", "organogram", "access-profiles", "profile-fields"]),
     },
     {
-      value: "collaborator-profile",
-      label: "Perfil do colaborador",
-      title: "Perfil do colaborador",
-      description: "Configure os campos e a composição do perfil dos colaboradores.",
+      value: "responsibilities",
+      label: "Responsabilidades",
+      title: "Responsabilidades",
+      description: "Defina a responsabilidade do DP por atividade e grupo de unidades.",
       content: null,
-      children: pickPersonalTabs(["profile-fields"]),
+      children: pickPersonalTabs(["responsibility-coverage"]),
     },
     {
       value: "journey",
-      label: "Jornada",
-      title: "Jornada",
-      description: "Configure turnos, calendários e regras de acesso por escala.",
+      label: "Tempo",
+      title: "Tempo",
+      description: "Configure jornadas, turnos, ausências, hora extra e calendários de trabalho.",
       content: null,
-      children: pickPersonalTabs(["shifts", "calendars", "login-access"]),
+      children: pickPersonalTabs(["work-journeys", "shifts", "absences", "overtime", "calendars"]),
+    },
+    {
+      value: "documents",
+      label: "Documentos",
+      title: "Documentos",
+      description: "Centralize os modelos e as regras dos documentos vinculados aos colaboradores.",
+      content: null,
+      children: pickPersonalTabs(["generated-documents", "document-templates"]),
     },
     {
       value: "recruitment",
@@ -656,7 +760,7 @@ export default function SettingsPage() {
       title: "Governança",
       description: "Centralize privacidade, auditoria e controles internos do departamento pessoal.",
       content: null,
-      children: pickPersonalTabs(["profile-compliance", "privacy", "audit"]),
+      children: pickPersonalTabs(["profile-compliance", "login-access", "privacy", "audit"]),
     },
   ].filter((tab) => (tab.children?.length ?? 0) > 0);
 
@@ -781,6 +885,10 @@ export default function SettingsPage() {
   useEffect(() => {
     if (requestedDepartment === "pessoal" && requestedTab === "users") {
       router.replace("/dashboard/dp/collaborators");
+    } else if (requestedDepartment === "pessoal" && requestedTab === "collaborator-profile") {
+      router.replace("/dashboard/settings?department=pessoal&tab=profile-fields");
+    } else if (requestedDepartment === "financeiro" && requestedTab === "generated-documents") {
+      router.replace("/dashboard/settings?department=pessoal&tab=generated-documents");
     }
   }, [requestedDepartment, requestedTab, router]);
 

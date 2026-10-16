@@ -59,7 +59,7 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
                       type="button"
                       onClick={() => onEdit(key)}
                       className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-all mt-0.5"
-                      title={`Editar ${entry.label}`}
+                      title={entry.self_service_policy === 'approval' && role === 'employee' ? `Solicitar alteração de ${entry.label}` : `Editar ${entry.label}`}
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />

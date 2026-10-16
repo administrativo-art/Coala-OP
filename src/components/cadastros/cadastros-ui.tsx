@@ -30,14 +30,13 @@ import {
 
 export { SelectBox };
 
-/** O que o espaço de trabalho passa a cada aba: o seletor de abas (parte do cabeçalho escuro) e a visualização. */
+/** O que o espaço de trabalho passa ao conteúdo de cada aba. */
 export type CadastrosTabProps = {
-  tabs: React.ReactNode;
   view: CadastrosView;
   onViewChange: (view: CadastrosView) => void;
 };
 
-/* ───────────────────────── Cabeçalho escuro ───────────────────────── */
+/* ───────────────────────── Navegação interna ───────────────────────── */
 
 export type CadastrosTabItem = { id: string; label: string; count: number };
 
@@ -51,7 +50,7 @@ export function CadastrosTabs({
   onChange: (id: string) => void;
 }) {
   return (
-    <div role="tablist" className="grid grid-cols-1 gap-1 border-b border-white/10 sm:grid-cols-3">
+    <nav aria-label="Tipos de cadastro" role="tablist" className="flex flex-wrap gap-0.5">
       {tabs.map((tab) => {
         const isActive = tab.id === active;
         return (
@@ -62,25 +61,22 @@ export function CadastrosTabs({
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'flex flex-col gap-1.5 border-b-4 px-1 pb-4 pt-1.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-kicker',
-              isActive ? 'border-ds-accent text-white' : 'border-transparent text-ds-indicator-zero hover:text-ds-on-dark-2'
+              'inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-[11px] text-[13px] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent',
+              isActive
+                ? 'bg-ds-surface font-extrabold text-ds-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
+                : 'font-semibold text-ds-muted hover:bg-ds-surface/60 hover:text-ds-ink'
             )}
           >
-            <span
-              className={cn(
-                'font-ds-mono text-[44px] font-bold leading-none tracking-tighter',
-                isActive ? 'text-ds-accent-kicker' : 'text-ds-indicator-zero opacity-60'
-              )}
-            >
-              {tab.count}
-            </span>
-            <span className="text-base font-extrabold tracking-[-0.01em]">{tab.label}</span>
+            <span>{tab.label}</span>
+            <span className={cn('text-[11px]', isActive ? 'text-ds-muted' : 'text-ds-faint')}>{tab.count}</span>
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }
+
+/* ───────────────────────── Cabeçalho escuro ───────────────────────── */
 
 export function CadastrosHero({
   kicker,
@@ -94,7 +90,8 @@ export function CadastrosHero({
   onChip,
 }: {
   kicker: string;
-  tabs: React.ReactNode;
+  /** Compatibilidade temporária para telas ainda não migradas para a faixa clara. */
+  tabs?: React.ReactNode;
   search: { value: string; placeholder: string; onChange: (value: string) => void };
   /** Omitido nas telas sem situação ativo/inativo. */
   status?: {

@@ -15,8 +15,8 @@ Release lê configuração pública Android de `app/google-services.json` (ignor
 | `COALA_FIREBASE_APP_ID` | appId da aplicação **Android**, não o appId web do Expo |
 | `COALA_FIREBASE_PROJECT_ID` | projectId Firebase |
 | `COALA_FIREBASE_SENDER_ID` | Número do projeto Google para Play Integrity |
-| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 10; crescente nas atualizações Go |
-| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.5 |
+| `COALA_VERSION_CODE` | Código Android próprio do Go, padrão 14; crescente nas atualizações Go |
+| `COALA_VERSION_NAME` | Versão exibida, padrão 0.3.9 |
 | `COALA_LOCAL_TEST` | Somente debug: habilita HTTP e Auth emulator `10.0.2.2:9099` |
 
 Debug sem configuração oferece simulação sem API/Firebase/Storage de negócio. Release recusa configuração pública ausente, appId web, HTTP, modo de teste ou ausência da assinatura existente. Não registrar `local.properties`, `google-services.json`, `.env`, APKs intermediários, senhas ou keystores no Git. A exceção de distribuição é o instalador assinado `public/app/CoalaGo.apk`, acompanhado por metadados e hash verificados.
@@ -55,6 +55,10 @@ WorkManager repete usando o mesmo UUID, somente com rede, e valida a conta no en
 
 ## Handoff visual nativo
 
+Os padrões de interface do app (cores, tipografia, ícones, animações, seta de
+dropdown, seletor de unidade e como cada tela abre) estão em
+[`docs/design/app.md`](../../docs/design/app.md). Mudou um padrão, atualize lá.
+
 O handoff `Coala One App - Prototipo.dc.html` foi adaptado para **Coala Go**,
 sem runtime HTML ou dados fictícios no release. Inter Tight e JetBrains Mono
 estão embarcadas em `res/font`, com licenças SIL OFL em `assets/font-licenses`.
@@ -67,11 +71,19 @@ expandem suavemente. Escala zero desliga movimentos decorativos e mostra o
 progresso final. Animações nunca simulam resposta de servidor.
 
 Home usa hero de compra e grid filtrado pelas permissões reais, preservando
-Signage. O subtítulo da saudação mostra a função recebida do perfil, ou o cargo
-quando não há função; sem ambos, mostra "Equipe Coala". Metas oferece
-Dias/Equipe/Prêmio; Metas e Escala compartilham o seletor de unidade no
-cabeçalho, com lista pesquisável quando há mais de seis opções. Escala seleciona
-um dia da semana e Equipe/Só minha, sem perder a navegação semanal. Compra, contagem e
+Signage. A barra escura do início mostra só os dados dela, sem alça nem resumo
+deslizante; o que há para hoje aparece nos selos dos cartões. A simulação
+guarda `Heucilene Oliveira Ribeiro`, enquanto a interface mostra somente
+primeiro e último nomes (`Heucilene Ribeiro`) nos espaços compactos do app.
+O subtítulo da saudação mostra a função recebida do perfil, ou o cargo quando
+não há função; sem ambos, mostra "Equipe Coala".
+Na Escala, o cartão mantém nome e cargo em uma linha, destaca o horário com
+ícone de relógio, reduz rótulos técnicos de turno (por exemplo, `CS · Líder`),
+alinha o conteúdo pelo topo e reserva larguras estáveis para identidade e turno.
+Metas oferece Dias/Equipe/Prêmio; Metas e Escala compartilham o seletor de
+unidade no cabeçalho, com lista pesquisável quando há mais de seis opções.
+Escala seleciona um dia da semana e Equipe/Só minha, sem perder a navegação
+semanal. Compra, contagem e
 recebimento mantêm seus ViewModels, validações, confirmações e contratos.
 Limites/estados reais prevalecem sobre números, timers e sucessos do protótipo.
 

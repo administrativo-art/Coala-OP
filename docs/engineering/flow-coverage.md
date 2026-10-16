@@ -8,7 +8,7 @@ Esta lista é derivada da [matriz página → fluxo](flow-matrix.csv) na etapa 1
 
 A [verificação por grupo](flow-verification.md) registra referências e lacunas na base principal para cada grupo; `Traçado` não significa teste integrado aprovado.
 
-Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 25 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
+Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28 redirecionamentos, 10 desativadas e 1 rota especial de modal. A matriz cita o arquivo de cada página e registra o destino dos redirecionamentos. Esses totais são verificados por [`check-flow-matrix.py`](../../scripts/check-flow-matrix.py).
 
 | Grupo | Páginas associadas | Estado | Documento profundo |
 | --- | ---: | --- | --- |
@@ -19,15 +19,16 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `cash-flow` | 4 | Traçado | [Realizados, previsões e lançamento](flows/cash-flow.md) — cronograma de projetos e meses futuros atualizados em 2026-09-26; unitários/integração desse subfluxo executados, homologação global pendente |
 | `catalog` | 1 | Traçado | [Fichas técnicas](flows/catalog.md) — verificação de acesso e custo pendente |
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
+| `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
-| `document-templates` | 4 | Traçado | [Cadastro e publicação](flows/document-templates.md) — percurso complementado; verificação integrada pendente |
+| `document-templates` | 5 | Traçado | [Cadastro e publicação](flows/document-templates.md) — percurso complementado; verificação integrada pendente |
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
-| `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
+| `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — [ausências](flows/dp-absences.md): Etapa 1 publicada; Etapas 2 e 3 fechadas localmente, inclusive SLA, escala e coberturas do DP; cutover, homologação e publicação pendentes |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
 | `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
@@ -47,7 +48,7 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
-| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; sem mudança financeira; HTTP autenticado e homologação global pendentes |
+| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; sem geração de lançamento financeiro; HTTP autenticado e homologação global pendentes |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
@@ -68,9 +69,9 @@ Classificação inicial: **158/158 páginas** — 114 ativas, 8 de navegação, 
 | `uniforms` | 1 | Traçado | [Uniformes](flows/uniforms.md) — percurso complementado; verificação integrada pendente |
 | `vacations` | 2 | Traçado | [Agendamento](flows/vacation-scheduling.md), [aviso](flows/vacation-notice.md), [contador](flows/vacation-accountant-dispatch.md), [recibos](flows/vacation-receipts.md), [pagamento e encerramento](flows/vacation-payment-closure.md) — verificação integrada pendente |
 
-Total inicial: **53 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
+Total atual: **56 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
 
-Na integração documental da main, nenhum grupo é promovido a Verificado pelas execuções do worktree de correções. São 53 grupos traçados, 73 guias de subfluxo e validação comportamental parcial.
+Nenhum grupo é promovido a Verificado apenas pelas execuções locais. São 56 grupos traçados, 75 guias de subfluxo e validação comportamental parcial.
 
 Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.
 

@@ -126,6 +126,7 @@ export function DPBulkShiftEditPanel({
     return selectedDates.filter((date) => dates.has(date)).length;
   }, [selectedDates, swapUserId, vacationDatesByUser]);
   const hasTimeChange = Boolean(startTime && endTime);
+  const selectedDefinition = shiftDefinitions.find((item) => item.id === shiftDefinitionId);
 
   const affectedUsers = React.useMemo(
     () => uniqSorted(selectedShifts.map((item) => item.userName)),
@@ -202,8 +203,13 @@ export function DPBulkShiftEditPanel({
       return;
     }
 
-    if (action === 'replace' && hasTimeChange && startTime >= endTime) {
-      toast({ title: 'O horário final deve ser posterior ao horário inicial.', variant: 'destructive' });
+    if (action === 'replace' && hasTimeChange && startTime === endTime) {
+      toast({ title: 'O início e o fim do turno não podem ser iguais.', variant: 'destructive' });
+      return;
+    }
+
+    if (action === 'replace' && hasTimeChange && startTime > endTime && selectedDefinition?.overnight !== true) {
+      toast({ title: 'Selecione um turno noturno para atravessar a meia-noite.', variant: 'destructive' });
       return;
     }
 
@@ -330,7 +336,7 @@ export function DPBulkShiftEditPanel({
                       <span className={`h-[7px] w-[7px] rounded-full ${!shiftDefinitionId ? 'bg-[#db2777]' : 'bg-[#cbd5e1]'}`} />
                       <span className={`text-xs font-extrabold ${!shiftDefinitionId ? 'text-[#db2777]' : 'text-[#475569]'}`}>Manual</span>
                     </button>
-                    {shiftDefinitions.map((definition) => {
+                    {shiftDefinitions.filter((definition) => definition.isArchived !== true).map((definition) => {
                       const selected = shiftDefinitionId === definition.id;
                       return (
                         <button

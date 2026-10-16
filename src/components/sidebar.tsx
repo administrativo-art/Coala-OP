@@ -19,7 +19,7 @@ import {
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
-  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
+  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt, Inbox,
   Files, Building2, FileStack, Banknote, UserCircle, Store, BookOpenText, Trophy, Gauge, ChartNoAxesCombined, BadgeDollarSign, Calculator, Scale} from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -199,6 +199,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
               { label: "Uniforme", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
+              { label: "Solicitações", href: "/dashboard/dp/requests", icon: Inbox, show: permissions.dp?.requests?.view },
               { label: "Desligamento", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
             ],
           },
@@ -215,12 +216,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             href: "/dashboard/documents/generated",
             icon: FileStack,
             show: hasFormalizationPermission(permissions, "documents.view"),
-          },
-          {
-            label: "Modelos",
-            href: "/dashboard/documents/templates",
-            icon: FileStack,
-            show: hasFormalizationPermission(permissions, "templates.view"),
           },
           {
             label: "Documentos da empresa",

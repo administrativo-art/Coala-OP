@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { X, Check } from "lucide-react"
+import { X, Check, ChevronDown } from "lucide-react"
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { cn } from "@/lib/utils"
@@ -105,7 +105,7 @@ export function MultiSelect({
     <div className={cn("relative", className)}>
       <div onKeyDown={handleKeyDown}>
         <div
-          className="group border border-input px-3 py-2 text-sm ring-offset-background rounded-md focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+          className="group relative min-h-10 rounded-ds-md border border-ds-border-input bg-ds-input py-2 pl-3 pr-12 text-[13px] text-ds-ink focus-within:border-ds-modal focus-within:bg-white focus-within:ring-[3px] focus-within:ring-ds-modal-soft"
         >
           <div className="flex flex-wrap gap-1">
             {selected.map((value) => {
@@ -130,9 +130,12 @@ export function MultiSelect({
               onBlur={() => setTimeout(() => setOpen(false), 100)} // Delay blur to allow click
               onFocus={() => setOpen(true)}
               placeholder={selected.length === 0 ? placeholder : ""}
-              className="ml-2 bg-transparent outline-hidden placeholder:text-muted-foreground flex-1 min-w-[120px]"
+              className="ml-2 min-w-[120px] flex-1 bg-transparent outline-hidden placeholder:text-ds-ink-faint"
             />
           </div>
+          <span className="pointer-events-none absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs">
+            <ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} />
+          </span>
         </div>
         
         {open && (

@@ -12,7 +12,7 @@ import {
   signageMobileScreenSchema,
   type SignageOrientation,
 } from '@/lib/signage';
-import { listSignageScreens, resolveSignageScreen } from '@/lib/signage-server';
+import { listSignageUnitsAndScreens, resolveSignageScreen } from '@/lib/signage-server';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { SignageScreen } from '@/types';
 
@@ -46,13 +46,12 @@ function unitView(name: string, id: string, screens: SignageScreen[]) {
 /** Unidades do usuário, as telas de cada uma e o nome que a próxima vai receber. */
 export async function loadMobileSignageUnits(actor: ServerUserContext) {
   assertCanManageMobileSignage(actor);
-  const screens = (await listSignageScreens()).filter((screen) => canUseUnit(actor, screen.kioskId));
-  const byUnit = new Map<string, { name: string; screens: SignageScreen[] }>();
-  for (const screen of screens) {
-    const unit = byUnit.get(screen.kioskId) ?? { name: screen.kioskName, screens: [] };
-    unit.screens.push(screen);
-    byUnit.set(screen.kioskId, unit);
-  }
+  const { kiosks, screens } = await listSignageUnitsAndScreens();
+  // A unidade aparece mesmo sem tela: é por aqui que a primeira é cadastrada.
+  const byUnit = new Map<string, { name: string; screens: SignageScreen[] }>(
+    kiosks.filter((kiosk) => canUseUnit(actor, kiosk.id)).map((kiosk) => [kiosk.id, { name: kiosk.name, screens: [] }]),
+  );
+  for (const screen of screens) byUnit.get(screen.kioskId)?.screens.push(screen);
   return { units: [...byUnit.entries()].map(([id, unit]) => unitView(unit.name, id, unit.screens)).sort((left, right) => left.name.localeCompare(right.name, 'pt-BR')) };
 }
 
@@ -66,16 +65,16 @@ async function codeInUse(code: string) {
 
 type Author = { userId: string; username: string };
 
-/** Tela padrão: o código mora no cadastro da unidade; o documento de mesmo id guarda só nome e posição. */
+/** Primeira tela da unidade: o código mora no cadastro da unidade; o documento de mesmo id guarda nome e posição. */
 async function connectDefaultScreen(kioskId: string, code: string, orientation: SignageOrientation, now: string, author: Author) {
   const override = signageDbAdmin.collection('screens').doc(kioskId);
   await dbAdmin.collection('kiosks').doc(kioskId).update({ deviceToken: code });
-  await override.set({ orientation, connectedAt: now, connectedBy: author, source: 'coala-one-app' }, { merge: true });
+  await override.set({ kioskId, orientation, connectedAt: now, connectedBy: author, source: 'coala-one-app' }, { merge: true });
 }
 
 /**
  * Liga o monitor que mostrou o QR code a uma tela da unidade. Sem `screenId`, cria a próxima tela:
- * a primeira é a tela padrão ("Tela 1"), as seguintes são telas adicionais. Com `screenId`, o
+ * a primeira usa o id da unidade e passa a existir aqui, as seguintes são telas adicionais. Com `screenId`, o
  * monitor assume uma tela existente e o código anterior dela deixa de valer.
  * O monitor consulta o próprio código em `/api/signage/pair` e se conecta sozinho logo depois.
  */
@@ -112,18 +111,20 @@ export async function addMobileSignageScreen(raw: unknown, actor: ServerUserCont
   const collection = signageDbAdmin.collection('screens');
   if (kiosk.usedDefault) {
     const override = collection.doc(kioskId);
-    await override.set({ orientation, connectedAt: now, connectedBy: author, source: 'coala-one-app' }, { merge: true });
-    const name = String((await override.get()).get('name') || SIGNAGE_DEFAULT_SCREEN_NAME);
+    const [current, siblings] = await Promise.all([override.get(), collection.where('kioskId', '==', kioskId).limit(SIGNAGE_MAX_SCREENS_PER_KIOSK + 1).get()]);
+    // Sem nome ainda, recebe o próximo livre: a unidade pode já ter telas criadas pelo painel.
+    const name = String(current.get('name') || nextSignageScreenName(siblings.docs.filter((document) => document.id !== kioskId).map((document) => String(document.get('name') ?? ''))));
+    await override.set({ kioskId, name, orientation, connectedAt: now, connectedBy: author, source: 'coala-one-app' }, { merge: true });
     return { screen: { id: kioskId, name, kioskName: kiosk.name, orientation }, created: true };
   }
 
   const ref = collection.doc();
   const name = await signageDbAdmin.runTransaction(async (transaction) => {
     const existing = await transaction.get(collection.where('kioskId', '==', kioskId).limit(SIGNAGE_MAX_SCREENS_PER_KIOSK + 1));
-    const defaultOverride = await transaction.get(collection.doc(kioskId));
     const extras = existing.docs.filter((document) => document.id !== kioskId);
     if (extras.length + 1 >= SIGNAGE_MAX_SCREENS_PER_KIOSK) failure('SCREEN_LIMIT', `Cada unidade pode ter até ${SIGNAGE_MAX_SCREENS_PER_KIOSK} telas.`);
-    const names = [String(defaultOverride.get('name') || SIGNAGE_DEFAULT_SCREEN_NAME), ...extras.map((document) => String(document.get('name') ?? ''))];
+    const first = existing.docs.find((document) => document.id === kioskId);
+    const names = [String(first?.get('name') || SIGNAGE_DEFAULT_SCREEN_NAME), ...extras.map((document) => String(document.get('name') ?? ''))];
     const nextName = nextSignageScreenName(names);
     transaction.set(ref, { kioskId, name: nextName, deviceToken: code, orientation, createdAt: now, createdBy: author, connectedAt: now, connectedBy: author, source: 'coala-one-app' });
     return nextName;

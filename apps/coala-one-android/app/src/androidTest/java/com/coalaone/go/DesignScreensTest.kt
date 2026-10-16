@@ -40,12 +40,13 @@ class DesignScreensTest {
         assertTrue("Disabled CTA must remain visible on the dark surface", login.toPixelMap()[login.width / 2, login.height / 4].red > .2f)
         compose.runOnIdle { assertFalse(WindowCompat.getInsetsController(compose.activity.window, compose.activity.window.decorView).isAppearanceLightStatusBars) }
         compose.onNodeWithText("Explorar simulação").performScrollTo().performClick()
+        compose.onNodeWithText("Heucilene Ribeiro", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Compra local").assertExists()
         snapshot("home")
         compose.runOnIdle { assertFalse(WindowCompat.getInsetsController(compose.activity.window, compose.activity.window.decorView).isAppearanceLightStatusBars) }
         compose.onNodeWithText("Metas").performScrollTo().performClick()
         // Goals open straight on a unit; the header shows it with "Trocar unidade".
-        compose.onNodeWithText("Trocar unidade ⌄").assertExists()
+        compose.onNodeWithText("Trocar unidade").assertExists()
         compose.onNodeWithText("MINHA PARTE").assertExists()
         compose.onNodeWithText("HOJE NA UNIDADE").assertExists()
         snapshot("goals-days")
@@ -56,6 +57,7 @@ class DesignScreensTest {
         snapshot("goals")
         compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("Escala").performScrollTo().performClick()
+        compose.onNodeWithText("Heucilene Ribeiro", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Só a minha").performScrollTo().performClick()
         snapshot("schedule")
         compose.onNodeWithContentDescription("Voltar").performClick()
@@ -91,7 +93,8 @@ class DesignScreensTest {
         compose.onNodeWithText("Tela 2 conectada em Unidade de simulação.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithContentDescription("Voltar").performClick()
-        compose.onNodeWithText("AS").performClick()
+        compose.onNodeWithContentDescription("Abrir perfil: foto, versão e sair").performClick()
+        compose.onNodeWithText("Heucilene Ribeiro").assertIsDisplayed()
         compose.onNodeWithText("Sair da conta").performScrollTo().assertExists()
         snapshot("profile")
     }

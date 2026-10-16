@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useForm, Controller, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,7 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronsUpDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, Info, CheckCircle2, MailCheck } from 'lucide-react';
+import { Edit, Shield, ChevronDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, CheckCircle2, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -48,7 +48,6 @@ import { createAuditLog } from '@/features/audit/client';
 import { createManagedTerminationProcess } from '@/features/hr/termination/client';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
@@ -58,6 +57,8 @@ import {
   CYCLE_STATUS_CONFIG,
   getVacationCycleHistory,
 } from '@/lib/utils/vacation-logic';
+import { PageHeader } from '@/components/layout/page-header';
+import { InfoPopover } from '@/components/ui/info-popover';
 
 function getAvatarUploadErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
@@ -93,7 +94,7 @@ function fullYearsSince(date: Date, today = new Date()) {
 }
 
 function formatTenure(date: Date, today = new Date()) {
-  if (startOfLocalDay(date) > startOfLocalDay(today)) return 'Admissao futura';
+  if (startOfLocalDay(date) > startOfLocalDay(today)) return 'Admissão futura';
 
   let totalMonths = (today.getFullYear() - date.getFullYear()) * 12 + today.getMonth() - date.getMonth();
   if (today.getDate() < date.getDate()) totalMonths -= 1;
@@ -101,10 +102,10 @@ function formatTenure(date: Date, today = new Date()) {
 
   const years = Math.floor(totalMonths / 12);
   const months = totalMonths % 12;
-  if (years === 0 && months === 0) return 'Menos de 1 mes';
-  if (years === 0) return `${months} ${months === 1 ? 'mes' : 'meses'}`;
+  if (years === 0 && months === 0) return 'Menos de 1 mês';
+  if (years === 0) return `${months} ${months === 1 ? 'mês' : 'meses'}`;
   if (months === 0) return `${years} ${years === 1 ? 'ano' : 'anos'}`;
-  return `${years} ${years === 1 ? 'ano' : 'anos'} e ${months} ${months === 1 ? 'mes' : 'meses'}`;
+  return `${years} ${years === 1 ? 'ano' : 'anos'} e ${months} ${months === 1 ? 'mês' : 'meses'}`;
 }
 
 function nextAnniversary(date: Date, today = new Date()) {
@@ -124,40 +125,90 @@ function daysUntil(date: Date, today = new Date()) {
 function formatAnniversary(date: Date, today = new Date()) {
   const days = daysUntil(date, today);
   if (days === 0) return `${format(date, 'dd/MM/yyyy')} (hoje)`;
-  if (days === 1) return `${format(date, 'dd/MM/yyyy')} (amanha)`;
+  if (days === 1) return `${format(date, 'dd/MM/yyyy')} (amanhã)`;
   return `${format(date, 'dd/MM/yyyy')} (em ${days} dias)`;
 }
 
 function DerivedInfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-slate-50/70 p-3">
-      <p className="text-[11px] font-semibold uppercase text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-800">{value}</p>
+    <div className="rounded-ds-md border border-ds-border bg-ds-muted p-3">
+      <p className="text-[11px] font-extrabold uppercase tracking-wide text-ds-ink-faint">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-ds-ink">{value}</p>
     </div>
   );
 }
 
 function FieldHelpTooltip({ title, description }: { title: string; description: string }) {
   return (
-    <TooltipProvider delayDuration={100}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-200 hover:text-pink-700 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-pink-500/40"
-            aria-label={title}
-          >
-            <Info className="h-3.5 w-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="start" className="max-w-[320px] p-3 text-xs leading-relaxed">
-          <p className="font-semibold text-slate-950">{title}</p>
-          <p className="mt-1 text-muted-foreground">{description}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <InfoPopover title={title} contentClassName="w-[340px]">
+      <p>{description}</p>
+    </InfoPopover>
   );
 }
+
+function UserFormSection({
+  title,
+  description,
+  help,
+  compact,
+  children,
+}: {
+  title: string;
+  description?: string;
+  help?: string;
+  compact?: boolean;
+  children: ReactNode;
+}) {
+  if (compact) return <div className="space-y-2">{children}</div>;
+
+  return (
+    <section data-ui="form-section" className="overflow-hidden rounded-ds-card border border-ds-border bg-ds-surface shadow-xs">
+      <header className="flex items-start justify-between gap-3 border-b border-ds-divider px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="text-lg font-extrabold tracking-tight text-ds-ink">{title}</h2>
+          {description ? <p className="mt-1 text-sm text-ds-ink-muted">{description}</p> : null}
+        </div>
+        {help ? (
+          <InfoPopover title={title} contentClassName="w-[360px]">
+            <p>{help}</p>
+          </InfoPopover>
+        ) : null}
+      </header>
+      <div className="space-y-4 px-5 py-5">{children}</div>
+    </section>
+  );
+}
+
+type CollaboratorEditTab = 'identity' | 'access';
+
+const COLLABORATOR_EDIT_TABS: Array<{ id: CollaboratorEditTab; label: string }> = [
+  { id: 'identity', label: 'Identificação' },
+  { id: 'access', label: 'Atuação e acesso' },
+];
+
+const COLLABORATOR_EDIT_FIELD_TAB: Partial<Record<keyof UserFormValues, CollaboratorEditTab>> = {
+  username: 'identity',
+  email: 'identity',
+  avatarUrl: 'identity',
+  employmentRelationshipType: 'identity',
+  profileId: 'access',
+  unitId: 'access',
+  assignedKioskIds: 'access',
+  jobRoleId: 'access',
+  jobFunctionIds: 'access',
+  responsibleUnitIds: 'access',
+  unitAccessScope: 'access',
+  unitAccessUnitIds: 'access',
+  registrationIdBizneo: 'access',
+  registrationIdPdv: 'access',
+  shiftDefinitionId: 'identity',
+  admissionDate: 'identity',
+  birthDate: 'identity',
+  operacional: 'identity',
+  participatesInGoals: 'identity',
+  needsTransportVoucher: 'identity',
+  transportVoucherValue: 'identity',
+};
 
 type InactivationMode = 'temporary' | 'contract_termination';
 type TransportVoucherStatus = 'none' | 'active' | 'suspended';
@@ -173,9 +224,9 @@ function VacationSummaryCard({ user, admissionDate, vacations }: { user: User | 
 
   if (health.status === 'INVALIDO' || !openCycle) {
     return (
-      <div className="rounded-lg border bg-slate-50/70 p-3">
-        <p className="text-[11px] font-semibold uppercase text-slate-400">Férias</p>
-        <p className="mt-1 text-sm font-semibold text-slate-800">Informe a data de admissão</p>
+      <div className="rounded-ds-md border border-ds-border bg-ds-muted p-3">
+        <p className="text-[11px] font-extrabold uppercase tracking-wide text-ds-ink-faint">Férias</p>
+        <p className="mt-1 text-sm font-semibold text-ds-ink">Informe a data de admissão</p>
       </div>
     );
   }
@@ -186,11 +237,11 @@ function VacationSummaryCard({ user, admissionDate, vacations }: { user: User | 
   const daysToDeadline = differenceInDays(deadline, startOfLocalDay(new Date()));
 
   return (
-    <div className="rounded-lg border bg-slate-50/70 p-3 md:col-span-4">
+    <div className="rounded-ds-md border border-ds-border bg-ds-muted p-3 md:col-span-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] font-semibold uppercase text-slate-400">Férias</p>
-          <p className="mt-1 text-sm font-semibold text-slate-800">
+          <p className="text-[11px] font-extrabold uppercase tracking-wide text-ds-ink-faint">Férias</p>
+          <p className="mt-1 text-sm font-semibold text-ds-ink">
             {openCycle.balance} dias de saldo · ciclo {openCycle.id}
           </p>
         </div>
@@ -198,10 +249,10 @@ function VacationSummaryCard({ user, admissionDate, vacations }: { user: User | 
           {statusConfig.label}
         </span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full rounded-full bg-pink-500" style={{ width: `${progress}%` }} />
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-ds-divider">
+        <div className="h-full rounded-full bg-ds-accent" style={{ width: `${progress}%` }} />
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-slate-500">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-ds-ink-muted">
         <span>Usados: {openCycle.takenDays}d</span>
         <span>Prazo: {format(deadline, 'dd/MM/yyyy')}</span>
         <span>{daysToDeadline >= 0 ? `${daysToDeadline} dias restantes` : `${Math.abs(daysToDeadline)} dias vencido`}</span>
@@ -259,7 +310,7 @@ const userSchema = z.object({
   registrationIdPdv: z.string().optional(),
   jobRoleId: z.string().optional(),
   jobFunctionIds: z.array(z.string()).optional(),
-  employmentRelationshipType: z.enum(['clt', 'pj', 'internship'], {
+  employmentRelationshipType: z.enum(['clt', 'apprenticeship', 'pj', 'internship', 'partner'], {
     required_error: 'Selecione o tipo de vínculo.',
   }),
   responsibleUnitIds: z.array(z.string()).optional(),
@@ -344,7 +395,9 @@ function userAuditDiff(before: User, after: Partial<User>) {
 type UserManagementProps = {
   createOnly?: boolean;
   editUserId?: string;
-  onClose?: () => void;
+  onClose?: (reason?: 'cancel' | 'saved') => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  presentation?: 'page' | 'drawer';
   contextLabel?: string;
   showTransportVoucher?: boolean;
 };
@@ -353,6 +406,8 @@ export function UserManagement({
   createOnly = false,
   editUserId,
   onClose,
+  onDirtyChange,
+  presentation = 'page',
   contextLabel = 'Gestão do colaborador',
   showTransportVoucher = false,
 }: UserManagementProps = {}) {
@@ -365,6 +420,7 @@ export function UserManagement({
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showForm, setShowForm] = useState(createOnly || Boolean(editUserId));
+  const [activeEditTab, setActiveEditTab] = useState<CollaboratorEditTab>('identity');
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
@@ -422,6 +478,28 @@ export function UserManagement({
         transportVoucherValue: undefined,
     }
   });
+
+  const isDrawer = presentation === 'drawer' && !createOnly;
+
+  const handleEditTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % COLLABORATOR_EDIT_TABS.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + COLLABORATOR_EDIT_TABS.length) % COLLABORATOR_EDIT_TABS.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = COLLABORATOR_EDIT_TABS.length - 1;
+    else return;
+
+    event.preventDefault();
+    const nextTab = COLLABORATOR_EDIT_TABS[nextIndex];
+    setActiveEditTab(nextTab.id);
+    window.requestAnimationFrame(() => document.getElementById(`collaborator-edit-tab-${nextTab.id}`)?.focus());
+  };
+
+  useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const selectedRoleId = form.watch('jobRoleId') ?? '';
   const selectedFunctionIds = form.watch('jobFunctionIds') ?? [];
@@ -633,11 +711,13 @@ export function UserManagement({
   }, [filteredUsers, profiles, adminProfileId]);
 
 
-  const closeForm = () => {
-    setShowForm(false);
-    setEditingUser(null);
-    setPendingTransportVoucherHistory([]);
-    if (createOnly || editUserId) onClose?.();
+  const closeForm = (reason: 'cancel' | 'saved' = 'cancel') => {
+    if (!isDrawer || reason === 'saved') {
+      setShowForm(false);
+      setEditingUser(null);
+      setPendingTransportVoucherHistory([]);
+    }
+    if (createOnly || editUserId) onClose?.(reason);
   };
 
   const handleAddNew = () => {
@@ -710,6 +790,7 @@ export function UserManagement({
     Object.entries(user.pdvOperatorIds ?? {}).forEach(([k, v]) => { existing[k] = String(v); });
     setPdvOperatorIds(existing);
     setPendingTransportVoucherHistory([]);
+    setActiveEditTab('identity');
     setShowForm(true);
   }, [form, kiosks, units]);
 
@@ -801,10 +882,13 @@ export function UserManagement({
   const handleInactivateConfirm = async () => {
     if (userToInactivate) {
       if (inactivationMode === 'contract_termination' && !contractTerminationAvailable) {
+        const isSpecialEmploymentContract = userToInactivate.employmentRelationshipType === 'internship'
+          || userToInactivate.employmentRelationshipType === 'apprenticeship'
+          || userToInactivate.employmentRelationshipType === 'partner';
         toast({
-          title: userToInactivate.employmentRelationshipType === 'internship' ? 'Fluxo de estágio ainda não disponível.' : 'Tipo de vínculo obrigatório.',
-          description: userToInactivate.employmentRelationshipType === 'internship'
-            ? 'Nesta entrega, o desligamento específico de estágio ainda não foi habilitado.'
+          title: isSpecialEmploymentContract ? `${terminationCopy.action} ainda não disponível.` : 'Tipo de vínculo obrigatório.',
+          description: isSpecialEmploymentContract
+            ? 'Nesta entrega, o encerramento específico deste vínculo ainda não foi habilitado.'
             : 'Defina o tipo de vínculo no cadastro antes de registrar o encerramento.',
           variant: 'destructive',
         });
@@ -994,7 +1078,7 @@ export function UserManagement({
       return;
     }
     toast({ title: 'Alterações salvas.' });
-    closeForm();
+    closeForm('saved');
   };
 
   const onSubmit = async (values: UserFormValues) => {
@@ -1011,13 +1095,18 @@ export function UserManagement({
 
   const onInvalidSubmit = (errors: FieldErrors<UserFormValues>) => {
     const field = Object.keys(errors)[0] as keyof UserFormValues | undefined;
-    if (field) form.setFocus(field);
+    if (field && isDrawer) {
+      setActiveEditTab(COLLABORATOR_EDIT_FIELD_TAB[field] ?? 'identity');
+      window.requestAnimationFrame(() => form.setFocus(field));
+    } else if (field) {
+      form.setFocus(field);
+    }
     toast({
       variant: 'destructive',
       title: 'Existem campos obrigatórios pendentes.',
       description: firstUserFormError(errors),
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!isDrawer) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
   const handlePhotoUpdate = async (dataUrl: string) => {
@@ -1110,7 +1199,7 @@ export function UserManagement({
           <CardDescription>O cadastro solicitado não está disponível ou não pertence ao seu escopo de acesso.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button type="button" variant="outline" onClick={onClose}>Voltar para o perfil</Button>
+          <Button type="button" variant="outline" onClick={() => onClose?.('cancel')}>Voltar para o perfil</Button>
         </CardContent>
       </Card>
     );
@@ -1153,16 +1242,35 @@ export function UserManagement({
     <>
       {showForm ? (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "personal-create-user-form space-y-2" : "space-y-5"}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)}
+            autoComplete={createOnly ? 'off' : 'on'}
+            className={cn(
+              createOnly && 'personal-create-user-form space-y-2',
+              !createOnly && !isDrawer && 'collaborator-edit-form system-standard-page space-y-5 font-ds',
+              isDrawer && 'collaborator-edit-form flex min-h-[calc(100dvh-158px)] flex-col gap-4 font-ds',
+            )}
+          >
             {/* ── Back nav ── */}
-            {!createOnly ? (
+            {!createOnly && !isDrawer && editUserId && editingUser ? (
+              <PageHeader
+                title="Editar dados"
+                description="Atualize a identificação, a atuação, a jornada e o comportamento deste cadastro."
+                back={{
+                  fallbackHref: `/dashboard/dp/collaborators/${encodeURIComponent(editUserId)}`,
+                  parentLabel: editingUser.username,
+                  ariaLabel: `Voltar para o perfil de ${editingUser.username}`,
+                }}
+              />
+            ) : !createOnly && !isDrawer ? (
               <div className="flex items-center gap-3 mb-2">
                 <Button
                   type="button" variant="ghost" size="icon"
-                  className="shrink-0 h-8 w-8 rounded-full"
-                  onClick={closeForm}
+                  className="shrink-0 h-9 w-9 rounded-ds-btn bg-ds-surface text-ds-ink-muted shadow-xs ring-1 ring-ds-border"
+                  onClick={() => closeForm('cancel')}
+                  aria-label="Voltar"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft aria-hidden="true" className="h-4 w-4" />
                 </Button>
                 <div>
                   <p className="font-semibold leading-tight">
@@ -1173,9 +1281,46 @@ export function UserManagement({
               </div>
             ) : null}
 
-            {/* ── Cartão 1: Departamento Pessoal + identidade ── */}
-            <Card className={createOnly ? "personal-create-user-card shadow-none" : undefined} style={{ padding: createOnly ? '0.625rem' : '1.25rem 1.5rem' }}>
-              <div className={createOnly ? "grid gap-2" : "flex gap-5 items-start"}>
+            {isDrawer ? (
+              <nav
+                aria-label="Seções da edição do colaborador"
+                className="sticky top-0 z-20 -mx-1 overflow-x-auto rounded-ds-md bg-ds-surface-seg p-[3px] shadow-xs"
+              >
+                <div role="tablist" aria-label="Dados do colaborador" className="flex min-w-max gap-1">
+                  {COLLABORATOR_EDIT_TABS.map((tab, index) => (
+                    <button
+                      key={tab.id}
+                      id={`collaborator-edit-tab-${tab.id}`}
+                      type="button"
+                      role="tab"
+                      tabIndex={activeEditTab === tab.id ? 0 : -1}
+                      aria-selected={activeEditTab === tab.id}
+                      aria-controls={`collaborator-edit-panel-${tab.id}`}
+                      onClick={() => setActiveEditTab(tab.id)}
+                      onKeyDown={(event) => handleEditTabKeyDown(event, index)}
+                      className={cn(
+                        'rounded-ds-sm px-3 py-2 text-xs font-extrabold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink',
+                        activeEditTab === tab.id
+                          ? 'bg-ds-surface text-ds-ink shadow-xs'
+                          : 'text-ds-ink-muted hover:text-ds-ink',
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </nav>
+            ) : null}
+
+            {(!isDrawer || activeEditTab === 'identity') ? (
+            <div id="collaborator-edit-panel-identity" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-identity' : undefined}>
+            <UserFormSection
+              title="Identificação"
+              description="Dados básicos e natureza do vínculo da pessoa."
+              help="Reúne a identificação principal do cadastro. O tipo de vínculo define quais fluxos trabalhistas ou societários podem ser aplicados, sem alterar sozinho cargo, função ou permissões."
+              compact={createOnly}
+            >
+              <div className={createOnly ? "grid gap-2" : "flex flex-col gap-5 sm:flex-row sm:items-start"}>
                 {/* Avatar + botões */}
                 {!createOnly ? (
                 <div className="flex flex-col items-center gap-2 shrink-0">
@@ -1199,10 +1344,10 @@ export function UserManagement({
                     )}
                   </Avatar>
                   <div className="flex gap-1.5">
-                    <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}>
+                    <Button type="button" size="sm" variant="ds-secondary" onClick={() => setIsPhotoModalOpen(true)} disabled={isUploadingPhoto}>
                       <Camera className="h-3 w-3 mr-1" /> Tirar foto
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}>
+                    <Button type="button" size="sm" variant="ds-secondary" onClick={() => fileInputRef.current?.click()} disabled={isUploadingPhoto}>
                       <Upload className="h-3 w-3 mr-1" /> Carregar
                     </Button>
                   </div>
@@ -1273,7 +1418,7 @@ export function UserManagement({
                           </SelectContent>
                         </Select>
                         <FormDescription className="text-xs">
-                          Define as regras de integração e de encerramento aplicáveis.
+                          Classifica a natureza do vínculo e habilita somente os fluxos compatíveis.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1281,9 +1426,21 @@ export function UserManagement({
                   </div>
                 </div>
               </div>
-              <div className={createOnly ? "mt-2 space-y-2 border-t pt-2" : "mt-5 space-y-4 border-t pt-5"}>
-                {permissions.dp?.view && (
-                  <>
+            </UserFormSection>
+            </div>
+            ) : null}
+
+            {permissions.dp?.view ? (
+              <>
+                {(!isDrawer || activeEditTab === 'access') ? (
+                <div id="collaborator-edit-panel-access" role={isDrawer ? 'tabpanel' : undefined} aria-labelledby={isDrawer ? 'collaborator-edit-tab-access' : undefined}>
+                <UserFormSection
+                  title="Atuação e acesso"
+                  description="Cargo, função, unidades e alcance das permissões deste cadastro."
+                  help="Cargo e função determinam o perfil de permissão aplicável. As unidades de operação controlam onde a pessoa entra na escala; a unidade principal é a referência financeira; e o escopo define onde ela pode visualizar ou operar."
+                  compact={createOnly}
+                >
+                  <div className={createOnly ? "space-y-2 border-t pt-2" : "space-y-4"}>
                     <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
                       <FormField control={form.control} name="jobRoleId" render={({ field }) => (
                         <FormItem>
@@ -1455,9 +1612,11 @@ export function UserManagement({
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <FormControl>
-                                <Button variant="outline" className="w-full justify-between font-normal">
+                                <Button variant="ds-secondary" className="relative h-10 w-full justify-start rounded-ds-md bg-ds-input pr-12 text-[13px] font-normal">
                                   {(field.value?.length || 0) > 0 ? `${field.value.length} unidade(s)` : 'Selecione as unidades'}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  <span className="pointer-events-none absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-ds-sm border border-ds-border bg-ds-surface text-ds-ink-muted shadow-xs">
+                                    <ChevronDown aria-hidden="true" className="h-4 w-4" strokeWidth={2.25} />
+                                  </span>
                                 </Button>
                               </FormControl>
                             </DropdownMenuTrigger>
@@ -1509,6 +1668,20 @@ export function UserManagement({
                         </div>
                       </div>
                     )}
+                  </div>
+                </UserFormSection>
+                </div>
+                ) : null}
+
+                {(!isDrawer || activeEditTab === 'identity') ? (
+                <div id="collaborator-edit-section-journey">
+                <UserFormSection
+                  title="Jornada e datas"
+                  description="Turno de referência, datas contratuais e informações calculadas."
+                  help="O turno padrão orienta a montagem da escala dentro da jornada aplicável. As datas alimentam cálculos de tempo de empresa, idade, aniversários e ciclos de férias; integrações podem bloquear campos que são mantidos pelo sistema de origem."
+                  compact={createOnly}
+                >
+                  <div className={createOnly ? "space-y-2" : "space-y-4"}>
                     <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 gap-4 lg:grid-cols-3"}>
                       <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
                         <FormItem>
@@ -1554,8 +1727,8 @@ export function UserManagement({
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                       <DerivedInfoCard label="Tempo de empresa" value={dpDateSummary.tenure} />
                       <DerivedInfoCard label="Idade" value={dpDateSummary.age} />
-                      <DerivedInfoCard label="Aniversario de empresa" value={dpDateSummary.companyAnniversary} />
-                      <DerivedInfoCard label="Aniversario de idade" value={dpDateSummary.birthday} />
+                      <DerivedInfoCard label="Aniversário de empresa" value={dpDateSummary.companyAnniversary} />
+                      <DerivedInfoCard label="Aniversário de idade" value={dpDateSummary.birthday} />
                       <VacationSummaryCard
                         user={editingUser}
                         admissionDate={parseDateInput(admissionDateValue)}
@@ -1563,17 +1736,24 @@ export function UserManagement({
                       />
                     </div>
                     ) : null}
-                  </>
-                )}
-              </div>
-            </Card>
+                  </div>
+                </UserFormSection>
+                </div>
+                ) : null}
+              </>
+            ) : null}
 
-            {/* ── Cartão 2: Comportamento no sistema ── */}
-            <Card className={createOnly ? "personal-create-user-card max-w-5xl" : "max-w-5xl"} style={{ padding: createOnly ? '0.625rem' : '1rem' }}>
-              <p className="mb-1.5 text-[11px] font-semibold">Comportamento no sistema</p>
-              <div className="grid gap-2 md:grid-cols-3">
+            {(!isDrawer || activeEditTab === 'identity') ? (
+            <div id="collaborator-edit-section-system">
+            <UserFormSection
+              title="Comportamento no sistema"
+              description="Recursos operacionais habilitados para esta pessoa."
+              help="Estas opções habilitam a participação do cadastro em rotinas específicas. Elas não substituem cargo, função, vínculo, jornada nem perfil de permissão, e não geram efeitos financeiros por conta própria."
+              compact={createOnly}
+            >
+              <div className="grid gap-3 md:grid-cols-2">
                 <FormField control={form.control} name="operacional" render={({ field }) => (
-                  <FormItem className="flex min-h-[46px] flex-row items-center justify-between gap-2 rounded-md border p-2">
+                  <FormItem className="flex min-h-[58px] flex-row items-center justify-between gap-3 rounded-ds-md border border-ds-border bg-ds-input px-3 py-2.5">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <FormLabel className="text-sm font-medium">Operacional</FormLabel>
@@ -1584,21 +1764,21 @@ export function UserManagement({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={cn('text-[11px] font-bold', field.value ? 'text-pink-700' : 'text-slate-600')}>
+                      <span className={cn('text-[11px] font-bold', field.value ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
                         {field.value ? 'Ativo' : 'Inativo'}
                       </span>
                       <FormControl>
                         <Switch
                           checked={!!field.value}
                           onCheckedChange={field.onChange}
-                          className="border border-slate-400 shadow-inner data-[state=unchecked]:bg-slate-300 data-[state=checked]:border-pink-600 data-[state=checked]:bg-pink-600"
+                          className="border border-ds-border-input shadow-inner data-[state=unchecked]:bg-ds-disabled data-[state=checked]:border-ds-accent data-[state=checked]:bg-ds-accent"
                         />
                       </FormControl>
                     </div>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
-                  <FormItem className="flex min-h-[46px] flex-row items-center justify-between gap-2 rounded-md border p-2">
+                  <FormItem className="flex min-h-[58px] flex-row items-center justify-between gap-3 rounded-ds-md border border-ds-border bg-ds-input px-3 py-2.5">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <FormLabel className="text-sm font-medium">Metas</FormLabel>
@@ -1609,14 +1789,14 @@ export function UserManagement({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={cn('text-[11px] font-bold', field.value ? 'text-pink-700' : 'text-slate-600')}>
+                      <span className={cn('text-[11px] font-bold', field.value ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
                         {field.value ? 'Ativo' : 'Inativo'}
                       </span>
                       <FormControl>
                         <Switch
                           checked={!!field.value}
                           onCheckedChange={field.onChange}
-                          className="border border-slate-400 shadow-inner data-[state=unchecked]:bg-slate-300 data-[state=checked]:border-pink-600 data-[state=checked]:bg-pink-600"
+                          className="border border-ds-border-input shadow-inner data-[state=unchecked]:bg-ds-disabled data-[state=checked]:border-ds-accent data-[state=checked]:bg-ds-accent"
                         />
                       </FormControl>
                     </div>
@@ -1624,7 +1804,7 @@ export function UserManagement({
                 )} />
                 {showTransportVoucher ? (
                   <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
-                  <FormItem className="rounded-lg border p-3 md:col-span-3">
+                  <FormItem className="rounded-ds-md border border-ds-border p-3 md:col-span-2">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-[220px] space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1663,7 +1843,7 @@ export function UserManagement({
 
                         <div className="rounded-lg border bg-slate-50/70 p-3">
                           <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-bold uppercase text-slate-400">Historico de atos</p>
+                            <p className="text-[11px] font-bold uppercase text-slate-400">Histórico de atos</p>
                             <p className="text-[11px] font-semibold text-slate-400">Solicitar · Suspender · Reativar</p>
                           </div>
                           {transportVoucherHistory.length > 0 ? (
@@ -1696,15 +1876,45 @@ export function UserManagement({
                   )} />
                 ) : null}
               </div>
-            </Card>
+            </UserFormSection>
+            </div>
+            ) : null}
 
-            {/* ── Footer ── */}
-            <div className="flex justify-end gap-2 pt-0.5">
-              <Button type="button" variant="outline" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} onClick={closeForm}>Cancelar</Button>
-              <Button type="submit" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} disabled={isUploadingPhoto || form.formState.isSubmitting || (!!editingUser && !form.formState.isDirty)}>
-                {form.formState.isSubmitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                {editingUser ? 'Salvar alterações' : 'Criar usuário'}
-              </Button>
+            <div className={cn(
+              'flex gap-3',
+              createOnly
+                ? 'justify-end pt-0.5'
+                : cn(
+                    'sticky z-20 flex-col rounded-ds-card border border-ds-border bg-ds-surface/95 px-4 py-3 shadow-lg backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between',
+                    isDrawer ? 'bottom-0 mt-auto' : 'bottom-4',
+                  ),
+            )}>
+              {!createOnly ? (
+                <p className={cn('text-sm font-semibold', form.formState.isDirty ? 'text-ds-accent-ink' : 'text-ds-ink-muted')}>
+                  {form.formState.isDirty ? 'Alterações pendentes' : 'Nenhuma alteração pendente'}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant={createOnly ? 'outline' : 'ds-secondary'}
+                  size={createOnly ? 'default' : 'md'}
+                  className={createOnly ? "h-7 px-3 text-[11px]" : undefined}
+                  onClick={() => closeForm('cancel')}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant={createOnly ? 'default' : 'primary-page'}
+                  size={createOnly ? 'default' : 'md'}
+                  className={createOnly ? "h-7 px-3 text-[11px]" : undefined}
+                  loading={form.formState.isSubmitting}
+                  disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}
+                >
+                  {editingUser ? 'Salvar alterações' : 'Criar usuário'}
+                </Button>
+              </div>
             </div>
           </form>
         </Form>
@@ -2044,7 +2254,11 @@ export function UserManagement({
                     ? `Vínculo: ${employmentRelationshipLabel(selectedTerminationRelationship)}.`
                     : selectedTerminationRelationship === 'internship'
                       ? 'O fluxo específico de estágio será implementado posteriormente.'
-                      : 'Defina o tipo de vínculo antes de registrar o encerramento.'}
+                      : selectedTerminationRelationship === 'apprenticeship'
+                        ? 'O fluxo específico de aprendiz será implementado posteriormente.'
+                        : selectedTerminationRelationship === 'partner'
+                          ? 'O fluxo específico societário será implementado posteriormente.'
+                          : 'Defina o tipo de vínculo antes de registrar o encerramento.'}
                 </p>
               </button>
             </div>

@@ -4,11 +4,20 @@ import { Timestamp } from "firebase-admin/firestore";
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
 import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
-import { requireUser } from "@/lib/auth-server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
+import { AppError } from "@/lib/observability";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import { canDelegateUnitAccess } from "@/lib/unit-access";
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
+import {
+  EMPLOYMENT_CYCLE_FIELDS,
+  setEmploymentCyclePatch,
+} from "@/lib/employment-cycle.server";
 import {
   PdvOperationalUnitSyncError,
   PDV_SERVER_MANAGED_USER_FIELDS,
@@ -56,6 +65,8 @@ const SERVER_ONLY_FIELDS = new Set([
   "hrEmployeeId",
   "personRecordType",
   "profileCompliance",
+  "employmentCycleVersion",
+  "absenceDocumentDeletionFence",
   ...PDV_SERVER_MANAGED_USER_FIELDS,
 ]);
 
@@ -80,6 +91,104 @@ const COLLABORATOR_CORE_FIELDS = new Set([
 ]);
 
 const MAX_AUTOMATIC_PDV_UNIT_SYNCS = 10;
+type RouteContext = { params: Promise<{ userId: string }> };
+type UpdateUserResource = {
+  userId: string;
+  existingUser: Record<string, unknown>;
+};
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "users.update",
+  version: 1,
+  surface: { method: "PATCH", path: "/api/users/[userId]" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "custom", strategy: "user-management-update" },
+  resourceScope: { kind: "custom", strategy: "employee-unit" },
+  input: { kind: "none" },
+  effects: { mode: "write", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+const enforcer = defineSecurityEnforcer<
+  NextRequest,
+  RouteContext,
+  unknown,
+  ServerUserContext,
+  Record<string, unknown>,
+  UpdateUserResource
+>({
+  id: "user-management-update-v1",
+  guarantees: [
+    "authenticated-user",
+    "active-user",
+    "authorization:user-management-update",
+    "scope:employee-unit",
+  ],
+  async enforce({ request, routeContext }) {
+    const actor = await requireUser(request).catch((cause) => {
+      throw new AppError({ code: "USER_UPDATE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+    });
+    const canManageUsers = actor.isDefaultAdmin || actor.permissions.settings.manageUsers;
+    const canManageDp =
+      actor.permissions.dp?.collaborators?.edit === true ||
+      actor.permissions.dp?.collaborators?.terminate === true;
+    if (!canManageUsers && !canManageDp) {
+      throw new AppError({
+        code: "USER_UPDATE_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "Sem permissão para editar usuário.",
+      });
+    }
+
+    const [params, rawPayload] = await Promise.all([
+      routeContext.params,
+      request.json().catch(() => null),
+    ]);
+    if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
+      throw new AppError({
+        code: "USER_UPDATE_PAYLOAD_INVALID",
+        kind: "VALIDATION",
+        safeMessage: "Payload inválido.",
+      });
+    }
+
+    const userId = params.userId;
+    const existingUserSnap = await dbAdmin.collection("users").doc(userId).get();
+    if (!existingUserSnap.exists) {
+      throw new AppError({
+        code: "USER_UPDATE_TARGET_NOT_FOUND",
+        kind: "NOT_FOUND",
+        safeMessage: "Usuário não encontrado.",
+      });
+    }
+    await assertEmployeeUnitAccess(actor, userId).catch((cause) => {
+      throw new AppError({
+        code: "USER_UPDATE_UNIT_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "Você não possui acesso à unidade deste colaborador.",
+        cause,
+      });
+    });
+
+    return {
+      actor,
+      input: rawPayload as Record<string, unknown>,
+      resource: { userId, existingUser: existingUserSnap.data() ?? {} },
+    };
+  },
+});
+
+const collaboratorCoreValidationMessages = new Set([
+  "Cargo não encontrado.",
+  "Função não encontrada.",
+  "A função selecionada não está vinculada ao cargo escolhido.",
+  "Turno não encontrado.",
+  "O turno selecionado não pertence à unidade escolhida.",
+  "Escopo de unidades inválido.",
+  "Selecione ao menos uma unidade para o escopo específico.",
+]);
 
 function cleanPayload(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -116,44 +225,40 @@ function valuesDiffer(left: unknown, right: unknown) {
   return JSON.stringify(comparable(left)) !== JSON.stringify(comparable(right));
 }
 
+function userEntity(user: Record<string, unknown>) {
+  if (typeof user.unitId === "string" && user.unitId.trim()) return user.unitId.trim();
+  if (Array.isArray(user.unitIds)) {
+    const unitId = user.unitIds.find((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    if (unitId) return unitId.trim();
+  }
+  return "CS";
+}
+
 function isProtectedUser(user: Record<string, unknown>) {
   return user.username === "Tiago Brasil" || user.email === "administrativo@coalas.com";
 }
 
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ userId: string }> }
-) {
+export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) => {
   try {
-    const actor = await requireUser(request);
-    const { userId } = await context.params;
-    const rawPayload = await request.json();
-
-    if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
-      return NextResponse.json({ error: "Payload inválido." }, { status: 400 });
-    }
-
+    const { actor, input: rawPayload, resource } = security;
+    const { userId, existingUser } = resource;
     const canManageUsers = actor.isDefaultAdmin || actor.permissions.settings.manageUsers;
-    const canManageDp =
-      actor.permissions.dp?.collaborators?.edit === true ||
-      actor.permissions.dp?.collaborators?.terminate === true;
-
-    if (!canManageUsers && !canManageDp) {
-      return NextResponse.json({ error: "Sem permissão para editar usuário." }, { status: 403 });
-    }
-
     const payload = cleanPayload(rawPayload) as Record<string, unknown>;
     for (const field of SERVER_ONLY_FIELDS) {
       delete payload[field];
     }
+    if (
+      hasOwn(payload, "employmentRelationshipType") &&
+      !isEmploymentRelationshipType(payload.employmentRelationshipType)
+    ) {
+      throw new AppError({
+        code: "USER_UPDATE_RELATIONSHIP_INVALID",
+        kind: "VALIDATION",
+        safeMessage: "Tipo de vínculo inválido.",
+      });
+    }
 
     const userRef = dbAdmin.collection("users").doc(userId);
-    const existingUserSnap = await userRef.get();
-    const existingUser = existingUserSnap.data() ?? {};
-    if (!existingUserSnap.exists) {
-      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
-    }
-    await assertEmployeeUnitAccess(actor, userId);
     const unitAssignmentChanged = Object.keys(payload).some((field) =>
       UNIT_ASSIGNMENT_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
     );
@@ -166,17 +271,19 @@ export async function PATCH(
     );
 
     if (defaultAdminOnlyFields.length > 0 && !actor.isDefaultAdmin) {
-      return NextResponse.json(
-        { error: "Somente o administrador padrão pode alterar privilégios administrativos." },
-        { status: 403 }
-      );
+      throw new AppError({
+        code: "USER_UPDATE_DEFAULT_ADMIN_REQUIRED",
+        kind: "AUTHORIZATION",
+        safeMessage: "Somente o administrador padrão pode alterar privilégios administrativos.",
+      });
     }
 
     if (restrictedFields.length > 0 && !canManageUsers) {
-      return NextResponse.json(
-        { error: "Sem permissão para alterar acesso, perfil ou desligamento." },
-        { status: 403 }
-      );
+      throw new AppError({
+        code: "USER_UPDATE_RESTRICTED_FIELDS_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "Sem permissão para alterar acesso, perfil ou desligamento.",
+      });
     }
 
     if (hasCollaboratorCoreFields(payload)) {
@@ -196,10 +303,11 @@ export async function PATCH(
         { isDefaultAdmin: actor.isDefaultAdmin },
       )
     ) {
-      return NextResponse.json(
-        { error: "Você não pode atribuir unidades ou um escopo maior que o seu próprio." },
-        { status: 403 },
-      );
+      throw new AppError({
+        code: "USER_UPDATE_UNIT_SCOPE_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "Você não pode atribuir unidades ou um escopo maior que o seu próprio.",
+      });
     }
 
     if (
@@ -209,28 +317,41 @@ export async function PATCH(
       valuesDiffer(payload.profileId.trim(), existingUser.profileId)
     ) {
       if (userId === actor.decoded.uid) {
-        return NextResponse.json(
-          { error: "Somente o administrador padrão pode alterar o próprio perfil de acesso." },
-          { status: 403 }
-        );
+        throw new AppError({
+          code: "USER_UPDATE_OWN_PROFILE_FORBIDDEN",
+          kind: "AUTHORIZATION",
+          safeMessage: "Somente o administrador padrão pode alterar o próprio perfil de acesso.",
+        });
       }
       const targetProfile = await dbAdmin
         .collection("profiles")
         .doc(payload.profileId.trim())
         .get();
       if (!targetProfile.exists) {
-        return NextResponse.json({ error: "Perfil não encontrado." }, { status: 400 });
+        throw new AppError({
+          code: "USER_UPDATE_PROFILE_NOT_FOUND",
+          kind: "VALIDATION",
+          safeMessage: "Perfil não encontrado.",
+        });
       }
       if (targetProfile.data()?.isDefaultAdmin === true) {
-        return NextResponse.json(
-          { error: "Somente o administrador padrão pode atribuir o perfil administrativo." },
-          { status: 403 }
-        );
+        throw new AppError({
+          code: "USER_UPDATE_ADMIN_PROFILE_FORBIDDEN",
+          kind: "AUTHORIZATION",
+          safeMessage: "Somente o administrador padrão pode atribuir o perfil administrativo.",
+        });
       }
     }
 
     const nextUser = { ...existingUser, ...payload };
     const pdvSyncPlans = planPdvOperationalUnitSyncs(existingUser, nextUser);
+    const employmentCycleChanged = Object.keys(payload).some((field) =>
+      EMPLOYMENT_CYCLE_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
+    );
+    if (employmentCycleChanged && pdvSyncPlans.length > 0) {
+      throw new AppError({ code: "USER_UPDATE_EMPLOYMENT_AND_PDV_CONFLICT", kind: "CONFLICT",
+        safeMessage: "Atualize o vínculo e as unidades do PDV em operações separadas." });
+    }
     if (pdvSyncPlans.length > MAX_AUTOMATIC_PDV_UNIT_SYNCS) {
       throw new PdvOperationalUnitSyncError(
         `Selecione no máximo ${MAX_AUTOMATIC_PDV_UNIT_SYNCS} novas unidades por alteração para sincronizar o PDV Legal.`,
@@ -341,7 +462,8 @@ export async function PATCH(
               "As unidades da colaboradora foram alteradas durante a sincronização. Tente novamente.",
             );
           }
-          transaction.set(userRef, payload, { merge: true });
+          setEmploymentCyclePatch(transaction, userRef, latestUserSnap, payload,
+            { cycleMutation: employmentCycleChanged });
           transaction.set(pdvSyncAuditRef!, {
             status: "completed",
             completedOperations: pdvSyncResults,
@@ -358,7 +480,12 @@ export async function PATCH(
         throw error;
       }
     } else {
-      await userRef.set(payload, { merge: true });
+      await dbAdmin.runTransaction(async (transaction) => {
+        const latestUserSnap = await transaction.get(userRef);
+        if (!latestUserSnap.exists) throw new AppError({ code: "USER_UPDATE_TARGET_NOT_FOUND", kind: "NOT_FOUND" });
+        setEmploymentCyclePatch(transaction, userRef, latestUserSnap, payload,
+          { cycleMutation: employmentCycleChanged });
+      });
     }
 
     if (unitAssignmentChanged) {
@@ -400,7 +527,7 @@ export async function PATCH(
           dailyValue: typeof payload.transportVoucherValue === "number" ? payload.transportVoucherValue : null,
           effectiveDate: typeof latestHistory?.effectiveDate === "string" ? latestHistory.effectiveDate : null,
           reason: typeof latestHistory?.reason === "string" ? latestHistory.reason : null,
-          entity: existingUser.unitId ?? existingUser.unitIds?.[0] ?? "CS",
+          entity: userEntity(existingUser),
           actorId: actor.decoded.uid,
         });
       }
@@ -415,10 +542,37 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const integrationFailure = error instanceof PdvApiError;
-    const message = integrationFailure
-      ? "Não foi possível atualizar a filial da colaboradora no PDV Legal. Nenhuma alteração de unidade foi salva no Coala One."
-      : error instanceof Error ? error.message : "Falha ao atualizar usuário.";
-    return NextResponse.json({ error: message }, { status: integrationFailure ? 502 : 400 });
+    if (error instanceof AppError) throw error;
+    const knownMessage = error instanceof Error ? error.message : "";
+    if (error instanceof PdvApiError) {
+      throw new AppError({
+        code: "USER_UPDATE_PDV_SYNC_FAILED",
+        kind: "PERMANENT_EXTERNAL",
+        safeMessage: "Não foi possível atualizar a filial da colaboradora no PDV Legal. Nenhuma alteração de unidade foi salva no Coala One.",
+        cause: error,
+      });
+    }
+    if (error instanceof PdvOperationalUnitSyncError) {
+      throw new AppError({
+        code: "USER_UPDATE_PDV_SYNC_INVALID",
+        kind: "CONFLICT",
+        safeMessage: knownMessage,
+        cause: error,
+      });
+    }
+    if (collaboratorCoreValidationMessages.has(knownMessage)) {
+      throw new AppError({
+        code: "USER_UPDATE_CORE_INVALID",
+        kind: "VALIDATION",
+        safeMessage: knownMessage,
+        cause: error,
+      });
+    }
+    throw new AppError({
+      code: "USER_UPDATE_FAILED",
+      kind: "UNEXPECTED_APPLICATION",
+      safeMessage: "Falha ao atualizar usuário.",
+      cause: error,
+    });
   }
-}
+});

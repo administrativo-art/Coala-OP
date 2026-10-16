@@ -12,6 +12,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class AttestationToken(val token: String, val expiresAt: Long)
 @Serializable data class AttestationResponse(val attestation: AttestationToken? = null)
 @Serializable data class ResetRequest(val email: String)
+@Serializable data class PushDeviceRegistration(val installationId: String, val token: String, val packageName: String, val permissionGranted: Boolean = true, val appVersion: String? = null)
+@Serializable data class PushDeviceRemoval(val installationId: String)
+@Serializable data class PushDeviceRegistered(val registered: Boolean)
+@Serializable data class PushDeviceRemoved(val removed: Boolean)
 
 @Serializable data class ExitReason(val value: String, val label: String)
 @Serializable data class OpenSession(val id: String, val kioskId: String, val kioskName: String, val startedAt: String, val itemCount: Int)
@@ -35,7 +39,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class ReceiveRequest(val activityId: String, val rows: List<ReceiptRow>)
 @Serializable data class Received(val status: String, val hasDivergence: Boolean, val alreadyReceived: Boolean)
 
-@Serializable data class Withdrawal(val sourceId: String, val unitId: String, val unitName: String, val date: String, val time: String? = null, val amountCents: Long, val operatorName: String? = null)
+@Serializable data class Withdrawal(val sourceId: String, val unitId: String, val unitName: String, val date: String, val time: String? = null, val amountCents: Long, val operatorName: String? = null, val reason: String? = null)
 @Serializable data class AwaitingPurchase(val id: String, val unitId: String, val supplierName: String, val purchaseDate: String, val totalCents: Long)
 @Serializable data class DateWindow(val from: String, val to: String)
 @Serializable data class Withdrawals(val withdrawals: List<Withdrawal>, val awaitingPurchases: List<AwaitingPurchase> = emptyList(), val window: DateWindow, val partial: Boolean)
@@ -70,6 +74,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class Prize(val methodName: String, val tiers: List<PrizeTier>, val highestTierLabel: String? = null, val nextTier: NextLevel? = null, val totalTeamBonus: Double, val leadershipBonus: Double, val message: String? = null)
 @Serializable data class Goal(val id: String, val typeLabel: String, val startDate: String, val endDate: String, val summary: GoalSummary, val days: List<GoalDay>, val team: List<GoalMember>, val prize: Prize? = null, val distributedBySchedule: Boolean = false)
 @Serializable data class GoalUnits(val units: List<UnitRef>)
+@Serializable data class OverviewGoal(val id: String, val typeLabel: String, val startDate: String, val endDate: String, val cumulative: Boolean, val currentValue: Double, val targetValue: Double, val percentOfTarget: Double)
+@Serializable data class OverviewUnit(val id: String, val name: String, val goals: List<OverviewGoal>)
+@Serializable data class OverviewTotal(val currentValue: Double, val targetValue: Double, val percentOfTarget: Double, val unitCount: Int)
+@Serializable data class GoalsOverview(val today: String, val total: OverviewTotal? = null, val units: List<OverviewUnit>)
 @Serializable data class UnitGoals(val kioskId: String, val today: String, val goals: List<Goal>)
 
 @Serializable data class SignageScreen(val id: String, val name: String, val orientation: String? = null, val connected: Boolean)

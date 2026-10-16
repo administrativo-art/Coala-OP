@@ -7,6 +7,10 @@ const monthSource = readFileSync('src/components/dp/dp-schedule-month-view.tsx',
 const sidebarSource = readFileSync('src/components/dp/dp-schedules-sidebar.tsx', 'utf8');
 const editorSource = readFileSync('src/components/dp/dp-schedule-editor.tsx', 'utf8');
 const bulkSource = readFileSync('src/components/dp/dp-bulk-shift-edit-dialog.tsx', 'utf8');
+const schedulePageSource = readFileSync('src/app/dashboard/dp/schedules/[id]/page.tsx', 'utf8');
+const scheduleStoreSource = readFileSync('src/store/use-dp-store.ts', 'utf8');
+const scheduleStateSource = readFileSync('src/features/dp/schedules/state-service.server.ts', 'utf8');
+const schedulesShiftsHookSource = readFileSync('src/hooks/use-dp-schedules-shifts.ts', 'utf8');
 
 test('lista mantém planejamento por ano, inclusão de mês e exportação global', () => {
   assert.match(listSource, /Meses de escala/);
@@ -14,6 +18,11 @@ test('lista mantém planejamento por ano, inclusão de mês e exportação globa
   assert.match(listSource, /Exportar para o Bizneo/);
   assert.match(listSource, /Array\.from\(\{ length: 12 \}/);
   assert.match(listSource, /alreadyStarted/);
+  assert.match(listSource, /buildMonthlyTransportVoucherSummaries/);
+  assert.match(listSource, /Vale-transporte/);
+  assert.match(listSource, /PopoverContent/);
+  assert.match(schedulesShiftsHookSource, /Promise\.allSettled/);
+  assert.match(schedulesShiftsHookSource, /failedScheduleIds/);
 });
 
 test('visão mensal agrupa unidades por estado e cidade sem ação criar por linha', () => {
@@ -45,4 +54,24 @@ test('painel em lote oferece seleção visível, por pessoa e bloqueios de ausê
   assert.match(bulkSource, /swapDayOffWarning/);
   assert.match(bulkSource, /swapVacationWarning/);
   assert.match(bulkSource, /onRemoveSelected/);
+});
+
+test('editor busca uma escala histórica sem cancelar a própria requisição', () => {
+  const lookupEffect = schedulePageSource.slice(
+    schedulePageSource.indexOf('useEffect(() => {'),
+    schedulePageSource.indexOf("if (!permissions.dp?.schedules?.view)"),
+  );
+  assert.match(lookupEffect, /fetchSchedule\(id\)/);
+  assert.doesNotMatch(lookupEffect, /\|\| lookupLoading/);
+  assert.doesNotMatch(lookupEffect, /lookupError, lookupLoading,/);
+});
+
+test('fechamento usa validação autoritativa de jornada e rejeita resultado obsoleto', () => {
+  assert.match(editorSource, /useDPScheduleJourneyValidation\(schedule\.id\)/);
+  assert.match(editorSource, /pendência.*de jornada impedem o fechamento/);
+  assert.match(scheduleStoreSource, /action: 'lock'/);
+  assert.match(scheduleStoreSource, /\/api\/dp\/schedules\/\$\{encodeURIComponent\(id\)\}/);
+  assert.match(scheduleStateSource, /validateScheduleJourneys/);
+  assert.match(scheduleStateSource, /DP_SCHEDULE_JOURNEY_VALIDATION_STALE/);
+  assert.match(scheduleStateSource, /journeyValidationVersion/);
 });

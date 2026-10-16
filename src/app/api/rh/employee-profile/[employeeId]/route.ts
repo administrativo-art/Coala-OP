@@ -10,6 +10,10 @@ import { refreshProbationProcess, type ProbationProcessState } from "@/features/
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
 import { isOwnHrEmployeeId } from "@/lib/hr/person-link";
+import { AppError } from "@/lib/observability/app-error";
+import { defineSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,25 +84,54 @@ async function loadFieldMap(actor: Awaited<ReturnType<typeof requireUser>>): Pro
   } as FieldMap;
 }
 
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ employeeId: string }> },
-) {
+type RouteContext = { params: Promise<{ employeeId: string }> };
+type ProfileResource = { employeeId: string };
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "rh.employee-profile.read",
+  version: 1,
+  surface: { method: "GET", path: "/api/rh/employee-profile/[employeeId]" },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "custom", strategy: "rh-profile-read" },
+  resourceScope: { kind: "custom", strategy: "employee-profile" },
+  input: { kind: "schema", schema: "rh-employee-profile-route", unknownFields: "reject" },
+  effects: { mode: "read", audit: "none" },
+  errorExposure: "sanitized",
+});
+
+const enforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof requireUser>>, { employeeId: string }, ProfileResource>({
+  id: "rh-employee-profile-read-v1",
+  guarantees: ["authenticated-user", "active-user", "authorization:rh-profile-read", "scope:employee-profile", "input-validated", "fields-allowlisted"],
+  async enforce({ request, routeContext }) {
+    const actor = await requireUser(request).catch((cause) => {
+      throw new AppError({ code: "RH_PROFILE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", safeMessage: "Autenticação necessária.", cause, reportable: false });
+    });
+    const params = await routeContext.params;
+    const employeeId = decodeURIComponent(params.employeeId ?? "").trim();
+    if (!employeeId || employeeId.length > 250) {
+      throw new AppError({ code: "RH_PROFILE_EMPLOYEE_ID_INVALID", kind: "VALIDATION", safeMessage: "Colaborador obrigatório.", reportable: false });
+    }
+    if (!canReadRhProfile(actor, employeeId)) {
+      throw new AppError({ code: "RH_PROFILE_READ_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem permissão para visualizar perfil RH.", reportable: false });
+    }
+    await assertEmployeeUnitAccess(actor, employeeId).catch((cause) => {
+      throw new AppError({ code: "RH_PROFILE_UNIT_FORBIDDEN", kind: "AUTHORIZATION", safeMessage: "Sem acesso à unidade deste colaborador.", cause, reportable: false });
+    });
+    return { actor, input: { employeeId }, resource: { employeeId } };
+  },
+});
+
+export const GET = secureRoute({ contract, enforcer }, async ({ security }) => {
   try {
-    const actor = await requireUser(request);
-    const { employeeId } = await context.params;
-    const normalizedEmployeeId = decodeURIComponent(employeeId ?? "").trim();
+    const actor = security.actor;
+    const normalizedEmployeeId = security.resource.employeeId;
 
-    if (!normalizedEmployeeId) {
-      return NextResponse.json({ error: "Colaborador obrigatório." }, { status: 400 });
-    }
-    if (!canReadRhProfile(actor, normalizedEmployeeId)) {
-      return NextResponse.json({ error: "Sem permissão para visualizar perfil RH." }, { status: 403 });
-    }
-    await assertEmployeeUnitAccess(actor, normalizedEmployeeId);
-
-    const fieldMap = await loadFieldMap(actor);
-    const personLink = await resolvePersonLink(normalizedEmployeeId);
+    const [fieldMap, personLink] = await Promise.all([
+      loadFieldMap(actor),
+      resolvePersonLink(normalizedEmployeeId),
+    ]);
     const employeeSnap = personLink.employeeDocument;
     if (!employeeSnap?.exists) {
       return NextResponse.json({ error: "Colaborador não encontrado no RH." }, { status: 404 });
@@ -111,33 +144,7 @@ export async function GET(
       ...(accessEmail ? { email: accessEmail, access_email: accessEmail } : {}),
     };
     const resolvedEmployeeId = employeeSnap.id;
-    let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
-    let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
-    let onboardingSnap = await hrDbAdmin
-      .collection("onboardingProcesses")
-      .where("employeeId", "==", resolvedEmployeeId)
-      .limit(1)
-      .get();
     const employeeEmail = typeof employee.email === "string" ? employee.email.trim().toLowerCase() : "";
-    if (onboardingSnap.empty && employeeEmail) {
-      onboardingSnap = await hrDbAdmin
-        .collection("onboardingProcesses")
-        .where("candidateEmail", "==", employeeEmail)
-        .limit(1)
-        .get();
-    }
-    const onboarding = onboardingSnap.empty ? null : onboardingSnap.docs[0].data();
-    const onboardingId = onboardingSnap.empty ? null : onboardingSnap.docs[0].id;
-    imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
-    privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
-      ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingId }
-      : null;
-    const probation = onboarding?.probationV2
-      ? refreshProbationProcess(
-          onboarding.probationV2 as ProbationProcessState,
-          new Date().toISOString().slice(0, 10),
-        )
-      : null;
     const role = inferRole(actor, employee);
     const cache: RhAccessCache = {
       auth_uid: actor.userDoc.id,
@@ -159,11 +166,51 @@ export async function GET(
       .filter(([, entry]) => canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix))
       .map(([key]) => key);
 
-    // BatchGet mantém a autorização por chave e evita uma ida ao Firestore para cada campo.
+    // As fontes independentes são carregadas juntas para evitar uma cascata de consultas.
     const fieldValueRefs = readableKeys.map((key) => employeeSnap.ref.collection("field_values").doc(key));
-    const fieldValueSnaps = fieldValueRefs.length > 0
-      ? await hrDbAdmin.getAll(...fieldValueRefs)
-      : [];
+    const onboardingByEmployeePromise = hrDbAdmin
+      .collection("onboardingProcesses")
+      .where("employeeId", "==", resolvedEmployeeId)
+      .limit(1)
+      .get();
+    const onboardingByEmailPromise = employeeEmail
+      ? hrDbAdmin
+          .collection("onboardingProcesses")
+          .where("candidateEmail", "==", employeeEmail)
+          .limit(1)
+          .get()
+      : Promise.resolve(null);
+    const fieldValuesPromise = fieldValueRefs.length > 0
+      ? hrDbAdmin.getAll(...fieldValueRefs)
+      : Promise.resolve([]);
+    const changeRequestsPromise = hrDbAdmin
+      .collection("hrProfileUpdateRequests")
+      .where("employeeId", "==", resolvedEmployeeId)
+      .limit(100)
+      .get();
+    const [onboardingByEmployee, onboardingByEmail, fieldValueSnaps, changeRequestSnapshot] = await Promise.all([
+      onboardingByEmployeePromise,
+      onboardingByEmailPromise,
+      fieldValuesPromise,
+      changeRequestsPromise,
+    ]);
+
+    const onboardingSnap = !onboardingByEmployee.empty ? onboardingByEmployee : onboardingByEmail;
+    const onboarding = onboardingSnap && !onboardingSnap.empty ? onboardingSnap.docs[0].data() : null;
+    const onboardingId = onboardingSnap && !onboardingSnap.empty ? onboardingSnap.docs[0].id : null;
+    let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
+    let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
+    imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
+    privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
+      ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingId }
+      : null;
+    const probation = onboarding?.probationV2
+      ? refreshProbationProcess(
+          onboarding.probationV2 as ProbationProcessState,
+          new Date().toISOString().slice(0, 10),
+        )
+      : null;
+
     const fieldValues = Object.fromEntries(
       fieldValueSnaps
         .filter((snap) => snap.exists)
@@ -177,6 +224,28 @@ export async function GET(
         updated_by: "system:access-account",
       };
     }
+    const changeRequests = changeRequestSnapshot.docs
+      .filter((document) => (
+        document.get("type") === "self_service_profile_update"
+        && document.get("status") === "pending_approval"
+        && readableKeys.includes(String(document.get("fieldKey") ?? ""))
+      ))
+      .map((document) => {
+        const value = document.data();
+        const requestedAt = value.requestedAt;
+        return {
+          id: document.id,
+          status: "pending_approval" as const,
+          employeeId: resolvedEmployeeId,
+          fieldKey: String(value.fieldKey ?? ""),
+          fieldLabel: String(value.fieldLabel ?? value.fieldKey ?? "Campo"),
+          oldValue: value.oldValue ?? null,
+          proposedValue: value.proposedValue ?? null,
+          requestedBy: String(value.requestedBy ?? ""),
+          requestedAt: typeof requestedAt?.toDate === "function" ? requestedAt.toDate().toISOString() : String(requestedAt ?? ""),
+        };
+      })
+      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt));
 
     return NextResponse.json(
       {
@@ -187,6 +256,7 @@ export async function GET(
         consentimento_imagem_voz: imageVoiceConsent,
         ciencia_privacidade_onboarding: privacyAcknowledgement,
         periodo_experiencia: probation,
+        changeRequests,
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );
@@ -196,4 +266,4 @@ export async function GET(
       { status: 400 },
     );
   }
-}
+});

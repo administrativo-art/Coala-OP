@@ -4,6 +4,7 @@ import com.coalaone.go.auth.*
 import com.coalaone.go.data.*
 import com.coalaone.go.offline.*
 import com.coalaone.go.ui.*
+import com.coalaone.go.push.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
@@ -16,6 +17,17 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewModelsTest {
+    private val push = object : PushController {
+        override val state = kotlinx.coroutines.flow.MutableStateFlow(PushStatus())
+        override val permissionRequested = false
+        override fun markPermissionRequested() {}
+        override fun permissionGranted() = true
+        override fun reflect(uid: String?) {}
+        override fun enable(uid: String) {}
+        override fun foreground(uid: String?) {}
+        override fun disable(uid: String) {}
+        override suspend fun logout(uid: String?) {}
+    }
     @Before fun setup() { Dispatchers.setMain(StandardTestDispatcher()) }
     @After fun tearDown() { Dispatchers.resetMain() }
     private val auth = TestAuth()
@@ -28,7 +40,7 @@ class ViewModelsTest {
             override fun enabled(uid: String) = false; override fun ready(uid: String) = false
             override fun record(uid: String, enabled: Boolean) {}; override fun clear() {}
         }
-        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, DemoApi(), object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} })
+        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, DemoApi(), object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, push)
         runCurrent(); assertTrue(vm.state.value.locked)
         auth.rejectPassword = true; vm.unlock("bad", false); advanceUntilIdle()
         assertTrue(vm.state.value.locked); assertNotNull(vm.state.value.error)
@@ -36,13 +48,24 @@ class ViewModelsTest {
         assertFalse(vm.state.value.locked)
         vm.signOut(); runCurrent(); assertNull(vm.state.value.identity)
     }
+    @Test fun signOutRevokesPushBeforeAuthenticationEnds() = runTest {
+        var ownerAtRevoke: String? = null
+        val pushSpy = object : PushController by push {
+            override suspend fun logout(uid: String?) { ownerAtRevoke = auth.current?.uid; assertEquals(uid, ownerAtRevoke) }
+        }
+        val biometric = object : BiometricPreferences { override fun enabled(uid: String) = false; override fun ready(uid: String) = false; override fun record(uid: String, enabled: Boolean) {}; override fun clear() {} }
+        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, DemoApi(), object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, pushSpy)
+        runCurrent(); vm.signOut(); advanceUntilIdle()
+        assertEquals("test-owner", ownerAtRevoke)
+        assertNull(auth.current)
+    }
     @Test fun passwordUnlockBindsBiometricToCurrentUid() = runTest {
         var recorded = ""
         val biometric = object : BiometricPreferences {
             override fun enabled(uid: String) = false; override fun ready(uid: String) = false
             override fun record(uid: String, enabled: Boolean) { if (enabled) recorded = uid }; override fun clear() {}
         }
-        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, DemoApi(), object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} })
+        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, DemoApi(), object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, push)
         runCurrent(); vm.unlock("good", true); advanceUntilIdle()
         assertEquals("test-owner", recorded); assertFalse(vm.state.value.locked)
     }
@@ -50,7 +73,7 @@ class ViewModelsTest {
         var requested = ""
         val api = object : ApiService by DemoApi() { override suspend fun reset(request: ResetRequest) { requested = request.email } }
         val biometric = object : BiometricPreferences { override fun enabled(uid: String) = false; override fun ready(uid: String) = false; override fun record(uid: String, enabled: Boolean) {}; override fun clear() {} }
-        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, api, object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} })
+        val vm = SessionViewModel(auth, SessionGate(), mode, biometric, api, object : AppAttestation { override suspend fun token(): String? = null; override fun clear() {} }, push)
         runCurrent(); vm.reset(" nobody@example.invalid "); advanceUntilIdle()
         assertEquals("nobody@example.invalid", requested); assertTrue(vm.state.value.resetSent)
     }
@@ -144,6 +167,7 @@ class ViewModelsTest {
     }
     @Test fun scheduleUnitSelectionKeepsLoadedUnitsAndOnlyMineState() = runTest {
         val vm = ModulesViewModel(repository(auth, DemoApi()))
+        assertEquals(com.coalaone.go.domain.Rules.ALL_UNITS, vm.state.value.selectedScheduleUnit)
         vm.schedule(LocalDate.of(2026, 10, 12)); advanceUntilIdle()
         val loaded = vm.state.value.schedules
         assertEquals(8, loaded.getValue("2026-10").units.size)

@@ -11,6 +11,11 @@ const PERIOD_ID = 'integration-pdv-period';
 const EMPLOYEE_GOAL_ID = 'integration-pdv-employee-goal';
 const LATE_PERIOD_ID = 'integration-pdv-late-period';
 const LATE_EMPLOYEE_GOAL_ID = 'integration-pdv-late-employee-goal';
+const SHIFT_PERIOD_ID = 'integration-pdv-shift-period';
+const MORNING_GOAL_ID = 'integration-pdv-morning-goal';
+const AFTERNOON_GOAL_ID = 'integration-pdv-afternoon-goal';
+const SHIFT_SCHEDULE_ID = 'integration-pdv-shift-schedule';
+const DP_UNIT_ID = 'integration-pdv-dp-unit';
 const USER_ID = 'integration-pdv-user';
 const NON_REVENUE_PERIOD_IDS = Array.from(
   { length: 5 },
@@ -50,6 +55,12 @@ function coupon(id, hour) {
 }
 
 async function cleanup() {
+  const shiftSnapshot = await dbAdmin.collection('dp_schedules').doc(SHIFT_SCHEDULE_ID).collection('shifts').get();
+  if (!shiftSnapshot.empty) {
+    const batch = dbAdmin.batch();
+    shiftSnapshot.docs.forEach((document) => batch.delete(document.ref));
+    await batch.commit();
+  }
   await Promise.all([
     dbAdmin.collection('salesReports').doc(REPORT_ID).delete(),
     dbAdmin.collection('consumptionReports').doc(CONSUMPTION_ID).delete(),
@@ -58,14 +69,28 @@ async function cleanup() {
     dbAdmin.collection('employeeGoals').doc(EMPLOYEE_GOAL_ID).delete(),
     dbAdmin.collection('goalPeriods').doc(LATE_PERIOD_ID).delete(),
     dbAdmin.collection('employeeGoals').doc(LATE_EMPLOYEE_GOAL_ID).delete(),
+    dbAdmin.collection('goalPeriods').doc(SHIFT_PERIOD_ID).delete(),
+    dbAdmin.collection('employeeGoals').doc(MORNING_GOAL_ID).delete(),
+    dbAdmin.collection('employeeGoals').doc(AFTERNOON_GOAL_ID).delete(),
+    dbAdmin.collection('dp_schedules').doc(SHIFT_SCHEDULE_ID).delete(),
+    dbAdmin.collection('dp_units').doc(DP_UNIT_ID).delete(),
+    dbAdmin.collection('kiosks').doc(KIOSK_ID).delete(),
     dbAdmin.collection('users').doc(USER_ID).delete(),
     ...NON_REVENUE_PERIOD_IDS.map((id) => dbAdmin.collection('goalPeriods').doc(id).delete()),
   ]);
 }
 
+async function setupGoalUnit() {
+  await dbAdmin.collection('dp_units').doc(DP_UNIT_ID).set({
+    name: 'Unidade PDV de integração',
+    externalId: KIOSK_ID,
+  });
+}
+
 test('reconcilia cupom tardio, período encerrado e respostas regressivas atomicamente', async (t) => {
   await cleanup();
   t.after(cleanup);
+  await setupGoalUnit();
 
   await Promise.all([
     dbAdmin.collection('goalPeriods').doc(PERIOD_ID).set({
@@ -197,6 +222,7 @@ test('reconcilia cupom tardio, período encerrado e respostas regressivas atomic
 test('receita líquida confere com cupons, relatório e metas; prévia não escreve', async (t) => {
   await cleanup();
   t.after(cleanup);
+  await setupGoalUnit();
   await Promise.all([
     dbAdmin.collection('goalPeriods').doc(PERIOD_ID).set({
       kioskId: KIOSK_ID, templateType: 'revenue', status: 'closed',
@@ -243,4 +269,68 @@ test('receita líquida confere com cupons, relatório e metas; prévia não escr
   coupons = [{ ...coupon('bad', '15:00'), valortotal: 99 }];
   await assert.rejects(syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, options), { code: 'PDV_REVENUE_CONTRACT_FAILED' });
   assert.equal((await dbAdmin.collection('salesReports').doc(REPORT_ID).get()).get('sourceRevenueCents'), 1800);
+});
+
+test('cobertura externa não direciona receita do PDV para um turno individual', async (t) => {
+  await cleanup();
+  t.after(cleanup);
+  await Promise.all([
+    dbAdmin.collection('dp_units').doc(DP_UNIT_ID).set({ name: 'Tirirical' }),
+    dbAdmin.collection('kiosks').doc(KIOSK_ID).set({ name: 'Quiosque Tirirical' }),
+  ]);
+  await Promise.all([
+    dbAdmin.collection('goalPeriods').doc(SHIFT_PERIOD_ID).set({
+      kioskId: KIOSK_ID,
+      templateType: 'revenue',
+      status: 'active',
+      startDate: Timestamp.fromDate(new Date('2026-08-01T03:00:00Z')),
+      endDate: Timestamp.fromDate(new Date('2026-09-01T02:59:59Z')),
+      currentValue: 0,
+      dailyProgress: {},
+      targetValue: 24_000,
+      shifts: [
+        { id: 'morning', label: 'Manhã (08:00–12:00)', fraction: 0.5 },
+        { id: 'afternoon', label: 'Tarde (13:00–17:00)', fraction: 0.5 },
+      ],
+    }),
+    dbAdmin.collection('employeeGoals').doc(MORNING_GOAL_ID).set({
+      periodId: SHIFT_PERIOD_ID, kioskId: KIOSK_ID, employeeId: USER_ID, shiftId: 'morning',
+      currentValue: 0, targetValue: 12_000, dailyProgress: {},
+    }),
+    dbAdmin.collection('employeeGoals').doc(AFTERNOON_GOAL_ID).set({
+      periodId: SHIFT_PERIOD_ID, kioskId: KIOSK_ID, employeeId: USER_ID, shiftId: 'afternoon',
+      currentValue: 0, targetValue: 12_000, dailyProgress: {},
+    }),
+    dbAdmin.collection('users').doc(USER_ID).set({
+      assignedKioskIds: [KIOSK_ID], pdvOperatorIds: { [KIOSK_ID]: 'operator-1' },
+    }),
+    dbAdmin.collection('dp_schedules').doc(SHIFT_SCHEDULE_ID).set({
+      year: 2026, month: 8, unitId: DP_UNIT_ID, name: 'Escala de cobertura', createdAt: new Date(),
+    }),
+    dbAdmin.collection('dp_schedules').doc(SHIFT_SCHEDULE_ID).collection('shifts').doc('external').set({
+      userId: USER_ID,
+      date: DATE,
+      type: 'work',
+      startTime: '13:00',
+      endTime: '17:00',
+      countsTowardGoals: false,
+      assignmentKind: 'external_coverage',
+    }),
+  ]);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify([coupon('external-shift', '15:00')]), { status: 200 });
+  t.after(() => { globalThis.fetch = originalFetch; });
+  await syncDayAdmin(DATE, KIOSK_ID, '17344', dbAdmin, {
+    accessToken: 'test-token', catalog, mode: 'reconciliation', runId: 'external-shift-test',
+  });
+
+  const [morning, afternoon] = await Promise.all([
+    dbAdmin.collection('employeeGoals').doc(MORNING_GOAL_ID).get(),
+    dbAdmin.collection('employeeGoals').doc(AFTERNOON_GOAL_ID).get(),
+  ]);
+  assert.equal(Number(morning.get(`dailyProgress.${DATE}`) ?? 0), 0);
+  assert.equal(Number(afternoon.get(`dailyProgress.${DATE}`) ?? 0), 0);
+  assert.equal(morning.get('currentValue'), 0);
+  assert.equal(afternoon.get('currentValue'), 0);
 });

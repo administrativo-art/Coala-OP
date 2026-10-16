@@ -27,10 +27,10 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes e kit admissional", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 14);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 15);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
-    ["Admissão", "Base institucional", "Contratos", "Financeiro e recibos", "Uniformes"].sort(),
+    ["Admissão", "Base institucional", "Benefícios", "Contratos", "Financeiro e recibos", "Uniformes"].sort(),
   );
   assert.equal(systemDocumentTemplateById("system-letterhead-blank")?.status, "published");
   assert.equal(
@@ -39,7 +39,7 @@ test("catálogo reúne base institucional, uniformes e kit admissional", () => {
   );
   assert.equal(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "admission_docx").length,
-    10,
+    11,
   );
   const admissionTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter((template) =>
     template.id.startsWith("system-admission-"),
@@ -238,11 +238,15 @@ test("vale-transporte fica no pacote inicial e vira avulso em alteração poster
   const voucherTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter((template) =>
     template.id.includes("transportation-voucher"),
   );
-  assert.equal(voucherTemplates.length, 2);
-  voucherTemplates.forEach((template) => {
+  assert.equal(voucherTemplates.length, 3);
+  voucherTemplates.filter((template) => template.id.startsWith("system-admission-")).forEach((template) => {
     assert.equal(template.signatureScope, "bundle");
     assert.equal(template.postAdmissionSignatureScope, "independent");
   });
+  const reactivation = systemDocumentTemplateById("system-post-admission-transportation-voucher-reactivation");
+  assert.equal(reactivation?.signatureScope, "independent");
+  assert.equal(reactivation?.category, "Benefícios");
+  assert.equal(reactivation?.variables.includes("transport_voucher_effective_date"), true);
 });
 
 test("consentimento de imagem integra o pacote inicial sem perder a alteração avulsa posterior", () => {
