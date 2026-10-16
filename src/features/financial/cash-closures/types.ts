@@ -51,6 +51,8 @@ export type CashClosureCashMovement = {
   id: string;
   identitySource?: "provider" | "synthetic";
   kind: CashClosureCashMovementKind;
+  /** Justificativa informada pelo operador no PDV; não é a observação da classificação financeira. */
+  pdvReason?: string | null;
   amountCents: number;
   occurredAt: string;
   date: string;

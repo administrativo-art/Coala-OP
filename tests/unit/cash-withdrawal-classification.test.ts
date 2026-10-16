@@ -7,10 +7,11 @@ import {
 } from "../../src/features/financial/cash-closures/withdrawal-classification";
 import { assertExpenseAllowsNewPayment, sourceSettlementSummary } from "../../src/features/financial/lib/source-settlement";
 import type { CashClosure, CashClosureLine } from "../../src/features/financial/cash-closures/types";
+import { isWithdrawalClassifiableAccount } from "../../src/features/financial/cash-closures/withdrawal-account-policy";
 
 const movement = { id: "m-1", identitySource: "provider" as const, kind: "withdrawal" as const, amountCents: 1000,
   date: "2026-09-01", occurredAt: "2026-09-01T12:00:00-03:00", operatorId: "op", terminalId: "t",
-  paymentMethodId: "cash", paymentMethodName: "DINHEIRO", isCash: true, cancelled: false };
+  paymentMethodId: "cash", paymentMethodName: "DINHEIRO", pdvReason: "Compra de limão", isCash: true, cancelled: false };
 const closure = { id: "unit_2026-09-01", workspaceId: "coala", kioskId: "unit", pdvFilialId: "pdv", date: movement.date, source: {} } as CashClosure;
 const line = { id: "line", operatorId: "op", channel: "cash", metadata: { withdrawalCents: 1000, cashMovements: [movement] } } as CashClosureLine;
 const source = withdrawalSources(closure, [line]).sources[0];
@@ -40,6 +41,9 @@ test("chave idempotente é estável e fingerprint muda com valor/data/operador",
   const next = withdrawalSources(closure, [{ ...line, metadata: { withdrawalCents: 2000, cashMovements: [{ ...movement, amountCents: 2000 }] } }]).sources[0];
   assert.equal(next.sourceId, source.sourceId);
   assert.notEqual(next.fingerprint, source.fingerprint);
+  const renamed = withdrawalSources(closure, [{ ...line, metadata: { ...line.metadata, cashMovements: [{ ...movement, pdvReason: "Compra de laranja" }] } }]).sources[0];
+  assert.equal(source.pdvReason, "Compra de limão");
+  assert.equal(renamed.fingerprint, source.fingerprint);
 });
 
 test("schema não aceita valor/data/unit enviados nem correção sem motivo", () => {
@@ -48,6 +52,13 @@ test("schema não aceita valor/data/unit enviados nem correção sem motivo", ()
   assert.equal(withdrawalClassificationSchema.safeParse({ ...valid, amountCents: 1 }).success, false);
   assert.equal(withdrawalClassificationSchema.safeParse({ ...valid, accountPlanId: "accounts/a" }).success, false);
   assert.equal(withdrawalClassificationSchema.safeParse({ action: "unlink", sourceId: source.sourceId }).success, false);
+});
+
+test("classificação aceita despesa da DRE e compra de insumo para estoque, mas não qualquer conta patrimonial", () => {
+  assert.equal(isWithdrawalClassifiableAccount({ is_dre_account: true, dre_position: "despesas_operacionais" }), true);
+  assert.equal(isWithdrawalClassifiableAccount({ is_dre_account: false, parentId: "estoque_compras_insumos_v2" }), true);
+  assert.equal(isWithdrawalClassifiableAccount({ is_dre_account: false, parentId: "payroll-obligations" }), false);
+  assert.equal(isWithdrawalClassifiableAccount({ is_dre_account: true, dre_position: null }), false);
 });
 
 const expense = { totalValue: 10, status: "pending", paymentMethod: "single", competenceMonth: "2026-09", resultCenterId: "center",
