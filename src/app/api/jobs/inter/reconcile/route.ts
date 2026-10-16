@@ -1,6 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { WORKSPACE_ID } from "@/lib/workspace";
+import { AppError } from "@/lib/observability";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 import {
   authorizeAndSubmitServiceApprovedPayment,
   deferBankStatusRefreshAfterFailure,
@@ -19,15 +24,47 @@ const MAX_SERVICE_APPROVALS_PER_RUN = 5;
 const MAX_SERVICE_APPROVAL_CANDIDATES = 50;
 const STALE_SUBMISSION_MS = 10 * 60_000;
 
+type StaticRouteContext = { params: Promise<Record<string, never>> };
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "inter.payment.reconciliation.run",
+  version: 1,
+  surface: { method: "POST", path: "/api/jobs/inter/reconcile" },
+  exposure: "internal-service",
+  identity: { kind: "service-job", service: "firebase-scheduler" },
+  authorization: { kind: "none" },
+  resourceScope: { kind: "workspace" },
+  input: { kind: "none" },
+  effects: { mode: "external", audit: "server-authoritative" },
+  errorExposure: "sanitized",
+});
+
 function authorized(actual: string, expected: string) {
   const left = Buffer.from(actual); const right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export async function POST(request: NextRequest) {
-  const secret = process.env.INTER_RECONCILIATION_SECRET?.trim();
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!secret || !authorized(token, secret)) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+const enforcer = createStandardSecurityEnforcer<NextRequest, StaticRouteContext, unknown, { service: string }, undefined, { workspaceId: string }>(contract, {
+  authenticate({ request }) {
+    const secret = process.env.INTER_RECONCILIATION_SECRET?.trim();
+    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+    if (!secret || !authorized(token, secret)) {
+      throw new AppError({ code: "JOB_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", safeMessage: "Não autorizado.", reportable: false });
+    }
+    return { service: "firebase-scheduler" };
+  },
+  loadResource: () => ({ workspaceId: WORKSPACE_ID }),
+  assertScope: ({ resource }) => {
+    if (resource.workspaceId !== WORKSPACE_ID) throw new AppError({ code: "JOB_WORKSPACE_FORBIDDEN", kind: "AUTHORIZATION" });
+  },
+});
+
+export const POST = secureRoute({
+  contract,
+  enforcer,
+  observability: { source: "job-api", operation: "reconcile-inter-payments" },
+}, async () => {
   const now = new Date();
   const nowIso = now.toISOString();
   const staleSubmissionBefore = new Date(now.getTime() - STALE_SUBMISSION_MS);
@@ -98,4 +135,4 @@ export async function POST(request: NextRequest) {
     results,
     serviceApprovals,
   });
-}
+});
