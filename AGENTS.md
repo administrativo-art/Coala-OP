@@ -1,5 +1,9 @@
 # Regras operacionais do Coala One
 
+## Comunicação com o usuário
+
+- Quando o usuário disser **“simplifique”**, explique como se estivesse falando com uma pessoa leiga no assunto: use linguagem comum, frases diretas e exemplos concretos quando ajudarem. Explique os termos técnicos indispensáveis sem omitir riscos, limites ou decisões importantes.
+
 ## Localização e impacto
 
 - Em checkouts de promoção seletiva, uma referência de documentação pode não existir na branch. Nesse caso, consulte a versão aprovada em `main` por leitura (`git show <sha-main-validado>:<caminho>`), registre a origem e confirme a aplicabilidade no código local. Isso não autoriza importar código, configurações ou executar ferramentas ausentes no checkout.

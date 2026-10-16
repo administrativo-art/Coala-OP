@@ -84,3 +84,43 @@ export async function listScheduleShifts(context: ServerUserContext, scheduleId:
   }
   return shifts.docs.map(serializeDocument);
 }
+
+/** Lista somente a projeção operacional mínima; motivo e documentos nunca chegam à escala. */
+export async function listScheduleAbsences(context: ServerUserContext, scheduleId: string) {
+  assertCanViewSchedule(context);
+  const schedule = await dbAdmin.collection('dp_schedules').doc(scheduleId).get();
+  if (!schedule.exists) {
+    throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
+  }
+  const unitId = schedule.get('unitId');
+  const unit = typeof unitId === 'string' ? await dbAdmin.collection('dp_units').doc(unitId).get() : null;
+  const externalUnitId = unit?.exists ? String(unit.get('externalId') ?? '') : '';
+  if (typeof unitId !== 'string' || !(canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin })
+    || externalUnitId && canAccessUnit(context.userDoc, externalUnitId, { isDefaultAdmin: context.isDefaultAdmin }))) {
+    throw new AppError({ code: 'DP_SCHEDULE_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade desta escala.' });
+  }
+  const month = Number(schedule.get('month'));
+  const year = Number(schedule.get('year'));
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    throw new AppError({ code: 'DP_SCHEDULE_PERIOD_INVALID', kind: 'DATA_INTEGRITY', safeMessage: 'A competência da escala está inconsistente.' });
+  }
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+  const absences = await dbAdmin.collection('dp_absenceOperationalAvailability')
+    .where('workspaceId', '==', context.workspace_id)
+    .where('unitId', '==', unitId)
+    .where('state', '==', 'active')
+    .where('monthKeys', 'array-contains', monthKey)
+    .limit(201).get();
+  if (absences.size > 200) {
+    throw new AppError({ code: 'DP_SCHEDULE_ABSENCE_LIMIT_REACHED', kind: 'DATA_INTEGRITY', safeMessage: 'Há ausências demais nesta competência.' });
+  }
+  return absences.docs.map((document) => ({
+    requestId: document.id,
+    beneficiaryUid: String(document.get('beneficiaryUid')),
+    unitId: String(document.get('unitId')),
+    startDate: String(document.get('startDate')),
+    endDate: String(document.get('endDate')),
+    intervals: Array.isArray(document.get('intervals')) ? document.get('intervals') : [],
+    state: 'active' as const,
+  }));
+}

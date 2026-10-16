@@ -2,6 +2,16 @@
 
 Migração original integrada em `main` pelo PR #395 e publicada como 0.2.0. O [inventário](coala-go-mobile-migration-inventory.md) registra o levantamento histórico. O [projeto Kotlin](../../apps/coala-one-android/README.md) usa `coalaone.go`, API26, nome Coala Go, único app mobile após retirada expressamente autorizada do Expo e APK antigo. Não havia usuários. Extensões autorizadas: foto privada do recebimento, allowlist de package na atestação e atualização de versão/instalador para Go. APIs de negócio restantes não mudam. O handoff visual 0.3.0 mantém esses contratos; publicação autorizada, sem substituir o aceite físico/integrado pendente.
 
+## Push — incremento local de 15/10/2026
+
+O perfil do Android permite opt-in por conta e aparelho, autorização do sistema e desativação. `POST/DELETE /api/mobile/push/devices` exigem usuário ativo e atestação mobile; proprietário/workspace vêm da sessão, não do corpo. `mobilePushTokens` e `mobilePushInstallations` ficam em `coala`, sem acesso direto pelo cliente. Rotação, troca de conta, limite de dez dispositivos e revogação são transacionais; token não aparece em resposta ou auditoria. Registro repetido em menos de 24h evita novas escritas quando não houve mudança.
+
+O envio é uma função interna, sem endpoint público: mensagem data-only genérica, destinatário vinculado à conta e caminho HTTPS permitido. O app revalida consentimento, conta, permissão, evento e destino, e deduplica os últimos 50 eventos. Logout desativa localmente antes de tentar revogação remota. Aceitação pelo FCM não significa entrega no aparelho. Até existir operação nativa de solicitações, o aviso abre a central web autenticada.
+
+Testes JVM (46), lint e integração geral com provedor falso passaram. A infraestrutura de push permanece disponível para outros fluxos, porém, por decisão de produto, o outbox RH de ausências projeta somente o aviso no sino interno e não chama FCM nem e-mail. A reconciliação do aviso revalida o destinatário e mantém IDs estáveis. Não houve envio real, homologação em aparelho, publicação de API nem release Android nesta tarefa.
+
+Preflight de custo da infraestrutura geral de push: cada registro de dispositivo lê dois documentos e consulta até 11 tokens ativos, além de usuário/perfil da autenticação. Com 100 pessoas, 10 retomadas/dia e 22 dias, teto conservador de 15 leituras por tentativa = 330.000 leituras/mês (com um aparelho ativo, aproximadamente 110.000); sem polling. Atualização igual em menos de 24h não escreve; rotação escreve até dois registros anteriores, dois atuais e auditoria. Um envio de outro fluxo lê uma pessoa e até 11 tokens; nenhuma coleção é carregada integralmente. Esses custos de dispositivo não são acionados pelos avisos de ausência. São cenários, não medição de produção nem garantia de cobrança.
+
 ## Tela × contrato × teste
 
 | Tela/fluxo | Contrato/persistência | Evidência automatizada | Homologação restante |

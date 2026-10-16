@@ -8,6 +8,8 @@ interface ApiService {
     @GET("api/app/version?packageName=coalaone.go") suspend fun release(): Release
     @POST("api/auth/forgot-password") suspend fun reset(@Body request: ResetRequest)
     @GET("api/mobile/profile") suspend fun profile(): ProfileResponse
+    @POST("api/mobile/push/devices") suspend fun registerPush(@Body request: PushDeviceRegistration, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRegistered
+    @HTTP(method = "DELETE", path = "api/mobile/push/devices", hasBody = true) suspend fun removePush(@Body request: PushDeviceRemoval, @Header("X-Coala-Local-Owner") expectedOwner: String): PushDeviceRemoved
     @Multipart @POST("api/mobile/profile/photo") suspend fun avatar(@Part photo: MultipartBody.Part): AvatarResponse
     @GET("api/stock/mobile-count") suspend fun countContext(): CountContext
     @POST("api/stock/mobile-count/start") suspend fun startCount(@Body request: StartCountRequest): StartedCount

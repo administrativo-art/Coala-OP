@@ -5,6 +5,7 @@ import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 
 import { Chevron, EmptyResults, ListHead, ListRow, ListShell, ListSkeleton } from '@/components/cadastros/cadastros-ui';
 import { useDP } from '@/components/dp-context';
+import { AbsenceApprovalAssignments } from '@/components/dp/absence-approval-assignments';
 import { DPTimeApplicabilityFields, TimeConfigurationNotice } from '@/components/dp/dp-time-config-fields';
 import { ControlPanel, ControlSearch } from '@/components/patterns/control-panel';
 import { Field, fieldInputClass } from '@/components/patterns/field';
@@ -655,6 +656,7 @@ export function DPSettingsAbsences() {
                         <Field label="Fluxo de aprovação" htmlFor={`absence-approval-${index}`} hint="A ordem aparece logo abaixo."><AbsenceSelect id={`absence-approval-${index}`} value={policy.approvalFlow} onChange={(event) => updatePolicy(index, { approvalFlow: event.target.value as DPAbsencePolicy['approvalFlow'] })}>{Object.entries(approvalLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</AbsenceSelect></Field>
                         <ApprovalFlowPreview flow={policy.approvalFlow} />
                       </div>
+                      <AbsenceApprovalAssignments value={policy.approvalAssignments} onChange={(approvalAssignments) => updatePolicy(index, { approvalAssignments })} roles={roles} functions={functions} people={activeUsers} attachment={policy.attachment} />
                     </div>
                     <div className="space-y-3 border-t border-ds-divider pt-4">
                       <RuleSectionHeader label="Limites, prazos e documento" title="Limites, prazos e anexo"><RuleLimitsHelp /></RuleSectionHeader>

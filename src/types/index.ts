@@ -754,6 +754,7 @@ export type PermissionSet = {
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; assignExternal: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     requests: { view: boolean; review: boolean; };
+    responsibilities: { manage: boolean; receiveUnassignedAlerts: boolean; };
     collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
     settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageTime: boolean; manageAbsences?: boolean; };
     rh_role?: 'employee' | 'manager' | 'admin';
@@ -994,6 +995,20 @@ export type User = {
   isActive?: boolean;
   /** Incrementada ao suspender acesso; tokens com versão anterior permanecem inválidos após readmissão. */
   sessionVersion?: number;
+  /** Revisão monotônica do vínculo; protege retenção documental contra desligamento/readmissão concorrente. */
+  employmentCycleVersion?: number;
+  /** Trava interna e temporária. Nunca deve ser exibida ou alterada pelo cliente. */
+  absenceDocumentDeletionFence?: {
+    protocolVersion: 1;
+    workspaceId: string;
+    caseId: string;
+    operationId: string;
+    state: 'executing' | 'execution_unknown' | 'release_pending' | 'review_required';
+    employmentCycleVersion: number;
+    terminationDate: string;
+    startedAt: string;
+    updatedAt: string;
+  } | null;
   inactivationType?: 'temporary' | 'contract_termination';
   inactivationHistory?: Array<{
     type: 'temporary' | 'contract_termination' | 'reactivation';
@@ -2970,6 +2985,7 @@ export const defaultGuestPermissions: PermissionSet = {
       schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false, assignExternal: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       requests: { view: false, review: false },
+      responsibilities: { manage: false, receiveUnassignedAlerts: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
       settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageTime: false, manageAbsences: false },
       rh_role: undefined,
@@ -3083,6 +3099,7 @@ export const defaultAdminPermissions: PermissionSet = {
       schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true, assignExternal: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       requests: { view: true, review: true },
+      responsibilities: { manage: true, receiveUnassignedAlerts: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
       settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageTime: true, manageAbsences: true },
       rh_role: 'admin' as const,
@@ -3771,6 +3788,52 @@ export type DPAbsenceRequestUnit = 'day' | 'hour';
 export type DPAbsenceInitiator = 'collaborator' | 'manager' | 'dp' | 'system';
 export type DPAbsenceColor = 'pink' | 'red' | 'orange' | 'amber' | 'yellow' | 'green' | 'teal' | 'cyan' | 'blue' | 'indigo' | 'violet' | 'slate';
 
+export type DPAbsenceApprovalLevel =
+  | { kind: 'people'; personIds: string[] }
+  | { kind: 'function'; functionId: string; fallbackJobRoleId?: string }
+  | { kind: 'role'; jobRoleId: string };
+
+export type DPResponsibilityActivity = 'schedules' | 'vacations' | 'absences';
+export type DPResponsibilityScope = { kind: 'unit_group' | 'unit'; id: string };
+export type DPResponsibilityCoverage = {
+  id: string;
+  workspaceId: string;
+  activity: DPResponsibilityActivity;
+  scope: DPResponsibilityScope;
+  levels: DPAbsenceApprovalLevel[];
+  state: 'draft' | 'active';
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+export type DPResponsibilityTask = {
+  id: string;
+  workspaceId: string;
+  activity: DPResponsibilityActivity;
+  kind: 'absence_schedule_recomposition' | 'absence_cancellation_review';
+  scope: DPResponsibilityScope;
+  unitId: string;
+  requestId: string;
+  beneficiaryUid: string;
+  startDate: string;
+  endDate: string;
+  displacedShiftCount: number;
+  status: 'unassigned' | 'pending' | 'claimed' | 'resolved';
+  assignedUserIds: string[];
+  assignedLevel: number | null;
+  claimedByUid?: string;
+  claimedAt?: string;
+  resolvedByUid?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DPAbsencePolicy = {
   id: string;
   name: string;
@@ -3784,6 +3847,7 @@ export type DPAbsencePolicy = {
   maximumRetroactiveDays?: number;
   attachment: 'not_required' | 'required';
   approvalFlow: 'automatic' | 'manager' | 'dp' | 'manager_then_dp';
+  approvalAssignments?: { manager?: DPAbsenceApprovalLevel[]; dp?: DPAbsenceApprovalLevel[] };
   rejectionReasonRequired: boolean;
   allowFutureEdit: boolean;
   allowFutureCancel: boolean;
@@ -3914,6 +3978,17 @@ export type DPShift = {
     resolvedAt: Timestamp;
   };
   createdAt: Timestamp;
+};
+
+/** Projeção operacional mínima exibida na escala; não contém motivo, tipo ou documento. */
+export type DPScheduleAbsence = {
+  requestId: string;
+  beneficiaryUid: string;
+  unitId: string;
+  startDate: string;
+  endDate: string;
+  intervals: Array<{ date: string; fromMinute: number; toMinute: number }>;
+  state: 'active';
 };
 
 export type DPCalendar = {

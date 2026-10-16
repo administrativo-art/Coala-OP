@@ -1076,6 +1076,13 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit, initialAct
                                   </div>
                                 </div>
 
+                                {/* Cobertura de responsabilidades */}
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Users className="h-4 w-4" /> Cobertura de responsabilidades</h4>
+                                  {renderPermissionSwitch("permissions.dp.responsibilities.manage" as any, "Administrar coberturas", "Permite configurar a hierarquia responsável por escalas, férias e ausências em cada grupo de unidades.", !dpViewWatch)}
+                                  {renderPermissionSwitch("permissions.dp.responsibilities.receiveUnassignedAlerts" as any, "Receber alertas sem responsável", "Recebe no sino os avisos de tarefas que não encontraram nenhuma pessoa com permissão e abrangência válidas.", !dpViewWatch)}
+                                </div>
+
                                 {/* Uniformes */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Shirt className="h-4 w-4" /> Controle de uniformes</h4>

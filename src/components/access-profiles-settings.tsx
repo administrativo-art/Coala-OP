@@ -93,6 +93,8 @@ const PERMISSION_LABELS: Record<string, string> = {
   viewAll: "Ver todos",
   request: "Solicitar",
   review: "Analisar",
+  responsibilities: "Cobertura de responsabilidades",
+  receiveUnassignedAlerts: "Receber alertas sem responsável",
   manageSettings: "Gerenciar configurações",
   collaborators: "Colaboradores",
   ownProfileOnly: "Somente o próprio perfil",

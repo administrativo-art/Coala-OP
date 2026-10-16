@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { cert, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { assertAbsenceOperationalAdminWriteAllowed } from "./absence-operational-admin-gate.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const EFFECTIVE_DATE = "2026-07-31";
@@ -45,6 +46,9 @@ if (!serviceAccountPath) throw new Error("FIREBASE_SERVICE_ACCOUNT_PATH não con
 const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf8"));
 const app = initializeApp({ credential: cert(serviceAccount) }, `sync-auto-shifts-${Date.now()}`);
 const db = getFirestore(app, "coala");
+
+if (APPLY) await assertAbsenceOperationalAdminWriteAllowed(db,
+  process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? "coala");
 
 const [definitionsSnap, schedulesSnap, usersSnap] = await Promise.all([
   Promise.all(Object.keys(MODELS).map((id) => db.collection("dp_shiftDefinitions").doc(id).get())),

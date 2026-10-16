@@ -10,6 +10,7 @@ export const E2E_USER = {
   email: "admin.e2e@coala.test",
   password: "coala-e2e-2026",
 };
+export const E2E_ABSENCE_BENEFICIARY = { uid: 'employee-absence-e2e', name: 'Colaboradora Ausência E2E' };
 export const E2E_ORDER_IDS = {
   issued: "order-e2e-issued-0001",
   confirmed: "order-e2e-confirmed-0002",
@@ -108,6 +109,18 @@ export default async function seedE2E() {
       lastConfirmedAt: now,
       nextReviewAt: isoDate(180),
     },
+  });
+  batch.set(mainDb.collection("users").doc(E2E_ABSENCE_BENEFICIARY.uid), {
+    username: E2E_ABSENCE_BENEFICIARY.name,
+    email: 'ausencia.e2e@coala.test',
+    profileId: 'user',
+    assignedKioskIds: [],
+    unitIds: [],
+    employmentRelationshipType: 'clt',
+    admissionDate: '2024-01-01',
+    isActive: true,
+    operacional: true,
+    createdAt: now,
   });
   batch.set(mainDb.collection("kiosks").doc(E2E_STOCK_MIN.cdKioskId), { name: "CD E2E" });
   batch.set(mainDb.collection("kiosks").doc(E2E_STOCK_MIN.storeKioskId), { name: "Loja E2E" });
