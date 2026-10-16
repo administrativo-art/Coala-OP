@@ -1,7 +1,5 @@
-import { firebaseClientConfig } from '../src/lib/firebase-client-config';
-import { withCoalaSession } from './financial/coala-authenticated-payment.mts';
-import { buildNatashaSnapshotFromCoala, NatashaCollectError } from './natasha/coala-snapshot';
-import { createNatashaFirestoreReader, validateNatashaReadPlan } from './natasha/firestore-reader';
+import { NatashaCollectError } from './natasha/coala-snapshot';
+import { validateNatashaReadPlan } from './natasha/firestore-reader';
 
 const usage = 'Uso: npm run natasha:collect -- --email <conta> --period AAAA-MM --unit <id> [--unit <id>] --review-target [--history-confirmed] [--all-units-confirmed]\n';
 
@@ -42,15 +40,9 @@ async function main() {
     process.stdout.write(usage);
     return;
   }
-  const result = await withCoalaSession(input.email, async (token) => {
-    const source = await createNatashaFirestoreReader({
-      token,
-      projectId: firebaseClientConfig.projectId,
-    }).collect(input.plan);
-    return buildNatashaSnapshotFromCoala(source);
-  });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (!result.snapshot.history?.complete || result.evidence.missingTargetUnitIds.length > 0) process.exitCode = 3;
+  // natasha-offline-snapshot/v2: the client REST reader cannot prove the RH ack,
+  // Coala operational readiness and cross-database fence. Stop before login/reads.
+  throw new NatashaCollectError('Coleta offline indisponível neste contrato: a fonte de ausências operacionais não pode ser comprovada. Use a API de disponibilidade v2.');
 }
 
 main().catch((error: unknown) => {

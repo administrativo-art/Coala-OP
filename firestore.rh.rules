@@ -172,6 +172,30 @@ service cloud.firestore {
       allow write:  if false;  // somente CF syncFromBizneo
     }
 
+    // Pedidos de ausência e seus artefatos são acessíveis apenas pelo Admin SDK.
+    match /dp_absenceTypes/{id} { allow read, write: if false; }
+    match /dp_absenceCatalogMigrations/{id} { allow read, write: if false; }
+    match /dp_absenceRequests/{id} { allow read, write: if false; }
+    match /dp_absencePreparations/{id} { allow read, write: if false; }
+    match /dp_absenceOccurrences/{id} { allow read, write: if false; }
+    match /dp_absenceAvailabilityShadow/{id} { allow read, write: if false; }
+    match /dp_absenceShadowOperations/{id} { allow read, write: if false; }
+    match /dp_absenceReversals/{id} { allow read, write: if false; }
+    match /dp_absenceRevisions/{id} { allow read, write: if false; }
+    match /dp_absenceDayReservations/{id} { allow read, write: if false; }
+    match /dp_absenceBalances/{id} { allow read, write: if false; }
+    match /dp_absenceOutbox/{id} { allow read, write: if false; }
+    match /dp_absenceEvents/{id} { allow read, write: if false; }
+    match /dp_absenceAudit/{id} { allow read, write: if false; }
+    match /dp_absenceIdempotency/{id} { allow read, write: if false; }
+    match /dp_absenceOperationalIntents/{id} { allow read, write: if false; }
+    match /dp_absenceOperationalAudit/{id} { allow read, write: if false; }
+    match /dp_absenceRetentionCases/{id} { allow read, write: if false; }
+    match /dp_absenceRetentionAudit/{id} { allow read, write: if false; }
+    match /dp_absenceRetentionOperations/{id} { allow read, write: if false; }
+    match /dp_absenceRetentionExecutionReceipts/{id} { allow read, write: if false; }
+    match /dp_absenceRetentionReconciliations/{id} { allow read, write: if false; }
+
     // Recrutamento é acessado exclusivamente pelas APIs autenticadas.
     match /candidates/{id}   { allow read, write: if false; }
     match /applications/{id} { allow read, write: if false; }

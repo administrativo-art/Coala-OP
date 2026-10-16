@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 import { buildNatashaSnapshotFromCoala, NatashaCollectError, type CoalaSnapshotSources } from '../../scripts/natasha/coala-snapshot';
 import { createNatashaFirestoreReader, validateNatashaReadPlan } from '../../scripts/natasha/firestore-reader';
+
+test('CLI offline v2 bloqueia antes de autenticar ou consultar fonte incompleta', () => {
+  const result = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/natasha-collect.mts',
+    '--email', 'fake@example.test', '--period', '2026-10', '--unit', 'shopping', '--review-target'],
+  { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Coleta offline indisponível neste contrato/);
+  assert.doesNotMatch(result.stderr, /token|senha/i);
+});
 
 function source(changes: Partial<CoalaSnapshotSources> = {}): CoalaSnapshotSources {
   return {

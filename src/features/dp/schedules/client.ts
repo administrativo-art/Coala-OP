@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/firebase';
 import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
-import type { DPSchedule, DPShift } from '@/types';
+import type { DPSchedule, DPScheduleAbsence, DPShift } from '@/types';
 import type { DPJourneyValidationResult } from '@/features/dp/journey-validation/core';
 
 const SHIFT_CHANGE_EVENT = 'coala:dp-schedule-shifts-changed';
@@ -35,6 +35,13 @@ export function fetchScheduleShifts(scheduleId: string) {
     `/api/dp/schedules/${encodeURIComponent(scheduleId)}/shifts`,
     { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
   ).then((payload) => payload.shifts);
+}
+
+export function fetchScheduleAbsences(scheduleId: string) {
+  return authenticatedApiRequest<{ absences: DPScheduleAbsence[] }>(
+    `/api/dp/schedules/${encodeURIComponent(scheduleId)}/absences`,
+    { getIdToken: async () => auth.currentUser?.getIdToken() ?? null },
+  ).then((payload) => payload.absences);
 }
 
 export function fetchScheduleJourneyValidation(scheduleId: string) {

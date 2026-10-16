@@ -7,10 +7,12 @@ import { completeAbsenceTypeSchema } from '@/features/dp/absences/schemas';
 import type { ServerUserContext } from '@/lib/auth-server';
 import { applicabilityScopeCollection, previousCalendarDate } from '@/lib/dp-time-config-rules';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { absenceCatalogStore } from './catalog.server';
 import { AppError } from '@/lib/observability/app-error';
 import type { DPAbsencePolicy, DPTimeApplicability } from '@/types';
 
 const COLLECTION = 'dp_absenceTypes';
+const catalogDb = () => absenceCatalogStore();
 const LIST_LIMIT = 100;
 const AUDIT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const EDITABLE_FIELDS = [
@@ -85,7 +87,7 @@ function parseComplete(source: Record<string, unknown>) {
 }
 
 export async function listAbsenceTypes() {
-  const snapshot = await dbAdmin.collection(COLLECTION).orderBy('updatedAt', 'desc').limit(LIST_LIMIT + 1).get();
+  const snapshot = await catalogDb().collection(COLLECTION).orderBy('updatedAt', 'desc').limit(LIST_LIMIT + 1).get();
   if (snapshot.size > LIST_LIMIT) {
     throw new AppError({ code: 'DP_ABSENCE_LIST_LIMIT', kind: 'DATA_INTEGRITY', safeMessage: 'Há tipos de ausência demais para carregar de uma vez.' });
   }
@@ -93,7 +95,7 @@ export async function listAbsenceTypes() {
 }
 
 export async function getAbsenceType(id: string) {
-  const snapshot = await dbAdmin.collection(COLLECTION).doc(id).get();
+  const snapshot = await catalogDb().collection(COLLECTION).doc(id).get();
   if (!snapshot.exists) throw new AppError({ code: 'DP_ABSENCE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Tipo de ausência não encontrado.' });
   return serializeDocument(snapshot);
 }
@@ -106,9 +108,10 @@ export async function createAbsenceType(params: {
   const { context, input, requestId } = params;
   const { supersedesId, ...fields } = input;
   await validateApplicabilityReferences(fields.policies as DPAbsencePolicy[]);
-  const ref = dbAdmin.collection(COLLECTION).doc();
-  const parentRef = supersedesId ? dbAdmin.collection(COLLECTION).doc(supersedesId) : null;
-  await dbAdmin.runTransaction(async (transaction) => {
+  const store = catalogDb();
+  const ref = store.collection(COLLECTION).doc();
+  const parentRef = supersedesId ? store.collection(COLLECTION).doc(supersedesId) : null;
+  await store.runTransaction(async (transaction) => {
     const parent = parentRef ? await transaction.get(parentRef) : null;
     if (parentRef && (!parent?.exists || !['published', 'archived'].includes(String(parent.get('status'))))) {
       throw new AppError({ code: 'DP_ABSENCE_SUPERSEDED_INVALID', kind: 'CONFLICT', safeMessage: 'A versão anterior não está disponível para revisão.' });
@@ -127,7 +130,7 @@ export async function createAbsenceType(params: {
       updatedAt: now,
       updatedBy: context.decoded.uid,
     });
-    transaction.set(dbAdmin.collection('actionLogs').doc(), auditPayload(context, 'absence_type_created', requestId, {
+    transaction.set(store.collection('actionLogs').doc(), auditPayload(context, 'absence_type_created', requestId, {
       absence_type_id: ref.id, version, supersedes_id: supersedesId ?? null,
     }, now));
   });
@@ -141,7 +144,8 @@ export async function updateAbsenceType(params: {
   requestId: string;
 }) {
   const { context, id, input, requestId } = params;
-  const ref = dbAdmin.collection(COLLECTION).doc(id);
+  const store = catalogDb();
+  const ref = store.collection(COLLECTION).doc(id);
   const existing = await ref.get();
   if (!existing.exists) throw new AppError({ code: 'DP_ABSENCE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Tipo de ausência não encontrado.' });
   const current = existing.data() ?? {};
@@ -167,7 +171,7 @@ export async function updateAbsenceType(params: {
     throw new AppError({ code: 'DP_ABSENCE_ALREADY_ARCHIVED', kind: 'CONFLICT', safeMessage: 'O tipo já está arquivado.' });
   }
 
-  await dbAdmin.runTransaction(async (transaction) => {
+  await store.runTransaction(async (transaction) => {
     const fresh = await transaction.get(ref);
     if (!fresh.exists || fresh.get('status') !== current.status || fresh.get('updatedAt')?.toMillis?.() !== existing.get('updatedAt')?.toMillis?.()) {
       throw new AppError({ code: 'DP_ABSENCE_CHANGED', kind: 'CONFLICT', safeMessage: 'A configuração foi alterada. Atualize a página e tente novamente.' });
@@ -179,7 +183,7 @@ export async function updateAbsenceType(params: {
     } else if (input.action === 'publish') {
       const supersedesId = fresh.get('supersedesId');
       if (typeof supersedesId === 'string' && supersedesId) {
-        const previousRef = dbAdmin.collection(COLLECTION).doc(supersedesId);
+        const previousRef = store.collection(COLLECTION).doc(supersedesId);
         const previous = await transaction.get(previousRef);
         if (!previous.exists || previous.get('status') !== 'published') {
           throw new AppError({ code: 'DP_ABSENCE_PREVIOUS_CHANGED', kind: 'CONFLICT', safeMessage: 'A versão anterior mudou. Atualize a página e tente novamente.' });
@@ -205,7 +209,7 @@ export async function updateAbsenceType(params: {
     } else {
       transaction.update(ref, { status: 'archived', archivedAt: now, archivedBy: context.decoded.uid, updatedAt: now, updatedBy: context.decoded.uid });
     }
-    transaction.set(dbAdmin.collection('actionLogs').doc(), auditPayload(context, `absence_type_${input.action}`, requestId, {
+    transaction.set(store.collection('actionLogs').doc(), auditPayload(context, `absence_type_${input.action}`, requestId, {
       absence_type_id: id, version: fresh.get('version') ?? null,
     }, now));
   });
@@ -214,14 +218,15 @@ export async function updateAbsenceType(params: {
 
 export async function deleteAbsenceType(params: { context: ServerUserContext; id: string; requestId: string }) {
   const { context, id, requestId } = params;
-  const ref = dbAdmin.collection(COLLECTION).doc(id);
-  await dbAdmin.runTransaction(async (transaction) => {
+  const store = catalogDb();
+  const ref = store.collection(COLLECTION).doc(id);
+  await store.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new AppError({ code: 'DP_ABSENCE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Tipo de ausência não encontrado.' });
     if (snapshot.get('status') !== 'draft') throw new AppError({ code: 'DP_ABSENCE_DELETE_FORBIDDEN', kind: 'CONFLICT', safeMessage: 'Somente rascunhos podem ser excluídos.' });
     const now = Timestamp.now();
     transaction.delete(ref);
-    transaction.set(dbAdmin.collection('actionLogs').doc(), auditPayload(context, 'absence_type_deleted', requestId, {
+    transaction.set(store.collection('actionLogs').doc(), auditPayload(context, 'absence_type_deleted', requestId, {
       absence_type_id: id, version: snapshot.get('version') ?? null,
     }, now));
   });

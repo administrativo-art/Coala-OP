@@ -10,7 +10,13 @@ import { PageHero } from "@/components/patterns/page-hero";
 import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
+import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
+import { AbsenceRetentionSection } from "@/features/dp/absences/requests/retention-panel";
+import { ResponsibilityTaskSection } from "@/features/dp/responsibility-coverage/task-section";
+import type { AbsenceListFilters } from "@/features/dp/absences/requests/client";
 import {
   fetchCollaboratorRequestSignature,
   fetchCollaboratorRequests,
@@ -27,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 type Filter = "pending" | "completed" | "all";
 
 export function HrRequestsPage() {
-  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
+  const { firebaseUser, permissions, isDefaultAdmin, activeUsers } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<CollaboratorRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +46,29 @@ export function HrRequestsPage() {
   const [dailyValue, setDailyValue] = useState("");
   const [signature, setSignature] = useState<CollaboratorRequestSignature | null>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
+  const [absenceQueueOpen, setAbsenceQueueOpen] = useState(false);
+  const [absenceTeamOpen, setAbsenceTeamOpen] = useState(false);
+  const [absenceRetentionOpen, setAbsenceRetentionOpen] = useState(false);
+  const [absenceCreateOpen, setAbsenceCreateOpen] = useState(false);
+  const [absenceBeneficiaryUid, setAbsenceBeneficiaryUid] = useState("");
+  const [absenceRefreshKey, setAbsenceRefreshKey] = useState(0);
+  const [absenceTeamFilters, setAbsenceTeamFilters] = useState<AbsenceListFilters>({ status: 'in_review' });
   const canReview = isDefaultAdmin || permissions.dp?.requests?.review === true;
+  const canViewAbsences = isDefaultAdmin || permissions.dp?.requests?.view === true;
+  const canViewResponsibilityTasks = isDefaultAdmin || permissions.dp?.schedules?.edit === true
+    || permissions.dp?.responsibilities?.manage === true
+    || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true;
+  const eligibleBeneficiaries = activeUsers.filter((person) => person.id !== firebaseUser?.uid && ['clt', 'apprenticeship', 'internship'].includes(person.employmentRelationshipType ?? ''));
+  const absenceBeneficiary = eligibleBeneficiaries.find((person) => person.id === absenceBeneficiaryUid);
+
+  useEffect(() => {
+    setAbsenceCreateOpen(false);
+    setAbsenceBeneficiaryUid('');
+    setAbsenceQueueOpen(false);
+    setAbsenceTeamOpen(false);
+    setAbsenceRetentionOpen(false);
+    setAbsenceTeamFilters({ status: 'in_review' });
+  }, [firebaseUser?.uid]);
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
@@ -166,6 +194,28 @@ export function HrRequestsPage() {
           <EmptyResults title="Nenhuma solicitação encontrada." onClear={() => { setSearch(""); setFilter("all"); }} />
         )}
       </ListShell>
+
+      {canReview || canViewAbsences ? <section className="space-y-3 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4">
+        <h2 className="text-lg font-extrabold text-ds-ink">Ausências</h2>
+        {canReview ? <div className="space-y-2"><label className="block space-y-1.5 text-xs font-bold text-ds-ink">Colaborador para novo pedido
+          <Select value={absenceBeneficiaryUid} onValueChange={setAbsenceBeneficiaryUid}><SelectTrigger className="h-11 rounded-ds-btn border-ds-border-input"><SelectValue placeholder="Selecione uma pessoa" /></SelectTrigger><SelectContent>{eligibleBeneficiaries.map((person) => <SelectItem key={person.id} value={person.id}>{person.username}</SelectItem>)}</SelectContent></Select>
+        </label><Button variant="primary-page" disabled={!absenceBeneficiaryUid} onClick={() => setAbsenceCreateOpen(true)}>Preparar ausência para colaborador</Button><p className="text-xs text-ds-ink-muted">A permissão e a lotação são conferidas novamente pelo servidor. O pedido começa como rascunho.</p></div> : null}
+        <div className="flex flex-wrap gap-2">
+          {canReview ? <Button variant="ds-secondary" onClick={() => setAbsenceQueueOpen((open) => !open)}>{absenceQueueOpen ? 'Ocultar fila de ausências' : 'Ver fila de ausências'}</Button> : null}
+          {canViewAbsences ? <Button variant="ds-secondary" onClick={() => setAbsenceTeamOpen((open) => !open)}>{absenceTeamOpen ? 'Ocultar pedidos da equipe' : 'Ver pedidos da equipe'}</Button> : null}
+          {canReview ? <Button variant="ds-secondary" onClick={() => setAbsenceRetentionOpen((open) => !open)}>{absenceRetentionOpen ? 'Ocultar retenção de documentos' : 'Ver retenção de documentos'}</Button> : null}
+        </div>
+        {absenceQueueOpen ? <AbsenceWorkflowSection firebaseUser={firebaseUser} scope="review" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} /> : null}
+        {absenceTeamOpen ? <AbsenceWorkflowSection key={`team:${absenceRefreshKey}`} firebaseUser={firebaseUser} scope="team" people={eligibleBeneficiaries} refreshKey={absenceRefreshKey} initialFilters={absenceTeamFilters} /> : null}
+        {absenceRetentionOpen ? <AbsenceRetentionSection firebaseUser={firebaseUser} /> : null}
+        {absenceCreateOpen && absenceBeneficiary ? <AbsencePreviewPanel key={`${firebaseUser?.uid}:${absenceBeneficiaryUid}`} open onOpenChange={setAbsenceCreateOpen} firebaseUser={firebaseUser} beneficiaryUid={absenceBeneficiaryUid} beneficiaryName={absenceBeneficiary.username} onDraftCreated={(request) => { setAbsenceTeamFilters({ status: 'draft', beneficiaryUid: request.beneficiaryUid }); setAbsenceTeamOpen(true); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
+      </section> : null}
+
+      {canViewResponsibilityTasks ? <ResponsibilityTaskSection firebaseUser={firebaseUser} people={activeUsers}
+        canManage={isDefaultAdmin || permissions.dp?.responsibilities?.manage === true}
+        canWorkSchedules={isDefaultAdmin || permissions.dp?.schedules?.edit === true}
+        canReceiveGaps={isDefaultAdmin || permissions.dp?.responsibilities?.receiveUnassignedAlerts === true}
+        canResolveAny={isDefaultAdmin} /> : null}
 
       <SidePanel
         open={Boolean(selected)}

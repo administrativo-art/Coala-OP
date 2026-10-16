@@ -10,6 +10,7 @@ import { isShiftDefinitionCompatibleWithJourney } from '@/lib/dp-time-config-rul
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney } from '@/types';
+import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 
 import type { SaveWorkShiftInput } from './schemas';
 
@@ -259,6 +260,19 @@ export async function saveWorkShift(params: {
       : mode === 'update'
         ? { originUnitId: FieldValue.delete(), exceptionReason: FieldValue.delete() }
         : {};
+
+    if (operationalGuardRequested()) {
+      const oldSlices = shiftSnapshot.exists ? shiftOccupancySlices({
+        beneficiaryUid: String(shiftSnapshot.get('userId')), date: String(shiftSnapshot.get('date')),
+        startTime: shiftSnapshot.get('startTime') as string, endTime: shiftSnapshot.get('endTime') as string,
+        addsOccupancy: false,
+      }) : [];
+      await guardOccupancyWrite(transaction, context.workspace_id, [
+        ...oldSlices,
+        ...shiftOccupancySlices({ beneficiaryUid: input.userId, date: input.date,
+          startTime: input.startTime, endTime: input.endTime, addsOccupancy: true }),
+      ]);
+    }
 
     if (mode === 'create') {
       transaction.create(shiftRef, {

@@ -11,6 +11,8 @@ import { PanelField, PanelSection, SidePanel } from "@/components/patterns/side-
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
+import { AbsenceWorkflowSection } from "@/features/dp/absences/requests/workflow-panel";
 import {
   createCollaboratorRequest,
   fetchCollaboratorRequestSignature,
@@ -45,6 +47,9 @@ export function CollaboratorRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CollaboratorRequest | null>(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [absencePreviewOpen, setAbsencePreviewOpen] = useState(false);
+  const [absenceRefreshKey, setAbsenceRefreshKey] = useState(0);
+  const [absenceListOpen, setAbsenceListOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [signature, setSignature] = useState<CollaboratorRequestSignature | null>(null);
@@ -125,19 +130,21 @@ export function CollaboratorRequestsPage() {
   }, [benefitActive, pending, toast, wasConfigured]);
 
   const openCatalog = () => {
-    if (pending) {
-      setSelected(pending);
-      toast({ title: "Já existe uma solicitação aguardando análise." });
-      return;
-    }
     setCatalogOpen(true);
   };
 
   useEffect(() => {
-    if (loading || initialRequestHandled.current || searchParams.get("new") !== "transport_voucher") return;
+    if (!firebaseUser || initialRequestHandled.current) return;
+    const requested = searchParams.get("new");
+    if (requested === "absence_preview") {
+      initialRequestHandled.current = true;
+      setAbsencePreviewOpen(true);
+      return;
+    }
+    if (loading || requested !== "transport_voucher") return;
     initialRequestHandled.current = true;
     openCreate();
-  }, [loading, openCreate, searchParams]);
+  }, [firebaseUser, loading, openCreate, searchParams]);
 
   const submit = async () => {
     if (!firebaseUser || busy) return;
@@ -230,7 +237,7 @@ export function CollaboratorRequestsPage() {
       />
 
       <div className="rounded-ds-card border border-ds-info-border bg-ds-info-bg px-4 py-3 text-[13px] text-ds-info">
-        <strong>Vale-transporte é o primeiro fluxo disponível.</strong> O pedido não altera o benefício sozinho: o Departamento Pessoal analisa, define o valor e gera o termo correspondente.
+        <strong>Vale-transporte e ausência.</strong> O pedido de vale-transporte passa por análise. Para ausência, confira a prévia; quando a criação estiver habilitada, salve o rascunho e envie pelo detalhe.
       </div>
       {simulationMode ? <div className="rounded-ds-card border border-ds-warn-border bg-ds-warn-bg px-4 py-3 text-[13px] text-ds-warn"><strong>Simulação local.</strong> Este pedido não foi gravado e nenhuma ação altera o cadastro do colaborador.</div> : null}
 
@@ -248,7 +255,9 @@ export function CollaboratorRequestsPage() {
         </ListShell>
       </section>
 
-      <SidePanel open={catalogOpen} onOpenChange={setCatalogOpen} kicker="Nova solicitação" title="O que você precisa solicitar?" subtitle="Escolha um tipo para iniciar. Esta lista crescerá conforme novos processos forem disponibilizados.">
+      {!simulationMode ? <div className="space-y-3"><Button variant="ds-secondary" onClick={() => setAbsenceListOpen((open) => !open)}>{absenceListOpen ? 'Ocultar pedidos de ausência' : 'Ver pedidos de ausência'}</Button>{absenceListOpen ? <AbsenceWorkflowSection firebaseUser={firebaseUser} scope="mine" refreshKey={absenceRefreshKey} /> : null}</div> : null}
+
+      <SidePanel open={catalogOpen} onOpenChange={setCatalogOpen} kicker="Nova solicitação" title="O que você precisa solicitar?" subtitle="Escolha um tipo para iniciar ou calcular uma prévia.">
         <button
           type="button"
           onClick={() => { setCatalogOpen(false); openCreate(); }}
@@ -258,8 +267,14 @@ export function CollaboratorRequestsPage() {
           <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-ds-ink">Vale-transporte</span><span className="mt-0.5 block text-xs leading-5 text-ds-ink-muted">Adesão, alteração, suspensão ou reativação.</span></span>
           <span className="text-ds-ink-faint transition-transform group-hover:translate-x-0.5">›</span>
         </button>
-        <div className="rounded-ds-card border border-dashed border-ds-border-input px-4 py-5 text-center text-xs font-semibold text-ds-ink-faint">Novos tipos de solicitação aparecerão aqui.</div>
+        <button type="button" onClick={() => { setCatalogOpen(false); setAbsencePreviewOpen(true); }} className="group flex w-full items-center gap-4 rounded-ds-card-lg border border-ds-border bg-ds-surface p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-ds-accent hover:shadow-ds-lift focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-ds-card bg-ds-info-bg text-ds-info"><Inbox className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-extrabold text-ds-ink">Prévia de ausência</span><span className="mt-0.5 block text-xs leading-5 text-ds-ink-muted">Confira datas e regra. Salve um rascunho se disponível.</span></span>
+          <span className="text-ds-ink-faint transition-transform group-hover:translate-x-0.5">›</span>
+        </button>
       </SidePanel>
+
+      {absencePreviewOpen ? <AbsencePreviewPanel key={firebaseUser?.uid ?? 'anonymous'} open onOpenChange={setAbsencePreviewOpen} firebaseUser={firebaseUser} onDraftCreated={() => { setAbsenceListOpen(true); setAbsenceRefreshKey((value) => value + 1); }} /> : null}
 
       <SidePanel open={creating} onOpenChange={setCreating} kicker="Nova solicitação" title="Vale-transporte" subtitle="Escolha o tipo e, se necessário, acrescente detalhes para a análise do Departamento Pessoal.">
         <PanelSection title="Benefício atual">

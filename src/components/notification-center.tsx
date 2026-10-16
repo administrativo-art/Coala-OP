@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { resolveSafeReturnPath } from "@/lib/safe-return-path";
+import { useAuth } from "@/hooks/use-auth";
+import { listUserNotifications, markUserNotificationsRead, type UserNotification } from "@/features/notifications/client";
 
 export interface LegacyTask {
   id: string;
@@ -14,7 +16,14 @@ export interface LegacyTask {
   icon: React.FC<{ className?: string }>;
 }
 
-type TabKey = "all" | "task";
+type TabKey = "all" | "task" | "absence";
+
+export function safeAbsenceNotificationPath(path: string): string | null {
+  if (path === '/dashboard/collaborator/requests' || path === '/dashboard/dp/requests') {
+    return resolveSafeReturnPath(path, '/dashboard/collaborator/requests');
+  }
+  return null;
+}
 
 interface NotificationCenterProps {
   tasks: LegacyTask[];
@@ -26,21 +35,94 @@ export function NotificationCenter({
   tasks,
   tone = "light",
 }: NotificationCenterProps) {
+  const { firebaseUser } = useAuth();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [notices, setNotices] = useState<UserNotification[]>([]);
+  const [hasOlderNotices, setHasOlderNotices] = useState(false);
+  const [nextNoticeCursor, setNextNoticeCursor] = useState<string | null>(null);
+  const [loadingNotices, setLoadingNotices] = useState(false);
+  const [noticeError, setNoticeError] = useState<string | null>(null);
+  const [marking, setMarking] = useState(false);
+  const requestSequence = useRef(0);
+  const identity = firebaseUser?.uid ?? '';
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
   const unreadTasks = tasks.filter((t) => !readIds.has(t.id));
-  const totalUnread = unreadTasks.length;
+  const unreadNotices = notices.filter((item) => !item.readAt);
+  const totalUnread = unreadTasks.length + unreadNotices.length;
+
+  useEffect(() => {
+    requestSequence.current++;
+    setNotices([]);
+    setHasOlderNotices(false);
+    setNextNoticeCursor(null);
+    setReadIds(new Set());
+    setNoticeError(null);
+    setLoadingNotices(false);
+    setMarking(false);
+    setOpen(false);
+  }, [identity]);
+
+  async function loadNotices(cursor?: string) {
+    if (!firebaseUser) return;
+    const request = ++requestSequence.current;
+    const uid = firebaseUser.uid;
+    setLoadingNotices(true);
+    setNoticeError(null);
+    try {
+      const response = await listUserNotifications(firebaseUser, cursor);
+      if (request === requestSequence.current && uid === identityRef.current) { setNotices(response.notifications); setHasOlderNotices(Boolean(response.nextCursor)); setNextNoticeCursor(response.nextCursor); }
+    } catch (cause) {
+      if (request === requestSequence.current && uid === identityRef.current) setNoticeError(cause instanceof Error ? cause.message : 'Não foi possível carregar os avisos.');
+    } finally {
+      if (request === requestSequence.current && uid === identityRef.current) setLoadingNotices(false);
+    }
+  }
+
+  useEffect(() => {
+    if (open) void loadNotices();
+    return () => { requestSequence.current++; };
+    // Carregar apenas ao abrir ou trocar de conta; sem polling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, identity]);
 
   function markRead(id: string) {
     setReadIds((prev) => new Set([...prev, id]));
   }
 
-  function markAllRead() {
-    setReadIds(new Set(tasks.map((t) => t.id)));
+  async function markNoticeIds(ids: string[]) {
+    if (!firebaseUser || !ids.length) return;
+    const uid = firebaseUser.uid;
+    await markUserNotificationsRead(firebaseUser, ids);
+    if (uid === identityRef.current) setNotices((current) => current.map((item) => ids.includes(item.id) ? { ...item, readAt: new Date().toISOString() } : item));
+  }
+
+  async function markAllRead() {
+    const uid = identity;
+    const request = requestSequence.current;
+    const visibleNotices = activeTab === 'task' ? [] : unreadNotices;
+    const visibleTasks = activeTab === 'absence' ? [] : tasks;
+    setReadIds((current) => new Set([...current, ...visibleTasks.map((item) => item.id)]));
+    if (!visibleNotices.length || marking) return;
+    setMarking(true);
+    setNoticeError(null);
+    try { await markNoticeIds(visibleNotices.map((item) => item.id)); }
+    catch (cause) { if (uid === identityRef.current && request === requestSequence.current) setNoticeError(cause instanceof Error ? cause.message : 'Não foi possível marcar os avisos como lidos.'); }
+    finally { if (uid === identityRef.current && request === requestSequence.current) setMarking(false); }
+  }
+
+  async function markNotice(item: UserNotification) {
+    if (item.readAt) return;
+    const uid = identity;
+    const request = requestSequence.current;
+    setNoticeError(null);
+    try { await markNoticeIds([item.id]); }
+    catch (cause) { if (uid === identityRef.current && request === requestSequence.current) setNoticeError(cause instanceof Error ? cause.message : 'Não foi possível marcar o aviso como lido.'); }
   }
 
   // Close on outside click
@@ -63,9 +145,11 @@ export function NotificationCenter({
   const tabs: { key: TabKey; label: string; count: number }[] = [
     { key: "all", label: "Todos", count: totalUnread },
     { key: "task", label: "Tarefas", count: unreadTasks.length },
+    { key: "absence", label: "Ausências", count: unreadNotices.length },
   ];
 
   const visibleLegacyTasks = activeTab === "all" || activeTab === "task" ? tasks : [];
+  const visibleNotices = activeTab === 'all' || activeTab === 'absence' ? notices : [];
 
   return (
     <div className="relative">
@@ -106,7 +190,8 @@ export function NotificationCenter({
               <span className="flex-1 text-sm font-bold">Notificações</span>
               <button
                 type="button"
-                onClick={markAllRead}
+                onClick={() => void markAllRead()}
+                disabled={marking}
                 className="rounded-md px-1.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 transition-colors"
               >
                 Marcar tudo como lido
@@ -142,13 +227,26 @@ export function NotificationCenter({
 
           {/* List */}
           <div className="flex-1 overflow-y-auto">
-            {visibleLegacyTasks.length === 0 ? (
+            {noticeError ? <div role="alert" className="space-y-1 px-4 py-2 text-xs text-ds-danger"><p>{noticeError}</p><button type="button" className="font-bold underline" onClick={() => void loadNotices()}>Tentar novamente</button></div> : null}
+            {loadingNotices ? <p role="status" className="px-4 py-2 text-xs text-muted-foreground">Carregando avisos…</p> : null}
+            {hasOlderNotices && activeTab !== 'task' ? <div className="px-4 py-2 text-[11px] text-muted-foreground"><p>Mostrando até 25 avisos por vez.</p><button type="button" disabled={loadingNotices} className="mt-1 font-bold text-primary hover:underline" onClick={() => { if (nextNoticeCursor) void loadNotices(nextNoticeCursor); }}>Ver avisos anteriores</button></div> : null}
+            {visibleLegacyTasks.length === 0 && visibleNotices.length === 0 && !loadingNotices ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <Bell className="mb-2 h-8 w-8 text-muted-foreground/30" />
                 <p className="text-xs text-muted-foreground">Nenhuma notificação.</p>
               </div>
             ) : (
               <div>
+                {visibleNotices.map((notice) => {
+                  const href = safeAbsenceNotificationPath(notice.path);
+                  return <div key={notice.id} className={`border-b border-border/60 px-4 py-3 text-xs ${notice.readAt ? '' : 'bg-ds-info-bg'}`}>
+                    <p className="font-bold">{notice.title}</p><p className="mt-1 text-muted-foreground">{notice.body}</p>
+                    <div className="mt-2 flex gap-3">
+                      {href ? <Link href={href} onClick={() => { void markNotice(notice); setOpen(false); }} className="font-bold text-primary hover:underline">Abrir pedido →</Link> : null}
+                      {!notice.readAt ? <button type="button" onClick={() => void markNotice(notice)} className="font-bold text-primary hover:underline">Marcar como lido</button> : null}
+                    </div>
+                  </div>;
+                })}
                 {visibleLegacyTasks.map((task) => {
                   const isUnread = !readIds.has(task.id);
                   const Icon = task.icon;

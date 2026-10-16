@@ -26,10 +26,10 @@ export function createNatashaAvailabilityApiReader(params: {
           signal: AbortSignal.timeout(30_000),
         });
       } catch {
-        throw new NatashaCollectError('Falha ou tempo esgotado na leitura das férias da equipe candidata.');
+        throw new NatashaCollectError('Falha ou tempo esgotado na leitura da disponibilidade da equipe candidata.');
       }
       if (!response.ok || response.redirected) {
-        throw new NatashaCollectError(`O Coala recusou as férias da equipe candidata (HTTP ${response.status}); confira implantação, sessão e permissões.`);
+        throw new NatashaCollectError(`O Coala recusou a disponibilidade da equipe candidata (HTTP ${response.status}); confira implantação, sessão e permissões.`);
       }
       const body = await response.json().catch(() => null);
       const parsed = natashaAvailabilityReportSchema.safeParse(body);

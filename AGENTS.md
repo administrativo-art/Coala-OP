@@ -1,5 +1,9 @@
 # Regras operacionais do Coala One
 
+## Comunicação com o usuário
+
+- Quando o usuário disser **“simplifique”**, explique como se estivesse falando com uma pessoa leiga no assunto: use linguagem comum, frases diretas e exemplos concretos quando ajudarem. Explique os termos técnicos indispensáveis sem omitir riscos, limites ou decisões importantes.
+
 ## Localização e impacto
 
 - Em checkouts de promoção seletiva, uma referência de documentação pode não existir na branch. Nesse caso, consulte a versão aprovada em `main` por leitura (`git show <sha-main-validado>:<caminho>`), registre a origem e confirme a aplicabilidade no código local. Isso não autoriza importar código, configurações ou executar ferramentas ausentes no checkout.
@@ -164,6 +168,14 @@
 - Não repita no navegador uma alteração que o script já confirmou. Quando o uso tiver sido autorizado, limite-o ao escopo solicitado e confira somente os dados necessários, como descrição, valor, competência, vencimento, unidade/centro de resultado, plano de contas e status.
 - Quando uma ação necessária e segura estiver bloqueada por permissão, reautenticação ou confirmação pessoal, peça explicitamente ao desenvolvedor a autorização necessária pelo mecanismo disponível; não presuma recusa nem encerre a operação sem antes solicitar essa autorização.
 - Depois de autorizado, a IA pode iniciar o fluxo de autenticação da CLI e deve aguardar o desenvolvedor concluir diretamente no provedor. Nunca solicite nem manipule senhas, códigos ou outros segredos no chat.
+
+## Registro de compras a partir de comprovantes
+
+- Quando o desenvolvedor pedir para popular uma compra a partir de captura, pedido ou comprovante externo, faça o lançamento por backend/CLI com script determinístico; não use a interface nem o navegador para transcrever os dados.
+- O comprovante é evidência dos campos que ele mostra, não autorização para criar vínculos por semelhança. Não associe automaticamente fornecedor, produto, insumo, despesa, transação ou outro cadastro interno. Grave os textos observados e mantenha as referências vazias até uma instrução explícita ou uma chave determinística já fornecida.
+- Plano de contas e centro de resultado fazem parte do pré-voo do lançamento. Preencha somente quando houver regra aprovada ou orientação explícita; se não houver, apresente a pendência antes da escrita em vez de omitir silenciosamente ou inferir pelo nome do fornecedor.
+- O lançamento deve permanecer em revisão (`created`) para conferência e confirmação humana. Popular a compra não autoriza confirmar pedido, criar recebimento, movimentar estoque, sincronizar despesa nem associar a uma compra anterior.
+- Antes da escrita real, valide identificador externo, duplicidade, valores, datas, forma de pagamento, itens visíveis e estado atual. O script deve oferecer dry-run, invariantes dos documentos-alvo, backup idempotente e verificação pós-escrita; migração em banco real continua exigindo autorização própria.
 
 ## Limpeza de scripts operacionais
 

@@ -28,7 +28,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `design-guide` | 1 | Traçado | [Guia de design](flows/design-guide.md) — página interna de referência; verificação integrada pendente |
 | `dp-overview` | 1 | Traçado | [Painel DP](flows/dp-overview.md) — percurso complementado; verificação integrada pendente |
 | `dp-schedules` | 3 | Traçado | [Escalas DP](flows/dp-schedules.md) — piloto Natasha prepara demanda, equipe, férias, horários/posições, regras e alternativas; rotas ainda não implantadas e verificação real pendente |
-| `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — percurso complementado; verificação integrada pendente |
+| `dp-settings` | 10 | Traçado | [Configurações DP](flows/dp-configuration.md) — [ausências](flows/dp-absences.md): Etapa 1 publicada; Etapas 2 e 3 fechadas localmente, inclusive SLA, escala e coberturas do DP; cutover, homologação e publicação pendentes |
 | `dre` | 1 | Traçado | [Fontes de receita, despesa e CMV](flows/dre.md) — receita integral e diferenças físicas versionadas; CMV atual e congelamento mensal manual com revisões; histórico real/validação visual não executados |
 | `employee-documents` | 3 | Traçado | [Resumo e visibilidade](flows/employee-documents.md) — percurso complementado; verificação integrada pendente |
 | `expenses` | 7 | Traçado | [Lançamento e auditoria](flows/expenses.md) — destino canônico de extratos; auditoria contextual, período e consistência entre KPIs e filtros cobertos por contratos locais; verificação integrada pendente |
@@ -48,7 +48,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
-| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; sem mudança financeira; HTTP autenticado e homologação global pendentes |
+| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; sem geração de lançamento financeiro; HTTP autenticado e homologação global pendentes |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
