@@ -222,6 +222,77 @@ test("unidade de abastecimento soma o consumo das unidades comerciais dos grupos
   assert.equal(levels[cd].override, false);
 });
 
+test("unidade de abastecimento ignora compra direta e zera o mínimo quando nenhum destino usa o CD", async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const baseProductId = `test-supply-routing-${suffix}`;
+  const groupCd = `group-cd-routing-${suffix}`;
+  const groupStores = `group-stores-routing-${suffix}`;
+  const cd = `cd-routing-${suffix}`;
+  const directStore = `store-direct-${suffix}`;
+  const cdStore = `store-cd-${suffix}`;
+
+  await db.collection("dp_unitGroups").doc(groupCd).set({ name: "CD teste", suppliedGroupIds: [groupStores] });
+  await db.collection("dp_unitGroups").doc(groupStores).set({ name: "Quiosques teste" });
+  await seedUnit(`u-${cd}`, { externalSource: "kiosk", externalId: cd, groupId: groupCd, stockRole: "supply" });
+  await seedUnit(`u-${directStore}`, { externalSource: "kiosk", externalId: directStore, groupId: groupStores });
+  await seedUnit(`u-${cdStore}`, { externalSource: "kiosk", externalId: cdStore, groupId: groupStores });
+
+  for (const month of [3, 4, 5, 6, 7, 8]) {
+    await seedConsumptionReport(directStore, 2026, month, 10, [
+      { baseProductId, productName: "TESTE ROTA DIRETA", consumedQuantity: 10 },
+    ]);
+    await seedConsumptionReport(cdStore, 2026, month, 10, [
+      { baseProductId, productName: "TESTE ROTA CD", consumedQuantity: 20 },
+    ]);
+  }
+
+  await db.collection("baseProducts").doc(baseProductId).set({
+    name: "TESTE ROTEAMENTO",
+    unit: "un",
+    category: "Unidade",
+    stockLevels: {
+      [directStore]: { override: false, supplyMode: "direct" },
+      [cdStore]: { override: false, supplyMode: "cd" },
+      [cd]: { override: false, min: 99 },
+    },
+  });
+
+  await runMinimumStockRecalculation(db, NOW);
+
+  let levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
+  assert.equal(levels[directStore].min, 13, "a unidade direta ainda calcula sua própria necessidade local");
+  assert.equal(levels[cdStore].min, 26, "a unidade via CD ainda calcula sua própria necessidade");
+  assert.equal(levels[cd].min, 26, "o CD deve somar somente o destino via CD");
+  assert.equal(levels[cd].lastAutoCalculatedMean, 20);
+
+  await db.collection("baseProducts").doc(baseProductId).update({
+    [`stockLevels.${cdStore}.supplyMode`]: "direct",
+  });
+  const noHistoryBaseProductId = `test-supply-routing-no-history-${suffix}`;
+  await db.collection("baseProducts").doc(noHistoryBaseProductId).set({
+    name: "TESTE ROTEAMENTO SEM HISTÓRICO",
+    unit: "un",
+    category: "Unidade",
+    stockLevels: {
+      [directStore]: { override: false, supplyMode: "direct" },
+      [cdStore]: { override: false, supplyMode: "direct" },
+      [cd]: { override: false, min: 77 },
+    },
+  });
+  await runMinimumStockRecalculation(db, NOW);
+
+  levels = (await db.collection("baseProducts").doc(baseProductId).get()).data()!.stockLevels;
+  assert.equal(levels[cd].min, 0, "o CD sem nenhum destino via CD deve limpar o mínimo legado anterior");
+  assert.equal(levels[cd].lastAutoCalculatedMean, 0);
+  assert.equal(levels[directStore].min, 13, "a rota direta não remove o cálculo da própria unidade");
+  assert.equal(levels[cdStore].min, 26, "a nova rota direta mantém o cálculo da própria unidade");
+
+  const noHistoryLevels =
+    (await db.collection("baseProducts").doc(noHistoryBaseProductId).get()).data()!.stockLevels;
+  assert.equal(noHistoryLevels[cd].min, 0, "a ausência de histórico não deve preservar mínimo no CD sem dependentes");
+  assert.equal(noHistoryLevels[cd].lastAutoCalculatedMean, 0);
+});
+
 test("unidade de abastecimento com override mantém o valor manual", async () => {
   const suffix = randomUUID().slice(0, 8);
   const baseProductId = `test-supply-override-${suffix}`;
