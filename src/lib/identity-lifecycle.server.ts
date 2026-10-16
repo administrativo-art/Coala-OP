@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { setEmploymentCyclePatch } from "@/lib/employment-cycle.server";
 
 function storedSessionVersion(value: unknown) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -27,11 +28,11 @@ export async function suspendIdentityAccess(params: {
     const snapshot = await transaction.get(userRef);
     if (!snapshot.exists) throw new Error("Usuário não encontrado.");
     const nextVersion = storedSessionVersion(snapshot.get("sessionVersion")) + 1;
-    transaction.set(userRef, {
+    setEmploymentCyclePatch(transaction, userRef, snapshot, {
       ...params.userPatch,
       isActive: false,
       sessionVersion: nextVersion,
-    }, { merge: true });
+    }, { cycleMutation: true });
     return nextVersion;
   });
 

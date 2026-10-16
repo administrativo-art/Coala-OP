@@ -12,6 +12,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class AttestationToken(val token: String, val expiresAt: Long)
 @Serializable data class AttestationResponse(val attestation: AttestationToken? = null)
 @Serializable data class ResetRequest(val email: String)
+@Serializable data class PushDeviceRegistration(val installationId: String, val token: String, val packageName: String, val permissionGranted: Boolean = true, val appVersion: String? = null)
+@Serializable data class PushDeviceRemoval(val installationId: String)
+@Serializable data class PushDeviceRegistered(val registered: Boolean)
+@Serializable data class PushDeviceRemoved(val removed: Boolean)
 
 @Serializable data class ExitReason(val value: String, val label: String)
 @Serializable data class OpenSession(val id: String, val kioskId: String, val kioskName: String, val startedAt: String, val itemCount: Int)

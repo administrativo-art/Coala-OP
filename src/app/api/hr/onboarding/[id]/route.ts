@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
+import { z } from 'zod';
 
 import { resolveCollaboratorCore } from '@/features/hr/lib/collaborator-core.server';
 import { initialTransportVoucherHistory } from '@/features/hr/lib/collaborator-data-contract';
@@ -8,6 +9,7 @@ import { integrationTemplateVersionSchema, type IntegrationTemplateVersion } fro
 import { assertFormalizationAccess, serializeHrValue } from '@/features/hr/lib/server-access';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { authAdmin, dbAdmin } from '@/lib/firebase-admin';
+import { setEmploymentCyclePatch } from '@/lib/employment-cycle.server';
 import { createFirstAccessLink } from '@/lib/first-access-links';
 import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
@@ -16,6 +18,10 @@ import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
 import { mergeBizneoEmployee } from '@/lib/hr/merge-bizneo-employee';
 import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
+import { AppError } from '@/lib/observability/app-error';
+import { defineSecurityEnforcer } from '@/lib/security/enforcer';
+import { defineSecurityContract } from '@/lib/security/route-contract';
+import { secureRoute } from '@/lib/security/secure-route.server';
 import {
   canVerifyOnboardingIntegrations,
   pendingPdvOnboardingAlert,
@@ -49,6 +55,95 @@ import type { OnboardingDocument, OnboardingProcess, OnboardingStageId, PjOnboar
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+type RouteContext = { params: Promise<{ id: string }> };
+
+const routeIdSchema = z.string().trim().min(1).max(250).refine((value) => !value.includes('/'));
+const patchBodySchema = z.object({
+  action: z.string(),
+  checkId: z.unknown().optional(),
+  completed: z.unknown().optional(),
+  currentStage: z.unknown().optional(),
+  documentId: z.unknown().optional(),
+  documentIds: z.unknown().optional(),
+  employerUnitId: z.unknown().optional(),
+  expectedAdmissionDate: z.unknown().optional(),
+  fieldKey: z.unknown().optional(),
+  finalizationSettings: z.unknown().optional(),
+  note: z.unknown().optional(),
+  reason: z.unknown().optional(),
+  status: z.unknown().optional(),
+  value: z.unknown().optional(),
+}).strict();
+
+const getContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'hr.onboarding.read',
+  version: 1,
+  surface: { method: 'GET', path: '/api/hr/onboarding/[id]' },
+  exposure: 'authenticated',
+  identity: { kind: 'active-user' },
+  authorization: { kind: 'custom', strategy: 'formalization-view' },
+  resourceScope: { kind: 'none' },
+  input: { kind: 'schema', schema: 'hr-onboarding-route-params', unknownFields: 'reject' },
+  effects: { mode: 'read', audit: 'none' },
+  errorExposure: 'sanitized',
+});
+
+const patchContract = defineSecurityContract({
+  schemaVersion: 1,
+  id: 'hr.onboarding.update',
+  version: 1,
+  surface: { method: 'PATCH', path: '/api/hr/onboarding/[id]' },
+  exposure: 'authenticated',
+  identity: { kind: 'active-user' },
+  authorization: { kind: 'custom', strategy: 'formalization-action' },
+  resourceScope: { kind: 'none' },
+  input: { kind: 'schema', schema: 'hr-onboarding-update', unknownFields: 'reject' },
+  effects: { mode: 'write', audit: 'server-authoritative' },
+  errorExposure: 'sanitized',
+});
+
+const getEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>, { id: string }, undefined>({
+  id: 'hr-onboarding-read-v1',
+  guarantees: ['authenticated-user', 'active-user', 'authorization:formalization-view', 'input-validated', 'fields-allowlisted'],
+  async enforce({ request, routeContext }) {
+    const parsedId = routeIdSchema.safeParse((await routeContext.params).id);
+    if (!parsedId.success) {
+      throw new AppError({ code: 'HR_ONBOARDING_ID_INVALID', kind: 'VALIDATION', safeMessage: 'Integração inválida.', reportable: false });
+    }
+    const actor = await assertFormalizationAccess(request, 'view').catch((cause) => {
+      throw new AppError({ code: 'HR_ONBOARDING_READ_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para acessar onboarding.', cause, reportable: false });
+    });
+    return { actor, input: { id: parsedId.data }, resource: undefined };
+  },
+});
+
+const patchEnforcer = defineSecurityEnforcer<NextRequest, RouteContext, unknown, Awaited<ReturnType<typeof assertFormalizationAccess>>, { id: string; body: z.infer<typeof patchBodySchema> }, undefined>({
+  id: 'hr-onboarding-update-v1',
+  guarantees: ['authenticated-user', 'active-user', 'authorization:formalization-action', 'input-validated', 'fields-allowlisted'],
+  async enforce({ request, routeContext }) {
+    const [routeParams, rawBody] = await Promise.all([
+      routeContext.params,
+      request.json().catch(() => null),
+    ]);
+    const parsedId = routeIdSchema.safeParse(routeParams.id);
+    const parsedBody = patchBodySchema.safeParse(rawBody);
+    if (!parsedId.success || !parsedBody.success) {
+      throw new AppError({ code: 'HR_ONBOARDING_UPDATE_INVALID', kind: 'VALIDATION', safeMessage: 'Payload inválido.', reportable: false });
+    }
+    const requiredPermission = parsedBody.data.action === 'document_status'
+      || parsedBody.data.action === 'document_status_bulk'
+      || parsedBody.data.action === 'confirm_document_field'
+      || parsedBody.data.action === 'correct_document_field'
+      ? 'documents.review'
+      : 'onboarding.manage';
+    const actor = await assertFormalizationAccess(request, requiredPermission).catch((cause) => {
+      throw new AppError({ code: 'HR_ONBOARDING_UPDATE_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem permissão para executar esta ação na integração.', cause, reportable: false });
+    });
+    return { actor, input: { id: parsedId.data, body: parsedBody.data }, resource: undefined };
+  },
+});
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -352,6 +447,14 @@ async function getOrCreateAuthUser(email: string, displayName: string) {
   }
 }
 
+async function mergeOnboardingEmploymentUser(userId: string, patch: Record<string, unknown>) {
+  return dbAdmin.runTransaction(async (transaction) => {
+    const ref = dbAdmin.collection('users').doc(userId);
+    const current = await transaction.get(ref);
+    setEmploymentCyclePatch(transaction, ref, current, patch, { cycleMutation: current.exists });
+  });
+}
+
 async function createPjUserFromOnboarding(params: {
   processId: string;
   process: Record<string, unknown>;
@@ -392,10 +495,9 @@ async function createPjUserFromOnboarding(params: {
       throw new Error('Já existe um usuário com este e-mail. Revise o cadastro antes de criar o acesso.');
     }
   }
-  await authAdmin.setCustomUserClaims(authUser.uid, { profileId, isDefaultAdmin: false });
   const now = new Date().toISOString();
   const startTimestamp = timestampFromDateString(workflow.terms.contractStartDate);
-  await dbAdmin.collection('users').doc(authUser.uid).set({
+  await mergeOnboardingEmploymentUser(authUser.uid, {
     username: name,
     email,
     cpf,
@@ -420,7 +522,8 @@ async function createPjUserFromOnboarding(params: {
     },
     updatedAt: now,
     createdAt: now,
-  }, { merge: true });
+  });
+  await authAdmin.setCustomUserClaims(authUser.uid, { profileId, isDefaultAdmin: false });
   await hrDbAdmin.collection('employees').doc(authUser.uid).set({
     auth_uid: authUser.uid,
     source_user_id: authUser.uid,
@@ -549,7 +652,7 @@ async function createCollaboratorFromOnboarding(params: {
       ? 'internship'
       : 'employee';
 
-  await dbAdmin.collection('users').doc(authUser.uid).set({
+  await mergeOnboardingEmploymentUser(authUser.uid, {
     username: name,
     email,
     hrEmployeeId: employeeId,
@@ -580,7 +683,7 @@ async function createCollaboratorFromOnboarding(params: {
     onboardingId: params.processId,
     updatedAt: now,
     createdAt: now,
-  }, { merge: true });
+  });
 
   const employeeRef = hrDbAdmin.collection('employees').doc(employeeId);
   const onboardingImageVoiceConsent = asRecord(params.process.consentimento_imagem_voz);
@@ -813,10 +916,8 @@ async function createCollaboratorFromOnboarding(params: {
   };
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'view').catch(() => null);
-  if (!access) return jsonError('Sem permissão para acessar onboarding.', 403);
-  const { id } = await context.params;
+export const GET = secureRoute({ contract: getContract, enforcer: getEnforcer }, async ({ security }) => {
+  const { actor: access, input: { id } } = security;
   const snapshot = await hrDbAdmin.collection('onboardingProcesses').doc(id).get();
   if (!snapshot.exists) return jsonError('Onboarding não encontrado.', 404);
   return NextResponse.json({
@@ -825,18 +926,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       ...((serializeHrValue(snapshot.data()) as Record<string, unknown>) ?? {}),
     }, access),
   });
-}
+});
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object') return jsonError('Payload inválido.');
+export const PATCH = secureRoute({ contract: patchContract, enforcer: patchEnforcer }, async ({ request, security }) => {
+  const { actor: access, input: { id, body } } = security;
   const action = asString(body.action);
-  const requiredPermission = action === 'document_status' || action === 'document_status_bulk' || action === 'confirm_document_field' || action === 'correct_document_field'
-    ? 'documents.review'
-    : 'onboarding.manage';
-  const access = await assertFormalizationAccess(request, requiredPermission).catch(() => null);
-  if (!access) return jsonError('Sem permissão para executar esta ação na integração.', 403);
 
   const ref = hrDbAdmin.collection('onboardingProcesses').doc(id);
   const snap = await ref.get();
@@ -1347,4 +1441,4 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       ...(responseFirstAccessUrl ? { firstAccessUrl: responseFirstAccessUrl } : {}),
     },
   });
-}
+});

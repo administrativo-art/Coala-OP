@@ -1876,7 +1876,12 @@ function CollaboratorDashboardPanelInner() {
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem disabled className="rounded-ds-md text-xs">Novos tipos serão adicionados aqui.</DropdownMenuItem>
+                        <DropdownMenuItem asChild className="rounded-ds-md p-2.5">
+                          <Link href="/dashboard/collaborator/requests?new=absence_preview">
+                            <Inbox className="h-4 w-4 text-ds-info" />
+                            <span><span className="block font-bold">Prévia de ausência</span><span className="block text-[11px] text-ds-ink-faint">Calcular e preparar rascunho, se disponível</span></span>
+                          </Link>
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   }

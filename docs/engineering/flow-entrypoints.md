@@ -263,19 +263,35 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx), [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx).
 
-Arquivos locais percorridos: 30.
+Arquivos locais percorridos: 47.
 
 Chamadas candidatas encontradas:
 
+- `/api/collaborator/absence-requests` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/route.ts`](../../src/app/api/collaborator/absence-requests/route.ts)
+- `/api/collaborator/absence-requests/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/[requestId]/route.ts`](../../src/app/api/collaborator/absence-requests/%5BrequestId%5D/route.ts)
+- `/api/collaborator/absence-requests/options` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/options/route.ts`](../../src/app/api/collaborator/absence-requests/options/route.ts)
+- `/api/collaborator/absence-requests/preparations` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preparations/route.ts`](../../src/app/api/collaborator/absence-requests/preparations/route.ts)
+- `/api/collaborator/absence-requests/preview` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preview/route.ts`](../../src/app/api/collaborator/absence-requests/preview/route.ts)
 - `/api/collaborator/requests` — interface [`src/features/hr/requests/client.ts`](../../src/features/hr/requests/client.ts); rota candidata [`src/app/api/collaborator/requests/route.ts`](../../src/app/api/collaborator/requests/route.ts)
 - `/api/collaborator/requests/` — interface [`src/features/hr/requests/client.ts`](../../src/features/hr/requests/client.ts); rota candidata [`src/app/api/collaborator/requests/[requestId]/route.ts`](../../src/app/api/collaborator/requests/%5BrequestId%5D/route.ts)
 - `/api/dev/transport-voucher-templates/` — interface [`src/features/hr/requests/collaborator-requests-page.tsx`](../../src/features/hr/requests/collaborator-requests-page.tsx); rota candidata [`src/app/api/dev/transport-voucher-templates/[kind]/route.ts`](../../src/app/api/dev/transport-voucher-templates/%5Bkind%5D/route.ts)
+- `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
+- `/api/dp/absence-retention` — interface [`src/features/dp/absences/requests/retention-client.ts`](../../src/features/dp/absences/requests/retention-client.ts); rota candidata [`src/app/api/dp/absence-retention/route.ts`](../../src/app/api/dp/absence-retention/route.ts)
+- `/api/dp/absence-retention/` — interface [`src/features/dp/absences/requests/retention-client.ts`](../../src/features/dp/absences/requests/retention-client.ts); rota candidata [`src/app/api/dp/absence-retention/route.ts`](../../src/app/api/dp/absence-retention/route.ts)
+
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `dp_unitGroups` — [`src/features/dp/absences/requests/target.server.ts`](../../src/features/dp/absences/requests/target.server.ts)
+- `dp_units` — [`src/features/dp/absences/requests/target.server.ts`](../../src/features/dp/absences/requests/target.server.ts)
+- `users` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
 - `dashboard.collaborator` — [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx)
 - `dashboard.view` — [`src/app/dashboard/collaborator/requests/page.tsx`](../../src/app/dashboard/collaborator/requests/page.tsx)
-- `dp.requests.review` — [`src/features/hr/requests/hr-requests-page.tsx`](../../src/features/hr/requests/hr-requests-page.tsx)
+- `dp.collaborators.edit` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.collaborators.ownProfileOnly` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.requests.review` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 - `dp.requests.view` — [`src/app/dashboard/dp/requests/page.tsx`](../../src/app/dashboard/dp/requests/page.tsx)
 
 ## `collaborator-schedule`
@@ -1394,7 +1410,7 @@ Chamadas candidatas encontradas:
 
 Páginas: [`src/app/dashboard/settings/page.tsx`](../../src/app/dashboard/settings/page.tsx), [`src/app/dashboard/settings/units/page.tsx`](../../src/app/dashboard/settings/units/page.tsx).
 
-Arquivos locais percorridos: 233.
+Arquivos locais percorridos: 234.
 
 Chamadas candidatas encontradas:
 
