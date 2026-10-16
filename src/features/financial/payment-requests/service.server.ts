@@ -29,6 +29,20 @@ import { paymentReceiverMatchesSnapshot } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
 import { canRetryDefinitivelyRejectedPayment, paymentSubmissionAttemptCount } from "./submission-retry";
 import { assertFinancialInboxPaymentTarget, overdueBarcodeSettlementRevisionSchema, planOverdueBarcodeSettlementRevision, type OverdueBarcodeSettlementRevisionInput } from "./overdue-settlement";
+import {
+  FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
+  FINANCIAL_SERVICE_APPROVAL_POLICY,
+  FINANCIAL_SERVICE_APPROVER_ID,
+  financialServiceApprovalRejection,
+} from "./service-approval-policy";
+
+export class FinancialServiceApprovalIneligibleError extends Error {}
+
+const financialServiceApprover: PaymentActor = {
+  uid: FINANCIAL_SERVICE_APPROVER_ID,
+  email: null,
+  name: "Aprovador financeiro do backend",
+};
 
 export async function createPaymentRequest(input: {
   sourceType: LegacyBankPaymentSourceType;
@@ -312,6 +326,30 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
     await hrDbAdmin.collection("hrNotifications").doc(notificationId).set({ status: "completed", authorizedAt: now, authorizedBy: actor.uid, updatedAt: now }, { merge: true });
   }
   return request.sourceType === "termination" || request.sourceType === "aso" ? submitPaymentRequest(id, actor) : request;
+}
+
+export async function authorizeAndSubmitServiceApprovedPayment(id: string, allowedSourceIds: ReadonlySet<string>) {
+  let request = await getPaymentRequest(id);
+  const messageSnapshot = request.sourceType === "financial_inbox"
+    ? await financialDbAdmin.collection("financialInboxMessages").doc(request.sourceId).get()
+    : null;
+  const rejection = financialServiceApprovalRejection({
+    request,
+    inboxMessageId: messageSnapshot?.id ?? "",
+    inboxMessage: messageSnapshot?.exists ? messageSnapshot.data() ?? null : null,
+    allowedSourceIds,
+    workspaceId: WORKSPACE_ID,
+    today: todayInBelem(),
+  });
+  if (rejection) throw new FinancialServiceApprovalIneligibleError(rejection);
+  if (request.status === "awaiting_financial_authorization") {
+    request = await authorizePaymentRequest(id, financialServiceApprover);
+    await addPaymentEvent(id, "FINANCIAL_SERVICE_APPROVAL_POLICY_APPLIED", financialServiceApprover, {
+      policy: FINANCIAL_SERVICE_APPROVAL_POLICY,
+      maxAmountCents: FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
+    });
+  }
+  return submitPaymentRequest(request.id, financialServiceApprover);
 }
 
 export async function reviseAndAuthorizeOverdueBarcodePaymentRequest(
