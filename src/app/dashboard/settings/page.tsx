@@ -41,6 +41,10 @@ const DPSettingsAbsences = dynamic(
   () => import("@/components/dp/dp-settings-absences").then((m) => m.DPSettingsAbsences),
   { ssr: false }
 );
+const DPResponsibilityCoverage = dynamic(
+  () => import("@/components/dp/dp-responsibility-coverage").then((m) => m.DPResponsibilityCoverage),
+  { ssr: false }
+);
 const DPSettingsRoles = dynamic(
   () => import("@/components/dp/dp-settings-roles").then((m) => m.DPSettingsRoles),
   { ssr: false }
@@ -611,6 +615,13 @@ export default function SettingsPage() {
       content: <DPSettingsAbsences />,
     },
     {
+      value: "responsibility-coverage",
+      label: "Coberturas",
+      title: "Coberturas do DP",
+      description: "Defina quem responde por cada atividade e grupo de unidades e identifique lacunas antes que uma tarefa fique sem responsável.",
+      content: <DPResponsibilityCoverage />,
+    },
+    {
       value: "calendars",
       label: "Calendários",
       title: "Calendários de trabalho",
@@ -688,6 +699,12 @@ export default function SettingsPage() {
     if (tab.value === "absences") {
       return canManageAbsences;
     }
+    if (tab.value === "responsibility-coverage") {
+      return !!(
+        isDefaultAdmin
+        || permissions.dp?.responsibilities?.manage
+      );
+    }
     if (tab.value === "calendars") {
       return !!permissions.dp?.settings?.manageCalendars;
     }
@@ -704,6 +721,14 @@ export default function SettingsPage() {
       description: "Gerencie cargos, funções, perfis de colaboradores e a estrutura organizacional.",
       content: null,
       children: pickPersonalTabs(["roles", "organogram", "access-profiles", "profile-fields"]),
+    },
+    {
+      value: "responsibilities",
+      label: "Responsabilidades",
+      title: "Responsabilidades",
+      description: "Defina a responsabilidade do DP por atividade e grupo de unidades.",
+      content: null,
+      children: pickPersonalTabs(["responsibility-coverage"]),
     },
     {
       value: "journey",

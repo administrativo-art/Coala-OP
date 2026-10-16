@@ -36,6 +36,9 @@ function source() {
       { id: 'fora-janela', userId: 'sara', startDate: '2026-11-20', endDate: '2026-11-25', recordType: 'gozo', status: 'APPROVED' },
     ],
     sourceQuery: 'dp_vacations:endDate:2026-10-01:2026-12-13',
+    operational: { workspaceId: 'workspace-test', sourceReady: true,
+      epoch: '12345678-1234-4234-8234-123456789abc', projectionDocuments: [], requestDocuments: [],
+      sourceQuery: 'synthetic:ready-empty' },
   };
 }
 
@@ -50,6 +53,7 @@ test('prepara férias aprovadas de toda a equipe e separa pendências na janela 
   assert.equal(report.evidence.outsideCandidateDocumentsOmitted, true);
   assert.equal(report.evidence.ignoredSalesOrRejected, 1);
   assert.equal(report.evidence.externalUnavailabilitiesIncluded, false);
+  assert.equal(report.evidence.approvedAbsencesIncluded, true);
   assert.equal(report.evidence.requiresHumanConfirmation, true);
 });
 
@@ -58,6 +62,7 @@ test('fica pronto para confirmação quando só há gozo aprovado e a equipe est
   input.vacationDocuments = input.vacationDocuments.filter((item) => item.id === 'ferias-edna');
   const report = prepareNatashaAvailability(input);
   assert.equal(report.status, 'ready_for_confirmation');
+  assert.equal(report.scope, 'candidate_vacations_and_approved_absences_v2_external_prompts');
   assert.equal(report.approvedVacations[0]?.employeeName, 'Edna');
 });
 

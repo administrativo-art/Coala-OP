@@ -14,6 +14,8 @@ const prefix = "withdrawal-integration";
 const actor = { userId: prefix, userName: "Teste sangrias" };
 const context = { decoded: { uid: prefix }, userDoc: { username: "Teste sangrias" }, workspace_id: WORKSPACE_ID, isDefaultAdmin: true, permissions: {} };
 const accountId = `${prefix}-account`;
+const stockAccountId = `${prefix}-stock-account`;
+const patrimonialAccountId = `${prefix}-patrimonial-account`;
 const centerId = `${prefix}-center`;
 const unit = `${prefix}-unit`;
 const ownedRefs = new Map();
@@ -23,7 +25,8 @@ const rejectedCode = code => error => error.code === `CASH_WITHDRAWAL_${code}`;
 function built(date, amountCents = 1000, extra = {}) {
   const [year, month, day] = date.split("-").map(Number);
   const movements = amountCents ? [{ id: `${prefix}-${date}`, identitySource: "provider", kind: "withdrawal", amountCents,
-    date, occurredAt: `${date}T12:00:00-03:00`, operatorId: "op", terminalId: "terminal", paymentMethodId: "cash", paymentMethodName: "DINHEIRO", isCash: true, cancelled: false }] : [];
+    date, occurredAt: `${date}T12:00:00-03:00`, operatorId: "op", terminalId: "terminal", paymentMethodId: "cash", paymentMethodName: "DINHEIRO",
+    pdvReason: "Compra de limão", isCash: true, cancelled: false }] : [];
   return { workspaceId: WORKSPACE_ID, kioskId: unit, kioskName: "Unidade teste", pdvFilialId: `${prefix}-pdv`, date, year, month, day, status: "draft",
     expectedTotalCents: 10000 - amountCents, expectedByChannelCents: { cash: 10000 - amountCents }, operatorCount: 1,
     pdvSales: { version: 1, amountCents: 10000 },
@@ -52,6 +55,8 @@ async function classify(id, input, ctx = context) {
 
 test.before(async () => {
   await own(db.collection("accounts").doc(accountId)).set({ name: "Limpeza", active: true, isGroup: false, dre_position: "despesas_operacionais", is_dre_account: true });
+  await own(db.collection("accounts").doc(stockAccountId)).set({ name: "Insumos composição", active: true, isGroup: false, parentId: "estoque_compras_insumos_v2", is_dre_account: false });
+  await own(db.collection("accounts").doc(patrimonialAccountId)).set({ name: "Conta patrimonial alheia", active: true, isGroup: false, parentId: "outro_grupo_patrimonial", is_dre_account: false });
   await own(db.collection("resultCenters").doc(centerId)).set({ name: "Centro exclusivo", active: true, unitIds: [unit] });
 });
 test.after(async () => {
@@ -176,6 +181,20 @@ test("scope, permissões, conta-grupo, centro compartilhado e PDV sem identidade
   delete unverified.lines[0].metadata.cashMovements[0].identitySource;
   await upsertClosureFromPdv(unverified, actor);
   await assert.rejects(classify(id, createInput(source)), rejectedCode("IDENTITY_UNVERIFIED"));
+});
+
+test("aceita insumo de composição fora da DRE e mantém outras contas patrimoniais bloqueadas", async () => {
+  const stock = await setup("2035-08-09");
+  assert.equal(stock.source.pdvReason, "Compra de limão");
+  const result = await classify(stock.id, { ...createInput(stock.source), accountPlanId: stockAccountId, description: stock.source.pdvReason });
+  assert.equal(result.classification.accountPlanId, stockAccountId);
+  assert.equal((await db.collection("expenses").doc(result.classification.expenseId).get()).data().accountPlan, stockAccountId);
+
+  const unrelated = await setup("2035-08-10");
+  await assert.rejects(
+    classify(unrelated.id, { ...createInput(unrelated.source), accountPlanId: patrimonialAccountId }),
+    rejectedCode("ACCOUNT_INVALID"),
+  );
 });
 
 test("sem sangrias permite finalizar; contagem alterada revalida autorização sênior na transação", async () => {

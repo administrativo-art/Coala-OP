@@ -204,6 +204,7 @@ export async function POST(request: NextRequest) {
       avatarUrl: text(userData.avatarUrl, 2000),
       operacional: userData.operacional === true,
       isActive: true,
+      employmentCycleVersion: 0,
       mustChangePassword: true,
       source: "manual_user_creation",
       createdAt: FieldValue.serverTimestamp(),

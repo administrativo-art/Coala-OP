@@ -6,6 +6,7 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import type { DPScheduleSnapshot } from '@/types';
+import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices, type OccupancySlice } from '@/features/dp/absences/operational/occupancy-guard.server';
 
 import { validateScheduleJourneys } from '../journey-validation/service.server';
 
@@ -71,6 +72,20 @@ export async function changeDPScheduleLock(params: {
         kind: 'CONFLICT',
         safeMessage: 'A escala mudou durante a validação. Tente trancar novamente.',
       });
+    }
+
+    if (operationalGuardRequested()) {
+      const shifts = await transaction.get(scheduleRef.collection('shifts').limit(201));
+      if (shifts.size === 201) throw new AppError({ code: 'ABSENCE_OPERATIONAL_LOCK_LIMIT', kind: 'CONFLICT',
+        safeMessage: 'Escala extensa demais para validação operacional.' });
+      const slices: OccupancySlice[] = shifts.docs.flatMap((shift) => {
+        const beneficiaryUid = String(shift.get('userId') ?? '');
+        const date = String(shift.get('date') ?? '');
+        if (shift.get('type') === 'day_off') return [{ beneficiaryUid, date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }];
+        return shiftOccupancySlices({ beneficiaryUid, date, startTime: shift.get('startTime') as string,
+          endTime: shift.get('endTime') as string, addsOccupancy: false });
+      });
+      await guardOccupancyWrite(transaction, params.context.workspace_id, slices, 2);
     }
 
     const now = Timestamp.now();

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { assertAbsenceRetentionEmploymentWriteAllowed } from "./absence-operational-admin-gate.mjs";
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "smart-converter-752gf";
 const APP_DATABASE_ID = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || "coala";
@@ -114,6 +115,8 @@ if (!APPLY) {
   process.exit(0);
 }
 
+await assertAbsenceRetentionEmploymentWriteAllowed(db);
+
 const appBackupRef = db.collection("system_migration_backups").doc(MIGRATION_ID);
 const hrBackupRef = hrDb.collection("system_migration_backups").doc(MIGRATION_ID);
 const [appBackup, hrBackup] = await Promise.all([appBackupRef.get(), hrBackupRef.get()]);
@@ -194,10 +197,14 @@ await hrBatch.commit();
 
 const userBatch = db.batch();
 for (const { user, hrEmployeeId, type } of targets) {
+  const relationshipChanged = type === "pj" && user.employmentRelationshipType !== "pj";
   userBatch.set(db.collection("users").doc(user.id), {
     hrEmployeeId,
     personRecordType: type,
-    ...(type === "pj" ? { employmentRelationshipType: "pj" } : {}),
+    ...(relationshipChanged ? {
+      employmentRelationshipType: "pj",
+      employmentCycleVersion: FieldValue.increment(1),
+    } : {}),
     emailSource: "firebase_auth",
     personLinkVersion: 1,
     personLinkUpdatedAt: FieldValue.serverTimestamp(),

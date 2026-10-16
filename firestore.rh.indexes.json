@@ -1,5 +1,141 @@
 {
   "indexes": [
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryUid", "order": "ASCENDING" }, { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryUid", "order": "ASCENDING" }, { "fieldPath": "reviewSla.deadlineAt", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" },
+      { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "ASCENDING" },
+      { "fieldPath": "endDate", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "requesterUid", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "requesterUid", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "requesterUid", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "requesterUid", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "requesterUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "requesterUid", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "startDate", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "startDate", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" },
+      { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "startDate", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "assignedReviewerIds", "arrayConfig": "CONTAINS" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "unitId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "startDate", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    {
+      "collectionGroup": "dp_absencePreparations", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
     {
       "collectionGroup": "hrNotifications",
       "queryScope": "COLLECTION",
@@ -158,7 +294,29 @@
         { "fieldPath": "field_key",   "order": "ASCENDING" },
         { "fieldPath": "updated_at",  "order": "DESCENDING" }
       ]
-    }
+    },
+    { "collectionGroup": "dp_absenceRetentionCases", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "updatedAt", "order": "DESCENDING" }, { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRetentionCases", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "unitId", "order": "ASCENDING" },
+      { "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRetentionCases", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "reviewAfter", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRetentionCases", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "noticeStatus", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRequests", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "workspaceId", "order": "ASCENDING" }, { "fieldPath": "beneficiaryUid", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
+    { "collectionGroup": "dp_absenceRetentionReconciliations", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "state", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "ASCENDING" }
+    ] }
   ],
   "fieldOverrides": []
 }

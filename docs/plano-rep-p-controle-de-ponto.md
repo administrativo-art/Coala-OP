@@ -68,6 +68,8 @@ COALA
 
 Regras da fronteira:
 
+**Persistência decidida em 14/10/2026:** configurações de Tempo, pedidos/ocorrências de ausência e tratamento/apuração (PTRP) serão organizados em coleções próprias no banco existente `coala-rh`. O cadastro hoje em `coala` será movido por migração controlada, sem duas fontes editáveis. O banco exclusivo da ARP continua separado do RH; ele não recebe regras de ausência, documentos médicos ou resultados de apuração.
+
 1. **O REP-P registra o que aconteceu; o PTRP interpreta.** Se o colaborador bateu 08:07, a ARP guarda 08:07 para sempre, mesmo que a regra considere 08:00.
 2. Nenhum módulo fora do REP-P escreve na ARP. O PTRP só lê.
 3. Mudanças em RH, escalas, dashboard ou outros módulos não alteram o código do núcleo. Toda alteração no núcleo gera nova versão do REP-P (o Atestado Técnico identifica programa e versão).
@@ -186,6 +188,10 @@ Ficam registrados com usuário, data, hora, IP, evento, valor anterior e valor p
 - falhas na cadeia de hashes.
 
 ## 6. Requisitos do PTRP (Jornada V2)
+
+**Alinhamento de 14/10/2026:** pedidos e ocorrências seguem o contrato de [Ausências do DP](engineering/flows/dp-absences.md). A ocorrência aprovada é insumo do PTRP, nunca uma marcação original nem autorização de escrita na ARP. Justificativa, abono/crédito, débito de banco e efeito de folha permanecem distinguíveis e vinculados à regra/decisão aplicada. Correções e reversões acrescentam histórico e reprocessam apenas o período afetado, respeitando fechamento versionado. Uma ausência aprovada não impede a coleta de uma batida real.
+
+O acesso temporário dos aprovadores ao comprovante de ausência termina na aprovação final; o arquivo continua restrito ao titular e ao DP responsável. Os anexos não entram no AFD, AEJ ou projeções da escala. Sua retenção de 20 anos após o desligamento e eliminação mediante autorização são políticas desse fluxo, não o prazo geral dos registros da ARP. Conferir os leiautes oficiais vigentes do MTE antes de implementar cada exportação.
 
 Ficam detalhados em [plano-jornada-fechamento-rh.md](plano-jornada-fechamento-rh.md). O que este plano acrescenta:
 

@@ -15,6 +15,10 @@ import { secureRoute } from "@/lib/security/secure-route.server";
 import { canDelegateUnitAccess } from "@/lib/unit-access";
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 import {
+  EMPLOYMENT_CYCLE_FIELDS,
+  setEmploymentCyclePatch,
+} from "@/lib/employment-cycle.server";
+import {
   PdvOperationalUnitSyncError,
   PDV_SERVER_MANAGED_USER_FIELDS,
   pdvOperationalUnitPatch,
@@ -61,6 +65,8 @@ const SERVER_ONLY_FIELDS = new Set([
   "hrEmployeeId",
   "personRecordType",
   "profileCompliance",
+  "employmentCycleVersion",
+  "absenceDocumentDeletionFence",
   ...PDV_SERVER_MANAGED_USER_FIELDS,
 ]);
 
@@ -339,6 +345,13 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
 
     const nextUser = { ...existingUser, ...payload };
     const pdvSyncPlans = planPdvOperationalUnitSyncs(existingUser, nextUser);
+    const employmentCycleChanged = Object.keys(payload).some((field) =>
+      EMPLOYMENT_CYCLE_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
+    );
+    if (employmentCycleChanged && pdvSyncPlans.length > 0) {
+      throw new AppError({ code: "USER_UPDATE_EMPLOYMENT_AND_PDV_CONFLICT", kind: "CONFLICT",
+        safeMessage: "Atualize o vínculo e as unidades do PDV em operações separadas." });
+    }
     if (pdvSyncPlans.length > MAX_AUTOMATIC_PDV_UNIT_SYNCS) {
       throw new PdvOperationalUnitSyncError(
         `Selecione no máximo ${MAX_AUTOMATIC_PDV_UNIT_SYNCS} novas unidades por alteração para sincronizar o PDV Legal.`,
@@ -449,7 +462,8 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
               "As unidades da colaboradora foram alteradas durante a sincronização. Tente novamente.",
             );
           }
-          transaction.set(userRef, payload, { merge: true });
+          setEmploymentCyclePatch(transaction, userRef, latestUserSnap, payload,
+            { cycleMutation: employmentCycleChanged });
           transaction.set(pdvSyncAuditRef!, {
             status: "completed",
             completedOperations: pdvSyncResults,
@@ -466,7 +480,12 @@ export const PATCH = secureRoute({ contract, enforcer }, async ({ security }) =>
         throw error;
       }
     } else {
-      await userRef.set(payload, { merge: true });
+      await dbAdmin.runTransaction(async (transaction) => {
+        const latestUserSnap = await transaction.get(userRef);
+        if (!latestUserSnap.exists) throw new AppError({ code: "USER_UPDATE_TARGET_NOT_FOUND", kind: "NOT_FOUND" });
+        setEmploymentCyclePatch(transaction, userRef, latestUserSnap, payload,
+          { cycleMutation: employmentCycleChanged });
+      });
     }
 
     if (unitAssignmentChanged) {

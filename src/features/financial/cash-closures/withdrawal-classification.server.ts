@@ -10,6 +10,7 @@ import { FINANCIAL_COLLECTIONS } from "../lib/constants";
 import { canUseCashClosure } from "./access.server";
 import { canEditCashClosure } from "./state-machine";
 import type { CashClosure, CashClosureLine, CashClosureOperator } from "./types";
+import { isWithdrawalClassifiableAccount } from "./withdrawal-account-policy";
 import {
   MAX_WITHDRAWALS, assertEligibleWithdrawalExpense, assertWithdrawalSourceIntegrity,
   changeReturnIsProven, preLinkedChangeCents, sourceExpenseGuard, withdrawalClassificationSchema, withdrawalDocumentIdSchema,
@@ -19,7 +20,6 @@ import {
 
 const COLLECTION = FINANCIAL_COLLECTIONS.sourceSettlements;
 export const LOCAL_PURCHASE_WITHDRAWAL_LINKS = "localPurchaseWithdrawalLinks";
-const EXPENSE_POSITIONS = new Set(["impostos_deducoes", "custos_variaveis", "pessoal", "despesas_operacionais", "ocupacao", "despesas_financeiras", "despesa_nao_operacional", "impostos_resultado"]);
 const MUTATED_FIELDS = ["workspaceId", "installments", "status", "paidAt", "paymentState", "settlementSummary", "plannedPaymentMethodType", "plannedPaymentMethodLabel", "sourceSettlement"];
 type Raw = Record<string, any>;
 const closureRef = (id: string) => db.collection("cashClosures").doc(id);
@@ -65,17 +65,14 @@ export async function readClassificationCatalog(transaction: Transaction, source
   ]);
   const account = accountSnap.data();
   const center = centerSnap.data();
-  if (!account || account.active === false || account.isGroup === true || !childSnap.empty || account.is_dre_account === false) {
-    withdrawalFailure("ACCOUNT_INVALID", "Selecione uma conta-folha ativa de despesa da DRE.", "VALIDATION");
+  if (!account || !isWithdrawalClassifiableAccount(account) || !childSnap.empty) {
+    withdrawalFailure("ACCOUNT_INVALID", "Selecione uma conta-folha ativa de despesa ou compra de insumo para estoque.", "VALIDATION");
   }
   assertCatalogWorkspace(account, source.workspaceId);
   if (!center || center.active === false || !Array.isArray(center.unitIds) || center.unitIds.length !== 1 || center.unitIds[0] !== source.unitId) {
     withdrawalFailure("CENTER_INVALID", "Selecione um centro de resultado ativo e exclusivo da unidade da sangria.", "VALIDATION");
   }
   assertCatalogWorkspace(center, source.workspaceId);
-  if (!EXPENSE_POSITIONS.has(account.dre_position)) {
-    withdrawalFailure("ACCOUNT_DRE_POSITION", "A conta deve estar classificada em uma linha de despesa da DRE.", "VALIDATION");
-  }
   return { accountPlanId: accountId, accountPlanName: String(account.name || accountId),
     resultCenterId: centerId, resultCenterName: String(center.name || centerId) };
 }
