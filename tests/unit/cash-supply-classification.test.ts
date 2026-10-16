@@ -81,11 +81,28 @@ function line(date: string, classification?: CashSupplyClassificationKind): Cash
   };
 }
 
-test("classificação de suprimentos só é exigida a partir de novembro de 2026", () => {
-  assert.equal(requiresCashSupplyClassification("2026-10-31"), false);
-  assert.equal(requiresCashSupplyClassification("2026-11-01"), true);
-  assert.equal(cashSupplyClassificationSummary([line("2026-10-31")]).pending, 0);
-  assert.equal(cashSupplyClassificationSummary([line("2026-11-01")]).pending, 1);
+test("classificação de suprimentos é exigida desde agosto de 2026", () => {
+  assert.equal(requiresCashSupplyClassification("2026-07-31"), false);
+  assert.equal(requiresCashSupplyClassification("2026-08-01"), true);
+  assert.equal(cashSupplyClassificationSummary([line("2026-07-31")]).pending, 0);
+  assert.equal(cashSupplyClassificationSummary([line("2026-08-01")]).pending, 1);
+});
+
+test("operador já finalizado não recebe pendência retroativa", () => {
+  const finalized = cashSupplyClassificationSummary(
+    [line("2026-08-01")],
+    { operatorStatus: "approved" },
+  );
+  assert.equal(finalized.required, false);
+  assert.equal(finalized.pending, 0);
+  assert.equal(finalized.total, 1);
+
+  const reopened = cashSupplyClassificationSummary(
+    [line("2026-08-01")],
+    { operatorStatus: "reopened" },
+  );
+  assert.equal(reopened.required, true);
+  assert.equal(reopened.pending, 1);
 });
 
 test("fundo de caixa reduz o esperado do malote sem alterar o esperado bruto do Caixa", () => {

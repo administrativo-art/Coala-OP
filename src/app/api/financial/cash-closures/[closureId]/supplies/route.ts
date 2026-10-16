@@ -93,7 +93,7 @@ function mapClassificationError(cause: unknown): never {
   if (message.includes("não encontrado")) {
     throw new AppError({ code: "CASH_SUPPLY_NOT_FOUND", kind: "NOT_FOUND", cause });
   }
-  if (message.includes("01/11/2026") || message.includes("classificação")) {
+  if (message.includes("01/08/2026") || message.includes("classificação")) {
     throw new AppError({
       code: "CASH_SUPPLY_CLASSIFICATION_INVALID",
       kind: "VALIDATION",

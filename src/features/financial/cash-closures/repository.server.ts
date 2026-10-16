@@ -638,7 +638,7 @@ export async function classifyCashSupply(
     const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
     if (rawClosure.workspaceId !== input.workspaceId) throw new Error("Fechamento fora do workspace.");
     if (!requiresCashSupplyClassification(rawClosure.date)) {
-      throw new Error("A classificação de suprimentos vale somente a partir de 01/11/2026.");
+      throw new Error("A classificação de suprimentos vale somente a partir de 01/08/2026.");
     }
     if (!canEditCashClosure(rawClosure.status)) {
       throw new Error("Somente fechamentos ainda não finalizados podem ser editados.");
