@@ -1,13 +1,14 @@
 import type {
   CashClosureCashMovement,
   CashClosureLine,
+  CashClosureOperatorStatus,
   CashSupplyClassification,
 } from "./types";
 
 type CashSupplyLine = Pick<CashClosureLine, "date" | "metadata">;
 type CashFinanceLine = CashSupplyLine & Pick<CashClosureLine, "expectedCents" | "reportedCents">;
 
-export const CASH_SUPPLY_CLASSIFICATION_EFFECTIVE_DATE = "2026-11-01";
+export const CASH_SUPPLY_CLASSIFICATION_EFFECTIVE_DATE = "2026-08-01";
 
 export function requiresCashSupplyClassification(date: string) {
   return date >= CASH_SUPPLY_CLASSIFICATION_EFFECTIVE_DATE;
@@ -70,9 +71,14 @@ export function financeReportedCentsForLine(line: CashFinanceLine) {
   return Math.max(0, line.reportedCents - cashFundCentsForLine(line));
 }
 
-export function cashSupplyClassificationSummary(lines: CashClosureLine[]) {
+export function cashSupplyClassificationSummary(
+  lines: CashClosureLine[],
+  options: { operatorStatus?: CashClosureOperatorStatus } = {},
+) {
   const supplies = lines.flatMap((line) => cashSupplyMovements(line).map((movement) => ({ line, movement })));
-  if (!lines.some((line) => requiresCashSupplyClassification(line.date))) {
+  const effective = lines.some((line) => requiresCashSupplyClassification(line.date));
+  const required = effective && options.operatorStatus !== "approved";
+  if (!effective) {
     return { required: false, total: supplies.length, pending: 0, cashFundCents: 0, supplyCents: 0 };
   }
   let pending = 0;
@@ -80,11 +86,13 @@ export function cashSupplyClassificationSummary(lines: CashClosureLine[]) {
   let supplyCents = 0;
   for (const { line, movement } of supplies) {
     const classification = cashSupplyClassificationForMovement(line, movement);
-    if (!classification) pending++;
+    if (!classification) {
+      if (required) pending++;
+    }
     else if (classification.kind === "cash_fund") cashFundCents += movement.amountCents;
     else supplyCents += movement.amountCents;
   }
-  return { required: true, total: supplies.length, pending, cashFundCents, supplyCents };
+  return { required, total: supplies.length, pending, cashFundCents, supplyCents };
 }
 
 export function preserveCashSupplyClassifications(

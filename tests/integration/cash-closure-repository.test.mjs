@@ -266,10 +266,10 @@ test("repository persiste fechamento, linhas, totais, transições e auditoria a
   assert.deepEqual(workspaceAClosures.map((closure) => closure.id), [closureId]);
 });
 
-test("classifica somente fundo de caixa fora do esperado do malote desde novembro de 2026", async () => {
+test("classifica somente fundo de caixa fora do esperado do malote desde agosto de 2026", async () => {
   const workspaceId = "workspace-integration-cash-fund";
   const kioskId = "kiosk-integration-cash-fund";
-  const date = "2026-11-02";
+  const date = "2026-08-02";
   const closureId = cashClosureId(kioskId, date);
   const built = builtClosure({ workspaceId, kioskId, date });
   const cashBuiltLine = built.lines.find((line) => line.channel === "cash");
@@ -346,6 +346,80 @@ test("classifica somente fundo de caixa fora do esperado do malote desde novembr
         lineId: cashLine.id,
         movementId: "supply-fund-1",
         classification: "supply",
+        workspaceId,
+      },
+      actor,
+    ),
+    /finalizado|editados/,
+  );
+});
+
+test("ressincronização preserva operador de agosto já finalizado sem pendência retroativa", async () => {
+  const workspaceId = "workspace-integration-finalized-history";
+  const kioskId = "kiosk-integration-finalized-history";
+  const date = "2026-08-03";
+  const closureId = cashClosureId(kioskId, date);
+  const original = builtClosure({ workspaceId, kioskId, date });
+
+  await upsertClosureFromPdv(original, actor);
+  const initial = await getCashClosure(closureId);
+  const cashLine = initial?.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, reportedCents: 10_000, countedCents: 10_000 }],
+    actor,
+    { editReported: true, editCounted: true },
+  );
+  const finalized = await finalizeCashClosureOperator(
+    closureId,
+    "operator-1",
+    actor,
+    { legacyImmediateAllocation: true },
+  );
+  assert.equal(finalized.operator.status, "approved");
+  assert.equal(finalized.operator.cashDeposit.eligibleCents, 10_000);
+
+  const resync = builtClosure({ workspaceId, kioskId, date });
+  const resyncCashLine = resync.lines.find((line) => line.channel === "cash");
+  assert.ok(resyncCashLine);
+  resyncCashLine.metadata = {
+    ...resyncCashLine.metadata,
+    supplyCents: 4_000,
+    cashMovements: [{
+      id: "historical-supply-1",
+      identitySource: "provider",
+      kind: "supply",
+      pdvDescription: "Supr. no.1492",
+      amountCents: 4_000,
+      occurredAt: `${date}T09:00:00`,
+      date,
+      operatorId: "operator-1",
+      terminalId: "terminal-1",
+      paymentMethodId: "0",
+      paymentMethodName: null,
+      isCash: false,
+      cancelled: false,
+    }],
+  };
+  await upsertClosureFromPdv(resync, actor);
+
+  const preserved = await getCashClosure(closureId);
+  const preservedOperator = preserved?.operators.find((operator) => operator.operatorId === "operator-1");
+  const preservedCashLine = preserved?.lines.find((line) => line.channel === "cash");
+  assert.equal(preservedOperator?.status, "approved");
+  assert.equal(preservedOperator?.cashDeposit.eligibleCents, 10_000);
+  assert.equal(preservedCashLine?.expectedCents, 10_000);
+  assert.equal(preservedCashLine?.countedCents, 10_000);
+  assert.equal(preservedCashLine?.differenceCents, 0);
+  assert.deepEqual(preservedCashLine?.metadata.supplyClassifications, []);
+  await assert.rejects(
+    () => classifyCashSupply(
+      closureId,
+      {
+        lineId: cashLine.id,
+        movementId: "historical-supply-1",
+        classification: "cash_fund",
         workspaceId,
       },
       actor,
