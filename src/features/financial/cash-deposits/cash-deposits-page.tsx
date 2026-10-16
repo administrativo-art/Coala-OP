@@ -45,6 +45,7 @@ import type { InterCobrancaDocument } from "./inter-cobranca";
 import {
   CASH_DEPOSIT_SOURCE_LABEL,
   cashDepositBatchReference,
+  cashDepositDenominationRows,
   groupCashDepositItemsByDay,
 } from "./references";
 import type {
@@ -158,6 +159,32 @@ function DenominationGrid({
   </label>)}</div>;
 }
 
+function DenominationBreakdown({
+  title,
+  description,
+  denominations,
+  kind,
+}: {
+  title: string;
+  description: string;
+  denominations: CashDepositBatch["denominations"];
+  kind: "note" | "coin";
+}) {
+  const rows = cashDepositDenominationRows(denominations, kind);
+  if (rows.length === 0) return null;
+  const unitLabel = kind === "note" ? "cédula" : "moeda";
+  return <div className={cn("rounded-xl border p-3", kind === "note" ? "border-ds-border bg-ds-ok-bg" : "border-ds-alert-border bg-ds-warn-bg")}>
+    <p className={cn("text-xs font-black", kind === "note" ? "text-ds-ok" : "text-ds-alert-ink")}>{title}</p>
+    <p className="mt-1 text-[11px] font-semibold text-ds-ink-muted">{description}</p>
+    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {rows.map((entry) => <div key={entry.valueCents} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg border border-ds-border bg-white px-3 py-2.5">
+        <span><strong className="block font-mono text-sm text-ds-ink-2">{formatBRL(entry.valueCents)}</strong><span className="text-[11px] font-bold text-ds-ink-muted">{entry.quantity} {unitLabel}{entry.quantity === 1 ? "" : "s"}</span></span>
+        <strong className="font-mono text-sm tabular-nums text-ds-ink-2">{formatBRL(entry.totalCents)}</strong>
+      </div>)}
+    </div>
+  </div>;
+}
+
 export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string } = {}) {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
@@ -244,7 +271,8 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
 
   const totals = useMemo(() => ({
     inBatches: batches.reduce((sum, batch) => sum + batch.totalCents, 0),
-    coins: coinBalances.reduce((sum, balance) => sum + balance.pendingExchangeCents, 0),
+    coins: coinBalances.reduce((sum, balance) => sum + balance.pendingExchangeCents, 0)
+      + batches.filter((batch) => !!batch.countingSessionId).reduce((sum, batch) => sum + batch.coinHoldCents, 0),
     issued: batches.filter((batch) => ["issuing", "issued", "paid"].includes(batch.status)).reduce((sum, batch) => sum + batch.totalCents, 0),
     paid: batches.filter((batch) => batch.status === "paid").reduce((sum, batch) => sum + batch.totalCents, 0),
   }), [batches, coinBalances]);
@@ -496,7 +524,7 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
       subtitle="Composição física, emissão de boletos e troca de moedas."
       chips={<>
         <HeroChip value={formatBRL(totals.inBatches)} label="Cédulas em blocos" />
-        <HeroChip value={formatBRL(totals.coins)} label="Moedas aguardando troca" tone="warning" />
+        <HeroChip value={formatBRL(totals.coins)} label="Moedas no caixa / troca" tone="warning" />
         <HeroChip value={formatBRL(totals.issued)} label="Emitido (boleto)" tone="info" />
         <HeroChip value={formatBRL(totals.paid)} label="Pago / depositado" />
       </>}
@@ -588,7 +616,7 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
               <CardHeader className="px-6 pb-2 pt-5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><CardTitle className="text-base font-bold">{batch.countingSessionId ? "Malote" : "Bloco"} #{batch.sequence}</CardTitle><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11px] font-bold", statusBadgeClass(batch.status))}>{STATUS_LABEL[batch.status]}</Badge><span className="font-mono text-[11px] font-bold text-muted-foreground">{reference}</span></div><div className="flex items-center gap-3"><strong className="font-mono text-base">{formatBRL(batch.totalCents)} <span className="text-sm font-semibold text-muted-foreground">/ {formatBRL(batch.maxCents)}</span></strong>{canIssue && <Button size="sm" variant={batch.status === "open" ? "default" : "outline"} className={cn("h-9 rounded-[11px] text-[13px] font-extrabold", batch.status === "open" && "bg-ds-accent text-white hover:bg-ds-accent-hover")} onClick={() => void prepareIssue(batch)} disabled={!permissions.financial.cashDeposits.issue}><Barcode className="mr-2 h-4 w-4" />{["failed", "cancelled"].includes(batch.status) ? "Reemitir boleto" : "Preparar emissão"}</Button>}</div></div></CardHeader>
               <CardContent className="space-y-3 px-6 pb-5">
                 <div><div className="h-2 overflow-hidden rounded-full bg-ds-muted"><div className={cn("h-full rounded-full", statusBarClass(batch.status))} style={{ width: `${Math.min(100, (batch.totalCents / batch.maxCents) * 100)}%` }} /></div><p className="mt-2 text-xs font-semibold text-muted-foreground">{batch.status === "paid" ? `Liquidado em ${batch.paidAt ? new Date(batch.paidAt).toLocaleDateString("pt-BR") : "data registrada"}` : `Ainda cabem ${formatBRL(batch.remainingCapacityCents)} antes do limite`}</p></div>
-                {batch.coinPreparedAt && <div className="grid gap-2 rounded-xl border border-ds-alert-border bg-ds-warn-bg p-3 text-xs sm:grid-cols-3"><div><span className="block text-ds-ink-muted">Dinheiro físico</span><strong>{formatBRL(batch.grossTotalCents)}</strong></div><div><span className="block text-ds-ink-muted">Moedas para troca</span><strong className="text-ds-alert-ink">− {formatBRL(batch.coinHoldCents)}</strong></div><div><span className="block text-ds-ink-muted">Cédulas no boleto</span><strong>{formatBRL(batch.totalCents)}</strong></div></div>}
+                {batch.coinPreparedAt && <div className="grid gap-2 rounded-xl border border-ds-alert-border bg-ds-warn-bg p-3 text-xs sm:grid-cols-3"><div><span className="block text-ds-ink-muted">Dinheiro físico</span><strong>{formatBRL(batch.grossTotalCents)}</strong></div><div><span className="block text-ds-ink-muted">{batch.countingSessionId ? "Moedas no caixa / troca" : "Moedas para troca"}</span><strong className="text-ds-alert-ink">− {formatBRL(batch.coinHoldCents)}</strong></div><div><span className="block text-ds-ink-muted">Cédulas no boleto</span><strong>{formatBRL(batch.totalCents)}</strong></div></div>}
                 {batch.lockReason === "next_item_would_exceed_limit" && <div className="flex gap-2 rounded-lg bg-ds-warn-bg p-3 text-xs text-ds-alert-ink"><Lock className="h-4 w-4 shrink-0" /><span>Travado porque o próximo fechamento de {formatBRL(batch.nextRejectedCents ?? 0)} ultrapassaria o limite.</span></div>}
                 {cobranca && <div className="rounded-xl border border-ds-border bg-ds-info-bg p-3 text-xs"><div className="flex flex-wrap justify-between gap-3"><span className="text-ds-ink-muted">Inter: <strong className="text-ds-ink-2">{cobranca.situacao ?? cobranca.status}</strong></span><span className="text-ds-ink-muted">Referência bancária: <strong className="font-mono text-ds-ink-2">{cobranca.seuNumero}</strong></span><span className="text-ds-ink-muted">Vencimento: <strong className="text-ds-ink-2">{cobranca.dataVencimento.split("-").reverse().join("/")}</strong></span></div>{cobranca.linhaDigitavel && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ds-border pt-3"><div className="min-w-0 flex-1"><p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Linha digitável</p><p className="truncate font-mono text-xs font-bold text-ds-ink-2">{cobranca.linhaDigitavel}</p></div><Button size="sm" variant="outline" className="h-8 bg-white" onClick={() => void navigator.clipboard.writeText(cobranca.linhaDigitavel ?? "")}><Copy className="mr-1.5 h-3.5 w-3.5" />Copiar</Button></div>}{cobranca.codigoSolicitacao && <p className="mt-2 text-muted-foreground">Código da solicitação: <span className="font-mono">{cobranca.codigoSolicitacao}</span></p>}{cobranca.recebidoManual && <p className="mt-2 text-ds-alert-ink">Marcado recebido manualmente; não tratado como liquidação bancária.</p>}{batch.ledgerTransactionId && <p className="mt-2 font-semibold text-ds-ok">Entrada bancária registrada no financeiro.</p>}{batch.bankWarning && <p className="mt-2 text-ds-alert-ink">{batch.bankWarning}</p>}</div>}
                 <div className="overflow-hidden rounded-xl border border-ds-border">
@@ -603,6 +631,18 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
                     {compositionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </Button>
                   {expanded && <div className="space-y-2 border-t p-3">
+                    {batch.countingSessionId && <DenominationBreakdown
+                      title="Quantidade de cédulas para fechar o malote"
+                      description="Conte somente a quantidade indicada em cada valor; os subtotais e o total já estão calculados."
+                      denominations={batch.denominations}
+                      kind="note"
+                    />}
+                    {batch.countingSessionId && <DenominationBreakdown
+                      title="Moedas reservadas no caixa / troca"
+                      description="Estas moedas foram contadas na sessão e não entram no boleto bancário."
+                      denominations={batch.reservedCoinDenominations}
+                      kind="coin"
+                    />}
                     {dayComposition.length === 0
                       ? <p className="text-xs text-muted-foreground">Nenhum item encontrado neste bloco.</p>
                       : dayComposition.map((day) => {
@@ -641,10 +681,10 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
             <div><span className="text-[11px] text-ds-ink-muted">Dinheiro físico</span><strong className="mt-1 block font-mono">{formatBRL(selected?.grossTotalCents ?? 0)}</strong></div>
             <div><span className="text-[11px] text-ds-ink-muted">Moedas para troca</span><CentsInput value={coinHoldCents} onChange={setCoinHoldCents} ariaLabel="Valor total de moedas separado para troca" className="mt-1 h-9 bg-white font-mono" /></div>
             <div><span className="text-[11px] text-ds-ink-muted">Cédulas no boleto</span><strong className={cn("mt-1 block font-mono", (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0) && "text-ds-danger")}>{formatBRL(Math.max(0, (selected?.grossTotalCents ?? 0) - (coinHoldCents ?? 0)))}</strong></div>
-          </div> : <div className="rounded-xl border border-ds-border bg-ds-ok-bg p-4 text-sm text-ds-ok"><strong>Composição física já confirmada na sessão.</strong><p className="mt-1 text-xs">Este malote contém apenas cédulas; as moedas foram registradas como retorno ao caixa.</p></div>}
+          </div> : <div className="rounded-xl border border-ds-border bg-ds-ok-bg p-4 text-sm text-ds-ok"><strong>Composição física já confirmada na sessão.</strong><p className="mt-1 text-xs">Este malote contém apenas cédulas; as moedas ficaram reservadas no caixa ou para troca.</p></div>}
           <div><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Pagador</p><div className="rounded-lg border border-ds-border bg-ds-muted px-3 py-2.5 text-sm font-semibold text-ds-ink-2">{inter.payer ? `${inter.payer.name} · ${formatCnpj(inter.payer.cpfCnpj)}` : "Pagador institucional configurado"}</div></div>
           <div><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Vencimento</p><div className="grid grid-cols-3 gap-2"><Button type="button" variant="outline" className={cn("h-10 rounded-lg text-xs font-bold", dueChoice === "1" && "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft")} onClick={() => setDueChoice("1")}>D+1 · {formatShortDate(inter.issueSettings?.suggestedDueDates["1"])}</Button><Button type="button" variant="outline" className={cn("h-10 rounded-lg text-xs font-bold", dueChoice === "2" && "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft")} onClick={() => setDueChoice("2")}>D+2 · {formatShortDate(inter.issueSettings?.suggestedDueDates["2"])}</Button><Button type="button" variant="outline" className={cn("h-10 rounded-lg text-xs font-bold", dueChoice === "custom" && "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft")} onClick={() => setDueChoice("custom")}>Escolher</Button></div>{dueChoice === "custom" && <input type="date" value={customDueDate} onChange={(event) => setCustomDueDate(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-ds-border bg-white px-3 text-sm outline-hidden focus:border-ds-accent-soft focus:ring-2 focus:ring-ds-accent" />}</div>
-          <div className="rounded-xl border border-ds-border bg-ds-muted p-4"><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{selected?.countingSessionId ? "Cédulas do malote" : `${selected?.dates.length ?? 0} dias neste bloco`}</p><div className="flex flex-wrap gap-1.5">{selected?.countingSessionId ? selected.denominations?.filter((item) => item.quantity > 0).map((item) => <span key={item.valueCents} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{item.quantity}× {formatBRL(item.valueCents)}</span>) : loadingBatchIds.has(selected?.id ?? "") ? <Loader2 className="h-4 w-4 animate-spin text-ds-ink-faint" /> : selectedComposition.length > 0 ? selectedComposition.map((day) => <span key={day.date} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{day.date.slice(5).split("-").reverse().join("/")} · {formatBRL(day.amountCents)}</span>) : selected?.dates.map((date) => <span key={date} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{date.slice(5).split("-").reverse().join("/")}</span>)}</div></div>
+          <div className="rounded-xl border border-ds-border bg-ds-muted p-4"><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{selected?.countingSessionId ? "Cédulas do malote" : `${selected?.dates.length ?? 0} dias neste bloco`}</p><div className="flex flex-wrap gap-1.5">{selected?.countingSessionId ? cashDepositDenominationRows(selected.denominations, "note").map((item) => <span key={item.valueCents} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{item.quantity}× {formatBRL(item.valueCents)}</span>) : loadingBatchIds.has(selected?.id ?? "") ? <Loader2 className="h-4 w-4 animate-spin text-ds-ink-faint" /> : selectedComposition.length > 0 ? selectedComposition.map((day) => <span key={day.date} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{day.date.slice(5).split("-").reverse().join("/")} · {formatBRL(day.amountCents)}</span>) : selected?.dates.map((date) => <span key={date} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{date.slice(5).split("-").reverse().join("/")}</span>)}</div></div>
           {!inter.ready && <div className="rounded-lg border border-ds-alert-border bg-ds-warn-bg p-3 text-sm text-ds-alert-ink">{inter.reason}</div>}
         </div>
         <DialogFooter className="border-t border-ds-border px-6 py-4"><Button variant="outline" className="rounded-lg" onClick={() => setSelected(null)}>Cancelar</Button><Button className="rounded-lg bg-ds-accent font-bold text-white hover:bg-ds-accent-hover" onClick={() => void issueSelected()} disabled={(!selected?.countingSessionId && (selected?.grossTotalCents ?? 0) !== (coinHoldCents ?? 0) && !inter.ready) || (selected?.countingSessionId && !inter.ready) || submitting || (!selected?.countingSessionId && (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0)) || (dueChoice === "custom" && !customDueDate)}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : !selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? <Coins className="mr-2 h-4 w-4" /> : <Barcode className="mr-2 h-4 w-4" />}{!selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? "Separar moedas" : "Emitir boleto"}</Button></DialogFooter>
