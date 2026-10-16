@@ -15,6 +15,16 @@ function isCalendarDate(value: string) {
 }
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data no formato AAAA-MM-DD.').refine(isCalendarDate, 'Informe uma data válida.');
 
+const approvalLevelSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('people'), personIds: z.array(idSchema).min(1).max(20) }).strict(),
+  z.object({ kind: z.literal('function'), functionId: idSchema, fallbackJobRoleId: idSchema.optional() }).strict(),
+  z.object({ kind: z.literal('role'), jobRoleId: idSchema }).strict(),
+]);
+const approvalAssignmentsSchema = z.object({
+  manager: z.array(approvalLevelSchema).min(1).max(20).optional(),
+  dp: z.array(approvalLevelSchema).min(1).max(20).optional(),
+}).strict();
+
 const absencePolicySchema = z.object({
   id: z.string().trim().min(1).max(60),
   name: z.string().trim().min(2).max(120),
@@ -29,6 +39,7 @@ const absencePolicySchema = z.object({
   maximumRetroactiveDays: z.number().int().min(0).max(3650).optional(),
   attachment: z.enum(['not_required', 'required']),
   approvalFlow: z.enum(['automatic', 'manager', 'dp', 'manager_then_dp']),
+  approvalAssignments: approvalAssignmentsSchema.optional(),
   rejectionReasonRequired: z.boolean(),
   allowFutureEdit: z.boolean(),
   allowFutureCancel: z.boolean(),

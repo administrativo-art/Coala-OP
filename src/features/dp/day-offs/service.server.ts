@@ -17,6 +17,7 @@ import {
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
 import type { DPJourney } from '@/types';
+import { guardOccupancyWrite, operationalGuardRequested } from '@/features/dp/absences/operational/occupancy-guard.server';
 import type {
   PublishDayOffInput,
   PublishDayOffResult,
@@ -442,6 +443,8 @@ async function prepareDayOff(params: {
       });
     }
 
+    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
+      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 4);
     const now = Timestamp.now();
     const confirmedAt = existingDayOff?.get('dayOffConfirmedAt') ?? now;
     const shiftPayload = {
@@ -782,6 +785,8 @@ async function prepareDayOffRemoval(params: {
       });
     }
 
+    if (operationalGuardRequested()) await guardOccupancyWrite(transaction, context.workspace_id,
+      [{ beneficiaryUid: input.userId, date: input.date, fromMinute: 0, toMinute: 1440, addsOccupancy: false }], 3);
     const now = Timestamp.now();
     transaction.update(shiftRef, {
       bizneoSyncStatus: 'removing',

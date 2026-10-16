@@ -356,6 +356,7 @@ A regra da Escala está em `ModulesState.selectedScheduleUnit` (valor inicial `R
 - **Voltar** da barra e do sistema fazem o mesmo. Dentro de fluxos em níveis (Signage, etapas), voltar recua um nível antes de sair da tela.
 - Voltar fica bloqueado enquanto a tela está ocupada.
 - Tarefas de conta ficam no **perfil**, fora do início: foto, versão do app, atualização e "Sair da conta".
+- **Como está hoje — notificações:** o perfil oferece ativação voluntária por conta/aparelho e desativação. Consentimento e permissão do Android são estados diferentes: bloqueio no sistema é informado e oferece acesso às configurações também antes do Android 13. O push mostra somente aviso genérico; solicitações continuam abrindo na web até existir operação nativa. Simulação não registra dispositivos.
 
 ## Estados e mensagens
 

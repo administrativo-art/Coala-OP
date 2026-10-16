@@ -10,8 +10,14 @@ import { getAccessToken, loadPdvSyncCatalog, syncDayAdmin } from './pdv-sync.js'
 import { reconciliationDates } from './pdv-reconciliation-policy.js';
 import { PDVLEGAL_SECRET_NAMES } from './pdv-secret-contract.js';
 import { randomUUID } from 'node:crypto';
-import { applyUserTerminationEffects } from './user-termination-effects.js';
+import { applyUserTerminationEffects, revokeTerminatedUserAccess,
+  runTerminatedUserProfile } from './user-termination-effects.js';
+import { reconcileAbsenceRetentionPage, continueAbsenceRetentionReconciliations,
+  detectDueAbsenceRetention, absenceRetentionExecutionStore,
+  continueAbsenceRetentionExecutions } from './absence-retention.js';
 import { assertActiveSession } from './active-session.js';
+import { setEmploymentCyclePatch } from './employment-cycle.js';
+import { reconcileOpenResponsibilityTasks } from './responsibility-coverage.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
@@ -270,13 +276,23 @@ async function syncBizneoUsersIntoCoala(source: string) {
     const avatarUrl = await uploadBizneoAvatar(userDoc.id, bizneoUser.avatar_url);
     if (avatarUrl) avatarSynced += 1;
 
-    await userDoc.ref.update({
+    const patch = {
       registrationIdBizneo: String(bizneoUser.id),
       ...(avatarUrl ? { avatarUrl } : {}),
       ...(admissionDate ? { admissionDate } : {}),
       ...(birthDate ? { birthDate } : {}),
       bizneoSyncedAt: new Date().toISOString(),
       bizneoSyncSource: source,
+    };
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(userDoc.ref);
+      if (!current.exists) return;
+      const storedAdmission = current.get('admissionDate');
+      const admissionMillis = admissionDate?.toMillis();
+      const admissionChanged = admissionMillis !== undefined
+        && (typeof storedAdmission?.toMillis !== 'function'
+          || storedAdmission.toMillis() !== admissionMillis);
+      setEmploymentCyclePatch(transaction, userDoc.ref, current, patch, admissionChanged);
     });
     matched += 1;
   }
@@ -615,6 +631,19 @@ export const cleanupExpiredActionLogs = onSchedule({
   await batch.commit();
 
   console.log(`[cleanupExpiredActionLogs] ${snap.size} log(s) removido(s).`);
+});
+
+export const absenceRetentionDailyReview = onSchedule({ schedule: '0 9 * * *',
+  timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {
+  await detectDueAbsenceRetention(db, hrDb);
+});
+export const absenceRetentionReconciliation = onSchedule({ schedule: '15 4 * * *',
+  timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {
+  await continueAbsenceRetentionReconciliations(db, hrDb);
+});
+export const absenceRetentionExecutionReconciliation = onSchedule({ schedule: 'every 15 minutes',
+  timeZone: 'America/Belem', retryCount: 1, memory: '256MiB' }, async () => {
+  await continueAbsenceRetentionExecutions(db, hrDb, absenceRetentionExecutionStore(STORAGE_BUCKET));
 });
 
 // Remove uploads de RH abandonados. A análise guarda arquivos em uma área
@@ -1011,6 +1040,7 @@ export const createUser = onCall(
         assignedKioskIds: assignedKioskIds || [],
         avatarUrl: avatarUrl || '',
         operacional: operacional || false,
+        employmentCycleVersion: 0,
         mustChangePassword: true,
       });
 
@@ -1099,7 +1129,8 @@ export const terminateUser = onCall(
         const current = await transaction.get(targetRef);
         if (!current.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
         const nextVersion = storedSessionVersion(current.get('sessionVersion')) + 1;
-        transaction.update(targetRef, { ...updatePayload, sessionVersion: nextVersion });
+        setEmploymentCyclePatch(transaction, targetRef, current,
+          { ...updatePayload, sessionVersion: nextVersion }, true);
         return nextVersion;
       });
 
@@ -1124,6 +1155,7 @@ export const terminateUser = onCall(
       return { success: true };
     } catch (error: any) {
       console.error('Erro ao desligar usuário:', error);
+      if (error instanceof HttpsError) throw error;
       throw new HttpsError('internal', error.message || 'Erro ao desligar usuário.');
     }
   }
@@ -1148,12 +1180,11 @@ export const reactivateUser = onCall(
     const sessionVersion = storedSessionVersion(targetSnapshot.get('sessionVersion'));
 
     try {
-      await writeSessionClaim(uid, sessionVersion);
-      await auth.updateUser(uid, { disabled: false });
-
       const nowIso = new Date().toISOString();
-      await Promise.all([
-        targetRef.update({
+      await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(targetRef);
+        if (!current.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
+        setEmploymentCyclePatch(transaction, targetRef, current, {
           isActive: true,
           inactivationType: FieldValue.delete(),
           terminationDate: FieldValue.delete(),
@@ -1166,16 +1197,18 @@ export const reactivateUser = onCall(
           terminationEffectsVersion: FieldValue.delete(),
           terminationEffectsAppliedAt: FieldValue.delete(),
           terminationEffectsReportPath: FieldValue.delete(),
+          terminationEffectsStatus: FieldValue.delete(),
+          terminationEffectsPendingAt: FieldValue.delete(),
           inactivationHistory: FieldValue.arrayUnion({
-            type: 'reactivation',
-            at: nowIso,
-            actorUid: request.auth.uid,
-            reason: 'Reativação/recontratação',
-            cause: null,
-            notes: null,
-            terminationDate: null,
+            type: 'reactivation', at: nowIso, actorUid: request.auth.uid,
+            reason: 'Reativação/recontratação', cause: null, notes: null, terminationDate: null,
           }),
-        }),
+        }, true);
+      });
+      await writeSessionClaim(uid, sessionVersion);
+      await auth.updateUser(uid, { disabled: false });
+
+      await Promise.all([
         hrDb.collection('rh_access_cache').doc(uid).set({
           status: 'active',
           is_active: true,
@@ -1203,6 +1236,7 @@ export const reactivateUser = onCall(
       return { success: true };
     } catch (error: any) {
       console.error('Erro ao reativar usuário:', error);
+      if (error instanceof HttpsError) throw error;
       throw new HttpsError('internal', error.message || 'Erro ao reativar usuário.');
     }
   }
@@ -1213,6 +1247,7 @@ export const onUserProfileChange = onDocumentWritten(
   { document: 'users/{userId}', database: 'coala' },
   async (event: any) => {
     const userId = event.params.userId;
+    await reconcileOpenResponsibilityTasks(db, `user:${userId}`);
 
     if (!event.data?.after.exists) {
       await auth.setCustomUserClaims(userId, {});
@@ -1220,24 +1255,52 @@ export const onUserProfileChange = onDocumentWritten(
       return;
     }
 
-    const userData = event.data.after.data()!;
+    const liveUser = await event.data.after.ref.get();
+    if (!liveUser.exists) {
+      await auth.setCustomUserClaims(userId, {});
+      return;
+    }
+    const userData = liveUser.data()!;
     const isContractTermination = userData.isActive === false && (
       userData.inactivationType === 'contract_termination' || userData.employmentStatus === 'terminated'
     );
-    if (isContractTermination && userData.terminationEffectsVersion !== 1) {
-      const report = await applyUserTerminationEffects({
-        db,
-        hrDb,
-        checklistDb,
-        userId,
-        user: userData,
+    if (isContractTermination) {
+      const revoke = async () => {
+        await revokeTerminatedUserAccess({ auth, hrDb, financialDb, userId,
+          sessionVersion: storedSessionVersion(userData.sessionVersion) });
+        await reconcileAbsenceRetentionPage(db, hrDb,
+          process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? 'coala', userId, liveUser);
+      };
+      if (userData.terminationEffectsVersion === 1) await revoke();
+      else await runTerminatedUserProfile({ revoke,
+        apply: () => applyUserTerminationEffects({
+            db, hrDb, checklistDb, userId, user: userData,
+            workspaceId: process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? 'coala',
+          }),
+        applied: async (report) => {
+          await event.data.after.ref.set({
+            terminationEffectsVersion: report.version,
+            terminationEffectsAppliedAt: report.appliedAt,
+            terminationEffectsReportPath: `terminationImpactReports/${userId}__${report.effectiveDate}`,
+            terminationEffectsStatus: FieldValue.delete(),
+            terminationEffectsPendingAt: FieldValue.delete(),
+          }, { merge: true });
+          console.log(`✅ Efeitos do desligamento aplicados para ${userId}`, report.counts);
+        },
+        pending: async () => {
+          // A second trigger with the same pending marker performs no user write, avoiding a loop.
+          if (userData.terminationEffectsStatus !== 'pending_occupancy_guard') {
+            await event.data.after.ref.set({ terminationEffectsStatus: 'pending_occupancy_guard',
+              terminationEffectsPendingAt: FieldValue.serverTimestamp() }, { merge: true });
+          }
+        },
       });
-      await event.data.after.ref.set({
-        terminationEffectsVersion: report.version,
-        terminationEffectsAppliedAt: report.appliedAt,
-        terminationEffectsReportPath: `terminationImpactReports/${userId}__${report.effectiveDate}`,
-      }, { merge: true });
-      console.log(`✅ Efeitos do desligamento aplicados para ${userId}`, report.counts);
+      return;
+    }
+    if (event.data.before.exists && event.data.before.get('isActive') === false
+      || userData.terminationDate) {
+      await reconcileAbsenceRetentionPage(db, hrDb,
+        process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? 'coala', userId, liveUser);
     }
     const profileId = userData.profileId;
 
@@ -1270,6 +1333,7 @@ export const onProfileChange = onDocumentWritten(
   { document: 'profiles/{profileId}', database: 'coala' },
   async (event: any) => {
     const profileId = event.params.profileId;
+    await reconcileOpenResponsibilityTasks(db, `profile:${profileId}`);
 
     const usersSnap = await db.collection('users')
       .where('profileId', '==', profileId)
@@ -1285,6 +1349,13 @@ export const onProfileChange = onDocumentWritten(
     const financialPermissions = profileData?.permissions?.financial ?? { view: false };
 
     const promises = usersSnap.docs.map(async (userDoc) => {
+      if (userDoc.get('isActive') === false && (
+        userDoc.get('inactivationType') === 'contract_termination'
+        || userDoc.get('employmentStatus') === 'terminated')) {
+        await revokeTerminatedUserAccess({ auth, hrDb, financialDb, userId: userDoc.id,
+          sessionVersion: storedSessionVersion(userDoc.get('sessionVersion')) });
+        return;
+      }
       const active = userDoc.data().isActive !== false && userDoc.data().active !== false;
       const sessionVersion = storedSessionVersion(userDoc.data().sessionVersion);
       await Promise.all([
@@ -1304,6 +1375,20 @@ export const onProfileChange = onDocumentWritten(
     await Promise.all(promises);
     console.log(`🎉 ${promises.length} usuário(s) atualizados para profileId=${profileId}`);
   }
+);
+
+export const onResponsibilityUnitChange = onDocumentWritten(
+  { document: 'dp_units/{unitId}', database: 'coala' },
+  async (event: any) => {
+    await reconcileOpenResponsibilityTasks(db, `unit:${event.params.unitId}`);
+  },
+);
+
+export const onResponsibilityUnitGroupChange = onDocumentWritten(
+  { document: 'dp_unitGroups/{groupId}', database: 'coala' },
+  async (event: any) => {
+    await reconcileOpenResponsibilityTasks(db, `unit-group:${event.params.groupId}`);
+  },
 );
 
 // --- Geração diária automática de checklists ---

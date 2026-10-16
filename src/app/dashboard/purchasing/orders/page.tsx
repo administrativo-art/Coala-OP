@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import type { LocalPurchaseSummary } from '@/features/purchasing/local-purchase-
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { canCreatePurchase, canCreateQuotation, canRevertPurchaseStage, canViewPurchasing } from '@/lib/purchasing-permissions';
 import { type PurchaseFinancial, type PurchaseOrder, type PurchaseReceipt } from '@/types';
+import { purchaseOrderDisplayCode } from '@/lib/purchasing-order-readiness';
 import {
   PurchasingEmptyState,
   PurchasingPageFrame,
@@ -31,10 +32,6 @@ import {
   type PurchasingPeriodFilter,
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
-
-function orderCode(id: string) {
-  return `CMP-${id.slice(-8).toUpperCase()}`;
-}
 
 function supplierName(order: PurchaseOrder, fallback?: string) {
   return order.fiscal?.issuerName?.trim() || order.supplierName?.trim() || fallback || 'Fornecedor a definir';
@@ -277,7 +274,10 @@ export default function PurchaseOrdersPage() {
                         </div>
                         <div className={`text-xs font-bold ${stage === 'cancelled' ? 'text-zinc-500' : 'text-emerald-700'}`}>{localPurchaseFinancialLabel(purchase)}</div>
                         <div className="text-right font-mono text-[13px] font-extrabold text-zinc-950">{purchasingCompactMoney(purchase.totalCents / 100)}</div>
-                        <div className="text-right text-xs text-zinc-500">{formatDate(purchase.purchaseDate)}</div>
+                        <div className="flex items-center justify-end gap-2 text-right text-xs text-zinc-500">
+                          <span>{formatDate(purchase.purchaseDate)}</span>
+                          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        </div>
                       </button>
                     );
                   }
@@ -288,10 +288,11 @@ export default function PurchaseOrdersPage() {
                     <Link
                       key={order.id}
                       href={`/dashboard/purchasing/orders/${order.id}`}
-                      className="grid grid-cols-[128px_minmax(260px,1.7fr)_158px_132px_120px_96px] items-center gap-4 px-4 py-3.5 transition-colors hover:bg-zinc-50"
+                      aria-label={`Abrir pedido ${purchaseOrderDisplayCode(order)} de ${supplier}`}
+                      className="group grid grid-cols-[128px_minmax(260px,1.7fr)_158px_132px_120px_96px] items-center gap-4 px-4 py-3.5 transition-colors hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-violet-600"
                     >
                       <div>
-                        <div className="font-mono text-[11.5px] font-extrabold text-zinc-700">{orderCode(order.id)}</div>
+                        <div className="font-mono text-[11.5px] font-extrabold text-zinc-700">{purchaseOrderDisplayCode(order)}</div>
                         <div className="mt-1 text-[10.5px] text-zinc-500">{formatDate(order.createdAt)}</div>
                       </div>
                       <div className="min-w-0">
@@ -313,7 +314,10 @@ export default function PurchaseOrdersPage() {
                         {financial ? financialLabels[financial.status] : stage === 'issued' ? 'A lançar' : '—'}
                       </div>
                       <div className="text-right font-mono text-[13px] font-extrabold text-zinc-950">{purchasingCompactMoney(orderDisplayTotal(order))}</div>
-                      <div className={`text-right text-xs ${delayed ? 'font-extrabold text-rose-700' : 'text-zinc-500'}`}>{formatDate(receipt?.expectedDate ?? order.estimatedReceiptDate)}</div>
+                      <div className={`flex items-center justify-end gap-2 text-right text-xs ${delayed ? 'font-extrabold text-rose-700' : 'text-zinc-500'}`}>
+                        <span>{formatDate(receipt?.expectedDate ?? order.estimatedReceiptDate)}</span>
+                        <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                      </div>
                     </Link>
                   );
                 })}

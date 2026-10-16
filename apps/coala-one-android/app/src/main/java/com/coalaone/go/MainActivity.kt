@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -35,6 +37,8 @@ import androidx.navigation.compose.*
 import coil3.ImageLoader
 import com.coalaone.go.domain.Rules
 import com.coalaone.go.ui.*
+import android.Manifest
+import android.os.Build
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import javax.inject.Inject
@@ -167,6 +171,12 @@ private fun installUpdate(context: android.content.Context, file: File) {
     var signOut by remember { mutableStateOf(false) }
     var framing by remember { mutableStateOf<com.coalaone.go.data.Document?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val push by session.push.state.collectAsStateWithLifecycle()
+    val owner = LocalOwner.current
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) session.push.enable(owner)
+        else session.push.reflect(owner)
+    }
     Page("Perfil", feedback, onBack, onRefresh = { vm.refresh() }) {
         CardBlock {
             Text(personDisplayName(state?.profile?.name.orEmpty()), style = MaterialTheme.typography.titleLarge)
@@ -183,6 +193,20 @@ private fun installUpdate(context: android.content.Context, file: File) {
             if (target != null) Action("Baixar atualização ${target.versionName}", updateFeedback.busy) { update.download { file -> installUpdate(context, file) } }
             else Text("Você está na versão mais recente.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
             updateFeedback.error?.let { Text(it, color = Tokens.danger) }
+        }
+        CardBlock {
+            Text("Notificações", style = MaterialTheme.typography.titleMedium)
+            val settingsRequired = com.coalaone.go.push.PushPolicy.requiresSystemSettings(Build.VERSION.SDK_INT, push.permitted, session.push.permissionRequested)
+            Text(if (push.enabled && !push.permitted) "Autorizadas nesta conta, mas bloqueadas no Android." else if (push.enabled) "Ativadas para esta conta." else "Receba avisos gerais do Coala Go neste aparelho.", color = Tokens.muted, style = MaterialTheme.typography.bodySmall)
+            if (push.enabled) Action("Desativar notificações", push.busy) { session.push.disable(owner) }
+            else Action("Ativar notificações", push.busy, enabled = !session.mode.simulation && !settingsRequired) {
+                if (Build.VERSION.SDK_INT >= 33 && !session.push.permissionGranted()) { session.push.markPermissionRequested(); permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                else session.push.enable(owner)
+            }
+            if (settingsRequired) {
+                TextButton({ context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}"))) }) { Text("Abrir configurações do Android") }
+            }
+            push.error?.let { Text(it, color = Tokens.danger, style = MaterialTheme.typography.bodySmall) }
         }
         if (signOut) InlineConfirmation("Sair da conta? Os documentos pendentes permanecem protegidos e vinculados a ela.", feedback.busy, { signOut = false }, "Sair da conta", session::signOut)
         else TextButton({ signOut = true }) { Text("Sair da conta", color = Tokens.danger) }
