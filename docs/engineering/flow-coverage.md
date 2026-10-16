@@ -48,7 +48,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `people-access` | 6 | Traçado | [Colaboradores e acesso](flows/people-access.md) — percurso complementado; verificação integrada pendente |
 | `platform-home` | 1 | Traçado | [Página inicial](flows/platform-home.md) — percurso complementado; verificação integrada pendente |
 | `pricing` | 4 | Traçado | [Preços](flows/pricing.md) — percurso complementado; verificação integrada pendente |
-| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; sem mudança financeira; HTTP autenticado e homologação global pendentes |
+| `purchasing` | 15 | Traçado | [Cotação, pedido, recebimento e estoque](flows/purchasing-order-receipt.md) — destino e avisos de recebimento cobertos localmente em testes puros/emulador; prontidão e códigos de pedidos importados cobertos por teste unitário; sem geração de lançamento financeiro; HTTP autenticado e homologação global pendentes |
 | `receivables` | 1 | Traçado | [Período, carteira e posição Stone](flows/receivables-stone.md) — percurso complementado; verificação integrada pendente |
 | `recruitment` | 3 | Traçado | [Vagas e candidatos](flows/recruitment.md) — percurso complementado; verificação integrada pendente |
 | `registry` | 6 | Traçado | [Cadastros](flows/registry.md) — percurso complementado; verificação integrada pendente |
