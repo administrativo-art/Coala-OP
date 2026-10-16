@@ -56,7 +56,7 @@ A conta foi criada em 2026-09-10 com o identificador estável `adiantamento-sala
 - **Terceirizados** (grupo) → **Consultoria de RH** (ex-"Recursos Humanos"), Publicidade e propaganda *(inativa)*, Logística
 - **Marketing** (grupo) → Material gráfico, Influenciadores | parcerias, **Agência | marketing terceirizado** (ex-"Terceirizado - Propaganda e Marketing"), **Redes sociais | mídia paga**, **Publicidade geral | offline** (ex-"Propaganda e publicidade")
 - **Frete** (grupo) → Frete | Movimentação interna, Frete | Compras gerais
-- **Honorários do contador**, **Materiais de limpeza e consumo** (fusão: ex-"Materiais de consumo da operação"; "Materiais de limpeza" *(inativa)*), **Utensílios e itens operacionais**, **Uniformes e EPIs** (criada em 2026-07-08, id `uniformes_epis_v1`), **Depreciação de ativo imobilizado** *(inativa)*
+- **Honorários do contador**, **Materiais de limpeza e consumo** (fusão: ex-"Materiais de consumo da operação"; "Materiais de limpeza" *(inativa)*), **Utensílios e itens operacionais**, **Uniformes e EPIs** (criada em 2026-07-08, id `uniformes_epis_v1`), **Despesas operacionais | Financeiro** (criada em 2026-10-15, id `despesas-operacionais-financeiro-v1`, para materiais e consumos do setor; não inclui tarifas ou juros), **Depreciação de ativo imobilizado** *(inativa)*
 
 ## 6. Estoque / Compras de insumos — [patrimonial], fora da DRE
 
