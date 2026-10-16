@@ -121,3 +121,10 @@ test("redirecionamento para depósitos preserva a sessão mesmo com fila paginad
   assert.match(depositsRouteSource, /getCashCountingSessionSummary\(focusSessionId\)/);
   assert.match(depositsRouteSource, /visibleCountingSessions\.unshift\(focusSession\)/);
 });
+
+test("malote mostra quantidades por cédula e reserva de moedas da sessão", () => {
+  assert.match(depositsPageSource, /Quantidade de cédulas para fechar o malote/);
+  assert.match(depositsPageSource, /cashDepositDenominationRows\(selected\.denominations, "note"\)/);
+  assert.match(depositsPageSource, /Moedas reservadas no caixa \/ troca/);
+  assert.match(sessionPageSource, /session\.denominations\.filter\(\(item\) => item\.kind === "coin"/);
+});

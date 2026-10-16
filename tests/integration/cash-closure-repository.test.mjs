@@ -610,9 +610,21 @@ test("sessão bloqueia a unidade, recebe operador sem depósito precoce e cria m
   assert.equal(prepared.session.noteTotalCents, 5_000);
   assert.equal(prepared.batches.length, 1);
   assert.equal(prepared.batches[0].countingSessionId, session.id);
+  assert.equal(prepared.batches[0].grossTotalCents, 10_000);
   assert.equal(prepared.batches[0].totalCents, 5_000);
+  assert.equal(prepared.batches[0].coinHoldCents, 5_000);
   assert.equal(prepared.batches[0].denominations?.find((entry) => entry.valueCents === 5_000)?.quantity, 1);
   assert.equal(prepared.batches[0].denominations?.some((entry) => entry.kind === "coin"), false);
+  assert.equal(prepared.batches[0].reservedCoinDenominations?.find((entry) => entry.valueCents === 100)?.quantity, 50);
+  await assert.rejects(
+    () => prepareCashDepositCoinHold({
+      workspaceId,
+      batchId: prepared.batches[0].id,
+      coinCents: 100,
+      actor,
+    }),
+    /já foram separadas durante a composição física/,
+  );
 
   const nextSession = await createCashCountingSession({ workspaceId, units, actor });
   assert.equal(nextSession.status, "open");
