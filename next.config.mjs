@@ -1,6 +1,12 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const configuredBuildCpus = Number.parseInt(process.env.COALA_NEXT_BUILD_CPUS ?? '', 10);
+const nextBuildCpus = Number.isInteger(configuredBuildCpus) && configuredBuildCpus > 0
+  ? configuredBuildCpus
+  : 1;
+const skipNextBuildTypecheck = process.env.COALA_NEXT_SKIP_TYPECHECK === 'true';
+const useWebpackBuildWorker = process.env.COALA_NEXT_WEBPACK_BUILD_WORKER === 'true';
 const documentPdfRuntimeAssets = [
   './src/features/hr/documents/assets/coala-shakes-letterhead-overlay-a4-v2.png',
   './node_modules/@fontsource/caladea/files/caladea-latin-400-normal.woff',
@@ -21,11 +27,18 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // O CI executa `next typegen` e `tsc --noEmit` antes do build. O App Hosting
+  // pode omitir somente a segunda verificação feita internamente pelo Next.
+  typescript: {
+    ignoreBuildErrors: skipNextBuildTypecheck,
+  },
   experimental: {
-    // App Hosting builds run in a memory-limited container. Next otherwise
-    // derives this from the host CPU count and can spawn enough page-data
-    // workers to exhaust the container after compilation.
-    cpus: 1,
+    // O padrão conservador continua em um worker. O App Hosting opta por dois
+    // via variável BUILD, sem voltar a derivar uma quantidade irrestrita do host.
+    cpus: nextBuildCpus,
+    // Este projeto customiza o Webpack, então o Next não habilita o build worker
+    // automaticamente. O worker isolado reduz a pressão de memória do build.
+    webpackBuildWorker: useWebpackBuildWorker,
   },
   outputFileTracingIncludes: {
     '/api/hr/onboarding/*/aso-workflow': [
