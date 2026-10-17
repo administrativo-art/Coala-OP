@@ -12,6 +12,10 @@ import { AppError } from "@/lib/observability";
 import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
+import {
+  classifyInterCobrancaApiError,
+  InterCobrancaApiError,
+} from "@/lib/integrations/inter/cobrancas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +40,25 @@ const contract = defineSecurityContract({
 
 function mapIssueError(cause: unknown): never {
   const message = cause instanceof Error ? cause.message : "";
+  const interRejection = classifyInterCobrancaApiError(cause);
+  if (interRejection === "invalid-request") {
+    throw new AppError({
+      code: "CASH_DEPOSIT_INTER_DATA_REJECTED",
+      kind: "PERMANENT_EXTERNAL",
+      safeMessage: "O Banco Inter recusou os dados da cobrança. Confira o cadastro do pagador e tente novamente.",
+      metadata: { providerStatus: cause instanceof InterCobrancaApiError ? cause.status : null },
+      cause,
+    });
+  }
+  if (interRejection === "authorization") {
+    throw new AppError({
+      code: "CASH_DEPOSIT_INTER_AUTHORIZATION_REJECTED",
+      kind: "PERMANENT_EXTERNAL",
+      safeMessage: "A integração do Banco Inter não está autorizada a emitir esta cobrança.",
+      metadata: { providerStatus: cause instanceof InterCobrancaApiError ? cause.status : null },
+      cause,
+    });
+  }
   if (message.includes("não encontrado")) {
     throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND", cause });
   }

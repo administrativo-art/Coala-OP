@@ -6,6 +6,8 @@ import { z } from "zod";
 import { createInterCobrancaClient } from "./client.server";
 import { getInterCobrancaEnvironment, type InterCobrancaPayer } from "./config.server";
 import { InterApiError } from "./error";
+import { InterCobrancaApiError } from "./cobranca-error";
+export { classifyInterCobrancaApiError, InterCobrancaApiError } from "./cobranca-error";
 export {
   interCobrancaWebhookItemSchema,
   interCobrancaWebhookSchema,
@@ -77,16 +79,6 @@ export type CreateInterCobrancaInput = {
   pagador: InterCobrancaPayer;
   formasRecebimento?: Array<"BOLETO" | "PIX">;
 };
-
-export class InterCobrancaApiError extends Error {
-  status: number | null;
-
-  constructor(message: string, status: number | null) {
-    super(message);
-    this.name = "InterCobrancaApiError";
-    this.status = status;
-  }
-}
 
 function apiError(error: unknown, fallback: string): never {
   if (error instanceof InterApiError) {
