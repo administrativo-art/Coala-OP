@@ -537,10 +537,13 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
         throw new Error(payload.error || "PDF indisponível.");
       }
       const url = URL.createObjectURL(await response.blob());
-      window.open(url, "_blank", "noopener,noreferrer");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `boleto-${cashDepositBatchReference(batch)}.pdf`;
+      link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
-      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao abrir PDF." });
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao baixar o boleto." });
     }
   }
 
@@ -759,7 +762,7 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
             {detail.ledgerTransactionId && <p className="text-xs font-semibold text-ds-ok">Entrada bancária registrada no financeiro.</p>}
             {cobranca.codigoSolicitacao && <div className="grid grid-cols-2 gap-2">
               <Button variant="ds-secondary" size="md" onClick={() => void refreshBatch(detail)} disabled={submitting}><RefreshCw className="h-4 w-4" />Consultar no Inter</Button>
-              {["issued", "paid", "marked_received"].includes(cobranca.status) && <Button variant="ds-secondary" size="md" onClick={() => void openPdf(detail)}><FileText className="h-4 w-4" />Abrir PDF</Button>}
+              {["issued", "paid", "marked_received"].includes(cobranca.status) && <Button variant="ds-secondary" size="md" onClick={() => void openPdf(detail)} title="Baixar o boleto em PDF"><Download className="h-4 w-4" />Boleto</Button>}
             </div>}
             {cobranca.codigoSolicitacao && ["requested", "issued", "marked_received"].includes(cobranca.status) && permissions.financial.cashDeposits.cancel && <Button variant="danger-link" size="xs" className="self-start px-0" onClick={() => setCancelBatch(detail)}>Cancelar boleto</Button>}
           </PanelSection>}
