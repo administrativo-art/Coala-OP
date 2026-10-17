@@ -92,7 +92,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-deposits/page.tsx`](../../src/app/dashboard/financial/cash-deposits/page.tsx).
 
-Arquivos locais percorridos: 22.
+Arquivos locais percorridos: 25.
 
 Chamadas candidatas encontradas:
 
