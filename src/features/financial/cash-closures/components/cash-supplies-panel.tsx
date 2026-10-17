@@ -117,7 +117,7 @@ export function CashSuppliesPanel({ data, operatorId, editable, onClassify }: Pr
               variant="outline"
               className={cn(
                 "h-auto min-h-16 justify-start whitespace-normal px-3 py-3 text-left",
-                classification?.kind === "cash_fund" && "border-ds-accent bg-ds-accent-soft text-ds-accent-ink",
+                classification?.kind === "cash_fund" && "border-ds-modal bg-ds-modal-soft text-ds-modal-ink",
               )}
               disabled={!editable || finalized || !!busy}
               aria-pressed={classification?.kind === "cash_fund"}
@@ -131,7 +131,7 @@ export function CashSuppliesPanel({ data, operatorId, editable, onClassify }: Pr
               variant="outline"
               className={cn(
                 "h-auto min-h-16 justify-start whitespace-normal px-3 py-3 text-left",
-                classification?.kind === "supply" && "border-ds-accent bg-ds-accent-soft text-ds-accent-ink",
+                classification?.kind === "supply" && "border-ds-modal bg-ds-modal-soft text-ds-modal-ink",
               )}
               disabled={!editable || finalized || !!busy}
               aria-pressed={classification?.kind === "supply"}

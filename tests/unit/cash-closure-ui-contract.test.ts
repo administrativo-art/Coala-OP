@@ -150,6 +150,13 @@ test("seletor do malote usa calendário próprio e bloqueia datas futuras", () =
   assert.doesNotMatch(countingDialogSource, /type="date"/);
 });
 
+test("seleção e progresso dentro do modal usam o acento índigo canônico", () => {
+  assert.match(countingDialogSource, /day_selected: "bg-ds-modal text-white/);
+  assert.match(countingDialogSource, /border-ds-modal bg-ds-modal-soft text-ds-modal-ink/);
+  assert.match(countingDialogSource, /current \? "bg-ds-modal text-white"/);
+  assert.match(suppliesPanelSource, /border-ds-modal bg-ds-modal-soft text-ds-modal-ink/);
+});
+
 test("emissão sugere D+7 e permite vencimento personalizado em calendário limitado", () => {
   assert.match(depositsPageSource, /D\+\{inter\.issueSettings\?\.dueBusinessDays \?\? 7\}/);
   assert.match(depositsPageSource, /Personalizado/);
