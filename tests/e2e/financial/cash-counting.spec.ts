@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { E2E_CASH_COUNTING, E2E_USER } from "../support/global-setup";
+import { E2E_CASH_COUNTING, E2E_USER, resetFinancialE2EFixtures } from "../support/global-setup";
+
+test.beforeEach(async () => {
+  await resetFinancialE2EFixtures();
+});
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -17,7 +21,7 @@ test("percorre o modal redesenhado da data até a conferência do operador", asy
     waitUntil: "domcontentloaded",
   });
 
-  await page.getByRole("button", { name: new RegExp(E2E_CASH_COUNTING.kioskName) }).click();
+  await page.getByRole("button", { name: new RegExp(E2E_CASH_COUNTING.kioskName) }).last().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Contar malote", { exact: true }).last()).toBeVisible();
   await expect(dialog.getByRole("navigation", { name: "Etapas para contar e finalizar o malote" }).getByRole("button")).toHaveCount(4);

@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 import { assertFirestoreEmulatorSafety } from "../../helpers/firestore-emulator-safety.mjs";
+import { shiftClosureDate, todayInClosureTimezone } from "../../../src/features/financial/cash-closures/date";
 
 const PROJECT_ID = "demo-coala-e2e";
 export const E2E_USER = {
@@ -368,7 +369,7 @@ export async function resetFinancialE2EFixtures() {
     ?? initializeApp({ projectId: PROJECT_ID }, "coala-e2e-seed");
   const financialDb = getFirestore(app, "coala-financeiro");
   const now = new Date().toISOString();
-  const cashClosureDate = dateOnly(-1);
+  const cashClosureDate = shiftClosureDate(todayInClosureTimezone(), -1);
   const cashClosureId = `${E2E_CASH_COUNTING.kioskId}_${cashClosureDate}`;
   const cashClosureYear = Number(cashClosureDate.slice(0, 4));
   const cashClosureMonth = Number(cashClosureDate.slice(5, 7));
