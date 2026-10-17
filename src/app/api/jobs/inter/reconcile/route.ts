@@ -7,12 +7,14 @@ import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
 import { defineSecurityContract } from "@/lib/security/route-contract";
 import { secureRoute } from "@/lib/security/secure-route.server";
 import {
-  authorizeAndSubmitServiceApprovedPayment,
   deferBankStatusRefreshAfterFailure,
-  FinancialServiceApprovalIneligibleError,
   markStalePaymentSubmissionForReview,
   refreshPaymentRequest,
 } from "@/features/financial/payment-requests/service.server";
+import {
+  FinancialServiceInboxPreparationIneligibleError,
+  reconcilePrepareAndSubmitServiceApprovedInboxPayment,
+} from "@/features/financial/payment-requests/service-inbox-orchestration.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +22,6 @@ export const dynamic = "force-dynamic";
 const MAX_PAYMENTS_PER_RUN = 10;
 const MAX_POST_PAYMENT_PER_RUN = 5;
 const MAX_STALE_SUBMISSIONS_PER_RUN = 5;
-const MAX_SERVICE_APPROVALS_PER_RUN = 5;
-const MAX_SERVICE_APPROVAL_CANDIDATES = 50;
 const STALE_SUBMISSION_MS = 10 * 60_000;
 
 type StaticRouteContext = { params: Promise<Record<string, never>> };
@@ -74,7 +74,7 @@ export const POST = secureRoute({
   // As consultas iniciais retornam no máximo 20 documentos por execução. Cada
   // item processado exige leituras adicionais da solicitação e, na conclusão,
   // da origem. Agendamentos futuros ficam fora da consulta até a data devida.
-  const [statusSnapshot, postPaymentSnapshot, staleSubmissionSnapshot, serviceApprovalSnapshot] = await Promise.all([
+  const [statusSnapshot, postPaymentSnapshot, staleSubmissionSnapshot] = await Promise.all([
     financialDbAdmin.collection("bankPaymentRequests")
       .where("status", "in", ["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"])
       .where("nextBankStatusCheckAt", "<=", nowIso)
@@ -90,11 +90,6 @@ export const POST = secureRoute({
       .where("submissionStartedAt", "<=", staleSubmissionBefore.toISOString())
       .orderBy("submissionStartedAt", "asc")
       .limit(MAX_STALE_SUBMISSIONS_PER_RUN).get(),
-    serviceApprovalEnabled && serviceApprovalSourceIds.size > 0
-      ? financialDbAdmin.collection("bankPaymentRequests")
-        .where("status", "in", ["awaiting_financial_authorization", "ready_to_submit"])
-        .limit(MAX_SERVICE_APPROVAL_CANDIDATES).get()
-      : Promise.resolve(null),
   ]);
   const ids = new Set(statusSnapshot.docs.map((document) => document.id));
   const pending = [
@@ -103,14 +98,22 @@ export const POST = secureRoute({
   ];
   const results: Array<{ id: string; status?: string; error?: string }> = [];
   const serviceApprovals: Array<{ id: string; status?: string; error?: string }> = [];
-  for (const document of serviceApprovalSnapshot?.docs ?? []) {
-    if (serviceApprovals.length >= MAX_SERVICE_APPROVALS_PER_RUN) break;
+  for (const sourceId of serviceApprovalEnabled ? serviceApprovalSourceIds : []) {
     try {
-      const payment = await authorizeAndSubmitServiceApprovedPayment(document.id, serviceApprovalSourceIds);
-      serviceApprovals.push({ id: document.id, status: payment.status });
+      const payment = await reconcilePrepareAndSubmitServiceApprovedInboxPayment(sourceId, serviceApprovalSourceIds);
+      serviceApprovals.push({ id: payment.id, status: payment.status });
+      console.info("[inter-payment-service-approval] Cobrança processada.", {
+        sourceId,
+        paymentRequestId: payment.id,
+        status: payment.status,
+        submittedToInter: Boolean(payment.interRequestId),
+      });
     } catch (error) {
-      if (error instanceof FinancialServiceApprovalIneligibleError) continue;
-      serviceApprovals.push({ id: document.id, error: "Falha na aprovação financeira do backend; nenhuma repetição automática será feita nesta execução." });
+      if (error instanceof FinancialServiceInboxPreparationIneligibleError) {
+        console.info("[inter-payment-service-approval] Cobrança não elegível.", { sourceId, reason: error.message });
+        continue;
+      }
+      serviceApprovals.push({ id: sourceId, error: "Falha na preparação ou aprovação financeira do backend; nenhuma repetição automática será feita nesta execução." });
     }
   }
   for (const document of staleSubmissionSnapshot.docs) {
