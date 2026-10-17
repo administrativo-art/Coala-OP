@@ -89,6 +89,7 @@ const nextConfig = {
     'react-pdf-renderer-server',
     'react-pdf-react-server',
     '@google/genai',
+    'pdfjs-dist',
     'handlebars',
     'express',
   ],

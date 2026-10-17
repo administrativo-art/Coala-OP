@@ -76,6 +76,7 @@ test('empacota todos os ativos locais usados pelas etapas da integração', () =
 test('isola o renderizador de PDF do servidor sem alterar o pacote do navegador', () => {
   assert.ok(nextConfig.serverExternalPackages?.includes('react-pdf-renderer-server'));
   assert.ok(nextConfig.serverExternalPackages?.includes('react-pdf-react-server'));
+  assert.ok(nextConfig.serverExternalPackages?.includes('pdfjs-dist'));
   const transpilePackages = 'transpilePackages' in nextConfig
     ? nextConfig.transpilePackages as string[] | undefined
     : undefined;

@@ -156,15 +156,14 @@ export function bankSlipAmountCents(value: string | null) {
 }
 
 export function extractPaymentBarcode(value: string) {
-  const labeled = value.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\s-]{44,70})/i);
-  const formattedBankSlip = value.match(/(?<!\d)(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})(?!\d)/);
-  const generic = Array.from(value.matchAll(/(?<!\d)([\d][\d.\s-]{42,68}[\d])(?!\d)/g))
-    .filter((match) => !/chave\s+de\s+acesso\s*[:\-]?\s*$/i.test(value.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
-  const candidates = [
-    labeled?.[1],
-    formattedBankSlip?.[1],
-    ...generic.map((match) => match[1]),
-  ].filter((candidate): candidate is string => Boolean(candidate));
+  const chunks = [...value.split(/\r?\n/), value];
+  const candidates = chunks.flatMap((chunk) => {
+    const labeled = chunk.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\t -]{44,70})/i);
+    const formattedBankSlip = chunk.match(/(?<!\d)(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})(?!\d)/);
+    const generic = Array.from(chunk.matchAll(/(?<!\d)([\d][\d.\t -]{42,68}[\d])(?!\d)/g))
+      .filter((match) => !/chave\s+de\s+acesso\s*[:\-]?\s*$/i.test(chunk.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
+    return [labeled?.[1], formattedBankSlip?.[1], ...generic.map((match) => match[1])];
+  }).filter((candidate): candidate is string => Boolean(candidate));
   for (const candidate of candidates) {
     const normalized = normalizePaymentBarcode(candidate);
     if (normalized) return normalized;
@@ -185,8 +184,8 @@ function documentType(value: string): { type: FinancialInboxDocumentType; confid
   }
   if (fiscalKind === "darf" || fiscalKind === "dctfweb") return { type: "inss_darf", confidence: "high" };
   if (/honor[aá]rio\s+cont[aá]bil|mensalidade\s+cont[aá]bil/i.test(value)) return { type: "accounting_fee", confidence: "high" };
-  if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
   if (/\b(?:energia|telefone|telefonia|internet|[aá]gua|fatura\s+vivo)\b/i.test(value)) return { type: "utility_bill", confidence: "medium" };
+  if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
   if (/\b(?:boleto|cobran[cç]a|fatura|vencimento|pagar)\b/i.test(value)) return { type: "charge", confidence: "medium" };
   return { type: "other", confidence: "low" };
 }
