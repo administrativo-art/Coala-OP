@@ -52,6 +52,9 @@ env:
   # dp_absenceCatalogMigrations/active (scripts/migrate-absence-catalog.mts).
   - variable: DP_ABSENCE_CATALOG_DATABASE
     value: coala-rh
+  # Etapa 3: aplicação de ausências na escala. Só ligar depois do recibo operacional ready.
+  - variable: DP_ABSENCE_OPERATIONAL_GUARD
+    value: "on"
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
   - variable: RESEND_WEBHOOK_SECRET
