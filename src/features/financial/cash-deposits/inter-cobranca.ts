@@ -5,6 +5,8 @@ import type { CashDepositBatch } from "./types";
 import { cashDepositKioskCode, cashDepositSessionCode } from "./references";
 
 export const MIN_BOLETO_CENTS = 250;
+export const INTER_COBRANCA_DUE_BUSINESS_DAYS = 7;
+export const INTER_COBRANCA_MAX_DUE_DAYS = 60;
 
 export type InterCobrancaStatus =
   | "issuing"
@@ -159,11 +161,16 @@ export function addBusinessDays(
   return dateKey(date);
 }
 
+export function addCalendarDays(startDate: string, days: number) {
+  const date = parseDateKey(startDate);
+  date.setUTCDate(date.getUTCDate() + days);
+  return dateKey(date);
+}
+
 export function buildInterCobrancaIssueInput(input: {
   batch: CashDepositBatch;
   attempt: number;
   payer: InterCobrancaPayer;
-  dueBusinessDays: number;
   dueDate?: string;
   numDiasAgenda: number;
   holidays?: string[];
@@ -176,10 +183,10 @@ export function buildInterCobrancaIssueInput(input: {
     throw new Error("O bloco ultrapassa o limite de depósito.");
   }
   const today = input.today ?? todayInClosureTimezone();
-  const dataVencimento = input.dueDate ?? addBusinessDays(today, input.dueBusinessDays, input.holidays);
+  const dataVencimento = input.dueDate ?? addBusinessDays(today, INTER_COBRANCA_DUE_BUSINESS_DAYS, input.holidays);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dataVencimento) || dateKey(parseDateKey(dataVencimento)) !== dataVencimento) throw new Error("A data de vencimento é inválida.");
   const daysUntilDue = Math.round((parseDateKey(dataVencimento).getTime() - parseDateKey(today).getTime()) / 86_400_000);
-  if (daysUntilDue < 0 || daysUntilDue > 60) throw new Error("O vencimento deve ficar entre hoje e os próximos 60 dias.");
+  if (daysUntilDue < 0 || daysUntilDue > INTER_COBRANCA_MAX_DUE_DAYS) throw new Error(`O vencimento deve ficar entre hoje e os próximos ${INTER_COBRANCA_MAX_DUE_DAYS} dias.`);
   return {
     seuNumero: deterministicSeuNumero({
       kioskId: input.batch.kioskId,

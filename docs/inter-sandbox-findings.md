@@ -128,7 +128,7 @@ Consequência: o backend deve extrair `pdf`, decodificar base64 e responder ao n
 - O ambiente de Cobrança será escolhido por configuração própria, sem reutilizar `INTER_ENVIRONMENT` de outros fluxos durante a validação.
 - `MIN_BOLETO_CENTS = 250`.
 - `numDiasAgenda = 30` por default configurável.
-- vencimento: D+2 dias úteis por default configurável.
+- vencimento: D+7 dias úteis por padrão; fins de semana e feriados configurados são ignorados na contagem. A emissão permite escolher outra data entre hoje e 60 dias corridos à frente. Esse teto é uma guarda operacional do Coala, pois o OpenAPI oficial não publica máximo para `dataVencimento`; os 60 dias documentados pelo Inter pertencem a `numDiasAgenda`, após o vencimento.
 - pagador: entidade institucional referenciada por CNPJ e resolvida no cadastro canônico de Entidades; a emissão fica indisponível se o cadastro estiver incompleto.
 - nenhuma emissão bancária será automática.
 - ao confirmar `RECEBIDO` em produção, o sistema registra uma única movimentação

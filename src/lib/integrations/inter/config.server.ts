@@ -31,7 +31,6 @@ export type InterCobrancaPayer = {
 export type InterCobrancaSettings = {
   environment: InterEnvironment;
   payerCnpj: string;
-  dueBusinessDays: number;
   numDiasAgenda: number;
   minimumCents: number;
   holidays: string[];
@@ -112,7 +111,6 @@ export function getInterCobrancaSettings(): InterCobrancaSettings {
   return {
     environment: getInterCobrancaEnvironment(),
     payerCnpj,
-    dueBusinessDays: integerSetting("INTER_COBRANCA_DUE_BUSINESS_DAYS", 2, 0, 30),
     numDiasAgenda: integerSetting("INTER_COBRANCA_NUM_DIAS_AGENDA", 30, 0, 60),
     minimumCents: integerSetting("INTER_COBRANCA_MIN_CENTS", 250, 250, 500_000),
     holidays: (process.env.INTER_COBRANCA_HOLIDAYS ?? "")

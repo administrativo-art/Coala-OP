@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireUser } from "@/lib/auth-server";
+import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import {
   assertCashClosureAccess,
   assertCashClosureDivergenceApproval,
@@ -8,10 +8,29 @@ import {
 } from "@/features/financial/cash-closures/access.server";
 import { finalizeCashClosureOperator, getCashClosure } from "@/features/financial/cash-closures/repository.server";
 import { finalizeCashClosureOperatorSchema } from "@/features/financial/cash-closures/schemas";
-import { AppError, withApiErrorHandling } from "@/lib/observability";
+import { AppError } from "@/lib/observability";
+import { createStandardSecurityEnforcer } from "@/lib/security/enforcer";
+import { defineSecurityContract } from "@/lib/security/route-contract";
+import { secureRoute } from "@/lib/security/secure-route.server";
 
 type RouteContext = { params: Promise<{ closureId: string }> };
+type FinalizeInput = { operatorId: string; countingSessionId: string };
+type ClosureResource = NonNullable<Awaited<ReturnType<typeof getCashClosure>>>;
 const ROUTE = "/api/financial/cash-closures/[closureId]/finalize";
+
+const contract = defineSecurityContract({
+  schemaVersion: 1,
+  id: "financial.cash-closure.operator-finalize",
+  version: 1,
+  surface: { method: "POST", path: ROUTE },
+  exposure: "authenticated",
+  identity: { kind: "active-user" },
+  authorization: { kind: "permission", action: "financial.cash-closures.approve" },
+  resourceScope: { kind: "unit" },
+  input: { kind: "schema", schema: "financial.cash-closure.operator-finalize", unknownFields: "reject" },
+  effects: { mode: "write", audit: "server-authoritative" },
+  errorExposure: "sanitized",
+});
 
 function throwFinalizationError(cause: unknown): never {
   if (cause instanceof AppError) throw cause;
@@ -55,7 +74,7 @@ function throwFinalizationError(cause: unknown): never {
     throw new AppError({
       code: "CASH_CLOSURE_DIVERGENCE_NOTE_REQUIRED",
       kind: "VALIDATION",
-      safeMessage: "Informe as justificativas das faltas do Caixa e do Financeiro antes de finalizar.",
+      safeMessage: "O Financeiro deve justificar cada falta confirmada antes de finalizar.",
       cause,
     });
   }
@@ -68,56 +87,72 @@ function throwFinalizationError(cause: unknown): never {
   throw cause;
 }
 
-export const POST = withApiErrorHandling<RouteContext>({
-  source: "api",
-  operation: "finalize-cash-closure-count",
-  routeOrJob: ROUTE,
-}, async (request: NextRequest, routeContext) => {
-  const context = await requireUser(request).catch((cause) => {
+const enforcer = createStandardSecurityEnforcer<NextRequest, RouteContext, unknown, ServerUserContext, FinalizeInput, ClosureResource>(contract, {
+  authenticate: ({ request }) => requireUser(request).catch((cause) => {
     throw new AppError({ code: "CASH_CLOSURE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
-  });
+  }),
+  parseInput: async ({ request }) => {
+    const parsed = finalizeCashClosureOperatorSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new AppError({
+        code: "CASH_CLOSURE_OPERATOR_INVALID",
+        kind: "VALIDATION",
+        safeMessage: "Selecione um operador válido para finalizar.",
+        cause: parsed.error,
+      });
+    }
+    return parsed.data;
+  },
+  loadResource: async ({ routeContext }) => {
+    const { closureId } = await routeContext.params;
+    const current = await getCashClosure(closureId);
+    if (!current) throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND" });
+    return current;
+  },
+  authorize: ({ actor, input, resource }) => {
+    try {
+      assertCashClosureAccess(actor, "approve", resource.closure.kioskId);
+    } catch (cause) {
+      throw new AppError({ code: "CASH_CLOSURE_FINALIZE_FORBIDDEN", kind: "AUTHORIZATION", cause });
+    }
+    try {
+      assertCashClosureDivergenceApproval(
+        actor,
+        resource.closure.kioskId,
+        resource.lines.filter((line) => line.operatorId === input.operatorId),
+      );
+    } catch (cause) {
+      throw new AppError({
+        code: "CASH_CLOSURE_SENIOR_FINALIZATION_REQUIRED",
+        kind: "AUTHORIZATION",
+        safeMessage: "Esta divergência exige um perfil sênior para finalizar a contagem.",
+        cause,
+      });
+    }
+  },
+  assertScope: ({ actor, resource }) => {
+    if (resource.closure.workspaceId !== actor.workspace_id) {
+      throw new AppError({ code: "CASH_CLOSURE_FINALIZE_FORBIDDEN", kind: "AUTHORIZATION" });
+    }
+  },
+});
+
+export const POST = secureRoute({
+  contract,
+  enforcer,
+  observability: { source: "api", operation: "finalize-cash-closure-count" },
+}, async ({ routeContext, security }) => {
   const { closureId } = await routeContext.params;
-  const parsed = finalizeCashClosureOperatorSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    throw new AppError({
-      code: "CASH_CLOSURE_OPERATOR_INVALID",
-      kind: "VALIDATION",
-      safeMessage: "Selecione um operador válido para finalizar.",
-      cause: parsed.error,
-    });
-  }
-  const current = await getCashClosure(closureId);
-  if (!current) throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND" });
-  try {
-    assertCashClosureAccess(context, "approve", current.closure.kioskId);
-  } catch (cause) {
-    throw new AppError({ code: "CASH_CLOSURE_FINALIZE_FORBIDDEN", kind: "AUTHORIZATION", cause });
-  }
-  try {
-    assertCashClosureDivergenceApproval(
-      context,
-      current.closure.kioskId,
-      current.lines.filter((line) => line.operatorId === parsed.data.operatorId),
-    );
-  } catch (cause) {
-    throw new AppError({
-      code: "CASH_CLOSURE_SENIOR_FINALIZATION_REQUIRED",
-      kind: "AUTHORIZATION",
-      safeMessage: "Esta divergência exige um perfil sênior para finalizar a contagem.",
-      cause,
-    });
-  }
-  const actor = cashClosureActor(context);
   const finalized = await finalizeCashClosureOperator(
     closureId,
-    parsed.data.operatorId,
-    actor,
+    security.input.operatorId,
+    cashClosureActor(security.actor),
     {
-      countingSessionId: parsed.data.countingSessionId,
-      authorizationContext: context,
-      canManageSessionOfOthers: context.isDefaultAdmin || context.permissions.financial?.cashClosures?.reopen === true,
+      countingSessionId: security.input.countingSessionId,
+      authorizationContext: security.actor,
+      canManageSessionOfOthers: security.actor.isDefaultAdmin || security.actor.permissions.financial?.cashClosures?.reopen === true,
     },
   ).catch(throwFinalizationError);
   const closure = finalized.closure;
-  return NextResponse.json({ closure, countingSessionId: parsed.data.countingSessionId });
+  return NextResponse.json({ closure, countingSessionId: security.input.countingSessionId });
 });

@@ -1044,12 +1044,8 @@ export async function finalizeCashClosureOperator(
     if (operatorLines.some((line) => line.reportedCents === null || line.countedCents === null)) {
       throw new Error(`Preencha as contagens do Caixa e do Financeiro de ${currentOperator.operatorName} antes de finalizar.`);
     }
-    if (operatorLines.some((line) => {
-      const cashierDifference = (line.reportedDifferenceCents ?? 0) < 0 && !line.reportedNote?.trim();
-      const financeDifference = (line.differenceCents ?? 0) < 0 && !line.note?.trim();
-      return cashierDifference || financeDifference;
-    })) {
-      throw new Error("Toda falta apurada pelo Caixa ou pelo Financeiro precisa de justificativa antes da finalização.");
+    if (operatorLines.some((line) => (line.differenceCents ?? 0) < 0 && !line.note?.trim())) {
+      throw new Error("Toda falta confirmada pelo Financeiro precisa de justificativa antes da finalização.");
     }
     const eligibleCents = currentOperator.countedCashCents;
     const sessionAttachment = "countingSessionId" in allocation
