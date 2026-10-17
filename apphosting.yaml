@@ -14,6 +14,20 @@ env:
     value: "--max-old-space-size=4096"
     availability:
       - BUILD
+  # O CI já executa typecheck. Estes ajustes afetam somente o build gerenciado
+  # e mantêm o padrão local conservador de um worker com validação de tipos.
+  - variable: COALA_NEXT_BUILD_CPUS
+    value: "2"
+    availability:
+      - BUILD
+  - variable: COALA_NEXT_SKIP_TYPECHECK
+    value: "true"
+    availability:
+      - BUILD
+  - variable: COALA_NEXT_WEBPACK_BUILD_WORKER
+    value: "true"
+    availability:
+      - BUILD
   - variable: BIZNEO_TOKEN
     secret: BIZNEO_TOKEN
   - variable: PDVLEGAL_COD_EMPRESA
