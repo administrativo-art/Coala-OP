@@ -11,6 +11,8 @@ import { ABSENCE_OPERATIONAL_COVERAGE_HASH, operationalGuardRequested,
 
 const PAGE = 100;
 const MAX_PER_SOURCE = 2000;
+// Teto absoluto por fonte. Produção passa um maxPerSource explícito, medido antes da execução.
+const MAX_PER_SOURCE_LIMIT = 20000;
 const SOURCES = [
   ['coala', 'dp_schedules'], ['coala', 'shifts'], ['coala', 'dp_vacations'],
   ['coala', 'dp_absenceOperationalAvailability'], ['coala', 'dp_absenceOperationalFences'],
@@ -73,7 +75,16 @@ function expectSource(doc: DocumentSnapshot | undefined, label: string) {
   if (!doc?.exists) throw fail(label);
   return doc;
 }
-function validate(pass: Collected, workspaceId: string, epoch: string) {
+/**
+ * Escala legada do formato antigo (uma por mês para todas as unidades, unidade só no turno): aceita como
+ * histórico somente se trancada; seus turnos precisam ser anteriores à janela de cobertura e continuam no hash.
+ * Turnos trancados não recebem escrita pelas APIs, então não participam do cálculo de ocupação da janela.
+ */
+function legacyHistoricalSchedule(schedule: QueryDocumentSnapshot) {
+  return !stringValue(schedule.get('unitId')) && schedule.get('locked') === true;
+}
+
+function validate(pass: Collected, workspaceId: string, epoch: string, coverageFrom: string) {
   const all = pass.documents;
   const requests = byId(all.dp_absenceRequests);
   const occurrences = byId(all.dp_absenceOccurrences);
@@ -85,10 +96,15 @@ function validate(pass: Collected, workspaceId: string, epoch: string) {
   const outbox = byId(all.dp_absenceOutbox);
   for (const schedule of all.dp_schedules.values()) {
     if (schedule.get('workspaceId') && schedule.get('workspaceId') !== workspaceId) throw fail('workspace da escala');
-    if (!stringValue(schedule.get('unitId'))) throw fail('unidade da escala');
+    if (!stringValue(schedule.get('unitId')) && !legacyHistoricalSchedule(schedule)) throw fail('unidade da escala');
   }
   for (const shift of all.shifts.values()) {
     const schedule = all.dp_schedules.get(shift.ref.parent.parent?.path ?? '');
+    if (schedule && legacyHistoricalSchedule(schedule)) {
+      if (!stringValue(shift.get('userId')) || !validDate(shift.get('date'))) throw fail('turno legado inválido');
+      if (shift.get('date') >= coverageFrom) throw fail('escala legada com turno na janela de cobertura');
+      continue;
+    }
     if (!schedule || !stringValue(shift.get('userId')) || !stringValue(shift.get('unitId'))
       || shift.get('unitId') !== schedule.get('unitId') || !validDate(shift.get('date'))) throw fail('turno órfão ou inválido');
     if (shift.get('type') === 'work') shiftOccupancySlices({ beneficiaryUid: shift.get('userId'),
@@ -194,7 +210,10 @@ function validate(pass: Collected, workspaceId: string, epoch: string) {
   }
 }
 
-/** Demo-only one-shot audit. Two equal scans are evidence under an operator quiescence barrier, not a distributed snapshot. */
+/**
+ * One-shot audit (demo emulators or production, as accepted by operationalGuardRequested). Two equal scans are
+ * evidence under an operator quiescence barrier, not a distributed snapshot.
+ */
 export async function bootstrapAbsenceOperationalReadiness(input: {
   workspaceId: string; coverageFrom: string; coverageThrough: string; quiescenceConfirmed: true;
   betweenPasses?: () => Promise<void>;
@@ -204,7 +223,7 @@ export async function bootstrapAbsenceOperationalReadiness(input: {
     || !validDate(input.coverageFrom) || !validDate(input.coverageThrough)
     || input.coverageFrom > input.coverageThrough
     || input.maxPerSource !== undefined && (!Number.isInteger(input.maxPerSource)
-      || input.maxPerSource < 1 || input.maxPerSource > MAX_PER_SOURCE)) throw fail('escopo/gate inválido');
+      || input.maxPerSource < 1 || input.maxPerSource > MAX_PER_SOURCE_LIMIT)) throw fail('escopo/gate inválido');
   const readiness = operationalReadinessRef(input.workspaceId);
   const runId = randomUUID();
   const started = await dbAdmin.runTransaction(async (tx) => {
@@ -221,10 +240,10 @@ export async function bootstrapAbsenceOperationalReadiness(input: {
   const scope = { workspaceId: input.workspaceId, epoch: started.epoch,
     coverageFrom: input.coverageFrom, coverageThrough: input.coverageThrough };
   const first = await collect(input.maxPerSource ?? MAX_PER_SOURCE, scope);
-  validate(first, input.workspaceId, started.epoch);
+  validate(first, input.workspaceId, started.epoch, input.coverageFrom);
   await input.betweenPasses?.();
   const second = await collect(input.maxPerSource ?? MAX_PER_SOURCE, scope);
-  validate(second, input.workspaceId, started.epoch);
+  validate(second, input.workspaceId, started.epoch, input.coverageFrom);
   if (first.hash !== second.hash || JSON.stringify(first.counts) !== JSON.stringify(second.counts)) throw fail('fontes mudaram entre passagens');
   await dbAdmin.runTransaction(async (tx) => {
     const current = await tx.get(readiness);
@@ -238,9 +257,35 @@ export async function bootstrapAbsenceOperationalReadiness(input: {
     tx.update(readiness, { state: 'ready', bootstrapComplete: true,
       scopeHash: second.hash, sourceCounts: second.counts, completedAt: new Date().toISOString() });
   });
-  return { mode: 'demo_bootstrap' as const, state: 'ready' as const, epoch: started.epoch,
+  return { mode: process.env.FIRESTORE_EMULATOR_HOST ? 'demo_bootstrap' as const : 'production_bootstrap' as const,
+    state: 'ready' as const, epoch: started.epoch,
     hash: second.hash, counts: second.counts };
 }
 
-export const ABSENCE_BOOTSTRAP_LIMITS = { pageSize: PAGE, maxPerSource: MAX_PER_SOURCE,
+/**
+ * Pré-voo somente leitura: uma passada de coleta + validação, sem gravar o recibo nem exigir quiescência.
+ * Serve para achar dados que fariam o bootstrap falhar antes da janela de congelamento.
+ */
+export async function auditAbsenceOperationalSources(input: {
+  workspaceId: string; coverageFrom: string; coverageThrough: string; maxPerSource?: number;
+}) {
+  if (!operationalGuardRequested() || input.workspaceId !== WORKSPACE_ID
+    || !validDate(input.coverageFrom) || !validDate(input.coverageThrough)
+    || input.coverageFrom > input.coverageThrough
+    || input.maxPerSource !== undefined && (!Number.isInteger(input.maxPerSource)
+      || input.maxPerSource < 1 || input.maxPerSource > MAX_PER_SOURCE_LIMIT)) throw fail('escopo/gate inválido');
+  const readiness = await operationalReadinessRef(input.workspaceId).get();
+  const epoch = typeof readiness.get('epoch') === 'string' ? readiness.get('epoch') as string : 'pre-bootstrap';
+  const pass = await collect(input.maxPerSource ?? MAX_PER_SOURCE, { workspaceId: input.workspaceId, epoch,
+    coverageFrom: input.coverageFrom, coverageThrough: input.coverageThrough });
+  try {
+    validate(pass, input.workspaceId, epoch, input.coverageFrom);
+    return { mode: 'dry_run' as const, valid: true as const, readinessState: readiness.get('state') ?? null, counts: pass.counts };
+  } catch (error) {
+    return { mode: 'dry_run' as const, valid: false as const, readinessState: readiness.get('state') ?? null,
+      reason: error instanceof Error ? error.message : 'falha desconhecida', counts: pass.counts };
+  }
+}
+
+export const ABSENCE_BOOTSTRAP_LIMITS = { pageSize: PAGE, maxPerSource: MAX_PER_SOURCE, maxPerSourceLimit: MAX_PER_SOURCE_LIMIT,
   sourceCount: SOURCES.length, passes: 2 } as const;
