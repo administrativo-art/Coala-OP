@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { FieldPath, FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { financialDbAdmin as db } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
@@ -173,39 +173,7 @@ export async function listWithdrawalClassifications(id: string, context: ServerU
       limits: { withdrawals: MAX_WITHDRAWALS, candidatesPerPage: 25 },
     };
   }, { readOnly: true });
-  return { ...listed, preLinks: await listWithdrawalPreLinks(listed.sources) };
-}
-
-export async function listWithdrawalExpenseCandidates(id: string, sourceId: string, centerId: string, cursor: string | undefined, context: ServerUserContext) {
-  const current = await listWithdrawalClassifications(id, context);
-  const source = current.sources.find(row => row.sourceId === sourceId);
-  if (!source || !withdrawalDocumentIdSchema.safeParse(centerId).success || cursor && !withdrawalDocumentIdSchema.safeParse(cursor).success) {
-    withdrawalFailure("CANDIDATE_QUERY_INVALID", "Selecione uma sangria e um centro válidos.", "VALIDATION");
-  }
-  const center = await db.collection("resultCenters").doc(centerId).get();
-  if (!center.exists || center.data()?.active === false || center.data()?.unitIds?.length !== 1 || center.data()?.unitIds?.[0] !== source.unitId) {
-    withdrawalFailure("CENTER_INVALID", "Centro fora da unidade.", "VALIDATION");
-  }
-  assertCatalogWorkspace(center.data()!, source.workspaceId);
-  let query = db.collection("expenses")
-    .where("competenceMonth", "==", source.competenceMonth).where("resultCenterId", "==", centerId)
-    .where("status", "==", "pending").orderBy(FieldPath.documentId()).limit(26);
-  if (source.workspaceId !== WORKSPACE_ID) query = query.where("workspaceId", "==", source.workspaceId);
-  if (cursor) query = query.startAfter(cursor);
-  const snapshot = await query.get();
-  const page = snapshot.docs.slice(0, 25);
-  const candidates = page.flatMap(doc => {
-    const expense = doc.data();
-    try { assertEligibleWithdrawalExpense(expense, source, WORKSPACE_ID); }
-    catch (error) {
-      if (error instanceof Error && error.name === "AppError") return [];
-      throw error;
-    }
-    return [{ id: doc.id, description: String(expense.description || "Despesa"), amountCents: source.amountCents,
-      localPurchase: expense.originModule === "local_purchase",
-      competenceMonth: source.competenceMonth, accountPlanId: String(expense.accountPlan || expense.accountId || ""), resultCenterId: centerId }];
-  });
-  return { candidates, nextCursor: snapshot.size > 25 ? page.at(-1)!.id : null };
+  return listed;
 }
 
 export async function classifyCashWithdrawal(id: string, raw: unknown, context: ServerUserContext, authorization: WithdrawalAuthorization = "user") {
@@ -214,6 +182,9 @@ export async function classifyCashWithdrawal(id: string, raw: unknown, context: 
     withdrawalFailure("INPUT_INVALID", "Dados de classificação inválidos.", "VALIDATION");
   }
   const input = parsed.data;
+  if (input.action === "link" && authorization === "user") {
+    withdrawalFailure("LINK_DISABLED", "A sangria deve criar uma nova despesa; vincular uma despesa existente está desativado.", "VALIDATION");
+  }
   return db.runTransaction(async transaction => {
     const current = await loadTransactionClosure(transaction, id, context, input.action, authorization);
     const { closure } = current;

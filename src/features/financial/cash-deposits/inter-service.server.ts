@@ -117,7 +117,6 @@ async function prepareIssue(input: {
   workspaceId: string;
   batchId: string;
   actor: CashClosureActor;
-  dueBusinessDays?: number;
   dueDate?: string;
 }) {
   const settings = getInterCobrancaSettings();
@@ -153,7 +152,6 @@ async function prepareIssue(input: {
       batch,
       attempt,
       payer,
-      dueBusinessDays: input.dueBusinessDays ?? settings.dueBusinessDays,
       dueDate: input.dueDate,
       numDiasAgenda: settings.numDiasAgenda,
       holidays: settings.holidays,
@@ -381,7 +379,6 @@ export async function issueInterCobrancaForBatch(input: {
   workspaceId: string;
   batchId: string;
   actor: CashClosureActor;
-  dueBusinessDays?: number;
   dueDate?: string;
 }) {
   const readiness = interCobrancaReadiness();
