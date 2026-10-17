@@ -42,7 +42,7 @@ const message = {
     amountCents: FINANCIAL_SERVICE_APPROVAL_MAX_AMOUNT_CENTS,
     barcode: request.barcodeSnapshot.code,
     dueDate: request.barcodeSnapshot.dueDate,
-    supplierTaxId: "02558157000405",
+    billingIdentity: { supplierTaxId: "02558157000405" },
   },
 };
 
@@ -66,6 +66,7 @@ test("backend aprova somente cobrança Vivo íntegra até R$ 5.000", () => {
   assert.equal(rejection(), null);
   assertRejected(rejection({ ...request, amount: 5000.01 }), /limite/);
   assertRejected(rejection({ ...request, barcodeSnapshot: { ...request.barcodeSnapshot, beneficiaryDocument: "11222333000181" } }), /beneficiário/);
+  assertRejected(rejection(request, { ...message, classification: { ...(message.classification as Record<string, unknown>), billingIdentity: null } }), /CNPJ extraído/);
   assertRejected(rejection(request, { ...message, linkedExpenseId: "expense_other" }), /despesa/);
   assertRejected(rejection(request, { ...message, existingBankPayment: { transactionId: "inter_existing" } }), /pagamento bancário/);
   assertRejected(financialServiceApprovalRejection({

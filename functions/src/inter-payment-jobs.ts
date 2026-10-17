@@ -7,8 +7,9 @@ const reconciliationUrl = defineString('INTER_PAYMENT_RECONCILIATION_URL');
 /**
  * Fallback do webhook do Inter para pagamentos Pix enviados.
  *
- * Este job chama apenas a rota de consulta/conciliação. Ele nunca cria nem
- * reenvia pagamentos ao banco.
+ * Este job chama a rota de consulta/conciliação. A rota também pode preparar
+ * e enviar as cobranças explicitamente allowlisted pela política financeira;
+ * os demais pagamentos nunca são criados ou reenviados por este agendamento.
  */
 export const interPaymentReconciliation = onSchedule({
   schedule: 'every 5 minutes',
