@@ -68,7 +68,7 @@ export function CadastrosTabs({
             )}
           >
             <span>{tab.label}</span>
-            <span className={cn('text-[11px]', isActive ? 'text-ds-muted' : 'text-ds-faint')}>{tab.count}</span>
+            <span className={cn('text-[11px]', isActive ? 'text-ds-muted' : 'text-ds-ink-faint')}>{tab.count}</span>
           </button>
         );
       })}

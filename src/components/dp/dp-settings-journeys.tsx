@@ -788,7 +788,7 @@ export function DPSettingsJourneys() {
                 })}
                 </div>
               ) : (
-                <p className="rounded-ds-md border border-dashed border-ds-divider px-3 py-4 text-sm text-ds-ink-3">
+                <p className="rounded-ds-md border border-dashed border-ds-divider px-3 py-4 text-sm text-ds-ink-muted">
                   Informe os dias no ciclo para configurar a distribuição.
                 </p>
               )}

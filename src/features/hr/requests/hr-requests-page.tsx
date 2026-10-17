@@ -236,7 +236,7 @@ export function HrRequestsPage() {
               <PanelField label="Benefício ao solicitar">{selected.currentSnapshot.active ? "Ativo" : "Inativo"}</PanelField>
               <PanelField label="Valor anterior">{formatCurrency(selected.currentSnapshot.dailyValue)}</PanelField>
             </div>
-            <p className="rounded-ds-md border border-ds-info-border bg-ds-info-bg p-3 text-[12px] leading-5 text-ds-info">Até o dia {selected.cutoffDay}, a alteração vale no mês seguinte. Depois do corte, vale no segundo mês seguinte. A análise do RH não muda a competência registrada no envio. O reflexo aparecerá no contracheque que será pago no dia {formatRequestDate(selected.payslipPaymentDate)}.</p>
+            <p className="rounded-ds-md border border-ds-info/20 bg-ds-info-bg p-3 text-[12px] leading-5 text-ds-info">Até o dia {selected.cutoffDay}, a alteração vale no mês seguinte. Depois do corte, vale no segundo mês seguinte. A análise do RH não muda a competência registrada no envio. O reflexo aparecerá no contracheque que será pago no dia {formatRequestDate(selected.payslipPaymentDate)}.</p>
             <p className="rounded-ds-md bg-ds-muted p-3 text-[12.5px] leading-5 text-ds-ink-muted">{selected.details || "Nenhum motivo ou detalhe adicional foi informado."}</p>
           </PanelSection>
 

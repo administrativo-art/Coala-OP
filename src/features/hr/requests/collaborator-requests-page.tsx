@@ -236,10 +236,10 @@ export function CollaboratorRequestsPage() {
         chips={<><HeroChip value={pending ? 1 : 0} label="aguardando análise" tone="warning" /><HeroChip value={approvedCount} label="aprovadas" tone="info" /><HeroChip value={items.length} label="no histórico" /></>}
       />
 
-      <div className="rounded-ds-card border border-ds-info-border bg-ds-info-bg px-4 py-3 text-[13px] text-ds-info">
+      <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg px-4 py-3 text-[13px] text-ds-info">
         <strong>Vale-transporte e ausência.</strong> O pedido de vale-transporte passa por análise. Para ausência, confira a prévia; quando a criação estiver habilitada, salve o rascunho e envie pelo detalhe.
       </div>
-      {simulationMode ? <div className="rounded-ds-card border border-ds-warn-border bg-ds-warn-bg px-4 py-3 text-[13px] text-ds-warn"><strong>Simulação local.</strong> Este pedido não foi gravado e nenhuma ação altera o cadastro do colaborador.</div> : null}
+      {simulationMode ? <div className="rounded-ds-card border border-ds-warn/20 bg-ds-warn-bg px-4 py-3 text-[13px] text-ds-warn"><strong>Simulação local.</strong> Este pedido não foi gravado e nenhuma ação altera o cadastro do colaborador.</div> : null}
 
       <section>
         <div className="mb-3 flex items-end justify-between gap-3">
@@ -296,7 +296,7 @@ export function CollaboratorRequestsPage() {
               </SelectContent>
             </Select>
           </label>
-          <div className="rounded-ds-card border border-ds-info-border bg-ds-info-bg p-4 text-ds-info">
+          <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg p-4 text-ds-info">
             <p className="text-[12px] font-extrabold">Quando esta solicitação entrará em vigor?</p>
             <p className="mt-1 text-[12px] leading-5">Solicitações feitas até o dia 20 entram em vigor no primeiro dia do mês seguinte. Após o dia 20, entram em vigor no primeiro dia do segundo mês seguinte.</p>
             <div className="mt-3 rounded-ds-md bg-ds-surface/80 px-3 py-2.5">

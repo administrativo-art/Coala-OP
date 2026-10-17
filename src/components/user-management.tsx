@@ -1284,7 +1284,7 @@ export function UserManagement({
             {isDrawer ? (
               <nav
                 aria-label="Seções da edição do colaborador"
-                className="sticky top-0 z-20 -mx-1 overflow-x-auto rounded-ds-md bg-ds-surface-seg p-[3px] shadow-xs"
+                className="sticky top-0 z-20 -mx-1 overflow-x-auto rounded-ds-md bg-ds-seg p-[3px] shadow-xs"
               >
                 <div role="tablist" aria-label="Dados do colaborador" className="flex min-w-max gap-1">
                   {COLLABORATOR_EDIT_TABS.map((tab, index) => (
