@@ -447,6 +447,7 @@ function,functions/src/index.ts,onResponsibilityUnitGroupChange,docs/engineering
 function,functions/src/index.ts,absenceRetentionDailyReview,docs/engineering/flows/dp-absences.md,onSchedule; detector limitado de vencimentos e aviso privado sem exclusao; deploy nao confirmado.
 function,functions/src/index.ts,absenceRetentionReconciliation,docs/engineering/flows/dp-absences.md,onSchedule; continua cursors de reconciliacao por beneficiario limitados; deploy nao confirmado.
 function,functions/src/index.ts,absenceRetentionExecutionReconciliation,docs/engineering/flows/dp-absences.md,onSchedule; a cada 15 minutos reconcilia ate 20 exclusoes pela geracao exata; deploy nao confirmado.
+function,functions/src/index.ts,absenceTerminationEffectsResume,docs/engineering/flows/dp-absences.md,onSchedule; a cada 30 minutos so com recibo operacional ready toca ate 20 cadastros com efeitos de desligamento pendentes para reaplicacao por onUserProfileChange; deploy nao confirmado.
 function,functions/src/index.ts,reactivateUser,docs/engineering/runtime-surfaces.md,onCall; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,reconcileGeneratedDocumentRetention,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
 function,functions/src/index.ts,reconcilePdvSalesHistory,docs/engineering/runtime-surfaces.md,onSchedule; consultar familia e consumidores no guia; deploy nao confirmado.
