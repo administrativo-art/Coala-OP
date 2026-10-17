@@ -30,6 +30,8 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts login
   npx tsx scripts/financial/coala-authenticated-payment.mts find --email EMAIL --query TEXTO --view work|identified [--cursor CURSOR]
   npx tsx scripts/financial/coala-authenticated-payment.mts inspect --email EMAIL --id INBOX_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts analyze --email EMAIL --id INBOX_ID
+  npx tsx scripts/financial/coala-authenticated-payment.mts reconcile-vivo --email EMAIL --confirm-financial-actions
   npx tsx scripts/financial/coala-authenticated-payment.mts document --email EMAIL --collection expenses|bankPaymentRequests|transactions --id ID
   npx tsx scripts/financial/coala-authenticated-payment.mts lookup --email EMAIL --kind expense-amount|expense-supplier|expense-account|expense-account-center|expense-unit-month|expense-center-due-month --value VALOR
   npx tsx scripts/financial/coala-authenticated-payment.mts requests --email EMAIL --amount-cents CENTAVOS
@@ -42,6 +44,7 @@ function help() {
   npx tsx scripts/financial/coala-authenticated-payment.mts send-adjusted --email EMAIL --id REQUEST_ID --amount-cents CENTAVOS --settlement-amount-cents CENTAVOS --late-charge-cents CENTAVOS --scheduled-for AAAA-MM-DD --beneficiary-document CNPJ --expense-id EXPENSE_ID --barcode CODIGO_COMPLETO --source-attachment-id ANEXO_ID --source-attachment-sha256 SHA256
 
 O login pede a senha diretamente no terminal e guarda somente o refresh token no Chaves do macOS.
+Adicione --temporary-session aos demais comandos para pedir a senha no terminal e usar uma sessão apenas em memória, sem ler ou gravar o Chaves.
 Autorizar no Coala e enviar ao Inter são comandos separados. A aprovação final no Inter continua separada.
 `);
 }
@@ -184,6 +187,91 @@ async function coalaPrepareInbox(token: string, id: string, input: {
   return body.request;
 }
 
+async function coalaAnalyzeInbox(token: string, id: string) {
+  const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/analyze`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+  });
+  if (!response.ok) throw new PaymentCliError(`O Coala recusou a análise (HTTP ${response.status}). Nenhuma conciliação foi feita.`);
+  return paymentCliJson<Record<string, unknown>>(response);
+}
+
+async function coalaLinkInbox(token: string, id: string, input: Record<string, unknown>) {
+  const response = await paymentCliFetch(`${COALA_URL}/api/financial/inbox/${encodeURIComponent(id)}/link`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input), cache: "no-store",
+  });
+  if (!response.ok) throw new PaymentCliError(`O Coala recusou a conciliação (HTTP ${response.status}). Nenhuma ordem de pagamento foi enviada.`);
+  return paymentCliJson<Record<string, unknown>>(response);
+}
+
+function inspectMessage(payload: Record<string, unknown>) {
+  const message = payload.message;
+  if (!message || typeof message !== "object" || Array.isArray(message)) throw new PaymentCliError("O Coala não retornou a cobrança esperada.");
+  return message as Record<string, unknown>;
+}
+
+export function existingExpenseLinkInput(message: Record<string, unknown>): Record<string, unknown> | undefined {
+  const suggestion = message.existingExpenseSuggestion;
+  if (!suggestion || typeof suggestion !== "object" || Array.isArray(suggestion)) return undefined;
+  const candidate = suggestion as Record<string, unknown>;
+  if (candidate.status !== "suggested" || typeof candidate.expenseId !== "string" || !candidate.expenseId) return undefined;
+  const installmentNumber = candidate.installmentNumber;
+  return typeof installmentNumber === "number" && Number.isSafeInteger(installmentNumber) && installmentNumber > 0
+    ? { expenseId: candidate.expenseId, installmentNumber }
+    : { expenseId: candidate.expenseId };
+}
+
+async function linkInboxAfterAnalysis(token: string, id: string, message: Record<string, unknown>) {
+  const input = existingExpenseLinkInput(message);
+  if (!input) {
+    throw new PaymentCliError(`A fatura ${id} não tem uma sugestão única de despesa para vínculo automático. Faça a conferência documental no Coala; nenhuma ordem de pagamento foi criada.`);
+  }
+  try {
+    await coalaLinkInbox(token, id, input);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("(HTTP 409)")) throw error;
+    const current = inspectMessage(await coalaRead(token, paymentReadPath({ command: "inspect", id })));
+    if (current.linkedExpenseId) return current;
+    throw new PaymentCliError(`A fatura ${id} mudou durante a conciliação e exige nova conferência no Coala. Nenhuma ordem de pagamento foi criada.`);
+  }
+  return inspectMessage(await coalaRead(token, paymentReadPath({ command: "inspect", id })));
+}
+
+async function reconcileVivo(token: string) {
+  const items = [
+    { id: "7c1c9815-0167-4132-a1c4-116c0ea8c20d", dueDate: "2026-10-25" },
+    { id: "dd5b24aa-19f4-4550-a94a-83ab4e735232", dueDate: "2026-10-17" },
+  ];
+  const results: Array<Record<string, unknown>> = [];
+  for (const item of items) {
+    await coalaAnalyzeInbox(token, item.id);
+    let message = inspectMessage(await coalaRead(token, paymentReadPath({ command: "inspect", id: item.id })));
+    if (!message.linkedExpenseId) message = await linkInboxAfterAnalysis(token, item.id, message);
+    if (!message.linkedExpenseId) throw new PaymentCliError(`A fatura ${item.id} não recebeu vínculo automático com a provisão.`);
+    let request: Record<string, unknown> | undefined;
+    if (message.paymentRequestId) {
+      request = (await coalaGet(token)).find((row) => row.id === message.paymentRequestId);
+      if (!request) throw new PaymentCliError(`A fatura ${item.id} já possui uma ordem ${String(message.paymentRequestId)}, mas ela não apareceu na consulta limitada. Nenhuma nova ordem foi criada.`);
+    }
+    const classification = message.classification && typeof message.classification === "object" && !Array.isArray(message.classification)
+      ? message.classification as Record<string, unknown>
+      : undefined;
+    if (!request) {
+      const barcode = String(classification?.barcode ?? "").replace(/\D/g, "");
+      if (!barcode) throw new PaymentCliError(`A fatura ${item.id} foi conciliada, mas não tem linha digitável para preparar o pagamento.`);
+      request = await coalaPrepareInbox(token, item.id, {
+        scheduledFor: String(classification?.dueDate || item.dueDate),
+        beneficiaryDocument: "02558157000405",
+        barcode,
+      });
+    }
+    if (request.status === "awaiting_financial_authorization") request = await coalaPost(token, String(request.id), "authorize");
+    if (request.status === "ready_to_submit") request = await coalaPost(token, String(request.id), "submit");
+    results.push({ id: item.id, expenseId: message.linkedExpenseId, paymentRequestId: request.id, status: request.status, interRequestId: request.interRequestId ?? null, bankStatus: request.bankStatus ?? null });
+  }
+  stdout.write(`${JSON.stringify({ results })}\n`);
+}
+
 async function login(email: string) {
   let password = await hiddenPassword();
   let credentials: Record<string, unknown>;
@@ -200,6 +288,25 @@ async function login(email: string) {
   await coalaGet(String(credentials.idToken));
   keychain("write", email, String(credentials.refreshToken));
   stdout.write("Login do Coala validado; sessão guardada no Chaves do macOS. Nenhuma senha foi gravada.\n");
+}
+
+export async function authenticateWithPassword(email: string, password: string) {
+  const credentials = await firebasePost(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(firebaseClientConfig.apiKey)}`,
+    JSON.stringify({ email, password, returnSecureToken: true }), "application/json",
+  );
+  if (String(credentials.email ?? "").toLowerCase() !== email.toLowerCase()
+    || !credentials.idToken) throw new PaymentCliError("O login não retornou a conta ou a sessão esperada.");
+  return String(credentials.idToken);
+}
+
+async function temporaryToken(email: string) {
+  let password = await hiddenPassword();
+  try {
+    return await authenticateWithPassword(email, password);
+  } finally {
+    password = "";
+  }
 }
 
 async function renewedToken(email: string) {
@@ -229,6 +336,10 @@ export async function withCoalaSession<T>(email: string, operation: (token: stri
   return operation(await renewedToken(email.toLowerCase()));
 }
 
+async function commandToken(email: string) {
+  return process.argv.includes("--temporary-session") ? temporaryToken(email) : renewedToken(email);
+}
+
 function printStatus(request: Record<string, unknown>) {
   const barcode = request.barcodeSnapshot as Record<string, unknown> | undefined;
   stdout.write(`${JSON.stringify({
@@ -247,14 +358,20 @@ function printStatus(request: Record<string, unknown>) {
 async function main() {
   const command = process.argv[2];
   if (!command || command === "--help" || command === "help") return help();
-  if (!["login", "find", "inspect", "document", "lookup", "requests", "status", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
+  if (!["login", "find", "inspect", "analyze", "reconcile-vivo", "document", "lookup", "requests", "status", "prepare", "authorize", "send", "retry-send", "adjust-overdue", "send-adjusted"].includes(command)) throw new PaymentCliError("Comando desconhecido. Use --help.");
   const email = command === "login" ? await loginEmail() : requireOption("email").toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PaymentCliError("E-mail inválido.");
   if (command === "login") return login(email);
+  if (command === "reconcile-vivo") {
+    if (!process.argv.includes("--confirm-financial-actions")) {
+      throw new PaymentCliError("reconcile-vivo analisa, vincula, autoriza e envia pagamentos. Repita com --confirm-financial-actions somente após conferir as duas cobranças.");
+    }
+    return reconcileVivo(await commandToken(email));
+  }
   if (command === "requests") {
     const cents = Number(requireOption("amount-cents"));
     if (!Number.isSafeInteger(cents) || cents <= 0) throw new PaymentCliError("Valor inválido.");
-    const rows = await coalaGet(await renewedToken(email));
+    const rows = await coalaGet(await commandToken(email));
     const requests = rows.filter((row) => Math.round(Number(row.amount) * 100) === cents)
       .map((doc) => summarizePaymentRead("document", { doc }));
     stdout.write(`${JSON.stringify({ requests, scanned: rows.length, limit: 100,
@@ -264,7 +381,7 @@ async function main() {
   if (command === "lookup") {
     const kind = requireOption("kind");
     const structuredQuery = paymentLookupQuery(kind, requireOption("value"));
-    const token = await renewedToken(email);
+    const token = await commandToken(email);
     // runQuery é uma leitura, apesar do verbo HTTP POST. Não usar credenciais Admin/IAM.
     const response = await paymentCliFetch(`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseClientConfig.projectId)}/databases/coala-financeiro/documents:runQuery`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -281,17 +398,24 @@ async function main() {
       coverage: "Busca exata filtrada, no máximo 25 resultados; não comprova ausência em outros campos, códigos equivalentes ou coleções." })}\n`);
     return;
   }
+  if (command === "analyze") {
+    const id = requireOption("id");
+    if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da cobrança inválido.");
+    const result = await coalaAnalyzeInbox(await commandToken(email), id);
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return;
+  }
   if (["find", "inspect", "document"].includes(command)) {
     const path = paymentReadPath({ command, query: option("query"), view: option("view"),
       cursor: option("cursor"), collection: option("collection"), id: option("id") });
-    const token = await renewedToken(email);
+    const token = await commandToken(email);
     const result = await coalaRead(token, path);
     stdout.write(`${JSON.stringify(summarizePaymentRead(command, result))}\n`);
     return;
   }
   const id = requireOption("id");
   if (!/^[a-zA-Z0-9_-]{8,170}$/.test(id)) throw new PaymentCliError("ID da solicitação inválido.");
-  const token = await renewedToken(email);
+  const token = await commandToken(email);
   if (command === "prepare") {
     const amountCents = Number(requireOption("amount-cents"));
     const scheduledFor = requireOption("scheduled-for");
