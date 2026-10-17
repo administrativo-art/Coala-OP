@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ptBR } from "date-fns/locale";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Loader2, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Loader2, LockKeyhole, RefreshCw, RotateCcw, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,12 +25,20 @@ import { isCurrentDraftLoad, isCurrentDraftRevision, persistLatestDraft } from "
 import { formatBRL } from "@/features/financial/cash-closures/money";
 import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
 import { CentsInput } from "@/features/financial/cash-closures/components/cents-input";
+import { CashSuppliesPanel } from "@/features/financial/cash-closures/components/cash-supplies-panel";
 import { CashWithdrawalsPanel } from "@/features/financial/cash-closures/components/cash-withdrawals-panel";
 import { isPdvAutoCountedChannel } from "@/features/financial/cash-closures/channel-normalization";
+import {
+  cashFundCentsForLine,
+  cashSupplyClassificationSummary,
+  financeExpectedCentsForLine,
+  financeReportedCentsForLine,
+} from "@/features/financial/cash-closures/supply-classification";
 import type {
   CashClosureLine,
   CashClosureOperator,
   CashClosureWithLines,
+  CashSupplyClassificationKind,
 } from "@/features/financial/cash-closures/types";
 import type { CashCountingSession } from "../types";
 
@@ -43,7 +52,7 @@ type ClosurePayload = CashClosureWithLines & {
 const COUNTING_GUIDE_STEPS = [
   { title: "Informe a data", description: "Use a data impressa no malote." },
   { title: "Escolha turno/operador", description: "Abra o cartão de quem entregou o malote." },
-  { title: "Confira o malote", description: "Conte, revise diferenças e classifique sangrias." },
+  { title: "Confira o malote", description: "Conte, revise diferenças e classifique suprimentos e sangrias." },
   { title: "Finalize o operador", description: "Finalize e repita nos demais turnos." },
 ] as const;
 
@@ -70,7 +79,6 @@ function groupsFromPayload(data: CashClosureWithLines | null) {
     operator: operatorById.get(operatorId) ?? null,
   }));
 }
-
 function updatedLine(
   line: CashClosureLine,
   patch: Partial<Pick<CashClosureLine, "reportedCents" | "reportedNote" | "countedCents" | "note">>,
@@ -79,10 +87,12 @@ function updatedLine(
   const reportedDifferenceCents = next.reportedCents === null
     ? null
     : next.reportedCents - next.expectedCents;
-  const conferenceDifferenceCents = next.countedCents === null || next.reportedCents === null
+  const financeExpectedCents = financeExpectedCentsForLine(next);
+  const financeReportedCents = financeReportedCentsForLine(next);
+  const conferenceDifferenceCents = next.countedCents === null || financeReportedCents === null
     ? null
-    : next.countedCents - next.reportedCents;
-  const differenceCents = next.countedCents === null ? null : next.countedCents - next.expectedCents;
+    : next.countedCents - financeReportedCents;
+  const differenceCents = next.countedCents === null ? null : next.countedCents - financeExpectedCents;
   return {
     ...next,
     reportedDifferenceCents,
@@ -141,7 +151,7 @@ function dateKeyFromTypedDate(value: string) {
 }
 
 export function CashCountingDialog({ open, session, unit, editable, onClose, onSessionChanged }: Props) {
-  const { permissions } = useAuth();
+  const { permissions, isDefaultAdmin } = useAuth();
   const api = useAuthenticatedApi();
   const { toast } = useToast();
   const [date, setDate] = useState("");
@@ -155,11 +165,12 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<CountingStep>(1);
   const [activeOperatorIndex, setActiveOperatorIndex] = useState(0);
-  const [conferenceSection, setConferenceSection] = useState<"values" | "withdrawals">("values");
   const [typedDate, setTypedDate] = useState("");
   const [typedDateError, setTypedDateError] = useState("");
   const [automaticChannelsExpanded, setAutomaticChannelsExpanded] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => calendarDateFromKey(todayInClosureTimezone()) ?? new Date());
+  const [reopenTarget, setReopenTarget] = useState<{ operatorId: string; name: string } | null>(null);
+  const [reopenReason, setReopenReason] = useState("");
   const latestData = useRef<CashClosureWithLines | null>(null);
   const draftRevision = useRef(0);
   const dirtyLineIds = useRef<Set<string>>(new Set());
@@ -223,7 +234,8 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
       loadRequestId.current += 1;
       setActiveStep(1);
       setActiveOperatorIndex(0);
-      setConferenceSection("values");
+      setReopenTarget(null);
+      setReopenReason("");
       return;
     }
     const key = `${session.id}:${unit.id}`;
@@ -243,7 +255,6 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     setSaveState("idle");
     setActiveStep(1);
     setActiveOperatorIndex(0);
-    setConferenceSection("values");
     draftRevision.current = 0;
     if (resumeDate) void loadClosure(resumeDate);
   }, [loadClosure, open, session.id, session.lastDraftDate, session.lastDraftKioskId, unit.id]);
@@ -358,7 +369,6 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
         setDate(nextDate);
         setActiveStep(1);
         setActiveOperatorIndex(0);
-        setConferenceSection("values");
         dirtyLineIds.current.clear();
         latestData.current = null;
         setData(null);
@@ -406,11 +416,31 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     }
   }
 
+  async function classifySupply(input: {
+    lineId: string;
+    movementId: string;
+    classification: CashSupplyClassificationKind;
+  }) {
+    const targetDate = activeDate.current;
+    if (!editable || !targetDate) return;
+    if (dirtyLineIds.current.size > 0 || saveInFlight.current) await save();
+    const payload = await api<ClosurePayload>(
+      `/api/financial/cash-closures/${encodeURIComponent(`${unit.id}_${targetDate}`)}/supplies`,
+      { method: "PATCH", json: input },
+    );
+    if (activeDate.current !== targetDate) return;
+    const next = { closure: payload.closure, lines: payload.lines, operators: payload.operators };
+    dirtyLineIds.current.clear();
+    latestData.current = next;
+    setData(next);
+    setSaveState("saved");
+    setLastSavedAt(new Date().toISOString());
+  }
+
   async function finalizeOperator(operator: CashClosureOperator) {
     const targetDate = activeDate.current;
     if (!editable || !targetDate) return;
     const closureId = `${unit.id}_${targetDate}`;
-    const finalizedIndex = activeOperatorIndex;
     setWorking(`finalize:${operator.operatorId}`);
     try {
       if (dirtyLineIds.current.size > 0 || saveInFlight.current) await save();
@@ -420,15 +450,33 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
       });
       toast({ title: `Contagem de ${operator.operatorName} finalizada.` });
       await Promise.all([loadClosure(targetDate), onSessionChanged()]);
-      const nextOperatorIndex = groups.findIndex((group, index) => index > finalizedIndex && group.operator?.status !== "approved");
-      if (nextOperatorIndex >= 0) {
-        setActiveOperatorIndex(nextOperatorIndex);
-        setActiveStep(2);
-      } else {
-        setActiveStep(4);
-      }
+      setActiveStep(2);
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao finalizar o operador." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function reopenOperator() {
+    const target = reopenTarget;
+    const targetDate = activeDate.current;
+    if (!target || !targetDate || reopenReason.trim().length < 3) return;
+    const targetIndex = groups.findIndex((group) => group.operatorId === target.operatorId);
+    setWorking(`reopen:${target.operatorId}`);
+    try {
+      await api(`/api/financial/cash-closures/${encodeURIComponent(`${unit.id}_${targetDate}`)}/reopen`, {
+        method: "POST",
+        json: { operatorId: target.operatorId, reason: reopenReason.trim() },
+      });
+      toast({ title: `Contagem de ${target.name} reaberta.` });
+      setReopenTarget(null);
+      setReopenReason("");
+      if (targetIndex >= 0) setActiveOperatorIndex(targetIndex);
+      setActiveStep(2);
+      await Promise.all([loadClosure(targetDate), onSessionChanged()]);
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao reabrir o operador." });
     } finally {
       setWorking(null);
     }
@@ -463,12 +511,16 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
   const incomplete = activeGroup?.lines.some((line) => line.reportedCents === null || line.countedCents === null) ?? true;
   const missingFinanceNote = activeGroup?.lines.some((line) => (line.differenceCents ?? 0) < 0 && !line.note?.trim()) ?? false;
   const missingNote = missingFinanceNote;
+  const supplySummary = activeGroup
+    ? cashSupplyClassificationSummary(activeGroup.lines, { operatorStatus: activeOperator?.status })
+    : { required: false, total: 0, pending: 0, cashFundCents: 0, supplyCents: 0 };
+  const missingSupplyClassification = supplySummary.required && supplySummary.pending > 0;
   const canEditReported = editable && !!permissions.financial?.cashClosures?.edit && !operatorFinalized;
   const canEditCounted = editable && !!permissions.financial?.cashClosures?.approve && !operatorFinalized;
-  const nextOperatorIndex = groups.findIndex((group, index) => index > activeOperatorIndex && group.operator?.status !== "approved");
+  const canReopen = editable && (isDefaultAdmin || !!permissions.financial?.cashClosures?.reopen);
   const hasWithdrawals = activeGroup?.lines.some((line) => (line.metadata.withdrawalCents ?? 0) > 0) ?? false;
   const operatorTotals = activeGroup?.lines.reduce((totals, line) => ({
-    expected: totals.expected + line.expectedCents,
+    expected: totals.expected + financeExpectedCentsForLine(line),
     reported: totals.reported + (line.reportedCents ?? 0),
     counted: totals.counted + (line.countedCents ?? 0),
     withdrawals: totals.withdrawals + (line.metadata.withdrawalCents ?? 0),
@@ -488,6 +540,8 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
         {manualLines.map((line) => {
       const reportedShortage = (line.reportedDifferenceCents ?? 0) < 0;
       const financeShortage = (line.differenceCents ?? 0) < 0;
+      const cashFundCents = cashFundCentsForLine(line);
+      const financeExpectedCents = financeExpectedCentsForLine(line);
       return <div key={line.id} className={cn("space-y-3 border-b border-ds-border p-4 last:border-b-0", (reportedShortage || financeShortage) && "bg-ds-danger-bg")}>
         <div className="grid min-w-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(140px,1.1fr)_repeat(3,minmax(0,1fr))]">
           <strong className="text-sm">{line.channelLabel}</strong>
@@ -496,13 +550,13 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
           <div className="min-w-0 rounded-lg bg-ds-accent-soft p-1"><span className="block px-2 pt-1 text-[11px] font-semibold text-ds-accent-ink sm:hidden">Financeiro · contado agora</span><CentsInput value={line.countedCents} onChange={(value) => updateClosureLine(line.id, { countedCents: value })} disabled={!canEditCounted} ariaLabel={`Valor contado agora em ${line.channelLabel} para ${activeGroup.name}`} className={cn("h-10 bg-white font-ds-mono", !canEditCounted && "border-transparent bg-transparent px-0 shadow-none")} /></div>
         </div>
         {(line.reportedCents !== null || line.countedCents !== null) && <div className="grid items-stretch gap-2 text-xs lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1.1fr)]">
-          <div className="rounded-xl border border-ds-border bg-ds-muted px-3 py-2.5"><span className="block text-[10px] font-extrabold uppercase tracking-wide text-ds-ink-muted">PDV esperado</span><strong className="mt-1 block font-ds-mono text-sm tabular-nums">{formatBRL(line.expectedCents)}</strong></div>
+          <div className="rounded-xl border border-ds-border bg-ds-muted px-3 py-2.5"><span className="block text-[10px] font-extrabold uppercase tracking-wide text-ds-ink-muted">PDV esperado no caixa</span><strong className="mt-1 block font-ds-mono text-sm tabular-nums">{formatBRL(line.expectedCents)}</strong>{cashFundCents > 0 && <span className="mt-1 block text-[10px] font-bold text-ds-ok">Malote: {formatBRL(financeExpectedCents)} · fundo: {formatBRL(cashFundCents)}</span>}</div>
           <ArrowRight className="mx-auto h-4 w-4 self-center rotate-90 text-ds-ink-faint lg:rotate-0" aria-hidden="true" />
           <div className={cn("rounded-xl px-3 py-2.5", differenceClass(line.reportedDifferenceCents))}><span className="block text-[10px] font-extrabold uppercase tracking-wide opacity-75">Caixa informado</span><strong className="mt-1 block font-ds-mono text-sm tabular-nums">{line.reportedCents === null ? "—" : formatBRL(line.reportedCents)}</strong><span className="mt-1 block font-semibold">{differenceLabel(line.reportedDifferenceCents)} vs. PDV</span></div>
           <ArrowRight className="mx-auto h-4 w-4 self-center rotate-90 text-ds-ink-faint lg:rotate-0" aria-hidden="true" />
           <div className={cn("rounded-xl px-3 py-2.5", differenceClass(line.conferenceDifferenceCents))}><span className="block text-[10px] font-extrabold uppercase tracking-wide opacity-75">Financeiro contado</span><strong className="mt-1 block font-ds-mono text-sm tabular-nums">{line.countedCents === null ? "—" : formatBRL(line.countedCents)}</strong><span className="mt-1 block font-semibold">{differenceLabel(line.conferenceDifferenceCents)} vs. Caixa</span></div>
           <ArrowRight className="mx-auto h-4 w-4 self-center rotate-90 text-ds-ink-faint lg:rotate-0" aria-hidden="true" />
-          <div className={cn("rounded-xl px-3 py-2.5", differenceClass(line.differenceCents))}><span className="block text-[10px] font-extrabold uppercase tracking-wide opacity-75">Resultado final</span><strong className="mt-1 block text-sm">{differenceLabel(line.differenceCents)}</strong><span className="mt-1 block font-semibold">Financeiro vs. PDV</span></div>
+          <div className={cn("rounded-xl px-3 py-2.5", differenceClass(line.differenceCents))}><span className="block text-[10px] font-extrabold uppercase tracking-wide opacity-75">Resultado final</span><strong className="mt-1 block text-sm">{differenceLabel(line.differenceCents)}</strong><span className="mt-1 block font-semibold">Financeiro × malote esperado</span></div>
         </div>}
         {(financeShortage || line.note) && <label className="block"><span className="mb-1.5 block text-xs font-bold text-ds-ink-muted">Justificativa do Financeiro</span><Textarea value={line.note ?? ""} onChange={(event) => updateClosureLine(line.id, { note: event.target.value })} disabled={!canEditCounted} placeholder="Obrigatória quando a conferência encontrou falta em relação ao PDV" className="min-h-16 resize-y bg-white" /></label>}
       </div>;
@@ -522,7 +576,6 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     if (index < 0 || index >= groups.length) return;
     setActiveOperatorIndex(index);
     setActiveStep(2);
-    setConferenceSection("values");
   }
 
   function renderDateStep() {
@@ -593,7 +646,7 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
           })}
         </div>
         <Card className={cn("overflow-hidden rounded-2xl border-ds-border bg-white shadow-xs", operatorFinalized && "border-ds-ok/30 bg-ds-ok-bg")}>
-          <CardHeader className="border-b border-ds-border px-5 py-4 sm:px-6"><div className="flex items-center justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-[.12em] text-ds-ink-muted">Operador {activeOperatorIndex + 1} de {groups.length}</span>{operatorFinalized ? <Badge className="bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Finalizado</Badge> : <Badge variant="outline" className="border-ds-border bg-ds-muted text-ds-ink-muted">Aguardando conferência</Badge>}</div></CardHeader>
+          <CardHeader className="border-b border-ds-border px-5 py-4 sm:px-6"><div className="flex items-center justify-between gap-3"><span className="text-xs font-extrabold uppercase tracking-[.12em] text-ds-ink-muted">Operador {activeOperatorIndex + 1} de {groups.length}</span><span className="flex items-center gap-2">{operatorFinalized ? <Badge className="bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Finalizado</Badge> : <Badge variant="outline" className="border-ds-border bg-ds-muted text-ds-ink-muted">Aguardando conferência</Badge>}{operatorFinalized && canReopen && <Button type="button" variant="outline" size="sm" disabled={!!working} onClick={() => { setReopenTarget({ operatorId: activeGroup.operatorId, name: activeGroup.name }); setReopenReason(""); }}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Reabrir</Button>}</span></div></CardHeader>
           <CardContent className="space-y-6 p-5 sm:p-7"><div className="flex items-center gap-4"><span className={cn("grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-sm font-extrabold", operatorFinalized ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-accent-soft text-ds-accent-ink")}>{activeGroup.name.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><div className="min-w-0"><h3 className="truncate text-xl font-extrabold">{activeGroup.name}</h3><p className="mt-1 text-sm text-ds-ink-muted">{activeGroup.lines.length} canais neste fechamento · malote de {dateLabel}</p></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-ds-muted p-4"><span className="block text-xs font-semibold text-ds-ink-muted">Esperado no PDV</span><strong className="mt-1 block font-ds-mono text-lg">{formatBRL(activeOperator?.expectedTotalCents ?? activeGroup.lines.reduce((sum, line) => sum + line.expectedCents, 0))}</strong></div><div className="rounded-xl bg-ds-muted p-4"><span className="block text-xs font-semibold text-ds-ink-muted">Canais manuais</span><strong className="mt-1 block text-lg">{activeGroup.lines.filter((line) => !isPdvAutoCountedChannel(line.channel)).length}</strong></div><div className="rounded-xl bg-ds-muted p-4"><span className="block text-xs font-semibold text-ds-ink-muted">Situação</span><strong className={cn("mt-1 block text-lg", operatorFinalized ? "text-ds-ok" : "text-ds-accent-ink")}>{operatorFinalized ? "Conferido" : "Pendente"}</strong></div></div></CardContent>
         </Card>
       </div>
@@ -612,43 +665,34 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     if (activeStep === 3) return <div className="mx-auto w-full max-w-4xl space-y-5">
       <div>
         <h2 className="text-2xl font-extrabold tracking-tight text-ds-ink">Confira o malote</h2>
-        <p className="mt-2 text-sm leading-6 text-ds-ink-muted">São duas partes: primeiro conte os valores de <strong>{activeGroup.name}</strong>; depois informe o que foi pago em cada sangria.</p>
+        <p className="mt-2 text-sm leading-6 text-ds-ink-muted">Conte os valores de <strong>{activeGroup.name}</strong>, revise as diferenças e classifique os suprimentos e as sangrias nesta mesma etapa.</p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <button type="button" onClick={() => setConferenceSection("values")} className={cn("flex items-center gap-3 rounded-[14px] border bg-white p-3.5 text-left transition-colors", conferenceSection === "values" ? "border-ds-accent bg-ds-accent-soft" : "border-ds-border hover:bg-ds-muted")}>
-          <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-extrabold", !incomplete && !missingNote ? "bg-ds-ok text-white" : conferenceSection === "values" ? "bg-ds-accent text-white" : "bg-ds-neutral-bg text-ds-ink-muted")}>{!incomplete && !missingNote ? <Check className="h-4 w-4" /> : "1"}</span>
-          <span><strong className="block text-sm">Conferir valores</strong><span className="text-xs text-ds-ink-muted">{incomplete ? "Há canais para preencher" : missingNote ? "Falta justificar diferença" : "Valores conferidos"}</span></span>
-        </button>
-        <button type="button" onClick={() => setConferenceSection("withdrawals")} className={cn("flex items-center gap-3 rounded-[14px] border bg-white p-3.5 text-left transition-colors", conferenceSection === "withdrawals" ? "border-ds-accent bg-ds-accent-soft" : "border-ds-border hover:bg-ds-muted")}>
-          <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-extrabold", conferenceSection === "withdrawals" ? "bg-ds-accent text-white" : "bg-ds-neutral-bg text-ds-ink-muted")}>2</span>
-          <span><strong className="block text-sm">Classificar sangrias</strong><span className="text-xs text-ds-ink-muted">{hasWithdrawals ? "Crie as despesas pagas em espécie" : "Nenhuma sangria neste turno"}</span></span>
-        </button>
-      </div>
-      {conferenceSection === "values" ? <>
-        {renderOperatorChannels()}
-        {!operatorFinalized && incomplete && <p className="rounded-xl border border-ds-alert-border bg-ds-alert-bg px-4 py-3 text-xs font-semibold text-ds-alert-ink">Preencha todos os canais manuais do Caixa e do Financeiro. R$ 0,00 pode ser finalizado normalmente.</p>}
-        {!operatorFinalized && missingFinanceNote && <p className="rounded-xl border border-ds-confirm-border bg-ds-danger-bg px-4 py-3 text-xs font-semibold text-ds-danger">O Financeiro deve justificar cada falta encontrada em relação ao PDV.</p>}
-      </> : <CashWithdrawalsPanel key={`${data.closure.id}:${activeGroup.operatorId}`} data={data} editable={editable && !working} operatorId={activeGroup.operatorId} />}
+      {renderOperatorChannels()}
+      {!operatorFinalized && incomplete && <p className="rounded-xl border border-ds-alert-border bg-ds-alert-bg px-4 py-3 text-xs font-semibold text-ds-alert-ink">Preencha todos os canais manuais do Caixa e do Financeiro. R$ 0,00 pode ser finalizado normalmente.</p>}
+      {!operatorFinalized && missingFinanceNote && <p className="rounded-xl border border-ds-confirm-border bg-ds-danger-bg px-4 py-3 text-xs font-semibold text-ds-danger">O Financeiro deve justificar cada falta encontrada em relação ao malote esperado.</p>}
+      <CashSuppliesPanel data={data} editable={editable && !working} operatorId={activeGroup.operatorId} onClassify={classifySupply} />
+      <CashWithdrawalsPanel key={`${data.closure.id}:${activeGroup.operatorId}`} data={data} editable={editable && !working} operatorId={activeGroup.operatorId} />
     </div>;
 
     return <div className="mx-auto w-full max-w-4xl space-y-5 py-1">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-extrabold tracking-tight text-ds-ink">Revise e finalize {activeGroup.name}</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-ds-ink-muted">Confira os valores e as sangrias antes de finalizar. Depois disso, os dados ficam bloqueados até uma reabertura.</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-ds-ink-muted">Confira os valores, suprimentos e sangrias antes de finalizar. Depois disso, os dados ficam bloqueados até uma reabertura.</p>
         </div>
-        <Badge className={cn("px-3 py-1.5", operatorFinalized ? "bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg" : incomplete || missingNote ? "bg-ds-warn-bg text-ds-warn hover:bg-ds-warn-bg" : "bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg")}>
-          {operatorFinalized ? "Finalizado" : incomplete ? "Faltam valores" : missingNote ? "Falta justificativa" : "Pronto para finalizar"}
+        <Badge className={cn("px-3 py-1.5", operatorFinalized ? "bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg" : incomplete || missingNote || missingSupplyClassification ? "bg-ds-warn-bg text-ds-warn hover:bg-ds-warn-bg" : "bg-ds-ok-bg text-ds-ok hover:bg-ds-ok-bg")}>
+          {operatorFinalized ? "Finalizado" : incomplete ? "Faltam valores" : missingSupplyClassification ? "Faltam suprimentos" : missingNote ? "Falta justificativa" : "Pronto para finalizar"}
         </Badge>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-ds-border bg-ds-muted px-3.5 py-3"><span className="block text-xs font-bold text-ds-ink-muted">PDV esperado</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(operatorTotals.expected)}</strong><span className="mt-1 block text-xs text-ds-ink-muted">Base sincronizada</span></div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-xl border border-ds-border bg-ds-muted px-3.5 py-3"><span className="block text-xs font-bold text-ds-ink-muted">Malote esperado</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(operatorTotals.expected)}</strong><span className="mt-1 block text-xs text-ds-ink-muted">Após fundo de caixa</span></div>
         <div className={cn("rounded-xl px-3.5 py-3", differenceClass(activeOperator?.reportedDifferenceTotalCents ?? null))}><span className="block text-xs font-bold opacity-80">Caixa informado</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(operatorTotals.reported)}</strong><span className="mt-1 block text-xs font-semibold">{differenceLabel(activeOperator?.reportedDifferenceTotalCents ?? null)} vs. PDV</span></div>
-        <div className={cn("rounded-xl px-3.5 py-3", differenceClass(activeOperator?.differenceTotalCents ?? null))}><span className="block text-xs font-bold opacity-80">Financeiro contado</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(operatorTotals.counted)}</strong><span className="mt-1 block text-xs font-semibold">{differenceLabel(activeOperator?.differenceTotalCents ?? null)} vs. PDV</span></div>
+        <div className={cn("rounded-xl px-3.5 py-3", differenceClass(activeOperator?.differenceTotalCents ?? null))}><span className="block text-xs font-bold opacity-80">Financeiro contado</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(operatorTotals.counted)}</strong><span className="mt-1 block text-xs font-semibold">{differenceLabel(activeOperator?.differenceTotalCents ?? null)} vs. malote</span></div>
+        <div className="rounded-xl border border-ds-border bg-white px-3.5 py-3"><span className="block text-xs font-bold text-ds-ink-muted">Fundo de caixa</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(supplySummary.cashFundCents)}</strong><span className="mt-1 block text-xs text-ds-ink-muted">{missingSupplyClassification ? `${supplySummary.pending} pendente(s)` : `${supplySummary.total} movimento(s)`}</span></div>
         <div className="rounded-xl border border-ds-border bg-white px-3.5 py-3"><span className="block text-xs font-bold text-ds-ink-muted">Sangrias do turno</span><strong className="mt-1 block font-ds-mono text-base tabular-nums">{formatBRL(operatorTotals.withdrawals)}</strong><span className="mt-1 block text-xs text-ds-ink-muted">{hasWithdrawals ? "Despesa criada por sangria" : "Nenhuma sangria"}</span></div>
       </div>
       <div className="overflow-hidden rounded-2xl border border-ds-border bg-white">
-        <div className="flex items-center justify-between gap-3 border-b border-ds-border bg-ds-muted px-4 py-3"><strong className="text-sm">Valores por canal</strong><button type="button" className="text-xs font-bold text-ds-accent-ink hover:text-ds-accent-ink-hover" onClick={() => { setConferenceSection("values"); setActiveStep(3); }}>Editar valores</button></div>
+        <div className="flex items-center justify-between gap-3 border-b border-ds-border bg-ds-muted px-4 py-3"><strong className="text-sm">Valores por canal</strong><button type="button" className="text-xs font-bold text-ds-accent-ink hover:text-ds-accent-ink-hover" onClick={() => setActiveStep(3)}>Editar conferência</button></div>
         <div className="hidden grid-cols-[minmax(110px,1.2fr)_repeat(3,minmax(0,1fr))_minmax(110px,1.1fr)] gap-2 border-b border-ds-divider px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-wide text-ds-ink-muted md:grid"><span>Canal</span><span>PDV</span><span>Caixa</span><span>Financeiro</span><span>Resultado</span></div>
         {activeGroup.lines.map((line) => <div key={line.id} className="grid gap-2 border-b border-ds-divider px-4 py-3 text-sm last:border-b-0 md:grid-cols-[minmax(110px,1.2fr)_repeat(3,minmax(0,1fr))_minmax(110px,1.1fr)] md:items-center">
           <strong>{line.channelLabel}</strong><span className="font-ds-mono tabular-nums">{formatBRL(line.expectedCents)}</span><span className="font-ds-mono tabular-nums">{line.reportedCents === null ? "—" : formatBRL(line.reportedCents)}</span><span className="font-ds-mono tabular-nums">{line.countedCents === null ? "—" : formatBRL(line.countedCents)}</span><span className={cn("font-bold", (line.differenceCents ?? 0) < 0 ? "text-ds-danger" : (line.differenceCents ?? 0) > 0 ? "text-ds-info" : "text-ds-ok")}>{differenceLabel(line.differenceCents)}</span>
@@ -657,10 +701,11 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ds-border bg-white px-4 py-3">
         <span><strong className="block text-sm">Sangrias · {formatBRL(operatorTotals.withdrawals)}</strong><span className="mt-0.5 block text-xs text-ds-ink-muted">{hasWithdrawals ? "Cada retirada deve gerar sua própria despesa paga em espécie." : "Nenhuma sangria em espécie neste turno."}</span></span>
-        {hasWithdrawals && <button type="button" className="text-xs font-bold text-ds-accent-ink hover:text-ds-accent-ink-hover" onClick={() => { setConferenceSection("withdrawals"); setActiveStep(3); }}>Editar sangrias</button>}
+        {(hasWithdrawals || supplySummary.total > 0) && <button type="button" className="text-xs font-bold text-ds-accent-ink hover:text-ds-accent-ink-hover" onClick={() => setActiveStep(3)}>Editar movimentos</button>}
       </div>
       {operatorFinalized && <p className="rounded-xl border border-ds-ok/30 bg-ds-ok-bg px-4 py-3 text-sm font-bold text-ds-ok"><CheckCircle2 className="mr-2 inline h-4 w-4" />{activeGroup.name} já foi finalizado. Para corrigir, reabra a contagem no fechamento.</p>}
       {!operatorFinalized && incomplete && <p className="text-xs font-semibold text-ds-warn-ink">Volte à etapa 3 para preencher os canais manuais.</p>}
+      {!operatorFinalized && missingSupplyClassification && <p className="text-xs font-semibold text-ds-danger">Volte à etapa 3 para classificar cada suprimento como Fundo de caixa ou Suprimento.</p>}
       {!operatorFinalized && missingNote && <p className="text-xs font-semibold text-ds-danger">Volte à etapa 3 para completar as justificativas do Financeiro.</p>}
     </div>;
   }
@@ -678,21 +723,41 @@ export function CashCountingDialog({ open, session, unit, editable, onClose, onS
     : "Selecione no calendário";
   const stepEyebrows = ["", "ETAPA 1 DE 4 · IDENTIFICAÇÃO", "ETAPA 2 DE 4 · OPERADOR", "ETAPA 3 DE 4 · CONFERÊNCIA", "ETAPA 4 DE 4 · FINALIZAÇÃO"];
 
-  return <Dialog open={open} onOpenChange={(next) => { if (!next) void requestClose(); }}>
+  return <><Dialog open={open} onOpenChange={(next) => { if (!next) void requestClose(); }}>
     <DialogContent hideClose overlayClassName="bg-ds-dark/45" className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] min-w-0 max-w-[1180px] grid-cols-1 grid-rows-1 gap-0 overflow-hidden rounded-ds-modal border-0 bg-ds-input p-0 font-ds shadow-ds-modal sm:h-[min(860px,calc(100dvh-3rem))] sm:max-w-[min(1180px,calc(100vw-2rem))] sm:p-0 md:grid-cols-[minmax(240px,300px)_minmax(0,1fr)]">
       <DialogTitle className="sr-only">Contar malote</DialogTitle><DialogDescription className="sr-only">Contagem do malote da unidade {unit.name}.</DialogDescription>
       <aside className="hidden min-h-0 flex-col gap-[22px] overflow-y-auto bg-ds-dark px-[22px] py-[26px] text-ds-on-dark md:flex">
         <div className="space-y-1.5"><p className="text-[11px] font-extrabold uppercase tracking-[.14em] text-ds-accent-kicker">Fechamento de caixa</p><p className="text-2xl font-extrabold tracking-tight">Contar malote</p><p className="text-[13px] text-ds-on-dark-sub">{unit.name}</p></div>
         <div className="rounded-2xl border border-white/[.08] bg-white/[.05] p-4"><span className="block text-xs font-bold text-ds-on-dark-sub">Data impressa no malote</span><strong className="mt-1 block font-ds-mono text-[28px] leading-tight">{date ? dateLabel : "—/—/—"}</strong><span className="mt-1 block text-[13px] capitalize text-ds-on-dark-sub">{selectedWeekday}</span>{activeGroup && activeStep >= 2 && <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-3 text-[13px]"><span className="text-ds-on-dark-sub">Operador</span><strong className="truncate">{activeGroup.name.split(" ")[0]} · {activeOperatorIndex + 1}/{groups.length}</strong></div>}</div>
-        <nav aria-label="Etapas para contar e finalizar o malote"><ol className="space-y-1">{COUNTING_GUIDE_STEPS.map((step, index) => { const stepNumber = (index + 1) as CountingStep; const current = activeStep === stepNumber; const done = stepNumber < activeStep || (stepNumber === 4 && operatorFinalized); const available = stepNumber <= activeStep && (!!date || stepNumber === 1); return <li key={step.title}><button type="button" disabled={!available} aria-current={current ? "step" : undefined} onClick={() => { if (stepNumber === 3) setConferenceSection("values"); setActiveStep(stepNumber); }} className={cn("flex w-full items-start gap-3 rounded-[14px] border px-3 py-3 text-left transition-colors", current ? "border-ds-accent-ink bg-white/[.06]" : "border-transparent hover:bg-white/[.04]", !available && "cursor-not-allowed opacity-45")}><span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold", current ? "bg-ds-accent text-white" : done ? "bg-ds-ok text-white" : "bg-white/10 text-ds-on-dark-2")}>{done && !current ? <Check className="h-4 w-4" /> : stepNumber}</span><span className="min-w-0"><strong className="block text-sm text-ds-on-dark">{step.title}</strong><span className="mt-0.5 block text-xs leading-[1.35] text-ds-on-dark-sub">{step.description}</span></span></button></li>; })}</ol></nav>
+        <nav aria-label="Etapas para contar e finalizar o malote"><ol className="space-y-1">{COUNTING_GUIDE_STEPS.map((step, index) => { const stepNumber = (index + 1) as CountingStep; const current = activeStep === stepNumber; const done = stepNumber < activeStep || (stepNumber === 4 && operatorFinalized); const available = stepNumber <= activeStep && (!!date || stepNumber === 1); return <li key={step.title}><button type="button" disabled={!available} aria-current={current ? "step" : undefined} onClick={() => setActiveStep(stepNumber)} className={cn("flex w-full items-start gap-3 rounded-[14px] border px-3 py-3 text-left transition-colors", current ? "border-ds-accent-ink bg-white/[.06]" : "border-transparent hover:bg-white/[.04]", !available && "cursor-not-allowed opacity-45")}><span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-extrabold", current ? "bg-ds-accent text-white" : done ? "bg-ds-ok text-white" : "bg-white/10 text-ds-on-dark-2")}>{done && !current ? <Check className="h-4 w-4" /> : stepNumber}</span><span className="min-w-0"><strong className="block text-sm text-ds-on-dark">{step.title}</strong><span className="mt-0.5 block text-xs leading-[1.35] text-ds-on-dark-sub">{step.description}</span></span></button></li>; })}</ol></nav>
         <div className="mt-auto space-y-2 text-xs text-ds-on-dark-sub">{statusMessage && <span className="flex items-center gap-2">{statusMessage}</span>}<p>Responsável pela sessão: <strong className="text-ds-on-dark">{session.openedByName}</strong></p></div>
       </aside>
       <main className="flex min-h-0 min-w-0 flex-col bg-white">
         <header className="border-b border-ds-divider px-5 py-[18px] sm:px-7"><div className="flex items-center justify-between gap-4"><div className="min-w-0"><p className="text-xs font-extrabold uppercase tracking-[.14em] text-ds-accent-ink">{stepEyebrows[activeStep]}</p><p className="mt-1 truncate text-sm font-bold text-ds-ink md:hidden">Contar malote · {unit.name}</p></div><Button type="button" size="icon" variant="ghost" className="h-9 w-9 shrink-0 rounded-full" aria-label="Fechar contagem" disabled={changingDate} onClick={() => void requestClose()}><X className="h-5 w-5" /></Button></div><ol className="mt-3 flex gap-1.5 overflow-x-auto pb-1 md:hidden" aria-label="Etapas da contagem">{COUNTING_GUIDE_STEPS.map((step, index) => { const stepNumber = (index + 1) as CountingStep; return <li key={step.title} className="min-w-[108px] flex-1"><button type="button" disabled={stepNumber > activeStep} onClick={() => setActiveStep(stepNumber)} className={cn("w-full rounded-lg border px-2 py-1.5 text-left text-[10px] font-bold", stepNumber === activeStep ? "border-ds-accent bg-ds-accent-soft text-ds-accent-ink" : "border-ds-border bg-white text-ds-ink-muted")}>{stepNumber}. {step.title}</button></li>; })}</ol></header>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-divider bg-ds-input px-5 py-3 text-xs sm:px-7"><span className="font-bold text-ds-ink-muted">{date ? `Malote de ${dateLabel} · ${unit.name}` : "Selecione a data do malote"}</span>{activeGroup && <span className="text-ds-ink-muted">Operador {activeOperatorIndex + 1}/{groups.length}</span>}</div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-7">{renderStepContent()}</div>
-        <footer className="flex flex-col gap-3 border-t border-ds-border-footer bg-ds-input px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-7"><div className="flex min-h-8 flex-wrap items-center gap-2 text-xs text-ds-ink-muted"><span>{activeGroup && activeStep >= 2 ? activeGroup.name : date ? `Malote de ${dateLabel} · ${unit.name}` : "Selecione a data do malote"}</span>{activeGroup && !operatorFinalized && incomplete && activeStep >= 3 && <span className="rounded-full bg-ds-warn-bg px-2.5 py-1 font-bold text-ds-warn-ink">Preenchimento pendente</span>}</div><div className="flex flex-wrap items-center justify-end gap-2"><Button type="button" variant="ds-secondary" size="lg" disabled={activeStep === 1 || !!working} onClick={() => { if (activeStep === 3 && conferenceSection === "withdrawals") setConferenceSection("values"); else setActiveStep((current) => Math.max(1, current - 1) as CountingStep); }}><ArrowLeft className="mr-1.5 h-4 w-4" />Voltar</Button>{activeStep === 1 && <Button type="button" variant="primary-modal" size="lg" disabled={!date || loading || loadError || missing || groups.length === 0} onClick={() => setActiveStep(2)}>Escolher operador<ArrowRight className="ml-2 h-4 w-4" /></Button>}{activeStep === 2 && <Button type="button" variant="primary-modal" size="lg" disabled={!activeGroup} onClick={() => { setConferenceSection("values"); setActiveStep(3); }}>Começar contagem<ArrowRight className="ml-2 h-4 w-4" /></Button>}{activeStep === 3 && conferenceSection === "values" && hasWithdrawals && <Button type="button" variant="primary-modal" size="lg" disabled={!activeGroup || incomplete || missingNote} onClick={() => setConferenceSection("withdrawals")}>Classificar sangrias<ArrowRight className="ml-2 h-4 w-4" /></Button>}{activeStep === 3 && (conferenceSection === "withdrawals" || !hasWithdrawals) && <Button type="button" variant="primary-modal" size="lg" disabled={!activeGroup || incomplete || missingNote} onClick={() => setActiveStep(4)}>Revisar finalização<ArrowRight className="ml-2 h-4 w-4" /></Button>}{activeStep === 4 && (operatorFinalized ? <Button type="button" variant="primary-modal" size="lg" onClick={() => nextOperatorIndex >= 0 ? moveOperator(nextOperatorIndex) : void requestClose()}>{nextOperatorIndex >= 0 ? <>Próximo operador<ArrowRight className="ml-2 h-4 w-4" /></> : <>Concluir contagem<CheckCircle2 className="ml-2 h-4 w-4" /></>}</Button> : <Button type="button" variant="primary-modal" size="lg" disabled={!editable || !!working || !activeOperator || incomplete || missingNote} onClick={() => activeOperator && void finalizeOperator(activeOperator)}>{working === `finalize:${activeGroup?.operatorId}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Finalizar operador</Button>)}</div></footer>
+        <footer className="flex flex-col gap-3 border-t border-ds-border-footer bg-ds-input px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+          <div className="flex min-h-8 flex-wrap items-center gap-2 text-xs text-ds-ink-muted">
+            <span>{activeGroup && activeStep >= 2 ? activeGroup.name : date ? `Malote de ${dateLabel} · ${unit.name}` : "Selecione a data do malote"}</span>
+            {activeGroup && !operatorFinalized && (incomplete || missingSupplyClassification) && activeStep >= 3 && <span className="rounded-full bg-ds-warn-bg px-2.5 py-1 font-bold text-ds-warn-ink">{missingSupplyClassification ? `${supplySummary.pending} suprimento(s) pendente(s)` : "Preenchimento pendente"}</span>}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" variant="ds-secondary" size="lg" disabled={activeStep === 1 || !!working} onClick={() => setActiveStep((current) => Math.max(1, current - 1) as CountingStep)}><ArrowLeft className="mr-1.5 h-4 w-4" />Voltar</Button>
+            {activeStep === 1 && <Button type="button" variant="primary-modal" size="lg" disabled={!date || loading || loadError || missing || groups.length === 0} onClick={() => setActiveStep(2)}>Escolher operador<ArrowRight className="ml-2 h-4 w-4" /></Button>}
+            {activeStep === 2 && <Button type="button" variant="primary-modal" size="lg" disabled={!activeGroup} onClick={() => setActiveStep(3)}>{operatorFinalized ? "Revisar operador" : "Começar contagem"}<ArrowRight className="ml-2 h-4 w-4" /></Button>}
+            {activeStep === 3 && <Button type="button" variant="primary-modal" size="lg" disabled={!activeGroup || incomplete || missingNote || missingSupplyClassification} onClick={() => setActiveStep(4)}>Revisar finalização<ArrowRight className="ml-2 h-4 w-4" /></Button>}
+            {activeStep === 4 && (operatorFinalized
+              ? <Button type="button" variant="primary-modal" size="lg" onClick={() => setActiveStep(2)}>Voltar aos operadores<ArrowRight className="ml-2 h-4 w-4" /></Button>
+              : <Button type="button" variant="primary-modal" size="lg" disabled={!editable || !!working || !activeOperator || incomplete || missingNote || missingSupplyClassification} onClick={() => activeOperator && void finalizeOperator(activeOperator)}>{working === `finalize:${activeGroup?.operatorId}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Finalizar operador</Button>)}
+          </div>
+        </footer>
       </main>
     </DialogContent>
-  </Dialog>;
+  </Dialog><Dialog open={reopenTarget !== null} onOpenChange={(next) => { if (!next && !working) { setReopenTarget(null); setReopenReason(""); } }}>
+    <DialogContent className="rounded-[20px] sm:max-w-[460px]">
+      <DialogHeader><DialogTitle>Reabrir contagem de {reopenTarget?.name}</DialogTitle><DialogDescription>A reabertura libera somente este operador para alterações e exige uma justificativa.</DialogDescription></DialogHeader>
+      <Textarea value={reopenReason} maxLength={500} disabled={!!working} onChange={(event) => setReopenReason(event.target.value)} placeholder="Motivo obrigatório" />
+      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={!!working} onClick={() => { setReopenTarget(null); setReopenReason(""); }}>Cancelar</Button><Button type="button" disabled={!!working || reopenReason.trim().length < 3} onClick={() => void reopenOperator()}>{working?.startsWith("reopen:") && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar reabertura</Button></div>
+    </DialogContent>
+  </Dialog></>;
 }

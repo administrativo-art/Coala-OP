@@ -11,6 +11,7 @@ assert.equal(process.env.FIREBASE_PROJECT_ID, PROJECT_ID);
 assert.equal(process.env.GOOGLE_CLOUD_PROJECT, PROJECT_ID);
 
 const {
+  classifyCashSupply,
   finalizeCashClosure,
   finalizeCashClosureOperator,
   getCashClosure,
@@ -263,6 +264,168 @@ test("repository persiste fechamento, linhas, totais, transições e auditoria a
   }), actor);
   const workspaceAClosures = await listCashClosures({ workspaceId, limit: 10 });
   assert.deepEqual(workspaceAClosures.map((closure) => closure.id), [closureId]);
+});
+
+test("classifica somente fundo de caixa fora do esperado do malote desde agosto de 2026", async () => {
+  const workspaceId = "workspace-integration-cash-fund";
+  const kioskId = "kiosk-integration-cash-fund";
+  const date = "2026-08-02";
+  const closureId = cashClosureId(kioskId, date);
+  const built = builtClosure({ workspaceId, kioskId, date });
+  const cashBuiltLine = built.lines.find((line) => line.channel === "cash");
+  assert.ok(cashBuiltLine);
+  cashBuiltLine.metadata = {
+    ...cashBuiltLine.metadata,
+    supplyCents: 4_000,
+    cashMovements: [{
+      id: "supply-fund-1",
+      identitySource: "provider",
+      kind: "supply",
+      pdvDescription: "Supr. no.1491",
+      amountCents: 4_000,
+      occurredAt: `${date}T09:00:00`,
+      date,
+      operatorId: "operator-1",
+      terminalId: "terminal-1",
+      paymentMethodId: "0",
+      paymentMethodName: null,
+      isCash: false,
+      cancelled: false,
+    }],
+  };
+
+  await upsertClosureFromPdv(built, actor);
+  const initial = await getCashClosure(closureId);
+  const cashLine = initial?.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{
+      id: cashLine.id,
+      reportedCents: 10_000,
+      countedCents: 6_000,
+      note: "Diferença aguardando classificação do suprimento",
+    }],
+    actor,
+    { editReported: true, editCounted: true },
+  );
+  await assert.rejects(
+    () => finalizeCashClosureOperator(closureId, "operator-1", actor, { legacyImmediateAllocation: true }),
+    /Classifique todos os suprimentos/,
+  );
+
+  const classified = await classifyCashSupply(
+    closureId,
+    {
+      lineId: cashLine.id,
+      movementId: "supply-fund-1",
+      classification: "cash_fund",
+      workspaceId,
+    },
+    actor,
+  );
+  const classifiedCash = classified.lines.find((line) => line.channel === "cash");
+  assert.equal(classifiedCash?.expectedCents, 10_000);
+  assert.equal(classifiedCash?.reportedDifferenceCents, 0);
+  assert.equal(classifiedCash?.conferenceDifferenceCents, 0);
+  assert.equal(classifiedCash?.differenceCents, 0);
+
+  await upsertClosureFromPdv(built, actor);
+  const resynced = await getCashClosure(closureId);
+  assert.equal(resynced?.lines.find((line) => line.channel === "cash")?.metadata.supplyClassifications?.[0]?.kind, "cash_fund");
+  const finalized = await finalizeCashClosureOperator(closureId, "operator-1", actor, { legacyImmediateAllocation: true });
+  assert.equal(finalized.operator.countedCashCents, 6_000);
+  assert.equal(finalized.operator.cashDeposit.eligibleCents, 6_000);
+
+  const audit = await listCashClosureAuditLogs(workspaceId, closureId);
+  assert.equal(audit.some((entry) => entry.action === "supply_classified"), true);
+  await assert.rejects(
+    () => classifyCashSupply(
+      closureId,
+      {
+        lineId: cashLine.id,
+        movementId: "supply-fund-1",
+        classification: "supply",
+        workspaceId,
+      },
+      actor,
+    ),
+    /finalizado|editados/,
+  );
+});
+
+test("ressincronização preserva operador de agosto já finalizado sem pendência retroativa", async () => {
+  const workspaceId = "workspace-integration-finalized-history";
+  const kioskId = "kiosk-integration-finalized-history";
+  const date = "2026-08-03";
+  const closureId = cashClosureId(kioskId, date);
+  const original = builtClosure({ workspaceId, kioskId, date });
+
+  await upsertClosureFromPdv(original, actor);
+  const initial = await getCashClosure(closureId);
+  const cashLine = initial?.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, reportedCents: 10_000, countedCents: 10_000 }],
+    actor,
+    { editReported: true, editCounted: true },
+  );
+  const finalized = await finalizeCashClosureOperator(
+    closureId,
+    "operator-1",
+    actor,
+    { legacyImmediateAllocation: true },
+  );
+  assert.equal(finalized.operator.status, "approved");
+  assert.equal(finalized.operator.cashDeposit.eligibleCents, 10_000);
+
+  const resync = builtClosure({ workspaceId, kioskId, date });
+  const resyncCashLine = resync.lines.find((line) => line.channel === "cash");
+  assert.ok(resyncCashLine);
+  resyncCashLine.metadata = {
+    ...resyncCashLine.metadata,
+    supplyCents: 4_000,
+    cashMovements: [{
+      id: "historical-supply-1",
+      identitySource: "provider",
+      kind: "supply",
+      pdvDescription: "Supr. no.1492",
+      amountCents: 4_000,
+      occurredAt: `${date}T09:00:00`,
+      date,
+      operatorId: "operator-1",
+      terminalId: "terminal-1",
+      paymentMethodId: "0",
+      paymentMethodName: null,
+      isCash: false,
+      cancelled: false,
+    }],
+  };
+  await upsertClosureFromPdv(resync, actor);
+
+  const preserved = await getCashClosure(closureId);
+  const preservedOperator = preserved?.operators.find((operator) => operator.operatorId === "operator-1");
+  const preservedCashLine = preserved?.lines.find((line) => line.channel === "cash");
+  assert.equal(preservedOperator?.status, "approved");
+  assert.equal(preservedOperator?.cashDeposit.eligibleCents, 10_000);
+  assert.equal(preservedCashLine?.expectedCents, 10_000);
+  assert.equal(preservedCashLine?.countedCents, 10_000);
+  assert.equal(preservedCashLine?.differenceCents, 0);
+  assert.deepEqual(preservedCashLine?.metadata.supplyClassifications, []);
+  await assert.rejects(
+    () => classifyCashSupply(
+      closureId,
+      {
+        lineId: cashLine.id,
+        movementId: "historical-supply-1",
+        classification: "cash_fund",
+        workspaceId,
+      },
+      actor,
+    ),
+    /finalizado|editados/,
+  );
 });
 
 test("finaliza e aloca cada operador sem aguardar o restante do dia", async () => {

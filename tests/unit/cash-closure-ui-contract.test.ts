@@ -39,6 +39,10 @@ const withdrawalsPanelSource = readFileSync(
   path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-withdrawals-panel.tsx"),
   "utf8",
 );
+const suppliesPanelSource = readFileSync(
+  path.join(process.cwd(), "src/features/financial/cash-closures/components/cash-supplies-panel.tsx"),
+  "utf8",
+);
 
 test("contagem do Caixa não oferece atalho para copiar o esperado do PDV", () => {
   assert.doesNotMatch(dayPageSource, /Usar esperado/);
@@ -63,6 +67,7 @@ test("modal mostra todos os canais, fluxo das divergências e justificativa some
   assert.match(countingDialogSource, /Caixa informado/);
   assert.match(countingDialogSource, /Financeiro contado/);
   assert.match(countingDialogSource, /Resultado final/);
+  assert.match(countingDialogSource, /Financeiro × malote esperado/);
   assert.match(countingDialogSource, /ETAPA 3 DE 4 · CONFERÊNCIA/);
   assert.match(countingDialogSource, /CashWithdrawalsPanel[\s\S]*operatorId=\{activeGroup\.operatorId\}/);
   assert.doesNotMatch(countingDialogSource, /Classifique sangrias/);
@@ -83,6 +88,33 @@ test("classificação da sangria mostra a justificativa informada no PDV", () =>
   assert.match(withdrawalsPanelSource, /Esta sangria sempre cria uma nova despesa já quitada em espécie/);
   assert.match(withdrawalsPanelSource, /action: "create"/);
   assert.doesNotMatch(withdrawalsPanelSource, /Vincular despesa|Buscar despesas em aberto|existingExpenseId|mode === "link"/);
+  assert.match(withdrawalsPanelSource, /Sangrias deste operador/);
+});
+
+test("modal permite selecionar e reabrir o operador sem paginação manual", () => {
+  assert.match(countingDialogSource, /groups\.map\(\(group, index\)/);
+  assert.doesNotMatch(countingDialogSource, /Próximo operador|>Anterior</);
+  assert.match(countingDialogSource, /\/reopen`/);
+  assert.match(countingDialogSource, /operatorId: target\.operatorId, reason: reopenReason\.trim\(\)/);
+});
+
+test("sangrias aparecem junto da contagem e os cards principais não criam divisor vertical", () => {
+  assert.match(countingDialogSource, /activeStep === 3[\s\S]*CashWithdrawalsPanel/);
+  assert.match(countingDialogSource, /CashWithdrawalsPanel[\s\S]*operatorId=\{activeGroup\.operatorId\}/);
+  assert.match(sessionPageSource, /rounded-\[18px\] border-0 bg-ds-warm shadow-none/);
+  assert.doesNotMatch(sessionPageSource, /Unidades da sessão[\s\S]{0,300}border-b border-ds-border/);
+});
+
+test("suprimentos são classificados por operador entre fundo de caixa e suprimento", () => {
+  assert.match(countingDialogSource, /<CashSuppliesPanel/);
+  assert.match(countingDialogSource, /missingSupplyClassification/);
+  assert.match(countingDialogSource, /operatorStatus: activeOperator\?\.status/);
+  assert.match(countingDialogSource, /Financeiro × malote esperado/);
+  assert.match(suppliesPanelSource, /Fundo de caixa/);
+  assert.match(suppliesPanelSource, /Suprimento/);
+  assert.match(suppliesPanelSource, /não vai no malote/);
+  assert.match(suppliesPanelSource, /Finalizado · histórico preservado/);
+  assert.match(suppliesPanelSource, /não foi alterado pela nova regra/);
 });
 
 test("modal de contagem respeita a viewport e o fluxo interno usa o retorno canônico", () => {
