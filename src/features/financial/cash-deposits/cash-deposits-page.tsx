@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ptBR } from "date-fns/locale";
 import {
   AlertTriangle,
   Barcode,
   Banknote,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -25,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -94,11 +97,11 @@ type InterReadiness = {
   payer?: { name: string; cpfCnpj: string };
   issueSettings?: {
     dueBusinessDays: number;
-    suggestedDueDates: Record<"1" | "2", string>;
+    dueDate: string;
+    minimumDueDate: string;
+    maximumDueDate: string;
   };
 };
-
-type DueChoice = "1" | "2" | "custom";
 
 function formatCnpj(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -111,6 +114,20 @@ function formatShortDate(value: string | undefined) {
   if (!value) return "—";
   const [, month, day] = value.split("-");
   return `${day}/${month}`;
+}
+
+function calendarDateFromKey(value: string | undefined) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return undefined;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function calendarDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function responseErrorMessage(payload: unknown, fallback: string) {
@@ -139,6 +156,14 @@ type DepositReport = {
 
 function quantityRecord(values: readonly number[]) {
   return Object.fromEntries(values.map((value) => [value, 0])) as Record<number, number>;
+}
+
+function sessionQuantityRecord(session: CashCountingSession) {
+  const quantities = quantityRecord(CASH_COUNTING_DENOMINATION_VALUES_CENTS);
+  for (const denomination of session.denominations) {
+    quantities[denomination.valueCents] = denomination.quantity;
+  }
+  return quantities;
 }
 
 function DenominationGrid({
@@ -201,10 +226,11 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<CashDepositBatch | null>(null);
   const [coinHoldCents, setCoinHoldCents] = useState<number | null>(0);
+  const [customDueDateEnabled, setCustomDueDateEnabled] = useState(false);
+  const [customDueDate, setCustomDueDate] = useState("");
+  const [dueVisibleMonth, setDueVisibleMonth] = useState(() => new Date());
   const [exchangeBalance, setExchangeBalance] = useState<CashCoinBalance | null>(null);
   const [exchangeCents, setExchangeCents] = useState<number | null>(null);
-  const [dueChoice, setDueChoice] = useState<DueChoice>("1");
-  const [customDueDate, setCustomDueDate] = useState("");
   const [cancelBatch, setCancelBatch] = useState<CashDepositBatch | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [report, setReport] = useState<DepositReport | null>(null);
@@ -240,6 +266,8 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
       const nextCountingSessions = (payload.countingSessions ?? []) as CashCountingSession[];
       setCountingSessions(nextCountingSessions);
       setCountingSessionsHasMore(payload.countingSessionsHasMore === true);
+      const focusedSession = nextCountingSessions.find((session) => session.id === focusSessionId);
+      if (focusedSession) setQuantities(sessionQuantityRecord(focusedSession));
       setSelectedCountingSession((current) => {
         const preferredId = current?.id ?? focusSessionId;
         return nextCountingSessions.find((session) => session.id === preferredId) ?? null;
@@ -369,19 +397,16 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
   }
 
   async function prepareIssue(batch: CashDepositBatch) {
-    setDueChoice("1");
-    setCustomDueDate("");
     setCoinHoldCents(batch.coinHoldCents);
+    setCustomDueDateEnabled(false);
+    setCustomDueDate(inter.issueSettings?.dueDate ?? "");
+    setDueVisibleMonth(calendarDateFromKey(inter.issueSettings?.dueDate) ?? new Date());
     setSelected(batch);
     await ensureBatchComposition(batch);
   }
 
   async function issueSelected() {
     if (!selected) return;
-    if (dueChoice === "custom" && !customDueDate) {
-      toast({ variant: "destructive", title: "Escolha a data de vencimento." });
-      return;
-    }
     try {
       const prepared = selected.countingSessionId
         ? { batch: selected }
@@ -397,9 +422,7 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
         setSelected(null);
         return;
       }
-      await postAction(`/api/financial/cash-deposits/${encodeURIComponent(selected.id)}/issue`, dueChoice === "custom"
-        ? { dueDate: customDueDate }
-        : { dueBusinessDays: Number(dueChoice) });
+      await postAction(`/api/financial/cash-deposits/${encodeURIComponent(selected.id)}/issue`, customDueDateEnabled ? { dueDate: customDueDate } : {});
       toast({ title: "Boleto enviado ao Inter", description: "A situação foi confirmada por consulta ativa." });
       setSelected(null);
     } catch (error) {
@@ -550,7 +573,7 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
       </CardHeader>
       <CardContent className="space-y-5 p-4 sm:p-6">
         {countingSessionsHasMore && <div className="rounded-xl border border-ds-alert-border bg-ds-warn-bg px-4 py-3 text-sm text-ds-alert-ink">A fila possui mais de 50 sessões. As mais antigas são exibidas primeiro; ao concluir uma, a próxima aparecerá automaticamente.</div>}
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{countingSessions.map((session) => <button key={session.id} type="button" onClick={() => { setSelectedCountingSession(session); setQuantities(quantityRecord(CASH_COUNTING_DENOMINATION_VALUES_CENTS)); }} className={cn("rounded-xl border p-3 text-left transition-all motion-reduce:transform-none motion-reduce:transition-none", selectedCountingSession?.id === session.id ? "border-ds-accent-soft bg-ds-accent-soft ring-2 ring-ds-accent" : "border-ds-border hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-xs")}><strong className="block truncate text-sm">{session.kioskNames.join(" · ")}</strong><span className="mt-1 block text-xs text-ds-ink-muted">{session.finalizedOperatorCount} operador(es) · {formatBRL(session.depositEligibleCents)}</span></button>)}</div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{countingSessions.map((session) => <button key={session.id} type="button" onClick={() => { setSelectedCountingSession(session); setQuantities(sessionQuantityRecord(session)); }} className={cn("rounded-xl border p-3 text-left transition-all motion-reduce:transform-none motion-reduce:transition-none", selectedCountingSession?.id === session.id ? "border-ds-accent-soft bg-ds-accent-soft ring-2 ring-ds-accent" : "border-ds-border hover:-translate-y-0.5 hover:border-ds-accent-soft hover:shadow-xs")}><strong className="block truncate text-sm">{session.kioskNames.join(" · ")}</strong><span className="mt-1 block text-xs text-ds-ink-muted">{session.finalizedOperatorCount} operador(es) · {formatBRL(session.depositEligibleCents)}</span></button>)}</div>
 
         <Dialog open={selectedCountingSession !== null} onOpenChange={(open) => { if (!open) setSelectedCountingSession(null); }}>
           <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[960px] sm:p-0">
@@ -683,11 +706,43 @@ export function CashDepositsPage({ focusSessionId }: { focusSessionId?: string }
             <div><span className="text-[11px] text-ds-ink-muted">Cédulas no boleto</span><strong className={cn("mt-1 block font-mono", (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0) && "text-ds-danger")}>{formatBRL(Math.max(0, (selected?.grossTotalCents ?? 0) - (coinHoldCents ?? 0)))}</strong></div>
           </div> : <div className="rounded-xl border border-ds-border bg-ds-ok-bg p-4 text-sm text-ds-ok"><strong>Composição física já confirmada na sessão.</strong><p className="mt-1 text-xs">Este malote contém apenas cédulas; as moedas ficaram reservadas no caixa ou para troca.</p></div>}
           <div><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Pagador</p><div className="rounded-lg border border-ds-border bg-ds-muted px-3 py-2.5 text-sm font-semibold text-ds-ink-2">{inter.payer ? `${inter.payer.name} · ${formatCnpj(inter.payer.cpfCnpj)}` : "Pagador institucional configurado"}</div></div>
-          <div><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Vencimento</p><div className="grid grid-cols-3 gap-2"><Button type="button" variant="outline" className={cn("h-10 rounded-lg text-xs font-bold", dueChoice === "1" && "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft")} onClick={() => setDueChoice("1")}>D+1 · {formatShortDate(inter.issueSettings?.suggestedDueDates["1"])}</Button><Button type="button" variant="outline" className={cn("h-10 rounded-lg text-xs font-bold", dueChoice === "2" && "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft")} onClick={() => setDueChoice("2")}>D+2 · {formatShortDate(inter.issueSettings?.suggestedDueDates["2"])}</Button><Button type="button" variant="outline" className={cn("h-10 rounded-lg text-xs font-bold", dueChoice === "custom" && "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink hover:bg-ds-accent-soft")} onClick={() => setDueChoice("custom")}>Escolher</Button></div>{dueChoice === "custom" && <input type="date" value={customDueDate} onChange={(event) => setCustomDueDate(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-ds-border bg-white px-3 text-sm outline-hidden focus:border-ds-accent-soft focus:ring-2 focus:ring-ds-accent" />}</div>
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Vencimento</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setCustomDueDateEnabled(false)} className={cn("rounded-xl border px-3 py-3 text-left transition-colors", !customDueDateEnabled ? "border-ds-accent bg-ds-accent-soft text-ds-accent-ink" : "border-ds-border bg-white text-ds-ink-2")}>
+                <span className="block text-[11px] font-bold uppercase tracking-wide">Automático</span>
+                <strong className="mt-1 block text-sm">D+{inter.issueSettings?.dueBusinessDays ?? 7} · {formatShortDate(inter.issueSettings?.dueDate)}</strong>
+              </button>
+              <button type="button" onClick={() => { setCustomDueDateEnabled(true); setCustomDueDate((current) => current || inter.issueSettings?.dueDate || ""); }} className={cn("rounded-xl border px-3 py-3 text-left transition-colors", customDueDateEnabled ? "border-ds-accent bg-ds-accent-soft text-ds-accent-ink" : "border-ds-border bg-white text-ds-ink-2")}>
+                <span className="block text-[11px] font-bold uppercase tracking-wide">Personalizado</span>
+                <strong className="mt-1 block text-sm">Outra data</strong>
+              </button>
+            </div>
+            {customDueDateEnabled && <div className="mt-3 overflow-hidden rounded-xl border border-ds-border bg-white">
+              <div className="flex items-center gap-2 border-b border-ds-border px-3 py-2 text-xs font-semibold text-ds-ink-muted"><CalendarDays className="h-4 w-4" />Escolha entre hoje e {inter.issueSettings?.maximumDueDate?.split("-").reverse().join("/") ?? "60 dias"}</div>
+              <Calendar
+                mode="single"
+                locale={ptBR}
+                month={dueVisibleMonth}
+                onMonthChange={setDueVisibleMonth}
+                selected={calendarDateFromKey(customDueDate)}
+                onSelect={(value) => value && setCustomDueDate(calendarDateKey(value))}
+                fromDate={calendarDateFromKey(inter.issueSettings?.minimumDueDate)}
+                toDate={calendarDateFromKey(inter.issueSettings?.maximumDueDate)}
+                disabled={[
+                  { before: calendarDateFromKey(inter.issueSettings?.minimumDueDate) ?? new Date() },
+                  { after: calendarDateFromKey(inter.issueSettings?.maximumDueDate) ?? new Date() },
+                ]}
+                className="mx-auto"
+                classNames={{ day_selected: "bg-ds-accent text-white hover:bg-ds-accent-hover hover:text-white focus:bg-ds-accent focus:text-white", day_today: "border border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink" }}
+              />
+            </div>}
+            <p className="mt-1.5 text-xs text-ds-ink-muted">D+7 dias úteis é o padrão. Fins de semana e feriados configurados não entram na contagem.</p>
+          </div>
           <div className="rounded-xl border border-ds-border bg-ds-muted p-4"><p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{selected?.countingSessionId ? "Cédulas do malote" : `${selected?.dates.length ?? 0} dias neste bloco`}</p><div className="flex flex-wrap gap-1.5">{selected?.countingSessionId ? cashDepositDenominationRows(selected.denominations, "note").map((item) => <span key={item.valueCents} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{item.quantity}× {formatBRL(item.valueCents)}</span>) : loadingBatchIds.has(selected?.id ?? "") ? <Loader2 className="h-4 w-4 animate-spin text-ds-ink-faint" /> : selectedComposition.length > 0 ? selectedComposition.map((day) => <span key={day.date} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{day.date.slice(5).split("-").reverse().join("/")} · {formatBRL(day.amountCents)}</span>) : selected?.dates.map((date) => <span key={date} className="inline-flex h-6 items-center rounded-full border border-ds-border bg-white px-2.5 text-[11px] font-semibold text-ds-ink-muted">{date.slice(5).split("-").reverse().join("/")}</span>)}</div></div>
           {!inter.ready && <div className="rounded-lg border border-ds-alert-border bg-ds-warn-bg p-3 text-sm text-ds-alert-ink">{inter.reason}</div>}
         </div>
-        <DialogFooter className="border-t border-ds-border px-6 py-4"><Button variant="outline" className="rounded-lg" onClick={() => setSelected(null)}>Cancelar</Button><Button className="rounded-lg bg-ds-accent font-bold text-white hover:bg-ds-accent-hover" onClick={() => void issueSelected()} disabled={(!selected?.countingSessionId && (selected?.grossTotalCents ?? 0) !== (coinHoldCents ?? 0) && !inter.ready) || (selected?.countingSessionId && !inter.ready) || submitting || (!selected?.countingSessionId && (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0)) || (dueChoice === "custom" && !customDueDate)}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : !selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? <Coins className="mr-2 h-4 w-4" /> : <Barcode className="mr-2 h-4 w-4" />}{!selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? "Separar moedas" : "Emitir boleto"}</Button></DialogFooter>
+        <DialogFooter className="border-t border-ds-border px-6 py-4"><Button variant="outline" className="rounded-lg" onClick={() => setSelected(null)}>Cancelar</Button><Button className="rounded-lg bg-ds-accent font-bold text-white hover:bg-ds-accent-hover" onClick={() => void issueSelected()} disabled={(customDueDateEnabled && !customDueDate) || (!selected?.countingSessionId && (selected?.grossTotalCents ?? 0) !== (coinHoldCents ?? 0) && !inter.ready) || (selected?.countingSessionId && !inter.ready) || submitting || (!selected?.countingSessionId && (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0))}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : !selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? <Coins className="mr-2 h-4 w-4" /> : <Barcode className="mr-2 h-4 w-4" />}{!selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? "Separar moedas" : "Emitir boleto"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 

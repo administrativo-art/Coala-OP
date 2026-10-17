@@ -354,6 +354,44 @@ test("finaliza e aloca cada operador sem aguardar o restante do dia", async () =
   assert.equal(batch.items.filter((item) => item.closureId === closureId).reduce((sum, item) => sum + item.amountCents, 0), 17_000);
 });
 
+test("finalização exige justificativa somente da falta confirmada pelo Financeiro", async () => {
+  const workspaceId = "workspace-integration-finance-note-only";
+  const kioskId = "kiosk-integration-finance-note-only";
+  const date = "2035-07-08";
+  const closureId = cashClosureId(kioskId, date);
+
+  await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
+  const initial = await getCashClosure(closureId);
+  assert.ok(initial);
+  const cashLine = initial.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+
+  await saveCashClosureDraft(
+    closureId,
+    [{
+      id: cashLine.id,
+      reportedCents: 9_800,
+      countedCents: 9_900,
+      note: "Falta confirmada pelo Financeiro",
+    }],
+    actor,
+    { editReported: true, editCounted: true },
+  );
+
+  await finalizeCashClosureOperator(
+    closureId,
+    "operator-1",
+    actor,
+    { legacyImmediateAllocation: true },
+  );
+  const finalized = await getCashClosure(closureId);
+  assert.ok(finalized);
+  const finalizedCashLine = finalized.lines.find((line) => line.channel === "cash");
+  assert.ok(finalizedCashLine);
+  assert.equal(finalizedCashLine.reportedNote, null);
+  assert.equal(finalizedCashLine.note, "Falta confirmada pelo Financeiro");
+});
+
 test("preserva a contagem na DRE sem criar depósito quando o fechamento é somente DRE", async () => {
   const workspaceId = "workspace-integration-dre-only";
   const kioskId = "kiosk-integration-dre-only";
@@ -537,8 +575,80 @@ test("sessão bloqueia a unidade, recebe operador sem depósito precoce e cria m
     /já foram separadas durante a composição física/,
   );
 
+  await reopenCashClosureWithDepositHandling({
+    workspaceId,
+    closureId,
+    operatorId: "operator-1",
+    reason: "Recontagem depois da composição e antes do boleto",
+    actor,
+  });
+  const reopenedAfterComposition = await getCashCountingSession(session.id);
+  assert.equal(reopenedAfterComposition?.session.status, "open");
+  assert.equal(reopenedAfterComposition?.session.finalizedOperatorCount, 0);
+  assert.equal(reopenedAfterComposition?.session.denominationsConfirmedAt, null);
+  assert.equal(reopenedAfterComposition?.session.denominationTotalCents, 10_000);
+  assert.equal(reopenedAfterComposition?.session.noteTotalCents, 5_000);
+  assert.equal(reopenedAfterComposition?.session.coinReturnedToTillCents, 5_000);
+  assert.deepEqual(reopenedAfterComposition?.session.denominations.filter(({ quantity }) => quantity > 0).map(({ valueCents, quantity }) => ({ valueCents, quantity })), [
+    { valueCents: 5_000, quantity: 1 },
+    { valueCents: 100, quantity: 50 },
+  ]);
+  assert.deepEqual(reopenedAfterComposition?.session.bags, []);
+  assert.deepEqual(reopenedAfterComposition?.session.batchIds, []);
+  assert.equal((await financialDbAdmin.collection("cashDepositBatches").doc(prepared.batches[0].id).get()).exists, false);
+
+  await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
+  const recomposed = await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
+  assert.equal(recomposed.status, "deposit_ready");
+  assert.equal(recomposed.denominationsConfirmedAt !== null, true);
+  assert.deepEqual(recomposed.denominations.filter(({ quantity }) => quantity > 0).map(({ valueCents, quantity }) => ({ valueCents, quantity })), [
+    { valueCents: 5_000, quantity: 1 },
+    { valueCents: 100, quantity: 50 },
+  ]);
+  assert.equal(recomposed.batchIds.length, 1);
+  assert.equal((await financialDbAdmin.collection("cashDepositBatches").doc(recomposed.batchIds[0]).get()).exists, true);
+
   const nextSession = await createCashCountingSession({ workspaceId, units, actor });
   assert.equal(nextSession.status, "open");
+});
+
+test("sessão de contagem não reabre depois que o boleto foi emitido", async () => {
+  const workspaceId = "workspace-integration-issued-session-reopen";
+  const kioskId = "kiosk-issued-session-reopen";
+  const { session, closureId } = await finalizeSingleOperatorInSession({
+    workspaceId,
+    kioskId,
+    date: "2035-10-03",
+    countedCents: 10_000,
+  });
+  await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
+  const prepared = await confirmCashCountingSessionDenominations({
+    workspaceId,
+    sessionId: session.id,
+    entries: [{ valueCents: 10_000, quantity: 1 }],
+    actor,
+  });
+  const batchRef = financialDbAdmin.collection("cashDepositBatches").doc(prepared.batches[0].id);
+  await batchRef.set({
+    status: "issued",
+    issuedAt: new Date().toISOString(),
+    issuedBy: actor.userId,
+    interCobrancaId: "cobranca-session-issued",
+    interCobrancaIds: ["cobranca-session-issued"],
+  }, { merge: true });
+
+  await assert.rejects(
+    () => reopenCashClosureWithDepositHandling({
+      workspaceId,
+      closureId,
+      operatorId: "operator-1",
+      reason: "Tentativa depois da emissão do boleto",
+      actor,
+    }),
+    /boleto emitido/,
+  );
+  assert.equal((await getCashCountingSession(session.id))?.session.status, "deposit_ready");
+  assert.equal((await batchRef.get()).exists, true);
 });
 
 test("locks globais resolvem concorrência por unidade e permitem unidades diferentes", async () => {

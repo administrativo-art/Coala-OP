@@ -55,7 +55,7 @@ function throwFinalizationError(cause: unknown): never {
     throw new AppError({
       code: "CASH_CLOSURE_DIVERGENCE_NOTE_REQUIRED",
       kind: "VALIDATION",
-      safeMessage: "Informe as justificativas das faltas do Caixa e do Financeiro antes de finalizar.",
+      safeMessage: "O Financeiro deve justificar cada falta confirmada antes de finalizar.",
       cause,
     });
   }

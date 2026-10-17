@@ -8,7 +8,12 @@ import {
   type InterCobrancaPayer,
 } from "@/lib/integrations/inter/config.server";
 import { todayInClosureTimezone } from "../cash-closures/date";
-import { addBusinessDays } from "./inter-cobranca";
+import {
+  addBusinessDays,
+  addCalendarDays,
+  INTER_COBRANCA_DUE_BUSINESS_DAYS,
+  INTER_COBRANCA_MAX_DUE_DAYS,
+} from "./inter-cobranca";
 import { interCobrancaPayerFromCompany } from "./payer";
 
 export async function resolveConfiguredInterCobrancaPayer(): Promise<InterCobrancaPayer> {
@@ -34,11 +39,10 @@ export async function configuredInterCobrancaReadiness() {
       ...readiness,
       payer: { name: payer.nome, cpfCnpj: payer.cpfCnpj },
       issueSettings: {
-        dueBusinessDays: settings.dueBusinessDays,
-        suggestedDueDates: {
-          1: addBusinessDays(today, 1, settings.holidays),
-          2: addBusinessDays(today, 2, settings.holidays),
-        },
+        dueBusinessDays: INTER_COBRANCA_DUE_BUSINESS_DAYS,
+        dueDate: addBusinessDays(today, INTER_COBRANCA_DUE_BUSINESS_DAYS, settings.holidays),
+        minimumDueDate: today,
+        maximumDueDate: addCalendarDays(today, INTER_COBRANCA_MAX_DUE_DAYS),
       },
     };
   } catch {

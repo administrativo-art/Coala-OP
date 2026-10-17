@@ -7,7 +7,7 @@ const { WORKSPACE_ID } = await import("../../src/lib/workspace.ts");
 const { Timestamp } = await import("firebase-admin/firestore");
 const { upsertClosureFromPdv, getCashClosure, saveCashClosureDraft, finalizeCashClosure, finalizeCashClosureOperator } = await import("../../src/features/financial/cash-closures/repository.server.ts");
 const { reopenCashClosureWithDepositHandling } = await import("../../src/features/financial/cash-deposits/repository.server.ts");
-const { classifyCashWithdrawal, listWithdrawalClassifications, listWithdrawalExpenseCandidates } = await import("../../src/features/financial/cash-closures/withdrawal-classification.server.ts");
+const { classifyCashWithdrawal, listWithdrawalClassifications } = await import("../../src/features/financial/cash-closures/withdrawal-classification.server.ts");
 const { registerReportedPayment, queueMatchedBankPayment } = await import("../../src/features/financial/obligations/service.server.ts");
 
 const prefix = "withdrawal-integration";
@@ -67,7 +67,6 @@ test.after(async () => {
     for (const doc of snapshot.docs) await db.recursiveDelete(doc.ref);
   }
 });
-
 test("bloqueia finalização legada sem classificação e cria apenas uma despesa sob concorrência/retry", async () => {
   const { id, source } = await setup("2035-08-01");
   await assert.rejects(finalizeCashClosure(id, actor), rejectedCode("CLASSIFICATION_REQUIRED"));
@@ -87,37 +86,16 @@ test("bloqueia finalização legada sem classificação e cria apenas uma despes
   await assert.rejects(registerReportedPayment(results[0].classification.expenseId, { idempotencyKey: "x" }, { uid: prefix }), error => error.code === "EXPENSE_SETTLED_AT_SOURCE");
   await assert.rejects(queueMatchedBankPayment({ batch: db.batch(), expenseId: results[0].classification.expenseId, expense, bankTransactionId: "none", principalAmount: 10, cashAmount: 10, paidAt: Timestamp.now(), actor: { uid: prefix } }), error => error.code === "EXPENSE_SETTLED_AT_SOURCE");
 });
-
-test("vincula avulsa real sem workspace e parcela única, preserva notas, restaura sem nova despesa", async () => {
+test("classificação manual rejeita vínculo com despesa existente", async () => {
   const { id, source } = await setup("2035-08-02");
   const ref = own(db.collection("expenses").doc(`${prefix}-manual`));
-  const dueDate = Timestamp.fromDate(new Date("2035-08-05T12:00:00Z"));
-  const original = { obligationId: `obl_${ref.id}`, totalValue: 10, description: "Compra avulsa", status: "pending", paymentMethod: "single",
-    competenceMonth: "2035-08", competenceDate: dueDate, dueDate, accountPlan: accountId, accountId, accountPlanName: "Limpeza",
-    resultCenterId: centerId, resultCenter: "Centro exclusivo", resultCenterName: "Centro exclusivo",
-    installments: [{ number: 1, dueDate, value: 10, status: "pending" }], plannedBankAccountId: null, plannedPaymentMethodType: null,
-    hasAccountAllocations: false, accountAllocations: null, hasPersonAllocations: false, personAllocations: null, isApportioned: false, apportionments: null, notes: "Original" };
-  await ref.set(original);
-  const candidates = await listWithdrawalExpenseCandidates(id, source.sourceId, centerId, undefined, context);
-  assert.ok(candidates.candidates.some(row => row.id === ref.id));
-  const input = { action: "link", sourceId: source.sourceId, fingerprint: source.fingerprint, existingExpenseId: ref.id };
-  assert.equal((await classify(id, input)).classification.expenseId, ref.id);
-  assert.equal((await classify(id, input)).idempotent, true);
-  const paid = (await ref.get()).data();
-  assert.equal(paid.workspaceId, WORKSPACE_ID);
-  assert.equal(paid.installments[0].status, "paid");
-  assert.equal(paid.installments[0].paidAt.toMillis(), paid.paidAt.toMillis());
-  await ref.update({ notes: "Anotação posterior" });
-  await assert.rejects(classifyCashWithdrawal(id, { action: "unlink", sourceId: source.sourceId }, context), rejectedCode("INPUT_INVALID"));
-  await classify(id, { action: "unlink", sourceId: source.sourceId, reason: "Vínculo incorreto" });
-  const restored = (await ref.get()).data();
-  assert.equal(restored.sourceSettlement, undefined);
-  assert.equal(restored.workspaceId, undefined);
-  assert.deepEqual(restored.installments, original.installments);
-  assert.equal(restored.status, "pending");
-  assert.equal(restored.notes, "Anotação posterior");
+  await ref.set({ workspaceId: WORKSPACE_ID, totalValue: 10, description: "Compra avulsa", status: "pending" });
+  await assert.rejects(
+    classifyCashWithdrawal(id, { action: "link", sourceId: source.sourceId, fingerprint: source.fingerprint, existingExpenseId: ref.id }, context),
+    rejectedCode("LINK_DISABLED"),
+  );
+  assert.equal((await ref.get()).get("status"), "pending");
 });
-
 test("resync/reabertura não duplica; origem alterada exige correção e recertifica a contagem", async () => {
   const { id, source } = await setup("2035-08-03");
   const first = await classify(id, createInput(source));
@@ -218,30 +196,4 @@ test("sangria retirada pelo PDV exige desfazer a despesa, mesmo quando a linha c
   assert.equal((await db.collection("expenses").doc(first.classification.expenseId).get()).data().status, "cancelled");
   await upsertClosureFromPdv(built("2035-08-06"), actor);
   assert.equal((await listWithdrawalClassifications(id, context)).sources.length, 1);
-});
-
-test("batch bancário preparado antes da classificação não pode sobrescrever quitação na origem", async () => {
-  const { id, source } = await setup("2035-08-07");
-  const ref = own(db.collection("expenses").doc(`${prefix}-bank-race`));
-  const expense = { workspaceId: WORKSPACE_ID, totalValue: 10, description: "Despesa avulsa", status: "pending", paymentMethod: "single", competenceMonth: "2035-08", accountId, accountPlan: accountId, resultCenterId: centerId };
-  await ref.set(expense);
-  const batch = db.batch();
-  const match = await queueMatchedBankPayment({ batch, expenseId: ref.id, expense, bankTransactionId: `${prefix}-statement`, principalAmount: 10, cashAmount: 10, paidAt: Timestamp.now(), actor: { uid: prefix } });
-  batch.update(ref, match.expensePatch);
-  await classify(id, { action: "link", sourceId: source.sourceId, fingerprint: source.fingerprint, existingExpenseId: ref.id });
-  await assert.rejects(batch.commit(), error => error.code === 9);
-  assert.equal((await db.collection("payments").doc(match.paymentId).get()).exists, false);
-  assert.equal((await ref.get()).data().sourceSettlement.sourceId, source.sourceId);
-
-  // Ordinary matching still commits with the optimistic precondition in place.
-  const control = own(db.collection("expenses").doc(`${prefix}-ordinary-bank`));
-  await control.set(expense);
-  const ordinaryBatch = db.batch();
-  const ordinary = await queueMatchedBankPayment({ batch: ordinaryBatch, expenseId: control.id, expense, bankTransactionId: `${prefix}-control`, principalAmount: 10, cashAmount: 10, paidAt: Timestamp.now(), actor: { uid: prefix } });
-  own(db.collection("payments").doc(ordinary.paymentId));
-  own(db.collection("financialObligations").doc(ordinary.obligationId));
-  own(db.collection("obligationPaymentLinks").doc(ordinary.linkId));
-  ordinaryBatch.update(control, ordinary.expensePatch);
-  await ordinaryBatch.commit();
-  assert.equal((await control.get()).data().status, "paid");
-});
+}); // cash-withdrawal-classification integration coverage

@@ -5,9 +5,11 @@ import {
   addBusinessDays,
   buildInterCobrancaIssueInput,
   deterministicSeuNumero,
+  INTER_COBRANCA_DUE_BUSINESS_DAYS,
   mapInterSituation,
   parseInterMoneyToCents,
 } from "../../src/features/financial/cash-deposits/inter-cobranca";
+import { issueCashDepositSchema } from "../../src/features/financial/cash-deposits/schemas";
 import type { CashDepositBatch } from "../../src/features/financial/cash-deposits/types";
 import { interCobrancaPayerFromCompany } from "../../src/features/financial/cash-deposits/payer";
 import type { NormalizedCompanyData } from "../../src/lib/company/company-lookup-types";
@@ -118,48 +120,74 @@ test("unidades com nomes iniciados por Quiosque recebem referências bancárias 
   assert.notEqual(joaoPaulo, tirirical);
 });
 
-test("D+2 útil pula fim de semana e feriado configurado", () => {
+test("dias úteis pulam fim de semana e feriado configurado", () => {
   assert.equal(addBusinessDays("2026-08-07", 2), "2026-08-11");
   assert.equal(addBusinessDays("2026-08-07", 2, ["2026-08-10"]), "2026-08-12");
 });
 
-test("valor mínimo de 250 centavos é aceito e convertido sem drift", () => {
+test("valor mínimo é aceito e a cobrança recebe vencimento padrão em D+7 útil", () => {
   const input = buildInterCobrancaIssueInput({
     batch: batch(250),
     attempt: 1,
     payer,
-    dueBusinessDays: 2,
     numDiasAgenda: 30,
     today: "2026-08-03",
   });
   assert.equal(input.valorNominal, 2.5);
-  assert.equal(input.dataVencimento, "2026-08-05");
+  assert.equal(INTER_COBRANCA_DUE_BUSINESS_DAYS, 7);
+  assert.equal(input.dataVencimento, "2026-08-12");
   assert.equal(parseInterMoneyToCents("2.5"), 250);
 });
 
-test("vencimento escolhido no modal prevalece sobre o prazo padrão", () => {
+test("D+7 útil respeita fim de semana e feriado configurado", () => {
   const input = buildInterCobrancaIssueInput({
     batch: batch(500_000),
     attempt: 1,
     payer,
-    dueBusinessDays: 2,
-    dueDate: "2026-08-06",
+    numDiasAgenda: 30,
+    holidays: ["2026-08-10"],
+    today: "2026-08-07",
+  });
+  assert.equal(input.dataVencimento, "2026-08-19");
+});
+
+test("uma data personalizada substitui D+7 sem alterar os demais dados da cobrança", () => {
+  const input = buildInterCobrancaIssueInput({
+    batch: batch(250),
+    attempt: 1,
+    payer,
+    dueDate: "2026-08-20",
     numDiasAgenda: 30,
     today: "2026-08-03",
   });
-  assert.equal(input.dataVencimento, "2026-08-06");
+  assert.equal(input.dataVencimento, "2026-08-20");
+  assert.equal(input.valorNominal, 2.5);
 });
 
-test("vencimento escolhido no modal é limitado aos próximos 60 dias", () => {
+test("a API aceita apenas data personalizada no formato canônico", () => {
+  assert.equal(issueCashDepositSchema.safeParse({}).success, true);
+  assert.equal(issueCashDepositSchema.safeParse({ dueDate: "2026-08-06" }).success, true);
+  assert.equal(issueCashDepositSchema.safeParse({ dueBusinessDays: 1 }).success, false);
+  assert.equal(issueCashDepositSchema.safeParse({ dueDate: "06/08/2026" }).success, false);
+});
+
+test("vencimento personalizado deve ficar entre hoje e os próximos 60 dias", () => {
   assert.throws(() => buildInterCobrancaIssueInput({
-    batch: batch(500_000),
+    batch: batch(250),
     attempt: 1,
     payer,
-    dueBusinessDays: 2,
-    dueDate: "2026-10-15",
+    dueDate: "2026-08-02",
     numDiasAgenda: 30,
     today: "2026-08-03",
-  }), /próximos 60 dias/i);
+  }), /entre hoje e os próximos 60 dias/i);
+  assert.throws(() => buildInterCobrancaIssueInput({
+    batch: batch(250),
+    attempt: 1,
+    payer,
+    dueDate: "2026-10-03",
+    numDiasAgenda: 30,
+    today: "2026-08-03",
+  }), /entre hoje e os próximos 60 dias/i);
 });
 
 test("valor abaixo do mínimo não é emitido", () => {
@@ -167,7 +195,6 @@ test("valor abaixo do mínimo não é emitido", () => {
     batch: batch(249),
     attempt: 1,
     payer,
-    dueBusinessDays: 2,
     numDiasAgenda: 30,
     today: "2026-08-03",
   }), /valor mínimo/i);

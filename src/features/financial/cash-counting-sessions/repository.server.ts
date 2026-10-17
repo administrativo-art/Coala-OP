@@ -8,7 +8,6 @@ import type { CashClosure, CashClosureActor, CashClosureOperator } from "@/featu
 import { CASH_DEPOSIT_MAX_CENTS, type CashDepositBatch, type CashDepositBatchItem } from "@/features/financial/cash-deposits/types";
 import { buildCashCountingBags, normalizeCashCountingDenominations } from "./denominations";
 import type {
-  CashCountingDenomination,
   CashCountingSession,
   CashCountingSessionAuditAction,
   CashCountingSessionAuditLog,
@@ -562,11 +561,36 @@ export async function prepareCashCountingSessionOperatorDetachment(
   if (!sessionSnapshot.exists) throw new Error("Sessão de contagem não encontrada.");
   const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
   if (session.workspaceId !== input.workspaceId) throw new Error("Sessão de contagem não encontrada.");
-  const canReturnToCounting = session.status === "counted"
-    || (session.status === "completed" && !session.denominationsConfirmedAt && session.batchIds.length === 0);
+  const canReturnToCounting = ["counted", "deposit_ready", "completed"].includes(session.status);
   if (session.status !== "open" && !canReturnToCounting) {
-    throw new Error("A composição física da sessão já foi confirmada; a correção exige um ajuste auditado de depósito.");
+    throw new Error("A sessão de contagem não pode ser reaberta neste estado.");
   }
+  const compositionBatchRefs = canReturnToCounting
+    ? session.batchIds.map((batchId) => financialDbAdmin.collection(DEPOSIT_BATCHES).doc(batchId))
+    : [];
+  const compositionBatchSnapshots = await Promise.all(compositionBatchRefs.map((ref) => transaction.get(ref)));
+  if (compositionBatchSnapshots.some((snapshot) => !snapshot.exists)) {
+    throw new Error("A composição física da sessão está inconsistente e não pode ser removida com segurança.");
+  }
+  const compositionBatches = compositionBatchSnapshots.map((snapshot) => snapshotValue<CashDepositBatch>(snapshot));
+  const hasIssuedBoleto = session.paidBatchCount > 0 || compositionBatches.some((batch) =>
+    ["issuing", "issued", "paid", "cancelled"].includes(batch.status)
+    || !!batch.issuedAt
+    || !!batch.paidAt
+    || !!batch.interCobrancaId
+    || (batch.interCobrancaIds?.length ?? 0) > 0
+    || !!batch.ledgerTransactionId
+  );
+  if (hasIssuedBoleto) {
+    throw new Error("Já existe boleto emitido para esta sessão de contagem; a reabertura não é permitida.");
+  }
+  const compositionItemSnapshots = await Promise.all(compositionBatchRefs.map((ref) =>
+    transaction.get(ref.collection("items").limit(501))
+  ));
+  if (compositionItemSnapshots.some((snapshot) => snapshot.size > 500)) {
+    throw new Error("A composição física excede o limite seguro para reabertura.");
+  }
+  const compositionItemRefs = compositionItemSnapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.ref));
   const lockRefs = canReturnToCounting
     ? session.kioskIds.map((kioskId) => financialDbAdmin.collection(LOCKS).doc(
       cashCountingSessionUnitLockId(input.workspaceId, kioskId),
@@ -619,7 +643,11 @@ export async function prepareCashCountingSessionOperatorDetachment(
     sessionId: session.id,
     action: "operator_detached",
     actor: input.actor,
-    metadata: { closureId: input.closureId, operatorId: input.operatorId },
+    metadata: {
+      closureId: input.closureId,
+      operatorId: input.operatorId,
+      discardedCompositionBatchIds: compositionBatches.map((batch) => batch.id),
+    },
     now: input.now,
   });
   const nextScopeCounts = { ...session.finalizedOperatorCountsByScope };
@@ -655,7 +683,19 @@ export async function prepareCashCountingSessionOperatorDetachment(
     ...(canReturnToCounting ? {
       countingFinishedAt: null,
       countingFinishedBy: null,
+      denominationsConfirmedAt: null,
+      denominationsConfirmedBy: null,
+      coinPendingExchangeCents: 0,
+      coinExchangedCents: 0,
+      coinReturnedToTillCents: session.coinTotalCents,
+      bags: [],
+      batchIds: [],
+      paidBatchCount: 0,
       completedAt: null,
+      lastDraftKioskId: sessionOperator.kioskId,
+      lastDraftDate: sessionOperator.closureDate,
+      lastDraftUpdatedAt: input.now,
+      lastDraftUpdatedBy: input.actor.userId,
     } : {}),
     updatedAt: input.now,
   };
@@ -674,7 +714,15 @@ export async function prepareCashCountingSessionOperatorDetachment(
       lockedBy: input.actor.userId,
     } satisfies CashCountingSessionLock,
   })) : [];
-  return { operatorRef, audit, sessionRef, sessionUpdate, locks };
+  return {
+    operatorRef,
+    audit,
+    sessionRef,
+    sessionUpdate,
+    locks,
+    compositionBatchRefs,
+    compositionItemRefs,
+  };
 }
 
 export async function finishCashCountingSession(input: {
@@ -695,15 +743,69 @@ export async function finishCashCountingSession(input: {
     const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
     if (session.finalizedOperatorCount === 0) throw new Error("Finalize ao menos um operador antes de encerrar a sessão.");
     const now = new Date().toISOString();
+    const savedPhysical = session.denominations.length > 0
+      ? normalizeCashCountingDenominations(session.denominations.map(({ valueCents, quantity }) => ({ valueCents, quantity })))
+      : null;
+    const canRestorePhysicalComposition = session.depositEligibleCents > 0
+      && session.batchIds.length === 0
+      && savedPhysical !== null
+      && savedPhysical.totalCents === session.depositEligibleCents;
+    const preparedSession: CashCountingSession = canRestorePhysicalComposition
+      ? {
+        ...session,
+        denominationsConfirmedAt: now,
+        denominationsConfirmedBy: input.actor.userId,
+      }
+      : session;
+    const restoredBags = canRestorePhysicalComposition && savedPhysical
+      ? buildCashCountingBags({
+        sessionId: session.id,
+        denominations: savedPhysical.denominations,
+        maxCents: CASH_DEPOSIT_MAX_CENTS,
+        source: "initial_notes",
+      })
+      : [];
+    const reservedCoinDenominations = savedPhysical?.denominations
+      .filter((entry) => entry.kind === "coin" && entry.quantity > 0) ?? [];
+    const restoredBatches = restoredBags.map((bag, index) => sessionDepositBatch({
+      session: preparedSession,
+      bag,
+      now,
+      coinHoldCents: index === 0 ? savedPhysical?.coinTotalCents ?? 0 : 0,
+      reservedCoinDenominations: index === 0 ? reservedCoinDenominations : [],
+    }));
+    const restoredSessionBags = restoredBags.map((bag, index) => ({
+      ...bag,
+      batchId: restoredBatches[index].batch.id,
+    }));
     const next: CashCountingSession = {
-      ...session,
-      status: session.depositEligibleCents > 0 ? "counted" : "completed",
+      ...preparedSession,
+      status: canRestorePhysicalComposition
+        ? restoredBatches.length > 0 ? "deposit_ready" : "completed"
+        : session.depositEligibleCents > 0 ? "counted" : "completed",
       countingFinishedAt: now,
       countingFinishedBy: input.actor.userId,
-      completedAt: session.depositEligibleCents > 0 ? null : now,
+      ...(canRestorePhysicalComposition && savedPhysical ? {
+        denominationTotalCents: savedPhysical.totalCents,
+        noteTotalCents: savedPhysical.noteTotalCents,
+        coinTotalCents: savedPhysical.coinTotalCents,
+        coinReturnedToTillCents: savedPhysical.coinTotalCents,
+        denominations: savedPhysical.denominations,
+        bags: restoredSessionBags,
+        batchIds: restoredBatches.map(({ batch }) => batch.id),
+      } : {}),
+      completedAt: session.depositEligibleCents <= 0
+        || (canRestorePhysicalComposition && restoredBatches.length === 0)
+        ? now
+        : null,
       updatedAt: now,
     };
     transaction.set(sessionRef, next);
+    for (const { batch, item } of restoredBatches) {
+      const batchRef = financialDbAdmin.collection(DEPOSIT_BATCHES).doc(batch.id);
+      transaction.create(batchRef, batch);
+      transaction.create(batchRef.collection("items").doc(item.id), item);
+    }
     lockSnapshots.forEach((lockSnapshot, index) => {
       if (lockSnapshot.exists && lockSnapshot.data()?.sessionId === session.id) {
         transaction.delete(lockRefs[index]);
@@ -723,6 +825,24 @@ export async function finishCashCountingSession(input: {
       now,
     });
     transaction.set(financialDbAdmin.collection(SESSION_AUDIT).doc(audit.id), audit);
+    if (canRestorePhysicalComposition && savedPhysical) {
+      const compositionAudit = sessionAudit({
+        workspaceId: input.workspaceId,
+        sessionId: session.id,
+        action: "denominations_confirmed",
+        actor: input.actor,
+        metadata: {
+          restoredFromPreviousComposition: true,
+          denominationTotalCents: savedPhysical.totalCents,
+          noteTotalCents: savedPhysical.noteTotalCents,
+          coinTotalCents: savedPhysical.coinTotalCents,
+          coinReturnedToTillCents: savedPhysical.coinTotalCents,
+          batchIds: next.batchIds,
+        },
+        now,
+      });
+      transaction.set(financialDbAdmin.collection(SESSION_AUDIT).doc(compositionAudit.id), compositionAudit);
+    }
     return next;
   });
 }

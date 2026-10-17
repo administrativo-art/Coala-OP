@@ -945,6 +945,8 @@ export async function reopenCashClosureWithDepositHandling(input: {
       transaction.set(closureRef.collection(CLOSURE_OPERATORS).doc(operator.id), operator);
     }
     for (const detachment of sessionDetachments) {
+      for (const itemRef of detachment.compositionItemRefs) transaction.delete(itemRef);
+      for (const batchRef of detachment.compositionBatchRefs) transaction.delete(batchRef);
       transaction.delete(detachment.operatorRef);
       if (detachment.sessionUpdate) transaction.set(detachment.sessionRef, detachment.sessionUpdate, { merge: true });
       for (const lock of detachment.locks) transaction.set(lock.ref, lock.value);

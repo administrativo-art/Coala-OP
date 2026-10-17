@@ -82,8 +82,6 @@ env:
     value: "production"
   - variable: INTER_COBRANCA_PAYER_CNPJ
     value: "14276603000125"
-  - variable: INTER_COBRANCA_DUE_BUSINESS_DAYS
-    value: "2"
   - variable: INTER_COBRANCA_NUM_DIAS_AGENDA
     value: "30"
   - variable: INTER_COBRANCA_MIN_CENTS

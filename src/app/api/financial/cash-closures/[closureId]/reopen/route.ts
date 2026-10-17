@@ -57,11 +57,19 @@ export const POST = withApiErrorHandling<RouteContext>({
           cause,
         });
       }
+      if (message.includes("boleto emitido")) {
+        throw new AppError({
+          code: "CASH_COUNTING_SESSION_REOPEN_AFTER_ISSUE_FORBIDDEN",
+          kind: "CONFLICT",
+          safeMessage: "Esta sessão já possui boleto emitido e não pode mais ser reaberta.",
+          cause,
+        });
+      }
       if (message.includes("sessão") || message.includes("Sessão") || message.includes("composição física")) {
         throw new AppError({
           code: "CASH_COUNTING_SESSION_REOPEN_CONFLICT",
           kind: "CONFLICT",
-          safeMessage: "A composição física da sessão impede esta reabertura; faça um ajuste auditado de depósito.",
+          safeMessage: "Não foi possível retirar esta sessão do depósito para reabrir a contagem.",
           cause,
         });
       }

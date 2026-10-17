@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **455**
-- Totalmente contratados: **101**
-- Legados congelados: **352**
+- Totalmente contratados: **102**
+- Legados congelados: **351**
 - Exceções temporárias: **2**
 - Violações: **0**
 
@@ -170,7 +170,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/cash-deposits/[batchId]` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/cancel` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/cancel/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/cancel/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/coins` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/coins/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/coins/route.ts) |
-| `/api/financial/cash-deposits/[batchId]/issue` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/issue/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/issue/route.ts) |
+| `/api/financial/cash-deposits/[batchId]/issue` | POST ✓ | `CONTRACTED` | [src/app/api/financial/cash-deposits/[batchId]/issue/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/issue/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/pdf` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/pdf/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/pdf/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/refresh` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/refresh/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/refresh/route.ts) |
 | `/api/financial/cash-deposits/adjustments/allocate` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/adjustments/allocate/route.ts](../../src/app/api/financial/cash-deposits/adjustments/allocate/route.ts) |
