@@ -48,6 +48,10 @@ env:
     value: coala
   - variable: FORMS_ANALYTICS_PERSONAL_RETENTION_DAYS
     value: "365"
+  # Catálogo e pedidos de ausência no banco de RH. Só trocar depois do recibo
+  # dp_absenceCatalogMigrations/active (scripts/migrate-absence-catalog.mts).
+  - variable: DP_ABSENCE_CATALOG_DATABASE
+    value: coala-rh
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
   - variable: RESEND_WEBHOOK_SECRET
