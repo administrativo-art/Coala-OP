@@ -202,7 +202,7 @@ export function AbsencePreviewPanel({ open, onOpenChange, firebaseUser, benefici
 
   return <SidePanel open={open} onOpenChange={(value) => { if (!saving) onOpenChange(value); }} kicker="Minhas solicitações" title={editingRequest ? 'Editar rascunho de ausência' : 'Prévia de ausência'} subtitle="Confira a regra e o período antes de preparar uma solicitação.">
     {beneficiaryName ? <p className="text-xs font-bold text-ds-ink">Solicitação para {beneficiaryName}</p> : null}
-    <div className="rounded-ds-card border border-ds-info-border bg-ds-info-bg p-4 text-[12.5px] leading-5 text-ds-info">
+    <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg p-4 text-[12.5px] leading-5 text-ds-info">
       {canCreate ? editingRequest ? 'A edição cria uma nova revisão do rascunho. Os comprovantes anteriores permanecem no histórico; o pedido só será enviado pelo detalhe.' : 'Calcule a prévia e confira a regra antes de salvar um rascunho. O pedido só será enviado por uma ação posterior no detalhe.' : 'Esta é apenas uma prévia: nenhum pedido será criado. Anexar documentos e enviar a solicitação ainda não estão disponíveis.'}
     </div>
 

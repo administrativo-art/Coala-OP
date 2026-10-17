@@ -128,7 +128,7 @@ export function GeneratedDocumentsSettings() {
 
   return (
     <div className="space-y-5 font-ds">
-      <div className="rounded-ds-card border border-ds-info-border bg-ds-info-bg px-4 py-3 text-[13px] leading-5 text-ds-info">
+      <div className="rounded-ds-card border border-ds-info/20 bg-ds-info-bg px-4 py-3 text-[13px] leading-5 text-ds-info">
         <strong>Uma regra por modelo ou pacote.</strong> Esta aba controla o local de geração, o vínculo com o colaborador, a assinatura, o arquivamento e a publicação. O conteúdo e as versões ficam na aba Modelos.
       </div>
 
