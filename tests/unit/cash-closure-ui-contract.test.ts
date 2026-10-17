@@ -202,9 +202,16 @@ test("redirecionamento para depósitos preserva a sessão mesmo com fila paginad
 });
 
 test("malote mostra quantidades por cédula e reserva de moedas da sessão", () => {
-  assert.match(depositsPageSource, /Quantidade de cédulas para fechar o malote/);
+  assert.match(depositsPageSource, /title="Cédulas do malote"/);
   assert.match(depositsPageSource, /cashDepositDenominationRows\(selected\.denominations, "note"\)/);
-  assert.match(depositsPageSource, /Moedas reservadas no caixa \/ troca/);
+  assert.match(depositsPageSource, /title="Moedas retidas"/);
   assert.match(depositsPageSource, /reservedCoinDenominations/);
   assert.doesNotMatch(sessionPageSource, /Composição da sessão/);
+});
+
+test("depósitos listam malotes por etapa e abrem o detalhe no painel lateral", () => {
+  assert.match(depositsPageSource, /<LiftRow key=\{batch\.id\} id=\{`deposit-\$\{batch\.id\}`\}/);
+  assert.match(depositsPageSource, /title: "Aguardando boleto"[\s\S]*title: "Boleto emitido"[\s\S]*title: "Pago"/);
+  assert.match(depositsPageSource, /window\.location\.hash\.startsWith\("#deposit-"\)/);
+  assert.doesNotMatch(depositsPageSource, /cobranca\.situacao \?\? cobranca\.status/);
 });

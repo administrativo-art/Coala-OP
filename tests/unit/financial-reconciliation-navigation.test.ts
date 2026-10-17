@@ -282,5 +282,6 @@ test("conciliação segue o contrato visual documentado", () => {
   assert.match(deposits, /<PageContainer variant="wide" surface/);
   assert.match(deposits, /<PageHero[\s\S]*title="Depósitos em dinheiro"/);
   assert.doesNotMatch(deposits, /Financeiro <span[^>]*>›<\/span> Depósitos em dinheiro/);
-  assert.match(deposits, /label="Cédulas em blocos"/);
+  assert.match(deposits, /label="Cédulas em malotes"/);
+  assert.match(deposits, /label="Aguardando boleto"/);
 });
