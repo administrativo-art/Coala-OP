@@ -49,8 +49,9 @@ export function financialServiceApprovalRejection(input: {
   if (!classification || Number(classification.amountCents) !== amountCents) return "valor da cobrança divergente";
   if (digits(classification.barcode) !== barcode) return "linha digitável da cobrança divergente";
   if (classification.dueDate !== request.barcodeSnapshot.dueDate) return "vencimento da cobrança divergente";
-  const supplierTaxId = digits(classification.supplierTaxId);
-  if (supplierTaxId && supplierTaxId !== FINANCIAL_SERVICE_APPROVAL_BENEFICIARY_DOCUMENT) return "CNPJ extraído da cobrança divergente";
+  const billingIdentity = record(classification.billingIdentity);
+  const supplierTaxId = digits(billingIdentity?.supplierTaxId);
+  if (supplierTaxId !== FINANCIAL_SERVICE_APPROVAL_BENEFICIARY_DOCUMENT) return "CNPJ extraído da cobrança divergente";
   return null;
 }
 
