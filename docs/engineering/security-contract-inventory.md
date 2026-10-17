@@ -3,8 +3,8 @@
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
 - Arquivos de rota: **456**
-- Totalmente contratados: **103**
-- Legados congelados: **351**
+- Totalmente contratados: **107**
+- Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
 
@@ -152,11 +152,11 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/cash-closures/[closureId]` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/route.ts](../../src/app/api/financial/cash-closures/[closureId]/route.ts) |
 | `/api/financial/cash-closures/[closureId]/audit` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/audit/route.ts](../../src/app/api/financial/cash-closures/[closureId]/audit/route.ts) |
 | `/api/financial/cash-closures/[closureId]/expected-adjustment` | DELETE, POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/expected-adjustment/route.ts](../../src/app/api/financial/cash-closures/[closureId]/expected-adjustment/route.ts) |
-| `/api/financial/cash-closures/[closureId]/finalize` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/finalize/route.ts](../../src/app/api/financial/cash-closures/[closureId]/finalize/route.ts) |
-| `/api/financial/cash-closures/[closureId]/reopen` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/reopen/route.ts](../../src/app/api/financial/cash-closures/[closureId]/reopen/route.ts) |
+| `/api/financial/cash-closures/[closureId]/finalize` | POST ✓ | `CONTRACTED` | [src/app/api/financial/cash-closures/[closureId]/finalize/route.ts](../../src/app/api/financial/cash-closures/[closureId]/finalize/route.ts) |
+| `/api/financial/cash-closures/[closureId]/reopen` | POST ✓ | `CONTRACTED` | [src/app/api/financial/cash-closures/[closureId]/reopen/route.ts](../../src/app/api/financial/cash-closures/[closureId]/reopen/route.ts) |
 | `/api/financial/cash-closures/[closureId]/split-deposit` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts](../../src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts) |
 | `/api/financial/cash-closures/[closureId]/supplies` | PATCH ✓ | `CONTRACTED` | [src/app/api/financial/cash-closures/[closureId]/supplies/route.ts](../../src/app/api/financial/cash-closures/[closureId]/supplies/route.ts) |
-| `/api/financial/cash-closures/[closureId]/withdrawals` | GET, PATCH | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts](../../src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts) |
+| `/api/financial/cash-closures/[closureId]/withdrawals` | GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts](../../src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts) |
 | `/api/financial/cash-closures/months` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/months/route.ts](../../src/app/api/financial/cash-closures/months/route.ts) |
 | `/api/financial/cash-closures/overview` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-closures/overview/route.ts](../../src/app/api/financial/cash-closures/overview/route.ts) |
 | `/api/financial/cash-closures/sync` | POST ✓ | `CONTRACTED` | [src/app/api/financial/cash-closures/sync/route.ts](../../src/app/api/financial/cash-closures/sync/route.ts) |
@@ -171,7 +171,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/financial/cash-deposits/[batchId]` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/cancel` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/cancel/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/cancel/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/coins` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/coins/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/coins/route.ts) |
-| `/api/financial/cash-deposits/[batchId]/issue` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/issue/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/issue/route.ts) |
+| `/api/financial/cash-deposits/[batchId]/issue` | POST ✓ | `CONTRACTED` | [src/app/api/financial/cash-deposits/[batchId]/issue/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/issue/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/pdf` | GET | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/pdf/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/pdf/route.ts) |
 | `/api/financial/cash-deposits/[batchId]/refresh` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/[batchId]/refresh/route.ts](../../src/app/api/financial/cash-deposits/[batchId]/refresh/route.ts) |
 | `/api/financial/cash-deposits/adjustments/allocate` | POST | `LEGACY_BASELINE` | [src/app/api/financial/cash-deposits/adjustments/allocate/route.ts](../../src/app/api/financial/cash-deposits/adjustments/allocate/route.ts) |
