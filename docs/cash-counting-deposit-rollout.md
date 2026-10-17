@@ -168,6 +168,7 @@ Confirmar os documentos e quantidades apresentados antes de repetir com `--execu
 ## Configuração remota
 
 - Confirmar que `INTER_COBRANCA_PAYER_CNPJ=14276603000125` corresponde à Entidade pagadora correta.
+- O adaptador do pagador normaliza os textos e limita cada campo ao contrato da Cobrança Inter V3 antes da chamada externa, incluindo `complemento` com no máximo 30 caracteres. Recusas HTTP 400/422 e 401/403 são classificadas por status e mensagem segura; corpo, cabeçalhos e configuração do cliente bancário não são persistidos nem propagados.
 - Verificar `CASH_CLOSURE_JOB_SECRET`, `INTER_RECONCILIATION_SECRET`, `CASH_DEPOSIT_RECONCILIATION_SECRET`, credenciais, certificado e webhook do Inter.
 - Configurar `CASH_CLOSURE_JOB_URL`, `INTER_RECONCILIATION_URL` e `CASH_DEPOSIT_RECONCILIATION_URL` com os endpoints HTTPS definitivos.
 - Revisar índices dos bancos padrão e `coala-financeiro` antes do App Hosting.
