@@ -5,6 +5,8 @@ import {
   type WriteBatch,
 } from "firebase-admin/firestore";
 import type { Auth } from "firebase-admin/auth";
+import { applyGuardedOccupancyRemovals, OccupancyGuardChanged, occupancyMode, periodDays, shiftDays,
+  type OccupancyRemoval } from "./absence-occupancy-clock.js";
 
 type UserRecord = Record<string, unknown>;
 type PendingWrite = (batch: WriteBatch) => void;
@@ -49,12 +51,13 @@ export async function runTerminatedUserProfile<T>(steps: { revoke: () => Promise
   }
 }
 
-/** OFF legacy remains unchanged only when no bootstrap/cutover receipt exists. */
+/**
+ * Legado sem recibo; pendente durante bootstrap ou com recibo inválido. Com recibo `ready` válido os efeitos
+ * deixam de ficar pendentes: as remoções de turnos/férias passam a atualizar os relógios de ocupação.
+ */
 export async function terminationOccupancyGuardPending(db: Firestore, workspaceId: string,
   guardValue = process.env.DP_ABSENCE_OPERATIONAL_GUARD) {
-  if (guardValue && guardValue !== "off") return true;
-  const receipt = await db.collection("dp_absenceOperationalReadiness").doc(workspaceId).get();
-  return receipt.exists && ["bootstrapping", "ready"].includes(String(receipt.get("state")));
+  return (await occupancyMode(db, workspaceId, guardValue)).kind === "pending";
 }
 
 export async function revokeTerminatedUserAccess(params: {
@@ -145,9 +148,10 @@ export async function applyUserTerminationEffects(params: {
   now?: Date;
   workspaceId?: string;
 }): Promise<TerminationEffectsReport> {
-  if (await terminationOccupancyGuardPending(params.db, params.workspaceId ?? "coala")) {
-    throw new TerminationOccupancyGuardPending();
-  }
+  const workspaceId = params.workspaceId ?? "coala";
+  const mode = await occupancyMode(params.db, workspaceId);
+  if (mode.kind === "pending") throw new TerminationOccupancyGuardPending();
+  const occupancyRemovals: OccupancyRemoval[] = [];
   const now = params.now ?? new Date();
   const appliedAt = now.toISOString();
   const effectiveDate = effectiveDateFor(params.user, now);
@@ -214,23 +218,23 @@ export async function applyUserTerminationEffects(params: {
   }
 
   // Escalas passadas são histórico. Somente datas posteriores ao último dia são removidas.
+  // Cada turno removido é uma remoção de ocupação: no modo guard, vai numa transação com os relógios.
   const schedules = await params.db.collection("dp_schedules").get();
-  const removedWorkBySchedule = new Map<DocumentReference, number>();
   for (const schedule of schedules.docs) {
     const shifts = await schedule.ref.collection("shifts").where("userId", "==", params.userId).get();
     shifts.docs.forEach((shift) => {
       const date = stringValue(shift.get("date"));
       if (!date || date <= effectiveDate) return;
-      mainWrites.push((batch) => batch.delete(shift.ref));
-      if (shift.get("type") !== "day_off") {
-        removedWorkBySchedule.set(schedule.ref, (removedWorkBySchedule.get(schedule.ref) ?? 0) + 1);
-      }
+      const isWork = shift.get("type") !== "day_off";
+      occupancyRemovals.push({
+        beneficiaryUid: params.userId,
+        days: isWork ? shiftDays(date, shift.get("startTime"), shift.get("endTime")) : [date],
+        writes: [(writer) => writer.delete(shift.ref)],
+        ...(isWork ? { shiftCountDecrement: { schedule: schedule.ref, amount: 1 } } : {}),
+      });
       addCount(counts, "futureShiftsRemoved");
     });
   }
-  removedWorkBySchedule.forEach((amount, scheduleRef) => {
-    mainWrites.push((batch) => batch.update(scheduleRef, { shiftCount: FieldValue.increment(-amount) }));
-  });
 
   // Férias futuras não podem continuar aparecendo como planejadas/aprovadas.
   const vacations = await params.db.collection("dp_vacations").where("userId", "==", params.userId).get();
@@ -283,7 +287,8 @@ export async function applyUserTerminationEffects(params: {
       } : workflow.accountant,
       updatedAt: appliedAt,
     } : workflow;
-    mainWrites.push((batch) => batch.update(vacation.ref, {
+    const cancellationWrites: OccupancyRemoval["writes"] = [];
+    cancellationWrites.push((batch) => batch.update(vacation.ref, {
       status: "REJECTED",
       ...(cancelledWorkflow ? { workflow: cancelledWorkflow } : {}),
       warnings: FieldValue.arrayUnion("Cancelada automaticamente devido ao desligamento."),
@@ -297,7 +302,7 @@ export async function applyUserTerminationEffects(params: {
       cancelledAt: appliedAt,
       updatedAt: appliedAt,
     }));
-    mainWrites.push((batch) => batch.create(eventRef, {
+    cancellationWrites.push((batch) => batch.create(eventRef, {
       vacationId: vacation.id,
       type: "VACATION_CANCELLED_BY_TERMINATION",
       message: "Férias futuras canceladas automaticamente devido ao desligamento.",
@@ -307,6 +312,12 @@ export async function applyUserTerminationEffects(params: {
       actorName: "Sistema",
       data: { userId: params.userId, effectiveDate },
     }));
+    const endDate = stringValue(vacation.get("endDate"));
+    if (vacation.get("recordType") === "gozo" && endDate && endDate >= startDate) {
+      occupancyRemovals.push({ beneficiaryUid: params.userId, days: periodDays(startDate, endDate), writes: cancellationWrites });
+    } else {
+      cancellationWrites.forEach((write) => mainWrites.push((batch) => write(batch)));
+    }
     addCount(counts, "futureVacationsCancelled");
   });
 
@@ -532,6 +543,27 @@ export async function applyUserTerminationEffects(params: {
     return sum + Math.max(0, Number(assignment.get("quantityInPossession") ?? 0));
   }, 0);
   if (pendingUniformPieces > 0) counts.pendingUniformPieces = pendingUniformPieces;
+
+  // Ocupação primeiro: se o recibo mudar no meio, o desligamento volta a pendente antes dos demais efeitos.
+  if (mode.kind === "guarded") {
+    try {
+      await applyGuardedOccupancyRemovals(params.db, workspaceId, mode.epoch, occupancyRemovals);
+    } catch (error) {
+      if (error instanceof OccupancyGuardChanged) throw new TerminationOccupancyGuardPending();
+      throw error;
+    }
+  } else {
+    const legacyDecrements = new Map<string, { schedule: DocumentReference; amount: number }>();
+    occupancyRemovals.forEach((removal) => {
+      removal.writes.forEach((write) => mainWrites.push((batch) => write(batch)));
+      const item = removal.shiftCountDecrement;
+      if (item) legacyDecrements.set(item.schedule.path, { schedule: item.schedule,
+        amount: (legacyDecrements.get(item.schedule.path)?.amount ?? 0) + item.amount });
+    });
+    legacyDecrements.forEach(({ schedule, amount }) => {
+      mainWrites.push((batch) => batch.update(schedule, { shiftCount: FieldValue.increment(-amount) }));
+    });
+  }
 
   await Promise.all([
     commitInChunks(params.db, mainWrites),

@@ -5,6 +5,7 @@ import type { Transaction } from 'firebase-admin/firestore';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { absenceCivilDateSchema } from '../requests/schemas';
+import { absenceGuardEnvironmentAccepted } from './guard-environment';
 
 export const ABSENCE_OPERATIONAL_COVERAGE_HASH = 'absence-occupancy-writers-v1';
 export type OccupancySlice = { beneficiaryUid: string; date: string; fromMinute: number; toMinute: number; addsOccupancy: boolean };
@@ -12,19 +13,14 @@ const key = (value: string) => createHash('sha256').update(value).digest('hex');
 const failure = (code: string) => new AppError({ code, kind: 'CONFLICT',
   safeMessage: 'A disponibilidade operacional não pôde ser confirmada. Tente novamente após revisão do DP.' });
 
+/** ON only in the shapes accepted by absenceGuardEnvironmentAccepted; each write still needs readiness `ready`. */
 export function operationalGuardRequested() {
   const value = process.env.DP_ABSENCE_OPERATIONAL_GUARD;
   if (!value || value === 'off') return false;
-  // Until the coverage bootstrap/legacy Functions and maintenance writers are certified,
-  // ON is restricted to a local Firestore emulator. An env toggle alone cannot promote it.
   if (value === 'on') {
-    const loopback = /^(?:localhost|127\.0\.0\.1|\[::1\]):\d{2,5}$/;
-    if (process.env.NODE_ENV === 'production'
-      || !loopback.test(process.env.FIRESTORE_EMULATOR_HOST ?? '')
-      || !loopback.test(process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '')
-      || !/^demo-[a-z0-9-]+$/.test(adminApp.options.projectId ?? '')) {
-      throw failure('ABSENCE_OPERATIONAL_PRODUCTION_NOT_READY');
-    }
+    if (!absenceGuardEnvironmentAccepted({ firestoreEmulatorHost: process.env.FIRESTORE_EMULATOR_HOST,
+      authEmulatorHost: process.env.FIREBASE_AUTH_EMULATOR_HOST, projectId: adminApp.options.projectId ?? '',
+      nodeEnv: process.env.NODE_ENV })) throw failure('ABSENCE_OPERATIONAL_GUARD_ENVIRONMENT_INVALID');
     return true;
   }
   throw failure('ABSENCE_OPERATIONAL_GUARD_CONFIG_INVALID');
