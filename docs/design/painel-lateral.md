@@ -1,6 +1,6 @@
 # Painel lateral (`SidePanel`)
 
-- 460px (máximo 100vw), entra pela direita, fundo #fffdf9, `--ds-shadow-side`. Véu `--ds-scrim`. Ocupa sempre toda a altura dinâmica da janela (`100dvh`); regras genéricas de altura máxima para dialogs não se aplicam ao `SidePanel`.
+- 460px por padrão (máximo 100vw; ver exceções abaixo), entra pela direita, fundo #fffdf9, `--ds-shadow-side`. Véu `--ds-scrim`. Ocupa sempre toda a altura dinâmica da janela (`100dvh`); regras genéricas de altura máxima para dialogs não se aplicam ao `SidePanel`.
 - Os cantos superior e inferior esquerdos usam raio de 20px (`rounded-l-[20px]`) e o conteúdo é recortado pelo contorno (`overflow-hidden`). O lado direito permanece reto e encostado na borda da janela. Essa geometria é obrigatória para todo drawer lateral derivado do `SidePanel`; não arredondar os quatro cantos.
 - Fecha pelo ×, por clique no véu ou com **Esc**. O foco vai para o painel ao abrir e volta para a linha ao fechar.
 - **Topo escuro** (#15151c, padding 22px 24px): kicker rosa (#f08bb1, 10.5/800 caixa alta) com o identificador, nome 20/800 e especificação 12.5 #a9a8b3; números principais em 26/800.
@@ -13,6 +13,11 @@
   5. Excluir no rodapé (danger-link) → `InlineConfirm`.
 - Ações rápidas abrem dentro do painel, sem empilhar outro modal. Edições completas podem usar drawer largo quando preservar o contexto da página for importante; nesse caso, dividir o formulário em abas e manter as ações em rodapé fixo.
 - Bloqueios aparecem dentro do painel com o motivo ("há 3 lotes vinculados").
+
+### Painel de detalhe com etapas (540px)
+
+- Painéis de detalhe que mostram um trilho de etapas (ex.: **Formado → Travado → Boleto emitido → Pago** em Depósitos em dinheiro) usam 540px (`className="w-[540px]"`), mantendo `max-w-full` no mobile. A largura existe para o trilho caber em uma linha; não usar 540px só para acomodar mais campos.
+- Ações de fluxo do item (ex.: Emitir/Reemitir boleto) ficam no rodapé fixo com `primary-modal`; ao acioná-las, o painel de detalhe fecha e o painel da ação abre, sem empilhar dois painéis.
 
 ### Drawer largo de edição
 
