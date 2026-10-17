@@ -14,7 +14,7 @@ const { WORKSPACE_ID } = await import('../../src/lib/workspace.ts');
 const { belemCivilDate } = await import('../../src/features/dp/absences/requests/core.ts');
 const { operationalDayRefs, ABSENCE_OPERATIONAL_COVERAGE_HASH, guardOccupancyWrite,
   operationalGuardRequested, shiftOccupancySlices, vacationOccupancySlices } = await import('../../src/features/dp/absences/operational/occupancy-guard.server.ts');
-const { bootstrapAbsenceOperationalReadiness } = await import('../../src/features/dp/absences/operational/bootstrap.server.ts');
+const { bootstrapAbsenceOperationalReadiness, auditAbsenceOperationalSources } = await import('../../src/features/dp/absences/operational/bootstrap.server.ts');
 const { applyUserTerminationEffects, TerminationOccupancyGuardPending } =
   await import('../../functions/src/user-termination-effects.ts');
 const { activateOperationalAbsence, beginOperationalIntent, prepareOperationalAbsence,
@@ -181,6 +181,35 @@ test('intent fenced: conflito, aborto tombstone, aprovação única, bloqueio de
   await transient.delete();
   assert.equal((await bootstrapAbsenceOperationalReadiness({ workspaceId,
     coverageFrom: '1900-01-01', coverageThrough: '9999-12-31', quiescenceConfirmed: true })).state, 'ready');
+  // Com recibo ready, o desligamento deixa de ficar pendente: remove o turno futuro e incrementa o relógio do dia.
+  const terminatedUid = `absence-op-terminated-${suffix}`;
+  const terminationSchedule = dbAdmin.collection('dp_schedules').doc(`absence-op-termination-${suffix}`);
+  await terminationSchedule.set({ workspaceId, unitId, shiftCount: 1 });
+  await terminationSchedule.collection('shifts').doc('future').set({ userId: terminatedUid, unitId,
+    date: startDate, type: 'work', startTime: '22:00', endTime: '06:00' });
+  await applyUserTerminationEffects({ db: dbAdmin, hrDb: hrDbAdmin, checklistDb: dbAdmin, workspaceId,
+    userId: terminatedUid, user: { isActive: false, inactivationType: 'contract_termination',
+      terminationDate: addDays(startDate, -1) } });
+  assert.equal((await terminationSchedule.collection('shifts').doc('future').get()).exists, false);
+  assert.equal((await terminationSchedule.get()).get('shiftCount'), 0);
+  const readyEpoch = (await dbAdmin.collection('dp_absenceOperationalReadiness').doc(workspaceId).get()).get('epoch');
+  for (const day of [startDate, addDays(startDate, 1)]) {
+    const clock = await operationalDayRefs(workspaceId, terminatedUid, day).clock.get();
+    assert.equal(clock.get('epoch'), readyEpoch);
+    assert.equal(clock.get('version'), 1);
+  }
+  await dbAdmin.recursiveDelete(terminationSchedule);
+  // Escala legada (sem unidade, unidade só no turno) é histórico aceito apenas se trancada e antes da janela.
+  const legacySchedule = dbAdmin.collection('dp_schedules').doc(`absence-op-legacy-${suffix}`);
+  await legacySchedule.set({ workspaceId, name: 'Dezembro de 2025', month: 12, year: 2025, locked: true });
+  await legacySchedule.collection('shifts').doc('old').set({ userId: personUid, unitId: 'outra-unidade',
+    date: '2025-12-10', type: null });
+  const audit = (coverageFrom) => auditAbsenceOperationalSources({ workspaceId, coverageFrom, coverageThrough: '2099-12-31' });
+  assert.equal((await audit('2026-05-01')).valid, true);
+  assert.match((await audit('2025-01-01')).reason, /janela de cobertura/);
+  await legacySchedule.update({ locked: false });
+  assert.match((await audit('2026-05-01')).reason, /unidade da escala/);
+  await dbAdmin.recursiveDelete(legacySchedule);
   const [person, reviewer, admin] = await Promise.all([signIn(personUid), signIn(reviewerUid), signIn(adminUid)]);
   const availabilityPath = `/api/dp/natasha/availability?period=${startDate.slice(0, 7)}&unit=${unitId}`;
   assert.equal((await natashaAvailabilityRoute.GET(call(availabilityPath, 'GET', reviewer), context())).status, 403);
