@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { isPdvAutoCountedChannel, type CashClosureChannel } from "./channel-normalization";
 import { linePdvSalesSource, sumPdvSales } from "./dre-contract";
 import {
+  financeExpectedCentsForLine,
+  financeReportedCentsForLine,
+  preserveCashSupplyClassifications,
+} from "./supply-classification";
+import {
   CASH_CLOSURE_CHANNELS,
   type BuiltCashClosure,
   type BuiltCashClosureLine,
@@ -109,7 +114,10 @@ function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure
       ? null
       : line.countedCents;
   const reportedDifferenceCents = reportedCents === null ? null : reportedCents - line.expectedCents;
-  const differenceCents = countedCents === null ? null : countedCents - line.expectedCents;
+  const normalizedLine = { ...line, reportedCents, countedCents };
+  const financeExpectedCents = financeExpectedCentsForLine(normalizedLine);
+  const financeReportedCents = financeReportedCentsForLine(normalizedLine);
+  const differenceCents = countedCents === null ? null : countedCents - financeExpectedCents;
   return {
     ...line,
     pdvSales,
@@ -123,7 +131,7 @@ function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure
     reportedDifferenceCents,
     countedCents,
     conferenceDifferenceCents:
-      countedCents === null || reportedCents === null ? null : countedCents - reportedCents,
+      countedCents === null || financeReportedCents === null ? null : countedCents - financeReportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     reportedNote: automatic ? null : legacy ? line.note ?? null : line.reportedNote ?? null,
@@ -151,7 +159,11 @@ function normalizedSourceHash(built: BuiltCashClosure) {
           paymentRowCount: line.metadata.paymentRowCount,
           supplyCents: line.metadata.supplyCents,
           withdrawalCents: line.metadata.withdrawalCents,
-          cashMovements: line.metadata.cashMovements,
+          // A justificativa é evidência descritiva do PDV. Uma correção textual não muda
+          // a identidade financeira da origem nem invalida contagens já aprovadas.
+          cashMovements: line.metadata.cashMovements?.map(movement => Object.fromEntries(
+            Object.entries(movement).filter(([key]) => !["pdvReason", "pdvDescription"].includes(key)),
+          )),
         },
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
@@ -182,8 +194,18 @@ function builtLineToPersistent(
   const countedCents = automaticallyCounted
     ? expectedCents
     : existing?.countedCents ?? line.countedAmountCents;
+  const metadata = {
+    ...line.metadata,
+    supplyClassifications: preserveCashSupplyClassifications(
+      existing?.metadata.supplyClassifications,
+      line.metadata.cashMovements,
+    ),
+  };
+  const financialLine = { ...line, date: built.date, expectedCents, reportedCents, countedCents, metadata };
+  const financeExpectedCents = financeExpectedCentsForLine(financialLine);
+  const financeReportedCents = financeReportedCentsForLine(financialLine);
   const reportedDifferenceCents = reportedCents === null ? null : reportedCents - expectedCents;
-  const differenceCents = countedCents === null ? null : countedCents - expectedCents;
+  const differenceCents = countedCents === null ? null : countedCents - financeExpectedCents;
   const automaticCountIsCurrent =
     automaticallyCounted &&
     existing?.countedCents === countedCents &&
@@ -205,11 +227,11 @@ function builtLineToPersistent(
     reportedDifferenceCents,
     countedCents,
     conferenceDifferenceCents:
-      countedCents === null || reportedCents === null ? null : countedCents - reportedCents,
+      countedCents === null || financeReportedCents === null ? null : countedCents - financeReportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     rawPaymentNames: [...line.rawPaymentNames].sort(),
-    metadata: line.metadata,
+    metadata,
     reportedNote: existing?.reportedNote ?? null,
     note: existing?.note ?? null,
     reportedBy: automaticallyCounted ? "system:pdv" : existing?.reportedBy ?? null,
@@ -269,7 +291,10 @@ function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLi
   const hasExpectedAdjustment = existing.expectedAdjustedAt !== null;
   const expectedCents = hasExpectedAdjustment ? existing.expectedCents : 0;
   const reportedDifferenceCents = existing.reportedCents === null ? null : existing.reportedCents - expectedCents;
-  const differenceCents = existing.countedCents === null ? null : existing.countedCents - expectedCents;
+  const financialLine = { ...existing, expectedCents };
+  const financeExpectedCents = financeExpectedCentsForLine(financialLine);
+  const financeReportedCents = financeReportedCentsForLine(financialLine);
+  const differenceCents = existing.countedCents === null ? null : existing.countedCents - financeExpectedCents;
   return {
     ...existing,
     // A disappeared PDV line has zero source sales, even when its count is retained.
@@ -281,9 +306,9 @@ function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLi
     expectedAdjustmentNeedsReview: hasExpectedAdjustment,
     reportedDifferenceCents,
     conferenceDifferenceCents:
-      existing.countedCents === null || existing.reportedCents === null
+      existing.countedCents === null || financeReportedCents === null
         ? null
-        : existing.countedCents - existing.reportedCents,
+        : existing.countedCents - financeReportedCents,
     differenceCents,
     status: lineStatus(existing.countedCents, differenceCents),
     updatedAt:
@@ -493,12 +518,13 @@ export function recalculateReportedLine(
   now: string,
 ): CashClosureLine {
   const reportedDifferenceCents = reportedCents === null ? null : reportedCents - line.expectedCents;
+  const financeReportedCents = financeReportedCentsForLine({ ...line, reportedCents });
   return {
     ...line,
     reportedCents,
     reportedDifferenceCents,
     conferenceDifferenceCents:
-      line.countedCents === null || reportedCents === null ? null : line.countedCents - reportedCents,
+      line.countedCents === null || financeReportedCents === null ? null : line.countedCents - financeReportedCents,
     reportedNote: reportedNote?.trim() || null,
     reportedBy: reportedCents === null ? null : actorId,
     reportedAt: reportedCents === null ? null : now,
@@ -513,12 +539,14 @@ export function recalculateCountedLine(
   actorId: string,
   now: string,
 ): CashClosureLine {
-  const differenceCents = countedCents === null ? null : countedCents - line.expectedCents;
+  const financeExpectedCents = financeExpectedCentsForLine(line);
+  const financeReportedCents = financeReportedCentsForLine(line);
+  const differenceCents = countedCents === null ? null : countedCents - financeExpectedCents;
   return {
     ...line,
     countedCents,
     conferenceDifferenceCents:
-      countedCents === null || line.reportedCents === null ? null : countedCents - line.reportedCents,
+      countedCents === null || financeReportedCents === null ? null : countedCents - financeReportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     note: note?.trim() || null,
@@ -541,9 +569,12 @@ export function recalculateExpectedLine(
   const reportedDifferenceCents = reportedCents === null
     ? null
     : reportedCents - correctedExpectedCents;
+  const financialLine = { ...line, expectedCents: correctedExpectedCents, reportedCents, countedCents };
+  const financeExpectedCents = financeExpectedCentsForLine(financialLine);
+  const financeReportedCents = financeReportedCentsForLine(financialLine);
   const differenceCents = countedCents === null
     ? null
-    : countedCents - correctedExpectedCents;
+    : countedCents - financeExpectedCents;
   return {
     ...line,
     expectedCents: correctedExpectedCents,
@@ -556,7 +587,7 @@ export function recalculateExpectedLine(
     countedCents,
     reportedDifferenceCents,
     conferenceDifferenceCents:
-      reportedCents === null || countedCents === null ? null : countedCents - reportedCents,
+      financeReportedCents === null || countedCents === null ? null : countedCents - financeReportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     updatedAt: now,
@@ -572,7 +603,10 @@ export function restoreCalculatedExpectedLine(
   const reportedCents = automatic ? expectedCents : line.reportedCents;
   const countedCents = automatic ? expectedCents : line.countedCents;
   const reportedDifferenceCents = reportedCents === null ? null : reportedCents - expectedCents;
-  const differenceCents = countedCents === null ? null : countedCents - expectedCents;
+  const financialLine = { ...line, expectedCents, reportedCents, countedCents };
+  const financeExpectedCents = financeExpectedCentsForLine(financialLine);
+  const financeReportedCents = financeReportedCentsForLine(financialLine);
+  const differenceCents = countedCents === null ? null : countedCents - financeExpectedCents;
   return {
     ...line,
     expectedCents,
@@ -585,7 +619,7 @@ export function restoreCalculatedExpectedLine(
     countedCents,
     reportedDifferenceCents,
     conferenceDifferenceCents:
-      reportedCents === null || countedCents === null ? null : countedCents - reportedCents,
+      financeReportedCents === null || countedCents === null ? null : countedCents - financeReportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     updatedAt: now,

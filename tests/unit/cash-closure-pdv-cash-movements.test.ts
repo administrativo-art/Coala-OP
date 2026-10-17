@@ -109,7 +109,7 @@ test("reconhece os nomes de campo observados no payload real do PDV", () => {
   ]);
 });
 
-test("lê o motivo da sangria quando o PDV envia, por movimento e filial, sem alterar o movimento", () => {
+test("lê o motivo da sangria quando o PDV envia, por movimento e filial", () => {
   const withdrawals = [
     // Shape of the live PDV row: `codloja`, `dtmovimento` and the reason in `descricao`.
     { codigo: 101, codloja: 10, codusuario: 7, codformapgto: 1, valor: 20, dtmovimento: "2026-08-28T15:00:00", issangria: true, isCancelado: false, descricao: "  COMPRA DE\n LIMÃO  " },
@@ -126,5 +126,27 @@ test("lê o motivo da sangria quando o PDV envia, por movimento e filial, sem al
   assert.equal(reasons.get("105")?.length, 200);
   const movement = parsePdvCashMovements({ withdrawals, supplies: [], paymentMethods: [], date: "2026-08-28", filialId: "10" }).find((row) => row.id === "101");
   assert.equal(movement?.amountCents, 2_000);
-  assert.equal(movement && "reason" in movement, false);
+  assert.equal(movement?.pdvReason, "COMPRA DE LIMÃO");
+  assert.equal(parsePdvCashMovements({ withdrawals, supplies: [], paymentMethods: [], date: "2026-08-28", filialId: "10" }).find((row) => row.id === "102")?.pdvReason, null);
+});
+
+test("preserva a descrição automática do suprimento para a lista de classificação", () => {
+  const [supply] = parsePdvCashMovements({
+    date: "2026-11-02",
+    filialId: "17343",
+    paymentMethods: [],
+    withdrawals: [],
+    supplies: [{
+      codigo: 6569516,
+      codloja: 17343,
+      codusuario: 674192,
+      codformapgto: 0,
+      dtmovimento: "2026-11-02T16:02:07",
+      valor: 40,
+      descricao: "Supr. no.1491",
+      isCancelado: false,
+    }],
+  });
+  assert.equal(supply.pdvDescription, "Supr. no.1491");
+  assert.equal(supply.pdvReason, undefined);
 });

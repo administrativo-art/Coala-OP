@@ -65,6 +65,19 @@ test("supply, change, manual expected and surplus never alter integral PDV", () 
   assert.deepEqual(result.closure.finalizedCashDifferences, { version: 1, shortageCents: 0, surplusCents: 500 });
 });
 
+test("justificativa da sangria é persistida sem alterar o hash financeiro da origem", () => {
+  const firstMovement = { ...movement("withdrawal", 1_000), pdvReason: "Compra de limão" };
+  const first = mergeBuiltClosureForPersistence({ built: build([coupon()], [firstMovement]), now });
+  const updated = mergeBuiltClosureForPersistence({
+    built: build([coupon()], [{ ...firstMovement, pdvReason: "Compra de laranja" }]),
+    existingClosure: first.closure,
+    existingLines: first.lines,
+    now,
+  });
+  assert.equal(updated.closure.sourceHash, first.closure.sourceHash);
+  assert.equal(updated.lines[0].metadata.cashMovements?.[0].pdvReason, "Compra de laranja");
+});
+
 test("partial operators, reopen and noncash differences: never net shortages against surpluses", () => {
   const stored = mergeBuiltClosureForPersistence({ built: build([coupon("a"), coupon("b"), coupon("c", 50, "CONTA ASSINADA")]), now });
   const lines = stored.lines.map(line => recalculateCountedLine(line,

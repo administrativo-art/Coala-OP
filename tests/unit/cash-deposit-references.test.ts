@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   cashDepositBatchReference,
   cashDepositBatchReferenceFromId,
+  cashDepositDenominationRows,
   cashDepositKioskCode,
   groupCashDepositItemsByDay,
 } from "../../src/features/financial/cash-deposits/references";
@@ -51,4 +52,18 @@ test("itens do depósito são consolidados por dia preservando ajustes e origens
     itemCount: 2,
   });
   assert.equal(result[1].amountCents, 48_000);
+});
+
+test("composição física expõe somente quantidades positivas e recalcula subtotais", () => {
+  const rows = cashDepositDenominationRows([
+    { valueCents: 2_000, kind: "note", quantity: 5, totalCents: 1 },
+    { valueCents: 10_000, kind: "note", quantity: 10, totalCents: 1 },
+    { valueCents: 5_000, kind: "note", quantity: 0, totalCents: 0 },
+    { valueCents: 25, kind: "coin", quantity: 1, totalCents: 25 },
+  ], "note");
+
+  assert.deepEqual(rows.map((row) => [row.valueCents, row.quantity, row.totalCents]), [
+    [10_000, 10, 100_000],
+    [2_000, 5, 10_000],
+  ]);
 });

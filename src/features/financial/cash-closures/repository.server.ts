@@ -6,6 +6,12 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { assertCashClosureAccess, assertCashClosureDivergenceApproval } from "./access.server";
 import { assertWithdrawalsClassified } from "./withdrawal-classification.server";
 import { withdrawalFailure } from "./withdrawal-classification";
+import {
+  cashSupplyMovementFingerprint,
+  cashSupplyMovements,
+  cashSupplyClassificationSummary,
+  requiresCashSupplyClassification,
+} from "./supply-classification";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { isPdvAutoCountedChannel } from "./channel-normalization";
@@ -49,6 +55,7 @@ import type {
   CashClosureSource,
   CashClosureStatus,
   CashClosureWithLines,
+  CashSupplyClassificationKind,
 } from "./types";
 
 const CLOSURES = "cashClosures";
@@ -609,6 +616,119 @@ export async function saveCashClosureDraft(
   return { closure: result.closure, lines: result.lines, operators: result.operators };
 }
 
+export async function classifyCashSupply(
+  id: string,
+  input: {
+    lineId: string;
+    movementId: string;
+    classification: CashSupplyClassificationKind;
+    workspaceId: string;
+  },
+  actor: CashClosureActor,
+) {
+  const ref = closureRef(id);
+  const result = await financialDbAdmin.runTransaction(async (transaction) => {
+    const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      transaction.get(ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1)),
+    ]);
+    if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    assertCashClosureCollectionLimits(lineSnapshot, operatorSnapshot);
+    const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
+    if (rawClosure.workspaceId !== input.workspaceId) throw new Error("Fechamento fora do workspace.");
+    if (!requiresCashSupplyClassification(rawClosure.date)) {
+      throw new Error("A classificação de suprimentos vale somente a partir de 01/08/2026.");
+    }
+    if (!canEditCashClosure(rawClosure.status)) {
+      throw new Error("Somente fechamentos ainda não finalizados podem ser editados.");
+    }
+    const normalized = normalizeCashClosureWithLines(
+      rawClosure,
+      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    const currentOperators = buildBoundedCashClosureOperators({
+      closure: normalized.closure,
+      lines: normalized.lines,
+      existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+      now: normalized.closure.updatedAt,
+    }).operators;
+    const currentLine = normalized.lines.find((line) => line.id === input.lineId);
+    if (!currentLine) throw new Error("Linha do fechamento não encontrada.");
+    const currentOperator = currentOperators.find((operator) => operator.operatorId === currentLine.operatorId);
+    if (!currentOperator) throw new Error("Operador do fechamento não encontrado.");
+    if (currentOperator.status === "approved") {
+      throw new Error("O operador já foi finalizado e precisa ser reaberto antes de classificar suprimentos.");
+    }
+    const movement = cashSupplyMovements(currentLine).find((item) => item.id === input.movementId);
+    if (!movement || movement.operatorId !== currentLine.operatorId) {
+      throw new Error("Suprimento não encontrado para este operador.");
+    }
+    const now = new Date().toISOString();
+    const fingerprint = cashSupplyMovementFingerprint(movement);
+    const previous = (currentLine.metadata.supplyClassifications ?? []).find((item) =>
+      item.movementId === movement.id && item.movementFingerprint === fingerprint,
+    ) ?? null;
+    const nextClassification = {
+      movementId: movement.id,
+      movementFingerprint: fingerprint,
+      kind: input.classification,
+      classifiedAt: now,
+      classifiedBy: actor.userId,
+      classifiedByName: actor.userName,
+    };
+    const rawLines = normalized.lines.map((line) => line.id === currentLine.id ? {
+      ...line,
+      metadata: {
+        ...line.metadata,
+        supplyClassifications: [
+          ...(line.metadata.supplyClassifications ?? []).filter((item) => item.movementId !== movement.id),
+          nextClassification,
+        ],
+      },
+      updatedAt: now,
+    } : line);
+    const nextNormalized = normalizeCashClosureWithLines(
+      { ...normalized.closure, updatedAt: now },
+      rawLines,
+    );
+    const operatorResult = buildBoundedCashClosureOperators({
+      closure: nextNormalized.closure,
+      lines: nextNormalized.lines,
+      existingOperators: currentOperators,
+      now,
+    });
+    const nextClosure = withCashClosureOperatorAggregate(
+      nextNormalized.closure,
+      operatorResult.operators,
+      now,
+    );
+    const nextLine = nextNormalized.lines.find((line) => line.id === currentLine.id)!;
+    transaction.set(ref.collection("lines").doc(nextLine.id), nextLine);
+    transaction.set(ref, nextClosure);
+    for (const operator of operatorResult.operators) {
+      transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
+    }
+    writeAudit(transaction, {
+      workspaceId: nextClosure.workspaceId,
+      closureId: id,
+      lineId: nextLine.id,
+      operatorId: nextLine.operatorId,
+      action: "supply_classified",
+      actor,
+      createdAt: now,
+      previousValue: previous?.kind ?? null,
+      newValue: input.classification,
+      reason: input.classification === "cash_fund"
+        ? "Suprimento classificado como fundo de caixa"
+        : "Movimento mantido como suprimento",
+    });
+    return { closure: nextClosure, lines: nextNormalized.lines, operators: operatorResult.operators };
+  });
+  await refreshCashClosureSummaries(result.closure);
+  return result;
+}
+
 export async function adjustCashClosureExpected(
   id: string,
   input: CashClosureExpectedAdjustmentInput,
@@ -917,6 +1037,10 @@ export async function finalizeCashClosureOperator(
       assertCashClosureDivergenceApproval(context, closure.kioskId, operatorLines);
     }
     await assertWithdrawalsClassified(transaction, closure, normalized.lines, operatorId);
+    const supplySummary = cashSupplyClassificationSummary(operatorLines);
+    if (supplySummary.required && supplySummary.pending > 0) {
+      throw new Error(`Classifique todos os suprimentos de ${currentOperator.operatorName} antes de finalizar.`);
+    }
     if (operatorLines.some((line) => line.reportedCents === null || line.countedCents === null)) {
       throw new Error(`Preencha as contagens do Caixa e do Financeiro de ${currentOperator.operatorName} antes de finalizar.`);
     }
@@ -996,6 +1120,7 @@ export async function finalizeCashClosureOperator(
         operatorName: finalizedOperator.operatorName,
         approvedWithDivergence: finalizedOperator.approvedWithDivergence,
         cashDepositEligibleCents: finalizedOperator.cashDeposit.eligibleCents,
+        cashFundCents: supplySummary.cashFundCents,
       },
       reason: "Contagem do operador finalizada",
     });

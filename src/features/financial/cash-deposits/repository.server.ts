@@ -552,6 +552,9 @@ export async function prepareCashDepositCoinHold(input: {
     if (!batchSnapshot.exists) throw new Error("Bloco de depósito não encontrado.");
     const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
     if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco de depósito não encontrado.");
+    if (batch.countingSessionId) {
+      throw new Error("As moedas desta sessão já foram separadas durante a composição física.");
+    }
     if (!["open", "locked", "failed", "cancelled"].includes(batch.status)) {
       throw new Error("As moedas só podem ser separadas antes da emissão do boleto.");
     }

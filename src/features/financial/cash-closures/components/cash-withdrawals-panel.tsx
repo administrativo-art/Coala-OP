@@ -14,11 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBRL } from "../money";
 import type { CashClosureWithLines } from "../types";
+import { isWithdrawalClassifiableAccount } from "../withdrawal-account-policy";
 import type { listWithdrawalClassifications, listWithdrawalExpenseCandidates } from "../withdrawal-classification.server";
 
 type Payload = Awaited<ReturnType<typeof listWithdrawalClassifications>>;
 type Candidates = Awaited<ReturnType<typeof listWithdrawalExpenseCandidates>>;
-type CatalogAccount = { id: string; name: string; parentId?: string; active?: boolean; dre_position?: string; is_dre_account?: boolean };
+type CatalogAccount = { id: string; name: string; parentId?: string; active?: boolean; dre_position?: string; is_dre_account?: boolean; isGroup?: boolean };
 type Center = { id: string; name: string; unitIds: string[]; active?: boolean };
 const issueCopy: Record<string, string> = {
   unassigned_movements: "Há movimento sem operador. Corrija a origem e sincronize o PDV.",
@@ -29,7 +30,7 @@ const issueCopy: Record<string, string> = {
 };
 
 /** One bounded request per closure, never one per operator or per keystroke. */
-export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWithLines; editable: boolean }) {
+export function CashWithdrawalsPanel({ data, editable, operatorId: operatorScopeId }: { data: CashClosureWithLines; editable: boolean; operatorId?: string }) {
   const { permissions, isDefaultAdmin } = useAuth();
   const api = useAuthenticatedApi();
   const expensePermissions = permissions.financial?.expenses;
@@ -58,7 +59,24 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
   const centers = useFinancialCollection<Center>(centersQuery);
   const catalogOverflow = (accounts.data?.length ?? 0) > 500 || (centers.data?.length ?? 0) > 50;
   const centerOptions = (centers.data ?? []).filter(row => row.active !== false && row.unitIds.length === 1 && row.unitIds[0] === data.closure.kioskId);
-  const accountOptions = (accounts.data ?? []).filter(row => row.active !== false && row.is_dre_account !== false);
+  const accountOptions = useMemo(() => {
+    const catalogAccounts = accounts.data ?? [];
+    const activeAccounts = catalogAccounts.filter(row => row.active !== false);
+    const byId = new Map(activeAccounts.map(row => [row.id, row]));
+    const hasChild = new Set(catalogAccounts.flatMap(row => row.parentId ? [row.parentId] : []));
+    const classifiableLeaves = activeAccounts.filter(row => isWithdrawalClassifiableAccount(row) && !hasChild.has(row.id));
+    const visibleIds = new Set(classifiableLeaves.map(row => row.id));
+    classifiableLeaves.forEach(row => {
+      let parentId = row.parentId;
+      while (parentId) {
+        const parent = byId.get(parentId);
+        if (!parent || visibleIds.has(parent.id)) break;
+        visibleIds.add(parent.id);
+        parentId = parent.parentId;
+      }
+    });
+    return activeAccounts.filter(row => visibleIds.has(row.id));
+  }, [accounts.data]);
   const refresh = useCallback(() => setReload(value => value + 1), []);
   useEffect(() => {
     if (!canView) { setLoading(false); return; }
@@ -71,16 +89,18 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
     return () => controller.abort();
   }, [api, path, canView, reload, data.closure.sourceHash]);
 
-  const source = payload?.sources.find(row => row.sourceId === selected);
-  const classification = payload?.classifications.find(row => row.sourceId === selected);
+  const source = payload?.sources.find(row => row.sourceId === selected && (!operatorScopeId || row.operatorId === operatorScopeId));
+  const classification = payload?.classifications.find(row => row.sourceId === selected && (!operatorScopeId || row.operatorId === operatorScopeId));
   const active = classification?.active === true;
   const operatorId = source?.operatorId ?? classification?.operatorId;
   const finalized = data.operators.some(row => row.operatorId === operatorId && row.status === "approved");
-  const unresolved = payload?.sources.filter(row => !row.identityVerified || !payload.classifications.some(link => link.active && link.sourceId === row.sourceId && link.fingerprint === row.fingerprint)).length ?? 0;
-  const orphaned = payload?.classifications.filter(row => row.active && !payload.sources.some(source => source.sourceId === row.sourceId)) ?? [];
+  const scopedSources = payload?.sources.filter(row => !operatorScopeId || row.operatorId === operatorScopeId) ?? [];
+  const orphaned = payload?.classifications.filter(row => row.active && (!operatorScopeId || row.operatorId === operatorScopeId) && !payload.sources.some(source => source.sourceId === row.sourceId)) ?? [];
+  const unresolved = scopedSources.filter(row => !row.identityVerified || !payload?.classifications.some(link => link.active && link.sourceId === row.sourceId && link.fingerprint === row.fingerprint)).length;
   const choose = (id: string) => {
+    const selectedSource = scopedSources.find(row => row.sourceId === id);
     setSelected(id); setMode(canCreate ? "create" : "link"); setAccount(""); setCenter(centerOptions.length === 1 ? centerOptions[0].id : "");
-    setDescription(""); setReason(""); setExistingId(""); setCandidates(null); setError("");
+    setDescription(selectedSource?.pdvReason ?? ""); setReason(""); setExistingId(""); setCandidates(null); setError("");
   };
   const run = async (work: () => Promise<void>) => {
     if (busy) return;
@@ -110,18 +130,20 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
   });
   if (!canView) return <p className="text-sm text-muted-foreground">A classificação de sangrias exige acesso às despesas. A finalização continua validando os vínculos no servidor.</p>;
   return <Card className="border-ds-border">
-    <CardHeader><CardTitle>Sangrias — despesas pagas em espécie</CardTitle><CardDescription>O PDV já descontou estas saídas do dinheiro esperado. Classifique cada uma ou vincule uma despesa existente; não haverá outro pagamento bancário.</CardDescription></CardHeader>
+    <CardHeader><CardTitle>{operatorScopeId ? "Sangrias deste operador" : "Sangrias — despesas pagas em espécie"}</CardTitle><CardDescription>O PDV já descontou estas saídas do dinheiro esperado{operatorScopeId ? " na contagem acima" : ""}. Classifique cada uma ou vincule uma despesa existente; não haverá outro pagamento bancário. O plano de contas mostra folhas ativas de despesa e compras de insumos para estoque.</CardDescription></CardHeader>
     <CardContent className="space-y-3">
       {loading ? <p role="status">Consultando sangrias…</p> : !payload ? <Button variant="outline" onClick={refresh}>Tentar novamente</Button> : <>
-        <p role="status" className="text-sm">{unresolved + orphaned.length} pendência(s) de vínculo. Todas as sangrias do operador devem estar classificadas para finalizar sua contagem.</p>
+        <p role="status" className="text-sm">{unresolved + orphaned.length} pendência(s) de vínculo. Todas as sangrias {operatorScopeId ? "deste operador" : "do fechamento"} devem estar classificadas para finalizar {operatorScopeId ? "sua contagem" : "a contagem"}.</p>
         {payload.issues.map(issue => <p key={issue} className="text-sm text-destructive">{issueCopy[issue] ?? "A origem da sangria precisa de conferência."}</p>)}
-        {!payload.sources.length && !orphaned.length && <p className="text-sm text-muted-foreground">Nenhuma sangria em espécie neste fechamento.</p>}
-        {[...payload.sources.map(row => ({ ...row, removed: false })), ...orphaned.map(row => ({ ...row, identityVerified: false, removed: true }))].map(row => {
+        {!scopedSources.length && !orphaned.length && <p className="text-sm text-muted-foreground">Nenhuma sangria em espécie {operatorScopeId ? "para este operador" : "neste fechamento"}.</p>}
+        {[...scopedSources.map(row => ({ ...row, removed: false })), ...orphaned.map(row => ({ ...row, identityVerified: false, removed: true }))].map(row => {
           const link = payload.classifications.find(item => item.sourceId === row.sourceId && item.active);
           const name = data.operators.find(operator => operator.operatorId === row.operatorId)?.operatorName ?? row.operatorId;
           const preLink = link || row.removed ? undefined : payload.preLinks.find(item => item.sourceId === row.sourceId);
+          const pdvReason = "pdvReason" in row && typeof row.pdvReason === "string" ? row.pdvReason : null;
           return <div key={row.sourceId} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm">
             <div><p className="font-medium">{name} · {formatBRL(row.amountCents)}</p><p className="text-muted-foreground">{row.removed ? "Removida do PDV: desfaça o vínculo anterior" : !row.identityVerified ? "Identificador ainda não comprovado: sincronize o PDV" : link?.fingerprint === row.fingerprint ? `${link.accountPlanName} · ${link.resultCenterName}` : "Classificação pendente ou origem alterada"}</p>
+              {!row.removed && <p className="text-muted-foreground"><span className="font-medium text-foreground">Justificativa informada no PDV:</span> {pdvReason ?? "Não informada"}</p>}
               {preLink && <p className="text-muted-foreground">Nota enviada pelo aplicativo: {preLink.supplierName} · {formatBRL(preLink.totalCents)}{preLink.changeCents > 0 ? ` · troco de ${formatBRL(preLink.changeCents)}: exige um suprimento desse valor no PDV neste dia` : ""}</p>}</div>
             <div className="flex gap-2">{link && <Button asChild variant="outline" size="sm"><Link href={`/dashboard/financial/expenses?search=${encodeURIComponent(link.description)}`}>Ver despesa</Link></Button>}
               {canLink && preLink && preLink.changeCents >= 0 && row.identityVerified && <Button type="button" size="sm" disabled={busy} onClick={() => usePreLink(preLink)}>Usar nota do aplicativo</Button>}
@@ -129,8 +151,9 @@ export function CashWithdrawalsPanel({ data, editable }: { data: CashClosureWith
           </div>;
         })}
       </>}
-      {selected && <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+      {selected && (source || classification) && <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
         <p className="font-semibold">{active ? "Corrigir classificação" : "Classificar sangria"} · {formatBRL(source?.amountCents ?? classification?.amountCents ?? 0)}</p>
+        {source && <div className="rounded-lg border bg-background p-3 text-sm"><p className="font-medium">Justificativa informada no PDV</p><p className="mt-1 text-muted-foreground">{source.pdvReason ?? "O operador não informou uma justificativa no PDV."}</p></div>}
         {finalized ? <p>Reabra a contagem deste operador no fechamento para corrigir o vínculo.</p> : active ? <p className="text-sm">Ao desvincular, uma despesa criada aqui será cancelada; uma despesa previamente existente voltará ao estado anterior. O histórico será preservado. Depois, classifique novamente.</p> : <>
           <label className="block text-sm">Como registrar?<select className="mt-1 w-full rounded-md border bg-background p-2" value={mode} disabled={busy} onChange={event => setMode(event.target.value as "create" | "link")}>{canCreate && <option value="create">Criar a despesa paga pela sangria</option>}{canLink && <option value="link">Vincular despesa já cadastrada</option>}</select></label>
           <label className="block text-sm">Centro de resultado da unidade<select className="mt-1 w-full rounded-md border bg-background p-2" value={center} disabled={busy || centers.loading} onChange={event => { setCenter(event.target.value); setCandidates(null); setExistingId(""); }}><option value="">Selecione</option>{centerOptions.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>

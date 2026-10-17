@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, ChevronDown, Loader2, Play, Store, XCircle } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHero } from "@/components/patterns/page-hero";
@@ -183,7 +182,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
     {session.status === "counted" && canComposeDeposit && <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-ds-border bg-ds-ok-bg px-5 py-4"><span><strong className="block text-[15px] font-black text-ds-ok">Contagem encerrada. A próxima etapa é contar fisicamente cédulas e moedas.</strong><span className="mt-1 block text-xs font-semibold text-ds-ok">O total contado fica travado; a composição física define os malotes e o que volta ao caixa.</span></span><Button asChild className="h-10 rounded-xl bg-ds-accent font-bold hover:bg-ds-accent-hover"><Link href={`/dashboard/financial/cash-deposits?sessionId=${encodeURIComponent(session.id)}`}>Continuar no depósito<ArrowRight className="ml-2 h-4 w-4" /></Link></Button></div>}
 
     <div className="grid gap-4 xl:grid-cols-[minmax(320px,.9fr)_minmax(0,1.35fr)]">
-      <Card className="rounded-[18px] border-ds-border bg-ds-warm">
+      <Card className="rounded-[18px] border-0 bg-ds-warm shadow-none">
         <CardHeader className="border-b border-ds-border"><CardTitle className="text-base font-black">Unidades da sessão</CardTitle><p className="text-sm text-ds-ink-muted">Abra uma unidade e informe a data impressa no malote.</p></CardHeader>
         <CardContent className="grid gap-3">{units.map((unit) => {
           const finalizedCount = operators.filter((operator) => operator.kioskId === unit.id).length;
@@ -192,7 +191,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
         })}</CardContent>
       </Card>
 
-      <Card className="rounded-[18px] border-ds-border bg-ds-warm">
+      <Card className="rounded-[18px] border-0 bg-ds-warm shadow-none">
         <CardHeader className="border-b border-ds-border"><div className="flex flex-wrap items-end justify-between gap-3"><div><CardTitle className="text-base font-black">Contagens por turno</CardTitle><p className="text-sm text-ds-ink-muted">{operators.length === 0 ? "Nenhuma contagem finalizada nesta sessão até agora." : `${operators.length} contagem(ns) finalizada(s) · ${finalizedByDate.length} data(s) de malote`}</p></div><span className="text-right"><span className="block text-[11px] font-extrabold text-ds-ink-faint">Elegível para depósito</span><strong className="block font-mono text-base text-ds-ok">{formatBRL(session.depositEligibleCents)}</strong></span></div></CardHeader>
         <CardContent className="space-y-3 p-4"><div className="rounded-xl border border-ds-border bg-ds-ok-bg px-3.5 py-2.5 text-[11.5px] font-bold leading-relaxed text-ds-ok">Só aparecem as contagens finalizadas nesta sessão. Cada uma já entra no valor do boleto, sem depender dos outros turnos.</div>
           {operators.length === 0 ? <p className="py-6 text-center text-sm text-ds-ink-muted">Os rascunhos salvos não entram nos totais.</p> : <div className="space-y-2">{finalizedByDate.map(([closureDate, dateOperators]) => {
@@ -204,7 +203,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
       </Card>
     </div>
 
-    {["deposit_ready", "completed"].includes(session.status) && <Card className="rounded-2xl border-ds-border"><CardHeader><CardTitle className="text-lg">Composição da sessão</CardTitle></CardHeader><CardContent className="space-y-3"><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-ds-ok-bg p-4"><span className="text-xs font-semibold text-ds-ok">Cédulas destinadas ao depósito</span><strong className="mt-1 block font-mono text-lg text-ds-ok">{formatBRL(session.noteTotalCents)}</strong></div><div className="rounded-xl bg-ds-warn-bg p-4"><span className="text-xs font-semibold text-ds-alert-ink">Moedas devolvidas ao caixa</span><strong className="mt-1 block font-mono text-lg text-ds-alert-ink">{formatBRL(session.coinReturnedToTillCents)}</strong></div></div>{session.bags.map((bag) => <div key={bag.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ds-border p-4"><span><strong className="block">Malote {String(bag.sequence).padStart(2, "0")}</strong><span className="text-xs text-ds-ink-faint">{bag.denominations.filter((item) => item.quantity > 0).map((item) => `${item.quantity}× ${formatBRL(item.valueCents)}`).join(" · ")}</span></span><strong className="font-mono text-lg">{formatBRL(bag.totalCents)}</strong></div>)}</CardContent></Card>}
+    {["deposit_ready", "completed"].includes(session.status) && <Card className="rounded-2xl border-ds-border"><CardHeader><CardTitle className="text-lg">Composição da sessão</CardTitle></CardHeader><CardContent className="space-y-3"><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-ds-ok-bg p-4"><span className="text-xs font-semibold text-ds-ok">Cédulas destinadas ao depósito</span><strong className="mt-1 block font-mono text-lg text-ds-ok">{formatBRL(session.noteTotalCents)}</strong></div><div className="rounded-xl bg-ds-warn-bg p-4"><span className="text-xs font-semibold text-ds-alert-ink">Moedas reservadas no caixa / troca</span><strong className="mt-1 block font-mono text-lg text-ds-alert-ink">{formatBRL(session.coinReturnedToTillCents)}</strong><span className="mt-1 block text-[11px] font-semibold text-ds-ink-muted">{session.denominations.filter((item) => item.kind === "coin" && item.quantity > 0).map((item) => `${item.quantity}× ${formatBRL(item.valueCents)}`).join(" · ") || "Nenhuma moeda"}</span></div></div>{session.bags.map((bag) => <div key={bag.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ds-border p-4"><span><strong className="block">Malote {String(bag.sequence).padStart(2, "0")}</strong><span className="text-xs text-ds-ink-faint">{bag.denominations.filter((item) => item.quantity > 0).map((item) => `${item.quantity}× ${formatBRL(item.valueCents)}`).join(" · ")}</span></span><strong className="font-mono text-lg">{formatBRL(bag.totalCents)}</strong></div>)}</CardContent></Card>}
 
     {dialogUnit && canCount && <CashCountingDialog open={!!dialogUnit} session={session} unit={dialogUnit} editable={canCount} onClose={() => { setDialogUnit(null); void load(true); }} onSessionChanged={() => load(true)} />}
 

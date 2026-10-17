@@ -1,6 +1,6 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **455 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **456 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
 Inclui **52 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
@@ -178,6 +178,7 @@ Inclui **52 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/financial/cash-closures/[closureId]/finalize` | POST | [src/app/api/financial/cash-closures/[closureId]/finalize/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/finalize/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/[closureId]/reopen` | POST | [src/app/api/financial/cash-closures/[closureId]/reopen/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/reopen/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/[closureId]/split-deposit` | POST | [src/app/api/financial/cash-closures/[closureId]/split-deposit/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/split-deposit/route.ts) | [cash-closures](flows/cash-closures.md) |
+| `/api/financial/cash-closures/[closureId]/supplies` | PATCH | [src/app/api/financial/cash-closures/[closureId]/supplies/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/supplies/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/[closureId]/withdrawals` | GET, PATCH | [src/app/api/financial/cash-closures/[closureId]/withdrawals/route.ts](../../src/app/api/financial/cash-closures/%5BclosureId%5D/withdrawals/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/months` | GET | [src/app/api/financial/cash-closures/months/route.ts](../../src/app/api/financial/cash-closures/months/route.ts) | [cash-closures](flows/cash-closures.md) |
 | `/api/financial/cash-closures/overview` | GET | [src/app/api/financial/cash-closures/overview/route.ts](../../src/app/api/financial/cash-closures/overview/route.ts) | [cash-closures](flows/cash-closures.md) |

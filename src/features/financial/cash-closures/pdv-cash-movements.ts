@@ -85,9 +85,15 @@ function providerMovementId(source: UnknownRecord) {
 const WITHDRAWAL_REASON_KEYS = ["descricao", "Descricao", "descr", "motivo", "Motivo", "observacao", "Observacao"];
 const WITHDRAWAL_REASON_MAX_LENGTH = 200;
 
+function withdrawalReason(source: UnknownRecord) {
+  const raw = field(source, WITHDRAWAL_REASON_KEYS);
+  if (typeof raw !== "string") return null;
+  return raw.replace(/\s+/g, " ").trim().slice(0, WITHDRAWAL_REASON_MAX_LENGTH).trim() || null;
+}
+
 /**
  * Free text the operator typed at the PDV when making the sangria, by the PDV-issued movement id.
- * Absent or blank simply means "no reason". Kept apart from the movement so closure hashes do not change.
+ * Absent or blank simply means "no reason".
  */
 export function parsePdvWithdrawalReasons(input: { withdrawals: unknown; filialId: string }) {
   const reasons = new Map<string, string>();
@@ -97,8 +103,7 @@ export function parsePdvWithdrawalReasons(input: { withdrawals: unknown; filialI
     const movementFilialId = filialId(source);
     if (movementFilialId && movementFilialId !== input.filialId) continue;
     const id = providerMovementId(source);
-    const raw = field(source, WITHDRAWAL_REASON_KEYS);
-    const reason = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, WITHDRAWAL_REASON_MAX_LENGTH).trim() : "";
+    const reason = withdrawalReason(source);
     if (id && reason) reasons.set(id, reason);
   }
   return reasons;
@@ -140,10 +145,13 @@ function parseMovement(input: {
   const normalizedPaymentName = paymentMethodName ? normalizeName(paymentMethodName) : "";
   const providerId = providerMovementId(source);
   const id = providerId ?? `${input.kind}-${date}-${input.index}`;
+  const pdvDescription = withdrawalReason(source);
   return {
     id,
     identitySource: providerId ? "provider" : "synthetic",
     kind: input.kind,
+    pdvDescription,
+    ...(input.kind === "withdrawal" ? { pdvReason: pdvDescription } : {}),
     amountCents: toCents(numericAmount),
     occurredAt,
     date,

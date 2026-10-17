@@ -1,4 +1,9 @@
-import type { CashDepositBatch, CashDepositBatchItem, CashDepositBatchItemSource } from "./types";
+import type {
+  CashDepositBatch,
+  CashDepositBatchItem,
+  CashDepositBatchItemSource,
+  CashDepositPhysicalDenomination,
+} from "./types";
 
 const KNOWN_KIOSK_CODES: Record<string, string> = {
   "joao-paulo": "JPA",
@@ -90,4 +95,17 @@ export function groupCashDepositItemsByDay(items: CashDepositBatchItem[]): CashD
   }
 
   return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+export function cashDepositDenominationRows(
+  denominations: CashDepositPhysicalDenomination[] | undefined,
+  kind: CashDepositPhysicalDenomination["kind"],
+) {
+  return (denominations ?? [])
+    .filter((entry) => entry.kind === kind && Number.isSafeInteger(entry.quantity) && entry.quantity > 0)
+    .map((entry) => ({
+      ...entry,
+      totalCents: entry.valueCents * entry.quantity,
+    }))
+    .sort((left, right) => right.valueCents - left.valueCents);
 }
