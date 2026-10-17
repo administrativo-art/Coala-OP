@@ -13,12 +13,8 @@ export const registerCashCoinExchangeSchema = z.object({
 }).strict();
 
 export const issueCashDepositSchema = z.object({
-  dueBusinessDays: z.number().int().min(0).max(30).optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-}).strict().refine(
-  (value) => value.dueBusinessDays === undefined || value.dueDate === undefined,
-  "Informe o prazo ou a data de vencimento, não ambos.",
-);
+}).strict();
 
 export const cancelCashDepositSchema = z.object({
   reason: z.string().trim().min(1).max(50),

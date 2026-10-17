@@ -55,7 +55,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/[day]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/%5Bday%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/[year]/[month]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/%5Byear%5D/%5Bmonth%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/[kioskId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/%5BkioskId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/page.tsx`](../../src/app/dashboard/financial/cash-closures/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/[sessionId]/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/%5BsessionId%5D/page.tsx), [`src/app/dashboard/financial/cash-closures/sessions/new/page.tsx`](../../src/app/dashboard/financial/cash-closures/sessions/new/page.tsx).
 
-Arquivos locais percorridos: 63.
+Arquivos locais percorridos: 64.
 
 Chamadas candidatas encontradas:
 
@@ -92,7 +92,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/financial/cash-deposits/page.tsx`](../../src/app/dashboard/financial/cash-deposits/page.tsx).
 
-Arquivos locais percorridos: 21.
+Arquivos locais percorridos: 22.
 
 Chamadas candidatas encontradas:
 
