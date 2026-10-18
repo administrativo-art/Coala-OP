@@ -1248,6 +1248,14 @@ type EmployeeProfileFieldRow = {
 
 const EMPLOYMENT_RELATIONSHIP_FIELD_KEY = "system.employment.relationship";
 
+/** Subgrupo da ficha: sai do card no hover, como a linha das listas (`LiftRow`, escala de tabela). */
+const PROFILE_SUBGROUP_CLASS = [
+  "relative rounded-xl border border-ds-divider bg-ds-surface p-2.5",
+  "transition-[transform,box-shadow,border-color] duration-180 ease-ds-lift",
+  "hover:z-3 hover:-translate-y-[3px] hover:scale-[1.006] hover:border-transparent hover:shadow-ds-lift",
+  "motion-reduce:hover:translate-y-0 motion-reduce:hover:scale-100",
+].join(" ");
+
 function EmployeeProfileFields({
   user,
   units,
@@ -1963,7 +1971,7 @@ function EmployeeProfileFields({
     return (
       <div className="space-y-2.5 p-2.5">
         {groups.map((group) => (
-          <div key={group.id} className="rounded-xl border border-ds-divider bg-ds-surface p-2.5">
+          <div key={group.id} className={PROFILE_SUBGROUP_CLASS}>
             <div className="mb-2.5 px-0.5">
               <p className="text-xs font-black text-ds-ink">{group.title}</p>
               <p className="mt-0.5 text-[10px] font-semibold text-ds-ink-muted">{group.description}</p>
@@ -2073,7 +2081,7 @@ function EmployeeProfileFields({
                         .filter((field): field is EmployeeProfileFieldRow => Boolean(field));
                       if (groupFields.length === 0) return null;
                       return (
-                        <div key={group.id} className="rounded-xl border border-ds-divider bg-white p-2.5">
+                        <div key={group.id} className={PROFILE_SUBGROUP_CLASS}>
                           <div className="mb-2.5 px-0.5">
                             <p className="text-xs font-black text-ds-ink">{group.title}</p>
                             <p className="mt-0.5 text-[10px] font-semibold text-ds-ink-muted">{group.description}</p>
