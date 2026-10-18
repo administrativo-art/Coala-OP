@@ -93,6 +93,8 @@ Testes unitários cobrem CRC, larguras, encoding, cabeçalho/trailer, hash adult
 
 ## Bloqueios para uso real
 
+O acompanhamento formal está no [pacote de homologação](../../rep-p/homologacao/README.md): relatório de gates, modelos dos atestados, roteiro de assinatura com e-CPF, gerador de amostras AFD/CAdES e PDF/PAdES não oficiais, checklist de validação no ITI, inventário IAM e roteiro de restauração.
+
 - simular no ambiente publicado a perda/retomada da HLB; a conectividade UDP/123 e o quórum real já foram confirmados, e ReSinc certificada permanece pendência não obrigatória por enquanto;
 - criar registro INPI, atestados e cadastro fiscal aprovado de cada estabelecimento;
 - validar AFD/CAdES e comprovante/PAdES reais no VALIDAR/ITI; carimbo de tempo ACT permanece pendência separada;
