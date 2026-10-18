@@ -14,7 +14,7 @@ export interface SystemBrandProps {
 
 /**
  * Marca do sistema no topo das barras laterais (docs/design/barra-lateral.md): o logotipo anima o tamanho
- * junto com a barra e, expandida, mostra "Coala + palavra" separada por um filete rosa.
+ * junto com a barra e, expandida, mostra "Coala + palavra" separada por um filete branco.
  */
 export function SystemBrand({ collapsed, accent, animation = "pulse", className }: SystemBrandProps) {
   return (
@@ -35,7 +35,7 @@ export function SystemBrand({ collapsed, accent, animation = "pulse", className 
       {!collapsed && (
         <span
           className={cn(
-            "whitespace-nowrap border-l-2 border-ds-accent py-1.5 pl-3 text-[17px] font-extrabold leading-none tracking-[-0.01em] text-ds-on-dark",
+            "whitespace-nowrap border-l-2 border-ds-on-dark py-1.5 pl-3 text-[17px] font-extrabold leading-none tracking-[-0.01em] text-ds-on-dark",
             animation === "pulse" && "coala-pulse-name"
           )}
         >
