@@ -14,7 +14,7 @@ import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
-import {
+import { BellRing,
   ChevronDown, X, LayoutDashboard, Package, ListTodo,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
@@ -288,6 +288,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         icon: Settings,
         items: [
           { label: "Configurações", href: "/dashboard/settings", icon: Settings, show: permissions.settings.view },
+          { label: "Avisos do sistema", href: "/dashboard/system-notices", icon: BellRing, show: isDefaultAdmin || (permissions.settings.view && permissions.settings.viewSystemNotices) },
           { label: "Ajuda", href: "/dashboard/help", icon: HelpCircle, show: permissions.help.view },
         ],
       },

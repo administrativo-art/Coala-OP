@@ -1,5 +1,11 @@
 # Cobertura dos grupos de fluxo
 
+2026-10-18: [Registro REP-P](flows/dp-time-recording.md) ganhou duas APIs autenticadas, ARP dedicada, NSR transacional, relógio fail-closed e AFD 004 com contrato CAdES. O ensaio é somente sintético; provedores reais, comprovante PAdES, app e piloto seguem bloqueados. Nenhum grupo/página foi promovido porque ainda não há interface.
+
+2026-10-18: [Escalas DP](flows/dp-schedules.md) documenta simulação pura diária a partir de vínculo vigente e referências históricas explícitas, sem leitura atual de cadastro, API, UI ou persistência. Só o débito conservador de banco sob condições completas pode ser proposto; qualquer ausência ou trabalho extra vai para revisão. Não é apuração fiscal nem conclusão das Fases 1/2/3; o grupo permanece Traçado.
+
+2026-10-17: [Escalas DP](flows/dp-schedules.md) ganha captura privada append-only de referências de planejamento nas gravações individuais e substituições em lote. Empregador é separado de lotação/cobertura; faltas cadastrais ficam pendentes. [Pessoas](flows/people-access.md) ganha serviço e API privados para publicar revisões de vigências e resolver pessoa/data, sem alterar `users`; a ficha do colaborador consulta e acrescenta períodos com CAS, preservação integral da timeline e datas civis. Ainda faltam leitura histórica pelo PTRP, cobertura de todos os escritores e validação integrada; grupos permanecem Traçados. Testes e limites da execução ficam no registro da tarefa de ponto.
+
 2026-10-11: [Coala Go Kotlin](../../apps/coala-one-android/README.md), package `coalaone.go`, único mobile após autorização expressa de retirada do Expo/APK antigo (não havia usuários). APK assinado/metadados/hash/link `/app/CoalaGo.apk` preparados localmente; [matriz](coala-go-parity.md) registra testes/lacunas. Extensões autorizadas: foto privada do recebimento e seleção de package na atestação/versão; [acesso/privacidade](access-and-privacy.md) documenta controles. Estoque/compras/signage continuam Traçados; testes locais não homologam serviços reais/aparelhos físicos. Sem publicação.
 
 2026-10-05: [Instagram](flows/instagram-publishing.md) passa a usar dimensões reais nas prévias e avaliação de proporção por formato; detalhes permitem editar a legenda de agendamentos ainda editáveis, com auditoria e invalidação segura do contêiner preparado. Regressões cobertas em `tests/unit/instagram-media-presentation.test.ts`; não equivale a homologação visual ou publicação real na Meta. A superfície externa permanece fora da contagem de grupos das páginas internas.
@@ -21,6 +27,8 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
+| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Meu ponto sem link de menu; batida, comprovante e histórico só sintéticos; provedores reais e Coala Go pendentes |
+| `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |
 | `document-generation` | 4 | Traçado | [Geração, leitura e auditoria](flows/document-generation.md), [revisão/finalização](flows/document-review-finalization.md), [assinatura avulsa](flows/document-standalone-signature.md) — verificação integrada pendente |
@@ -69,9 +77,9 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `uniforms` | 1 | Traçado | [Uniformes](flows/uniforms.md) — percurso complementado; verificação integrada pendente |
 | `vacations` | 2 | Traçado | [Agendamento](flows/vacation-scheduling.md), [aviso](flows/vacation-notice.md), [contador](flows/vacation-accountant-dispatch.md), [recibos](flows/vacation-receipts.md), [pagamento e encerramento](flows/vacation-payment-closure.md) — verificação integrada pendente |
 
-Total atual: **56 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
+Total atual: **58 grupos**. Atualize estado, documentos e contagem junto com cada etapa do [plano](system-map-execution.md).
 
-Nenhum grupo é promovido a Verificado apenas pelas execuções locais. São 56 grupos traçados, 75 guias de subfluxo e validação comportamental parcial.
+Nenhum grupo é promovido a Verificado apenas pelas execuções locais. São 58 grupos traçados, 75 guias de subfluxo e validação comportamental parcial.
 
 Atualização de 2026-09-27: consulta orçamento × despesas e projeção de pagamentos confirmados descritas nos guias de [orçamentos](flows/financial-budgets.md), [despesas](flows/expenses.md) e [caixa](flows/cash-flow.md). Grupos permanecem Traçados; verificações do subfluxo não homologam todas as superfícies.
 

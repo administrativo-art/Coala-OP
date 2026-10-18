@@ -14,6 +14,7 @@ Os nomes identificam responsabilidades; não definem personalidade ou estilo. A 
 | Velma Dinkley | Qualidade e revisão | `velma` |
 | Trinity | Segurança e permissões | `trinity` |
 | Rocket Raccoon | Infraestrutura e implantação | `rocket` |
+| Doc Brown | Normas de ponto eletrônico, análise jurídica orientativa e engenharia de sistemas do REP-P/PTRP | `doc` |
 
 ## Equipe financeira já nomeada
 
