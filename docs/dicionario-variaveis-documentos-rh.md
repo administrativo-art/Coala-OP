@@ -71,7 +71,7 @@ CPF, telefone, CEP, PIS e outros documentos devem ser exibidos com máscara quan
 | `{{employee.name}}` | Nome completo | `text` |
 | `{{employee.state}}` | Estado (UF) | `single_select` |
 | `{{employee.city}}` | Cidade | `text` |
-| `{{employee.address}}` | Endereço | `text` |
+| `{{employee.address}}` | Endereço completo, montado a partir do endereço residencial (logradouro, número ou "s/n", complemento, bairro, cidade/UF e CEP); a linha livre antiga só é usada quando não há logradouro | `text` |
 | `{{employee.phone}}` | Telefone celular | `text` |
 | `{{employee.personal_email}}` | E-mail pessoal | `text` |
 | `{{employee.nationality}}` | Nacionalidade | `text` |

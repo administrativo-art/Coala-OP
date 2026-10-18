@@ -1,6 +1,7 @@
 import type { EmployeeFieldValue, FieldType, RhRole } from '@/types/rh';
 import { maskSensitiveText } from '@/types/rh';
 import { formatFieldOptionLabel } from './field-option-labels';
+import { getFieldMask } from './field-masks';
 
 type SerializedTimestamp = {
   seconds?: number;
@@ -58,7 +59,8 @@ export function formatFieldValue(
 
   // Mascaramento de CPF para employee
   if (fieldKey === 'employee.cpf' && fv.value_text) {
-    return maskSensitiveText(fv.value_text, role);
+    const masked = maskSensitiveText(fv.value_text, role);
+    return masked === fv.value_text ? (getFieldMask(fieldKey)?.format(masked) ?? masked) : masked;
   }
 
   if (type === 'date' && fv.value_date) {
@@ -83,6 +85,9 @@ export function formatFieldValue(
   if (type === 'multi_select' && Array.isArray(fv.value_json)) {
     return (fv.value_json as string[]).map((value) => formatFieldOptionLabel(fieldKey, value)).join(', ') || '—';
   }
+
+  const mask = getFieldMask(fieldKey);
+  if (mask && fv.value_text) return mask.format(mask.normalize(fv.value_text));
 
   return fv.value_text ? formatFieldOptionLabel(fieldKey, fv.value_text) : '—';
 }
