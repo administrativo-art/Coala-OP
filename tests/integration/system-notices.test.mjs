@@ -12,6 +12,14 @@ const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monito
 const { listSystemNotices } = await import('../../src/features/system-notices/service.server.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
 
+const unavailableClock = { async read() { throw Object.assign(new Error('sem HLB'), { code: 'REP_P_TIME_UNAVAILABLE' }); } };
+const trustedClock = (now) => ({ async read() { return { instant: now, source: 'hlb-test', assurance: 'hlb_verified',
+  observedOffsetMs: 0, verifiedAt: now, attestationId: 'b'.repeat(64), attestationMode: 'fresh', quorum: 2,
+  observations: [
+    { server: '200.20.186.75', status: 'accepted', offsetMs: 0, roundTripMs: 20, stratum: 1 },
+    { server: '200.20.186.94', status: 'accepted', offsetMs: 0, roundTripMs: 22, stratum: 1 },
+  ] }; } });
+
 test('vigia diário abre um aviso por marco, resolve superados e entrega só a quem tem permissão', async () => {
   const workspaceId = 'system-notices-integration';
   const prefix = 'system-notices-it';
@@ -35,16 +43,26 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
       pendingReceipt.set({ workspaceId, status: 'pending', createdAt: Timestamp.fromDate(new Date('2029-11-09T00:00:00Z')) }),
     ]);
 
-    const first = await runRepPDailyMonitor({ workspaceId, signerPem, now: new Date('2029-11-10T12:00:00Z') });
+    const firstNow = new Date('2029-11-10T12:00:00Z');
+    const first = await runRepPDailyMonitor({ workspaceId, signerPem, now: firstNow, clock: unavailableClock });
     assert.equal(first.certificateState, 'valid');
     assert.equal(first.pendingReceipts, 1);
     assert.equal(first.normsReviewOverdue, true);
-    assert.equal(first.opened.length, 3);
+    assert.equal(first.clockState, 'unavailable');
+    assert.equal(first.opened.length, 4);
     assert.ok(first.opened.some((key) => key.endsWith(':60')));
     // Mesmo dia de novo: nada duplicado.
-    assert.deepEqual((await runRepPDailyMonitor({ workspaceId, signerPem, now: new Date('2029-11-10T18:00:00Z') })).opened, []);
+    assert.deepEqual((await runRepPDailyMonitor({ workspaceId, signerPem, now: new Date('2029-11-10T18:00:00Z'), clock: unavailableClock })).opened, []);
 
-    const second = await runRepPDailyMonitor({ workspaceId, signerPem, now: new Date('2029-11-18T12:00:00Z') });
+    // Uma atestação só em cache não pode resolver o incidente: o vigia exige quórum novo.
+    const cachedNow = new Date('2029-11-11T12:00:00Z');
+    const cachedClock = { async read() { return { ...(await trustedClock(cachedNow).read()), attestationMode: 'cached' }; } };
+    const cachedResult = await runRepPDailyMonitor({ workspaceId, signerPem, now: cachedNow, clock: cachedClock });
+    assert.equal(cachedResult.clockState, 'unavailable');
+
+    const secondNow = new Date('2029-11-18T12:00:00Z');
+    const second = await runRepPDailyMonitor({ workspaceId, signerPem, now: secondNow, clock: trustedClock(secondNow) });
+    assert.equal(second.clockState, 'ok');
     assert.ok(second.opened.some((key) => key.endsWith(':45')));
 
     const admin = context({ isDefaultAdmin: true, permissions: structuredClone(defaultAdminPermissions) });
@@ -66,17 +84,19 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
     // Sino: só o gestor de Tempo recebe.
     const managerBell = await dbAdmin.collection('userNotifications').where('ownerUid', '==', manager.id).get();
     const viewerBell = await dbAdmin.collection('userNotifications').where('ownerUid', '==', viewer.id).get();
-    assert.ok(managerBell.size >= 4);
+    assert.ok(managerBell.size >= 5);
     assert.equal(viewerBell.size, 0);
 
-    const expired = await runRepPDailyMonitor({ workspaceId, signerPem, now: new Date('2030-01-02T12:00:00Z') });
+    const expiredNow = new Date('2030-01-02T12:00:00Z');
+    const expired = await runRepPDailyMonitor({ workspaceId, signerPem, now: expiredNow, clock: trustedClock(expiredNow) });
     assert.ok(expired.opened.some((key) => key.endsWith(':expired')));
     const expiredOpen = (await listSystemNotices(admin, { status: 'open' })).notices.filter((notice) => notice.category === 'rep-p.certificate');
     assert.equal(expiredOpen[0].title, 'Certificado de assinatura do ponto vencido');
     assert.equal(expiredOpen[0].severity, 'critical');
 
     // ARP indisponível: a contagem é pulada sem derrubar certificado e normas nem resolver avisos às cegas.
-    const unavailable = await runRepPDailyMonitor({ workspaceId, signerPem, now: new Date('2030-01-02T13:00:00Z'),
+    const unavailableNow = new Date('2030-01-02T13:00:00Z');
+    const unavailable = await runRepPDailyMonitor({ workspaceId, signerPem, now: unavailableNow, clock: trustedClock(unavailableNow),
       repDatabase: { collection() { throw new Error('banco coala-rep ausente'); } } });
     assert.equal(unavailable.receiptsCheck, 'unavailable');
     assert.equal(unavailable.certificateState, 'expired');
@@ -84,7 +104,8 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
 
     // Renovação: certificado novo fora da janela resolve o aviso de vencido; pendência zerada resolve a de comprovantes.
     await pendingReceipt.update({ status: 'issued' });
-    const renewed = await runRepPDailyMonitor({ workspaceId, signerPem: renewedPem, now: new Date('2030-01-03T12:00:00Z') });
+    const renewedNow = new Date('2030-01-03T12:00:00Z');
+    const renewed = await runRepPDailyMonitor({ workspaceId, signerPem: renewedPem, now: renewedNow, clock: trustedClock(renewedNow) });
     assert.equal(renewed.pendingReceipts, 0);
     const afterRenewal = (await listSystemNotices(admin, { status: 'open' })).notices;
     assert.deepEqual(afterRenewal.map((notice) => notice.category), ['rep-p.norms-review']);

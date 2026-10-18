@@ -7,7 +7,7 @@ import type { PermissionSet } from '@/types';
 export const SYSTEM_NOTICE_AUDIENCES = ['system.admin', 'dp.time-manager-global'] as const;
 export type SystemNoticeAudience = typeof SYSTEM_NOTICE_AUDIENCES[number];
 export type SystemNoticeSeverity = 'info' | 'warning' | 'critical';
-export type SystemNoticeCategory = 'rep-p.certificate' | 'rep-p.receipts' | 'rep-p.norms-review';
+export type SystemNoticeCategory = 'rep-p.certificate' | 'rep-p.clock' | 'rep-p.receipts' | 'rep-p.norms-review';
 
 export type SystemNoticeActor = Readonly<{
   isDefaultAdmin: boolean;

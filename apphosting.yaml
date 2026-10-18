@@ -98,6 +98,13 @@ env:
   # e-CNPJ A1 da desenvolvedora (chave + certificados em PEM) para PAdES do comprovante e CAdES do AFD.
   - variable: REP_P_ICP_SIGNER_PEM
     secret: REP_P_ICP_SIGNER_PEM
+  # HLB gratuita: consulta com quórum aos quatro servidores NTP publicados pelo Observatório Nacional.
+  # Falha de rede, divergência ou desvio superior a 30 s bloqueia a marcação.
+  - variable: REP_P_HLB_NTP_ENABLED
+    value: "true"
+  # Gate independente: a sondagem HLB pode operar, mas nenhuma batida real é aceita antes da liberação formal.
+  - variable: REP_P_MARKING_ENABLED
+    value: "false"
   # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
   - variable: SYSTEM_NOTICES_JOB_SECRET
     secret: SYSTEM_NOTICES_JOB_SECRET

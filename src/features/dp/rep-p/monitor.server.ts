@@ -9,6 +9,8 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 
 import { inspectRepPIcpCredential } from './icp-signer';
+import { assertTrustedRepPClockReading, unconfiguredRepPClock, type RepPClock } from './clock';
+import { configuredRepPClock } from './hlb-ntp-clock.server';
 import { REP_P_NORMS_REGISTRY, REP_P_NORMS_REVIEW_INTERVAL_DAYS } from './norms-registry';
 
 const DEVELOPER_CNPJ = '14276603000125';
@@ -26,7 +28,7 @@ function brDate(instant: Date, timeZone: string) {
  */
 export async function runRepPDailyMonitor(params: {
   workspaceId: string; now?: Date; timeZone?: string; signerPem?: string;
-  database?: Firestore; repDatabase?: Firestore;
+  database?: Firestore; repDatabase?: Firestore; clock?: RepPClock;
 }) {
   const now = params.now ?? new Date();
   const timeZone = params.timeZone ?? 'America/Fortaleza';
@@ -67,6 +69,25 @@ export async function runRepPDailyMonitor(params: {
   await resolveSystemNotices({ workspaceId, category: 'rep-p.certificate',
     keepDedupeKeys: certificateKey ? [certificateKey] : [], reason: 'superseded_or_renewed' }, now, database);
 
+  // Hora Legal: a sondagem diária exige um quórum novo; cache/fallback nunca resolve o aviso.
+  const clock = params.clock ?? configuredRepPClock() ?? unconfiguredRepPClock;
+  let clockState: 'ok' | 'unavailable' = 'ok';
+  let clockKey: string | null = null;
+  try {
+    const reading = await clock.read({ requireFresh: true });
+    assertTrustedRepPClockReading(reading, now);
+    if (reading.attestationMode !== 'fresh') throw new Error('REP_P_TIME_ATTESTATION_NOT_FRESH');
+  } catch (cause) {
+    clockState = 'unavailable';
+    const issue = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : 'REP_P_TIME_UNAVAILABLE';
+    clockKey = await open({ category: 'rep-p.clock', dedupeKey: `rep-p-clock:${issue}`,
+      severity: 'critical', title: 'Hora oficial do ponto indisponível',
+      body: 'A Hora Legal Brasileira não pôde ser confirmada. Novas batidas permanecem bloqueadas até a fonte voltar ao estado válido.',
+      path: '/dashboard/system-notices' });
+  }
+  await resolveSystemNotices({ workspaceId, category: 'rep-p.clock', keepDedupeKeys: clockKey ? [clockKey] : [],
+    reason: 'official_time_restored' }, now, database);
+
   // Comprovantes pendentes há mais de 1 hora: um aviso por dia enquanto houver pendência.
   // Falha ao ler a ARP (banco ausente ou indisponível) não impede as demais checagens; fica no resultado.
   let pendingCount: number | null = null;
@@ -102,6 +123,6 @@ export async function runRepPDailyMonitor(params: {
   await resolveSystemNotices({ workspaceId, category: 'rep-p.norms-review', keepDedupeKeys: normsKey ? [normsKey] : [],
     reason: 'norms_reviewed' }, now, database);
 
-  return { certificateState: certificate.state, pendingReceipts: pendingCount, receiptsCheck: pendingCount === null ? 'unavailable' as const : 'ok' as const,
+  return { certificateState: certificate.state, clockState, pendingReceipts: pendingCount, receiptsCheck: pendingCount === null ? 'unavailable' as const : 'ok' as const,
     normsReviewOverdue: overdue, opened };
 }
