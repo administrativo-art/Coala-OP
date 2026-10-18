@@ -1248,13 +1248,17 @@ type EmployeeProfileFieldRow = {
 
 const EMPLOYMENT_RELATIONSHIP_FIELD_KEY = "system.employment.relationship";
 
-/** Subgrupo da ficha: sai do card no hover, como a linha das listas (`LiftRow`, escala de tabela). */
-const PROFILE_SUBGROUP_CLASS = [
-  "relative rounded-xl border border-ds-divider bg-ds-surface p-2.5",
-  "transition-[transform,box-shadow,border-color] duration-180 ease-ds-lift",
+/**
+ * Lift da ficha no hover, como a linha das listas (`LiftRow`, escala de tabela). Vai no menor
+ * bloco de leitura: no subgrupo quando a seção tem subgrupos; no card da seção quando não tem.
+ */
+const PROFILE_LIFT_CLASS = [
+  "relative transition-[transform,box-shadow,border-color] duration-180 ease-ds-lift",
   "hover:z-3 hover:-translate-y-[3px] hover:scale-[1.006] hover:border-transparent hover:shadow-ds-lift",
   "motion-reduce:hover:translate-y-0 motion-reduce:hover:scale-100",
 ].join(" ");
+
+const PROFILE_SUBGROUP_CLASS = `rounded-xl border border-ds-divider bg-ds-surface p-2.5 ${PROFILE_LIFT_CLASS}`;
 
 function EmployeeProfileFields({
   user,
@@ -2054,8 +2058,10 @@ function EmployeeProfileFields({
           {orderedSections.map((section) => {
             const sectionFields = sections[section] ?? [];
             const sectionVisibility = getVisibilitySummary(sectionFields.map(({ entry }) => entry));
+            const hasSubgroups = section === "Sistemas"
+              || groupProfileSection(section, buildProfileDisplayItems(sectionFields)) !== null;
             return (
-              <section data-profile-navigation-section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-ds-border bg-white shadow-xs">
+              <section data-profile-navigation-section id={profileSectionDomId(section)} key={section} className={`scroll-mt-[180px] rounded-xl border border-ds-border bg-white shadow-xs ${hasSubgroups ? "" : PROFILE_LIFT_CLASS}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-divider px-3 py-2">
                   <div className="flex items-center gap-3">
                     <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ds-accent-soft text-ds-accent-ink">
@@ -3215,7 +3221,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     const block = systemBlocks.find((item) => item.id === id && item.visible);
     if (!block) return null;
     return (
-      <div data-profile-navigation-section id={profileSectionDomId(block.id)} key={block.id} className={`scroll-mt-[236px] ${className || block.className}`}>
+      <div data-profile-navigation-section id={profileSectionDomId(block.id)} key={block.id} className={`scroll-mt-[236px] rounded-xl ${PROFILE_LIFT_CLASS} ${className || block.className}`}>
         {block.content}
       </div>
     );
