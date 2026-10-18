@@ -118,6 +118,7 @@ const EMPLOYEE_FALLBACKS: Record<string, DocumentVariableResolutionStep[]> = {
   "employee.vt_daily_value": [{ source: "user_record", path: "transportVoucherValue" }],
   "employee.job_role_id": [{ source: "reference", path: "jobRoleId", referenceCollection: "jobRoles" }],
   "employee.children_under_14": [{ source: "computed", path: "children.under14Count" }],
+  "employee.address": [{ source: "computed", path: "address.full" }],
 };
 
 const ONBOARDING_VARIABLES: DocumentVariableCatalogEntry[] = [
@@ -482,6 +483,8 @@ function fieldResolution(key: string): DocumentVariableResolutionStep[] {
     return [...special, base];
   }
   if (key === "employee.children_under_14") return [...special, base];
+  // O endereço sai dos campos do endereço residencial; a linha livre antiga é só reserva.
+  if (key === "employee.address") return [...special, base];
   return [base, ...special];
 }
 

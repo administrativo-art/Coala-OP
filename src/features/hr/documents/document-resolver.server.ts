@@ -4,6 +4,7 @@ import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
 import { DOCUMENT_VARIABLES, formatDocumentVariableValue, type DocumentVariableCatalogEntry } from "@/features/hr/integration/document-variables";
 import type { DPVacationRecord, UniformAssignment, UniformEvent } from "@/types";
 import type { ConditionalRule } from "@/types/rh";
+import { composeResidentialAddress } from "@/features/rh/lib/profile-field-layout";
 
 type RecordValue = Record<string, unknown>;
 function record(value: unknown): RecordValue { return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {}; }
@@ -279,7 +280,21 @@ async function buildComputed(params: {
         return age !== null && age >= 0 && age < 14;
       }).length
     : 0;
+  const text = (key: string) => {
+    const value = fieldStoredRaw(params.fieldValues[key]);
+    return typeof value === "string" ? value : null;
+  };
+  const residentialAddress = composeResidentialAddress({
+    street: text("employee.address_street"),
+    number: text("employee.address_number"),
+    complement: text("employee.address_complement"),
+    neighborhood: text("employee.address_neighborhood"),
+    city: text("employee.city"),
+    state: text("employee.state"),
+    zipcode: text("employee.address_zipcode"),
+  });
   return {
+    address: { full: residentialAddress },
     uniforms: { summary: uniforms },
     vacations: { summary: vacations },
     aso: { summary: asoSummary(params.fieldValues) },
