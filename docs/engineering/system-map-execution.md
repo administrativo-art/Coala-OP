@@ -1,5 +1,11 @@
 # Acompanhamento do mapa técnico
 
+2026-10-18: [registro REP-P](flows/dp-time-recording.md) agora possui APIs autenticadas, ARP em coleções `repP_*` do `coala-rh`, deny-all para clientes, NSR/original transacional, replay idempotente, fronteira de Hora Legal e AFD 004 completo com contrato de CAdES destacado. Empregador, estabelecimento e unidade de execução permanecem separados; ensaio concorrente cobriu unidade excepcional. Os provedores padrão de hora e assinatura bloqueiam produção; INPI/atestados, IAM/backup, comprovante PAdES, app e piloto continuam pendentes.
+
+2026-10-18: o motor puro [`calculateDailyTime`](../../src/features/dp/time-calculation/core.ts) simula uma pessoa/data usando vigência explícita, snapshots privados de turno e intervalos reais normalizados. A saída discrimina cálculo/revisão, proveniência e proposta não persistida de débito. Escala não vira batida; cobertura não troca empregador. Ausências, positivos, território não resolvido e entradas inconsistentes bloqueiam automatismo. Sem API/UI, persistência, REP-P/PTRP, livro de banco ou validação legal; `dp-schedules` permanece Traçado e as fases do plano seguem parciais.
+
+2026-10-17: incrementos locais do histórico de ponto capturam referências privadas de planejamento nos escritores de turnos individual/lote, sem expor vínculo fiscal na escala, e acrescentam serviço e API privados de vínculo por vigência com revisões imutáveis, idempotência e consulta por pessoa/data. A ficha do colaborador apresenta os períodos e permite a publicação incremental autorizada, preservando a timeline carregada e separando empregador de lotação. Coleções de referência são bloqueadas ao cliente; ocorrências mantêm somente ponteiro. O fluxo não altera `users` e ainda não integra o histórico com escala/PTRP. Não há migração real nem autorização de coleta oficial; demais escritores e ativação com vínculos conferidos continuam pendentes. Grupos permanecem Traçados; ver [escalas](flows/dp-schedules.md) e [pessoas](flows/people-access.md).
+
 2026-10-17: a configuração local de build passa a preservar um worker e typecheck por padrão, enquanto o ambiente `BUILD` do Firebase App Hosting testa dois workers, Webpack build worker explícito e remoção somente do typecheck já executado no CI. O ajuste não altera CPU, memória, concorrência ou escala do runtime Cloud Run. Testes de contrato e build local delimitam a configuração; o build remoto e o rollout devem ser medidos e conferidos separadamente na publicação.
 
 2026-10-16: a composição física da sessão passa a apresentar, em cada malote, quantidade e subtotal por denominação de cédula. As moedas continuam fora do boleto e do limite bancário, mas seu total e suas denominações ficam visíveis como reserva do caixa/fundo de troco no primeiro malote, sem duplicação entre malotes. O bloqueio impede reclassificar por fora as moedas de uma sessão já composta. Testes unitários e de integração em emulador delimitam a persistência e a apresentação; o grupo permanece Traçado até homologação visual e bancária.
@@ -85,7 +91,7 @@
 | --- | --- |
 | 1. Mapa curto | Preparado para consulta por linha relevante. |
 | 2. Inventários | Atualizados: 162 páginas internas, 22 externas, 433 APIs e 47 exports de Functions. |
-| 3. Guias detalhados | 56/56 grupos traçados integralmente no levantamento estático; 0/56 verificados nesta base. Há 76 guias de subfluxo. |
+| 3. Guias detalhados | 58/58 grupos traçados integralmente no levantamento estático; 0/58 verificados nesta base. Há 78 guias de subfluxo. |
 | 4. Manutenção | AGENTS.md, harness e verificadores exigem atualizar caminhos e guias com as alterações. |
 | 5. Auditoria | Referências e limites por grupo em flow-verification.md; sem transferir resultados do worktree de correções. |
 | 6. Correções locais anteriores | Preservadas somente no worktree de origem; não incluídas na integração documental. |

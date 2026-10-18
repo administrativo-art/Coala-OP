@@ -1,8 +1,8 @@
 # Entradas externas e rotas de API
 
-Inventário estrutural gerado de `src/app`: **456 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
+Inventário estrutural gerado de `src/app`: **465 rotas de API** e **22 páginas fora do dashboard**. Os métodos são extraídos dos exports; uma linha aqui não comprova autenticação, autorização, uso efetivo nem cobertura de fluxo. Para páginas internas, veja o [inventário do dashboard](route-inventory.md). Para entender comportamento, siga o [harness](investigation-harness.md) e confira o código.
 
-Inclui **53 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
+Inclui **54 exports de Cloud Functions** resolvidos de `functions/src/index.ts`. Destinos manuais na [matriz de superfícies](surface-flow-matrix.csv); uma entrada nova exige classificação explícita. Esta associação indica onde investigar, não certifica autorização, implantação nem execução. Veja a [auditoria ampliada](surface-audit.md).
 
 ## Páginas fora do dashboard
 
@@ -105,6 +105,7 @@ Inclui **53 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/absence-retention/[caseId]/decision` | POST | [src/app/api/dp/absence-retention/[caseId]/decision/route.ts](../../src/app/api/dp/absence-retention/%5BcaseId%5D/decision/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/absence-retention/[caseId]/execute` | POST | [src/app/api/dp/absence-retention/[caseId]/execute/route.ts](../../src/app/api/dp/absence-retention/%5BcaseId%5D/execute/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/bootstrap` | GET | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) | [dp-overview](flows/dp-overview.md) |
+| `/api/dp/collaborators/[userId]/employment-reference` | GET, PUT | [src/app/api/dp/collaborators/[userId]/employment-reference/route.ts](../../src/app/api/dp/collaborators/%5BuserId%5D/employment-reference/route.ts) | [people-access](flows/people-access.md) |
 | `/api/dp/mobile-schedule` | GET | [src/app/api/dp/mobile-schedule/route.ts](../../src/app/api/dp/mobile-schedule/route.ts) | [collaborator-schedule](flows/collaborator-schedule.md) |
 | `/api/dp/natasha/availability` | GET | [src/app/api/dp/natasha/availability/route.ts](../../src/app/api/dp/natasha/availability/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/natasha/journeys` | GET | [src/app/api/dp/natasha/journeys/route.ts](../../src/app/api/dp/natasha/journeys/route.ts) | [dp-schedules](flows/dp-schedules.md) |
@@ -123,6 +124,12 @@ Inclui **53 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/dp/schedules/[scheduleId]/shifts/[shiftId]` | PUT, PATCH, DELETE | [src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/%5BshiftId%5D/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/shifts/bulk` | POST | [src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/shifts/bulk/route.ts) | [dp-schedules](flows/dp-schedules.md) |
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/%5BscheduleId%5D/vacations/route.ts) | [dp-schedules](flows/dp-schedules.md) |
+| `/api/dp/time-recording/afd` | POST | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/markings` | POST, GET | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/options` | GET | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/pending-receipts` | GET | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/receipts/[receiptId]` | GET, POST | [src/app/api/dp/time-recording/receipts/[receiptId]/route.ts](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
+| `/api/dp/time-recording/signer-status` | GET | [src/app/api/dp/time-recording/signer-status/route.ts](../../src/app/api/dp/time-recording/signer-status/route.ts) | [dp-time-recording](flows/dp-time-recording.md) |
 | `/api/dp/time/absence-types` | GET, POST | [src/app/api/dp/time/absence-types/route.ts](../../src/app/api/dp/time/absence-types/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/time/absence-types/[id]` | GET, PATCH, DELETE | [src/app/api/dp/time/absence-types/[id]/route.ts](../../src/app/api/dp/time/absence-types/%5Bid%5D/route.ts) | [dp-absences](flows/dp-absences.md) |
 | `/api/dp/time/journeys` | GET, POST | [src/app/api/dp/time/journeys/route.ts](../../src/app/api/dp/time/journeys/route.ts) | [dp-configuration](flows/dp-configuration.md) |
@@ -385,6 +392,7 @@ Inclui **53 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/jobs/inter/statements/sync` | POST | [src/app/api/jobs/inter/statements/sync/route.ts](../../src/app/api/jobs/inter/statements/sync/route.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `/api/jobs/stone-pix/request` | POST | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
 | `/api/jobs/stone-sales-review/reconcile` | POST | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) | [stone-sales-review](flows/stone-sales-review.md) |
+| `/api/jobs/system-notices/daily` | POST | [src/app/api/jobs/system-notices/daily/route.ts](../../src/app/api/jobs/system-notices/daily/route.ts) | [system-notices](flows/system-notices.md) |
 | `/api/mercadorias` | GET | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) | [registry](flows/registry.md) |
 | `/api/mercadorias/export` | GET | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) | [registry](flows/registry.md) |
 | `/api/mobile/app-attestation` | POST | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) | [purchasing-order-receipt](flows/purchasing-order-receipt.md) |
@@ -466,6 +474,7 @@ Inclui **53 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `/api/stock/reposition-requests/[requestId]` | PATCH | [src/app/api/stock/reposition-requests/[requestId]/route.ts](../../src/app/api/stock/reposition-requests/%5BrequestId%5D/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/return-requests` | GET, POST | [src/app/api/stock/return-requests/route.ts](../../src/app/api/stock/return-requests/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
 | `/api/stock/return-requests/[requestId]` | PATCH, DELETE | [src/app/api/stock/return-requests/[requestId]/route.ts](../../src/app/api/stock/return-requests/%5BrequestId%5D/route.ts) | [stock-requests-reposition-returns](flows/stock-requests-reposition-returns.md) |
+| `/api/system-notices` | GET | [src/app/api/system-notices/route.ts](../../src/app/api/system-notices/route.ts) | [system-notices](flows/system-notices.md) |
 | `/api/tasks` | GET, POST | [src/app/api/tasks/route.ts](../../src/app/api/tasks/route.ts) | [tasks](flows/tasks.md) |
 | `/api/tasks/[taskId]` | PATCH, DELETE | [src/app/api/tasks/[taskId]/route.ts](../../src/app/api/tasks/%5BtaskId%5D/route.ts) | [tasks](flows/tasks.md) |
 | `/api/tasks/[taskId]/status` | PATCH | [src/app/api/tasks/[taskId]/status/route.ts](../../src/app/api/tasks/%5BtaskId%5D/status/route.ts) | [tasks](flows/tasks.md) |
@@ -544,6 +553,7 @@ Inclui **53 exports de Cloud Functions** resolvidos de `functions/src/index.ts`.
 | `syncFromBizneo` | `onSchedule` | [functions/src/rh/sync.ts](../../functions/src/rh/sync.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `syncGoalsForRange` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `syncRhAccessCache` | `onDocumentWritten` | [functions/src/rh/sync.ts](../../functions/src/rh/sync.ts) | [runtime-surfaces](runtime-surfaces.md) |
+| `systemNoticesDailyMonitor` | `onSchedule` | [functions/src/system-notice-jobs.ts](../../functions/src/system-notice-jobs.ts) | [system-notices](flows/system-notices.md) |
 | `terminateUser` | `onCall` | [functions/src/index.ts](../../functions/src/index.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberExpenseCandidateWritten` | `onDocumentWritten` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |
 | `uberSftpDailySync` | `onSchedule` | [functions/src/uber-sftp/jobs.ts](../../functions/src/uber-sftp/jobs.ts) | [runtime-surfaces](runtime-surfaces.md) |

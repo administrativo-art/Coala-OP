@@ -17,7 +17,7 @@
 
 ## Departamento de Desenvolvimento e Tecnologia
 
-- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os sete especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket.
+- Consulte `docs/engineering/development-technology.md` ao coordenar um chamado de desenvolvimento. A sessão principal é TARS; TARS não é um subagente. Os oito especialistas são Gandalf, Shuri, Edna, R2-D2, Velma, Trinity, Rocket e Doc Brown.
 - Escolha somente os especialistas necessários. Execute no máximo um especialista por vez; aguarde sua entrega e confira processos ainda ativos antes de iniciar ou retomar outro. Especialistas não delegam.
 - Selecione o modelo pelo trabalho concreto, conforme `docs/engineering/development-technology.md`. Neste departamento, use Luna ou Sol no Codex e Haiku ou Sonnet no Claude Code. Nunca selecione Fable ou Opus; Astra exige uma solicitação explícita do programador para aquele chamado. Se o trabalho exceder esses modelos, informe o limite e peça uma decisão. Registre o modelo efetivamente usado quando o CLI informar.
 - Antes de usar o Claude Code para este departamento, confira `claude --version`: a restrição da opção Padrão exige a versão 2.1.175 ou posterior. Se o comando resolver para uma instalação mais antiga, use uma instalação compatível antes de iniciar o chamado.
@@ -25,6 +25,12 @@
 - Registre objetivo, autorização, critérios de aceite, trabalho e evidências em `.ai-work/development-technology/<id>/`. Ao mudar de CLI, encerre a sessão anterior e confira o registro e o estado dos arquivos antes de assumir a coordenação.
 - Nome de personagem identifica papel. Somente TARS pode usar um estilo direto, calmo, pragmático e com humor pontual; precisão e regras operacionais têm prioridade.
 - Uma solicitação de implementação autoriza as alterações e verificações locais pertinentes ao escopo. Commit, push, migração em banco real, publicação e deploy exigem autorização própria, salvo quando já foram explicitamente incluídos na solicitação.
+
+### Revisão obrigatória das normas de ponto eletrônico
+
+- Toda mudança que toque registro, tratamento ou documento de ponto exige revisão de Doc Brown (`doc`) antes do commit: `src/features/dp/rep-p/**`, `src/features/dp/time-calculation/**`, `src/app/api/dp/time-recording/**`, telas de ponto no Coala One e no Coala Go, coleções `repP_*` (regras e índices em `firestore.rh.*`), jornadas, escalas e regras que alimentem o PTRP, AFD, AEJ, espelho, comprovante, assinatura, hora legal, retenção e contingência do ponto.
+- O veredito fica no registro do chamado. Requisito `não conforme` bloqueia o commit até correção ou decisão explícita do programador registrada; `decisão jurídica necessária` vira pendência nomeada no plano, nunca suposição no código.
+- O especialista também orienta juridicamente (interpretação, riscos, alternativas e recomendação) e prepara a consulta ao advogado quando o risco for alto. A orientação não é parecer definitivo, não declara conformidade legal e não substitui advogado habilitado, atestado técnico REP-P/PTRP ou registro no INPI.
 
 ### Gatilho compartilhado de entrega integral
 

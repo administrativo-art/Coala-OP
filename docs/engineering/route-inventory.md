@@ -14,13 +14,14 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | --- | --- | --- |
 | `dashboard/audit` | [page.tsx](../../src/app/dashboard/audit/page.tsx) | [stock-session-management.tsx](../../src/components/stock-session-management.tsx) |
 
-## collaborator (3)
+## collaborator (4)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
 | --- | --- | --- |
 | `dashboard/collaborator` | [page.tsx](../../src/app/dashboard/collaborator/page.tsx) | [collaborator-dashboard-panel.tsx](../../src/components/collaborator-dashboard-panel.tsx) |
 | `dashboard/collaborator/requests` | [page.tsx](../../src/app/dashboard/collaborator/requests/page.tsx) | [collaborator-requests-page.tsx](../../src/features/hr/requests/collaborator-requests-page.tsx) |
 | `dashboard/collaborator/schedule` | [page.tsx](../../src/app/dashboard/collaborator/schedule/page.tsx) | [collaborator-schedule-page.tsx](../../src/components/collaborator-schedule-page.tsx) |
+| `dashboard/collaborator/time-recording` | [page.tsx](../../src/app/dashboard/collaborator/time-recording/page.tsx) | [my-time-recording-page.tsx](../../src/features/dp/rep-p/my-time-recording-page.tsx) |
 
 ## commercial (1)
 
@@ -321,6 +322,12 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/stock/uniforms` | [page.tsx](../../src/app/dashboard/stock/uniforms/page.tsx) | [uniform-management.tsx](../../src/components/uniform-management.tsx), [page-hero.tsx](../../src/components/patterns/page-hero.tsx) |
 | `dashboard/stock/write-down` | [page.tsx](../../src/app/dashboard/stock/write-down/page.tsx) | Redireciona para `/dashboard/stock/inventory-control` |
 
+## system-notices (1)
+
+| Pasta sob `src/app` | Arquivo | Próximo ponto direto |
+| --- | --- | --- |
+| `dashboard/system-notices` | [page.tsx](../../src/app/dashboard/system-notices/page.tsx) | [system-notices-page.tsx](../../src/features/system-notices/system-notices-page.tsx) |
+
 ## tasks (1)
 
 | Pasta sob `src/app` | Arquivo | Próximo ponto direto |
@@ -340,4 +347,4 @@ Gerado de `src/app/dashboard/**/page.tsx` por `scripts/generate-route-inventory.
 | `dashboard/users/inactive` | [page.tsx](../../src/app/dashboard/users/inactive/page.tsx) | [inactive-users-screen.tsx](../../src/components/inactive-users-screen.tsx) |
 | `dashboard/users` | [page.tsx](../../src/app/dashboard/users/page.tsx) | Redireciona para `/dashboard/dp/collaborators` |
 
-Total: **163 páginas** no checkout usado para a geração.
+Total: **165 páginas** no checkout usado para a geração.

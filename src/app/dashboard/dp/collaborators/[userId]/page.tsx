@@ -121,6 +121,7 @@ import {
 } from "@/lib/hr/employment-relationship";
 import { createManagedTerminationProcess } from "@/features/hr/termination/client";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
+import { EmploymentReferenceCard } from "@/features/dp/employment-reference/employment-reference-card";
 
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
@@ -2600,7 +2601,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const { userId } = use(params);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { activeUsers, terminatedUsers, permissions, firebaseUser, user: currentUser, updateUser } = useAuth();
+  const { activeUsers, terminatedUsers, permissions, firebaseUser, user: currentUser, updateUser, isDefaultAdmin } = useAuth();
   const { toast } = useToast();
   const { shiftDefinitions, units, vacations, vacationsLoading } = useDPBootstrap();
   const [fieldMapReloadKey, setFieldMapReloadKey] = useState(0);
@@ -2728,6 +2729,10 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const blockOrder = (id: keyof typeof DEFAULT_PROFILE_BLOCKS) => profileBlocks[id]?.order ?? DEFAULT_PROFILE_BLOCKS[id].order;
   const canManageSystemFieldVisibility = Boolean(
     permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true
+  );
+  const canPublishEmploymentReference = Boolean(
+    !ownProfileOnly
+    && (isDefaultAdmin || permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true)
   );
   const systemViewerRole: RhRole = permissions.settings?.manageUsers === true
     ? "admin"
@@ -3452,6 +3457,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
               <div className="space-y-2.5">
                 {renderSystemBlock("system.schedule_units")}
+                <EmploymentReferenceCard
+                  user={collaborator}
+                  units={units}
+                  firebaseUser={firebaseUser}
+                  canPublish={canPublishEmploymentReference}
+                />
               </div>
               {renderSystemBlock("system.vacations")}
             </div>

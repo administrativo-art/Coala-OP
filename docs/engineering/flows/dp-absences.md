@@ -11,7 +11,7 @@ Este fluxo separa quatro responsabilidades:
 
 Férias não pertencem a este domínio: continuam no módulo próprio, com aquisição, concessão e efeitos específicos. Pessoa jurídica também não usa ausência trabalhista; eventual indisponibilidade contratual de PJ deve ser tratada em outro fluxo. Os vínculos elegíveis aqui são CLT, Aprendiz e Estágio, cada um com regras configuráveis e sem presumir que compartilham os mesmos limites.
 
-Este documento descreve o plano completo. A **Etapa 1** está publicada. As Etapas 2 e 3 estão funcionalmente fechadas no código local desta branch, com os gates e limites descritos abaixo; isso ainda não significa migração, homologação, ativação operacional ou publicação em produção.
+Este documento descreve o domínio de ausências. As **Etapas 1, 2 e 3 estão em produção** desde 17/10/2026: catálogo e pedidos no banco `coala-rh` (recibo `active`) e aplicação na escala com `DP_ABSENCE_OPERATIONAL_GUARD=on` e recibo operacional `ready`. O teste controlado na tela e a homologação funcional pelo DP continuam pendentes. A antiga Etapa 4 foi absorvida pelas Fases 3 e 5 do [plano mestre de ponto, jornada e fechamento](../../plano-jornada-fechamento-rh.md#6-fases).
 
 ## Banco e versionamento — decisão de 14/10/2026
 
@@ -228,9 +228,11 @@ A análise deve respeitar escopo de unidade e separar `view`, `review` e eventua
 
 ## Etapa 4 — ponto, folha, integrações e indicadores
 
-Somente depois da ocorrência aprovada e da integração validada:
+**Revisão de 17/10/2026:** esta etapa passa a ser executada dentro do [plano mestre](../../plano-jornada-fechamento-rh.md#6-fases): a parte de ponto na Fase 3 (PTRP) e a parte de folha na Fase 5 (eventos e fechamento). O ponto oficial futuro é o REP-P do Coala; não haverá projeção de justificativas no Bizneo, que sai no longo prazo. Os itens abaixo continuam como requisitos dessas fases.
 
-- projetar justificativa no ponto/Bizneo;
+Somente depois da ocorrência aprovada e do PTRP validado:
+
+- aplicar o tratamento da ocorrência no PTRP, sem alterar a marcação original da ARP;
 - creditar período trabalhado, debitar banco ou enviar para revisão, conforme o efeito;
 - produzir evento para folha sem calcular valor diretamente neste cadastro;
 - consolidar absenteísmo apenas quando `includeInAbsenteeism` estiver ativo;
@@ -299,11 +301,11 @@ A reconciliação da exclusão roda a cada 15 minutos: são 2.880 consultas de f
 
 Custos adicionais: página do sino até 26 documentos mais cursor; 5 aberturas/dia × 100 pessoas × 22 dias × 26 = 286.000 leituras/mês, além de autenticação/cursores, sem polling. O dispatcher revalida até 20 destinatários e grava somente os avisos internos elegíveis; não consulta dispositivos para ausências. Reconciliação-sombra: até 7 leituras/3 escritas por operação, além da autenticação; repetição da mesma operação não escreve. Dez operações/dia representam teto ilustrativo de 70 leituras/30 escritas diárias. Os índices RH declarados cobrem as combinações de filtros, inclusive SLA vencido; emulador não comprova provisionamento em produção.
 
-- homologar cutover do catálogo e pedidos no banco RH, índices, bootstrap e guard operacional em ambiente controlado antes de produção;
+- teste controlado na tela e homologação funcional pelo DP (cutover do catálogo, índices, bootstrap e guard já executados em produção em 17/10/2026);
 - inventariar e adaptar qualquer writer Admin externo ao repositório que possa contornar os fences;
 - executar testes controlados com Storage real para o descarte após 20 anos, sem remover documentos de produção durante a homologação;
 - validar os fluxos de encerramento documental e troca de custódia com o DP responsável;
-- mapeamento de cada efeito no Bizneo e na folha;
+- mapeamento de cada efeito no PTRP e nos eventos de folha (Fases 3 e 5 do plano mestre);
 - possibilidade e autoridade para reverter aprovação já exportada.
 
 As políticas concretas e documentos aceitos são preenchidos nas regras/instruções existentes e validados pelo DP/jurídico antes da publicação; não são um questionário estrutural novo. O sistema não transforma exemplos de interface em política trabalhista. Retenção, classificação e acesso definidos acima têm implementação local; ainda exigem inventário operacional de qualquer writer Admin externo, testes com Storage real controlado, migração/cutover e publicação antes de uso real.
