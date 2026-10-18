@@ -271,7 +271,7 @@ Pendências nomeadas, mantidas por decisão do programador. `REP_P_MARKING_ENABL
 | Pendência | Origem | Gate |
 | --- | --- | --- |
 | Eventos tipo 6 (indisponibilidade/retorno) e decisão sobre tipo 4 gravados na ARP | Anexo IX 6.2 e 6.4 | Piloto |
-| Reemissão automática de comprovantes pendentes; AFD fatiado por dia ou NSR acima de 2.500 eventos | Art. 80 II; art. 81 §2º | Piloto |
+| Frequência da reemissão (hoje diária, no vigia) e `/M`/`signingTime` pela hora legal; fila de pendentes permanentes | Art. 80 II | Piloto. Feito em 18/10/2026: reemissão automática sem tocar a ARP e AFD paginado em fotografia única, com testes. Falta job de intervalo curto (sugestão 15 min) antes de ligar a flag |
 | Política de assinatura ICP-Brasil (`sigPolicyId` AD-RB) no CAdES; cadeia até a raiz e revogação; `/M` e `signingTime` vindos da hora legal | Art. 88; DOC-ICP-15.03 | Validar no verificador do ITI com o e-CNPJ real antes do piloto |
 | Carimbo de tempo emitido por ACT | DOC-ICP-11 e política aplicável | **Pendência:** pode ser pago; decidir necessidade jurídica/técnica antes do piloto, sem presumir contratação |
 | Preenchimento dos campos numéricos do AFD (espaço à direita ou zeros à esquerda) | Leiaute AFD, regra 7 | **Antes do primeiro registro real** (irreversível pelo hash) |
@@ -312,7 +312,7 @@ Todos os IDs permanecem com implementação/eficácia **não verificadas**. Uma 
 | R7 | O | Hash fiscal da marcação | L6; L3 art. 79 | 2: vetores e coerência comprovante/AFD |
 | R8 | C | Escritor dedicado, privilégio mínimo e evidência independente | Projeto de proteção, não tecnologia imposta por lei | 2: tentativa de reescrita detectada/impedida |
 | R9 | C | Backup/restauração e preservação independente | Projeto a aprovar; L3 Anexo IX a conferir | 2/6: recuperação íntegra e continuidade |
-| R10 | O | Comprovante PDF assinado e acesso após marcação | L5 itens 30/40; L3 arts. 79–80 | 2/7: campos, PAdES e acesso. Campos/INPI e pré-requisitos corrigidos em 10-A; **lacunas abertas:** reemissão automática, política ICP-Brasil e acesso nas 48 h com comprovante pendente |
+| R10 | O | Comprovante PDF assinado e acesso após marcação | L5 itens 30/40; L3 arts. 79–80 | 2/7: campos, PAdES e acesso. Campos/INPI e pré-requisitos corrigidos em 10-A; reemissão automática feita no vigia diário; **lacunas abertas:** frequência diária insuficiente para o piloto, `/M` pela hora legal, política ICP-Brasil e acesso nas 48 h com comprovante pendente |
 | R11 | O | Extração mínima das últimas 48 h | L5 item 40 | 2: download independente do RH |
 | R12 | O | AFD oficial extraível pelo REP-P | L6; L5 itens 38/39 | 2/4: formato e simulação fiscal |
 | R13 | O | AFD CAdES destacado pelo desenvolvedor | L5 itens 28/33 | 2/7: assinatura real e arquivo verificados |

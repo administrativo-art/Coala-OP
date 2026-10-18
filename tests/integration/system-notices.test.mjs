@@ -47,6 +47,8 @@ test('vigia diário abre um aviso por marco, resolve superados e entrega só a q
     const first = await runRepPDailyMonitor({ workspaceId, signerPem, now: firstNow, clock: unavailableClock });
     assert.equal(first.certificateState, 'valid');
     assert.equal(first.pendingReceipts, 1);
+    // A reemissão roda antes da contagem; sem a batida correspondente o comprovante não é emitido às cegas.
+    assert.deepEqual(first.receiptRetry, { attempted: 1, issued: 0, stillPending: 0, failed: 1 });
     assert.equal(first.normsReviewOverdue, true);
     assert.equal(first.clockState, 'unavailable');
     assert.equal(first.opened.length, 4);

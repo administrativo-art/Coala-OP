@@ -29,14 +29,17 @@ const EVENTS = 'repP_events';
 const ATTEMPTS = 'repP_attempts';
 const EXPORT_AUDIT = 'repP_exportAudit';
 const RECEIPTS = 'repP_receipts';
-const MAX_AFD_EVENTS = 2_500;
+// Leitura em páginas para o AFD sair inteiro e de pronto (art. 81 §2º); o teto só protege memória.
+const AFD_PAGE_SIZE = 2_500;
+const MAX_AFD_EVENTS = 100_000;
+const MAX_RECEIPT_RETRIES_PER_RUN = 50;
 const MAX_HISTORY_MARKINGS = 300;
 const MAX_PENDING_RECEIPTS = 100;
 const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean; afdPageSize?: number; afdMaxEvents?: number;
 }>;
 
 const unavailableSigner: RepPCadesSigner = Object.freeze({
@@ -388,6 +391,38 @@ export async function retryOwnRepPReceipt(context: ServerUserContext, receiptId:
   return issueRepPReceipt(deps, marking);
 }
 
+/**
+ * Reemissão automática dos comprovantes pendentes do workspace, mais antigos primeiro.
+ * Nunca registra batida nem altera a ARP: só emite o comprovante de marcações já persistidas.
+ */
+export async function retryPendingRepPReceipts(params: { workspaceId: string; limit?: number }, injected: Partial<Dependencies> = {}) {
+  const deps = { ...defaults, ...injected };
+  const pending = await deps.repDb.collection(RECEIPTS).where('workspaceId', '==', params.workspaceId)
+    .where('status', '==', 'pending').orderBy('createdAt').limit(params.limit ?? MAX_RECEIPT_RETRIES_PER_RUN).get();
+  const result = { attempted: 0, issued: 0, stillPending: 0, failed: 0 };
+  for (const receipt of pending.docs) {
+    result.attempted += 1;
+    try {
+      const marking = (await deps.repDb.collection(EVENTS).doc(receipt.id).get()).data() as RepPMarkingCandidate | undefined;
+      if (!marking || marking.workspaceId !== params.workspaceId || marking.markingId !== receipt.get('markingId')
+        || !verifyRepPMarkingCandidate(marking)) {
+        result.failed += 1;
+        // Registra a falha no próprio comprovante para a operação enxergar; nunca emite às cegas.
+        await receipt.ref.update({ attempts: FieldValue.increment(1), lastIssue: 'REP_P_RECEIPT_MARKING_UNVERIFIABLE',
+          lastAttemptAt: Timestamp.now() }).catch(() => undefined);
+        continue;
+      }
+      const state = await issueRepPReceipt(deps, marking);
+      if (state.receiptStatus === 'available') result.issued += 1; else result.stillPending += 1;
+    } catch {
+      result.failed += 1;
+    }
+  }
+  return result;
+}
+
+export type RepPServiceDependencies = Partial<Dependencies>;
+
 export async function exportSignedRepPAfd(context: ServerUserContext, raw: unknown, injected: Partial<Dependencies> = {}) {
   const parsed = repPAfdExportSchema.safeParse(raw);
   if (!parsed.success) throw fail('REP_P_AFD_INPUT_INVALID', 'Período de exportação inválido.');
@@ -401,12 +436,27 @@ export async function exportSignedRepPAfd(context: ServerUserContext, raw: unkno
   const reading = await deps.clock.read();
   assertTrustedRepPClockReading(reading);
   const generatedAt = formatRepPAfdTimestamp(reading.instant, state.timeZone);
-  const snapshot = await deps.repDb.collection(EVENTS)
+  const pageSize = deps.afdPageSize ?? AFD_PAGE_SIZE;
+  const maxEvents = deps.afdMaxEvents ?? MAX_AFD_EVENTS;
+  const base = deps.repDb.collection(EVENTS)
     .where('workspaceId', '==', context.workspace_id).where('establishmentId', '==', input.establishmentId)
     .where('recordedDate', '>=', input.startDate).where('recordedDate', '<=', input.endDate)
-    .orderBy('recordedDate').orderBy('nsr').limit(MAX_AFD_EVENTS + 1).get();
-  if (snapshot.size > MAX_AFD_EVENTS) throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação.');
-  const events = snapshot.docs.map((document) => document.data() as RepPAfdEvent).sort((a, b) => a.nsr - b.nsr);
+    .orderBy('recordedDate').orderBy('nsr');
+  // Todas as páginas na mesma fotografia (transação somente leitura): batida gravada durante a
+  // exportação fica fora do arquivo inteiro, em vez de abrir lacuna de NSR no meio dele.
+  const events = await deps.repDb.runTransaction(async (transaction) => {
+    const collected: RepPAfdEvent[] = [];
+    for (let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null; ;) {
+      const page: FirebaseFirestore.QuerySnapshot = await transaction.get((cursor ? base.startAfter(cursor) : base).limit(pageSize));
+      collected.push(...page.docs.map((document) => document.data() as RepPAfdEvent));
+      if (collected.length > maxEvents) {
+        throw fail('REP_P_AFD_RANGE_TOO_LARGE', 'O período excede o limite seguro de exportação. Divida o intervalo de datas.');
+      }
+      if (page.size < pageSize) return collected;
+      cursor = page.docs[page.docs.length - 1];
+    }
+  }, { readOnly: true });
+  events.sort((a, b) => a.nsr - b.nsr);
   const pkg = generateRepPAfd({ profile: state.profile, startDate: input.startDate, endDate: input.endDate, generatedAt, events });
   const signed = await signRepPAfd(pkg, deps.signer, state.profile.developerCnpj);
   await deps.repDb.collection(EXPORT_AUDIT).add({ schemaVersion: 1, workspaceId: context.workspace_id,
