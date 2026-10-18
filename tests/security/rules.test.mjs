@@ -59,12 +59,12 @@ test("referências históricas privadas não são acessíveis nem por administra
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "users/owner"), { isActive: true, sessionVersion: 1, isDefaultAdmin: true });
       await setDoc(doc(context.firestore(), "dp_shiftReferenceHistory/private"), { userId: "owner", reference: { employerCnpj: "14276603000125" } });
-      for (const collectionName of ["dp_employmentReferenceHeads", "dp_employmentReferenceHistories", "dp_employmentReferenceRequests"]) {
+      for (const collectionName of ["dp_employmentReferenceHeads", "dp_employmentReferenceHistories", "dp_employmentReferenceRequests", "systemNotices"]) {
         await setDoc(doc(context.firestore(), collectionName, "private"), { userId: "owner" });
       }
     });
     for (const context of [env.unauthenticatedContext(), env.authenticatedContext("owner", { sessionVersion: 1, isDefaultAdmin: true })]) {
-      for (const collectionName of ["dp_shiftReferenceHistory", "dp_employmentReferenceHeads", "dp_employmentReferenceHistories", "dp_employmentReferenceRequests"]) {
+      for (const collectionName of ["dp_shiftReferenceHistory", "dp_employmentReferenceHeads", "dp_employmentReferenceHistories", "dp_employmentReferenceRequests", "systemNotices"]) {
         const reference = doc(context.firestore(), collectionName, "private");
         await assertFails(getDoc(reference));
         await assertFails(setDoc(reference, { altered: true }));

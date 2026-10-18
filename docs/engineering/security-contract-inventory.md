@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **456**
-- Totalmente contratados: **107**
+- Arquivos de rota: **465**
+- Totalmente contratados: **116**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -82,6 +82,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/absence-retention/[caseId]/decision` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-retention/[caseId]/decision/route.ts](../../src/app/api/dp/absence-retention/[caseId]/decision/route.ts) |
 | `/api/dp/absence-retention/[caseId]/execute` | POST ✓ | `CONTRACTED` | [src/app/api/dp/absence-retention/[caseId]/execute/route.ts](../../src/app/api/dp/absence-retention/[caseId]/execute/route.ts) |
 | `/api/dp/bootstrap` | GET ✓ | `CONTRACTED` | [src/app/api/dp/bootstrap/route.ts](../../src/app/api/dp/bootstrap/route.ts) |
+| `/api/dp/collaborators/[userId]/employment-reference` | GET ✓, PUT ✓ | `CONTRACTED` | [src/app/api/dp/collaborators/[userId]/employment-reference/route.ts](../../src/app/api/dp/collaborators/[userId]/employment-reference/route.ts) |
 | `/api/dp/mobile-schedule` | GET ✓ | `CONTRACTED` | [src/app/api/dp/mobile-schedule/route.ts](../../src/app/api/dp/mobile-schedule/route.ts) |
 | `/api/dp/natasha/availability` | GET ✓ | `CONTRACTED` | [src/app/api/dp/natasha/availability/route.ts](../../src/app/api/dp/natasha/availability/route.ts) |
 | `/api/dp/natasha/journeys` | GET ✓ | `CONTRACTED` | [src/app/api/dp/natasha/journeys/route.ts](../../src/app/api/dp/natasha/journeys/route.ts) |
@@ -100,6 +101,12 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/dp/schedules/[scheduleId]/shifts/[shiftId]` | DELETE, PATCH, PUT | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/[shiftId]/route.ts) |
 | `/api/dp/schedules/[scheduleId]/shifts/bulk` | POST | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts](../../src/app/api/dp/schedules/[scheduleId]/shifts/bulk/route.ts) |
 | `/api/dp/schedules/[scheduleId]/vacations` | GET | `LEGACY_BASELINE` | [src/app/api/dp/schedules/[scheduleId]/vacations/route.ts](../../src/app/api/dp/schedules/[scheduleId]/vacations/route.ts) |
+| `/api/dp/time-recording/afd` | POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/afd/route.ts](../../src/app/api/dp/time-recording/afd/route.ts) |
+| `/api/dp/time-recording/markings` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/markings/route.ts](../../src/app/api/dp/time-recording/markings/route.ts) |
+| `/api/dp/time-recording/options` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/options/route.ts](../../src/app/api/dp/time-recording/options/route.ts) |
+| `/api/dp/time-recording/pending-receipts` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/pending-receipts/route.ts](../../src/app/api/dp/time-recording/pending-receipts/route.ts) |
+| `/api/dp/time-recording/receipts/[receiptId]` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/receipts/[receiptId]/route.ts](../../src/app/api/dp/time-recording/receipts/[receiptId]/route.ts) |
+| `/api/dp/time-recording/signer-status` | GET ✓ | `CONTRACTED` | [src/app/api/dp/time-recording/signer-status/route.ts](../../src/app/api/dp/time-recording/signer-status/route.ts) |
 | `/api/dp/time/absence-types` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/absence-types/route.ts](../../src/app/api/dp/time/absence-types/route.ts) |
 | `/api/dp/time/absence-types/[id]` | DELETE ✓, GET ✓, PATCH ✓ | `CONTRACTED` | [src/app/api/dp/time/absence-types/[id]/route.ts](../../src/app/api/dp/time/absence-types/[id]/route.ts) |
 | `/api/dp/time/journeys` | GET ✓, POST ✓ | `CONTRACTED` | [src/app/api/dp/time/journeys/route.ts](../../src/app/api/dp/time/journeys/route.ts) |
@@ -362,6 +369,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/jobs/inter/statements/sync` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/inter/statements/sync/route.ts](../../src/app/api/jobs/inter/statements/sync/route.ts) |
 | `/api/jobs/stone-pix/request` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) |
 | `/api/jobs/stone-sales-review/reconcile` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) |
+| `/api/jobs/system-notices/daily` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/system-notices/daily/route.ts](../../src/app/api/jobs/system-notices/daily/route.ts) |
 | `/api/mercadorias` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/route.ts](../../src/app/api/mercadorias/route.ts) |
 | `/api/mercadorias/export` | GET | `LEGACY_BASELINE` | [src/app/api/mercadorias/export/route.ts](../../src/app/api/mercadorias/export/route.ts) |
 | `/api/mobile/app-attestation` | POST ✓ | `CONTRACTED` | [src/app/api/mobile/app-attestation/route.ts](../../src/app/api/mobile/app-attestation/route.ts) |
@@ -443,6 +451,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/stock/reposition-requests/[requestId]` | PATCH ✓ | `CONTRACTED` | [src/app/api/stock/reposition-requests/[requestId]/route.ts](../../src/app/api/stock/reposition-requests/[requestId]/route.ts) |
 | `/api/stock/return-requests` | GET, POST | `LEGACY_BASELINE` | [src/app/api/stock/return-requests/route.ts](../../src/app/api/stock/return-requests/route.ts) |
 | `/api/stock/return-requests/[requestId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/stock/return-requests/[requestId]/route.ts](../../src/app/api/stock/return-requests/[requestId]/route.ts) |
+| `/api/system-notices` | GET ✓ | `CONTRACTED` | [src/app/api/system-notices/route.ts](../../src/app/api/system-notices/route.ts) |
 | `/api/tasks` | GET, POST | `LEGACY_BASELINE` | [src/app/api/tasks/route.ts](../../src/app/api/tasks/route.ts) |
 | `/api/tasks/[taskId]` | DELETE, PATCH | `LEGACY_BASELINE` | [src/app/api/tasks/[taskId]/route.ts](../../src/app/api/tasks/[taskId]/route.ts) |
 | `/api/tasks/[taskId]/status` | PATCH | `LEGACY_BASELINE` | [src/app/api/tasks/[taskId]/status/route.ts](../../src/app/api/tasks/[taskId]/status/route.ts) |

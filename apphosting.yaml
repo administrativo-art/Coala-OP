@@ -98,6 +98,9 @@ env:
   # e-CNPJ A1 da desenvolvedora (chave + certificados em PEM) para PAdES do comprovante e CAdES do AFD.
   - variable: REP_P_ICP_SIGNER_PEM
     secret: REP_P_ICP_SIGNER_PEM
+  # Autentica a função agendada systemNoticesDailyMonitor na rota de avisos do sistema.
+  - variable: SYSTEM_NOTICES_JOB_SECRET
+    secret: SYSTEM_NOTICES_JOB_SECRET
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_ENABLED
     value: "true"
   - variable: INTER_SERVICE_PAYMENT_APPROVAL_SOURCE_IDS
