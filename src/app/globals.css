@@ -867,6 +867,11 @@
   0% { background-position: 200% 0; }
   100% { background-position: -100% 0; }
 }
+@keyframes coala-shimmer-divider {
+  0% { background-position: 0 200%; box-shadow: 0 0 0 rgba(238, 111, 168, 0); }
+  45% { box-shadow: 0 0 9px rgba(238, 111, 168, .58); }
+  100% { background-position: 0 -100%; box-shadow: 0 0 0 rgba(238, 111, 168, 0); }
+}
 .coala-shimmer-word {
   background: linear-gradient(110deg, var(--ds-accent-kicker-dark) 25%, #ffffff 45%, var(--ds-accent-kicker-dark) 65%);
   background-size: 250% 100%;
@@ -875,6 +880,12 @@
   color: transparent;
   animation: coala-shimmer-word 3.4s linear infinite;
 }
+.coala-shimmer-divider {
+  background: linear-gradient(180deg, var(--ds-accent-kicker-dark) 22%, #ffffff 48%, var(--ds-accent-kicker-dark) 74%);
+  background-size: 100% 250%;
+  animation: coala-shimmer-divider 3.4s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .coala-shimmer-word { animation: none; background: none; color: var(--ds-accent-kicker-dark); -webkit-text-fill-color: currentColor; }
+  .coala-shimmer-divider { animation: none; background: var(--ds-accent-kicker-dark); box-shadow: none; }
 }
