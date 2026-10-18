@@ -18,3 +18,12 @@ test("CPF aceita só números, exibe com pontos e traço e grava só dígitos", 
 test("campos sem máscara continuam livres", () => {
   assert.equal(getFieldMask("employee.name"), null);
 });
+
+test("CEP aceita só números e exibe 00000-000", () => {
+  const mask = getFieldMask("employee.address_zipcode");
+  assert.ok(mask);
+  assert.equal(mask.normalize("65010-000x"), "65010000");
+  assert.equal(mask.format("65010000"), "65010-000");
+  assert.equal(mask.validate("6501"), "O CEP tem 8 dígitos.");
+  assert.equal(mask.validate(""), null);
+});

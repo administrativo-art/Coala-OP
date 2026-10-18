@@ -42,6 +42,14 @@ import { canViewField, normalizeFieldVisibility } from "@/types/rh";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CYCLE_STATUS_CONFIG, getVacationCycleHistory, type VacationCycle } from "@/lib/utils/vacation-logic";
 import { FieldValue } from "@/features/rh/components/FieldValue";
+import { formatFieldValue } from "@/features/rh/lib/field-format";
+import {
+  HIDDEN_PROFILE_FIELD_KEYS,
+  buildProfileDisplayItems,
+  groupProfileSection,
+  type CompositeFieldDef,
+  type ProfileDisplayItem,
+} from "@/features/rh/lib/profile-field-layout";
 import { callOnFieldUpdate } from "@/features/rh/lib/rh-client";
 import { DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
 import {
@@ -106,6 +114,7 @@ import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from "@/lib/hr/terminati
 import {
   employmentRelationshipLabel,
   isEmploymentRelationshipEligibleForAbsence,
+  resolveEmploymentRelationshipType,
   terminationCopyForRelationship,
   terminationReasonsForRelationship,
   type EmploymentTerminationReason,
@@ -129,10 +138,10 @@ const FIELD_VISIBILITY_HELP: Record<NormalizedFieldVisibility, string> = {
 };
 
 const FIELD_VISIBILITY_TONE: Record<NormalizedFieldVisibility, string> = {
-  public: "border-emerald-100 bg-emerald-50 text-emerald-700",
-  restricted_partial: "border-sky-100 bg-sky-50 text-sky-700",
-  restricted_total: "border-amber-100 bg-amber-50 text-amber-700",
-  confidential: "border-rose-100 bg-rose-50 text-rose-700",
+  public: "border-ds-ok-bg bg-ds-ok-bg text-ds-ok",
+  restricted_partial: "border-ds-info-bg bg-ds-info-bg text-ds-info",
+  restricted_total: "border-ds-warn-bg bg-ds-warn-bg text-ds-warn",
+  confidential: "border-ds-danger-bg bg-ds-danger-bg text-ds-danger",
 };
 
 const AVATAR_COLORS = [
@@ -147,10 +156,10 @@ const AVATAR_COLORS = [
 ];
 
 const VACATION_STATUS: Record<string, { label: string; className: string }> = {
-  PENDING: { label: "Pendente", className: "bg-amber-100 text-amber-800" },
-  APPROVED: { label: "Aprovado", className: "bg-emerald-100 text-emerald-800" },
-  REJECTED: { label: "Rejeitado", className: "bg-rose-100 text-rose-800" },
-  PLANNED: { label: "Planejado", className: "bg-sky-100 text-sky-800" },
+  PENDING: { label: "Pendente", className: "bg-ds-warn-bg text-ds-warn" },
+  APPROVED: { label: "Aprovado", className: "bg-ds-ok-bg text-ds-ok" },
+  REJECTED: { label: "Rejeitado", className: "bg-ds-danger-bg text-ds-danger" },
+  PLANNED: { label: "Planejado", className: "bg-ds-info-bg text-ds-info" },
 };
 
 type TerminationPayload = {
@@ -378,6 +387,7 @@ function fieldDisplayLabel(label: string) {
     .replace(/\bcnh\b/gi, "CNH")
     .replace(/\baso\b/gi, "ASO")
     .replace(/\buf\b/gi, "UF")
+    .replace(/\bcep\b/gi, "CEP")
     .replace(/\bpcd\b/gi, "PCD");
 }
 
@@ -434,13 +444,13 @@ function Panel({ title, icon: Icon, children, className = "", action }: {
   action?: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-xl border border-[#dedfe4] bg-white shadow-xs ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2.5">
+    <section className={`rounded-xl border border-ds-border bg-white shadow-xs ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-divider px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fff0f6] text-[#df2f78]">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ds-accent-soft text-ds-accent-ink">
             <Icon className="h-5 w-5" />
           </span>
-          <h2 className="min-w-0 text-sm font-black leading-tight text-[#1d1d26]">{title}</h2>
+          <h2 className="min-w-0 text-sm font-black leading-tight text-ds-ink">{title}</h2>
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
@@ -451,10 +461,10 @@ function Panel({ title, icon: Icon, children, className = "", action }: {
 
 function Chip({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "good" | "warn" | "bad" }) {
   const tones = {
-    default: "bg-[#f3f3f5] text-[#6f6f7c]",
-    good: "bg-[#eafaf2] text-[#008963]",
-    warn: "bg-[#fff3c4] text-[#a35a00]",
-    bad: "bg-[#ffe9ef] text-[#d9275f]",
+    default: "bg-ds-neutral-bg text-ds-ink-muted",
+    good: "bg-ds-ok-bg text-ds-ok",
+    warn: "bg-ds-warn-bg text-ds-warn",
+    bad: "bg-ds-danger-bg text-ds-danger",
   };
   return <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${tones[tone]}`}>{children}</span>;
 }
@@ -487,13 +497,13 @@ function FieldVisibilityButton({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 rounded-lg p-2">
-        <div className="mb-2 flex items-start gap-2 rounded-md bg-slate-50 p-2">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white text-slate-500 ring-1 ring-slate-200">
+        <div className="mb-2 flex items-start gap-2 rounded-md bg-ds-muted p-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white text-ds-ink-muted ring-1 ring-ds-border">
             <Eye className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-xs font-black text-slate-950">Visibilidade do campo</p>
-            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-slate-500">
+            <p className="text-xs font-black text-ds-ink">Visibilidade do campo</p>
+            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-ds-ink-muted">
               Essa alteração vale para este campo em todos os colaboradores.
             </p>
           </div>
@@ -511,7 +521,7 @@ function FieldVisibilityButton({
                 className={`flex w-full items-start gap-2 rounded-md border p-2 text-left transition ${
                   selected
                     ? FIELD_VISIBILITY_TONE[visibility]
-                    : "border-slate-100 bg-white text-slate-700 hover:bg-slate-50"
+                    : "border-ds-divider bg-white text-ds-ink-2 hover:bg-ds-muted"
                 } disabled:cursor-not-allowed disabled:opacity-70`}
               >
                 <OptionIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -552,7 +562,7 @@ function CardVisibilityButton({
   const normalizedVisibility = normalizeFieldVisibility(visibility);
   const Icon = mixed ? Eye : fieldVisibilityIcon(normalizedVisibility);
   const tone = mixed
-    ? "border-slate-200 bg-slate-50 text-slate-600"
+    ? "border-ds-border bg-ds-muted text-ds-ink-2"
     : FIELD_VISIBILITY_TONE[normalizedVisibility];
 
   return (
@@ -569,13 +579,13 @@ function CardVisibilityButton({
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 rounded-lg p-2">
-        <div className="mb-2 flex items-start gap-2 rounded-md bg-slate-50 p-2">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white text-slate-500 ring-1 ring-slate-200">
+        <div className="mb-2 flex items-start gap-2 rounded-md bg-ds-muted p-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white text-ds-ink-muted ring-1 ring-ds-border">
             <Eye className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-xs font-black text-slate-950">Visibilidade do card</p>
-            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-slate-500">
+            <p className="text-xs font-black text-ds-ink">Visibilidade do card</p>
+            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-ds-ink-muted">
               Aplica a mesma visibilidade a todos os campos deste card.
             </p>
           </div>
@@ -593,7 +603,7 @@ function CardVisibilityButton({
                 className={`flex w-full items-start gap-2 rounded-md border p-2 text-left transition ${
                   selected
                     ? FIELD_VISIBILITY_TONE[option]
-                    : "border-slate-100 bg-white text-slate-700 hover:bg-slate-50"
+                    : "border-ds-divider bg-white text-ds-ink-2 hover:bg-ds-muted"
                 } disabled:cursor-not-allowed disabled:opacity-70`}
               >
                 <OptionIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -632,21 +642,21 @@ function isOpenVacationConcessiveCycle(cycle: VacationCycle) {
 
 function VacationRows({ vacations }: { vacations: DPVacationRecord[] }) {
   if (vacations.length === 0) {
-    return <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum registro neste ciclo.</p>;
+    return <p className="rounded-2xl bg-ds-muted p-4 text-sm font-semibold text-ds-ink-muted">Nenhum registro neste ciclo.</p>;
   }
 
   return (
     <div className="space-y-2">
       {vacations.slice(0, 5).map((vacation) => {
-        const status = VACATION_STATUS[vacation.status] ?? { label: vacation.status, className: "bg-slate-100 text-slate-700" };
+        const status = VACATION_STATUS[vacation.status] ?? { label: vacation.status, className: "bg-ds-neutral-bg text-ds-ink-2" };
         return (
-          <div key={vacation.id} className="rounded-2xl border border-[#ececf0] bg-[#fbfbfc] p-4">
+          <div key={vacation.id} className="rounded-2xl border border-ds-divider bg-ds-input p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black text-[#25231f]">
+                <p className="text-xs font-black text-ds-ink">
                   {vacation.recordType === "gozo" ? "Gozo" : "Venda"} - {vacation.days} dia{vacation.days === 1 ? "" : "s"}
                 </p>
-                <p className="mt-1 text-[11px] font-semibold text-[#817762]">
+                <p className="mt-1 text-[11px] font-semibold text-ds-alert-ink">
                   {formatVacationDate(vacation.startDate)} {vacation.endDate ? `até ${formatVacationDate(vacation.endDate)}` : ""}
                 </p>
               </div>
@@ -672,7 +682,7 @@ function VacationCycleOverview({
 }) {
   if (!admissionDate) {
     return (
-      <div className="mb-4 rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">
+      <div className="mb-4 rounded-2xl bg-ds-muted p-4 text-sm font-semibold text-ds-ink-muted">
         Informe a data de admissão para calcular o ciclo de férias.
       </div>
     );
@@ -694,11 +704,11 @@ function VacationCycleOverview({
 
   return (
     <div className="mb-4 space-y-3">
-      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+      <div className="rounded-2xl border border-ds-divider bg-ds-muted p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-black uppercase text-slate-400">{periodLabel}</p>
-            <p className="mt-1 text-sm font-black text-slate-950">
+            <p className="text-xs font-black uppercase text-ds-ink-faint">{periodLabel}</p>
+            <p className="mt-1 text-sm font-black text-ds-ink">
               {format(periodStart, "dd/MM/yyyy", { locale: ptBR })} - {format(periodEnd, "dd/MM/yyyy", { locale: ptBR })}
             </p>
           </div>
@@ -706,10 +716,10 @@ function VacationCycleOverview({
             {status.label}
           </span>
         </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
-          <div className="h-full rounded-full bg-pink-500" style={{ width: `${progress}%` }} />
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-ds-divider">
+          <div className="h-full rounded-full bg-ds-accent" style={{ width: `${progress}%` }} />
         </div>
-        <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-500 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 text-xs font-semibold text-ds-ink-muted sm:grid-cols-3">
           <span>{isAcquisitive ? "Progresso da aquisição" : "Prazo de gozo"}: {progress}%</span>
           <span>Saldo: {cycle.balance}d</span>
           <span>
@@ -720,26 +730,26 @@ function VacationCycleOverview({
         </div>
       </div>
       {!isAcquisitive && acquisitionCycle ? (
-        <div className="rounded-2xl border border-slate-100 bg-white p-3 text-xs font-semibold text-slate-500">
-          <span className="font-black uppercase text-slate-400">Aquisição atual: </span>
+        <div className="rounded-2xl border border-ds-divider bg-white p-3 text-xs font-semibold text-ds-ink-muted">
+          <span className="font-black uppercase text-ds-ink-faint">Aquisição atual: </span>
           {format(acquisitionCycle.acquisitivePeriod.start, "dd/MM/yyyy", { locale: ptBR })} - {format(acquisitionCycle.acquisitivePeriod.end, "dd/MM/yyyy", { locale: ptBR })}
         </div>
       ) : null}
       {overdueCycles.length > 0 ? (
-        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm">
-          <p className="font-black text-rose-800">
+        <div className="rounded-2xl border border-ds-danger-bg bg-ds-danger-bg p-4 text-sm">
+          <p className="font-black text-ds-danger">
             {overdueCycles.length === 1 ? "Há 1 ciclo vencido" : `Há ${overdueCycles.length} ciclos vencidos`}
           </p>
-          <p className="mt-1 text-xs font-semibold text-rose-700">
+          <p className="mt-1 text-xs font-semibold text-ds-danger">
             Existe saldo de férias que já deveria ter sido gozado.
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {overdueCycles.slice(0, 2).map((item) => (
-              <div key={item.id} className="rounded-xl bg-white/75 p-3 text-xs font-bold text-rose-800">
+              <div key={item.id} className="rounded-xl bg-white/75 p-3 text-xs font-bold text-ds-danger">
                 <p>
                   Ciclo {format(item.acquisitivePeriod.start, "dd/MM/yyyy", { locale: ptBR })} - {format(item.acquisitivePeriod.end, "dd/MM/yyyy", { locale: ptBR })}
                 </p>
-                <p className="mt-1 text-rose-600">Saldo vencido: {item.balance}d</p>
+                <p className="mt-1 text-ds-danger">Saldo vencido: {item.balance}d</p>
               </div>
             ))}
           </div>
@@ -802,9 +812,9 @@ function childRecordsFromProfile(fieldValues: Record<string, EmployeeFieldValue>
 }
 
 function familyDocumentStatusClassName(status: FamilyDocumentStatus) {
-  if (status === "Enviada") return "bg-emerald-50 text-emerald-700";
-  if (status === "Pendente") return "bg-amber-50 text-amber-700";
-  return "bg-white text-[#777784] ring-1 ring-[#e8e8ec]";
+  if (status === "Enviada") return "bg-ds-ok-bg text-ds-ok";
+  if (status === "Pendente") return "bg-ds-warn-bg text-ds-warn";
+  return "bg-white text-ds-ink-muted ring-1 ring-ds-border";
 }
 
 function EmployeeAsoControlPanel({
@@ -817,7 +827,7 @@ function EmployeeAsoControlPanel({
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
       <Panel title="Controle de ASOs" icon={FileText} action={action}>
-        <div className="h-36 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="h-36 animate-pulse rounded-2xl bg-ds-neutral-bg" />
       </Panel>
     );
   }
@@ -845,10 +855,10 @@ function EmployeeAsoControlPanel({
   return (
     <Panel title="Controle de ASOs" icon={FileText} action={action}>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-ds-divider bg-ds-input p-4">
           <div>
-            <p className="text-sm font-black text-[#1d1d26]">Prazos ocupacionais</p>
-            <p className="mt-1 text-xs font-semibold text-[#777784]">Periodicidade padrão: 24 meses, contado do último ASO válido.</p>
+            <p className="text-sm font-black text-ds-ink">Prazos ocupacionais</p>
+            <p className="mt-1 text-xs font-semibold text-ds-ink-muted">Periodicidade padrão: 24 meses, contado do último ASO válido.</p>
           </div>
           <Chip tone={status.tone}>{status.label}</Chip>
         </div>
@@ -860,7 +870,7 @@ function EmployeeAsoControlPanel({
         </div>
 
         {!summary || summary.admissionMissing ? (
-          <p className="rounded-2xl border border-rose-100 bg-rose-50 p-3 text-xs font-bold text-rose-700">
+          <p className="rounded-2xl border border-ds-danger-bg bg-ds-danger-bg p-3 text-xs font-bold text-ds-danger">
             Colaborador sem ASO admissional registrado. Ao arquivar o ASO admissional, a Mel usará a data real do exame para iniciar a previsão do periódico.
           </p>
         ) : null}
@@ -868,12 +878,12 @@ function EmployeeAsoControlPanel({
         {records.length > 0 ? (
           <div className="space-y-2">
             {records.map((record, index) => (
-              <div key={`${record.type}-${record.examDate}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-[#e8e8ec] bg-white p-3">
+              <div key={`${record.type}-${record.examDate}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-ds-divider bg-white p-3">
                 <div>
-                  <p className="text-sm font-black text-[#24242e]">{asoTypeLabel(record.type)}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#777784]">{formatIsoDate(record.examDate)}</p>
+                  <p className="text-sm font-black text-ds-ink">{asoTypeLabel(record.type)}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-ds-ink-muted">{formatIsoDate(record.examDate)}</p>
                   {record.source === "legacy_field" ? (
-                    <p className="mt-1 text-[11px] font-bold text-amber-700">Campo antigo/manual: confirme pelo ASO anexado.</p>
+                    <p className="mt-1 text-[11px] font-bold text-ds-warn">Campo antigo/manual: confirme pelo ASO anexado.</p>
                   ) : null}
                 </div>
                 {record.fitnessStatus ? <Chip tone="default">{record.fitnessStatus}</Chip> : null}
@@ -881,7 +891,7 @@ function EmployeeAsoControlPanel({
             ))}
           </div>
         ) : (
-          <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum ASO arquivado pela Mel ainda.</p>
+          <p className="rounded-2xl bg-ds-muted p-4 text-sm font-semibold text-ds-ink-muted">Nenhum ASO arquivado pela Mel ainda.</p>
         )}
       </div>
     </Panel>
@@ -909,7 +919,7 @@ function EmployeeFamilySalaryPanel({
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
       <Panel title="Salário-família" icon={IdCard} action={action}>
-        <div className="h-36 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="h-36 animate-pulse rounded-2xl bg-ds-neutral-bg" />
       </Panel>
     );
   }
@@ -974,10 +984,10 @@ function EmployeeFamilySalaryPanel({
   return (
     <Panel title="Salário-família" icon={IdCard} action={action}>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-ds-divider bg-ds-input p-4">
           <div>
-            <p className="text-sm font-black text-[#1d1d26]">Controle por filho</p>
-            <p className="mt-1 text-xs font-semibold text-[#777784]">Cota 2026: R$ {quota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por filho elegível.</p>
+            <p className="text-sm font-black text-ds-ink">Controle por filho</p>
+            <p className="mt-1 text-xs font-semibold text-ds-ink-muted">Cota 2026: R$ {quota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por filho elegível.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Chip tone={statusTone}>{statusLabel}</Chip>
@@ -985,7 +995,7 @@ function EmployeeFamilySalaryPanel({
               <button
                 type="button"
                 onClick={startEditing}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-xs ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-ds-accent-ink shadow-xs ring-1 ring-ds-accent-soft hover:bg-ds-accent-soft"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 Editar filhos
@@ -994,7 +1004,7 @@ function EmployeeFamilySalaryPanel({
           </div>
         </div>
 
-        <p className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+        <p className="rounded-2xl border border-ds-warn-bg bg-ds-warn-bg p-3 text-xs font-bold text-ds-warn">
           Atenção: em 2026, o benefício depende de remuneração mensal até R$ {limit.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}, considerada como salário de contribuição total antes dos descontos.
         </p>
 
@@ -1005,20 +1015,20 @@ function EmployeeFamilySalaryPanel({
         </div>
 
         {editing ? (
-          <div className="space-y-3 rounded-2xl border border-[#e8e8ec] bg-white p-4">
+          <div className="space-y-3 rounded-2xl border border-ds-divider bg-white p-4">
             <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
               <div>
-                <label className="text-xs font-black text-[#777784]">Quantidade de filhos</label>
+                <label className="text-xs font-black text-ds-ink-muted">Quantidade de filhos</label>
                 <input
                   type="number"
                   min={0}
                   max={12}
                   value={drafts.length}
                   onChange={(event) => updateChildCount(Number(event.target.value))}
-                  className="mt-1 h-11 w-full rounded-xl border border-[#dedfe4] bg-[#fbfbfc] px-3 text-sm font-black text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                  className="mt-1 h-11 w-full rounded-xl border border-ds-border bg-ds-input px-3 text-sm font-black text-ds-ink outline-hidden focus:border-ds-accent-ink focus:ring-2 focus:ring-ds-accent-soft"
                 />
               </div>
-              <p className="text-xs font-semibold text-[#777784]">
+              <p className="text-xs font-semibold text-ds-ink-muted">
                 A idade define os requisitos de certidão, vacinação e frequência escolar. O upload dos documentos atualiza os comprovantes do filho.
               </p>
             </div>
@@ -1031,50 +1041,50 @@ function EmployeeFamilySalaryPanel({
                   const documentStatuses = familyDocStatusItems(draft.birthDate, draft.documents);
                   const entitlementEndsAt = childEntitlementEndsAt(draft.birthDate);
                   return (
-                    <div key={draft.key} className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+                    <div key={draft.key} className="rounded-2xl border border-ds-divider bg-ds-input p-3">
                       <div className="mb-3 flex items-center justify-between gap-3">
-                        <p className="text-sm font-black text-[#1d1d26]">Filho {index + 1}</p>
+                        <p className="text-sm font-black text-ds-ink">Filho {index + 1}</p>
                         <Chip tone={age != null && age >= 14 ? "default" : required.length > 0 ? "warn" : "default"}>
                           {age == null ? "Nascimento pendente" : age >= 14 ? "Fora da idade" : `${age} ano${age === 1 ? "" : "s"}`}
                         </Chip>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-xs font-black text-[#777784]">
+                        <label className="text-xs font-black text-ds-ink-muted">
                           Nome
                           <input
                             value={draft.name}
                             onChange={(event) => updateDraft(index, { name: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-ds-border bg-white px-3 text-sm font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink focus:ring-2 focus:ring-ds-accent-soft"
                           />
                         </label>
-                        <label className="text-xs font-black text-[#777784]">
+                        <label className="text-xs font-black text-ds-ink-muted">
                           Data de nascimento
                           <input
                             type="date"
                             value={draft.birthDate}
                             onChange={(event) => updateDraft(index, { birthDate: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-ds-border bg-white px-3 text-sm font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink focus:ring-2 focus:ring-ds-accent-soft"
                           />
                         </label>
-                        <label className="text-xs font-black text-[#777784]">
+                        <label className="text-xs font-black text-ds-ink-muted">
                           CPF
                           <input
                             value={draft.cpf}
                             onChange={(event) => updateDraft(index, { cpf: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-ds-border bg-white px-3 text-sm font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink focus:ring-2 focus:ring-ds-accent-soft"
                           />
                         </label>
-                        <label className="text-xs font-black text-[#777784]">
+                        <label className="text-xs font-black text-ds-ink-muted">
                           RG
                           <input
                             value={draft.rg}
                             onChange={(event) => updateDraft(index, { rg: event.target.value })}
-                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                            className="mt-1 h-10 w-full rounded-xl border border-ds-border bg-white px-3 text-sm font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink focus:ring-2 focus:ring-ds-accent-soft"
                           />
                         </label>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {entitlementEndsAt ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-[#777784] ring-1 ring-[#e8e8ec]">Até {formatIsoDate(entitlementEndsAt)}</span> : null}
+                        {entitlementEndsAt ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-ds-ink-muted ring-1 ring-ds-border">Até {formatIsoDate(entitlementEndsAt)}</span> : null}
                         {documentStatuses.map((item) => (
                           <span
                             key={item.label}
@@ -1089,11 +1099,11 @@ function EmployeeFamilySalaryPanel({
                 })}
               </div>
             ) : (
-              <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Sem filhos cadastrados.</p>
+              <p className="rounded-2xl bg-ds-muted p-4 text-sm font-semibold text-ds-ink-muted">Sem filhos cadastrados.</p>
             )}
 
             {message ? (
-              <p className={`rounded-xl px-3 py-2 text-xs font-bold ${message.startsWith("Falha") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+              <p className={`rounded-xl px-3 py-2 text-xs font-bold ${message.startsWith("Falha") ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-ok-bg text-ds-ok"}`}>
                 {message}
               </p>
             ) : null}
@@ -1106,7 +1116,7 @@ function EmployeeFamilySalaryPanel({
                   setMessage(null);
                 }}
                 disabled={saving}
-                className="rounded-xl border border-[#dedfe4] bg-white px-4 py-2 text-sm font-black text-[#555563] hover:bg-[#f7f7f9] disabled:opacity-60"
+                className="rounded-xl border border-ds-border bg-white px-4 py-2 text-sm font-black text-ds-ink-2 hover:bg-ds-muted disabled:opacity-60"
               >
                 Cancelar
               </button>
@@ -1114,7 +1124,7 @@ function EmployeeFamilySalaryPanel({
                 type="button"
                 onClick={() => void saveChildren()}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#df2f78] px-4 py-2 text-sm font-black text-white hover:bg-[#c92768] disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-ds-accent px-4 py-2 text-sm font-black text-white hover:bg-ds-accent-hover disabled:opacity-60"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Salvar filhos
@@ -1130,15 +1140,15 @@ function EmployeeFamilySalaryPanel({
               const documentStatuses = familyDocStatusItems(dependent.birthDate, dependent.documents);
               const eligibleByAge = age != null && age >= 0 && age < 14;
               return (
-                <div key={dependent.key ?? `${dependent.name}-${index}`} className="rounded-xl border border-[#e8e8ec] bg-white p-3">
+                <div key={dependent.key ?? `${dependent.name}-${index}`} className="rounded-xl border border-ds-divider bg-white p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-black text-[#24242e]">{dependent.name ?? "Filho sem nome"}</p>
-                      <p className="mt-0.5 text-xs font-semibold text-[#777784]">
+                      <p className="text-sm font-black text-ds-ink">{dependent.name ?? "Filho sem nome"}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-ds-ink-muted">
                         {dependent.birthDate ? `${formatIsoDate(dependent.birthDate)} · ${age ?? "-"} ano${age === 1 ? "" : "s"}` : "Nascimento pendente"}
                       </p>
                       {dependent.entitlementEndsAt ? (
-                        <p className="mt-0.5 text-[11px] font-bold text-[#777784]">Conta para salário-família até {formatIsoDate(dependent.entitlementEndsAt)}</p>
+                        <p className="mt-0.5 text-[11px] font-bold text-ds-ink-muted">Conta para salário-família até {formatIsoDate(dependent.entitlementEndsAt)}</p>
                       ) : null}
                     </div>
                     <Chip tone={!eligibleByAge ? "default" : missing.length === 0 ? "good" : "warn"}>
@@ -1160,11 +1170,11 @@ function EmployeeFamilySalaryPanel({
             })}
           </div>
         ) : (
-          <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum filho cadastrado para salário-família ainda.</p>
+          <p className="rounded-2xl bg-ds-muted p-4 text-sm font-semibold text-ds-ink-muted">Nenhum filho cadastrado para salário-família ainda.</p>
         )}
 
         {!editing && message ? (
-          <p className={`rounded-xl px-3 py-2 text-xs font-bold ${message.startsWith("Falha") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+          <p className={`rounded-xl px-3 py-2 text-xs font-bold ${message.startsWith("Falha") ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-ok-bg text-ds-ok"}`}>
             {message}
           </p>
         ) : null}
@@ -1185,7 +1195,7 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-700 shadow-xs ring-1 ring-slate-200 hover:bg-slate-50"
+          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-ds-ink-2 shadow-xs ring-1 ring-ds-border hover:bg-ds-muted"
         >
           12 meses
         </button>
@@ -1193,10 +1203,10 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
       <PopoverContent align="end" className="w-[340px] rounded-lg p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-black text-slate-950">Resumo de metas</p>
-            <p className="mt-0.5 text-xs font-semibold text-slate-500">Últimos 12 meses</p>
+            <p className="text-sm font-black text-ds-ink">Resumo de metas</p>
+            <p className="mt-0.5 text-xs font-semibold text-ds-ink-muted">Últimos 12 meses</p>
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${participates ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${participates ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-neutral-bg text-ds-ink-muted"}`}>
             {participates ? "Participa" : "Não participa"}
           </span>
         </div>
@@ -1210,14 +1220,14 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
         <div className="mt-2 space-y-1">
           {months.map((month) => (
             <div key={month} className="grid grid-cols-[56px_1fr_32px] items-center gap-2 text-xs">
-              <span className="font-black capitalize text-slate-500">{month}</span>
-              <div className="h-1.5 rounded-full bg-slate-100" />
-              <span className="text-right font-black text-slate-400">-</span>
+              <span className="font-black capitalize text-ds-ink-muted">{month}</span>
+              <div className="h-1.5 rounded-full bg-ds-neutral-bg" />
+              <span className="text-right font-black text-ds-ink-faint">-</span>
             </div>
           ))}
         </div>
 
-        <p className="mt-2 rounded-md bg-slate-50 p-2 text-[10px] font-semibold leading-4 text-slate-500">
+        <p className="mt-2 rounded-md bg-ds-muted p-2 text-[10px] font-semibold leading-4 text-ds-ink-muted">
           O histórico consolidado depende dos fechamentos mensais de metas do colaborador.
         </p>
       </PopoverContent>
@@ -1232,7 +1242,11 @@ type EmployeeProfileFieldRow = {
   staticValue?: React.ReactNode;
   staticHasValue?: boolean;
   readOnly?: boolean;
+  /** Valor vindo do cadastro do sistema; a visibilidade não é configurável na ficha. */
+  fixedVisibility?: boolean;
 };
+
+const EMPLOYMENT_RELATIONSHIP_FIELD_KEY = "system.employment.relationship";
 
 function EmployeeProfileFields({
   user,
@@ -1254,6 +1268,7 @@ function EmployeeProfileFields({
   const { firebaseUser, permissions, user: currentUser } = useAuth();
   const employeeId = getHrEmployeeId(user) ?? user.id;
   const [editKey, setEditKey] = useState<string | null>(null);
+  const [editComposite, setEditComposite] = useState<CompositeFieldDef | null>(null);
   const [visibilitySavingKey, setVisibilitySavingKey] = useState<string | null>(null);
   const [visibilityMessage, setVisibilityMessage] = useState<string | null>(null);
   const [systemActionSaving, setSystemActionSaving] = useState<string | null>(null);
@@ -1299,22 +1314,22 @@ function EmployeeProfileFields({
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
       <div className="grid gap-2.5 lg:grid-cols-[232px_minmax(0,1fr)]">
-        <aside className="hidden rounded-xl border border-[#dedfe4] bg-white p-3 shadow-xs lg:block">
-          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-slate-100" />
+        <aside className="hidden rounded-xl border border-ds-border bg-white p-3 shadow-xs lg:block">
+          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-ds-neutral-bg" />
           {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="mb-2 h-9 animate-pulse rounded-lg bg-slate-100" />
+            <div key={index} className="mb-2 h-9 animate-pulse rounded-lg bg-ds-neutral-bg" />
           ))}
         </aside>
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, sectionIndex) => (
-            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-[#dedfe4] bg-white shadow-xs">
-              <div className="flex items-center gap-3 border-b border-[#e8e8ec] px-3 py-2">
-                <div className="h-6 w-6 animate-pulse rounded-md bg-[#fff0f6]" />
-                <div className="h-3 w-32 animate-pulse rounded bg-slate-100" />
+            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-ds-border bg-white shadow-xs">
+              <div className="flex items-center gap-3 border-b border-ds-divider px-3 py-2">
+                <div className="h-6 w-6 animate-pulse rounded-md bg-ds-accent-soft" />
+                <div className="h-3 w-32 animate-pulse rounded bg-ds-neutral-bg" />
               </div>
               <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 3 }).map((__, fieldIndex) => (
-                  <div key={fieldIndex} className="h-16 animate-pulse rounded-xl bg-slate-100" />
+                  <div key={fieldIndex} className="h-16 animate-pulse rounded-xl bg-ds-neutral-bg" />
                 ))}
               </div>
             </section>
@@ -1329,9 +1344,9 @@ function EmployeeProfileFields({
     return (
       <div className="space-y-4">
         <Panel title="Perfil do colaborador" icon={IdCard}>
-          <div className="rounded-2xl bg-[#fffaf0] p-4">
-            <p className="text-sm font-black text-slate-900">Campos do perfil indisponíveis</p>
-            <p className="mt-1 text-xs font-semibold text-[#817762]">
+          <div className="rounded-2xl bg-ds-alert-bg p-4">
+            <p className="text-sm font-black text-ds-ink">Campos do perfil indisponíveis</p>
+            <p className="mt-1 text-xs font-semibold text-ds-alert-ink">
               Não foi possível carregar os campos deste colaborador. Motivo: {profileState.message}
             </p>
           </div>
@@ -1575,6 +1590,7 @@ function EmployeeProfileFields({
     if (isSystemStaticField(key)) return acc;
     if (isSystemPanelProfileField(key)) return acc;
     if (isLegacyUniformField(key, entry)) return acc;
+    if (HIDDEN_PROFILE_FIELD_KEYS.has(key)) return acc;
     if (!canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix) || !conditionalMatches(entry, fieldValues)) return acc;
     const section = profileDisplaySection(entry.section);
     if (!acc[section]) acc[section] = [];
@@ -1672,6 +1688,21 @@ function EmployeeProfileFields({
       readOnly: true,
     });
   });
+
+  const relationshipEntry = systemField("Tipo de vínculo", "Dados contratuais", 5, "restricted_partial");
+  if (canManageFieldVisibility || canViewField(relationshipEntry.visibility, role, visibilityContext, relationshipEntry.access, fieldMap.access_matrix)) {
+    const relationshipType = resolveEmploymentRelationshipType(user.employmentRelationshipType, user.personRecordType);
+    const contractSection = profileDisplaySection("Dados contratuais");
+    if (!sections[contractSection]) sections[contractSection] = [];
+    sections[contractSection].push({
+      key: EMPLOYMENT_RELATIONSHIP_FIELD_KEY,
+      entry: relationshipEntry,
+      staticValue: employmentRelationshipLabel(relationshipType),
+      staticHasValue: Boolean(relationshipType),
+      readOnly: true,
+      fixedVisibility: true,
+    });
+  }
 
   Object.values(sections).forEach((items) => {
     items.sort((left, right) => (left.entry.order ?? 0) - (right.entry.order ?? 0));
@@ -1793,14 +1824,14 @@ function EmployeeProfileFields({
   const selectedNavigationId = activeNavigationId ?? profileNavigationItemsByGroup[0]?.items[0]?.id ?? null;
 
   const navigationStatusTone = {
-    complete: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    partial: "bg-amber-50 text-amber-700 ring-amber-100",
-    empty: "bg-slate-100 text-slate-500 ring-slate-200",
-    restricted: "bg-sky-50 text-sky-700 ring-sky-100",
-    confidential: "bg-rose-50 text-rose-700 ring-rose-100",
+    complete: "bg-ds-ok-bg text-ds-ok ring-ds-ok-bg",
+    partial: "bg-ds-warn-bg text-ds-warn ring-ds-warn-bg",
+    empty: "bg-ds-neutral-bg text-ds-ink-muted ring-ds-border",
+    restricted: "bg-ds-info-bg text-ds-info ring-ds-info-bg",
+    confidential: "bg-ds-danger-bg text-ds-danger ring-ds-danger-bg",
   } as const;
 
-  function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly }: EmployeeProfileFieldRow) {
+  function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly, fixedVisibility }: EmployeeProfileFieldRow) {
     const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
     const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
     const managedFlag = key === SYSTEM_FIELD_KEYS.operational
@@ -1809,17 +1840,17 @@ function EmployeeProfileFields({
         ? { field: "participatesInGoals" as const, active: systemFlags.participatesInGoals }
         : null;
     return (
-      <div key={key} className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+      <div key={key} className="rounded-xl border border-ds-divider bg-ds-input p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="truncate text-[10px] font-black text-[#9d9da9]">{fieldDisplayLabel(entry.label)}</p>
-            <div className="mt-1 text-xs font-black text-[#24242e]">
+            <p className="truncate text-[10px] font-black text-ds-ink-faint">{fieldDisplayLabel(entry.label)}</p>
+            <div className="mt-1 text-xs font-black text-ds-ink">
               {staticValue !== undefined ? (
                 staticValue
               ) : hasValue ? (
                 <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
               ) : role !== "employee" ? (
-                <button type="button" onClick={() => setEditKey(key)} className="text-[#df2f78]">
+                <button type="button" onClick={() => setEditKey(key)} className="text-ds-accent-ink">
                   + Adicionar
                 </button>
               ) : (
@@ -1828,7 +1859,7 @@ function EmployeeProfileFields({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {canManageFieldVisibility ? (
+            {canManageFieldVisibility && !fixedVisibility ? (
               <FieldVisibilityButton
                 entry={entry}
                 saving={visibilitySavingKey === key}
@@ -1840,7 +1871,7 @@ function EmployeeProfileFields({
               <button
                 type="button"
                 onClick={() => setEditKey(key)}
-                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-xs ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-ds-accent-ink shadow-xs ring-1 ring-ds-accent-soft hover:bg-ds-accent-soft"
               >
                 Editar
               </button>
@@ -1854,16 +1885,94 @@ function EmployeeProfileFields({
             aria-checked={managedFlag.active}
             disabled={Boolean(systemActionSaving)}
             onClick={() => void updateSystemFlag(managedFlag.field, !managedFlag.active)}
-            className="mt-3 flex w-full items-center justify-between gap-3 border-t border-[#ececf0] pt-3 text-left disabled:opacity-60"
+            className="mt-3 flex w-full items-center justify-between gap-3 border-t border-ds-divider pt-3 text-left disabled:opacity-60"
           >
-            <span className="text-[10px] font-black text-[#777784]">
+            <span className="text-[10px] font-black text-ds-ink-muted">
               {managedFlag.active ? "Ativo" : "Inativo"}
             </span>
-            <span className={`h-6 w-11 rounded-full p-1 transition ${managedFlag.active ? "bg-pink-500" : "bg-slate-300"}`}>
+            <span className={`h-6 w-11 rounded-full p-1 transition ${managedFlag.active ? "bg-ds-accent" : "bg-ds-disabled"}`}>
               <span className={`block h-4 w-4 rounded-full bg-white transition ${managedFlag.active ? "translate-x-5" : ""}`} />
             </span>
           </button>
         ) : null}
+      </div>
+    );
+  }
+
+  function renderCompositeCard(def: CompositeFieldDef, rows: EmployeeProfileFieldRow[]) {
+    const rowsByKey = new Map(rows.map((row) => [row.key, row]));
+    const value = def.format((fieldKey) => {
+      const row = rowsByKey.get(fieldKey);
+      if (!row) return null;
+      const text = formatFieldValue(row.fv, row.entry.type, role, fieldKey);
+      return text === "—" ? null : text;
+    });
+    const editable = role !== "employee" && def.editKeys.some((fieldKey) => rowsByKey.has(fieldKey));
+    const visibilityKey = `section:${def.label}`;
+    return (
+      <div key={def.id} className="rounded-xl border border-ds-divider bg-ds-input p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[10px] font-black text-ds-ink-faint">{def.label}</p>
+            <div className="mt-1 text-xs font-black text-ds-ink">
+              {value ?? (editable ? (
+                <button type="button" onClick={() => setEditComposite(def)} className="text-ds-accent-ink">
+                  + Adicionar
+                </button>
+              ) : "-")}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            {canManageFieldVisibility && rows[0] ? (
+              <FieldVisibilityButton
+                entry={rows[0].entry}
+                saving={visibilitySavingKey === visibilityKey}
+                disabled={Boolean(visibilitySavingKey && visibilitySavingKey !== visibilityKey)}
+                onChange={(visibility) => void updateSectionVisibility(def.label, rows, visibility)}
+              />
+            ) : null}
+            {editable && value ? (
+              <button
+                type="button"
+                onClick={() => setEditComposite(def)}
+                className="rounded-full bg-ds-surface px-2.5 py-1 text-xs font-black text-ds-accent-ink shadow-xs ring-1 ring-ds-accent-soft hover:bg-ds-accent-soft"
+              >
+                Editar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDisplayItem(item: ProfileDisplayItem<EmployeeProfileFieldRow>) {
+    return item.kind === "field" ? renderProfileFieldCard(item.row) : renderCompositeCard(item.def, item.rows);
+  }
+
+  function renderSectionBody(section: string, sectionFields: EmployeeProfileFieldRow[]) {
+    const items = buildProfileDisplayItems(sectionFields);
+    const groups = groupProfileSection(section, items);
+    if (!groups) {
+      return (
+        <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
+          {items.map(renderDisplayItem)}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-2.5 p-2.5">
+        {groups.map((group) => (
+          <div key={group.id} className="rounded-xl border border-ds-divider bg-ds-surface p-2.5">
+            <div className="mb-2.5 px-0.5">
+              <p className="text-xs font-black text-ds-ink">{group.title}</p>
+              <p className="mt-0.5 text-[10px] font-semibold text-ds-ink-muted">{group.description}</p>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {group.items.map(renderDisplayItem)}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -1873,8 +1982,8 @@ function EmployeeProfileFields({
       {visibilityMessage ? (
         <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
           visibilityMessage.startsWith("Falha") || visibilityMessage.startsWith("Sem permissão")
-            ? "bg-rose-50 text-rose-600"
-            : "bg-emerald-50 text-emerald-700"
+            ? "bg-ds-danger-bg text-ds-danger"
+            : "bg-ds-ok-bg text-ds-ok"
         }`}>
           {visibilityMessage}
         </p>
@@ -1882,8 +1991,8 @@ function EmployeeProfileFields({
       {systemActionMessage ? (
         <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
           systemActionMessage.startsWith("Falha") || systemActionMessage.includes("não ")
-            ? "bg-rose-50 text-rose-700"
-            : "bg-emerald-50 text-emerald-700"
+            ? "bg-ds-danger-bg text-ds-danger"
+            : "bg-ds-ok-bg text-ds-ok"
         }`}>
           {systemActionMessage}
         </p>
@@ -1891,11 +2000,11 @@ function EmployeeProfileFields({
 
       <div className="grid gap-2.5 lg:grid-cols-[232px_minmax(0,1fr)]">
         <aside className="min-w-0 lg:sticky lg:top-[236px] lg:self-start">
-          <nav aria-label="Seções do perfil" className="rounded-xl border border-[#dedfe4] bg-white p-2 shadow-xs">
+          <nav aria-label="Seções do perfil" className="rounded-xl border border-ds-border bg-white p-2 shadow-xs">
             <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-3 lg:overflow-visible lg:pb-0">
               {profileNavigationItemsByGroup.map(({ group, items }) => (
                 <div key={group} className="contents lg:block">
-                  <p className="hidden px-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#9d9da9] lg:block">
+                  <p className="hidden px-2 text-[10px] font-black uppercase tracking-[0.12em] text-ds-ink-faint lg:block">
                     {group}
                   </p>
                   <div className="contents lg:mt-1 lg:block lg:space-y-1">
@@ -1912,8 +2021,8 @@ function EmployeeProfileFields({
                           }}
                           className={`flex min-w-max items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-black transition lg:min-w-0 lg:w-full ${
                             active
-                              ? "border-[#f5bdd4] bg-[#fff0f6] text-[#bd185c] shadow-xs"
-                              : "border-transparent text-[#656572] hover:border-[#ececf0] hover:bg-[#fbfbfc] hover:text-[#bd185c]"
+                              ? "border-ds-accent-soft bg-ds-accent-soft text-ds-accent-ink-hover shadow-xs"
+                              : "border-transparent text-ds-ink-muted hover:border-ds-divider hover:bg-ds-input hover:text-ds-accent-ink-hover"
                           }`}
                         >
                           <span className="max-w-[170px] whitespace-normal break-words leading-4 lg:max-w-[128px]">{item.label}</span>
@@ -1938,13 +2047,13 @@ function EmployeeProfileFields({
             const sectionFields = sections[section] ?? [];
             const sectionVisibility = getVisibilitySummary(sectionFields.map(({ entry }) => entry));
             return (
-              <section data-profile-navigation-section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-[#dedfe4] bg-white shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2">
+              <section data-profile-navigation-section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-ds-border bg-white shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ds-divider px-3 py-2">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#fff0f6] text-[#df2f78]">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ds-accent-soft text-ds-accent-ink">
                       <IdCard className="h-4 w-4" />
                     </span>
-                    <h3 className="text-xs font-black text-[#1d1d26]">{sectionDisplayLabel(section)}</h3>
+                    <h3 className="text-xs font-black text-ds-ink">{sectionDisplayLabel(section)}</h3>
                   </div>
                   {canManageFieldVisibility ? (
                     <CardVisibilityButton
@@ -1964,27 +2073,27 @@ function EmployeeProfileFields({
                         .filter((field): field is EmployeeProfileFieldRow => Boolean(field));
                       if (groupFields.length === 0) return null;
                       return (
-                        <div key={group.id} className="rounded-xl border border-[#e8e8ec] bg-white p-2.5">
+                        <div key={group.id} className="rounded-xl border border-ds-divider bg-white p-2.5">
                           <div className="mb-2.5 px-0.5">
-                            <p className="text-xs font-black text-[#1d1d26]">{group.title}</p>
-                            <p className="mt-0.5 text-[10px] font-semibold text-[#777784]">{group.description}</p>
+                            <p className="text-xs font-black text-ds-ink">{group.title}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-ds-ink-muted">{group.description}</p>
                           </div>
                           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                             {groupFields.map(renderProfileFieldCard)}
                           </div>
                           {group.id === "pdv" ? (
-                            <div className="mt-2.5 space-y-2 border-t border-[#ececf0] pt-2.5">
+                            <div className="mt-2.5 space-y-2 border-t border-ds-divider pt-2.5">
                               <div className="flex items-center justify-between gap-3 px-0.5">
-                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#9d9da9]">Acessos por unidade</p>
-                                <span className="text-[10px] font-black text-[#777784]">{pdvAccesses.length} ativo{pdvAccesses.length === 1 ? "" : "s"}</span>
+                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Acessos por unidade</p>
+                                <span className="text-[10px] font-black text-ds-ink-muted">{pdvAccesses.length} ativo{pdvAccesses.length === 1 ? "" : "s"}</span>
                               </div>
                               {pdvAccesses.length > 0 ? pdvAccesses.map((access) => (
-                                <div key={access.externalUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#fbfbfc] p-3 ring-1 ring-[#e8e8ec]">
+                                <div key={access.externalUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ds-input p-3 ring-1 ring-ds-border">
                                   <div className="min-w-0">
-                                    <p className="text-xs font-black text-[#24242e]">
+                                    <p className="text-xs font-black text-ds-ink">
                                       {access.unitName ?? access.filialName ?? `Filial ${access.filialId || "não identificada"}`}
                                     </p>
-                                    <p className="mt-1 text-[10px] font-bold text-[#777784]">
+                                    <p className="mt-1 text-[10px] font-bold text-ds-ink-muted">
                                       Usuário {access.externalUserId} · {access.profileName ?? "Perfil do PDV ainda não sincronizado"}
                                     </p>
                                   </div>
@@ -1994,7 +2103,7 @@ function EmployeeProfileFields({
                                         type="button"
                                         disabled={Boolean(systemActionSaving)}
                                         onClick={() => void openPdvEditor(access)}
-                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-sky-700 shadow-xs ring-1 ring-sky-100 hover:bg-sky-50 disabled:opacity-50"
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-ds-info shadow-xs ring-1 ring-ds-info-bg hover:bg-ds-info-bg disabled:opacity-50"
                                       >
                                         Alterar unidade/perfil
                                       </button>
@@ -2002,7 +2111,7 @@ function EmployeeProfileFields({
                                         type="button"
                                         disabled={Boolean(systemActionSaving)}
                                         onClick={() => void removePdvAccess(access)}
-                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-rose-700 shadow-xs ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-50"
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-ds-danger shadow-xs ring-1 ring-ds-danger-bg hover:bg-ds-danger-bg disabled:opacity-50"
                                       >
                                         Remover acesso
                                       </button>
@@ -2010,7 +2119,7 @@ function EmployeeProfileFields({
                                   ) : null}
                                 </div>
                               )) : (
-                                <p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">Nenhum acesso ativo vinculado.</p>
+                                <p className="rounded-xl bg-ds-muted p-3 text-xs font-semibold text-ds-ink-muted">Nenhum acesso ativo vinculado.</p>
                               )}
                             </div>
                           ) : null}
@@ -2019,9 +2128,7 @@ function EmployeeProfileFields({
                     })}
                   </div>
                 ) : (
-                  <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
-                    {sectionFields.map(renderProfileFieldCard)}
-                  </div>
+                  renderSectionBody(section, sectionFields)
                 )}
               </section>
             );
@@ -2043,29 +2150,45 @@ function EmployeeProfileFields({
           }}
         />
       )}
+      {editComposite && (
+        <SectionEditModal
+          employeeId={employee.bizneo_employee_id}
+          editKey={editComposite.editKeys[0]}
+          editKeys={editComposite.editKeys}
+          groupLabel={editComposite.label.charAt(0).toLocaleLowerCase("pt-BR") + editComposite.label.slice(1)}
+          deriveOnSave={editComposite.deriveOnSave}
+          fields={allFields}
+          role={role}
+          onClose={() => setEditComposite(null)}
+          onSaved={() => {
+            setEditComposite(null);
+            onProfileChanged();
+          }}
+        />
+      )}
       {pdvEditorAccessId ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3">
           <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-base font-black text-[#1d1d26]">Alterar acesso do PDV Legal</p>
-                <p className="mt-0.5 text-xs font-semibold text-[#777784]">Usuário PDV {pdvEditorAccessId}</p>
+                <p className="text-base font-black text-ds-ink">Alterar acesso do PDV Legal</p>
+                <p className="mt-0.5 text-xs font-semibold text-ds-ink-muted">Usuário PDV {pdvEditorAccessId}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setPdvEditorAccessId(null)}
-                className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                className="grid h-9 w-9 place-items-center rounded-full bg-ds-neutral-bg text-ds-ink-muted hover:bg-ds-divider"
               >
                 ×
               </button>
             </div>
             <div className="mt-4 grid gap-3">
-              <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+              <label className="grid gap-1 text-xs font-black text-ds-ink">
                 Unidade do Coala One
                 <select
                   value={pdvUnitId}
                   onChange={(event) => setPdvUnitId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
+                  className="h-10 rounded-lg border border-ds-border bg-white px-3 text-xs font-bold outline-hidden focus:border-ds-accent-ink"
                 >
                   <option value="">Selecione a unidade</option>
                   {pdvUnits.map((unit) => (
@@ -2075,13 +2198,13 @@ function EmployeeProfileFields({
                   ))}
                 </select>
               </label>
-              <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+              <label className="grid gap-1 text-xs font-black text-ds-ink">
                 Perfil de acesso do PDV
                 <select
                   value={pdvProfileId}
                   disabled={pdvCatalogLoading}
                   onChange={(event) => setPdvProfileId(event.target.value)}
-                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-hidden focus:border-[#ec2f78] disabled:opacity-60"
+                  className="h-10 rounded-lg border border-ds-border bg-white px-3 text-xs font-bold outline-hidden focus:border-ds-accent-ink disabled:opacity-60"
                 >
                   <option value="">{pdvCatalogLoading ? "Carregando perfis..." : "Selecione o perfil"}</option>
                   {pdvProfileId && !pdvProfiles.some((profile) => profile.id === pdvProfileId) ? (
@@ -2097,7 +2220,7 @@ function EmployeeProfileFields({
               <button
                 type="button"
                 onClick={() => setPdvEditorAccessId(null)}
-                className="h-10 rounded-lg border border-slate-200 px-4 text-xs font-black text-slate-600 hover:bg-slate-50"
+                className="h-10 rounded-lg border border-ds-border px-4 text-xs font-black text-ds-ink-2 hover:bg-ds-muted"
               >
                 Cancelar
               </button>
@@ -2105,7 +2228,7 @@ function EmployeeProfileFields({
                 type="button"
                 disabled={!pdvUnitId || !pdvProfileId || pdvCatalogLoading || Boolean(systemActionSaving)}
                 onClick={() => void savePdvAccess()}
-                className="h-10 rounded-lg bg-pink-600 px-4 text-xs font-black text-white hover:bg-pink-700 disabled:opacity-50"
+                className="h-10 rounded-lg bg-ds-accent px-4 text-xs font-black text-white hover:bg-ds-accent-hover disabled:opacity-50"
               >
                 {systemActionSaving ? "Salvando..." : "Salvar no PDV"}
               </button>
@@ -2128,18 +2251,18 @@ function EmployeeProfileHeaderSummary({
 
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
-      <div className="min-w-[280px] rounded-2xl border border-[#ececf0] bg-[#fbfbfc] px-4 py-3">
-        <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
-        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-slate-100" />
+      <div className="min-w-[280px] rounded-2xl border border-ds-divider bg-ds-input px-4 py-3">
+        <div className="h-4 w-32 animate-pulse rounded bg-ds-divider" />
+        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-ds-neutral-bg" />
       </div>
     );
   }
 
   if (profileState.status === "error") {
     return (
-      <div className="min-w-[280px] rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
-        <p className="text-xs font-black text-amber-800">Cadastro local indisponível</p>
-        <p className="mt-1 text-[11px] font-bold text-amber-700">
+      <div className="min-w-[280px] rounded-2xl border border-ds-warn-bg bg-ds-warn-bg px-4 py-3">
+        <p className="text-xs font-black text-ds-warn">Cadastro local indisponível</p>
+        <p className="mt-1 text-[11px] font-bold text-ds-warn">
           Os campos complementares ainda não foram preparados para este colaborador.
         </p>
       </div>
@@ -2165,28 +2288,28 @@ function EmployeeProfileHeaderSummary({
   const completionPct = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : employee.profile_completion;
 
   return (
-    <div className="min-w-[320px] rounded-2xl border border-[#ececf0] bg-[#fbfbfc] px-4 py-3">
+    <div className="min-w-[320px] rounded-2xl border border-ds-divider bg-ds-input px-4 py-3">
       <div className="flex items-center gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <div
             className="grid h-11 w-11 shrink-0 place-items-center rounded-full"
             style={{ background: `conic-gradient(#df2f78 ${completionPct * 3.6}deg, #ececf0 0deg)` }}
           >
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-[#1d1d26]">
+            <div className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-ds-ink">
               {completionPct}%
             </div>
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-[#1d1d26]">Perfil completo</p>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${completionPct >= 80 ? "bg-[#eafaf2] text-[#008963]" : "bg-[#ffe9ef] text-[#d9275f]"}`}>
+              <p className="text-sm font-black text-ds-ink">Perfil completo</p>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${completionPct >= 80 ? "bg-ds-ok-bg text-ds-ok" : "bg-ds-danger-bg text-ds-danger"}`}>
                 {completionPct >= 80 ? "Completo" : "Incompleto"}
               </span>
             </div>
-            <p className="mt-0.5 text-[11px] font-bold text-[#777784]">
+            <p className="mt-0.5 text-[11px] font-bold text-ds-ink-muted">
               {filledFields}/{totalFields} campos preenchidos
             </p>
-            <p className="mt-0.5 text-[11px] font-bold text-[#8f8f9b]">
+            <p className="mt-0.5 text-[11px] font-bold text-ds-ink-muted">
               Cadastro local do Coala
             </p>
           </div>
@@ -2320,32 +2443,32 @@ function TerminationDialog({
         </DialogHeader>
 
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
-          <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
+          <label className="block text-xs font-black uppercase tracking-wide text-ds-ink-muted">
             {relationshipType === "pj" ? "CNPJ da contratante" : "CNPJ empregador"}
             <select
               value={employerUnitId}
               onChange={(event) => setEmployerUnitId(event.target.value)}
               required
-              className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
+              className="mt-1 h-9 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink"
             >
               <option value="">Selecione a empresa responsável pelo vínculo</option>
               {employerUnits.map((unit) => (
                 <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? "")}</option>
               ))}
             </select>
-            <span className="mt-1 block normal-case tracking-normal text-[11px] font-semibold text-slate-500">{relationshipType === "pj" ? "O sistema confirmará este CNPJ contra o contrato PJ assinado e congelará as duas partes no distrato." : "Este CNPJ será congelado no processo e usado no ASO, documentos, contabilidade e assinatura."}</span>
+            <span className="mt-1 block normal-case tracking-normal text-[11px] font-semibold text-ds-ink-muted">{relationshipType === "pj" ? "O sistema confirmará este CNPJ contra o contrato PJ assinado e congelará as duas partes no distrato." : "Este CNPJ será congelado no processo e usado no ASO, documentos, contabilidade e assinatura."}</span>
           </label>
           <div className="grid gap-2.5 sm:grid-cols-2">
-            <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+            <label className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">
               {isWithoutCause ? "Último dia de trabalho" : copy.dateLabel}
               <input
                 type="date"
                 value={terminationDate}
                 onChange={(event) => setTerminationDate(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink"
               />
             </label>
-            <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+            <label className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">
               {copy.reasonLabel}
               <select
                 value={terminationReason}
@@ -2354,7 +2477,7 @@ function TerminationDialog({
                   setTerminationReason(nextReason);
                   if (!requiresTerminationSubtype(nextReason)) setTerminationCause("");
                 }}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink"
               >
                 <option value="">Selecione</option>
                 {availableReasons.map((reason) => (
@@ -2365,12 +2488,12 @@ function TerminationDialog({
           </div>
 
           {needsSubtype ? (
-            <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
+            <label className="block text-xs font-black uppercase tracking-wide text-ds-ink-muted">
               Subtipo da justa causa
               <select
                 value={terminationCause}
                 onChange={(event) => setTerminationCause(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink"
               >
                 <option value="">Selecione</option>
                 {JUST_CAUSE_TYPES.map((cause) => (
@@ -2381,58 +2504,58 @@ function TerminationDialog({
           ) : null}
 
           {isWithoutCause ? (
-            <div className="space-y-4 rounded-xl border border-pink-100 bg-pink-50/40 p-4">
+            <div className="space-y-4 rounded-xl border border-ds-accent-soft bg-ds-accent-soft/40 p-4">
               <div>
-                <p className="text-sm font-black text-[#1d1d26]">Comunicação presencial</p>
-                <p className="mt-1 text-xs font-semibold text-[#777784]">Registre a conversa que já aconteceu. A comunicação oficial será gerada para assinatura após a abertura.</p>
+                <p className="text-sm font-black text-ds-ink">Comunicação presencial</p>
+                <p className="mt-1 text-xs font-semibold text-ds-ink-muted">Registre a conversa que já aconteceu. A comunicação oficial será gerada para assinatura após a abertura.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                <label className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">
                   Data e hora da comunicação
-                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
+                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink" />
                 </label>
-                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                <label className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">
                   Local
-                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
+                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink" />
                 </label>
-                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                <label className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">
                   Aviso-prévio
-                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]">
+                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink">
                     <option value="indemnified">Indenizado</option>
                     <option value="worked">Trabalhado</option>
                   </select>
                 </label>
-                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                <label className="text-xs font-black uppercase tracking-wide text-ds-ink-muted">
                   Outros participantes
-                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-hidden focus:border-[#df2f78]" />
+                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold text-ds-ink outline-hidden focus:border-ds-accent-ink" />
                 </label>
               </div>
-              <label className="flex items-start gap-3 rounded-xl border border-pink-200 bg-white p-3 text-sm font-bold text-slate-800">
-                <input type="checkbox" checked={communicationConfirmed} onChange={(event) => setCommunicationConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#df2f78]" />
+              <label className="flex items-start gap-3 rounded-xl border border-ds-accent-soft bg-white p-3 text-sm font-bold text-ds-ink">
+                <input type="checkbox" checked={communicationConfirmed} onChange={(event) => setCommunicationConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-ds-accent" />
                 <span>Confirmo que a colaboradora já foi comunicada presencialmente sobre seu desligamento.</span>
               </label>
             </div>
           ) : null}
 
           {isWithoutCause ? (
-            <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
+            <label className="block text-xs font-black uppercase tracking-wide text-ds-ink-muted">
               Motivo interno e confidencial
-              <Textarea value={terminationInternalReason} onChange={(event) => setTerminationInternalReason(event.target.value)} placeholder="Obrigatório. Esta informação não será exibida no comunicado da colaboradora." className="mt-1 min-h-16 rounded-lg border-[#dedfe4] text-xs font-semibold" />
+              <Textarea value={terminationInternalReason} onChange={(event) => setTerminationInternalReason(event.target.value)} placeholder="Obrigatório. Esta informação não será exibida no comunicado da colaboradora." className="mt-1 min-h-16 rounded-lg border-ds-border text-xs font-semibold" />
             </label>
           ) : null}
 
-          <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
+          <label className="block text-xs font-black uppercase tracking-wide text-ds-ink-muted">
             {isWithoutCause ? "Observações internas" : "Observações"}
             <Textarea
               value={terminationNotes}
               onChange={(event) => setTerminationNotes(event.target.value)}
               placeholder="Opcional"
-              className="mt-1 min-h-16 rounded-lg border-[#dedfe4] text-xs font-semibold"
+              className="mt-1 min-h-16 rounded-lg border-ds-border text-xs font-semibold"
             />
           </label>
 
           {message ? (
-            <p className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{message}</p>
+            <p className="rounded-2xl border border-ds-warn-bg bg-ds-warn-bg px-3 py-2 text-xs font-bold text-ds-warn">{message}</p>
           ) : null}
 
           <DialogFooter>
@@ -2440,14 +2563,14 @@ function TerminationDialog({
               type="button"
               onClick={() => onOpenChange(false)}
               disabled={saving}
-              className="rounded-2xl border border-[#dedfe4] bg-white px-4 py-2.5 text-sm font-black text-[#4f4f5b] hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-2xl border border-ds-border bg-white px-4 py-2.5 text-sm font-black text-ds-ink-2 hover:bg-ds-muted disabled:opacity-60"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving || !terminationAvailable}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#df2f78] px-4 py-2.5 text-sm font-black text-white hover:bg-[#c92768] disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ds-accent px-4 py-2.5 text-sm font-black text-white hover:bg-ds-accent-hover disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
               {saving ? copy.saving : copy.submit}
@@ -2875,12 +2998,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         <Panel title="Escala e unidades" icon={Clock} className="h-full" action={systemBlockVisibilityControl(systemBlockKeys.schedule)}>
           <div className="grid gap-3">
             {canShowSystemField(SYSTEM_FIELD_KEYS.shift) ? (
-            <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+            <div className="rounded-xl border border-ds-divider bg-ds-input p-3">
               {shiftDef ? (
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-black text-[#1d1d26]">{shiftDef.name}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#817762]">
+                    <p className="text-sm font-black text-ds-ink">{shiftDef.name}</p>
+                    <p className="mt-1 text-xs font-semibold text-ds-alert-ink">
                       {shiftDef.startTime} - {shiftDef.endTime}
                       {shiftDef.breakStart && shiftDef.breakEnd ? ` | intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
                     </p>
@@ -2892,29 +3015,29 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[#777784]">Sem turno atribuído.</p>
+                  <p className="text-sm font-semibold text-ds-ink-muted">Sem turno atribuído.</p>
                   {visibilityControl(SYSTEM_FIELD_KEYS.shift)}
                 </div>
               )}
             </div>
             ) : null}
             {canShowSystemField(SYSTEM_FIELD_KEYS.units) ? (
-            <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+            <div className="rounded-xl border border-ds-divider bg-ds-input p-3">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-xs font-black uppercase text-[#9d9da9]">Unidades</p>
+                <p className="text-xs font-black uppercase text-ds-ink-faint">Unidades</p>
                 {visibilityControl(SYSTEM_FIELD_KEYS.units)}
               </div>
               {userUnits.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {userUnits.map((unit) => (
-                    <span key={unit.id} className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-[#4f4f5b] ring-1 ring-[#ececf0]">
+                    <span key={unit.id} className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-ds-ink-2 ring-1 ring-ds-border">
                       <MapPin className="h-3.5 w-3.5" />
                       {unit.name}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm font-semibold text-[#777784]">Nenhuma unidade vinculada.</p>
+                <p className="text-sm font-semibold text-ds-ink-muted">Nenhuma unidade vinculada.</p>
               )}
             </div>
             ) : null}
@@ -2940,11 +3063,11 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         <Panel title="Férias" icon={Umbrella} className="h-full" action={systemBlockVisibilityControl(systemBlockKeys.vacations)}>
           {vacationsLoading ? (
             <div className="space-y-4">
-              <div className="h-28 animate-pulse rounded-2xl bg-slate-100" />
+              <div className="h-28 animate-pulse rounded-2xl bg-ds-neutral-bg" />
               <div className="grid grid-cols-3 gap-2">
-                <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
-                <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
-                <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+                <div className="h-16 animate-pulse rounded-2xl bg-ds-neutral-bg" />
+                <div className="h-16 animate-pulse rounded-2xl bg-ds-neutral-bg" />
+                <div className="h-16 animate-pulse rounded-2xl bg-ds-neutral-bg" />
               </div>
             </div>
           ) : (
@@ -2999,11 +3122,11 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         <Panel title="Vale-transporte" icon={MapPin} action={systemBlockVisibilityControl(systemBlockKeys.transportVoucher)}>
           {canShowSystemField(SYSTEM_FIELD_KEYS.transportVoucher) ? (
             <div className="space-y-3">
-              <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
+              <div className="rounded-xl border border-ds-divider bg-ds-input p-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-sm font-black text-[#1d1d26]">Direito ao vale-transporte</p>
-                    <p className="mt-1 text-xs font-medium text-[#777784]">
+                    <p className="text-sm font-black text-ds-ink">Direito ao vale-transporte</p>
+                    <p className="mt-1 text-xs font-medium text-ds-ink-muted">
                       Controle local do benefício por dia trabalhado.
                     </p>
                   </div>
@@ -3017,22 +3140,22 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
                 <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#9d9da9]">Situação atual</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Situação atual</p>
                     {transportVoucherStatus === "active" ? (
-                      <p className="mt-1 text-lg font-black text-[#1d1d26]">
+                      <p className="mt-1 text-lg font-black text-ds-ink">
                         Ativo
                         {collaborator.transportVoucherValue != null ? (
-                          <span className="ml-2 text-sm font-bold text-[#777784]">
+                          <span className="ml-2 text-sm font-bold text-ds-ink-muted">
                             R$ {collaborator.transportVoucherValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/dia
                           </span>
                         ) : (
-                          <span className="ml-2 text-sm font-bold text-amber-600">sem valor diário informado</span>
+                          <span className="ml-2 text-sm font-bold text-ds-warn">sem valor diário informado</span>
                         )}
                       </p>
                     ) : transportVoucherStatus === "suspended" ? (
-                      <p className="mt-1 text-lg font-black text-amber-700">Suspenso</p>
+                      <p className="mt-1 text-lg font-black text-ds-warn">Suspenso</p>
                     ) : (
-                      <p className="mt-1 text-lg font-black text-[#777784]">Ainda não configurado</p>
+                      <p className="mt-1 text-lg font-black text-ds-ink-muted">Ainda não configurado</p>
                     )}
                   </div>
                   {canManageTransportVoucher ? (
@@ -3047,10 +3170,10 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ds-muted p-3">
                 <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#9d9da9]">Histórico</p>
-                  <p className="mt-1 text-xs font-medium text-[#777784]">
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-ds-ink-faint">Histórico</p>
+                  <p className="mt-1 text-xs font-medium text-ds-ink-muted">
                     {transportVoucherHistory.length > 0
                       ? `Última alteração: ${formatVacationDate(transportVoucherHistory[transportVoucherHistory.length - 1]?.effectiveDate)}`
                       : "Nenhuma alteração registrada."}
@@ -3061,7 +3184,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     <button
                       type="button"
                       onClick={() => setTransportVoucherHistoryOpen(true)}
-                      className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-xs ring-1 ring-slate-200 hover:bg-slate-50"
+                      className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-ds-ink-2 shadow-xs ring-1 ring-ds-border hover:bg-ds-muted"
                     >
                       Ver histórico
                     </button>
@@ -3069,7 +3192,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </div>
               </div>
               {transportVoucherMessage ? (
-                <p className={`rounded-xl px-3 py-2 text-xs font-bold ${transportVoucherMessage.startsWith("Falha") || transportVoucherMessage.includes("válido") ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>
+                <p className={`rounded-xl px-3 py-2 text-xs font-bold ${transportVoucherMessage.startsWith("Falha") || transportVoucherMessage.includes("válido") ? "bg-ds-danger-bg text-ds-danger" : "bg-ds-ok-bg text-ds-ok"}`}>
                   {transportVoucherMessage}
                 </p>
               ) : null}
@@ -3091,7 +3214,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   }
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] bg-(--bg) p-2 text-[#1d1d26] md:p-3">
+    <div className="min-h-[calc(100vh-6rem)] bg-(--bg) p-2 text-ds-ink md:p-3">
       <div className="w-full space-y-2.5">
         <TerminationDialog
           user={collaborator}
@@ -3135,7 +3258,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <AlertDialogFooter>
               <AlertDialogCancel>Continuar editando</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-rose-600 text-white hover:bg-rose-700"
+                className="bg-ds-danger text-white hover:bg-ds-danger"
                 onClick={() => {
                   setEditDrawerDirty(false);
                   setDiscardEditOpen(false);
@@ -3154,17 +3277,17 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             ariaLabel="Voltar à página anterior"
             iconOnly
             variant="ghost"
-            className="h-8 w-8 rounded-lg bg-white p-0 text-[#777784] shadow-xs ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
+            className="h-8 w-8 rounded-lg bg-white p-0 text-ds-ink-muted shadow-xs ring-1 ring-ds-border hover:bg-white hover:text-ds-accent-ink"
             iconClassName="h-5 w-5"
           />
-          <span className="text-xs font-black text-[#8f8f9b]">Departamento pessoal</span>
-          <ChevronRight className="h-4 w-4 text-[#b5b5bf]" />
-          <h1 className="min-w-0 truncate text-lg font-black leading-tight text-[#181820]">
+          <span className="text-xs font-black text-ds-ink-muted">Departamento pessoal</span>
+          <ChevronRight className="h-4 w-4 text-ds-ink-faint" />
+          <h1 className="min-w-0 truncate text-lg font-black leading-tight text-ds-ink">
             Painel de {displayName(user.username)}
           </h1>
         </div>
 
-        <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur-sm lg:top-[76px]">
+        <section className="sticky top-[72px] z-10 rounded-xl border border-ds-border bg-white/95 p-3 shadow-md backdrop-blur-sm lg:top-[76px]">
         <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(0,1fr)_320px_auto] xl:items-center">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
@@ -3181,9 +3304,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             </div>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="min-w-0 wrap-break-word text-base font-black leading-tight text-[#181820]">{user.username}</h2>
+                <h2 className="min-w-0 wrap-break-word text-base font-black leading-tight text-ds-ink">{user.username}</h2>
                 <span
-                  className="inline-flex max-w-full items-center rounded-full bg-[#eafaf2] px-2 py-0.5 text-[10px] font-black text-[#008963] sm:max-w-[220px]"
+                  className="inline-flex max-w-full items-center rounded-full bg-ds-ok-bg px-2 py-0.5 text-[10px] font-black text-ds-ok sm:max-w-[220px]"
                   title={roleFunctionLabel}
                 >
                   <span className="truncate">{roleFunctionLabel}</span>
@@ -3191,32 +3314,32 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
                     collaborator.employmentRelationshipType
-                      ? "bg-sky-50 text-sky-700"
-                      : "bg-amber-50 text-amber-700"
+                      ? "bg-ds-info-bg text-ds-info"
+                      : "bg-ds-warn-bg text-ds-warn"
                   }`}
                 >
                   {employmentRelationshipLabel(collaborator.employmentRelationshipType)}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3f3f5] px-2 py-0.5 text-[10px] font-black text-[#6f6f7c]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-ds-neutral-bg px-2 py-0.5 text-[10px] font-black text-ds-ink-muted">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: user.color || "#e92828" }} />
                   Cor na escala
                 </span>
               </div>
-              <div className="mt-2 grid gap-x-5 gap-y-1.5 text-[10px] font-black text-[#24242e] md:grid-cols-4">
+              <div className="mt-2 grid gap-x-5 gap-y-1.5 text-[10px] font-black text-ds-ink md:grid-cols-4">
                 <span>
-                  <span className="block text-xs uppercase text-[#9d9da9]">E-mail</span>
+                  <span className="block text-xs uppercase text-ds-ink-faint">E-mail</span>
                   <span className="mt-1 block max-w-[180px] truncate">{user.email}</span>
                 </span>
                 <span>
-                  <span className="block text-xs uppercase text-[#9d9da9]">Telefone</span>
+                  <span className="block text-xs uppercase text-ds-ink-faint">Telefone</span>
                   <span className="mt-1 block">{(user as any).phone || "-"}</span>
                 </span>
                 <span>
-                  <span className="block text-xs uppercase text-[#9d9da9]">Último acesso</span>
+                  <span className="block text-xs uppercase text-ds-ink-faint">Último acesso</span>
                   <span className="mt-1 block">{fmtDate((user as any).lastLoginAt)}</span>
                 </span>
                 <span>
-                  <span className="block text-xs uppercase text-[#9d9da9]">Tempo de casa</span>
+                  <span className="block text-xs uppercase text-ds-ink-faint">Tempo de casa</span>
                   <span className="mt-1 block">{tenure(user.admissionDate)}</span>
                 </span>
               </div>
@@ -3250,7 +3373,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#dedfe4] bg-white text-[#777784] shadow-xs hover:text-[#df2f78]"
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-ds-border bg-white text-ds-ink-muted shadow-xs hover:text-ds-accent-ink"
                     title="Ações do colaborador"
                   >
                     <Menu className="h-5 w-5" />
@@ -3260,17 +3383,17 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   <div className="space-y-1">
                     <Link
                       href={`/dashboard/documents/consents/${encodeURIComponent(getHrEmployeeId(collaborator) ?? collaborator.id)}`}
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-ds-ink-2 hover:bg-ds-muted"
                     >
-                      <ImageIcon className="h-4 w-4 text-[#df2f78]" />
+                      <ImageIcon className="h-4 w-4 text-ds-accent-ink" />
                       Consentimento de imagem e voz
                     </Link>
                     {canRequestOwnResignation ? (
                       <Link
                         href="/dashboard/resignation"
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-50"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-ds-danger hover:bg-ds-danger-bg"
                       >
-                        <FilePenLine className="h-4 w-4 text-rose-600" />
+                        <FilePenLine className="h-4 w-4 text-ds-danger" />
                         Pedir demissão
                       </Link>
                     ) : null}
@@ -3281,9 +3404,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                           setActionsOpen(false);
                           setTerminationDialogOpen(true);
                         }}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-rose-700 hover:bg-rose-50"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-ds-danger hover:bg-ds-danger-bg"
                       >
-                        <UserX className="h-4 w-4 text-rose-600" />
+                        <UserX className="h-4 w-4 text-ds-danger" />
                       {terminationCopyForRelationship(collaborator.employmentRelationshipType).action}
                       </button>
                     ) : null}
@@ -3306,8 +3429,8 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             {systemVisibilityMessage ? (
               <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
                 systemVisibilityMessage.startsWith("Falha")
-                  ? "bg-rose-50 text-rose-600"
-                  : "bg-emerald-50 text-emerald-700"
+                  ? "bg-ds-danger-bg text-ds-danger"
+                  : "bg-ds-ok-bg text-ds-ok"
               }`}>
                 {systemVisibilityMessage}
               </p>
@@ -3333,25 +3456,25 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-base font-black text-[#1d1d26]">Editar vale-transporte</p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#777784]">{user.username}</p>
+                  <p className="text-base font-black text-ds-ink">Editar vale-transporte</p>
+                  <p className="mt-0.5 text-xs font-semibold text-ds-ink-muted">{user.username}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setTransportVoucherEditorOpen(false)}
-                  className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-ds-neutral-bg text-ds-ink-muted hover:bg-ds-divider"
                 >
                   ×
                 </button>
               </div>
 
               <div className="mt-3 grid gap-2.5">
-                <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+                <label className="grid gap-1 text-xs font-black text-ds-ink">
                   Situação
                   <select
                     value={transportVoucherStatusDraft}
                     onChange={(event) => setTransportVoucherStatusDraft(event.target.value as "active" | "suspended")}
-                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold outline-hidden focus:border-ds-accent-ink"
                   >
                     <option value="active">Ativo</option>
                     <option value="suspended">Suspenso</option>
@@ -3359,47 +3482,47 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </label>
 
                 {transportVoucherStatusDraft === "active" ? (
-                  <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+                  <label className="grid gap-1 text-xs font-black text-ds-ink">
                     Valor por dia
                     <CurrencyInput
                       value={transportVoucherValueDraft}
                       onChange={setTransportVoucherValueDraft}
-                      className="h-8 rounded-lg border-[#dedfe4] bg-white pl-8 text-xs font-bold outline-hidden focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="h-8 rounded-lg border-ds-border bg-white pl-8 text-xs font-bold outline-hidden focus:border-ds-accent-ink focus-visible:ring-0 focus-visible:ring-offset-0"
                       placeholder="0,00"
                     />
                   </label>
                 ) : null}
 
-                <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+                <label className="grid gap-1 text-xs font-black text-ds-ink">
                   Data da alteração
                   <input
                     type="date"
                     value={transportVoucherEffectiveDate}
                     onChange={(event) => setTransportVoucherEffectiveDate(event.target.value)}
-                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-hidden focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-ds-border bg-white px-2.5 text-xs font-bold outline-hidden focus:border-ds-accent-ink"
                   />
                 </label>
 
-                <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+                <label className="grid gap-1 text-xs font-black text-ds-ink">
                   Motivo
                   <textarea
                     value={transportVoucherReason}
                     onChange={(event) => setTransportVoucherReason(event.target.value)}
-                    className="min-h-16 rounded-lg border border-[#dedfe4] bg-white px-2.5 py-2 text-xs font-semibold outline-hidden focus:border-[#ec2f78]"
+                    className="min-h-16 rounded-lg border border-ds-border bg-white px-2.5 py-2 text-xs font-semibold outline-hidden focus:border-ds-accent-ink"
                     placeholder="Descreva o motivo da alteração."
                   />
                 </label>
               </div>
 
               {transportVoucherMessage ? (
-                <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">{transportVoucherMessage}</p>
+                <p className="mt-4 rounded-xl bg-ds-danger-bg px-3 py-2 text-xs font-bold text-ds-danger">{transportVoucherMessage}</p>
               ) : null}
 
               <div className="mt-6 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setTransportVoucherEditorOpen(false)}
-                  className="h-8 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-black text-[#4f4f5b] hover:bg-slate-50"
+                  className="h-8 rounded-lg border border-ds-border bg-white px-3 text-xs font-black text-ds-ink-2 hover:bg-ds-muted"
                 >
                   Cancelar
                 </button>
@@ -3407,7 +3530,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   type="button"
                   disabled={transportVoucherSaving}
                   onClick={() => void saveTransportVoucher()}
-                  className="h-8 rounded-lg bg-[#ec2f78] px-3 text-xs font-black text-white shadow-xs hover:bg-[#d92b6e] disabled:opacity-60"
+                  className="h-8 rounded-lg bg-ds-accent px-3 text-xs font-black text-white shadow-xs hover:bg-ds-accent-hover disabled:opacity-60"
                 >
                   {transportVoucherSaving ? "Salvando..." : "Salvar alteração"}
                 </button>
@@ -3421,13 +3544,13 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-2xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-base font-black text-[#1d1d26]">Histórico do vale-transporte</p>
-                  <p className="mt-0.5 text-xs font-semibold text-[#777784]">{user.username}</p>
+                  <p className="text-base font-black text-ds-ink">Histórico do vale-transporte</p>
+                  <p className="mt-0.5 text-xs font-semibold text-ds-ink-muted">{user.username}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setTransportVoucherHistoryOpen(false)}
-                  className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-ds-neutral-bg text-ds-ink-muted hover:bg-ds-divider"
                 >
                   ×
                 </button>
@@ -3435,26 +3558,26 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
               <div className="mt-3 max-h-[55vh] space-y-2 overflow-auto pr-1">
                 {transportVoucherHistory.length > 0 ? [...transportVoucherHistory].reverse().map((entry) => (
-                  <div key={entry.id} className="rounded-lg border border-[#ececf0] bg-[#fbfbfc] p-2.5">
+                  <div key={entry.id} className="rounded-lg border border-ds-divider bg-ds-input p-2.5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-black text-[#1d1d26]">{formatTransportVoucherAction(entry)}</p>
-                        <p className="mt-1 text-xs font-semibold text-[#777784]">
+                        <p className="text-sm font-black text-ds-ink">{formatTransportVoucherAction(entry)}</p>
+                        <p className="mt-1 text-xs font-semibold text-ds-ink-muted">
                           Vigência: {formatVacationDate(entry.effectiveDate)}
                           {entry.value != null ? ` · R$ ${entry.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/dia` : ""}
                         </p>
                       </div>
                       <Chip tone={entry.toStatus === "active" ? "good" : "warn"}>{transportVoucherStatusLabel(entry.toStatus)}</Chip>
                     </div>
-                    <p className="mt-3 rounded-xl bg-white p-3 text-xs font-semibold text-[#4f4f5b]">{entry.reason}</p>
+                    <p className="mt-3 rounded-xl bg-white p-3 text-xs font-semibold text-ds-ink-2">{entry.reason}</p>
                     {entry.changedBy ? (
-                      <p className="mt-2 text-[11px] font-semibold text-[#9d9da9]">
+                      <p className="mt-2 text-[11px] font-semibold text-ds-ink-faint">
                         Alterado por {entry.changedBy.username} em {fmtDate(entry.changedAt, "dd/MM/yyyy HH:mm")}
                       </p>
                     ) : null}
                   </div>
                 )) : (
-                  <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhuma alteração registrada.</p>
+                  <p className="rounded-2xl bg-ds-muted p-4 text-sm font-semibold text-ds-ink-muted">Nenhuma alteração registrada.</p>
                 )}
               </div>
 
@@ -3462,7 +3585,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <button
                   type="button"
                   onClick={() => setTransportVoucherHistoryOpen(false)}
-                  className="rounded-2xl bg-[#1d1d26] px-5 py-3 text-sm font-black text-white"
+                  className="rounded-2xl bg-ds-ink px-5 py-3 text-sm font-black text-white"
                 >
                   Fechar
                 </button>
@@ -3477,9 +3600,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-[#f7f7f9] p-3 text-center">
-      <p className="text-base font-black text-[#1d1d26]">{value}</p>
-      <p className="text-[10px] font-bold text-[#777784]">{label}</p>
+    <div className="rounded-2xl bg-ds-muted p-3 text-center">
+      <p className="text-base font-black text-ds-ink">{value}</p>
+      <p className="text-[10px] font-bold text-ds-ink-muted">{label}</p>
     </div>
   );
 }
