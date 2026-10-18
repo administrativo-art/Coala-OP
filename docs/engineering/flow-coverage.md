@@ -1,6 +1,6 @@
 # Cobertura dos grupos de fluxo
 
-2026-10-18: [Registro REP-P](flows/dp-time-recording.md) ganhou duas APIs autenticadas, ARP dedicada, NSR transacional, relógio fail-closed e AFD 004 com contrato CAdES. O ensaio é somente sintético; provedores reais, comprovante PAdES, app e piloto seguem bloqueados. Nenhum grupo/página foi promovido porque ainda não há interface.
+2026-10-18: [Registro REP-P](flows/dp-time-recording.md) ganhou duas APIs autenticadas, ARP dedicada, NSR transacional, NTP público do Observatório Nacional com quórum/falha fechada e AFD 004 com contrato CAdES. O ensaio é somente local; conectividade do runtime, validação oficial de assinaturas, Coala Go e piloto seguem bloqueados. Nenhum grupo/página foi promovido.
 
 2026-10-18: [Escalas DP](flows/dp-schedules.md) documenta simulação pura diária a partir de vínculo vigente e referências históricas explícitas, sem leitura atual de cadastro, API, UI ou persistência. Só o débito conservador de banco sob condições completas pode ser proposto; qualquer ausência ou trabalho extra vai para revisão. Não é apuração fiscal nem conclusão das Fases 1/2/3; o grupo permanece Traçado.
 
@@ -27,7 +27,7 @@ Classificação atual: **162/162 páginas** — 117 ativas, 6 de navegação, 28
 | `collaborator-dashboard` | 1 | Traçado | [Escala, metas e cartões](flows/collaborator-dashboard.md) — percurso complementado; verificação integrada pendente |
 | `collaborator-requests` | 2 | Traçado | [Solicitações do colaborador](flows/collaborator-requests.md) — vale-transporte, análise, termos e assinatura mapeados; homologação integrada pendente |
 | `collaborator-schedule` | 1 | Traçado | [Escala própria e equipe](flows/collaborator-schedule.md) — seleção final de unidades `"all"`/restrita e contrato local da UI Android cobertos; privacidade/custo e teste integrado pendentes |
-| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Meu ponto sem link de menu; batida, comprovante e histórico só sintéticos; provedores reais e Coala Go pendentes |
+| `dp-time-recording` | 1 | Traçado | [Registro REP-P](flows/dp-time-recording.md) — tela Meu ponto sem link de menu; NTP público preparado localmente, ainda sem sonda publicada; validação oficial, gates fiscais e Coala Go pendentes |
 | `system-notices` | 1 | Traçado | [Avisos do sistema](flows/system-notices.md) — central por permissão e público, rotina diária do certificado/comprovantes/normas; publicação e E2E pendentes |
 | `company-documents` | 2 | Traçado | [Arquivo e acesso](flows/company-documents.md) — percurso complementado; verificação integrada pendente |
 | `consents` | 1 | Traçado | [Imagem e voz](flows/consents.md) — percurso complementado; verificação integrada pendente |

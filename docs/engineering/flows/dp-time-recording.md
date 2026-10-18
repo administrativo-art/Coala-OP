@@ -47,7 +47,13 @@ Coletores: `01` para aplicativo móvel e `02` para navegador. O MVP aceita somen
 
 O contrato `RepPClock` exige atestação `hlb_verified`, fonte identificada, verificação interna recente e desvio absoluto máximo de 30 segundos. O instante é do servidor e é convertido no fuso IANA do estabelecimento para o formato fiscal `AAAA-MM-DDThh:mm:00±hhmm`; segundos brutos permanecem na evidência técnica da leitura.
 
-O provedor padrão é deliberadamente não configurado e retorna `REP_P_TIME_PROVIDER_UNCONFIGURED`. Leituras não verificadas, vencidas ou fora da tolerância retornam `REP_P_TIME_UNAVAILABLE`; nada é inserido na ARP. Não há fallback para relógio do celular, hora informada pelo usuário ou criação retroativa de uma batida. Offline permanece fora do MVP.
+Com `REP_P_HLB_NTP_ENABLED=true`, [`hlb-ntp-clock.server.ts`](../../../src/features/dp/rep-p/hlb-ntp-clock.server.ts) consulta por UDP/123 os quatro endereços publicados pelo Observatório Nacional (`200.20.186.75`, `200.20.186.94`, `200.20.224.100`, `200.20.224.101`). Cada resposta precisa ser NTP v3/v4 de servidor, estrato 1–15, ecoar o timestamp da requisição e ter ida e volta de até 1,5 s. A leitura só é aceita com ao menos dois servidores concordando dentro de 1 s; a mediana do grupo determina o desvio. Dois grupos máximos incompatíveis (divisão 2×2) são ambíguos e falham fechados.
+
+Uma atestação válida é reutilizada por 60 s para não consultar a rede a cada batida. Em falha transitória, a última atestação pode sustentar leituras por no máximo 5 min; depois disso o serviço falha fechado. Cada evento guarda o ID/hash da atestação, modo `fresh|cached|fallback`, quórum e amostras por servidor (aceita, descartada ou falha; com offset, RTT e stratum quando recebida). O monitor diário exige consulta `fresh`; cache/fallback não resolve incidente. Sem a variável de ativação retorna `REP_P_TIME_PROVIDER_UNCONFIGURED`; respostas insuficientes, ambíguas, divergentes, vencidas ou com desvio absoluto superior a 30 s retornam `REP_P_TIME_UNAVAILABLE`, sem inserir nada na ARP. Não há fallback para relógio do celular, hora informada pelo usuário ou criação retroativa de batida. Offline permanece fora do MVP.
+
+`REP_P_MARKING_ENABLED` é o gate operacional independente. Em produção ele permanece `false`: a fonte pública pode ser sondada e monitorada, mas o `POST` de marcação recusa antes de qualquer leitura ou escrita na ARP com `REP_P_MARKING_DISABLED`. Só pode virar `true` após decisão formal sobre INPI, os dois atestados, backup/PITR/proteção contra exclusão, validações oficiais e piloto. Essa liberação não é consequência automática de a HLB estar saudável.
+
+A fonte é o serviço público gratuito do ON, não o ReSinc certificado. A página oficial foi conferida em 18/10/2026: [acerte seu computador via internet](https://www.gov.br/observatorio/pt-br/assuntos/areas-de-atuacao/tempo-e-frequencia/acerte-seu-computador-via-internet). ReSinc/HLB certificada continua decisão pendente, sem conclusão de necessidade jurídica. O [contrato de rede do Cloud Run](https://docs.cloud.google.com/run/docs/securing/security#network-security) documenta egress de camada 4 por TCP e UDP, então o transporte é tecnicamente suportado; a saída UDP/123 deste backend App Hosting só estará homologada após sonda na revisão publicada. Falha apenas mantém o bloqueio.
 
 ## Etapa 4 — AFD 004 e CAdES
 
@@ -55,7 +61,7 @@ O provedor padrão é deliberadamente não configurado e retorna `REP_P_TIME_PRO
 
 A exportação consulta somente um estabelecimento/workspace e período, limita 2.500 eventos, ordena por NSR, gera os bytes uma vez e envia exatamente esses bytes ao `RepPCadesSigner`. Só aceita CAdES destacado não vazio cujo certificado corresponda ao CNPJ da desenvolvedora CT Sorvetes LTDA; retorna AFD e `.p7s` em base64 no pacote administrativo, com nomes, SHA-256 e contagens. Antes de responder, cria auditoria server-side imutável com período, ator, leiaute, arquivos, hash, certificado e contagens.
 
-O assinador padrão é deliberadamente indisponível (`REP_P_CADES_UNAVAILABLE`). O teste injeta uma assinatura sintética apenas para provar o encadeamento técnico; ela não é certificado nem evidência jurídica. A exportação de produção não sai sem e-CNPJ ICP-Brasil e provedor homologado.
+O assinador usa o e-CNPJ ICP-Brasil configurado no Secret Manager; sem a variável ou com credencial inválida, falha fechado (`REP_P_CADES_UNAVAILABLE` ou erro específico da credencial). O teste automatizado usa certificado sintético apenas para provar o encadeamento técnico; ele não é certificado nem evidência jurídica. Ainda falta gerar um par real AFD/`.p7s` e validar no serviço oficial do ITI antes do piloto.
 
 ## Etapa 5 — comprovante PDF/PAdES
 
@@ -71,25 +77,25 @@ Falha de assinatura, campo legal ausente (`REP_P_RECEIPT_FIELDS_MISSING`) ou err
 
 A credencial vem de `REP_P_ICP_SIGNER_PEM` (Secret Manager; chave sem senha + certificados em PEM, convertidos do `.pfx` por pipe direto ao `gcloud`). Sem a variável, os assinadores recusam como antes. O segredo foi criado em 18/10/2026 (versão 1, certificado SyngularID PJ A1 válido até 16/06/2027) e liberado ao backend `studio`; o `apphosting.yaml` o referencia nesta branch. Validação independente com certificado de teste: `openssl cms -verify` aceita o `.p7s` e `pdfsig` (Poppler) declara a assinatura do PDF válida e cobrindo o documento inteiro. O vencimento é acompanhado pela [central de avisos](system-notices.md) com marcos de 60 a 0 dias e vencido.
 
-Comprovante real continua impossível enquanto a Hora Legal não estiver configurada, porque a batida é recusada antes. O modelo está registrado como `system-rep-p-marking-receipt` em `SYSTEM_DOCUMENT_TEMPLATES` (sem timbre, retenção `manual_review` até a Fase 0). Ainda faltam o checklist campo a campo contra o art. 79/leiaute, a monitoração de pendentes e as telas de app/web (etapa 6). Os bytes ficam no próprio documento Firestore (PDF de poucos KB); mover para armazenamento de objetos é decisão aberta se o tamanho crescer.
+Comprovante real ainda depende da homologação publicada da Hora Legal e da validação oficial da assinatura. O modelo está registrado como `system-rep-p-marking-receipt` em `SYSTEM_DOCUMENT_TEMPLATES` (sem timbre, retenção `manual_review` até a Fase 0). Ainda faltam o checklist campo a campo contra o art. 79/leiaute e as telas de app/web completas (etapa 6). Os bytes ficam no próprio documento Firestore (PDF de poucos KB); mover para armazenamento de objetos é decisão aberta se o tamanho crescer.
 
 ## Etapa 6 — histórico e tela web (parcial)
 
 `/dashboard/collaborator/time-recording` (**Meu ponto**) registra a batida pelo canal `browser`, escolhe a unidade de execução entre as do vínculo e reutiliza o mesmo `attemptId` até haver resposta, para que um reenvio após falha de rede devolva a batida já gravada. Depois mostra horário fiscal, NSR e estado do comprovante, com **Baixar comprovante**, **Compartilhar** (folha nativa via Web Share, só quando o navegador aceita arquivos) ou **Tentar emitir comprovante**. O histórico tem Hoje, Dia e Período.
 
-A página não tem link no menu nem no painel do colaborador: sem Hora Legal configurada toda batida é recusada, e expor o atalho só geraria erro. Ligar o atalho junto com os provedores reais. Falta Coala Go (canal `mobile`), E2E da tela e exportação em lote/pasta do colaborador (etapa 7).
+A página não tem link no menu nem no painel do colaborador: a fonte pública de Hora Legal ainda precisa ser publicada e homologada, e os demais gates de uso real continuam abertos. Ligar o atalho somente com esses gates. Falta Coala Go (canal `mobile`), E2E da tela e exportação em lote/pasta do colaborador (etapa 7).
 
 Cada `receiptId` é catalogado com `recordedDate`. Consultas: histórico por `workspaceId+employeeId+recordedDate` e pendentes por `workspaceId+status+createdAt`, ambos com índice em `firestore.rep.indexes.json` e `limit`. Custo: uma consulta por abertura da tela ou troca de período (≤ 300 leituras), sem listener nem polling.
 
 ## Evidência de validação
 
-Testes unitários cobrem CRC, larguras, encoding, cabeçalho/trailer, hash adulterado, assinatura incompatível, fuso, tolerância da hora, replay e contratos das rotas/regras. O ensaio em Firestore Emulator cria eventos 2/5, executa duas batidas concorrentes, confirma NSRs 3/4, repete uma tentativa sem duplicar e exporta o AFD contendo os mesmos hashes. O cenário usa unidade de execução distinta da empregadora e confirma que o vínculo não muda. Para o comprovante, unitários cobrem PDF determinístico, campos ausentes, assinatura incremental adulterada/CNPJ errado/SubFilter errado; o emulador confirma batida gravada com comprovante pendente sem assinador, recuperação posterior sem nova batida, bytes preservados em nova tentativa, replay `available` e recusa a outro usuário.
+Testes unitários cobrem CRC, larguras, encoding, cabeçalho/trailer, hash adulterado, assinatura incompatível, fuso, tolerância da hora, replay e contratos das rotas/regras. Para NTP, cobrem vínculo resposta/requisição, cálculo de desvio/latência, quórum com 2, 3 e 4 fontes, recusa da divisão 2×2, descarte de divergência, cache, fallback e consulta fresca. Em 18/10/2026, uma sonda fora do sandbox nesta máquina recebeu os quatro servidores como estrato 1, com ida e volta de 66–94 ms e offsets de 93–104 ms; isso prova a viabilidade da fonte, não a saída UDP/123 do App Hosting. O ensaio em Firestore Emulator verifica que o gate global não toca a ARP, cria eventos 2/5, executa duas batidas concorrentes, confirma NSRs 3/4 e evidência HLB estruturada, repete uma tentativa sem duplicar e exporta o AFD contendo os mesmos hashes. O cenário usa unidade de execução distinta da empregadora e confirma que o vínculo não muda. Para o comprovante, unitários cobrem PDF determinístico, campos ausentes, assinatura incremental adulterada/CNPJ errado/SubFilter errado; o emulador confirma batida gravada com comprovante pendente sem assinador, recuperação posterior sem nova batida, bytes preservados em nova tentativa, replay `available` e recusa a outro usuário.
 
 ## Bloqueios para uso real
 
-- contratar/configurar fonte verificável de Hora Legal Brasileira e sua monitoração;
+- publicar e homologar a conectividade UDP/123 com os quatro NTPs públicos do ON e simular a perda/retomada; ReSinc certificada permanece pendência não obrigatória por enquanto;
 - criar registro INPI, atestados e cadastro fiscal aprovado de cada estabelecimento;
-- integrar assinadores CAdES (AFD) e PAdES (comprovante) reais com o e-CNPJ;
+- validar AFD/CAdES e comprovante/PAdES reais no VALIDAR/ITI; carimbo de tempo ACT permanece pendência separada;
 - aprovar IAM, retenção, backup imutável, restauração, alertas e contingência;
 - ligar Coala Go/Coala One às rotas, histórico e download sem expor AFD multiempregado;
 - executar simulação fiscal independente e piloto paralelo ao Bizneo.
