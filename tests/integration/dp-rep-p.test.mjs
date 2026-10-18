@@ -32,10 +32,15 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
   const employee = hrDbAdmin.collection('employees').doc(`${prefix}-hr`);
   const cpfField = employee.collection('field_values').doc('employee.cpf');
   const clock = { async read() { return { instant: new Date('2026-10-18T11:15:42.000Z'), source: 'synthetic-hlb-test',
-    assurance: 'hlb_verified', observedOffsetMs: 12, verifiedAt: new Date() }; } };
+    assurance: 'hlb_verified', observedOffsetMs: 12, verifiedAt: new Date(), attestationId: 'a'.repeat(64),
+    attestationMode: 'fresh', quorum: 2, observations: [
+      { server: '200.20.186.75', status: 'accepted', offsetMs: 10, roundTripMs: 20, stratum: 1 },
+      { server: '200.20.186.94', status: 'accepted', offsetMs: 14, roundTripMs: 22, stratum: 1 },
+    ] }; } };
   const profile = { establishmentId, employerCnpj, employerLegalName: 'CT Sorvetes LTDA',
     inpiRegistration: '12345678901234567', developerCnpj: employerCnpj };
   const dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin, clock,
+    markingEnabled: true,
     signer: { async signDetached(bytes) { assert.ok(bytes.length > 0); return { bytes: Buffer.from('synthetic-cades'),
       format: 'CAdES', detached: true, certificateCnpj: employerCnpj }; } },
     receiptSigner: { async signPdf() { throw new Error('PAdES indisponível no primeiro ensaio'); } } };
@@ -44,6 +49,10 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
   const padesSigner = icpSigners.pades;
   const allRefs = [];
   try {
+    await assert.rejects(recordOwnRepPMarking(context,
+      { attemptId: 'gate-check', workDate: '2026-10-18', executionUnitId, channel: 'browser' },
+      { ...dependencies, markingEnabled: false, repDb: { collection() { throw new Error('gate touched database'); } } }),
+    { code: 'REP_P_MARKING_DISABLED' });
     await Promise.all([
       employer.set({ name: 'Empregadora', address: 'Rua fiscal, 1', cnpj: employerCnpj, timeZone: 'America/Belem' }),
       execution.set({ name: 'Execução excepcional', address: 'Rua operacional, 2', cnpj: '11222333000181', timeZone: 'America/Belem' }),
@@ -153,6 +162,10 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const attemptSnapshot = await hrDbAdmin.collection('repP_attempts').where('employeeId', '==', userId).get();
     assert.equal(eventSnapshot.size, 4);
     assert.equal(attemptSnapshot.size, 2);
+    const markingEvents = eventSnapshot.docs.filter((doc) => doc.get('recordType') === '7');
+    assert.equal(markingEvents.length, 2);
+    assert.ok(markingEvents.every((doc) => doc.get('trustedClock.attestationId') === 'a'.repeat(64)
+      && doc.get('trustedClock.quorum') === 2 && doc.get('trustedClock.observations').length === 2));
     allRefs.push(...eventSnapshot.docs.map((doc) => doc.ref), ...attemptSnapshot.docs.map((doc) => doc.ref),
       ...exportAudit.docs.map((doc) => doc.ref));
   } finally {
