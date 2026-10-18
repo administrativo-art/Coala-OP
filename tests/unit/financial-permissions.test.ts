@@ -33,6 +33,7 @@ describe("permissões financeiras especializadas", () => {
       administer: false,
     });
     assert.equal(defaultGuestPermissions.settings.viewAiCosts, false);
+    assert.equal(defaultGuestPermissions.settings.viewSystemNotices, false);
   });
 
   it("mantém o administrador padrão com a matriz completa", () => {
@@ -41,6 +42,7 @@ describe("permissões financeiras especializadas", () => {
     assert.ok(Object.values(defaultAdminPermissions.financial.personnelCosts).every(Boolean));
     assert.ok(Object.values(defaultAdminPermissions.financial.reconciliation).every(Boolean));
     assert.equal(defaultAdminPermissions.settings.viewAiCosts, true);
+    assert.equal(defaultAdminPermissions.settings.viewSystemNotices, true);
   });
 
   it("não confunde importação, fechamento e conciliação da fatura", () => {

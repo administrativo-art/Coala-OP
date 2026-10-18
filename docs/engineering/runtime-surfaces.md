@@ -43,6 +43,8 @@ As URLs desses disparadores são configuração: a correspondência indicada dev
 
 [Scheduler financeiro](../../src/app/api/financial/analysis-routines/scheduler/route.ts) exige flag `FINANCIAL_ANALYSIS_SCHEDULER_ENABLED=true` e segredo em cabeçalho antes de `runDueFinancialRoutine`. Uma rota existente não significa scheduler ativado.
 
+[Avisos do sistema](flows/system-notices.md): a função agendada `systemNoticesDailyMonitor` (08:00 America/Belem) chama [`POST /api/jobs/system-notices/daily`](../../src/app/api/jobs/system-notices/daily/route.ts) com `SYSTEM_NOTICES_JOB_SECRET`. A rota é idempotente: abre no máximo um aviso por marco do certificado do ponto, por dia de pendência de comprovante e por data de revisão de normas. O segredo precisa existir no Secret Manager antes do deploy de Functions e da promoção do `apphosting.yaml`.
+
 ## Webhooks e consumidores
 
 | Entrada | Autenticação observada | Dados e consumidores / limite |

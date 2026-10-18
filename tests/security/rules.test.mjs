@@ -34,6 +34,46 @@ const rules = {
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
 
+test("ARP do REP-P no coala-rh não é acessível a nenhum cliente, nem administrador", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-rep-p-arp", firestore: { rules: rules.rh } });
+  const collections = ["repP_establishments", "repP_employees", "repP_events", "repP_attempts", "repP_receipts", "repP_exportAudit"];
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "rh_access_cache/owner"), { active: true, isDefaultAdmin: true, sessionVersion: 1 });
+      for (const collectionName of collections) await setDoc(doc(context.firestore(), collectionName, "original"), { nsr: 1 });
+    });
+    for (const context of [env.unauthenticatedContext(), env.authenticatedContext("owner", { sessionVersion: 1, isDefaultAdmin: true })]) {
+      for (const collectionName of collections) {
+        const reference = doc(context.firestore(), collectionName, "original");
+        await assertFails(getDoc(reference));
+        await assertFails(setDoc(reference, { nsr: 2 }));
+        await assertFails(deleteDoc(reference));
+      }
+    }
+  } finally { await env.cleanup(); }
+});
+
+test("referências históricas privadas não são acessíveis nem por administrador cliente", async () => {
+  const env = await initializeTestEnvironment({ projectId: "demo-security-shift-reference", firestore: { rules: rules.main } });
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "users/owner"), { isActive: true, sessionVersion: 1, isDefaultAdmin: true });
+      await setDoc(doc(context.firestore(), "dp_shiftReferenceHistory/private"), { userId: "owner", reference: { employerCnpj: "14276603000125" } });
+      for (const collectionName of ["dp_employmentReferenceHeads", "dp_employmentReferenceHistories", "dp_employmentReferenceRequests", "systemNotices"]) {
+        await setDoc(doc(context.firestore(), collectionName, "private"), { userId: "owner" });
+      }
+    });
+    for (const context of [env.unauthenticatedContext(), env.authenticatedContext("owner", { sessionVersion: 1, isDefaultAdmin: true })]) {
+      for (const collectionName of ["dp_shiftReferenceHistory", "dp_employmentReferenceHeads", "dp_employmentReferenceHistories", "dp_employmentReferenceRequests", "systemNotices"]) {
+        const reference = doc(context.firestore(), collectionName, "private");
+        await assertFails(getDoc(reference));
+        await assertFails(setDoc(reference, { altered: true }));
+        await assertFails(deleteDoc(reference));
+      }
+    }
+  } finally { await env.cleanup(); }
+});
+
 test("conta inativa ou token de sessão anterior não acessa o próprio cadastro", async () => {
   const env = await initializeTestEnvironment({ projectId: "demo-security-account-lifecycle", firestore: { rules: rules.main } });
   try {

@@ -785,6 +785,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Referências históricas da escala incluem vínculo, cargo e CNPJ; somente servidor.
+    match /dp_shiftReferenceHistory/{id} {
+      allow read, write: if false;
+    }
+
+    // Histórico de vínculo por vigência contém dados fiscais e é exclusivo do servidor.
+    match /dp_employmentReferenceHeads/{id} { allow read, write: if false; }
+    match /dp_employmentReferenceHistories/{id} { allow read, write: if false; }
+    match /dp_employmentReferenceRequests/{id} { allow read, write: if false; }
+
     // Escalas
     match /dp_schedules/{scheduleId} {
       // A criação usa um identificador determinístico e consulta antes de criar.
@@ -1011,6 +1021,7 @@ service cloud.firestore {
     match /mobilePushTokens/{id} { allow read, write: if false; }
     match /mobilePushInstallations/{id} { allow read, write: if false; }
     match /userNotifications/{id} { allow read, write: if false; }
+    match /systemNotices/{id} { allow read, write: if false; }
     match /dp_absenceOperationalReadiness/{id} { allow read, write: if false; }
     match /dp_absenceOperationalFences/{id} { allow read, write: if false; }
     match /dp_absenceOccupancyClocks/{id} { allow read, write: if false; }

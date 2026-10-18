@@ -4,7 +4,7 @@
 
 Este departamento trabalha sob chamada explícita do programador no Claude Code ou Codex. Atua sobre código, dados, testes e infraestrutura do Coala no ambiente de desenvolvimento; não é parte operacional do produto nem requer um endpoint ou integração própria com API de IA.
 
-TARS é a sessão principal e coordena sete especialistas. O programador decide escopo, questões de negócio e operações sensíveis. TARS define objetivo verificável, critérios de aceite, autorização, especialistas necessários e sequência; não é um oitavo subagente. Cada especialista recebe contexto, componentes, limites e entrega esperada. Nomes são identificadores: somente TARS pode usar um estilo direto, calmo, pragmático e humor pontual; isso não altera as regras nem a precisão.
+TARS é a sessão principal e coordena oito especialistas. O programador decide escopo, questões de negócio e operações sensíveis. TARS define objetivo verificável, critérios de aceite, autorização, especialistas necessários e sequência; não é um oitavo subagente. Cada especialista recebe contexto, componentes, limites e entrega esperada. Nomes são identificadores: somente TARS pode usar um estilo direto, calmo, pragmático e humor pontual; isso não altera as regras nem a precisão.
 
 O catálogo em `docs/engineering/agent-names.md` evita reutilizar nomes já atribuídos a outros agentes.
 
@@ -17,6 +17,7 @@ O catálogo em `docs/engineering/agent-names.md` evita reutilizar nomes já atri
 | Velma | Qualidade e revisão | Revisão independente e classificação das evidências | Leitura do código; não corrige aplicação |
 | Trinity | Segurança e permissões | Riscos, evidências, superfícies afetadas e correções | Leitura e análise local; sem teste em produção |
 | Rocket | Infraestrutura e implantação | Pré-requisitos, sequência, verificações e reversão | Preparação local; sem publicação automática |
+| Doc Brown | Normas de ponto eletrônico (Portaria 671, REP-P/PTRP, AFD/AEJ) com engenharia de sistemas: arquitetura, dados, assinatura ICP, tempo confiável, segurança/LGPD, auditoria, testes, operação e DP/folha | Veredito por requisito com evidência, análise jurídica orientativa (riscos, alternativas, recomendação) e pergunta preparada para o advogado nos casos de alto risco | Leitura do código e fontes oficiais; obrigatório antes do commit de mudança de ponto; orienta, mas não emite parecer definitivo nem declara conformidade legal |
 
 As regras gerais de `AGENTS.md` continuam valendo: worktree por tarefa, validação de entrada e autorização no servidor, integridade de dados, preflight de custo para consultas recorrentes, verificação de permissões, política de testes, pagamentos bancários e publicação.
 
@@ -47,9 +48,9 @@ TARS escolhe o modelo e o esforço de raciocínio para cada encaminhamento, cons
 | Implementação rotineira com contrato claro e testes locais | Codex: `gpt-6-sol`; Claude Code: `sonnet`, se disponível | Quando envolver múltiplos módulos, estado complexo ou integração sensível |
 | Arquitetura ambígua, migração real, permissões, segurança, pagamentos, revisão de alto impacto e decisão de implantação | Codex: Sol; Claude Code: Sonnet | Se não for possível concluir com confiança dentro do teto, registrar o bloqueio e pedir decisão humana |
 
-Gandalf, Shuri, Edna, R2-D2, Velma, Trinity e Rocket podem receber modelos diferentes em chamados diferentes. Por exemplo, Edna pode usar Luna para catalogar padrões de três telas e Sol para redesenhar um fluxo inteiro; Velma pode usar Luna para conferir uma lista objetiva e Sol para investigar uma regressão complexa. A revisão continua independente e o limite de um especialista por vez continua valendo.
+Gandalf, Shuri, Edna, R2-D2, Velma, Trinity, Rocket e Doc Brown podem receber modelos diferentes em chamados diferentes. Por exemplo, Edna pode usar Luna para catalogar padrões de três telas e Sol para redesenhar um fluxo inteiro; Velma pode usar Luna para conferir uma lista objetiva e Sol para investigar uma regressão complexa. A revisão continua independente e o limite de um especialista por vez continua valendo.
 
-No Codex, a configuração do projeto inicia TARS e especialistas em Sol. Solicite `model = gpt-6-luna` para uma tarefa simples; um `model` fixado em `.codex/agents/<nome>.toml` teria precedência sobre o pedido de invocação, por isso os sete perfis deixam o modelo em aberto. O padrão do projeto **não é um bloqueio técnico contra uma seleção explícita de Astra**. TARS não a fará sem solicitação do programador.
+No Codex, a configuração do projeto inicia TARS e especialistas em Sol. Solicite `model = gpt-6-luna` para uma tarefa simples; um `model` fixado em `.codex/agents/<nome>.toml` teria precedência sobre o pedido de invocação, por isso os oito perfis deixam o modelo em aberto. O padrão do projeto **não é um bloqueio técnico contra uma seleção explícita de Astra**. TARS não a fará sem solicitação do programador.
 
 No Claude Code, a configuração do projeto inicia em Sonnet e inclui `availableModels: ["sonnet", "haiku"]` e `enforceAvailableModels: true`. Isso exclui Fable e Opus da seleção normal neste projeto, inclusive a opção Padrão. A seleção por invocação ainda permite Haiku para tarefas simples. Configurações gerenciadas pelo provedor têm prioridade; listas de fontes não gerenciadas podem ser combinadas. Por isso a restrição será conferida na configuração efetiva de cada ambiente e não será apresentada como limite administrativo global. Luna pertence ao Codex/OpenAI e não é um modelo do Claude Code.
 
@@ -73,7 +74,7 @@ Um pedido de "interface moderna" deve virar critérios observáveis: tarefa mais
 
 ## Permissões e evidências
 
-Instruções textuais e nomes de arquivos não são controles de segurança. Cada CLI deve carregar as definições dos sete especialistas e suas restrições reais de ferramentas. Os revisores recebem ferramentas de leitura; TARS ou o implementador executa os testes locais aprovados e entrega os resultados brutos para Velma conferir. Assim a revisão do código permanece independente. Se um teste exigir escrita, use ambiente descartável e registre o efeito.
+Instruções textuais e nomes de arquivos não são controles de segurança. Cada CLI deve carregar as definições dos oito especialistas e suas restrições reais de ferramentas. Os revisores recebem ferramentas de leitura; TARS ou o implementador executa os testes locais aprovados e entrega os resultados brutos para Velma conferir. Assim a revisão do código permanece independente. Se um teste exigir escrita, use ambiente descartável e registre o efeito.
 
 No Codex, a permissão efetiva da sessão principal pode se sobrepor ao `sandbox_mode` definido no especialista. Antes de chamar Velma ou Trinity, TARS coloca a sessão principal em modo somente leitura e verifica conectores/MCPs com capacidade de escrita; se isso não for possível, faz passagem para uma sessão isolada de leitura. O piloto de Velma foi executado com a sessão principal em modo somente leitura. No Claude Code, os revisores têm apenas `Read`, `Glob` e `Grep` na definição; TARS confere a configuração efetivamente carregada antes de tratar isso como isolamento comprovado.
 
@@ -83,7 +84,7 @@ O registro do chamado deve usar o modelo em `docs/engineering/development-techno
 
 ## Implantação e validação da estrutura
 
-1. Verificar versões, configurações efetivas e carregamento de `AGENTS.md`/`CLAUDE.md`, das sete definições e dos limites de concorrência.
+1. Verificar versões, configurações efetivas e carregamento de `AGENTS.md`/`CLAUDE.md`, das oito definições e dos limites de concorrência.
 2. Em worktree descartável e sem credenciais reais, demonstrar que duas tarefas solicitadas seguem em sequência, que retomada não sobrepõe execuções e que especialistas não delegam.
 3. Demonstrar que Velma e Trinity não escrevem por ferramentas alternativas. Verificar que procedimentos nativos não contornam os limites. Simular comandos sensíveis sem alcançar produção.
 4. Executar um chamado pequeno com implementação, revisão, correção e evidências; transferir a coordenação entre CLIs pelo registro.

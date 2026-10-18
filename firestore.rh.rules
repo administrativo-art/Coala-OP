@@ -196,6 +196,15 @@ service cloud.firestore {
     match /dp_absenceRetentionExecutionReceipts/{id} { allow read, write: if false; }
     match /dp_absenceRetentionReconciliations/{id} { allow read, write: if false; }
 
+    // ARP do REP-P (registro eletrônico de ponto): nenhum cliente, nem administrador, lê ou escreve.
+    // Marcações originais, NSR, comprovantes e auditoria só passam pelo serviço server-side.
+    match /repP_establishments/{id} { allow read, write: if false; }
+    match /repP_employees/{id} { allow read, write: if false; }
+    match /repP_events/{id} { allow read, write: if false; }
+    match /repP_attempts/{id} { allow read, write: if false; }
+    match /repP_receipts/{id} { allow read, write: if false; }
+    match /repP_exportAudit/{id} { allow read, write: if false; }
+
     // Recrutamento é acessado exclusivamente pelas APIs autenticadas.
     match /candidates/{id}   { allow read, write: if false; }
     match /applications/{id} { allow read, write: if false; }
