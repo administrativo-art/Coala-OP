@@ -889,7 +889,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/dp/collaborators/[userId]/documents/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/documents/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/edit/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/edit/page.tsx), [`src/app/dashboard/dp/collaborators/[userId]/page.tsx`](../../src/app/dashboard/dp/collaborators/%5BuserId%5D/page.tsx), [`src/app/dashboard/dp/collaborators/page.tsx`](../../src/app/dashboard/dp/collaborators/page.tsx), [`src/app/dashboard/users/inactive/page.tsx`](../../src/app/dashboard/users/inactive/page.tsx).
 
-Arquivos locais percorridos: 75.
+Arquivos locais percorridos: 77.
 
 Chamadas candidatas encontradas:
 
@@ -1394,7 +1394,7 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/rh/config/fields/page.tsx`](../../src/app/dashboard/rh/config/fields/page.tsx), [`src/app/dashboard/rh/config/roles/page.tsx`](../../src/app/dashboard/rh/config/roles/page.tsx), [`src/app/dashboard/rh/employees/[bizneo_employee_id]/page.tsx`](../../src/app/dashboard/rh/employees/%5Bbizneo_employee_id%5D/page.tsx), [`src/app/dashboard/rh/employees/page.tsx`](../../src/app/dashboard/rh/employees/page.tsx), [`src/app/dashboard/rh/me/page.tsx`](../../src/app/dashboard/rh/me/page.tsx), [`src/app/dashboard/rh/sync/page.tsx`](../../src/app/dashboard/rh/sync/page.tsx).
 
-Arquivos locais percorridos: 39.
+Arquivos locais percorridos: 41.
 
 Chamadas candidatas encontradas:
 
