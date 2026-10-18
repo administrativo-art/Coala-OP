@@ -11,7 +11,7 @@ Padrão da navegação lateral do Coala One e da Programação do Instagram (Coa
 
 ## Marca e nome do sistema
 
-`SystemBrand` mostra o logotipo e, ao lado, "Coala + palavra" separados por um **filete rosa de 2px** (a divisão precisa ser visível). Recolhida, o mesmo logotipo **encolhe com animação** (a medida anima entre o estado aberto e o recolhido; não se troca por outro desenho) e o nome some. A palavra do sistema é a única coisa que se move:
+`SystemBrand` mostra o logotipo e, ao lado, "Coala + palavra" separados por um **filete branco de 2px** (`border-ds-on-dark`; a divisão precisa ser visível). Recolhida, o mesmo logotipo **encolhe com animação** (a medida anima entre o estado aberto e o recolhido; não se troca por outro desenho) e o nome some. A palavra do sistema é a única coisa que se move:
 
 | Sistema | Palavra | Animação | Intenção |
 |---|---|---|---|

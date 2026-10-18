@@ -11,6 +11,17 @@ import {
 import type { FieldMapEntry, EmployeeFieldValue, RhRole, BizneoEmployeeId } from '@/types/rh';
 import { callOnFieldUpdate } from '../lib/rh-client';
 import { formatFieldOptionLabel } from '../lib/field-option-labels';
+import { getFieldMask } from '../lib/field-masks';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Field, fieldInputClass } from '@/components/patterns/field';
+import { cn } from '@/lib/utils';
 
 type FieldInput = {
   key:   string;
@@ -35,21 +46,21 @@ function parseValue(entry: FieldMapEntry, raw: string): unknown {
   return raw || null;
 }
 
-function FieldInput({ fieldKey, entry, value, onChange }: {
+function FieldInput({ id, fieldKey, entry, value, onChange }: {
+  id:       string;
   fieldKey: string;
   entry:    FieldMapEntry;
   value:    string;
   onChange: (v: string) => void;
 }) {
-  const base = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white';
 
   if (entry.type === 'boolean') {
     return (
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={`${base} h-10`}>
+        <SelectTrigger id={id}>
           <SelectValue placeholder="Selecionar…" />
         </SelectTrigger>
-        <SelectContent className="z-70 rounded-xl">
+        <SelectContent className="z-70">
           <SelectItem value="true">Sim</SelectItem>
           <SelectItem value="false">Não</SelectItem>
         </SelectContent>
@@ -60,12 +71,12 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
   if (entry.type === 'single_select' && entry.options?.length) {
     return (
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={`${base} h-10`}>
+        <SelectTrigger id={id}>
           <SelectValue placeholder="Selecionar…" />
         </SelectTrigger>
-        <SelectContent className="z-70 rounded-xl">
+        <SelectContent className="z-70">
           {entry.options.map((option) => (
-            <SelectItem key={option} value={option} className="rounded-lg">
+            <SelectItem key={option} value={option}>
               {formatFieldOptionLabel(fieldKey, option)}
             </SelectItem>
           ))}
@@ -83,17 +94,19 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
       onChange(next.join(', '));
     };
     return (
-      <div className="flex flex-wrap gap-2">
+      <div id={id} role="group" className="flex flex-wrap gap-2">
         {entry.options.map((o) => (
           <button
             key={o}
             type="button"
+            aria-pressed={selected.includes(o)}
             onClick={() => toggle(o)}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+            className={cn(
+              'h-8 rounded-full border px-3 text-xs font-bold transition-colors focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-ds-modal-soft',
               selected.includes(o)
-                ? 'bg-violet-600 text-white border-violet-600'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
-            }`}
+                ? 'border-ds-modal bg-ds-modal-soft text-ds-modal-ink'
+                : 'border-ds-border-input bg-ds-input text-ds-ink-muted hover:border-ds-modal hover:text-ds-ink',
+            )}
           >
             {formatFieldOptionLabel(fieldKey, o)}
           </button>
@@ -103,27 +116,43 @@ function FieldInput({ fieldKey, entry, value, onChange }: {
   }
 
   if (entry.type === 'date') {
-    return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className={base} />;
+    return <input id={id} type="date" value={value} onChange={(e) => onChange(e.target.value)} className={fieldInputClass} />;
   }
 
   if (entry.type === 'currency') {
     return (
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">R$</span>
-        <input type="number" step="0.01" min="0" value={value} onChange={(e) => onChange(e.target.value)} className={`${base} pl-8`} />
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold text-ds-ink-faint">R$</span>
+        <input id={id} type="number" step="0.01" min="0" value={value} onChange={(e) => onChange(e.target.value)} className={cn(fieldInputClass, 'pl-9')} />
       </div>
     );
   }
 
   if (entry.type === 'number') {
-    return <input type="number" value={value} onChange={(e) => onChange(e.target.value)} className={base} />;
+    return <input id={id} type="number" value={value} onChange={(e) => onChange(e.target.value)} className={fieldInputClass} />;
   }
 
   if (entry.type === 'multiline') {
-    return <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} className={`${base} resize-none`} />;
+    return <textarea id={id} rows={3} value={value} onChange={(e) => onChange(e.target.value)} className={cn(fieldInputClass, 'h-auto resize-y py-2.5')} />;
   }
 
-  return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className={base} />;
+  const mask = getFieldMask(fieldKey);
+  if (mask) {
+    return (
+      <input
+        id={id}
+        type="text"
+        inputMode={mask.inputMode}
+        autoComplete="off"
+        placeholder={mask.placeholder}
+        value={mask.format(value)}
+        onChange={(e) => onChange(mask.normalize(e.target.value))}
+        className={fieldInputClass}
+      />
+    );
+  }
+
+  return <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)} className={fieldInputClass} />;
 }
 
 function currentRawValue(fv: EmployeeFieldValue | undefined, entry: FieldMapEntry): string {
@@ -143,11 +172,18 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
   const [confirmation, setConfirmation] = useState<string | null>(null);
 
   useEffect(() => {
-    if (field) setRawValue(currentRawValue(field.fv, field.entry));
+    if (!field) return;
+    const current = currentRawValue(field.fv, field.entry);
+    setRawValue(getFieldMask(field.key)?.normalize(current) ?? current);
   }, [field]);
 
   const handleSave = useCallback(async () => {
     if (!field) return;
+    const formatError = getFieldMask(field.key)?.validate(rawValue) ?? null;
+    if (formatError) {
+      setError(formatError);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -168,64 +204,79 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
 
   if (!field) return null;
 
+  const isRequest = field.entry.self_service_policy === 'approval' && role === 'employee';
+  const inputId = `section-edit-${field.key}`;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-xs" onClick={onClose} />
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent
+        flush
+        hideClose
+        className="overflow-hidden rounded-ds-card border-ds-border bg-ds-surface p-0 font-ds shadow-2xl sm:max-w-[440px]"
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (confirmation) onClose();
+            else void handleSave();
+          }}
+          className="flex max-h-[85vh] min-h-0 flex-col"
+        >
+          <DialogHeader className="shrink-0 space-y-0 border-b border-ds-divider px-5 py-4 text-left">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-ds-accent-kicker">
+                  {field.entry.section || 'Ficha do colaborador'}
+                </p>
+                <DialogTitle className="mt-1 text-lg font-extrabold tracking-tight text-ds-ink">
+                  {isRequest ? 'Solicitar alteração' : 'Editar campo'}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-ds-ink-muted">
+                  {isRequest
+                    ? 'O valor atual continua valendo até o RH aprovar.'
+                    : 'A alteração vale para a ficha assim que for salva.'}
+                </DialogDescription>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Fechar"
+                className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-ds-md text-ds-ink-muted transition-colors hover:bg-ds-page hover:text-ds-ink focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ds-accent-ink"
+              >
+                <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </DialogHeader>
 
-      <div className="relative w-full max-w-sm rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
-          <h2 className="text-sm font-semibold text-gray-900">
-            {field.entry.self_service_policy === 'approval' && role === 'employee' ? 'Solicitar alteração' : 'Editar campo'}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="max-h-[65vh] space-y-2 overflow-auto px-3 py-2.5">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              {field.entry.label}
-              {field.entry.required && <span className="text-red-500 ml-1">*</span>}
-            </label>
-            <FieldInput fieldKey={field.key} entry={field.entry} value={rawValue} onChange={setRawValue} />
-            {field.entry.help_text && (
-              <p className="text-[11px] text-gray-400 mt-1">{field.entry.help_text}</p>
-            )}
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-ds-input/40 px-5 py-4">
+            <Field
+              label={field.entry.label}
+              htmlFor={inputId}
+              requirement={field.entry.required ? 'obrigatório' : undefined}
+              hint={field.entry.help_text}
+              error={error}
+            >
+              <FieldInput id={inputId} fieldKey={field.key} entry={field.entry} value={rawValue} onChange={setRawValue} />
+            </Field>
+            {confirmation ? (
+              <p role="status" className="rounded-ds-md bg-ds-ok-bg px-3 py-2 text-xs font-semibold leading-5 text-ds-ok">{confirmation}</p>
+            ) : null}
           </div>
 
-          {error && (
-            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-          )}
-          {confirmation ? (
-            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-700">{confirmation}</p>
-          ) : null}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-gray-100 px-3 py-2.5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-8 rounded-lg px-3 text-xs text-gray-600 transition-colors hover:bg-gray-100"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={confirmation ? onClose : handleSave}
-            disabled={saving}
-            className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
-          >
-            {confirmation ? 'Fechar' : saving ? 'Salvando…' : field.entry.self_service_policy === 'approval' && role === 'employee' ? 'Enviar para aprovação' : 'Salvar'}
-          </button>
-        </div>
-      </div>
-    </div>
+          <div className="flex shrink-0 justify-end gap-2 border-t border-ds-divider px-5 py-3">
+            {confirmation ? null : (
+              <Button type="button" variant="ds-ghost" size="md" onClick={onClose}>
+                Cancelar
+              </Button>
+            )}
+            <Button type="submit" variant="primary-modal" size="md" loading={saving} disabled={saving}>
+              {confirmation ? 'Fechar' : isRequest ? 'Enviar para aprovação' : 'Salvar'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
