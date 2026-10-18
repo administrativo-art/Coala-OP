@@ -16,6 +16,7 @@ import { generateRepPAfd, signRepPAfd, type RepPAfdEvent, type RepPAfdProfile, t
 import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp,
   unconfiguredRepPClock, type RepPClock } from './clock';
 import { createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity } from './icp-signer';
+import { configuredRepPClock } from './hlb-ntp-clock.server';
 import { prepareRepPMarking, verifyRepPMarkingCandidate, type RepPMarkingCandidate } from './core';
 import { missingRepPReceiptFields, REP_P_INPI_PATTERN, REP_P_RECEIPT_TITLE, renderRepPReceiptPdf, signRepPReceipt,
   type RepPPadesSigner, type RepPReceiptSnapshot } from './receipt';
@@ -35,7 +36,7 @@ const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean;
 }>;
 
 const unavailableSigner: RepPCadesSigner = Object.freeze({
@@ -69,7 +70,9 @@ const environmentPadesSigner: RepPPadesSigner = Object.freeze({
   signPdf: (content: Buffer) => (environmentIcpSigners()?.pades ?? unavailableReceiptSigner).signPdf(content),
 });
 const defaults: Dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
-  clock: unconfiguredRepPClock, signer: environmentCadesSigner, receiptSigner: environmentPadesSigner };
+  clock: configuredRepPClock() ?? unconfiguredRepPClock,
+  signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
+  markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true' };
 
 export type RepPReceiptState = Readonly<{
   receiptId: string; receiptStatus: 'available' | 'pending'; receiptIssue: string | null;
@@ -182,6 +185,10 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
   if (!parsed.success) throw fail('REP_P_MARKING_INPUT_INVALID', 'Solicitação de marcação inválida.');
   const input: RepPMarkingRequest = parsed.data;
   const deps = { ...defaults, ...injected };
+  if (!deps.markingEnabled) {
+    throw new AppError({ code: 'REP_P_MARKING_DISABLED', kind: 'AUTHORIZATION', retryable: false,
+      safeMessage: 'A marcação real permanece bloqueada até a conclusão das pendências de implantação do REP-P.' });
+  }
   const requestDigest = digest([context.workspace_id, context.decoded.uid, input]);
   const attemptRef = deps.repDb.collection(ATTEMPTS).doc(digest([context.workspace_id, context.decoded.uid, input.attemptId]));
   const existingAttempt = await attemptRef.get();
@@ -266,7 +273,9 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
     const eventRef = deps.repDb.collection(EVENTS).doc(eventKey(establishmentId, prepared.marking.nsr));
     transaction.create(eventRef, { ...prepared.marking, arpPersistenceStatus: 'persisted', recordedDate: input.workDate,
       trustedClock: { source: reading.source, assurance: reading.assurance, observedOffsetMs: reading.observedOffsetMs,
-        verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString() }, createdAt: Timestamp.now() });
+        verifiedAt: reading.verifiedAt.toISOString(), serverInstant: reading.instant.toISOString(),
+        attestationId: reading.attestationId, attestationMode: reading.attestationMode,
+        quorum: reading.quorum, observations: reading.observations }, createdAt: Timestamp.now() });
     transaction.create(attemptRef, { workspaceId: context.workspace_id, employeeId: context.decoded.uid,
       requestDigest, marking: prepared.marking, createdAt: Timestamp.now() });
     transaction.update(establishmentRef, { lastNsr: prepared.marking.nsr, lastType7Hash: prepared.marking.hash,

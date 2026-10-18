@@ -266,17 +266,19 @@ Revisão orientativa, sem valor de parecer, sobre o código local das etapas 1�
 
 **Bloqueante antes da primeira marcação real:** backup agendado, PITR e proteção contra exclusão ligados no `coala-rh`, que guarda a ARP por decisão do programador; em 18/10/2026 os três estavam desligados. O teste `dp-rep-p-arp-deletion-guard` impede no código exclusões e enumeração de coleções que alcancem `repP_*`; IAM de escrita no `coala-rh` e a adequação a "redundância, alta disponibilidade e confiabilidade" (Anexo IX 6 e 13) seguem para inventário e jurídico.
 
-Pendências nomeadas, mantidas por decisão do programador (as rotas seguem falhando fechadas, sem Hora Legal real):
+Pendências nomeadas, mantidas por decisão do programador. `REP_P_MARKING_ENABLED=false` bloqueia toda batida real antes de tocar a ARP, mesmo com Hora Legal saudável; além disso, quando o gate vier a ser liberado, cada batida continuará falhando fechada se a Hora Legal pública não for atestada:
 
 | Pendência | Origem | Gate |
 | --- | --- | --- |
 | Eventos tipo 6 (indisponibilidade/retorno) e decisão sobre tipo 4 gravados na ARP | Anexo IX 6.2 e 6.4 | Piloto |
 | Reemissão automática de comprovantes pendentes; AFD fatiado por dia ou NSR acima de 2.500 eventos | Art. 80 II; art. 81 §2º | Piloto |
-| Política de assinatura ICP-Brasil (`sigPolicyId` AD-RB) no CAdES; cadeia até a raiz, revogação e carimbo do tempo; `/M` e `signingTime` vindos da hora legal | Art. 88; DOC-ICP-15.03 | Validar no verificador do ITI com o e-CNPJ real antes do piloto |
+| Política de assinatura ICP-Brasil (`sigPolicyId` AD-RB) no CAdES; cadeia até a raiz e revogação; `/M` e `signingTime` vindos da hora legal | Art. 88; DOC-ICP-15.03 | Validar no verificador do ITI com o e-CNPJ real antes do piloto |
+| Carimbo de tempo emitido por ACT | DOC-ICP-11 e política aplicável | **Pendência:** pode ser pago; decidir necessidade jurídica/técnica antes do piloto, sem presumir contratação |
 | Preenchimento dos campos numéricos do AFD (espaço à direita ou zeros à esquerda) | Leiaute AFD, regra 7 | **Antes do primeiro registro real** (irreversível pelo hash) |
 | ARP imutável (backup agendado, PITR e proteção contra exclusão no `coala-rh`; cópia longa trancada), retenção e contingência | Anexo IX 7; plano 5.10 | Piloto |
 | Batida recusada quando a data do aparelho diverge da hora oficial (virada de dia, celular desregulado) | Art. 74 | Decidir antes do piloto |
-| Hora Legal real, INPI, atestados, simulação fiscal | Arts. 89 e 91; Anexo IX | Piloto |
+| NTP público do ON no runtime, INPI, atestados, simulação fiscal | Arts. 89 e 91; Anexo IX | Publicar e homologar antes do piloto |
+| ReSinc/HLB certificada | Anexo IX item 2; serviço do ON | **Pendência:** serviço pago; não se concluiu que seja necessário para REP-P virtual |
 
 ## 11. Matriz de requisitos legais
 

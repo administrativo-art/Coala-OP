@@ -27,6 +27,7 @@ const severityLabel: Record<Severity, { label: string; variant: StatusPillVarian
 };
 const categoryLabel: Record<string, string> = {
   "rep-p.certificate": "Certificado do ponto",
+  "rep-p.clock": "Hora oficial do ponto",
   "rep-p.receipts": "Comprovantes do ponto",
   "rep-p.norms-review": "Normas do ponto",
 };
