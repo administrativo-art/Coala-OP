@@ -17,7 +17,7 @@ import {
 } from "@/features/hr/documents/document-form-schema";
 
 export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
-export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx" | "rep_p_receipt";
 export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
 
 export type SystemDocumentTemplate = {
@@ -34,12 +34,12 @@ export type SystemDocumentTemplate = {
   renderer: SystemDocumentTemplateRenderer;
   /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
   generationMode: SystemDocumentGenerationMode;
-  sourceModule?: "documents" | "uniforms" | "admission" | "termination";
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination" | "time_recording";
   sourceModulePath?: string;
   variables: string[];
   fieldMapping?: TemplateFieldMapping;
   formSchema?: DocumentFormSchema;
-  letterheadVersion: "coala-letterhead-v2";
+  letterheadVersion: "coala-letterhead-v2" | "none";
   signatureScope: "none" | "bundle" | "independent";
   postAdmissionSignatureScope?: "none" | "independent";
   retentionPolicyId: string;
@@ -423,10 +423,36 @@ const admissionTemplates: SystemDocumentTemplate[] = [
   updatedAt: ADMISSION_PUBLISHED_AT,
 }));
 
+/** Comprovante fiscal do REP-P: leiaute próprio, sem timbre, emitido e assinado a cada marcação. */
+const timeRecordingTemplates: SystemDocumentTemplate[] = [{
+  id: "system-rep-p-marking-receipt",
+  name: "Comprovante de registro de ponto",
+  documentTitle: "Comprovante de Registro de Ponto do Trabalhador",
+  category: "Controle de ponto",
+  description: "PDF individual de cada batida no REP-P, com NSR, empregador, local, trabalhador, horário e hash, assinado em PAdES.",
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "rep_p_receipt",
+  generationMode: "contextual",
+  sourceModule: "time_recording",
+  sourceModulePath: "src/features/dp/rep-p/receipt.ts",
+  variables: [],
+  letterheadVersion: "none",
+  signatureScope: "none",
+  // Prescrição não autoriza descarte automático; a guarda por classe ainda depende da Fase 0 jurídica.
+  retentionPolicyId: "manual_review",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: "/api/documents/templates/system-rep-p-marking-receipt/preview",
+  updatedAt: "2026-10-18T00:00:00.000Z",
+}];
+
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
   ...baseTemplates,
   ...uniformTemplates,
   ...admissionTemplates,
+  ...timeRecordingTemplates,
 ];
 
 export function systemDocumentTemplateById(id: string) {

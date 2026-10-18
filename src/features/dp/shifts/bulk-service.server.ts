@@ -6,10 +6,11 @@ import type { ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { resolveDPShiftAssignment, type DPShiftAssignment } from '@/lib/dp-external-coverage';
 import { resolveDPJourney, type DPJourneyResolvedBy } from '@/lib/dp-journey-resolution';
+import { buildDPShiftReference, buildShiftDefinitionReference, type DPShiftReference } from '@/lib/dp-shift-reference';
 import { isShiftDefinitionCompatibleWithJourney } from '@/lib/dp-time-config-rules';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
-import type { DPJourney } from '@/types';
+import type { DPJourney, DPShiftDefinition } from '@/types';
 import { guardOccupancyWrite, operationalGuardRequested, shiftOccupancySlices } from '@/features/dp/absences/operational/occupancy-guard.server';
 
 import type { BulkWorkShiftInput } from './schemas';
@@ -130,6 +131,23 @@ export async function applyWorkShiftBulkChange(params: {
       }
       return { snapshot, date };
     });
+    const previousReferenceIds = selected.flatMap(({ snapshot }) => {
+      const id = snapshot.get('referenceRevisionId');
+      return typeof id === 'string' && id ? [id] : [];
+    });
+    const previousReferences = new Map<string, DPShiftReference>();
+    if (input.action === 'replace' && previousReferenceIds.length) {
+      const documents = await transaction.getAll(...previousReferenceIds.map((id) => dbAdmin.collection('dp_shiftReferenceHistory').doc(id)));
+      for (const document of documents) {
+        const reference = document.get('reference') as DPShiftReference | undefined;
+        const matchingShift = selected.find(({ snapshot }) => snapshot.get('referenceRevisionId') === document.id)?.snapshot;
+        if (document.exists && matchingShift && document.get('shiftPath') === matchingShift.ref.path
+          && document.get('userId') === matchingShift.get('userId') && reference?.schemaVersion === 1
+          && reference.collaboratorId === matchingShift.get('userId')) {
+          previousReferences.set(document.id, reference);
+        }
+      }
+    }
 
     const replacementCrossesMidnight = Boolean(
       replacePatch?.startTime
@@ -156,8 +174,9 @@ export async function applyWorkShiftBulkChange(params: {
     }
 
     const effectiveShiftDefinitionIds = [...new Set(selected.flatMap(({ snapshot }) => {
-      const shiftDefinitionId = replacePatch?.shiftDefinitionId
-        ?? (typeof snapshot.get('shiftDefinitionId') === 'string' ? String(snapshot.get('shiftDefinitionId')) : null);
+      const shiftDefinitionId = replacePatch?.startTime && replacePatch.endTime
+        ? replacePatch.shiftDefinitionId ?? null
+        : typeof snapshot.get('shiftDefinitionId') === 'string' ? String(snapshot.get('shiftDefinitionId')) : null;
       return shiftDefinitionId ? [shiftDefinitionId] : [];
     }))];
     const shiftDefinitionsById = new Map<string, Record<string, unknown>>();
@@ -256,8 +275,9 @@ export async function applyWorkShiftBulkChange(params: {
         if (resolution.status === 'ambiguous') {
           throw new AppError({ code: 'DP_SHIFT_JOURNEY_AMBIGUOUS', kind: 'CONFLICT', safeMessage: 'Mais de uma jornada com a mesma prioridade se aplica à colaboradora escolhida.' });
         }
-        const effectiveShiftDefinitionId = replacePatch?.shiftDefinitionId
-          ?? (typeof snapshot.get('shiftDefinitionId') === 'string' ? String(snapshot.get('shiftDefinitionId')) : undefined);
+        const effectiveShiftDefinitionId = replacePatch?.startTime && replacePatch.endTime
+          ? replacePatch.shiftDefinitionId ?? undefined
+          : typeof snapshot.get('shiftDefinitionId') === 'string' ? String(snapshot.get('shiftDefinitionId')) : undefined;
         if (!isShiftDefinitionCompatibleWithJourney({
           journeyId: resolution.journey.id,
           journeyAllowedShiftDefinitionIds: resolution.journey.allowedShiftDefinitionIds,
@@ -346,7 +366,8 @@ export async function applyWorkShiftBulkChange(params: {
           addsOccupancy: true,
         })),
       ]);
-      await guardOccupancyWrite(transaction, context.workspace_id, slices);
+      await guardOccupancyWrite(transaction, context.workspace_id, slices,
+        (input.action === 'delete' ? selected.length : selected.length * 2) + 2);
     }
     const now = Timestamp.now();
     selected.forEach(({ snapshot, date }) => {
@@ -357,6 +378,45 @@ export async function applyWorkShiftBulkChange(params: {
 
       const update: Record<string, unknown> = { updatedAt: now };
       if (!replacePatch) return;
+      const effectiveDefinitionId = replacePatch.startTime && replacePatch.endTime
+        ? replacePatch.shiftDefinitionId ?? null
+        : typeof snapshot.get('shiftDefinitionId') === 'string' ? String(snapshot.get('shiftDefinitionId')) : null;
+      const definitionData = effectiveDefinitionId ? shiftDefinitionsById.get(effectiveDefinitionId) : null;
+      const definition = definitionData && effectiveDefinitionId
+        ? { id: effectiveDefinitionId, ...definitionData } as DPShiftDefinition : null;
+      const resolvedJourney = journeyResolutionByDate.get(date);
+      const previousRevisionId = typeof snapshot.get('referenceRevisionId') === 'string'
+        ? String(snapshot.get('referenceRevisionId')) : null;
+      const priorReference = previousRevisionId ? previousReferences.get(previousRevisionId) : null;
+      const reference = replacePatch.userId && targetUserSnapshot?.exists && resolvedJourney
+        ? buildDPShiftReference({
+          collaboratorId: replacePatch.userId, user: targetUserSnapshot.data() ?? {}, journey: resolvedJourney.journey,
+          resolvedBy: resolvedJourney.resolvedBy, definition,
+          executionUnitId: scheduleUnitId, date,
+          startTime: replacePatch.startTime ?? snapshot.get('startTime') as string,
+          endTime: replacePatch.endTime ?? snapshot.get('endTime') as string,
+          capturedAt: now.toDate().toISOString(),
+        })
+        : priorReference ? {
+          ...priorReference,
+          capturedAt: now.toDate().toISOString(),
+          basisCapturedAt: priorReference.basisCapturedAt ?? priorReference.capturedAt,
+          plannedStartTime: replacePatch.startTime ?? priorReference.plannedStartTime,
+          plannedEndTime: replacePatch.endTime ?? priorReference.plannedEndTime,
+          shiftDefinition: buildShiftDefinitionReference(definition),
+        } : null;
+      const referenceRef = dbAdmin.collection('dp_shiftReferenceHistory').doc();
+      transaction.create(referenceRef, {
+        workspaceId: context.workspace_id,
+        scheduleId, shiftId: snapshot.id, shiftPath: snapshot.ref.path,
+        userId: replacePatch.userId ?? String(snapshot.get('userId')),
+        actorId: context.decoded.uid, requestId,
+        event: 'revised', previousRevisionId,
+        reference,
+        referenceStatus: reference ? 'captured' : 'legacy_pending',
+        capturedAt: now,
+      });
+      update.referenceRevisionId = referenceRef.id;
       if (replacePatch.userId) {
         update.userId = replacePatch.userId;
         update.userName = targetUserName;
@@ -375,7 +435,6 @@ export async function applyWorkShiftBulkChange(params: {
             ? replacePatch.exceptionReason
             : FieldValue.delete();
         }
-        const resolvedJourney = journeyResolutionByDate.get(date);
         if (resolvedJourney) {
           update.journeyResolution = {
             journeyId: resolvedJourney.journey.id,

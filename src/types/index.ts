@@ -3948,6 +3948,8 @@ export type DPShift = {
   userId: string;            // referência ao users/ (Firebase UID)
   userName?: string;         // snapshot mínimo para a escala não depender do diretório carregado
   shiftDefinitionId?: string;
+  /** Ponteiro opaco para revisão privada da referência planejada; conteúdo é somente servidor. */
+  referenceRevisionId?: string;
   overnight?: boolean;
   date: string; // YYYY-MM-DD
   startTime: string;
