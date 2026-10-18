@@ -32,6 +32,12 @@ type FieldInput = {
 type Props = {
   employeeId: BizneoEmployeeId;
   editKey:    string;
+  /** Campos editados juntos (cartão combinado); sem isso, só `editKey`. */
+  editKeys?:  readonly string[];
+  /** Título do grupo no cabeçalho, quando há mais de um campo. */
+  groupLabel?: string;
+  /** Campos preenchidos a partir dos editados, no formato bruto do modal. */
+  deriveOnSave?: (values: Record<string, string>) => Record<string, string>;
   fields:     FieldInput[];
   role:       RhRole;
   onClose:    () => void;
@@ -164,48 +170,80 @@ function currentRawValue(fv: EmployeeFieldValue | undefined, entry: FieldMapEntr
   return fv.value_text ?? '';
 }
 
-export function SectionEditModal({ employeeId, editKey, fields, role, onClose, onSaved }: Props) {
-  const field = fields.find((f) => f.key === editKey);
-  const [rawValue, setRawValue] = useState('');
+export function SectionEditModal({ employeeId, editKey, editKeys, groupLabel, deriveOnSave, fields, role, onClose, onSaved }: Props) {
+  const keys = editKeys?.length ? editKeys : [editKey];
+  const editable = keys
+    .map((key) => fields.find((f) => f.key === key))
+    .filter((f): f is FieldInput => Boolean(f));
+  const field = editable[0];
+  const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const editableSignature = editable.map((f) => f.key).join('|');
 
   useEffect(() => {
-    if (!field) return;
-    const current = currentRawValue(field.fv, field.entry);
-    setRawValue(getFieldMask(field.key)?.normalize(current) ?? current);
-  }, [field]);
+    const initial: Record<string, string> = {};
+    for (const f of editable) {
+      const current = currentRawValue(f.fv, f.entry);
+      initial[f.key] = getFieldMask(f.key)?.normalize(current) ?? current;
+    }
+    setValues(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editableSignature]);
 
   const handleSave = useCallback(async () => {
-    if (!field) return;
-    const formatError = getFieldMask(field.key)?.validate(rawValue) ?? null;
-    if (formatError) {
-      setError(formatError);
+    if (editable.length === 0) return;
+    for (const f of editable) {
+      const formatError = getFieldMask(f.key)?.validate(values[f.key] ?? '') ?? null;
+      if (formatError) {
+        setError(formatError);
+        return;
+      }
+    }
+    const derived = deriveOnSave?.(values) ?? {};
+    const updates = [
+      ...editable.map((f) => ({ f, raw: values[f.key] ?? '' })),
+      ...Object.entries(derived)
+        .map(([key, raw]) => ({ f: fields.find((candidate) => candidate.key === key), raw }))
+        .filter((item): item is { f: FieldInput; raw: string } => Boolean(item.f)),
+    ].filter(({ f, raw }) => raw !== currentRawValue(f.fv, f.entry) || editable.length === 1);
+    if (updates.length === 0) {
+      onClose();
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const value = parseValue(field.entry, rawValue);
-      const result = await callOnFieldUpdate({ employee_id: employeeId, field_key: editKey, value });
-      if (result.pending_approval) {
+      let pending = false;
+      let lastKey = editKey;
+      let lastValue: unknown = null;
+      let completion = 0;
+      for (const { f, raw } of updates) {
+        const value = parseValue(f.entry, raw);
+        const result = await callOnFieldUpdate({ employee_id: employeeId, field_key: f.key, value });
+        pending = pending || Boolean(result.pending_approval);
+        lastKey = f.key;
+        lastValue = value;
+        completion = result.profile_completion;
+      }
+      if (pending) {
         setConfirmation('Solicitação enviada. O valor atual será mantido até a aprovação do RH.');
         return;
       }
-      onSaved(editKey, value, result.profile_completion);
+      onSaved(lastKey, lastValue, completion);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar campo.');
     } finally {
       setSaving(false);
     }
-  }, [field, rawValue, employeeId, editKey, onSaved, onClose]);
+  }, [editable, values, deriveOnSave, fields, employeeId, editKey, onSaved, onClose]);
 
   if (!field) return null;
 
-  const isRequest = field.entry.self_service_policy === 'approval' && role === 'employee';
-  const inputId = `section-edit-${field.key}`;
+  const isRequest = editable.some((f) => f.entry.self_service_policy === 'approval') && role === 'employee';
+  const isGroup = editable.length > 1;
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -229,7 +267,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
                   {field.entry.section || 'Ficha do colaborador'}
                 </p>
                 <DialogTitle className="mt-1 text-lg font-extrabold tracking-tight text-ds-ink">
-                  {isRequest ? 'Solicitar alteração' : 'Editar campo'}
+                  {isRequest ? 'Solicitar alteração' : isGroup ? `Editar ${groupLabel ?? 'campos'}` : 'Editar campo'}
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-xs text-ds-ink-muted">
                   {isRequest
@@ -251,15 +289,27 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-ds-input/40 px-5 py-4">
-            <Field
-              label={field.entry.label}
-              htmlFor={inputId}
-              requirement={field.entry.required ? 'obrigatório' : undefined}
-              hint={field.entry.help_text}
-              error={error}
-            >
-              <FieldInput id={inputId} fieldKey={field.key} entry={field.entry} value={rawValue} onChange={setRawValue} />
-            </Field>
+            {editable.map((f, index) => {
+              const inputId = `section-edit-${f.key}`;
+              return (
+                <Field
+                  key={f.key}
+                  label={f.entry.label}
+                  htmlFor={inputId}
+                  requirement={f.entry.required ? 'obrigatório' : undefined}
+                  hint={f.entry.help_text}
+                  error={index === editable.length - 1 ? error : null}
+                >
+                  <FieldInput
+                    id={inputId}
+                    fieldKey={f.key}
+                    entry={f.entry}
+                    value={values[f.key] ?? ''}
+                    onChange={(next) => setValues((current) => ({ ...current, [f.key]: next }))}
+                  />
+                </Field>
+              );
+            })}
             {confirmation ? (
               <p role="status" className="rounded-ds-md bg-ds-ok-bg px-3 py-2 text-xs font-semibold leading-5 text-ds-ok">{confirmation}</p>
             ) : null}

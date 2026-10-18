@@ -8,6 +8,8 @@ A [lista DP](../../../src/app/dashboard/dp/collaborators/page.tsx) filtra `activ
 
 Para o perfil RH, [`/api/rh/employee-profile/[employeeId]`](../../../src/app/api/rh/employee-profile/[employeeId]/route.ts) confere propriedade/perfil e filtra `field_values` pela [matriz de campos](../../../src/app/api/rh/field-map/route.ts). A ficha também chama integração de acesso PDV Legal e [rotas de documentos do colaborador](employee-documents.md). `users`, `profiles`, cadastros RH e permissões de unidade participam do percurso; ver [configuração DP](dp-configuration.md) e [desligamento](termination-process-center.md).
 
+A apresentação da ficha segue [`profile-field-layout`](../../../src/features/rh/lib/profile-field-layout.ts): "Dados pessoais" e "Benefícios" têm subgrupos fixos (campos sem grupo caem em "Outros dados"); cidade/UF, logradouro/número, Pix e cada benefício aparecem num cartão combinado, editado num único modal que grava cada chave separadamente (sem número grava `employee.address_no_number` automaticamente). `employee.address` não aparece na ficha: os documentos montam essa linha a partir do endereço residencial e só usam o texto antigo quando falta logradouro. "Dados contratuais" mostra o tipo de vínculo do cadastro do usuário, só leitura.
+
 A visibilidade local não basta para conceder acesso: conferir as funções de `useAuth`, regras Firestore, cada API e a sincronização de conta externa. As variantes de criação, inativação temporária versus término contratual, reativação, redefinição de senha e propagação de perfil estão rastreadas abaixo; a comprovação integrada dessas variantes continua pendente. `npm run check` passou, sem teste integrado de ciclo de acesso registrado.
 
 ## Ciclo de conta rastreado

@@ -32,8 +32,20 @@ const cpfMask: FieldMask = {
   placeholder: '000.000.000-00',
 };
 
+const cepMask: FieldMask = {
+  normalize: (raw) => digits(raw, 8),
+  format: (value) => {
+    const d = digits(value, 8);
+    return d.length <= 5 ? d : `${d.slice(0, 5)}-${d.slice(5)}`;
+  },
+  validate: (value) => (value && value.length !== 8 ? 'O CEP tem 8 dígitos.' : null),
+  inputMode: 'numeric',
+  placeholder: '00000-000',
+};
+
 const FIELD_MASKS: Record<string, FieldMask> = {
   'employee.cpf': cpfMask,
+  'employee.address_zipcode': cepMask,
 };
 
 export function getFieldMask(fieldKey: string): FieldMask | null {
