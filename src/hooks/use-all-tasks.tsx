@@ -19,6 +19,11 @@ export interface LegacyTask {
   description: string;
   link: string;
   icon: React.FC<any>;
+  dueDate?: string;
+  priority?: Task['priority'];
+  originLink?: string;
+  /** Tipo legado da origem ou "termination"; decide grupo e ação na linha do dia. */
+  originType?: string;
 }
 
 export interface CompletedReceipt {
@@ -192,6 +197,12 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
             : task.description || 'Tarefa pendente no novo motor.',
         link: '/dashboard/tasks',
         icon: task.status === 'awaiting_approval' ? History : ListTodo,
+        dueDate: task.dueDate,
+        priority: task.priority,
+        originLink: task.originLink,
+        originType: task.origin.kind === 'legacy'
+          ? task.origin.type
+          : task.origin.kind === 'manual' && task.origin.details?.processType === 'termination' ? 'termination' : undefined,
       }));
 
     return [...newTaskNotifications, ...legacyTasks];
