@@ -2,8 +2,8 @@
 
 Arquivo gerado. O baseline congela dívida estrutural e **não aprova** autenticação, autorização ou comportamento das rotas legadas.
 
-- Arquivos de rota: **465**
-- Totalmente contratados: **116**
+- Arquivos de rota: **466**
+- Totalmente contratados: **117**
 - Legados congelados: **347**
 - Exceções temporárias: **2**
 - Violações: **0**
@@ -367,6 +367,7 @@ Qualquer arquivo de rota novo ou alterado precisa usar `secureRoute` em todos os
 | `/api/jobs/inter/cobrancas/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/inter/cobrancas/reconcile/route.ts](../../src/app/api/jobs/inter/cobrancas/reconcile/route.ts) |
 | `/api/jobs/inter/reconcile` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/inter/reconcile/route.ts](../../src/app/api/jobs/inter/reconcile/route.ts) |
 | `/api/jobs/inter/statements/sync` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/inter/statements/sync/route.ts](../../src/app/api/jobs/inter/statements/sync/route.ts) |
+| `/api/jobs/rep-p/receipts-retry` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/rep-p/receipts-retry/route.ts](../../src/app/api/jobs/rep-p/receipts-retry/route.ts) |
 | `/api/jobs/stone-pix/request` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/stone-pix/request/route.ts](../../src/app/api/jobs/stone-pix/request/route.ts) |
 | `/api/jobs/stone-sales-review/reconcile` | POST | `LEGACY_BASELINE` | [src/app/api/jobs/stone-sales-review/reconcile/route.ts](../../src/app/api/jobs/stone-sales-review/reconcile/route.ts) |
 | `/api/jobs/system-notices/daily` | POST ✓ | `CONTRACTED` | [src/app/api/jobs/system-notices/daily/route.ts](../../src/app/api/jobs/system-notices/daily/route.ts) |

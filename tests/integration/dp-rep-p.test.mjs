@@ -12,6 +12,7 @@ const { defaultAdminPermissions } = await import('../../src/types/index.ts');
 const { publishEmploymentReference } = await import('../../src/features/dp/employment-reference/service.server.ts');
 const { exportSignedRepPAfd, getOwnRepPReceipt, listOwnRepPExecutionUnits, listOwnRepPMarkings, listPendingRepPReceipts, provisionRepPReferenceData,
   recordOwnRepPMarking, repPIdentifiersForTest, retryOwnRepPReceipt, retryPendingRepPReceipts } = await import('../../src/features/dp/rep-p/service.server.ts');
+const { runRepPDailyMonitor } = await import('../../src/features/dp/rep-p/monitor.server.ts');
 const { createRepPIcpSigners, loadRepPIcpIdentity, verifyRepPDetachedCms, verifyRepPSignedPdf }
   = await import('../../src/features/dp/rep-p/icp-signer.ts');
 const { createTestIcpCredential } = await import('../helpers/rep-p-test-certificate.ts');
@@ -128,11 +129,34 @@ test('ARP atribui NSR atomicamente, faz replay sem duplicar e exporta o mesmo or
     const arpSnapshot = async () => (await hrDbAdmin.collection('repP_events').where('establishmentId', '==', establishmentId).get())
       .docs.map((doc) => [doc.id, doc.get('nsr'), doc.get('hash') ?? null]).sort((a, b) => a[1] - b[1]);
     const arpBeforeRetry = await arpSnapshot();
-    const failedRetry = await retryPendingRepPReceipts({ workspaceId }, dependencies);
+    const at = (minutes) => () => new Date(Date.now() + minutes * 60_000);
+    const secondRef = hrDbAdmin.collection('repP_receipts').doc(second.receiptId);
+    // A falha na batida adiou a próxima tentativa em 15 min; antes disso a rotina não insiste.
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, dependencies), { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
+    // Fila justa: um pendente antigo que falha sempre é adiado e não ocupa o lote dos seguintes.
+    const stuckRef = hrDbAdmin.collection('repP_receipts').doc(repPIdentifiersForTest.receiptKey(establishmentId, 999_999_999));
+    await stuckRef.set({ schemaVersion: 1, workspaceId, establishmentId, employeeId: userId, status: 'pending', attempts: 3,
+      lastIssue: null, createdAt: Timestamp.fromMillis(Date.now() - 86_400_000), nextAttemptAt: Timestamp.fromMillis(Date.now() - 86_400_000) });
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId, limit: 1 }, { ...dependencies, now: at(16) }),
+      { attempted: 1, issued: 0, stillPending: 0, failed: 1 });
+    const stuck = await stuckRef.get();
+    assert.equal(stuck.get('lastIssue'), 'REP_P_RECEIPT_MARKING_UNVERIFIABLE');
+    assert.equal(stuck.get('nextAttemptAt').toMillis() - stuck.get('lastAttemptAt').toMillis() >= 29 * 60_000, true);
+    const failedRetry = await retryPendingRepPReceipts({ workspaceId, limit: 1 }, { ...dependencies, now: at(16) });
     assert.deepEqual(failedRetry, { attempted: 1, issued: 0, stillPending: 1, failed: 0 });
-    const retried = await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner });
-    assert.deepEqual(retried, { attempted: 1, issued: 1, stillPending: 0, failed: 0 });
-    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner }),
+    // Segunda falha: a espera sobe para o teto de 30 min a partir da tentativa.
+    const delayMs = (await secondRef.get()).get('nextAttemptAt').toMillis() - Date.now();
+    assert.ok(delayMs > 45 * 60_000 && delayMs < 47 * 60_000, `espera inesperada: ${delayMs}`);
+    await stuckRef.delete();
+    // Caminho de sucesso pelo vigia diário: reemite e conta sem pendência deste estabelecimento.
+    const monitorNow = at(47)();
+    const monitored = await runRepPDailyMonitor({ workspaceId, now: monitorNow, signerPem: '', clock,
+      repDependencies: { ...dependencies, receiptSigner: padesSigner } });
+    assert.deepEqual(monitored.receiptRetry, { attempted: 1, issued: 1, stillPending: 0, failed: 0 });
+    assert.equal(monitored.receiptsCheck, 'ok');
+    const monitorNotices = await dbAdmin.collection('systemNotices').where('workspaceId', '==', workspaceId).get();
+    await Promise.all(monitorNotices.docs.filter((doc) => monitored.opened.includes(doc.get('dedupeKey'))).map((doc) => doc.ref.delete()));
+    assert.deepEqual(await retryPendingRepPReceipts({ workspaceId }, { ...dependencies, receiptSigner: padesSigner, now: at(47) }),
       { attempted: 0, issued: 0, stillPending: 0, failed: 0 });
     assert.equal((await hrDbAdmin.collection('repP_establishments').doc(establishmentId).get()).get('lastNsr'), nsrBeforeRetry);
     assert.deepEqual(await arpSnapshot(), arpBeforeRetry);

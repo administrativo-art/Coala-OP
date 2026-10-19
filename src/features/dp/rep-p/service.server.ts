@@ -13,7 +13,7 @@ import { isValidCpf, normalizeCpf } from '@/lib/hr/employee-document-match';
 import { AppError } from '@/lib/observability/app-error';
 
 import { generateRepPAfd, signRepPAfd, type RepPAfdEvent, type RepPAfdProfile, type RepPCadesSigner } from './afd';
-import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp,
+import { assertTrustedRepPClockReading, civilDateFromRepPTimestamp, formatRepPAfdTimestamp, trustedRepPClockInstant,
   unconfiguredRepPClock, type RepPClock } from './clock';
 import { createRepPIcpSigners, inspectRepPIcpCredential, loadRepPIcpIdentity } from './icp-signer';
 import { configuredRepPClock } from './hlb-ntp-clock.server';
@@ -31,15 +31,20 @@ const EXPORT_AUDIT = 'repP_exportAudit';
 const RECEIPTS = 'repP_receipts';
 // Leitura em páginas para o AFD sair inteiro e de pronto (art. 81 §2º); o teto só protege memória.
 const AFD_PAGE_SIZE = 2_500;
-const MAX_AFD_EVENTS = 100_000;
+// Medido em 18/10/2026: 100 mil eventos somam ~340 MB ao processo (instância de 1 GiB); 50 mil deixam margem.
+const MAX_AFD_EVENTS = 50_000;
 const MAX_RECEIPT_RETRIES_PER_RUN = 50;
+// Espera entre tentativas de um mesmo comprovante: 15 min, depois 30 min no máximo (art. 80 II). Ordenar a fila
+// pela próxima tentativa impede que pendentes que falham sempre ocupem o lote e deixem os demais sem emissão.
+const RECEIPT_RETRY_BASE_MS = 15 * 60_000;
+const RECEIPT_RETRY_MAX_MS = 30 * 60_000;
 const MAX_HISTORY_MARKINGS = 300;
 const MAX_PENDING_RECEIPTS = 100;
 const CT_SORVETES_CNPJ = '14276603000125';
 
 type Dependencies = Readonly<{
   repDb: Firestore; mainDb: Firestore; hrDb: Firestore; clock: RepPClock; signer: RepPCadesSigner;
-  receiptSigner: RepPPadesSigner; markingEnabled: boolean; afdPageSize?: number; afdMaxEvents?: number;
+  receiptSigner: RepPPadesSigner; markingEnabled: boolean; afdPageSize?: number; afdMaxEvents?: number; now?: () => Date;
 }>;
 
 const unavailableSigner: RepPCadesSigner = Object.freeze({
@@ -59,11 +64,14 @@ const unavailableReceiptSigner: RepPPadesSigner = Object.freeze({
  * Credencial A1 da desenvolvedora vinda do Secret Manager (App Hosting expõe como variável).
  * Sem a variável, os assinadores continuam recusando; credencial inválida falha fechada a cada uso.
  */
+const environmentClock: RepPClock = configuredRepPClock() ?? unconfiguredRepPClock;
 let icpSigners: ReturnType<typeof createRepPIcpSigners> | null = null;
 function environmentIcpSigners() {
   const pem = process.env.REP_P_ICP_SIGNER_PEM;
   if (!pem?.trim()) return null;
-  icpSigners ??= createRepPIcpSigners(loadRepPIcpIdentity(pem, CT_SORVETES_CNPJ));
+  icpSigners ??= createRepPIcpSigners(loadRepPIcpIdentity(pem, CT_SORVETES_CNPJ),
+    // Instante gravado na assinatura (/M do PAdES, signingTime do CAdES) vem da Hora Legal; sem ela, a assinatura espera.
+    () => trustedRepPClockInstant(environmentClock));
   return icpSigners;
 }
 const environmentCadesSigner: RepPCadesSigner = Object.freeze({
@@ -73,7 +81,7 @@ const environmentPadesSigner: RepPPadesSigner = Object.freeze({
   signPdf: (content: Buffer) => (environmentIcpSigners()?.pades ?? unavailableReceiptSigner).signPdf(content),
 });
 const defaults: Dependencies = { repDb: hrDbAdmin, mainDb: dbAdmin, hrDb: hrDbAdmin,
-  clock: configuredRepPClock() ?? unconfiguredRepPClock,
+  clock: environmentClock,
   signer: environmentCadesSigner, receiptSigner: environmentPadesSigner,
   markingEnabled: process.env.REP_P_MARKING_ENABLED === 'true' };
 
@@ -291,10 +299,11 @@ export async function recordOwnRepPMarking(context: ServerUserContext, raw: unkn
       cnoCaepf: current.profile.cnoCaepf ?? null, workLocation, inpiRegistration: current.profile.inpiRegistration,
       developerCnpj: current.profile.developerCnpj, employeeName: identity.name, employeeCpf: identity.cpf,
       collectorId, establishmentId, executionUnitId: input.executionUnitId };
+    const createdAt = Timestamp.now();
     transaction.create(deps.repDb.collection(RECEIPTS).doc(eventRef.id), { schemaVersion: 1,
       workspaceId: context.workspace_id, employeeId: context.decoded.uid, establishmentId,
       nsr: prepared.marking.nsr, markingId: prepared.marking.markingId, recordedDate: input.workDate, status: 'pending', snapshot,
-      attempts: 0, lastIssue: null, createdAt: Timestamp.now() });
+      attempts: 0, lastIssue: null, createdAt, nextAttemptAt: createdAt });
     return { status: 'recorded' as const, marking: prepared.marking };
   });
   return { ...committed, ...await settleRepPReceipt(deps, committed.marking) };
@@ -313,6 +322,11 @@ function sameReceiptSnapshot(snapshot: RepPReceiptSnapshot | undefined, marking:
     && snapshot.executionUnitId === marking.executionUnitId && snapshot.collectorId === marking.collectorId);
 }
 
+function nextReceiptAttempt(deps: Dependencies, attemptsSoFar: number) {
+  const delay = Math.min(RECEIPT_RETRY_BASE_MS * 2 ** Math.max(attemptsSoFar, 0), RECEIPT_RETRY_MAX_MS);
+  return Timestamp.fromMillis((deps.now?.() ?? new Date()).getTime() + delay);
+}
+
 function issueCode(cause: unknown) {
   return cause instanceof AppError ? cause.code : 'REP_P_RECEIPT_SIGNATURE_REJECTED';
 }
@@ -324,12 +338,12 @@ function issueCode(cause: unknown) {
 async function issueRepPReceipt(deps: Dependencies, marking: RepPMarkingCandidate): Promise<RepPReceiptState> {
   const receiptId = eventKey(marking.establishmentId, marking.nsr);
   const receiptRef = deps.repDb.collection(RECEIPTS).doc(receiptId);
+  const current = await receiptRef.get();
   const pending = async (receiptIssue: string): Promise<RepPReceiptState> => {
-    await receiptRef.update({ attempts: FieldValue.increment(1), lastIssue: receiptIssue,
-      lastAttemptAt: Timestamp.now() }).catch(() => undefined);
+    await receiptRef.update({ attempts: FieldValue.increment(1), lastIssue: receiptIssue, lastAttemptAt: Timestamp.now(),
+      nextAttemptAt: nextReceiptAttempt(deps, Number(current.get('attempts') ?? 0)) }).catch(() => undefined);
     return { receiptId, receiptStatus: 'pending', receiptIssue };
   };
-  const current = await receiptRef.get();
   if (!current.exists) return { receiptId, receiptStatus: 'pending', receiptIssue: 'REP_P_RECEIPT_MISSING' };
   if (current.get('status') === 'issued') return { receiptId, receiptStatus: 'available', receiptIssue: null };
   const snapshot = current.get('snapshot') as RepPReceiptSnapshot | undefined;
@@ -392,13 +406,14 @@ export async function retryOwnRepPReceipt(context: ServerUserContext, receiptId:
 }
 
 /**
- * Reemissão automática dos comprovantes pendentes do workspace, mais antigos primeiro.
+ * Reemissão automática dos comprovantes pendentes do workspace cuja próxima tentativa já venceu, na ordem dela.
  * Nunca registra batida nem altera a ARP: só emite o comprovante de marcações já persistidas.
  */
 export async function retryPendingRepPReceipts(params: { workspaceId: string; limit?: number }, injected: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...injected };
   const pending = await deps.repDb.collection(RECEIPTS).where('workspaceId', '==', params.workspaceId)
-    .where('status', '==', 'pending').orderBy('createdAt').limit(params.limit ?? MAX_RECEIPT_RETRIES_PER_RUN).get();
+    .where('status', '==', 'pending').where('nextAttemptAt', '<=', Timestamp.fromDate(deps.now?.() ?? new Date()))
+    .orderBy('nextAttemptAt').limit(params.limit ?? MAX_RECEIPT_RETRIES_PER_RUN).get();
   const result = { attempted: 0, issued: 0, stillPending: 0, failed: 0 };
   for (const receipt of pending.docs) {
     result.attempted += 1;
@@ -409,7 +424,8 @@ export async function retryPendingRepPReceipts(params: { workspaceId: string; li
         result.failed += 1;
         // Registra a falha no próprio comprovante para a operação enxergar; nunca emite às cegas.
         await receipt.ref.update({ attempts: FieldValue.increment(1), lastIssue: 'REP_P_RECEIPT_MARKING_UNVERIFIABLE',
-          lastAttemptAt: Timestamp.now() }).catch(() => undefined);
+          lastAttemptAt: Timestamp.now(), nextAttemptAt: nextReceiptAttempt(deps, Number(receipt.get('attempts') ?? 0)) })
+          .catch(() => undefined);
         continue;
       }
       const state = await issueRepPReceipt(deps, marking);
