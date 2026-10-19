@@ -8,6 +8,7 @@ import { BackButton } from "@/components/navigation/back-button";
 import { errorMessageOf } from "@/components/patterns/panel-form";
 import { Segmented } from "@/components/patterns/segmented";
 import { listAbsenceRequests } from "@/features/dp/absences/requests/client";
+import { AbsencePreviewPanel } from "@/features/dp/absences/requests/preview-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +57,8 @@ export function MyTimeRecordingPage() {
   const [filter, setFilter] = useState("all");
   const [showFuture, setShowFuture] = useState(false);
   const [openDate, setOpenDate] = useState<string | null>(null);
+  // Pedido de ausência aberto na própria tela: undefined = fechado; "" = sem data; AAAA-MM-DD = vindo do dia.
+  const [absenceDate, setAbsenceDate] = useState<string | undefined>(undefined);
   const [busyReceipt, setBusyReceipt] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<{ id: string; message: string } | null>(null);
 
@@ -84,7 +87,8 @@ export function MyTimeRecordingPage() {
       setAbsencesUnavailable(!absencePayload.ok);
       setAbsences((absencePayload.result?.requests ?? [])
         .filter((item) => item.input.startDate <= monthEnd && item.input.endDate >= monthStart && !["draft", "cancelled", "rejected"].includes(item.status))
-        .map((item) => ({ id: item.id, typeName: item.typeName, status: item.status, startDate: item.input.startDate, endDate: item.input.endDate })));
+        .map((item) => ({ id: item.id, typeName: item.typeName, status: item.status, startDate: item.input.startDate, endDate: item.input.endDate,
+          approvedByInaction: item.approvedByInaction })));
     }).catch((error) => {
       if (!cancelled) setLoadError(errorMessageOf(error, "Não foi possível carregar o mês."));
     }).finally(() => {
@@ -200,7 +204,7 @@ export function MyTimeRecordingPage() {
 
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-          <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} />
+          <AbsencesAndAlerts days={days} absences={absences} filter={filter} onFilter={(next) => { setFilter(next); setShowFuture(false); }} onRequestAbsence={() => setAbsenceDate("")} />
           {absencesUnavailable ? <p className="px-1 text-xs text-ds-ink-muted">As ausências não puderam ser carregadas agora.</p> : null}
         </aside>
 
@@ -294,7 +298,10 @@ export function MyTimeRecordingPage() {
         </div>
       </div>
       <DayPanel day={openDate ? days.find((day) => day.date === openDate) ?? (openDate === today ? todayView : null) : null}
-        today={today} unitNames={unitNames} receipts={receipts} onClose={() => setOpenDate(null)} />
+        today={today} unitNames={unitNames} receipts={receipts} onClose={() => setOpenDate(null)}
+        onRequestAbsence={(date) => { setOpenDate(null); setAbsenceDate(date); }} />
+      <AbsencePreviewPanel open={absenceDate !== undefined} onOpenChange={(open) => { if (!open) setAbsenceDate(undefined); }}
+        firebaseUser={firebaseUser} initialDate={absenceDate || undefined} onDraftCreated={() => setReloadKey((current) => current + 1)} />
     </PageContainer>
   );
 }

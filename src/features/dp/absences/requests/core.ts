@@ -28,6 +28,7 @@ function publicRule(policy: DPAbsencePolicy): PublicAbsenceRule {
     minimumNoticeDays: policy.minimumNoticeDays,
     maximumRetroactiveDays: policy.maximumRetroactiveDays,
     attachment: policy.attachment, approvalFlow: policy.approvalFlow,
+    tacitApprovalDays: policy.tacitApprovalDays,
     instructions: policy.instructions,
   };
 }
@@ -39,7 +40,7 @@ export function listAbsenceRequestOptions(types: readonly DPAbsenceType[], targe
     const evaluationDate = today < type.validFrom ? type.validFrom : today;
     const resolution = resolveAbsencePolicy(type, evaluationDate, target);
     if (resolution.status !== 'matched') return [];
-    return [{ id: type.id, name: type.name, units: [...type.requestUnits], calculation: resolution.policy.calculation, validFrom: type.validFrom, validTo: type.validTo ?? null, color: type.color,
+    return [{ id: type.id, name: type.name, units: [...type.requestUnits], calculation: resolution.policy.calculation, attachmentRequired: resolution.policy.attachment === 'required', validFrom: type.validFrom, validTo: type.validTo ?? null, color: type.color,
       ...(origin === 'collaborator' ? {} : { origin }) }];
   });
 }
@@ -92,7 +93,8 @@ export function previewAbsenceRequest(input: AbsenceRequestPreviewInput, type: D
     rule: { id: policy.id, name: policy.name, snapshot: publicRule(policy) },
     period: { startDate: input.startDate, endDate: input.endDate, startTime: input.startTime ?? null, endTime: input.endTime ?? null },
     quantity: { value, unit: input.unit, calculation: policy.calculation },
-    approvalFlow: policy.approvalFlow, attachmentRequired: policy.attachment === 'required', instructions: policy.instructions ?? null,
+    approvalFlow: policy.approvalFlow, tacitApprovalDays: policy.approvalFlow === 'automatic' ? null : policy.tacitApprovalDays ?? null,
+    attachmentRequired: policy.attachment === 'required', instructions: policy.instructions ?? null,
     limits: { maxUnitsPerRequest: policy.maxUnitsPerRequest ?? null, maxUnitsPerPeriod: policy.maxUnitsPerPeriod ?? null, limitPeriod: policy.limitPeriod ?? null, remaining: null, minimumNoticeDays: policy.minimumNoticeDays ?? 0, maximumRetroactiveDays: policy.maximumRetroactiveDays ?? 0 },
     pending,
   };

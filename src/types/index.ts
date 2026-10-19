@@ -3853,6 +3853,8 @@ export type DPAbsencePolicy = {
   rejectionReasonRequired: boolean;
   allowFutureEdit: boolean;
   allowFutureCancel: boolean;
+  /** Dias corridos sem análise, contados desde a atribuição de cada etapa, para a etapa ser aprovada automaticamente. Ausente = nunca. */
+  tacitApprovalDays?: number;
   instructions?: string;
 };
 

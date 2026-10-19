@@ -26,7 +26,7 @@ export type DayShift = {
 
 export type DayMarking = { receiptId: string; markedAt: string; nsr: number; executionUnitId: string; receiptStatus: "available" | "pending" };
 
-export type DayAbsence = { id: string; typeName: string; status: string; startDate: string; endDate: string };
+export type DayAbsence = { id: string; typeName: string; status: string; startDate: string; endDate: string; approvedByInaction?: boolean };
 
 export type DayIncident = "missing" | "odd" | "late_exit" | "short_break" | "long_break" | "other_unit";
 

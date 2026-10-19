@@ -1,7 +1,6 @@
 "use client";
 
 import { AlertTriangle, CalendarPlus, Clock3, Coffee, FileText, Info, MapPin, RefreshCw, Share2, TimerOff } from "lucide-react";
-import Link from "next/link";
 
 import { LiftRow } from "@/components/patterns/lift-row";
 import { PanelSection, SidePanel } from "@/components/patterns/side-panel";
@@ -10,11 +9,12 @@ import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill"
 import { cn } from "@/lib/utils";
 
 import { fiscalClock, INCIDENT_SEVERITY, type DayAbsence, type DayIncident, type DayMarking, type DayView } from "./day-model";
+import { TACIT_APPROVAL_LABEL } from "@/features/dp/absences/requests/tacit-approval";
+
 import { ReceiptPill } from "./marking-ui";
 import { hm, MarkingSequence, suggestedLabel, expectedPunchesOf } from "./record-strip";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-export const ABSENCE_REQUEST_PATH = "/dashboard/collaborator/requests?new=absence_preview";
 
 export const INCIDENTS: Record<DayIncident, { label: string; detail: string; icon: typeof AlertTriangle }> = {
   missing: { label: "Dia sem batidas", detail: "Nenhuma batida num dia de escala. Se houve motivo, justifique com uma ausência.", icon: TimerOff },
@@ -36,7 +36,8 @@ function dayTone(day: DayView): "danger" | "warn" | null {
   return day.incidents.length ? "warn" : null;
 }
 
-export function absenceStatus(status: string): { label: string; variant: StatusPillVariant } {
+export function absenceStatus(status: string, approvedByInaction = false): { label: string; variant: StatusPillVariant } {
+  if (status === "approved" && approvedByInaction) return { label: TACIT_APPROVAL_LABEL, variant: "warn" };
   if (status === "approved") return { label: "Aprovada", variant: "neutral" };
   if (status === "in_review" || status === "submitted") return { label: "Em análise", variant: "info" };
   if (status === "adjustments_requested") return { label: "Ajuste pedido", variant: "warn" };
@@ -119,8 +120,9 @@ export type ReceiptActions = {
   retry: (receiptId: string) => void;
 };
 
-export function DayPanel({ day, today, unitNames, receipts, onClose }: {
+export function DayPanel({ day, today, unitNames, receipts, onClose, onRequestAbsence }: {
   day: DayView | null; today: string; unitNames: Map<string, string>; receipts: ReceiptActions; onClose: () => void;
+  onRequestAbsence: (date: string) => void;
 }) {
   if (!day) return null;
   const work = day.shift?.type === "work" ? day.shift : null;
@@ -147,8 +149,8 @@ export function DayPanel({ day, today, unitNames, receipts, onClose }: {
             );
           })}
           {day.incidents.includes("missing") ? (
-            <Button asChild variant="ds-secondary" size="sm">
-              <Link href={ABSENCE_REQUEST_PATH}><CalendarPlus className="h-4 w-4" aria-hidden /> Justificar com ausência</Link>
+            <Button type="button" variant="ds-secondary" size="sm" onClick={() => onRequestAbsence(day.date)}>
+              <CalendarPlus className="h-4 w-4" aria-hidden /> Justificar com ausência
             </Button>
           ) : null}
         </PanelSection>
@@ -157,7 +159,7 @@ export function DayPanel({ day, today, unitNames, receipts, onClose }: {
         <PanelSection title="Ausência">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-bold text-ds-ink">{day.absence.typeName}</span>
-            <StatusPill variant={absenceStatus(day.absence.status).variant}>{absenceStatus(day.absence.status).label}</StatusPill>
+            <StatusPill variant={absenceStatus(day.absence.status, day.absence.approvedByInaction).variant}>{absenceStatus(day.absence.status, day.absence.approvedByInaction).label}</StatusPill>
           </div>
           <p className="text-xs text-ds-ink-muted">
             {day.absence.startDate === day.absence.endDate ? `Dia ${day.absence.startDate.split("-").reverse().join("/")}` : `De ${day.absence.startDate.split("-").reverse().join("/")} a ${day.absence.endDate.split("-").reverse().join("/")}`}.
@@ -209,8 +211,8 @@ export function DayPanel({ day, today, unitNames, receipts, onClose }: {
   );
 }
 
-export function AbsencesAndAlerts({ days, absences, filter, onFilter }: {
-  days: DayView[]; absences: DayAbsence[]; filter: string; onFilter: (filter: string) => void;
+export function AbsencesAndAlerts({ days, absences, filter, onFilter, onRequestAbsence }: {
+  days: DayView[]; absences: DayAbsence[]; filter: string; onFilter: (filter: string) => void; onRequestAbsence: () => void;
 }) {
   const alerts = (Object.keys(INCIDENTS) as DayIncident[]).map((key) => ({ key, count: days.filter((day) => day.incidents.includes(key)).length }));
   const selectedClass = "bg-ds-accent-row shadow-[inset_3px_0_0_var(--ds-accent-ink)]";
@@ -220,7 +222,7 @@ export function AbsencesAndAlerts({ days, absences, filter, onFilter }: {
         <h2 className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-ds-ink-faint">Ausências do mês</h2>
         {absences.length === 0 ? <p className="text-sm text-ds-ink-muted">Nenhuma ausência neste mês.</p> : absences.map((absence) => {
           const key = `absence:${absence.id}`;
-          const status = absenceStatus(absence.status);
+          const status = absenceStatus(absence.status, absence.approvedByInaction);
           const count = days.filter((day) => day.absence?.id === absence.id).length;
           return (
             <button key={absence.id} type="button" aria-pressed={filter === key} onClick={() => onFilter(filter === key ? "all" : key)}
@@ -236,8 +238,8 @@ export function AbsencesAndAlerts({ days, absences, filter, onFilter }: {
             </button>
           );
         })}
-        <Button asChild variant="ds-secondary" size="sm" className="mt-1 w-full">
-          <Link href={ABSENCE_REQUEST_PATH}><CalendarPlus className="h-4 w-4" aria-hidden /> Solicitar ausência</Link>
+        <Button type="button" variant="ds-secondary" size="sm" className="mt-1 w-full" onClick={onRequestAbsence}>
+          <CalendarPlus className="h-4 w-4" aria-hidden /> Solicitar ausência
         </Button>
       </div>
       <div className="space-y-1.5 border-t border-ds-divider pt-4">

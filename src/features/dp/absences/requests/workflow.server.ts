@@ -7,7 +7,7 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit, resolveUnitAccess } from '@/lib/unit-access';
-import type { DPAbsenceType, User } from '@/types';
+import { defaultGuestPermissions, type DPAbsenceType, type User } from '@/types';
 import { requireAbsenceWorkflowReady } from '../catalog.server';
 import { absenceResolutionTargetForUser, ownAbsenceResolutionTarget } from './service.server';
 import { resolveAbsenceBeneficiary } from './beneficiary.server';
@@ -73,6 +73,10 @@ function dto(value: AbsenceRequestRecord, actor: ServerUserContext): AbsenceRequ
     updatedAt: value.updatedAt, submittedAt: value.submittedAt, decidedAt: value.decidedAt,
     ...(scopedInternalRequestAccess && value.reviewSla ? { reviewSla: value.reviewSla } : {}),
     typeName: value.typeSnapshot.name, attachmentCount: value.attachments.length,
+    ...(value.reason ? { reason: value.reason } : {}),
+    approvedByInaction: value.status === 'approved' && value.approvalOrigin === 'tacit_timeout',
+    ...(value.tacitApprovals?.length ? { tacitApprovals: value.tacitApprovals } : {}),
+    tacitApprovalDays: value.policySnapshot.approvalFlow === 'automatic' ? null : value.policySnapshot.tacitApprovalDays ?? null,
     beneficiaryUid: value.beneficiaryUid, beneficiaryName: value.beneficiaryName ?? null,
     requesterUid: value.requesterUid, assignedReviewerIds: value.assignedReviewerIds,
     canCancel: value.status === 'approved'
@@ -257,6 +261,7 @@ export async function createAbsenceDraft(actor: ServerUserContext, input: Create
       attachments: files, custodianDpUid: custodian?.reviewerIds[0] ?? null, segments: absenceDaySegments(input.request, policy),
       stage: null, stageIndex: -1, assignedReviewerIds: [], history: [{ action: 'created', actorUid: actor.decoded.uid, at: timestamp, version: 1 }],
       createdAt: timestamp, updatedAt: timestamp,
+      ...(input.reason ? { reason: input.reason } : {}),
     };
     tx.create(requests.doc(requestId), value);
     projectAbsenceRetentionCases(tx, value, files);
@@ -404,12 +409,78 @@ function checkCustodian(actor: ServerUserContext, value: AbsenceRequestRecord) {
   }
 }
 
-export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: string, input: AbsenceActionInput, store: AbsenceFileStore = absenceFileStore) {
+/** Ator de sistema da aprovação por decurso de prazo; nunca é uma pessoa nem tem perfil. */
+export const ABSENCE_TACIT_ACTOR_UID = 'system:absence-tacit-approval';
+const TACIT_BATCH_LIMIT = 50;
+
+function tacitOperationId(requestId: string, version: number) {
+  const digest = createHash('sha256').update(`tacit:${requestId}:${version}`).digest('hex');
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+}
+
+/**
+ * Aprova por decurso de prazo as etapas em análise cuja regra define `tacitApprovalDays`, contados em dias
+ * corridos desde a atribuição da etapa (`reviewSla.startedAt`). Percorre com cursor os pedidos em análise já fora
+ * do prazo de 24 h (páginas de 100, até 1.000 lidos por execução), para que vencidos de regras sem decurso não
+ * escondam os que já devem ser aprovados; aprova no máximo 50 por execução. Cada aprovação usa o mesmo caminho da
+ * análise humana (reservas, escala e notificação) com operationId determinístico; o que exigir confirmação humana
+ * (perfil, conflito, regra mudada) fica para o DP e aparece em `skippedCodes`.
+ */
+export async function applyTacitAbsenceApprovals(workspaceId: string, now = new Date(), store: AbsenceFileStore = absenceFileStore,
+  limits: { pageSize?: number; maxScanned?: number; maxApprovals?: number } = {}) {
+  await requireAbsenceWorkflowReady();
+  const pageSize = limits.pageSize ?? 100;
+  const maxScanned = limits.maxScanned ?? 1_000;
+  const maxApprovals = limits.maxApprovals ?? TACIT_BATCH_LIMIT;
+  // Usa o índice workspaceId + status + reviewSla.deadlineAt já existente para a fila de vencidos.
+  const base = requests.where('workspaceId', '==', workspaceId).where('status', '==', 'in_review')
+    .where('reviewSla.deadlineAt', '<', now.toISOString()).orderBy('reviewSla.deadlineAt', 'asc');
+  const result = { checked: 0, approved: 0, skipped: 0, notDue: 0, skippedCodes: {} as Record<string, number> };
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  while (result.checked < maxScanned && result.approved < maxApprovals) {
+    const page: FirebaseFirestore.QuerySnapshot = await (cursor ? base.startAfter(cursor) : base).limit(pageSize).get();
+    for (const doc of page.docs) {
+      if (result.approved >= maxApprovals) break;
+      result.checked++;
+      const value = doc.data() as AbsenceRequestRecord;
+      const days = value.policySnapshot.approvalFlow === 'automatic' ? undefined : value.policySnapshot.tacitApprovalDays;
+      const startedAt = Date.parse(value.reviewSla?.startedAt ?? '');
+      if (!days || !Number.isFinite(startedAt) || startedAt + days * 86_400_000 > now.getTime()) { result.notDue++; continue; }
+      try {
+        await actOnAbsenceRequest(tacitActor(value.workspaceId), value.id,
+          { action: 'approve', expectedVersion: value.version, operationId: tacitOperationId(value.id, value.version) },
+          store, { tacitTimeout: { days } });
+        result.approved++;
+      } catch (error) {
+        // Só o código opaco do erro: o pedido segue em análise com o DP, e a contagem fica visível no log da rotina.
+        const code = error instanceof AppError ? error.code : 'ABSENCE_TACIT_UNEXPECTED';
+        result.skipped++;
+        result.skippedCodes[code] = (result.skippedCodes[code] ?? 0) + 1;
+      }
+    }
+    if (page.size < pageSize) break;
+    cursor = page.docs[page.docs.length - 1];
+  }
+  return result;
+}
+
+function tacitActor(workspaceId: string): ServerUserContext {
+  return { decoded: { uid: ABSENCE_TACIT_ACTOR_UID }, userDoc: { id: ABSENCE_TACIT_ACTOR_UID }, profileId: null,
+    permissions: structuredClone(defaultGuestPermissions), isDefaultAdmin: false, workspace_id: workspaceId } as unknown as ServerUserContext;
+}
+
+export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: string, input: AbsenceActionInput, store: AbsenceFileStore = absenceFileStore,
+  /** Só a rotina de decurso de prazo usa: aprova a etapa vencida como ator de sistema, pelo mesmo caminho da análise humana. */
+  options: { tacitTimeout?: { days: number } } = {}) {
   await requireAbsenceWorkflowReady();
   const currentDoc = await requests.doc(requestId).get();
   if (!currentDoc.exists || currentDoc.get('workspaceId') !== actor.workspace_id) throw fail('ABSENCE_REQUEST_NOT_FOUND', 'Solicitação não encontrada.', 'NOT_FOUND');
   const current = currentDoc.data() as AbsenceRequestRecord;
-  ownOrReviewer(actor, current);
+  const tacit = options.tacitTimeout ?? null;
+  if (tacit && (input.action !== 'approve' || actor.decoded.uid !== ABSENCE_TACIT_ACTOR_UID || current.status !== 'in_review')) {
+    throw fail('ABSENCE_ACTION_FORBIDDEN', 'Ação indisponível.', 'AUTHORIZATION');
+  }
+  if (!tacit) ownOrReviewer(actor, current);
   if (current.operationalPending && (current.operationalPending.operationId !== input.operationId
     || current.operationalPending.actorUid !== actor.decoded.uid
     || current.operationalPending.actionHash !== operationHash(input))) {
@@ -427,7 +498,7 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
   if (input.action === 'update_draft' && (!isRequester || !['draft', 'adjustments_requested'].includes(current.status))) {
     throw fail('ABSENCE_ACTION_FORBIDDEN', 'Ação indisponível.', 'AUTHORIZATION');
   }
-  if (['approve', 'reject', 'request_adjustments'].includes(input.action)) {
+  if (['approve', 'reject', 'request_adjustments'].includes(input.action) && !tacit) {
     if (current.status !== 'in_review') throw fail('ABSENCE_ACTION_FORBIDDEN', 'Ação indisponível.', 'AUTHORIZATION');
     checkReviewer(actor, current);
     const live = await resolveAbsenceApprovers(current.policySnapshot, current.stage!, current.beneficiaryUid, current.unitId, current.requesterUid);
@@ -584,7 +655,7 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
     const value: AbsenceRequestRecord = { ...original, version: original.version + 1, updatedAt: timestamp,
       lastOperationId: input.operationId, lastOperationActorUid: actor.decoded.uid,
       lastOperationAction: input.action, lastOperationHash: operationHash(input),
-      history: [...original.history, { action: input.action, actorUid: actor.decoded.uid,
+      history: [...original.history, { action: tacit ? 'tacit_approve' : input.action, actorUid: actor.decoded.uid,
         at: timestamp, ...('reason' in input && input.reason ? { reason: input.reason } : {}), version: original.version + 1 }] };
     if (input.action === 'update_draft') {
       if (!target?.unitId || !typeDoc?.exists) throw fail('ABSENCE_REQUEST_UNAVAILABLE', 'Tipo ou vínculo indisponível.');
@@ -600,6 +671,7 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
       const custodian = attachments.length || policy.allowFutureCancel || ['dp', 'manager_then_dp'].includes(policy.approvalFlow)
         ? await resolveAbsenceApprovers(policy, 'dp', original.beneficiaryUid, target.unitId) : null;
       value.status = 'draft'; value.revision += 1; value.input = input.request;
+      if (input.reason) value.reason = input.reason; else delete value.reason;
       delete value.reviewSla;
       value.startDate = input.request.startDate; value.endDate = input.request.endDate;
       value.quantity = preview.quantity.value; value.unit = input.request.unit; value.unitId = target.unitId;
@@ -638,6 +710,7 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
       delete value.profileReviewReason;
       if (reservation) reserve(tx, original, reservation, assignment ? 'add' : 'approve_add');
     } else if (input.action === 'approve') {
+      if (tacit) value.tacitApprovals = [...(original.tacitApprovals ?? []), { stage: original.stage ?? 'dp', at: timestamp, days: tacit.days }];
       value.profileReviewRequired = original.profileReviewRequired || profileDrift;
       if (input.confirmProfile) {
         value.profileReviewConfirmedBy = actor.decoded.uid; value.profileReviewReason = input.profileReason;
@@ -654,6 +727,7 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
           throw fail('ABSENCE_PROFILE_CONFIRMATION_REQUIRED', 'O DP deve confirmar o histórico/perfil antes da aprovação final.');
         }
         value.status = 'approved'; value.stage = null; value.stageIndex = -1; value.assignedReviewerIds = []; value.decidedAt = timestamp;
+        value.approvalOrigin = tacit ? 'tacit_timeout' : 'review';
         delete value.reviewSla;
         if (reservation) reserve(tx, original, reservation, 'consume');
       }
@@ -704,7 +778,7 @@ export async function actOnAbsenceRequest(actor: ServerUserContext, requestId: s
     }
     const recipients = value.status === 'in_review' ? value.assignedReviewerIds : [value.beneficiaryUid];
     if (input.action !== 'update_draft') queue(tx, value, `${value.id}_${value.version}_notification`, `notification_${input.action}`, recipients);
-    audit(tx, value, actor.decoded.uid, input.action, input.operationId);
+    audit(tx, value, actor.decoded.uid, tacit ? 'tacit_approve' : input.action, input.operationId);
     return value;
   });
   if (operationalIntent && result.status === 'approved') {

@@ -55,3 +55,29 @@ export const repPReceiptRetryJob = onSchedule({
   const result = await response.json() as { attempted?: number; issued?: number; failed?: number };
   if (result.attempted) console.log('[repPReceiptRetryJob] Concluída.', result);
 });
+
+/**
+ * Aprovação por decurso de prazo das ausências, de hora em hora: aprova as etapas em análise cuja regra define
+ * `tacitApprovalDays` e cujo prazo, contado da atribuição da etapa, venceu. Lê só pedidos já fora do prazo de 24 h.
+ */
+export const absenceTacitApprovalJob = onSchedule({
+  schedule: '5 * * * *',
+  timeZone: 'America/Belem',
+  retryCount: 0,
+  timeoutSeconds: 300,
+  memory: '256MiB',
+  maxInstances: 1,
+  secrets: [jobSecret],
+}, async () => {
+  const response = await fetch(new URL('/api/jobs/dp/absences/tacit-approval', jobUrl.value()), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${jobSecret.value()}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Aprovação por decurso respondeu HTTP ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const result = await response.json() as { checked?: number; approved?: number; skipped?: number; skippedCodes?: Record<string, number> };
+  if (result.approved || result.skipped) console.log('[absenceTacitApprovalJob] Concluída.', result);
+});
