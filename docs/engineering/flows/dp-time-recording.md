@@ -17,6 +17,8 @@
 
 CPF, CNPJ, `employerUnitId`, estabelecimento, NSR, instante e hash nunca vêm do aparelho. A API deriva o empregado do token, lê CPF/nome no RH e resolve o empregador na revisão histórica de vínculo vigente na data. `executionUnitId` precisa constar em `unitIds`; cobertura excepcional mantém `employerUnitId` e CNPJ originais.
 
+**Extensão planejada, não implementada:** a [especificação de georreferenciamento](../time-recording-geolocation.md) prevê captura pontual na confirmação, avaliação no servidor e evidência separada da ARP. Localização externa, imprecisa ou indisponível não bloqueará a batida nem alterará AFD, hash ou comprovante. A coleta com pessoas reais depende de base legal, RIPD, retenção, acesso e revisão jurídica aprovados.
+
 ```text
 usuário autenticado + attemptId + data + unidade de execução
                              │

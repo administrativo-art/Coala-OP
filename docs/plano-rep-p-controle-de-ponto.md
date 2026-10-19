@@ -252,8 +252,10 @@ Ordem canônica no [plano mestre](plano-jornada-fechamento-rh.md#6-fases):
 - Fases 3/4: PTRP, AEJ/espelho e simulação fiscal.
 - Fases 5/6: fechamento/contador e validação integrada sintética.
 - Fase 7: INPI, certificados reais, atestados e teste da configuração final.
-- Fase 8: piloto real paralelo ao Bizneo, por competência completa.
-- Fases 9/10: promoção por estabelecimento e saída do Bizneo após preservar histórico.
+- Fase 8: piloto técnico com um usuário, antecipado por decisão do programador (19/10/2026); comprovantes sem validade até o lançamento total; sem paralelo com o Bizneo.
+- Fases 9/10: lançamento total por estabelecimento, depois das Fases 3 a 7; saída do Bizneo simplificada, sem importação.
+
+Sequência vigente e estado de cada fase: [plano mestre, seção 6](plano-jornada-fechamento-rh.md#sequência-vigente-19102026).
 
 Nenhum dado sintético vira registro oficial. Registro de piloto real é preservado como tal, pode produzir prova e exige apuração de divergências.
 
@@ -285,6 +287,41 @@ Pendências nomeadas, mantidas por decisão do programador. `REP_P_MARKING_ENABL
 | Perguntas da maquete do Registro de ponto (19/10/2026) | Arts. 74, 80, 82, 84; CLT arts. 58 §1º e 71 | **Perguntas ao advogado:** (1) registrar troca de unidade para conferência do DP, sem bloquear a batida, é adequado? (2) Fuso: **decidido pelo programador em 19/10/2026** que a batida usa o fuso da unidade de execução (sem cadastro, o do estabelecimento); confirmar com o advogado que o AFD com fusos diferentes por marcação no mesmo estabelecimento é aceito. Confirmar também se o cabeçalho do AFD continua no fuso do estabelecimento. Risco técnico registrado: o filtro por data civil (`recordedDate`, no fuso da unidade) pode deixar NSR consecutivos em dias diferentes na borda de um período exportado, criando lacuna aparente de NSR; tratar junto com o fatiamento do art. 81 §2º antes de fiscalização. (3) A tolerância de 5 min do art. 58 §1º vale para o intervalo? (4) Aprovação de ausência por decurso de prazo (3 dias) é aceitável, inclusive com atestado não conferido? Pode ser revertida e com que justificativa? |
 | Tela Registro de ponto, etapa 1 (19/10/2026) | Art. 74; art. 80; Anexo IX 3 | Saldo e itens "a conferir" são prévia, não apuração; a tela não usa a palavra "abono". **Decisão jurídica/DP:** ausência aprovada abona a jornada ou só justifica (depende de CCT e banco de horas)? Hoje a ausência aprovada ou em análise apenas cobre o dia na prévia, sem gerar crédito. Avisos de intervalo (±5 min) e de desvio (10 min) são de conferência, não a tolerância do art. 58 §1º CLT. Jornada que atravessa a meia-noite fica sem avisos até o PTRP. |
 | Ajuste de ponto pedido pelo colaborador (orientação Doc Brown, 19/10/2026) | Art. 74 IV; art. 82 p.ú.; art. 84 V; leiaute AEJ registro 05 | Original nunca é alterada; "substituir" = desconsideração (`tpMarc` D) + inclusão (`fonteMarc` I) atômicas no PTRP, com `motivo` ≤150 caracteres (obrigatório para D e I). Colaborador solicita; gestor/DP decide; solicitante nunca aprova o próprio pedido; nenhuma hora é preenchida pelo sistema. Autoria por ato (UID, papel, instante pela Hora Legal, canal, hash encadeado), reversão cria registro novo. **Pendências:** arquivar leiaute AEJ com hash; conferir `fonteMarc` "I " com espaço e a representação da linha D. **Perguntas ao advogado:** colaborador pode executar sem decisão? AEJ precisa identificar autor/decisor? Pedido após fechamento exige reabertura e quem autoriza? Ciência do espelho exige assinatura e o que fazer na discordância? Inclusão sem evidência vale como prova? Retenção do histórico e de IP/dispositivo? |
+| Georreferenciamento planejado (19/10/2026) | Art. 74; LGPD arts. 6º, 7º, 9º, 37, 38 e 46; orientação laboral CNPD | A [especificação técnica](engineering/time-recording-geolocation.md) separa localização da ARP, coleta somente na confirmação, calcula no servidor e nunca bloqueia a marcação. `outside` e `indeterminate` geram no máximo conferência humana, sem efeito automático em PTRP, folha ou disciplina. **Gates:** finalidade, base legal, RIPD, aviso, retenção, acesso, CCT/ACT aplicável e resposta do advogado antes de piloto real. |
+
+### 10-B. Decisões do programador sobre as perguntas jurídicas (19/10/2026)
+
+Decisões de produto registradas a partir da lista consolidada de perguntas; não substituem o parecer do advogado nos pontos marcados "confirmar".
+
+| Tema | Decisão do programador | Efeito no sistema |
+| --- | --- | --- |
+| Ajuste de ponto: quem decide | O ajuste sempre precisa de aprovação; o fluxo de aprovação exige justificativa | Colaborador solicita; gestor/DP aprova com justificativa obrigatória; solicitante nunca aprova o próprio pedido |
+| Ajuste no AEJ | O arquivo do fechamento identifica quem pediu e quem decidiu | Autor e decisor por ato, além de tipo e motivo |
+| Pedido depois do fechamento | Não existe: período fechado não aceita pedido | Pedido de ajuste ou ausência para competência fechada é recusado no servidor |
+| Ciência do espelho | Assinatura de concordância do colaborador; sem assinatura, fica "pendente" e a divergência é tratada com o DP fora do sistema | Espelho com estado de assinatura pendente/assinado |
+| Inclusão sem evidência | Vale como prova: a cadeia de autoria comprova que foi o titular quem pediu | Evidência opcional; justificativa, aprovação e trilha de autoria obrigatórias |
+| Ausência abona ou justifica | Depende do efeito cadastrado no tipo (`workdayEffect`) | Fechamento aplica o efeito do tipo; a tela mostra a prévia conforme o efeito |
+| Reversão de ausência aprovada por decurso | Só com fraude comprovada; implementação futura | Sem reversão comum; pendência de fluxo de fraude |
+| Decurso em tipo com atestado obrigatório (orientação Doc Brown, 19/10/2026) | Pendente de confirmação: o decurso aprova também tipos com anexo obrigatório ainda não conferido? Alternativa: aprovar a ocorrência sem efeito de abono até o DP conferir | Hoje aprova com o efeito do tipo; aprovação depois do fechamento deve ser tratada no reprocessamento sem alterar espelho assinado; alerta ao DP para pedido vencido que não pode ser aprovado sozinho |
+| Tolerância no intervalo | Não usa o art. 58 §1º; tolerância definida manualmente no cadastro | Campo de tolerância por turno (plano mestre 3.6.1) |
+| Fracionamento do intervalo | Respondido pelo planejamento das modalidades (plano mestre 3.6.1) | Modalidades fixas/flexíveis conforme cadastro |
+| Retenção | 20 anos para ARP, AFD, comprovantes, histórico de ajustes e evidências, como os demais documentos | Política de retenção de 20 anos |
+| Atestado assinado pela empregadora | Sim: a CT Sorvetes assina como desenvolvedora sendo também a empregadora | Confirmar com o advogado (pergunta mantida) |
+| Comprovante com atraso | Sem aviso ao sindicato; os registros de contingência (motivo, tentativas, horário de emissão) ajudam na fiscalização e ficam guardados | Mantidos `lastIssue`, `attempts` e instante de emissão |
+| Comprovante disponível depois | Basta o aviso de indisponibilidade; quando emitido, a pessoa baixa o comprovante, sem notificação no sino | Janela e dia mostram "comprovante em emissão" e liberam o download depois |
+| Unidade e fuso da batida | A unidade vem da escala, com o fuso dela; troca de unidade é registrada sem bloqueio e conferida pelo DP | Implementado na etapa 2 |
+| Fusos no AFD | Unidade em outra cidade/fuso terá CNPJ próprio (estabelecimento e AFD próprios); o que importa é a carga horária. Fuso em cada linha de batida; o cabeçalho segue o leiaute | Pergunta retirada; caso residual: empregado de um CNPJ cobrindo unidade em outro fuso grava o fuso da unidade na linha da batida |
+| Formato dos campos do AFD | Leiaute 004 item 7: conteúdo à esquerda e espaços à direita, inclusive numéricos; exceções literais (`004`, `01`/`02`, zeros do cabeçalho). CPF de 12 posições com espaço à direita (FAQ MTE 50 aceita também zero à esquerda; padronizado espaço). CRC-16/KERMIT com vetor oficial `123456789` → `2189`. Não há validador oficial público do AFD; o VALIDAR do ITI confere só a assinatura | Já implementado assim (`core.ts` `numericField`/`nsrField`/`cpfField`, `afd.ts`; teste do vetor CRC). Resta sem vetor oficial a serialização exata do SHA-256 do tipo 7: manter teste próprio e, se houver dúvida, consulta técnica à SIT |
+| Carimbo do tempo para a guarda | Pergunta retirada pelo programador | Mantida a assinatura com a hora oficial registrada; sem ACT |
+| Certificado do INPI no atestado | O atestado sai com o registro completo quando o INPI concluir | Sem "N/A" |
+| Validade dos comprovantes no piloto | No piloto os comprovantes não têm validade; tudo passa a valer no lançamento total, depois da validação da assinatura no ITI | Pergunta retirada; validar amostra no ITI antes do lançamento total |
+| AFD fracionado | Questão jurídica encerrada: o FAQ MTE 39 autoriza fracionar o AFD do REP-P; o teto de 50 mil eventos por arquivo pode ficar | Antes da produção, conferir tecnicamente: (1) cada parte é AFD válido com cabeçalho e trailer — atende; (2) cada parte tem seu `.p7s` CAdES — atende; (3) NSR original sem reinício — atende; (4) partes sem omissão nem duplicação na fronteira de datas — falta teste de fronteira; (5) exportar o período inteiro — hoje acima de 50 mil a exportação recusa e pede dividir o período manualmente; falta gerar as partes automaticamente e auditar a recusa |
+| Feriados no comércio (MTE 1.316/2026) | Fora do escopo do ponto por ora | Pergunta retirada |
+| Piloto | Piloto geral liberado pelo programador; primeiro teste com um usuário | Ligar `REP_P_MARKING_ENABLED` continua sendo ação de produção com autorização própria e gates do item 10-A |
+| Registro oficial x Bizneo | Irrelevante: nada é importado do Bizneo | Pergunta retirada |
+| Duas assinaturas no atestado | Responsáveis legal e técnico diferentes assinam o mesmo PDF, cada um com seu e-CPF | Fluxo de assinatura com dois PAdES no mesmo documento |
+| LGPD da geolocalização | Resolvido com atualização da cláusula de LGPD nos contratos | Gate de contrato atualizado antes do piloto com localização |
+| Atestado técnico | Um atestado quando o sistema estiver validado; a necessidade de novo atestado a cada alteração será analisada depois da liberação total | Atestado único na liberação; reavaliar por versão depois |
 
 ## 11. Matriz de requisitos legais
 
@@ -371,4 +408,4 @@ A [análise de lacunas do plano mestre](plano-jornada-fechamento-rh.md#5-estado-
 - Procedimento de contingência online e acesso pós-desligamento.
 - Eventos/unidades exigidos pelo contador.
 - Estabelecimento piloto, janela de corte e retorno.
-- Necessidade futura de offline/geolocalização, fora do MVP.
+- Necessidade futura de offline, fora do MVP; geolocalização possui [especificação técnica](engineering/time-recording-geolocation.md), ainda sem autorização para coleta real.

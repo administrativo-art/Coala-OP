@@ -125,7 +125,7 @@ Turnos existentes caem no tipo equivalente sem migração; campos novos: lista d
 
 Canal preferencial: **Coala Go existente**, Android nativo; canal alternativo: **Coala One web**, com a mesma coleta REP-P e os mesmos controles no servidor. Não criar aplicativo paralelo nem um motor de ponto separado por canal. Registrar origem da marcação, sem mudar sua validade ou cálculo por ter vindo do app ou da web.
 
-MVP online com contingência definida. Offline é extensão condicionada à necessidade operacional e à validação de relógio, reinício do aparelho, fila local e sincronização. Geolocalização não integra o MVP; adoção posterior exige finalidade e necessidade. Biometria/reconhecimento facial ficam fora do escopo.
+MVP online com contingência definida. Offline é extensão condicionada à necessidade operacional e à validação de relógio, reinício do aparelho, fila local e sincronização. Geolocalização não integra o MVP inicial; sua extensão posterior está definida na [especificação técnica de georreferenciamento](engineering/time-recording-geolocation.md), com coleta somente na batida, sem bloqueio, evidência separada da ARP e gates de privacidade. Biometria/reconhecimento facial ficam fora do escopo.
 
 ### 3.8. Estágios
 
@@ -318,9 +318,22 @@ Entrega incremental de interface, **sem retirar escopo**: Fase 2 entrega batida 
 | 5 — Fechamento e contador | Eventos, versões, envio, retorno e conciliação | Competência sintética completa |
 | 6 — Validação integrada | Simulação operacional e de falhas | Nenhuma pendência crítica; versão candidata identificada |
 | 7 — Conformidade formal | INPI, certificados reais e atestados REP-P/PTRP | Documentação e versão final validadas |
-| 8 — Piloto paralelo | Um estabelecimento no Coala e Bizneo | Uma competência sem perda ou divergência crítica não resolvida |
-| 9 — Oficial e expansão | Promoção por estabelecimento | Checklist completo; primeiro fechamento acompanhado |
+| 8 — Piloto técnico | Batida real para um usuário, antecipada por decisão do programador (19/10/2026), com comprovantes sem validade até o lançamento total; sem comparação com o Bizneo, pois nada é importado de lá | Batidas, comprovantes e AFD do piloto sem perda nem divergência crítica não resolvida |
+| 9 — Lançamento total | Promoção por estabelecimento depois das Fases 3 a 7; comprovantes passam a valer | Checklist completo; primeiro fechamento acompanhado |
 | 10 — Saída do Bizneo | Histórico independente; encerramento das integrações antigas | Consulta/recuperação verificadas antes do desligamento |
+
+### Sequência vigente (19/10/2026)
+
+Decisões do programador alteraram a ordem original: o piloto técnico (Fase 8) vem antes da conformidade formal (Fase 7), e a interface do colaborador antecipa partes das Fases 3 e 4. Estado e próximos passos:
+
+1. **Fase 0** — quase concluída: decisões na [seção 10-B do plano REP-P](plano-rep-p-controle-de-ponto.md); restam confirmações ao advogado.
+2. **Fase 2 e piloto técnico** — REP-P em produção com a batida desligada; reemissão, atalho "Bater ponto", tela Registro de ponto e fuso por unidade em PR. Próximo: mesclar, concluir ausências (etapa 4) e ligar a batida para um usuário.
+3. **Fase 1** — modalidades de intervalo e tolerância manual no turno (seção 3.6.1), após as decisões abertas.
+4. **Fase 3** — ausências (motivo, envio em duas etapas, decurso de prazo) e ajuste de ponto pedido pelo colaborador; apuração do mês.
+5. **Fases 4 e 5** — espelho com assinatura de concordância (ou pendente), documento de fechamento declarando ajustes e ausências, efeito da ausência conforme o tipo, banco de horas e AEJ com solicitante e decisor.
+6. **Fase 6** — simulação de uma competência completa com falhas.
+7. **Fase 7** — validação da assinatura no ITI, certificado do INPI e atestado assinado com e-CPF fora do sistema.
+8. **Fase 9** — lançamento total; Fase 10 reduzida, sem importação do Bizneo.
 
 ### Fase 0 — Base jurídica
 
