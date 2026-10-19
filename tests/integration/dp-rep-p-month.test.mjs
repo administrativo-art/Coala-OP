@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { assertFirestoreEmulatorSafety } from '../helpers/firestore-emulator-safety.mjs';
+
+assertFirestoreEmulatorSafety({ projectId: 'demo-coala-repository' });
+const { Timestamp } = await import('firebase-admin/firestore');
+const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
+const { defaultAdminPermissions } = await import('../../src/types/index.ts');
+const { readOwnRepPMonth } = await import('../../src/features/dp/rep-p/own-month.server.ts');
+
+test('escala do mês do Registro de ponto lê só os turnos da pessoa na escala oficial de cada unidade', async () => {
+  const prefix = 'rep-p-month';
+  const userId = `${prefix}-employee`;
+  const otherId = `${prefix}-other`;
+  const unitId = `${prefix}-unit`;
+  const context = { decoded: { uid: userId }, userDoc: { id: userId }, profileId: null,
+    permissions: structuredClone(defaultAdminPermissions), isDefaultAdmin: false, workspace_id: 'coala-one' };
+  const official = dbAdmin.collection('dp_schedules').doc(`${prefix}-official`);
+  const stale = dbAdmin.collection('dp_schedules').doc(`${prefix}-stale`);
+  const definition = dbAdmin.collection('dp_shiftDefinitions').doc(`${prefix}-manha`);
+  const unit = dbAdmin.collection('dp_units').doc(unitId);
+  const shift = (schedule, id, data) => schedule.collection('shifts').doc(id).set({ scheduleId: schedule.id, unitId, type: 'work', ...data });
+
+  await Promise.all([
+    official.set({ year: 2027, month: 3, unitId, locked: true, createdAt: Timestamp.fromMillis(1_000) }),
+    stale.set({ year: 2027, month: 3, unitId, locked: false, createdAt: Timestamp.fromMillis(9_000) }),
+    definition.set({ name: 'Manhã', breakType: 'staggered', breakDurationMinutes: 15, breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4 }),
+    unit.set({ name: 'Quiosque Teste' }),
+  ]);
+  await Promise.all([
+    shift(official, 'a', { userId, date: '2027-03-02', startTime: '10:00', endTime: '16:15', shiftDefinitionId: definition.id }),
+    shift(official, 'b', { userId, date: '2027-03-03', type: 'day_off', startTime: '00:00', endTime: '00:00' }),
+    shift(official, 'c', { userId: otherId, date: '2027-03-02', startTime: '08:00', endTime: '14:00' }),
+    shift(official, 'd', { userId, date: '2027-04-01', startTime: '10:00', endTime: '16:15' }),
+    // Escala mais nova, mas não trancada: a oficial da unidade é a trancada, como em Minha escala.
+    shift(stale, 'e', { userId, date: '2027-03-02', startTime: '07:00', endTime: '13:00' }),
+  ]);
+
+  const result = await readOwnRepPMonth(context, { month: '2027-03' });
+  assert.equal(result.month, '2027-03');
+  assert.equal(result.truncated, false);
+  assert.deepEqual(result.shifts.map((item) => [item.date, item.type, item.startTime]), [['2027-03-02', 'work', '10:00'], ['2027-03-03', 'day_off', '00:00']]);
+  assert.deepEqual(result.shifts[0], {
+    date: '2027-03-02', type: 'work', startTime: '10:00', endTime: '16:15', overnight: false, unitId, unitName: 'Quiosque Teste',
+    shiftName: 'Manhã', breakType: 'staggered', breakStart: null, breakEnd: null, breakDurationMinutes: 15,
+    breakWindowStart: '12:00', breakWindowEnd: '14:00', expectedPunches: 4,
+  });
+  await assert.rejects(readOwnRepPMonth(context, { month: '2027-13' }), { code: 'REP_P_MONTH_INPUT_INVALID' });
+  await assert.rejects(readOwnRepPMonth(context, { month: '2027-03', userId: otherId }), { code: 'REP_P_MONTH_INPUT_INVALID' });
+});

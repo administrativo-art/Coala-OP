@@ -454,18 +454,34 @@ Permissões citadas pela interface (a autorização deve ser conferida no servid
 
 Páginas: [`src/app/dashboard/collaborator/time-recording/page.tsx`](../../src/app/dashboard/collaborator/time-recording/page.tsx).
 
-Arquivos locais percorridos: 16.
+Arquivos locais percorridos: 32.
 
 Chamadas candidatas encontradas:
 
+- `/api/collaborator/absence-requests` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/route.ts`](../../src/app/api/collaborator/absence-requests/route.ts)
+- `/api/collaborator/absence-requests/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/[requestId]/route.ts`](../../src/app/api/collaborator/absence-requests/%5BrequestId%5D/route.ts)
+- `/api/collaborator/absence-requests/options` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/options/route.ts`](../../src/app/api/collaborator/absence-requests/options/route.ts)
+- `/api/collaborator/absence-requests/preparations` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preparations/route.ts`](../../src/app/api/collaborator/absence-requests/preparations/route.ts)
+- `/api/collaborator/absence-requests/preview` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts); rota candidata [`src/app/api/collaborator/absence-requests/preview/route.ts`](../../src/app/api/collaborator/absence-requests/preview/route.ts)
+- `/api/dp/absence-operational/` — interface [`src/features/dp/absences/requests/client.ts`](../../src/features/dp/absences/requests/client.ts)
 - `/api/dp/time-recording/markings` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/markings/route.ts`](../../src/app/api/dp/time-recording/markings/route.ts)
+- `/api/dp/time-recording/month` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/month/route.ts`](../../src/app/api/dp/time-recording/month/route.ts)
 - `/api/dp/time-recording/options` — interface [`src/features/dp/rep-p/use-rep-p-marking.ts`](../../src/features/dp/rep-p/use-rep-p-marking.ts); rota candidata [`src/app/api/dp/time-recording/options/route.ts`](../../src/app/api/dp/time-recording/options/route.ts)
 - `/api/dp/time-recording/receipts/` — interface [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx); rota candidata [`src/app/api/dp/time-recording/receipts/[receiptId]/route.ts`](../../src/app/api/dp/time-recording/receipts/%5BreceiptId%5D/route.ts)
 
+Coleções Firestore candidatas por literal no cliente (confirmar ramo e regras):
+
+- `dp_unitGroups` — [`src/features/dp/absences/requests/target.server.ts`](../../src/features/dp/absences/requests/target.server.ts)
+- `dp_units` — [`src/features/dp/absences/requests/target.server.ts`](../../src/features/dp/absences/requests/target.server.ts)
+- `users` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+
 Permissões citadas pela interface (a autorização deve ser conferida no servidor/regras):
 
-- `dashboard.collaborator` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
-- `dashboard.view` — [`src/features/dp/rep-p/my-time-recording-page.tsx`](../../src/features/dp/rep-p/my-time-recording-page.tsx)
+- `dashboard.collaborator` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dashboard.view` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.collaborators.edit` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.collaborators.ownProfileOnly` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
+- `dp.requests.review` — [`src/features/dp/absences/requests/beneficiary.server.ts`](../../src/features/dp/absences/requests/beneficiary.server.ts)
 
 ## `dre`
 

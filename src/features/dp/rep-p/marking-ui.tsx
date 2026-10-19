@@ -25,8 +25,16 @@ export function brDate(value: string) {
 export function fiscalTime(markedAt: string) {
   return markedAt.slice(11, 16);
 }
+/** "UTC−03:00" do fuso informado, para o colaborador saber de que horário se trata. */
+export function utcOffsetLabel(timeZone: string, at = new Date()) {
+  const part = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" }).formatToParts(at)
+    .find((item) => item.type === "timeZoneName")?.value ?? "GMT";
+  const match = /GMT([+-])(\d{2}):(\d{2})/.exec(part);
+  return match ? `UTC${match[1] === "-" ? "−" : "+"}${match[2]}:${match[3]}` : "UTC";
+}
+
 /** Relógio digital com segundos exigido no coletor (Anexo IX, item 3), na hora oficial do estabelecimento. */
-export function OfficialClockDisplay({ clock }: { clock: RepPOfficialClock | null }) {
+export function OfficialClockDisplay({ clock, tone = "light" }: { clock: RepPOfficialClock | null; tone?: "light" | "dark" }) {
   const [now, setNow] = useState(() => Date.now());
   const offset = useMemo(() => clock?.available ? officialClockOffsetMs(clock.instant, Date.now()) : 0, [clock]);
   useEffect(() => {
@@ -36,11 +44,21 @@ export function OfficialClockDisplay({ clock }: { clock: RepPOfficialClock | nul
   }, [clock]);
   if (!clock) return null;
   if (!clock.available) {
-    return <p className="text-sm font-semibold text-ds-warn">Hora oficial indisponível: o registro de ponto está temporariamente bloqueado.</p>;
+    return <p className={tone === "dark" ? "text-sm font-semibold text-ds-caution-tile" : "text-sm font-semibold text-ds-warn"}>
+      Hora oficial indisponível: o registro de ponto está temporariamente bloqueado.</p>;
+  }
+  if (tone === "dark") {
+    return (
+      <p aria-live="off">
+        <strong className="block font-ds-mono text-[30px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-white">
+          {formatOfficialClock(now + offset, clock.timeZone)}</strong>
+        <span className="mt-1 block text-[11px] text-ds-on-dark-muted">Hora oficial · {utcOffsetLabel(clock.timeZone)}</span>
+      </p>
+    );
   }
   return (
     <p className="text-ds-ink" aria-live="off">
-      <span className="block text-xs font-bold text-ds-ink-muted">Hora oficial (Hora Legal Brasileira)</span>
+      <span className="block text-xs font-bold text-ds-ink-muted">Hora oficial (Hora Legal Brasileira) · {utcOffsetLabel(clock.timeZone)}</span>
       <strong className="font-ds-mono text-3xl tabular-nums">{formatOfficialClock(now + offset, clock.timeZone)}</strong>
     </p>
   );

@@ -33,3 +33,6 @@ export type RepPOwnOptionsRequest = z.infer<typeof repPOwnOptionsSchema>;
 export type RepPOwnHistoryRequest = z.infer<typeof repPOwnHistorySchema>;
 export type RepPMarkingRequest = z.infer<typeof repPMarkingSchema>;
 export type RepPAfdExportRequest = z.infer<typeof repPAfdExportSchema>;
+
+export const repPOwnMonthSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Mês inválido.') }).strict();
+export type RepPOwnMonthRequest = z.infer<typeof repPOwnMonthSchema>;
